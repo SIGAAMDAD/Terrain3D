@@ -262,7 +262,8 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
 	const int authored_regions = m_pData ? m_pData->getRegionCount() : s_nRegionSlots;
 	const int required_active_surface_pages = MIN( authored_regions, active_side * active_side );
 	const int required_hot_height_pages = MIN( authored_regions, hot_side * hot_side );
-	int surface_capacity = isEditorAuthoringModeInternal() ? s_nGpuCacheEditorMaxLayers : s_nGpuCacheRuntimeMaxLayers;
+	int surface_capacity = isEditorAuthoringModeInternal() ? CLAMP( m_nEditorGpuRegionCachePages, 16, s_nGpuCacheEditorMaxLayers )
+	                                                     : CLAMP( m_nGpuRegionCachePageLimit, 16, s_nGpuCacheRuntimeMaxLayers );
 	int height_capacity = s_nGpuHeightCacheMaxLayers;
 	if ( m_pData ) {
 		if ( m_pData->getGpuRegionCacheCapacity() > 0 ) {
@@ -438,35 +439,49 @@ void Terrain3D::normalizeRuntimeTierLayout( const bool bSyncDetailLods ) {
 	m_nRuntimeNearShaderLods = CLAMP( m_nRuntimeNearShaderLods, 0, total_levels );
 	m_nRuntimeMiddleShaderLods = CLAMP( m_nRuntimeMiddleShaderLods, 0, total_levels - m_nRuntimeNearShaderLods );
 	m_nGpuRegionDetailLods = CLAMP( m_nGpuRegionDetailLods, 0, total_levels );
-	// A detail value of zero intentionally means every clipmap level. It already
-	// covers the near tier and must not be rewritten to the near count.
+	// A detail value of zero follows the authored Near tier. The detailed physical
+	// page cache is a Near representation; Middle/Far use their own reduced/coarse
+	// representations and must not inflate this footprint to the whole world.
 	if ( bSyncDetailLods && m_bRuntimeSyncDetailLods && m_nGpuRegionDetailLods > 0 && m_nRuntimeNearShaderLods > m_nGpuRegionDetailLods ) {
 		m_nGpuRegionDetailLods = m_nRuntimeNearShaderLods;
 	}
-	if ( m_pData && m_pData->isInitializedFor( this ) && m_pData->getRegionCount() > 0 && !m_bDeferGpuRegionCacheReconfigure ) {
-		const int effective_detail_lods = m_nGpuRegionDetailLods <= 0 ? total_levels : m_nGpuRegionDetailLods;
+
+	// GPU residency capacity is not render-tier authority. A transient or
+	// overcommitted page grant may reduce which Near pages are resident, but it must
+	// never rewrite the authored Near/Middle/Far clipmap layout. Missing primary
+	// pages already fall through to Middle/Far height in the RD vertex shader.
+	if ( m_pData && effectiveGpuRegionCacheEnabled() && m_pData->isInitializedFor( this ) && m_pData->getRegionCount() > 0
+	        && !m_bDeferGpuRegionCacheReconfigure ) {
+		const int effective_detail_lods = m_nGpuRegionDetailLods <= 0 ? MAX( 1, m_nRuntimeNearShaderLods ) : m_nGpuRegionDetailLods;
 		const int required_pages = m_pData->calculateGpuRegionRequiredCorePagesForLods( effective_detail_lods );
 		const int capacity = m_pData->calculateGpuRegionCapacityForLods( effective_detail_lods );
 		if ( required_pages > capacity ) {
-			int supported_lods = 0;
-			for ( int lods = 1; lods <= total_levels; ++lods ) {
-				const int candidate_required = m_pData->calculateGpuRegionRequiredCorePagesForLods( lods );
-				const int candidate_capacity = m_pData->calculateGpuRegionCapacityForLods( lods );
-				if ( candidate_required > candidate_capacity ) {
-					break;
-				}
-				supported_lods = lods;
+			markMemoryBudgetDirty();
+			if ( !m_bGpuRegionCapacityWarningActive ) {
+				m_bGpuRegionCapacityWarningActive = true;
+				LOG( WARN,
+				        "[gpu-cache] Detailed footprint exceeds current page capacity; preserving the render-tier layout and using "
+				        "Middle/Far fallback while the owner memory policy reevaluates. detail_lods=",
+				        effective_detail_lods,
+				        "; required_pages=",
+				        required_pages,
+				        "; mapped_capacity=",
+				        capacity,
+				        "; effective_budget_bytes=",
+				        m_nEffectiveGpuRegionCacheBudgetBytes,
+				        "; functional_minimum_bytes=",
+				        ( uint64_t )( m_pData->getGpuRegionCacheMinimumBytes() ) );
 			}
-			m_nGpuRegionDetailLods = supported_lods;
-			if ( m_bRuntimeSyncDetailLods && m_nRuntimeNearShaderLods > supported_lods ) {
-				m_nRuntimeNearShaderLods = supported_lods;
-				m_nRuntimeMiddleShaderLods = CLAMP( m_nRuntimeMiddleShaderLods, 0, total_levels - m_nRuntimeNearShaderLods );
-			}
-			LOG( WARN,
-			        "Clamped detailed terrain range to ",
-			        supported_lods,
-			        " clipmap levels because the configured GPU page capacity cannot cover the requested footprint" );
+		} else if ( m_bGpuRegionCapacityWarningActive ) {
+			m_bGpuRegionCapacityWarningActive = false;
+			LOG( INFO,
+			        "[gpu-cache] Detailed footprint capacity recovered without changing the render-tier layout. required_pages=",
+			        required_pages,
+			        "; mapped_capacity=",
+			        capacity );
 		}
+	} else {
+		m_bGpuRegionCapacityWarningActive = false;
 	}
 }
 
@@ -588,7 +603,7 @@ void Terrain3D::setGpuRegionCacheEnabled( const bool bEnabled ) {
 }
 
 void Terrain3D::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
-	const int budget_mb = CLAMP( nBudgetMb, 1, 128 );
+	const int budget_mb = CLAMP( nBudgetMb, s_nGpuRegionCacheMinBudgetMb, s_nGpuRegionCacheMaxBudgetMb );
 	if ( m_nGpuRegionCacheBudgetMb == budget_mb ) {
 		return;
 	}
@@ -600,8 +615,32 @@ void Terrain3D::setGpuRegionCacheBudgetMb( const int nBudgetMb ) {
 	}
 }
 
+void Terrain3D::setGpuRegionCachePageLimit( const int nPages ) {
+	const int pages = CLAMP( nPages, 16, s_nGpuCacheRuntimeMaxLayers );
+	if ( m_nGpuRegionCachePageLimit == pages ) {
+		return;
+	}
+	m_nGpuRegionCachePageLimit = pages;
+	if ( m_nGpuRegionSparePages >= pages ) {
+		m_nGpuRegionSparePages = MAX( s_nGpuCacheMinSpareLayers, pages - 1 );
+	}
+	markMemoryBudgetDirty();
+	refreshPerformanceProfileConformity();
+	if ( m_bInitialized && m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
+		m_pData->configureGpuRegionCache( true,
+		        m_nEffectiveGpuRegionCacheBudgetBytes,
+		        m_nGpuRegionUploadBudgetLayers,
+		        m_nGpuRegionUploadBudgetMb,
+		        m_nGpuRegionSparePages,
+		        m_nGpuRegionRetireFrames );
+		if ( m_bInitialized ) {
+			m_pData->updateGpuRegionResidency( getClipmapTargetPosition(), true );
+		}
+	}
+}
+
 void Terrain3D::setGpuRegionUploadBudgetLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 1, s_nGpuCacheRuntimeMaxLayers );
+	const int layers = CLAMP( nLayers, 1, s_nGpuRegionUploadMaxLayers );
 	if ( m_nGpuRegionUploadBudgetLayers == layers ) {
 		return;
 	}
@@ -689,7 +728,7 @@ void Terrain3D::setGpuRegionDetailRangeEndM( const real_t fRangeM ) {
 }
 
 real_t Terrain3D::getGpuRegionDetailRangeEndM( void ) const {
-	const int detail_lods = m_nGpuRegionDetailLods <= 0 ? getTotalClipmapLevels() : m_nGpuRegionDetailLods;
+	const int detail_lods = m_nGpuRegionDetailLods <= 0 ? MAX( 1, m_nRuntimeNearShaderLods ) : m_nGpuRegionDetailLods;
 	return lodCountToRange( detail_lods );
 }
 

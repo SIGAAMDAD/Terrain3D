@@ -313,6 +313,7 @@ private:
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
 	void markRdPublicationDirty( void );
+	void requestRuntimeCapacityForMutation( size_t nAdditionalRecords );
 	bool rebuildRuntimeStorageCapacities( void );
 	bool appendBuildingCellUpdate( const t3dCellUpdateKey_t &rKey );
 	bool insertStreamingUpdate( const t3dCellUpdateKey_t &rKey );
@@ -511,6 +512,7 @@ public:
 	        const bool bUpdate = true );
 	void updateTransforms( const AABB &rAabb );
 	void updateStreaming( const Vector3 &rTargetPosition );
+	void synchronizeStreamingTarget( const Vector3 &rTargetPosition );
 	EA_FORCE_INLINE void deferStreamingSelectionForFrame( void ) {
 		m_bStreamingSelectionDeferredLastFrame = true;
 	}

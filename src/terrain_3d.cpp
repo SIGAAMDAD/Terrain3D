@@ -185,10 +185,18 @@ void Terrain3D::initializeInternal( void ) {
 			deactivateRuntime();
 			return;
 		}
-		// Finalize runtime budgets and the Near/Middle/Far layout before the very
-		// first residency selection. The first GPU publication must observe the same
-		// tier counts that the mesher will use; an edit must never be required to
-		// repair a startup snapshot.
+		// Finalize the aggregate owner-controlled memory grants after the terrain
+		// repository has been loaded and before tier normalization. GPU page minimums
+		// depend on the real 128 m footprint and active topology; normalizing against
+		// the constructor-time provisional grant can otherwise collapse Near before
+		// the memory coordinator has had a chance to establish functional capacity.
+		// Runtime-page validation includes the material source signature, and that
+		// signature includes owner-dependent Terrain3D settings. Bind/initialize the
+		// asset owner before the first cooked-page residency pass so startup never
+		// validates a freshly cooked page against a provisional ownerless signature.
+		m_assets->initialize( this );
+
+		serviceMemoryBudgetPolicy( true );
 		applyRuntimeAdaptiveWorkBudgets();
 		normalizeRuntimeTierLayout( true );
 
@@ -201,11 +209,9 @@ void Terrain3D::initializeInternal( void ) {
 		m_pData->serviceColdInstanceResidency( initial_target, true );
 		m_pData->updateRegionResidency( initial_target, true );
 
-		// Asset arrays and the whole-world far atlases must exist before the tier
-		// materials take their initial sampler bindings. Initializing the material
-		// first leaves Middle/Far bound to their empty fallbacks until an unrelated
-		// material rebuild happens.
-		m_assets->initialize( this );
+		// Asset arrays are already initialized above so cooked-page source signatures
+		// are authoritative before residency. Build the whole-world far atlases before
+		// tier materials take their initial sampler bindings.
 		m_pData->ensureFarAtlases();
 		m_material->initialize( this );
 		if ( !m_material->isRenderShaderReady() ) {
@@ -512,8 +518,10 @@ void Terrain3D::physicsProcess( const double fDelta ) {
 		profile_sample.m_nOceanUsec = now - phase_started_usec;
 		phase_started_usec = now;
 	}
-	if ( m_pInstancer && effectiveInstancerCellStreamingEnabled() ) {
-		if ( m_bRuntimeBoundaryInstancerDeferredLastTick ) {
+	const bool bInstanceCellStreaming = effectiveInstancerCellStreamingEnabled();
+	const bool bInstanceTargetTracking = bInstanceCellStreaming || m_bInstancerSingleLodBuffers;
+	if ( m_pInstancer && bInstanceTargetTracking ) {
+		if ( bInstanceCellStreaming && m_bRuntimeBoundaryInstancerDeferredLastTick ) {
 			m_pInstancer->deferStreamingSelectionForFrame();
 			++m_nRuntimeBoundaryInstancerDeferralsTotal;
 		} else {
@@ -694,6 +702,7 @@ Vector3 t3dBakeSnapshot_t::getMeshVertex(
 
 Terrain3D::Terrain3D( void ) {
 	LOG( INFO, "Terrain3D v", m_version, " - https://github.com/TokisanGames/Terrain3D" );
+	LOG( INFO, "[build] native_build_id=", s_pszNativeBuildId );
 	// Process the command line
 	PackedStringArray args = OS::get_singleton()->get_cmdline_args();
 	for ( int i = args.size() - 1; i >= 0; i-- ) {

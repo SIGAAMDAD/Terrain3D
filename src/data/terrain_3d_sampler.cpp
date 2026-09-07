@@ -555,11 +555,13 @@ bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
         const int nHeight,
         float *const pDestination,
         const int nDestinationStride,
-        const bool bRespectHoles ) {
+        const bool bRespectHoles,
+        const bool bRequireCompleteCoverage ) {
 	if ( !validateEpoch() || !pDestination || nWidth <= 0 || nHeight <= 0 || nDestinationStride < nWidth ) {
 		return false;
 	}
 	bool bComplete = true;
+	bool bHardFailure = false;
 	for ( int row = 0; row < nHeight; ++row ) {
 		float *destination = pDestination + ( size_t )( row ) * ( size_t )( nDestinationStride );
 		const int64_t grid_z = iGridZ + row;
@@ -579,10 +581,14 @@ bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
 				copied += run;
 				continue;
 			}
-			t3dRegionView_t *const pView = getRegionViewUnchecked( Vector2i( ( int32_t )( region_x ), ( int32_t )( region_z ) ) );
+			const Vector2i region_location( ( int32_t )( region_x ), ( int32_t )( region_z ) );
+			t3dRegionView_t *const pView = getRegionViewUnchecked( region_location );
 			if ( !pView ) {
 				eastl::fill_n( destination + copied, run, NAN );
 				bComplete = false;
+				const Terrain3DRegion *const pRegion =
+				        m_source.m_pRepository ? m_source.m_pRepository->getRegionPtr( region_location ) : NULL;
+				bHardFailure = bHardFailure || ( pRegion && !pRegion->isDeleted() );
 				copied += run;
 				continue;
 			}
@@ -601,7 +607,7 @@ bool Terrain3DSampler::copyHeightRect( const int64_t iGridX,
 			copied += run;
 		}
 	}
-	return bComplete;
+	return !bHardFailure && ( bComplete || !bRequireCompleteCoverage );
 }
 
 bool Terrain3DSampler::minimumHeightRect(

@@ -273,6 +273,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_enabled" ), &Terrain3D::isGpuRegionCacheEnabled );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_budget_mb", "budget_mb" ), &Terrain3D::setGpuRegionCacheBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_budget_mb" ), &Terrain3D::getGpuRegionCacheBudgetMb );
+	ClassDB::bind_method( D_METHOD( "set_gpu_region_cache_page_limit", "pages" ), &Terrain3D::setGpuRegionCachePageLimit );
+	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_page_limit" ), &Terrain3D::getGpuRegionCachePageLimit );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_upload_budget_layers", "layers" ), &Terrain3D::setGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_upload_budget_layers" ), &Terrain3D::getGpuRegionUploadBudgetLayers );
 	ClassDB::bind_method( D_METHOD( "set_gpu_region_upload_budget_mb", "budget_mb" ), &Terrain3D::setGpuRegionUploadBudgetMb );
@@ -880,9 +882,12 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "gpu_region_cache_budget_auto" ),
 	        "set_gpu_region_cache_budget_auto",
 	        "is_gpu_region_cache_budget_auto" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_cache_budget_mb", PROPERTY_HINT_RANGE, "1,128,1" ),
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_cache_budget_mb", PROPERTY_HINT_RANGE, "1,512,1,suffix: MiB" ),
 	        "set_gpu_region_cache_budget_mb",
 	        "get_gpu_region_cache_budget_mb" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_cache_page_limit", PROPERTY_HINT_RANGE, "16,256,1,suffix: pages" ),
+	        "set_gpu_region_cache_page_limit",
+	        "get_gpu_region_cache_page_limit" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT,
 	                      "gpu_region_cache_effective_mb",
 	                      PROPERTY_HINT_NONE,
@@ -896,13 +901,13 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_upload_budget_mb", PROPERTY_HINT_RANGE, "1,64,1" ),
 	        "set_gpu_region_upload_budget_mb",
 	        "get_gpu_region_upload_budget_mb" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_spare_pages", PROPERTY_HINT_RANGE, "2,63,1" ),
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_spare_pages", PROPERTY_HINT_RANGE, "2,255,1" ),
 	        "set_gpu_region_spare_pages",
 	        "get_gpu_region_spare_pages" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_retire_frames", PROPERTY_HINT_RANGE, "1,16,1" ),
 	        "set_gpu_region_retire_frames",
 	        "get_gpu_region_retire_frames" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_detail_lods", PROPERTY_HINT_RANGE, "0,16,1,suffix: LODs (0 = all)" ),
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "gpu_region_detail_lods", PROPERTY_HINT_RANGE, "0,16,1,suffix: LODs (0 = Near tier)" ),
 	        "set_gpu_region_detail_lods",
 	        "get_gpu_region_detail_lods" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "gpu_region_detail_range_end_m", PROPERTY_HINT_RANGE, "0,8192,1,or_greater,suffix:m" ),

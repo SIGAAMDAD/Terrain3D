@@ -344,6 +344,8 @@ private:
 	int m_nQueuedCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;
 	uint64_t m_nSourceTopologyGeneration = 0u;
+	uint64_t m_nSourceMaterialSignature = 0u;
+	uint64_t m_nSourceCollisionSignature = 0u;
 	String m_sourceDataDirectory;
 	t3dRuntimePageNumericConfig_t m_sourceNumericConfig;
 	bool m_bSourceEditorAuthoring = false;
@@ -352,6 +354,8 @@ private:
 	bool m_bCapacityFailureLatched = false;
 	uint64_t m_nCapacityFailureTopologyGeneration = 0u;
 	uint64_t m_nCapacityFailurePreparedByteBudget = 0u;
+	uint64_t m_nCapacityFailureMaterialSignature = 0u;
+	uint64_t m_nCapacityFailureCollisionSignature = 0u;
 	t3dRuntimePageNumericConfig_t m_capacityFailureNumericConfig;
 	String m_capacityFailureDataDirectory;
 	bool m_bCapacityFailureEditorAuthoring = false;

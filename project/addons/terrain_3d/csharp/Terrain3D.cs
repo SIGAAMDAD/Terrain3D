@@ -220,6 +220,8 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName GpuRegionCacheEnabled = "gpu_region_cache_enabled";
 		/// <summary>Cached name for the physical region-map memory budget.</summary>
 		public new static readonly StringName GpuRegionCacheBudgetMb = "gpu_region_cache_budget_mb";
+		/// <summary>Cached name for the runtime physical GPU terrain-page ceiling.</summary>
+		public new static readonly StringName GpuRegionCachePageLimit = "gpu_region_cache_page_limit";
 		/// <summary>Cached name for the per-tick physical page publication limit.</summary>
 		public new static readonly StringName GpuRegionUploadBudgetLayers = "gpu_region_upload_budget_layers";
 		/// <summary>Cached name for the per-tick terrain upload byte budget.</summary>
@@ -824,6 +826,13 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.GpuRegionCacheBudgetMb, value);
 	}
 
+	/// <summary>Maximum runtime physical GPU terrain-page layer ceiling. Effective residency is also bounded by the byte budget.</summary>
+	public new long GpuRegionCachePageLimit
+	{
+		get => Get(GDExtensionPropertyName.GpuRegionCachePageLimit).As<long>();
+		set => Set(GDExtensionPropertyName.GpuRegionCachePageLimit, value);
+	}
+
 	/// <summary>Maximum physical terrain pages published during one residency update.</summary>
 	public new long GpuRegionUploadBudgetLayers
 	{
@@ -852,7 +861,7 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.GpuRegionRetireFrames, value);
 	}
 
-	/// <summary>Number of inner clipmap LODs that require detailed physical region pages; zero uses all LODs.</summary>
+	/// <summary>Number of inner clipmap LODs that require detailed physical region pages; zero follows the Near render tier.</summary>
 	public new long GpuRegionDetailLods
 	{
 		get => Get(GDExtensionPropertyName.GpuRegionDetailLods).As<long>();

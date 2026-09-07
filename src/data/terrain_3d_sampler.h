@@ -71,7 +71,8 @@ public:
 	        int nHeight,
 	        float *pDestination,
 	        int nDestinationStride,
-	        bool bRespectHoles = false );
+	        bool bRespectHoles = false,
+	        bool bRequireCompleteCoverage = true );
 	bool minimumHeightRect( int64_t iGridX, int64_t iGridZ, int nWidth, int nHeight, float &fHeight, bool bRespectHoles = true );
 
 private:

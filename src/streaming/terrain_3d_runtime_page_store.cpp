@@ -940,6 +940,8 @@ void Terrain3DRuntimePageStore::reset( void ) {
 	m_nQueuedCount = 0;
 	m_nStreamingGenerationLast = 0u;
 	m_nSourceTopologyGeneration = 0u;
+	m_nSourceMaterialSignature = 0u;
+	m_nSourceCollisionSignature = 0u;
 	m_nPreparedReservedBytes = 0u;
 	m_nPayloadBytesPerSlot = 0u;
 	m_nWorkerScratchReservedBytes = 0u;
@@ -949,6 +951,8 @@ void Terrain3DRuntimePageStore::reset( void ) {
 	m_bCapacityFailureLatched = false;
 	m_nCapacityFailureTopologyGeneration = 0u;
 	m_nCapacityFailurePreparedByteBudget = 0u;
+	m_nCapacityFailureMaterialSignature = 0u;
+	m_nCapacityFailureCollisionSignature = 0u;
 	m_capacityFailureNumericConfig = t3dRuntimePageNumericConfig_t();
 	m_capacityFailureDataDirectory = String();
 	m_bCapacityFailureEditorAuthoring = false;
@@ -1830,7 +1834,15 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 		return t3dRuntimePageStoreWriteFail( pError, "derived normal/slope page has an invalid size/format" );
 	}
 	if ( !t3dRuntimePageStoreValidImage( rPayload.m_middleHeight, middle_height_size, middle_height_size, Image::FORMAT_R16, false ) ) {
-		return t3dRuntimePageStoreWriteFail( pError, "middle-height page has an invalid size/format" );
+		const int actual_width = rPayload.m_middleHeight.is_valid() ? rPayload.m_middleHeight->get_width() : 0;
+		const int actual_height = rPayload.m_middleHeight.is_valid() ? rPayload.m_middleHeight->get_height() : 0;
+		const int actual_format = rPayload.m_middleHeight.is_valid() ? ( int )( rPayload.m_middleHeight->get_format() ) : -1;
+		return t3dRuntimePageStoreWriteFail( pError,
+		        String( "middle-height page has an invalid size/format; expected=" ) + String::num_int64( middle_height_size ) + String( "x" )
+		                + String::num_int64( middle_height_size ) + String( " R16 divisor=" )
+		                + String::num_int64( rConfig.m_nMiddleHeightDivisor ) + String( "; actual=" )
+		                + String::num_int64( actual_width ) + String( "x" ) + String::num_int64( actual_height ) + String( " format=" )
+		                + String::num_int64( actual_format ) );
 	}
 	if ( !t3dRuntimePageStoreValidImage( rPayload.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) ) {
 		return t3dRuntimePageStoreWriteFail( pError, "Middle composite page has an invalid size/format" );
@@ -2279,6 +2291,8 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 	        rState.m_config.m_nPrepareThreads );
 	const uint64_t topology_generation = m_pRepository->getTopologyGeneration();
 	const bool same_config = !m_bRuntimeSourcesDirty && topology_generation == m_nSourceTopologyGeneration
+	        && rState.m_config.m_nMaterialSourceSignature == m_nSourceMaterialSignature
+	        && rState.m_config.m_nCollisionSurfaceSignature == m_nSourceCollisionSignature
 	        && rState.m_config.m_dataDirectory == m_sourceDataDirectory && numeric.m_nColorDivisor == m_sourceNumericConfig.m_nColorDivisor
 	        && numeric.m_nDerivedDivisor == m_sourceNumericConfig.m_nDerivedDivisor
 	        && numeric.m_nMiddleHeightDivisor == m_sourceNumericConfig.m_nMiddleHeightDivisor
@@ -2290,6 +2304,8 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 
 	const bool same_capacity_failure = m_bCapacityFailureLatched && topology_generation == m_nCapacityFailureTopologyGeneration
 	        && m_nPreparedByteBudget == m_nCapacityFailurePreparedByteBudget
+	        && rState.m_config.m_nMaterialSourceSignature == m_nCapacityFailureMaterialSignature
+	        && rState.m_config.m_nCollisionSurfaceSignature == m_nCapacityFailureCollisionSignature
 	        && rState.m_config.m_dataDirectory == m_capacityFailureDataDirectory
 	        && numeric.m_nColorDivisor == m_capacityFailureNumericConfig.m_nColorDivisor
 	        && numeric.m_nDerivedDivisor == m_capacityFailureNumericConfig.m_nDerivedDivisor
@@ -2424,6 +2440,8 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 			m_bCapacityFailureLatched = true;
 			m_nCapacityFailureTopologyGeneration = topology_generation;
 			m_nCapacityFailurePreparedByteBudget = m_nPreparedByteBudget;
+			m_nCapacityFailureMaterialSignature = rState.m_config.m_nMaterialSourceSignature;
+			m_nCapacityFailureCollisionSignature = rState.m_config.m_nCollisionSurfaceSignature;
 			m_capacityFailureNumericConfig = numeric;
 			m_capacityFailureDataDirectory = rState.m_config.m_dataDirectory;
 			m_bCapacityFailureEditorAuthoring = rState.m_config.m_bEditorAuthoring;
@@ -2513,6 +2531,8 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 		return false;
 	}
 	m_nSourceTopologyGeneration = topology_generation;
+	m_nSourceMaterialSignature = rState.m_config.m_nMaterialSourceSignature;
+	m_nSourceCollisionSignature = rState.m_config.m_nCollisionSurfaceSignature;
 	m_sourceDataDirectory = rState.m_config.m_dataDirectory;
 	m_sourceNumericConfig = numeric;
 	m_bSourceEditorAuthoring = rState.m_config.m_bEditorAuthoring;

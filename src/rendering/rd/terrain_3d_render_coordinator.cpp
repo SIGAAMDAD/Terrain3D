@@ -1184,6 +1184,8 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
 	const uint64_t region_topology_generation = data->getRegionTopologyGenerationInternal();
 	const uint64_t physical_region_map_generation = data->getPhysicalRegionMapGenerationInternal();
+	const RID height_texture_rd = data->getHeightMapsRid();
+	const bool height_texture_ready = height_texture_rd.is_valid();
 	const int64_t region_map_count = s_nRegionSlots;
 	const uint16_t *const pPhysicalRegionMap = data->getPhysicalRegionMapDataInternal();
 	const uint16_t *const pLogicalRegionMap = data->getLogicalRegionMapDataInternal();
@@ -1229,7 +1231,8 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		return;
 	}
 	const bool region_map_changed = !m_bRegionMapInitialized || physical_region_map_generation != m_nPhysicalRegionMapGeneration
-	        || region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged;
+	        || region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged
+	        || height_texture_ready != m_bRegionMapHeightTextureReady;
 	if ( region_map_changed ) {
 		const uint32_t pending_bank = pPending ? pPending->m_nRegionMapBank : s_nRdInvalidFrameSnapshotIndex;
 		const uint32_t bank = selectWritablePublicationBank( m_nRegionMapReaderBank.load( T3D_MEMORY_ORDER_ACQUIRE ), pending_bank );
@@ -1247,7 +1250,11 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			const Vector2i map_location(
 			        ( int )( i & s_nRegionMapMask ) - s_nRegionMapHalf, ( int )( i >> s_nRegionMapShift ) - s_nRegionMapHalf );
 			const int source_index = Terrain3DData::getRegionMapIndex( map_location );
-			const uint32_t nPhysicalLayer = source_index >= 0 ? pPhysicalRegionMap[source_index] : 0u;
+			// A physical layer is meaningful only while the corresponding Near height
+			// array exists. During cache rebuild/startup publish zero residency so the
+			// shader takes its Middle/Far/background path instead of indexing a missing
+			// texture array. Logical presence remains published independently below.
+			const uint32_t nPhysicalLayer = height_texture_ready && source_index >= 0 ? pPhysicalRegionMap[source_index] : 0u;
 			const uint32_t nLogicalPresent = source_index >= 0 && pLogicalRegionMap[source_index] != 0u ? 0x80000000u : 0u;
 			uint32_t nShadowmaskMode = 0u;
 			if ( nLogicalPresent != 0u ) {
@@ -1267,6 +1274,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		m_nRegionTopologyGeneration = region_topology_generation;
 		m_nPhysicalRegionMapGeneration = physical_region_map_generation;
 		m_nRegionLightingSignature = region_lighting_signature;
+		m_bRegionMapHeightTextureReady = height_texture_ready;
 		m_nRegionMapGeneration = advanceGeneration( m_nRegionMapGeneration );
 		m_regionMapBanks[bank].m_nGeneration = m_nRegionMapGeneration;
 		m_nCurrentRegionMapBank = bank;
@@ -1286,7 +1294,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	snapshot.m_nRegionCacheGeneration = m_nRegionCacheGeneration;
 
 	t3dRdTerrainBindings_t &resources = publication.m_bindings;
-	resources.m_hHeightTextureRd = data->getHeightMapsRid();
+	resources.m_hHeightTextureRd = height_texture_rd;
 	resources.m_hDerivedTextureRd = data->getDerivedMapsRid();
 	resources.m_hControlTextureRd = data->getControlMapsRid();
 	resources.m_hColorTextureRd = data->getColorMapsRid();
@@ -1632,6 +1640,7 @@ void Terrain3DRenderCoordinator::resetSnapshotPublication( void ) {
 	m_nMaterialTextureGeneration = 0u;
 	m_lastPublishedResources = t3dRdTerrainBindings_t{};
 	m_bRegionMapInitialized = false;
+	m_bRegionMapHeightTextureReady = false;
 	m_bRegionCacheInitialized = false;
 	m_bPatchStateInitialized = false;
 	m_bMaterialStateInitialized = false;
@@ -1748,33 +1757,48 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
 	if ( m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		return true;
 	}
-	const bool ready = m_shaderLibrary.isReady()
+	const bool shader_ready = m_shaderLibrary.isReady();
+	const bool terrain_ready = shader_ready
 	        && m_renderer.initialize( m_shaderLibrary.getNear(),
 	                m_shaderLibrary.getMiddle(),
 	                m_shaderLibrary.getFar(),
 	                m_shaderLibrary.getCull(),
-	                m_shaderLibrary.getForwardBundle() )
-	        && m_instanceRenderer.initialize(
-	                m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() )
-	        && m_oceanRenderer.initialize( m_shaderLibrary.getOceanColor(), m_shaderLibrary.getOceanShadow() );
-	m_bRendererInitialized.store( ready, T3D_MEMORY_ORDER_RELEASE );
+	                m_shaderLibrary.getForwardBundle() );
+	bool instance_ready = false;
+	bool ocean_ready = false;
+	if ( terrain_ready ) {
+		// Terrain is the functional lane. Instance/HLOD and ocean are companion
+		// renderers and must never veto a valid height-driven terrain renderer.
+		instance_ready = m_instanceRenderer.initialize(
+		        m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() );
+		ocean_ready = m_oceanRenderer.initialize( m_shaderLibrary.getOceanColor(), m_shaderLibrary.getOceanShadow() );
+		if ( !instance_ready ) {
+			LOG( WARN, "[RD instances] Companion renderer unavailable; terrain rendering remains active: ", m_instanceRenderer.getLastError() );
+		}
+		if ( !ocean_ready ) {
+			LOG( WARN, "[RD ocean] Companion renderer unavailable; terrain rendering remains active: ", m_oceanRenderer.getLastError() );
+		}
+	}
+	m_bRendererInitialized.store( terrain_ready, T3D_MEMORY_ORDER_RELEASE );
+	m_bInstanceRendererInitialized.store( instance_ready, T3D_MEMORY_ORDER_RELEASE );
+	m_bOceanRendererInitialized.store( ocean_ready, T3D_MEMORY_ORDER_RELEASE );
 	m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
-	if ( !ready ) {
+	if ( !terrain_ready ) {
 		m_renderWorldRuntime.shutdown_cold();
 		m_oceanRenderer.shutdown();
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
+		m_bInstanceRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bOceanRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 		resetForwardLifecycle();
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
 		if ( failures >= 8u ) {
 			m_bRendererFailed.store( true, T3D_MEMORY_ORDER_RELEASE );
 		}
 		t3dScopedLock_t lock( m_diagnosticsMutex );
-		m_initializationError = m_shaderLibrary.isReady()
-		        ? ( !m_instanceRenderer.getLastError().is_empty() ? m_instanceRenderer.getLastError() : m_renderer.getLastError() )
-		        : m_shaderLibrary.getLastError();
+		m_initializationError = shader_ready ? m_renderer.getLastError() : m_shaderLibrary.getLastError();
 	}
-	return ready;
+	return terrain_ready;
 }
 
 void Terrain3DRenderCoordinator::initializeOcean( void ) {
@@ -1828,6 +1852,8 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	m_bFailureLatched = false;
+	m_nFailureLatchTerrainTextureGeneration = 0u;
+	m_nFailureLatchMaterialTextureGeneration = 0u;
 	{
 		t3dScopedLock_t lock( m_diagnosticsMutex );
 		m_initializationError = String();
@@ -1904,6 +1930,8 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		m_bRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bInstanceRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bOceanRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 	}
 	if ( m_effect.is_valid() ) {
 		m_effect->setCoordinator( NULL );
@@ -1954,8 +1982,23 @@ void Terrain3DRenderCoordinator::update( void ) {
 		return;
 	}
 	publishSnapshot();
+	if ( m_bFailureLatched
+	        && ( m_nTerrainTextureGeneration != m_nFailureLatchTerrainTextureGeneration
+	                || m_nMaterialTextureGeneration != m_nFailureLatchMaterialTextureGeneration ) ) {
+		// Resource readiness is generation-owned. A renderer that failed while a
+		// texture array was being rebuilt must be allowed to retry when publication
+		// advances; otherwise eight transient startup callbacks permanently disable
+		// the terrain even after the correct RIDs become available.
+		m_bFailureLatched = false;
+		m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+		++m_nRendererRecoveryCount;
+		LOG( INFO, "[RD terrain] Resource generation advanced after a latched failure; retrying renderer initialization" );
+	}
 	if ( m_bRendererFailed.load( T3D_MEMORY_ORDER_ACQUIRE ) && !m_bFailureLatched ) {
 		m_bFailureLatched = true;
+		m_nFailureLatchTerrainTextureGeneration = m_nTerrainTextureGeneration;
+		m_nFailureLatchMaterialTextureGeneration = m_nMaterialTextureGeneration;
 		m_bRenderEnabled.store( false, T3D_MEMORY_ORDER_RELEASE );
 		if ( m_effect.is_valid() ) {
 			m_effect->set_enabled( false );
@@ -1982,6 +2025,8 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 	m_renderer.shutdown();
 	resetForwardLifecycle();
 	m_bRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bInstanceRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+	m_bOceanRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 }
 
 void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
@@ -2088,24 +2133,26 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	        : NULL;
 	const bool bHasTerrain = snapshot.m_nPatchCount > 0u && pRegionMap && !pRegionMap->m_bytes.is_empty();
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
-	const bool instances_ok = m_instanceRenderer.render(
-	        pRenderData, pMeshes ? &pMeshes->m_snapshot : NULL, pScene ? &pScene->m_snapshot : NULL, snapshot.m_nCameraCullMask );
+	const bool instance_lane_ready = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	if ( instance_lane_ready ) {
+		( void )m_instanceRenderer.render(
+		        pRenderData, pMeshes ? &pMeshes->m_snapshot : NULL, pScene ? &pScene->m_snapshot : NULL, snapshot.m_nCameraCullMask );
+	}
 	const bool terrain_ok = !bHasTerrain
-	        || ( instances_ok
-	                && m_renderer.render(
-	                        pRenderData, snapshot, pRegionMap->m_bytes, snapshot.m_nRegionMapGeneration, publication->m_bindings, true ) );
-	const bool render_ok = instances_ok && terrain_ok;
-	if ( render_ok ) {
+	        || m_renderer.render( pRenderData, snapshot, pRegionMap->m_bytes, snapshot.m_nRegionMapGeneration, publication->m_bindings, true );
+	if ( terrain_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	} else {
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
-		// Resource/render failures are fatal to the current ownership generation.
-		// Tear it down on this render thread; a later callback reconstructs from
-		// immutable CPU publication without reviving the native renderer.
+		// Only the functional terrain lane can invalidate the terrain renderer.
+		// Companion instance/HLOD failures are isolated above and remain visible
+		// through their own diagnostics without suppressing a valid height pass.
 		m_renderWorldRuntime.shutdown_cold();
 		m_oceanRenderer.shutdown();
 		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
+		m_bInstanceRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
+		m_bOceanRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 		resetForwardLifecycle();
 		m_bRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 		if ( failures >= 8u ) {
@@ -2214,6 +2261,7 @@ void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
 	m_nForwardPreparedScenePass = 0u;
 	m_nForwardPreparedViewportKey = 0u;
 	m_bForwardPreparedHasTerrain = false;
+	m_bForwardPreparedHasInstances = false;
 	m_bForwardPreparedHasOcean = false;
 	m_bForwardPreparedHasRenderWorld = false;
 }
@@ -2341,6 +2389,8 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
+		m_bForwardPreparedHasInstances = false;
+		m_bForwardPreparedHasOcean = false;
 		m_bForwardPreparedHasRenderWorld = false;
 		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 			Terrain3DRdContext &render_world_context = Terrain3DRdContext::getShared();
@@ -2368,13 +2418,15 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 			m_bForwardPreparedHasRenderWorld = render_world_ready && render_world_generations_ok && m_renderWorldRuntime.has_scene();
 		}
 		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
-		const bool instances_ok = transparent_pass ? true
-		                                           : m_instanceRenderer.prepareForwardPass( rContext,
-		                                                     pMeshes ? &pMeshes->m_snapshot : NULL,
-		                                                     pScene ? &pScene->m_snapshot : NULL,
-		                                                     visibility_mask,
-		                                                     history_valid,
-		                                                     viewport_reconfigured );
+		const bool instance_lane_ready = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+		const bool instances_ok = transparent_pass || !instance_lane_ready
+		        || m_instanceRenderer.prepareForwardPass( rContext,
+		                pMeshes ? &pMeshes->m_snapshot : NULL,
+		                pScene ? &pScene->m_snapshot : NULL,
+		                visibility_mask,
+		                history_valid,
+		                viewport_reconfigured );
+		m_bForwardPreparedHasInstances = !transparent_pass && instance_lane_ready && instances_ok;
 		// Terrain and instance/HLOD resources are independent. Always prepare the
 		// terrain pass even when the companion instance lane reports a failure.
 		const bool terrain_ok = !has_terrain
@@ -2385,18 +2437,17 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		                publication->m_bindings,
 		                history_valid,
 		                viewport_reconfigured );
-		const bool ocean_ok =
-		        m_oceanRenderer.prepareForwardPass( rContext, snapshot, pOcean ? &pOcean->m_snapshot : NULL, visibility_mask );
-		m_bForwardPreparedHasOcean = snapshot.m_ocean.m_nEnabled != 0u && snapshot.m_ocean.m_nPatchCount > 0u
-		        && ( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
-		if ( instances_ok && terrain_ok && ocean_ok ) {
+		const bool ocean_lane_ready = m_bOceanRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+		const bool ocean_ok = !ocean_lane_ready
+		        || m_oceanRenderer.prepareForwardPass( rContext, snapshot, pOcean ? &pOcean->m_snapshot : NULL, visibility_mask );
+		m_bForwardPreparedHasOcean = ocean_lane_ready && ocean_ok && snapshot.m_ocean.m_nEnabled != 0u
+		        && snapshot.m_ocean.m_nPatchCount > 0u && ( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
+		if ( terrain_ok ) {
 			m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 			return true;
 		}
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
 		m_renderWorldRuntime.shutdown_cold();
-		m_oceanRenderer.shutdown();
-		m_instanceRenderer.shutdown();
 		m_renderer.shutdown();
 		resetForwardLifecycle();
 		m_bRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
@@ -2410,11 +2461,14 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	        || m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
 		return false;
 	}
-	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
-	const bool instances_ok = transparent_pass ? true : m_instanceRenderer.renderForwardPass( rContext );
+	if ( m_bForwardPreparedHasInstances ) {
+		( void )m_instanceRenderer.renderForwardPass( rContext );
+	}
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
-	const bool ocean_ok = !m_bForwardPreparedHasOcean || m_oceanRenderer.renderForwardPass( rContext );
+	if ( m_bForwardPreparedHasOcean ) {
+		( void )m_oceanRenderer.renderForwardPass( rContext );
+	}
 	T3DRenderWorldFrameResult render_world_result = {};
 	const bool render_world_ok = !m_bForwardPreparedHasRenderWorld
 	        || m_renderWorldRuntime.render_main_camera_hot( rContext, 0u, 0u, 0u, 0u, 0u, render_world_result );
@@ -2423,7 +2477,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		// companion submission from the native Terrain3D pipeline.
 		m_bForwardPreparedHasRenderWorld = false;
 	}
-	if ( instances_ok && terrain_ok && ocean_ok ) {
+	if ( terrain_ok ) {
 		m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 		return true;
 	}
@@ -2559,7 +2613,17 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["coordinator_mesh_source_builds"] = ( int64_t )( m_nMeshSourceBuildCount );
 	result["coordinator_ocean_static_state_builds"] = ( int64_t )( m_nOceanStaticStateBuildCount );
 	result["renderer_initialized"] = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["terrain_renderer_initialized"] = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["instance_renderer_initialized"] = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["ocean_renderer_initialized"] = m_bOceanRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["forward_prepared_has_terrain"] = m_bForwardPreparedHasTerrain;
+	result["forward_prepared_has_instances"] = m_bForwardPreparedHasInstances;
+	result["forward_prepared_has_ocean"] = m_bForwardPreparedHasOcean;
+	result["forward_prepared_has_render_world"] = m_bForwardPreparedHasRenderWorld;
 	result["renderer_failure_latched"] = m_bFailureLatched;
+	result["region_map_height_texture_ready"] = m_bRegionMapHeightTextureReady;
+	result["published_height_texture_valid"] = m_lastPublishedResources.m_hHeightTextureRd.is_valid();
+	result["renderer_recoveries"] = ( int64_t )( m_nRendererRecoveryCount );
 	result["callbacks"] = ( int64_t )( m_nCallbackCount.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["consecutive_render_failures"] = ( int64_t )( m_nConsecutiveRenderFailures.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	const uint64_t snapshot_token = m_nSnapshotExchangeToken.load( T3D_MEMORY_ORDER_ACQUIRE );

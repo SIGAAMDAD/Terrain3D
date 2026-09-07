@@ -597,10 +597,19 @@ int Terrain3DGpuRegionCache::calculateRequiredCorePagesForLods( const int nDetai
 		return 0;
 	}
 	const int total_lods = MAX( 1, m_pTerrain->getMeshLods() + m_pTerrain->getTessellationLevel() );
-	const int detail_lods = nDetailLods <= 0 ? total_lods : CLAMP( nDetailLods, 1, total_lods );
+	int detail_lods = nDetailLods;
+	if ( detail_lods <= 0 ) {
+		detail_lods = MAX( 1, m_pTerrain->getRuntimeNearShaderLods() );
+	}
+	detail_lods = CLAMP( detail_lods, 1, total_lods );
 	const int radius = t3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(), detail_lods );
 	const int diameter = radius * 2 + 1;
-	return MIN( diameter * diameter, s_nRegionMapSize * s_nRegionMapSize );
+	int required_pages = MIN( diameter * diameter, s_nRegionMapSize * s_nRegionMapSize );
+	const int active_regions = m_regionRepository.getActiveRegionCount();
+	if ( active_regions > 0 ) {
+		required_pages = MIN( required_pages, active_regions );
+	}
+	return required_pages;
 }
 
 uint64_t Terrain3DGpuRegionCache::calculateAuthoringGpuRegionBudgetBytes( void ) const {
@@ -617,12 +626,17 @@ int Terrain3DGpuRegionCache::calculateCapacityForLods( const int nDetailLods ) c
 		return 0;
 	}
 	( void )( nDetailLods );
-	// Allocation is budget-driven. The unified region policy determines which pages
-	// are desirable; legacy GPU guard/prefetch controls must not define a second
-	// spatial footprint or reduce the usable physical cache.
-	const int requested = MIN( m_regionRepository.getActiveRegionCount(), s_nGpuCacheRuntimeMaxLayers );
-	const int capacity = t3dGpuCacheCalculateCapacity( m_nGpuRegionCacheBudgetBytes,
-	        s_nGpuCacheRuntimeMaxLayers,
+	// Allocation is budget-driven. The physical page ceiling is an authored owner
+	// policy, not a compile-time runtime constant. Editor Authoring retains its
+	// independent ceiling so the same byte grant can be inspected at a wider page
+	// count without changing shipping defaults.
+	const bool bAuthoring = m_pTerrain->isEditorAuthoringMode();
+	const int maximum_layers = bAuthoring ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
+	                                      : CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers );
+	const uint64_t budget_bytes = bAuthoring ? calculateAuthoringGpuRegionBudgetBytes() : m_nGpuRegionCacheBudgetBytes;
+	const int requested = MIN( m_regionRepository.getActiveRegionCount(), maximum_layers );
+	const int capacity = t3dGpuCacheCalculateCapacity( budget_bytes,
+	        maximum_layers,
 	        requested,
 	        m_bControlMapsImplicit,
 	        !isColorChannelEnabled(),
@@ -646,9 +660,11 @@ int Terrain3DGpuRegionCache::calculateGpuRegionCacheCapacity( void ) const {
 		        m_pTerrain->getGpuRegionDerivedResolutionDivisor(),
 		        m_nGpuRegionSparePages );
 	}
-	const int allocation_request = MIN( m_regionRepository.getActiveRegionCount(), s_nGpuCacheRuntimeMaxLayers );
+	const int page_limit = m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers )
+	                                : s_nGpuCacheRuntimeMaxLayers;
+	const int allocation_request = MIN( m_regionRepository.getActiveRegionCount(), page_limit );
 	return t3dGpuCacheCalculateCapacity( m_nGpuRegionCacheBudgetBytes,
-	        s_nGpuCacheRuntimeMaxLayers,
+	        page_limit,
 	        allocation_request,
 	        m_bControlMapsImplicit,
 	        !isColorChannelEnabled(),
@@ -659,9 +675,13 @@ int Terrain3DGpuRegionCache::calculateGpuRegionCacheCapacity( void ) const {
 }
 
 int Terrain3DGpuRegionCache::calculateGpuRegionPhysicalLayers( const int nMappedCapacity ) const {
-	const bool bAuthoring = m_pTerrain && m_pTerrain->isEditorAuthoringMode();
-	const int maximum_layers = bAuthoring ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
-	                                      : s_nGpuCacheRuntimeMaxLayers;
+	bool bAuthoring = false;
+	int maximum_layers = s_nGpuCacheRuntimeMaxLayers;
+	if ( m_pTerrain ) {
+		bAuthoring = m_pTerrain->isEditorAuthoringMode();
+		maximum_layers = bAuthoring ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
+		                            : CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers );
+	}
 	const uint64_t budget_bytes = bAuthoring ? calculateAuthoringGpuRegionBudgetBytes() : m_nGpuRegionCacheBudgetBytes;
 	const int budget_layers = t3dGpuCacheCalculateBudgetPhysicalLayers( budget_bytes,
 	        maximum_layers,
@@ -679,9 +699,10 @@ int Terrain3DGpuRegionCache::calculateGpuRegionRequiredRadius( void ) const {
 	}
 	const int total_lods = MAX( 1, m_pTerrain->getMeshLods() + m_pTerrain->getTessellationLevel() );
 	int detail_lods = m_pTerrain->getGpuRegionDetailLods();
-	if ( detail_lods <= 0 || detail_lods > total_lods ) {
-		detail_lods = total_lods;
+	if ( detail_lods <= 0 ) {
+		detail_lods = MAX( 1, m_pTerrain->getRuntimeNearShaderLods() );
 	}
+	detail_lods = CLAMP( detail_lods, 1, total_lods );
 	return t3dGpuCacheCalculateFootprintRadiusRegions( m_pTerrain->getMeshSize(), detail_lods );
 }
 
@@ -961,8 +982,7 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 	        m_bControlMapsImplicit,
 	        "; implicit_color=",
 	        m_bColorMapsImplicit );
-	if ( capacity <= 0 || m_defaultHeightMap.is_null() || m_defaultControlMap.is_null() || m_defaultColorMap.is_null()
-	        || m_defaultDerivedMap.is_null() ) {
+	if ( capacity <= 0 || m_defaultHeightMap.is_null() ) {
 		return false;
 	}
 
@@ -998,69 +1018,92 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 	m_nGpuRegionDerivedDivisor = m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1;
 	const bool bColorChannelEnabled = isColorChannelEnabled();
 	const bool bDerivedChannelEnabled = isDerivedChannelEnabled();
-	m_bGpuRegionColorChannelAllocated = bColorChannelEnabled;
-	m_bGpuRegionDerivedChannelAllocated = bDerivedChannelEnabled;
 
 	m_gpuHeightMaps.resize( m_nGpuRegionPhysicalLayerCount );
-	m_gpuDerivedMaps.resize( bDerivedChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1 );
-	const int control_layers = m_bControlMapsImplicit ? 1 : m_nGpuRegionPhysicalLayerCount;
-	const int color_layers = bColorChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1;
-	m_gpuControlMaps.resize( control_layers );
-	m_gpuColorMaps.resize( color_layers );
-	m_gpuMiddleCompositeMaps.resize( m_nGpuRegionPhysicalLayerCount );
-	m_gpuTerrainShadowMasks.resize( m_nGpuRegionPhysicalLayerCount );
-	const Ref<Image> pDefaultGpuColor = makeGpuColorImage( m_defaultColorMap );
-	const Ref<Image> pDefaultGpuDerived = makeGpuDerivedImage( m_defaultDerivedMap );
-	if ( pDefaultGpuColor.is_null() || pDefaultGpuDerived.is_null() ) {
-		return false;
-	}
 	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
 		m_gpuHeightMaps[layer] = m_defaultHeightMap;
 	}
-	for ( int layer = 0; layer < m_gpuDerivedMaps.size(); ++layer ) {
-		m_gpuDerivedMaps[layer] = pDefaultGpuDerived;
-	}
+
+	const bool bControlSourceReady = m_defaultControlMap.is_valid();
+	const bool bColorSourceReady = m_defaultColorMap.is_valid();
+	const bool bDerivedSourceReady = m_defaultDerivedMap.is_valid();
+	const Ref<Image> pDefaultGpuColor = bColorSourceReady ? makeGpuColorImage( m_defaultColorMap ) : Ref<Image>();
+	const Ref<Image> pDefaultGpuDerived = bDerivedSourceReady ? makeGpuDerivedImage( m_defaultDerivedMap ) : Ref<Image>();
+	const int control_layers = bControlSourceReady ? ( m_bControlMapsImplicit ? 1 : m_nGpuRegionPhysicalLayerCount ) : 0;
+	const int color_layers = pDefaultGpuColor.is_valid() ? ( bColorChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1 ) : 0;
+	const int derived_layers = pDefaultGpuDerived.is_valid() ? ( bDerivedChannelEnabled ? m_nGpuRegionPhysicalLayerCount : 1 ) : 0;
+	m_gpuControlMaps.resize( control_layers );
+	m_gpuColorMaps.resize( color_layers );
+	m_gpuDerivedMaps.resize( derived_layers );
 	for ( int layer = 0; layer < control_layers; ++layer ) {
 		m_gpuControlMaps[layer] = m_defaultControlMap;
 	}
 	for ( int layer = 0; layer < color_layers; ++layer ) {
 		m_gpuColorMaps[layer] = pDefaultGpuColor;
 	}
-	const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
-	const uint64_t material_signature = pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u;
-	if ( !refreshMiddleCompositeSources( material_signature, pDefaultGpuColor->get_width(), pDefaultGpuColor->get_height() ) ) {
-		return false;
+	for ( int layer = 0; layer < derived_layers; ++layer ) {
+		m_gpuDerivedMaps[layer] = pDefaultGpuDerived;
 	}
-	const Ref<Image> pDefaultMiddleComposite = makeMiddleCompositeImage( s_v2iZero, m_defaultControlMap, pDefaultGpuColor, 0 );
-	if ( pDefaultMiddleComposite.is_null() ) {
-		return false;
+
+	Ref<Image> pDefaultMiddleComposite;
+	if ( bControlSourceReady && pDefaultGpuColor.is_valid() ) {
+		const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
+		const uint64_t material_signature = pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u;
+		if ( refreshMiddleCompositeSources( material_signature, pDefaultGpuColor->get_width(), pDefaultGpuColor->get_height() ) ) {
+			pDefaultMiddleComposite = makeMiddleCompositeImage( s_v2iZero, m_defaultControlMap, pDefaultGpuColor, 0 );
+		}
 	}
 	const Ref<Image> pDefaultTerrainShadow = makeTerrainShadowMaskImage( NULL );
-	if ( pDefaultTerrainShadow.is_null() ) {
-		return false;
+	if ( pDefaultMiddleComposite.is_valid() ) {
+		m_gpuMiddleCompositeMaps.resize( m_nGpuRegionPhysicalLayerCount );
+		for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
+			m_gpuMiddleCompositeMaps[layer] = pDefaultMiddleComposite;
+		}
+	} else {
+		m_gpuMiddleCompositeMaps.clear();
 	}
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		m_gpuMiddleCompositeMaps[layer] = pDefaultMiddleComposite;
-		m_gpuTerrainShadowMasks[layer] = pDefaultTerrainShadow;
+	if ( pDefaultTerrainShadow.is_valid() ) {
+		m_gpuTerrainShadowMasks.resize( m_nGpuRegionPhysicalLayerCount );
+		for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
+			m_gpuTerrainShadowMasks[layer] = pDefaultTerrainShadow;
+		}
+	} else {
+		m_gpuTerrainShadowMasks.clear();
 	}
 
 	const bool bHeightOk = m_generatedHeightMaps.create( m_gpuHeightMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
-	const bool bControlOk = m_generatedControlMaps.create( m_gpuControlMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
-	const bool bColorOk = m_generatedColorMaps.create( m_gpuColorMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
-	const bool bDerivedOk = m_generatedDerivedMaps.create( m_gpuDerivedMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
-	const bool bMiddleCompositeOk =
-	        m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
-	const bool bTerrainShadowOk = m_generatedTerrainShadowMasks.create( m_gpuTerrainShadowMasks, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bControlOk = control_layers > 0 && m_generatedControlMaps.create( m_gpuControlMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bColorOk = color_layers > 0 && m_generatedColorMaps.create( m_gpuColorMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
+	const bool bDerivedOk = derived_layers > 0 && m_generatedDerivedMaps.create( m_gpuDerivedMaps, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	const bool bMiddleCompositeOk = m_gpuMiddleCompositeMaps.size() > 0
+	        && m_generatedMiddleCompositeMaps.create( m_gpuMiddleCompositeMaps, T3D_RD_TEXTURE_SOURCE_COLOR ).is_valid();
+	const bool bTerrainShadowOk = m_gpuTerrainShadowMasks.size() > 0
+	        && m_generatedTerrainShadowMasks.create( m_gpuTerrainShadowMasks, T3D_RD_TEXTURE_LINEAR_DATA ).is_valid();
+	m_bGpuRegionColorChannelAllocated = bColorOk && bColorChannelEnabled;
+	m_bGpuRegionDerivedChannelAllocated = bDerivedOk && bDerivedChannelEnabled;
 	m_gpuHeightMaps.clear();
 	m_gpuControlMaps.clear();
 	m_gpuColorMaps.clear();
 	m_gpuDerivedMaps.clear();
 	m_gpuMiddleCompositeMaps.clear();
 	m_gpuTerrainShadowMasks.clear();
-	m_bGpuRegionCacheTexturesReady = bHeightOk && bControlOk && bColorOk && bDerivedOk && bMiddleCompositeOk && bTerrainShadowOk;
+	m_bGpuRegionCacheTexturesReady = bHeightOk;
 	if ( !m_bGpuRegionCacheTexturesReady ) {
-		LOG( ERROR, "Failed to create bounded GPU region cache with ", capacity, " physical layers" );
+		LOG( ERROR, "Failed to create mandatory GPU height page cache with ", capacity, " mapped pages" );
 		return false;
+	}
+	if ( !bControlOk || !bColorOk || !bDerivedOk || !bMiddleCompositeOk || !bTerrainShadowOk ) {
+		LOG( WARN,
+		        "[gpu-cache] Height page cache is ready with optional channels degraded: control=",
+		        bControlOk,
+		        "; color=",
+		        bColorOk,
+		        "; derived=",
+		        bDerivedOk,
+		        "; middle_composite=",
+		        bMiddleCompositeOk,
+		        "; terrain_shadow=",
+		        bTerrainShadowOk );
 	}
 	m_nGpuRegionLastPublicationTick = m_nGpuRegionTick;
 	m_nGpuRegionRequestedPages = calculateGpuRegionRequestedPages();
@@ -1588,8 +1631,10 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 	// requires no texture update, while explicit-to-default transitions still clear
 	// stale physical contents before publication.
 	const bool bUploadControl = ( eMapType == TYPE_CONTROL || eMapType == REGION_TYPE_MAX ) && !m_bControlMapsImplicit
+	        && m_generatedControlMaps.getRid().is_valid()
 	        && t3dGpuCacheOptionalChannelNeedsUpdate( source_channel_flags, previous_channel_flags, ( uint8_t )( REGION_CHANNEL_CONTROL ) );
 	const bool bUploadColor = ( eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX ) && isColorChannelEnabled()
+	        && m_generatedColorMaps.getRid().is_valid()
 	        && t3dGpuCacheOptionalChannelNeedsUpdate( source_channel_flags, previous_channel_flags, ( uint8_t )( REGION_CHANNEL_COLOR ) );
 	Ref<Image> pHeight;
 	Ref<Image> pDerived;
@@ -1620,12 +1665,15 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			return false;
 		}
 		if ( !bPreparedAttempted ) {
-			// When cooked-page residency is enabled, prepared pages are authoritative
-			// for full-page publication in both runtime and editor. Never fall through
-			// to synchronous control/composite synthesis from the HOT_FRAME service.
-			m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE;
-			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			return false;
+			// Cooked pages are authoritative in shipping/runtime. Editor Authoring keeps
+			// the live region maps authoritative: a missing/stale cook must never leave
+			// the detailed mesh permanently on its coarse fallback until an edit occurs.
+			// The live retry remains bounded by P07's upload byte/call token admission.
+			if ( !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() ) {
+				m_nGpuRegionStallFlagsLastTick |= TERRAIN3D_PROFILE_STALL_GPU_NO_READY_PAGE;
+				m_szGpuRegionSlotStates[nLayer] = previous_state;
+				return false;
+			}
 		}
 		if ( bCookedPage ) {
 			++m_nGpuRegionCookedHitsLastTick;
@@ -1648,7 +1696,9 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 	// Resolve the complete publication set before overwriting a physical layer.
 	// The page table continues to reference the previous logical region until all
 	// source images are known to be valid.
-	const bool bDerivedChannelEnabled = isDerivedChannelEnabled();
+	const bool bDerivedChannelEnabled = isDerivedChannelEnabled() && m_generatedDerivedMaps.getRid().is_valid();
+	const bool bMiddleCompositeAllocated = m_generatedMiddleCompositeMaps.getRid().is_valid();
+	const bool bTerrainShadowAllocated = m_generatedTerrainShadowMasks.getRid().is_valid();
 	if ( bUploadHeight && !bCookedPage ) {
 		pHeight = getRegionMapOrDefault( pRegion, TYPE_HEIGHT );
 		if ( pHeight.is_null() ) {
@@ -1699,13 +1749,13 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			return false;
 		}
 	}
-	if ( eMapType == REGION_TYPE_MAX && pTerrainShadowMask.is_null() ) {
+	if ( bTerrainShadowAllocated && eMapType == REGION_TYPE_MAX && pTerrainShadowMask.is_null() ) {
 		pTerrainShadowMask = makeTerrainShadowMaskImage( pRegion );
 		if ( pTerrainShadowMask.is_null() ) {
 			m_szGpuRegionSlotStates[nLayer] = previous_state;
 			return false;
 		}
-	} else if ( pTerrainShadowMask.is_valid() ) {
+	} else if ( bTerrainShadowAllocated && pTerrainShadowMask.is_valid() ) {
 		// Cooked pages preserve source dimensions; normalize every physical layer
 		// to the terrain region grid before publication.
 		if ( pTerrainShadowMask->get_width() != s_nRegionSize || pTerrainShadowMask->get_height() != s_nRegionSize ) {
@@ -1721,7 +1771,7 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			}
 		}
 	}
-	if ( eMapType == REGION_TYPE_MAX && pMiddleComposite.is_null() ) {
+	if ( bMiddleCompositeAllocated && eMapType == REGION_TYPE_MAX && pMiddleComposite.is_null() ) {
 		Ref<Image> pCompositeControl = pControl;
 		if ( pCompositeControl.is_null() ) {
 			pCompositeControl = makeGpuRenderControlImage( vLocation );
@@ -1776,18 +1826,21 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 		if ( bBatchReady && bUploadColor ) {
 			bBatchReady = t3dGpuAppendTextureBatchUpdate( updates, update_count, m_generatedColorMaps, pColor, nLayer );
 		}
-		if ( bBatchReady ) {
+		if ( bBatchReady && bMiddleCompositeAllocated ) {
 			bBatchReady = t3dGpuAppendTextureBatchUpdate( updates, update_count, m_generatedMiddleCompositeMaps, pMiddleComposite, nLayer );
 		}
-		if ( bBatchReady ) {
+		if ( bBatchReady && bTerrainShadowAllocated ) {
 			bBatchReady =
 			        t3dGpuAppendTextureBatchUpdate( updates, update_count, m_generatedTerrainShadowMasks, pTerrainShadowMask, nLayer );
 		}
 		if ( !bBatchReady ) {
 			m_szGpuRegionSlotStates[nLayer] = previous_state;
-			// A malformed/incompatible prepared page fails closed. Re-entering the
-			// live synthesis path here would put full-page CPU preparation back into
-			// HOT_FRAME and defeat the prepared-page ownership boundary.
+			// Authoring data is the editor authority. If a prepared page no longer
+			// matches the persistent texture layout, retry once from the live maps.
+			// bAllowCookedPage=false prevents recursion back into the cooked path.
+			if ( bCookedPage && m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
+				return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false );
+			}
 			return false;
 		}
 		const uint64_t upload_generation = pTextureManager->nextTrackedTextureBatchGeneration();
@@ -1825,16 +1878,20 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			m_nGpuRegionColorBytesLastTick += color_bytes;
 			m_nGpuRegionUploadBytesLastTick += color_bytes;
 		}
-		m_generatedMiddleCompositeMaps.commitLayerImage( pMiddleComposite, nLayer );
-		++m_nGpuRegionMiddleCompositeUpdatesLastTick;
-		const size_t middle_composite_bytes = t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
-		m_nGpuRegionMiddleCompositeBytesLastTick += middle_composite_bytes;
-		m_nGpuRegionUploadBytesLastTick += middle_composite_bytes;
-		m_generatedTerrainShadowMasks.commitLayerImage( pTerrainShadowMask, nLayer );
-		++m_nGpuRegionTerrainShadowUpdatesLastTick;
-		const size_t terrain_shadow_bytes = t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
-		m_nGpuRegionTerrainShadowBytesLastTick += terrain_shadow_bytes;
-		m_nGpuRegionUploadBytesLastTick += terrain_shadow_bytes;
+		if ( bMiddleCompositeAllocated ) {
+			m_generatedMiddleCompositeMaps.commitLayerImage( pMiddleComposite, nLayer );
+			++m_nGpuRegionMiddleCompositeUpdatesLastTick;
+			const size_t middle_composite_bytes = t3dGpuRegionCacheGpuImageBytes( pMiddleComposite );
+			m_nGpuRegionMiddleCompositeBytesLastTick += middle_composite_bytes;
+			m_nGpuRegionUploadBytesLastTick += middle_composite_bytes;
+		}
+		if ( bTerrainShadowAllocated ) {
+			m_generatedTerrainShadowMasks.commitLayerImage( pTerrainShadowMask, nLayer );
+			++m_nGpuRegionTerrainShadowUpdatesLastTick;
+			const size_t terrain_shadow_bytes = t3dGpuRegionCacheGpuImageBytes( pTerrainShadowMask );
+			m_nGpuRegionTerrainShadowBytesLastTick += terrain_shadow_bytes;
+			m_nGpuRegionUploadBytesLastTick += terrain_shadow_bytes;
+		}
 		m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
 		m_szGpuRegionMaterialMasks[nLayer] = material_mask;
 		if ( bDerivedChannelEnabled && !bCookedPage && !IS_EDITOR && pDerived != m_defaultDerivedMap ) {
@@ -1883,7 +1940,7 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
 	}
-	if ( bUploadOk && eMapType == REGION_TYPE_MAX ) {
+	if ( bUploadOk && bMiddleCompositeAllocated && eMapType == REGION_TYPE_MAX ) {
 		bUploadOk = m_generatedMiddleCompositeMaps.update( pMiddleComposite, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionMiddleCompositeUpdatesLastTick;
@@ -1892,7 +1949,7 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 			m_nGpuRegionUploadBytesLastTick += bytes;
 		}
 	}
-	if ( bUploadOk && eMapType == REGION_TYPE_MAX ) {
+	if ( bUploadOk && bTerrainShadowAllocated && eMapType == REGION_TYPE_MAX ) {
 		bUploadOk = m_generatedTerrainShadowMasks.update( pTerrainShadowMask, nLayer );
 		if ( bUploadOk ) {
 			++m_nGpuRegionTerrainShadowUpdatesLastTick;
@@ -1903,6 +1960,9 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 	}
 	if ( !bUploadOk ) {
 		m_szGpuRegionSlotStates[nLayer] = previous_state;
+		if ( bCookedPage && m_pTerrain && m_pTerrain->isEditorAuthoringMode() ) {
+			return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false );
+		}
 		return false;
 	}
 	m_szGpuRegionLayerChannelFlags[nLayer] = published_flags;
@@ -1954,7 +2014,11 @@ bool Terrain3DGpuRegionCache::configure( const bool bEnabled,
 		m_nGpuRegionUploadCallTokens = 0u;
 		m_nGpuRegionUploadTokenRefillUsec = 0u;
 	}
-	m_nGpuRegionSparePages = CLAMP( nSparePages, s_nGpuCacheMinSpareLayers, s_nGpuCacheRuntimeMaxLayers - 1 );
+	const int page_limit = m_pTerrain && m_pTerrain->isEditorAuthoringMode()
+	        ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
+	        : ( m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers )
+	                     : s_nGpuCacheRuntimeMaxLayers );
+	m_nGpuRegionSparePages = CLAMP( nSparePages, s_nGpuCacheMinSpareLayers, page_limit - 1 );
 	m_nGpuRegionRetireFrames = CLAMP( nRetireFrames, 1, 16 );
 
 	const int requested_pages = calculateGpuRegionRequestedPages();
@@ -2405,12 +2469,39 @@ size_t Terrain3DGpuRegionCache::getReservedBytes( void ) const {
 
 size_t Terrain3DGpuRegionCache::getMinimumBytes( void ) const {
 	const size_t shared_bytes = estimateSharedBytes();
-	return shared_bytes + estimateLayerBytes() * ( size_t )( s_nGpuCacheMinSpareLayers + 1 );
+	const size_t layer_bytes = estimateLayerBytes();
+	if ( layer_bytes == 0u ) {
+		return shared_bytes;
+	}
+
+	// The managed GPU-page grant must cover the configured detailed Near footprint,
+	// not merely one page or one clipmap level. A zero detail override follows the
+	// Near tier, so this remains coherent with runtime tier policy while Middle/Far
+	// retain independent reduced/coarse representations.
+	int minimum_mapped_pages = calculateRequiredCorePagesForLods( 0 );
+	const int active_regions = m_regionRepository.getActiveRegionCount();
+	if ( active_regions > 0 && minimum_mapped_pages > active_regions ) {
+		minimum_mapped_pages = active_regions;
+	}
+	minimum_mapped_pages = MAX( minimum_mapped_pages, 1 );
+	const size_t physical_layers = ( size_t )( minimum_mapped_pages + s_nGpuCacheMinSpareLayers );
+	if ( physical_layers > ( SIZE_MAX - shared_bytes ) / layer_bytes ) {
+		return SIZE_MAX;
+	}
+	return shared_bytes + layer_bytes * physical_layers;
 }
 
 size_t Terrain3DGpuRegionCache::getHardCapBytes( void ) const {
 	const size_t shared_bytes = estimateSharedBytes();
-	return shared_bytes + estimateLayerBytes() * ( size_t )( s_nGpuCacheMaxLayers );
+	const size_t layer_bytes = estimateLayerBytes();
+	const bool bAuthoring = m_pTerrain && m_pTerrain->isEditorAuthoringMode();
+	const int page_limit = bAuthoring ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
+	                                  : ( m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers )
+	                                               : s_nGpuCacheRuntimeMaxLayers );
+	if ( layer_bytes == 0u || ( size_t )( page_limit ) > ( SIZE_MAX - shared_bytes ) / layer_bytes ) {
+		return SIZE_MAX;
+	}
+	return shared_bytes + layer_bytes * ( size_t )( page_limit );
 }
 
 t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
@@ -2476,6 +2567,22 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	        m_pTerrain && m_pTerrain->isEditorAuthoringMode() ? calculateAuthoringGpuRegionBudgetBytes() : m_nGpuRegionCacheBudgetBytes;
 	stats["allocation_budget_bytes"] = ( int64_t )( allocation_budget_bytes );
 	stats["allocation_budget_mb"] = ( int64_t )( allocation_budget_bytes / ( uint64_t )( s_nGpuCacheMib ) );
+	const int runtime_page_limit = m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit(), 16, s_nGpuCacheRuntimeMaxLayers )
+	                                             : s_nGpuCacheRuntimeMaxLayers;
+	const int editor_page_limit = m_pTerrain ? CLAMP( m_pTerrain->getEditorGpuRegionCachePages(), 16, s_nGpuCacheEditorMaxLayers )
+	                                            : s_nGpuCacheEditorMaxLayers;
+	stats["configured_page_limit"] = m_pTerrain && m_pTerrain->isEditorAuthoringMode() ? editor_page_limit : runtime_page_limit;
+	stats["runtime_page_limit"] = runtime_page_limit;
+	stats["editor_page_limit"] = editor_page_limit;
+	stats["required_core_pages"] = calculateRequiredCorePagesForLods( 0 );
+	stats["functional_minimum_bytes"] = ( int64_t )( getMinimumBytes() );
+	stats["hard_cap_bytes"] = ( int64_t )( getHardCapBytes() );
+	stats["height_texture_ready"] = m_generatedHeightMaps.getRid().is_valid();
+	stats["control_texture_ready"] = m_generatedControlMaps.getRid().is_valid();
+	stats["color_texture_ready"] = m_generatedColorMaps.getRid().is_valid();
+	stats["derived_texture_ready"] = m_generatedDerivedMaps.getRid().is_valid();
+	stats["middle_composite_texture_ready"] = m_generatedMiddleCompositeMaps.getRid().is_valid();
+	stats["terrain_shadow_texture_ready"] = m_generatedTerrainShadowMasks.getRid().is_valid();
 	stats["capacity"] = m_nGpuRegionCacheCapacity;
 	stats["physical_layers"] = m_nGpuRegionPhysicalLayerCount;
 	stats["spare_layers"] = m_nGpuRegionSpareLayerCount;

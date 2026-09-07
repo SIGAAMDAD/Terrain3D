@@ -130,7 +130,7 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[s_nErosionDi
 #define s_nGpuFarAtlasHeaderBytes ( 52u )
 #define s_nGpuFarAtlasMagic ( 0x5444334641523031ull )
 #define s_nGpuFarAtlasVersion ( 9u )
-#define s_nGpuRegionCacheMaxBudgetMb ( 128 )
+#define s_nGpuRegionCacheMaxBudgetMb ( 512 )
 #define s_nGpuRegionCacheMinBudgetMb ( 1 )
 #define s_nGpuRegionUploadMaxBudgetMb ( 64 )
 #define s_nGpuRegionUploadMaxLayers ( 64 )
@@ -373,7 +373,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nGpuCacheDefaultSpareLayers ( 12 )
 #define s_nGpuCacheFarHeightSide ( 512 )
 #define s_nGpuCacheFarSurfaceMaxSide ( 4096 )
-#define s_nGpuCacheRuntimeMaxLayers ( 64 )
+#define s_nGpuCacheRuntimeMaxLayers ( 256 )
 #define s_nGpuCacheEditorMaxLayers ( 256 )
 #define s_nGpuCacheMaxLayers ( s_nGpuCacheEditorMaxLayers )
 #define s_nGpuCacheMaxPageTableBytes ( 64u * 64u * 3u )
@@ -382,7 +382,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nDiscoveryBytes ( 12u )
 #define s_nRuntimeWorkerLimit ( 32 )
 #define T3D_TERRAIN_3D_STREAMING_INTEGRATION_BOUNDARY_FRACTION ( 0.25 )
-#define s_nNativeApiRevision ( 2026082203LL )
+#define s_nNativeApiRevision ( 2026090601LL )
 
 // File Paths (e.g. extras)
 #define OCEAN_MATERIAL_PATH "res://addons/terrain_3d/extras/shaders/M_ocean.tres"
@@ -605,7 +605,7 @@ static const Vector3 s_v3Up{ 0.f, 1.f, 0.f };
 
 
 // Additional migrated constants.
-#define s_pszNativeBuildId ( "a2.9.2-shader-preprocessor-repair" )
+#define s_pszNativeBuildId ( "p07-runtime-page-authoring-cook-fix-2026-09-06" )
 #define s_pszEngineSingletonName ( "Terrain3DForwardPlusBridge" )
 #define s_pszProfileKey ( "xbox360_experimental" )
 #define s_pszProfileDisplayName ( "Xbox 360 Experimental" )

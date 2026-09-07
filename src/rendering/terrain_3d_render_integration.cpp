@@ -754,6 +754,9 @@ void Terrain3D::synchronizeClipmapNow( const Vector3 &rTargetPosition ) {
 	if ( m_pCollision ) {
 		m_pCollision->resetTargetPosition();
 	}
+	if ( m_pInstancer ) {
+		m_pInstancer->synchronizeStreamingTarget( rTargetPosition );
+	}
 	if ( m_nTessellationLevel > 0 ) {
 		m_lastBufferPosition = s_v2Max;
 	}

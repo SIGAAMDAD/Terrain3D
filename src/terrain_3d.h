@@ -330,8 +330,9 @@ private:
 	bool m_bRuntimeBoundaryNodeDeferredLastTick = false;
 	bool m_bRuntimeBoundaryInstancerDeferredLastTick = false;
 	bool m_bGpuRegionCacheEnabled = false;
+	bool m_bGpuRegionCapacityWarningActive = false;
 	bool m_bDeferGpuRegionCacheReconfigure = false;
-	int m_nGpuRegionCacheBudgetMb = 16;
+	int m_nGpuRegionCacheBudgetMb = 64;
 	int m_nGpuRegionUploadBudgetLayers = 4;
 	int m_nGpuRegionUploadBudgetMb = 2;
 	int m_nGpuRegionSparePages = s_nGpuCacheDefaultSpareLayers;
@@ -344,7 +345,8 @@ private:
 	int m_nGpuRegionDerivedResolutionDivisor = 1;
 	int m_nGpuMiddleHeightResolutionDivisor = 1;
 	t3dRuntimePageNumericConfig_t m_runtimePageNumericConfig;
-	int m_nEditorGpuRegionCachePages = 96;
+	int m_nGpuRegionCachePageLimit = 128;
+	int m_nEditorGpuRegionCachePages = 128;
 	int m_nGpuFarQualityDivisor = 1;
 	int m_nFarMaterialResolution = 128;
 	int m_nFarControlResolution = 128;
@@ -355,11 +357,11 @@ private:
 	int m_nRuntimeMaterialUploadBudgetLayers = 2;
 	bool m_bRuntimeReleaseSourceMaterialTextures = false;
 	bool m_bCpuRegionCacheEnabled = false;
-	int m_nCpuRegionCacheBudgetMb = 16;
+	int m_nCpuRegionCacheBudgetMb = 32;
 	int m_nCpuRegionLoadBudgetLayers = 4;
 	int m_nCpuRegionLoadBudgetMb = 2;
 	bool m_bInstanceRegionCacheEnabled = false;
-	int m_nInstanceRegionCacheBudgetMb = 16;
+	int m_nInstanceRegionCacheBudgetMb = 32;
 	int m_nInstanceRegionLoadBudgetPages = 4;
 	int m_nInstanceRegionLoadBudgetMb = 2;
 	int m_nInstancerCellSize = s_nInstanceDefaultCellSize;
@@ -390,27 +392,27 @@ private:
 	int m_nHlodMaxLevel = 6;
 	int m_nHlodLoadBudget = 2;
 	int m_nHlodUnloadBudget = 4;
-	int m_nHlodMemoryBudgetMb = 64;
+	int m_nHlodMemoryBudgetMb = 128;
 	int m_nHlodMaxShadowLevel = 3;
 	int m_nHlodForcedDebugLevel = -1;
 
 	// Total-memory budget policy. Manual subsystem budgets are retained as overrides;
 	// automatic mode derives effective budgets at the low-frequency policy cadence.
-	int m_nTotalMemoryBudgetMb = 128;
-	int m_nMemoryTransientReserveMb = 16;
+	int m_nTotalMemoryBudgetMb = 512;
+	int m_nMemoryTransientReserveMb = 32;
 	bool m_bGpuRegionCacheBudgetAuto = true;
 	bool m_bCpuRegionCacheBudgetAuto = true;
 	bool m_bInstanceRegionCacheBudgetAuto = true;
 	bool m_bLightmapResidencyBudgetAuto = true;
 	bool m_bHlodMemoryBudgetAuto = true;
 	bool m_bShaderCacheBudgetAuto = true;
-	int m_nLightmapResidencyBudgetMb = 16;
-	uint64_t m_nEffectiveGpuRegionCacheBudgetBytes = 16u * s_nMemoryMib;
-	int m_nEffectiveGpuRegionCacheBudgetMb = 16;
-	int m_nEffectiveCpuRegionCacheBudgetMb = 16;
-	int m_nEffectiveInstanceRegionCacheBudgetMb = 16;
-	int m_nEffectiveLightmapResidencyBudgetMb = 16;
-	int m_nEffectiveHlodMemoryBudgetMb = 16;
+	int m_nLightmapResidencyBudgetMb = 64;
+	uint64_t m_nEffectiveGpuRegionCacheBudgetBytes = 64u * s_nMemoryMib;
+	int m_nEffectiveGpuRegionCacheBudgetMb = 64;
+	int m_nEffectiveCpuRegionCacheBudgetMb = 32;
+	int m_nEffectiveInstanceRegionCacheBudgetMb = 32;
+	int m_nEffectiveLightmapResidencyBudgetMb = 64;
+	int m_nEffectiveHlodMemoryBudgetMb = 128;
 	int m_nEffectiveShaderCacheBudgetMb = 8;
 	bool m_bMemoryBudgetPolicyDirty = true;
 	uint64_t m_nMemoryBudgetPolicyFrame = 0u;
@@ -989,6 +991,10 @@ public:
 	void setGpuRegionCacheBudgetMb( int nBudgetMb );
 	EA_FORCE_INLINE int getGpuRegionCacheBudgetMb( void ) const {
 		return m_nGpuRegionCacheBudgetMb;
+	}
+	void setGpuRegionCachePageLimit( int nPages );
+	EA_FORCE_INLINE int getGpuRegionCachePageLimit( void ) const {
+		return m_nGpuRegionCachePageLimit;
 	}
 	void setGpuRegionUploadBudgetLayers( int nLayers );
 	EA_FORCE_INLINE int getGpuRegionUploadBudgetLayers( void ) const {

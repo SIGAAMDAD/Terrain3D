@@ -427,6 +427,8 @@ func _update_rd_renderer_product() -> void:
 		["Buffer updates", str(int(diagnostics.get("buffer_updates", 0))), "Explicit RD buffer update calls"],
 		["Bytes uploaded", _format_bytes(float(diagnostics.get("bytes_uploaded", 0))), "Total explicit RD buffer upload traffic"],
 		["Consecutive failures", str(int(diagnostics.get("consecutive_render_failures", 0))), "RD failures since the most recent successful render"],
+		["Near height binding", "READY" if bool(diagnostics.get("published_height_texture_valid", false)) else "PENDING", "Published Near height-array RID; PENDING uses Middle/Far/background fallback without latching the renderer"],
+		["Renderer recoveries", str(int(diagnostics.get("renderer_recoveries", 0))), "Automatic retries after a latched failure when terrain/material resource generations advance"],
 		["Initialization error", str(diagnostics.get("initialization_error", "")), "Last RD initialization error"],
 		["Last render error", str(diagnostics.get("last_render_error", "")), "Last direct-render failure"],
 		["Multiview", "supported" if bool(diagnostics.get("multiview_supported", false)) else "unsupported", "Per-view native Forward+ framebuffer/pipeline support"],
@@ -594,10 +596,11 @@ func _build_settings_tab() -> void:
 	restore_button.tooltip_text = "Reapply the authoritative selected profile and clear its serialized overrides."
 	restore_button.pressed.connect(_reset_selected_profile)
 	action_row.add_child(restore_button)
-	var clamp_button: Button = Button.new()
-	clamp_button.text = "Clamp detail to capacity"
-	clamp_button.pressed.connect(_clamp_detail_range)
-	action_row.add_child(clamp_button)
+	var fit_detail_button: Button = Button.new()
+	fit_detail_button.text = "Fit detail residency to capacity"
+	fit_detail_button.tooltip_text = "Adjust the detailed GPU residency range to the current mapped-page capacity. This is an explicit residency control; page capacity does not rewrite Near/Middle/Far render tiers automatically."
+	fit_detail_button.pressed.connect(_fit_detail_range_to_capacity)
+	action_row.add_child(fit_detail_button)
 
 	root.add_child(_section_label("Profile differences"))
 	_profile_diff_tree = Tree.new()
@@ -1350,7 +1353,7 @@ func _reset_selected_profile() -> void:
 	refresh_now()
 
 
-func _clamp_detail_range() -> void:
+func _fit_detail_range_to_capacity() -> void:
 	if not is_instance_valid(terrain):
 		return
 	terrain.gpu_region_detail_range_end_m = terrain.gpu_region_max_supported_detail_range_m

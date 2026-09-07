@@ -104,6 +104,22 @@ static void t3dEndInstancePageAccess( Terrain3DData *pData, const Vector2i &rLoc
 	}
 }
 
+static bool t3dRetainMutatedInstancePage( Terrain3DData *pData, Terrain3DRegion *pRegion, bool &bTemporary ) {
+	if ( !bTemporary || !pData || !pRegion || !pRegion->hasInstances() ) {
+		return !bTemporary;
+	}
+	// Empty regions intentionally consume no instance-cache slot. A first
+	// placement therefore begins as a temporary page access. Once mutation has
+	// populated the store, promote that same resident backing into the cache
+	// before the temporary-access cleanup can evict it. The cache's loaded
+	// notification schedules the normal render-cell update path.
+	if ( !pData->ensureInstanceRegionResident( pRegion->getLocation() ) ) {
+		return false;
+	}
+	bTemporary = false;
+	return true;
+}
+
 static uint64_t t3dRepositoryMeshInstanceCount( const Terrain3DData *pData, const int nMeshId ) {
 	if ( !pData || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
 		return 0u;
@@ -159,16 +175,45 @@ void Terrain3DInstancer::markRdPublicationDirty( void ) {
 	}
 }
 
+void Terrain3DInstancer::requestRuntimeCapacityForMutation( const size_t nAdditionalRecords ) {
+	if ( nAdditionalRecords == 0u || m_bRuntimeStorageRebuildPending ) {
+		return;
+	}
+	size_t logical_records = 0u;
+	for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( m_szLogicalMeshInstanceTotals ); ++iMesh ) {
+		const uint64_t mesh_records = m_szLogicalMeshInstanceTotals[iMesh];
+		if ( mesh_records > ( uint64_t )( eastl::numeric_limits<size_t>::max() - logical_records ) ) {
+			logical_records = eastl::numeric_limits<size_t>::max();
+			break;
+		}
+		logical_records += ( size_t )( mesh_records );
+	}
+	const size_t required = nAdditionalRecords > eastl::numeric_limits<size_t>::max() - logical_records
+	        ? eastl::numeric_limits<size_t>::max()
+	        : logical_records + nAdditionalRecords;
+	if ( required > m_nLogicalCellCapacity ) {
+		// Authoring/runtime mutation is an explicit cold-rebuild boundary. Do not
+		// grow fixed backing here; arm the owner service that runs before hot
+		// instance update/publication on the following frame.
+		m_bRuntimeStorageRebuildPending = true;
+	}
+}
+
 bool Terrain3DInstancer::reportRuntimeCapacityExceeded( const char *const pszStorage, const size_t nRequired, const size_t nCapacity ) {
 	++m_nCapacityMissCount;
 	++m_nOwnerGrowthDeniedCount;
-	LOG( ERROR,
-	        "Instancer fixed runtime capacity exceeded for ",
-	        pszStorage,
-	        ": required ",
-	        ( uint64_t )( nRequired ),
-	        ", configured ",
-	        ( uint64_t )( nCapacity ) );
+	const bool already_pending = m_bRuntimeStorageRebuildPending;
+	m_bRuntimeStorageRebuildPending = true;
+	if ( !already_pending ) {
+		LOG( WARN,
+		        "Instancer fixed runtime capacity miss for ",
+		        pszStorage,
+		        ": required ",
+		        ( uint64_t )( nRequired ),
+		        ", configured ",
+		        ( uint64_t )( nCapacity ),
+		        ". Cold capacity rebuild queued." );
+	}
 	return false;
 }
 
@@ -582,6 +627,15 @@ void Terrain3DInstancer::setLogicalCellCount( const Vector2i &vRegion, const int
 	t3dLogicalCellState_t *pState = t3dMapFind( m_logicalCellCounts, key );
 	const uint32_t old_count = pState ? pState->m_nCount : 0u;
 	if ( old_count == new_count ) {
+		publishLogicalMeshCount( nMeshId );
+		return;
+	}
+	if ( !pState && ( m_logicalCellCounts.size() >= m_nLogicalCellCapacity || m_logicalRegionNodes.size() >= m_nLogicalCellCapacity ) ) {
+		// A mutation can legitimately outgrow the sealed runtime image. The owner
+		// has already queued a cold rebuild; do not turn the transient pre-rebuild
+		// state into a hard placement failure. rebuildAll reconstructs these counts
+		// from the authoritative region store after capacity is established.
+		m_bRuntimeStorageRebuildPending = true;
 		publishLogicalMeshCount( nMeshId );
 		return;
 	}
@@ -2356,6 +2410,7 @@ void Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	}
 
 	eastl::sort( m_placementPending.begin(), m_placementPending.end(), pendingPlacementRegionCellLess );
+	requestRuntimeCapacityForMutation( m_placementPending.size() );
 
 	m_touchedRegions.clear();
 	const bool bWasMaterializing = m_bMaterializingUpdates;
@@ -2378,12 +2433,6 @@ void Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 		} else {
 			region->setModified( true );
 		}
-		if ( !bTemporaryPage ) {
-			if ( !m_touchedRegions.full() ) {
-				m_touchedRegions.push_back( region );
-			}
-		}
-
 		size_t begin = region_begin;
 		while ( begin < region_end ) {
 			const Vector2i cell_location = m_placementPending[begin].m_cell;
@@ -2409,6 +2458,12 @@ void Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 			cell.touch();
 			setLogicalCellCount( regionLocation, nMeshId, cell_location, cell.m_transforms.size() );
 			begin = end;
+		}
+		if ( bTemporaryPage && bUpdate && region->hasInstances() && !t3dRetainMutatedInstancePage( pData, region, bTemporaryPage ) ) {
+			LOG( ERROR, "Could not retain newly populated instance region for rendering: ", regionLocation );
+		}
+		if ( bUpdate && !bTemporaryPage && !m_touchedRegions.full() ) {
+			m_touchedRegions.push_back( region );
 		}
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 		region_begin = region_end;
@@ -2439,6 +2494,7 @@ void Terrain3DInstancer::appendRegionNative( Terrain3DRegion *const pRegion,
 	if ( !pRegion || pRegion->isDeleted() || !pTransforms || nTransformCount == 0u ) {
 		return;
 	}
+	requestRuntimeCapacityForMutation( nTransformCount );
 	Terrain3DData *const pData = m_pTerrain->getData();
 	const Vector2i regionLocation = pRegion->getLocation();
 	bool bTemporaryPage = false;
@@ -2503,6 +2559,10 @@ void Terrain3DInstancer::appendRegionNative( Terrain3DRegion *const pRegion,
 	m_bMaterializingUpdates = bWasMaterializing;
 	if ( !bWasMaterializing && !m_bProcessingPendingUpdates ) {
 		flushLogicalMeshCounts();
+	}
+	if ( bTemporaryPage && bUpdate && pRegion->hasInstances()
+	        && !t3dRetainMutatedInstancePage( pData, pRegion, bTemporaryPage ) ) {
+		LOG( ERROR, "Could not retain newly populated instance region for rendering: ", regionLocation );
 	}
 	if ( bUpdate && !bTemporaryPage ) {
 		updateMmis( nMeshId, regionLocation );
@@ -3546,6 +3606,23 @@ void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition ) {
 	if ( !m_streamingUpdates.empty() ) {
 		scheduleUpdateProcessing();
 	}
+}
+
+void Terrain3DInstancer::synchronizeStreamingTarget( const Vector3 &rTargetPosition ) {
+	const bool bTargetChanged = !m_bStreamPositionValid || !m_lastStreamPosition.is_equal_approx( rTargetPosition );
+	m_lastStreamPosition = rTargetPosition;
+	m_bStreamPositionValid = true;
+	m_bStreamingSelectionDeferredLastFrame = false;
+	if ( !bTargetChanged || ( !m_bCellStreamingEnabled && !m_bSingleLodInstanceBuffers ) ) {
+		return;
+	}
+
+	// Camera/explicit-target handoff is a lifecycle synchronization boundary.
+	// Re-evaluate the resident cells against the authoritative target instead of
+	// relying on an incremental transition scan from a startup/fallback target.
+	// This is especially important in editor Authoring mode where cell streaming
+	// is disabled while single-LOD instance buffers remain active.
+	updateMmis( -1, s_v2iMax, false );
 }
 
 int Terrain3DInstancer::getClosestMeshId( const Vector3 &rGlobalPosition ) const {

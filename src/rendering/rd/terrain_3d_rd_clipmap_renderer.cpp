@@ -1607,9 +1607,9 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 		setError( "Unsupported Terrain3D RD view count" );
 		return false;
 	}
-	const RID height = rHeightTextureRd;
-	const RID control = rControlTextureRd;
-	const RID color_map = rColorTextureRd;
+	RID height = rHeightTextureRd;
+	RID control = rControlTextureRd;
+	RID color_map = rColorTextureRd;
 	RID derived = rDerivedTextureRd;
 	RID middle_composite = rMiddleCompositeTextureRd;
 	RID terrain_shadow_mask = rTerrainShadowMaskTextureRd;
@@ -1626,14 +1626,20 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	RID world_noise = rWorldNoiseTextureRd;
 	RID macro_noise = rMacroNoiseTextureRd;
 	RID editor_brush = rEditorBrushTextureRd;
-	if ( !albedo.is_valid() ) {
-		albedo = color_map;
+	if ( !control.is_valid() ) {
+		control = m_hFallbackArrayTexture;
 	}
-	if ( !surface.is_valid() ) {
-		surface = normal.is_valid() ? normal : albedo;
+	if ( !color_map.is_valid() ) {
+		color_map = m_hFallbackArrayTexture;
+	}
+	if ( !albedo.is_valid() ) {
+		albedo = color_map.is_valid() ? color_map : m_hFallbackArrayTexture;
 	}
 	if ( !normal.is_valid() ) {
-		normal = surface;
+		normal = m_hFallbackArrayTexture;
+	}
+	if ( !surface.is_valid() ) {
+		surface = m_hFallbackArrayTexture;
 	}
 	if ( !material_displacement.is_valid() ) {
 		material_displacement = m_hFallbackArrayTexture;
@@ -1674,10 +1680,13 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	if ( !editor_brush.is_valid() ) {
 		editor_brush = m_hFallbackDisplacementTexture;
 	}
-	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() || !normal.is_valid()
-	        || !surface.is_valid() || !displacement.is_valid() ) {
-		setError( "Terrain3D direct RenderingDevice textures are incomplete" );
-		return false;
+	// Near height residency is allowed to converge after the render topology is
+	// already live. The coordinator publishes zero physical region layers while
+	// this RID is unavailable, so the shader cannot sample this one-layer neutral
+	// descriptor and instead follows its Middle/Far/background height path. Do not
+	// turn normal cache convergence into a renderer-fatal condition.
+	if ( !height.is_valid() ) {
+		height = m_hFallbackArrayTexture;
 	}
 	const uint64_t gpu_frame_id = m_nFramesRendered.load( T3D_MEMORY_ORDER_ACQUIRE ) + 1u;
 	m_context.beginFrame( gpu_frame_id, rSnapshot.m_nPublicationGeneration );
@@ -1820,9 +1829,9 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		return false;
 	}
 
-	const RID height = rHeightTextureRd;
-	const RID control = rControlTextureRd;
-	const RID color_map = rColorTextureRd;
+	RID height = rHeightTextureRd;
+	RID control = rControlTextureRd;
+	RID color_map = rColorTextureRd;
 	RID derived = rDerivedTextureRd;
 	RID middle_composite = rMiddleCompositeTextureRd;
 	RID terrain_shadow_mask = rTerrainShadowMaskTextureRd;
@@ -1839,14 +1848,20 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	RID world_noise = rWorldNoiseTextureRd;
 	RID macro_noise = rMacroNoiseTextureRd;
 	RID editor_brush = rEditorBrushTextureRd;
-	if ( !albedo.is_valid() ) {
-		albedo = color_map;
+	if ( !control.is_valid() ) {
+		control = m_hFallbackArrayTexture;
 	}
-	if ( !surface.is_valid() ) {
-		surface = normal.is_valid() ? normal : albedo;
+	if ( !color_map.is_valid() ) {
+		color_map = m_hFallbackArrayTexture;
+	}
+	if ( !albedo.is_valid() ) {
+		albedo = color_map.is_valid() ? color_map : m_hFallbackArrayTexture;
 	}
 	if ( !normal.is_valid() ) {
-		normal = surface;
+		normal = m_hFallbackArrayTexture;
+	}
+	if ( !surface.is_valid() ) {
+		surface = m_hFallbackArrayTexture;
 	}
 	if ( !material_displacement.is_valid() ) {
 		material_displacement = m_hFallbackArrayTexture;
@@ -1887,10 +1902,13 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	if ( !editor_brush.is_valid() ) {
 		editor_brush = m_hFallbackDisplacementTexture;
 	}
-	if ( !height.is_valid() || !control.is_valid() || !color_map.is_valid() || !albedo.is_valid() || !normal.is_valid()
-	        || !surface.is_valid() || !displacement.is_valid() ) {
-		setError( "Terrain3D direct RenderingDevice textures are incomplete" );
-		return false;
+	// Near height residency is allowed to converge after the render topology is
+	// already live. The coordinator publishes zero physical region layers while
+	// this RID is unavailable, so the shader cannot sample this one-layer neutral
+	// descriptor and instead follows its Middle/Far/background height path. Do not
+	// turn normal cache convergence into a renderer-fatal condition.
+	if ( !height.is_valid() ) {
+		height = m_hFallbackArrayTexture;
 	}
 
 	for ( uint32_t view = 0u; view < s_nRdForwardMaxViews; ++view ) {

@@ -259,7 +259,15 @@ func _open_runtime_page_cook_confirmation() -> void:
 		return
 	var discovered: int = int(inspection.get("discovered", 0))
 	var needs_cook: int = int(inspection.get("needs_cook", 0))
+	var future: int = int(inspection.get("future", 0))
 	var orphan_count: int = int(inspection.get("orphan_count", 0))
+	if future > 0:
+		_show_runtime_page_result("Runtime Dataset Cook Blocked", "\n".join(PackedStringArray([
+			"Future-version runtime pages: %d" % future,
+			"",
+			"This build will not overwrite pages produced by a newer runtime-page format.",
+		])))
+		return
 	if not is_instance_valid(_runtime_page_cook_confirm):
 		_runtime_page_cook_confirm = ConfirmationDialog.new()
 		_runtime_page_cook_confirm.title = "Cook Terrain Runtime Dataset"
@@ -272,8 +280,9 @@ func _open_runtime_page_cook_confirmation() -> void:
 		"Source of truth: %s" % String(inspection.get("data_directory", plugin.terrain.data_directory)),
 		"Authored regions: %d" % discovered,
 		"Current pages: %d" % int(inspection.get("current", 0)),
-		"Need cooking: %d  (missing %d · stale %d · invalid %d · unavailable %d)" % [
-			needs_cook, int(inspection.get("missing", 0)), int(inspection.get("stale", 0)),
+		"Need cooking: %d  (missing %d · legacy %d · stale %d · incompatible %d · invalid %d · unavailable %d)" % [
+			needs_cook, int(inspection.get("missing", 0)), int(inspection.get("legacy", 0)),
+			int(inspection.get("stale", 0)), int(inspection.get("incompatible", 0)),
 			int(inspection.get("invalid", 0)), int(inspection.get("source_unavailable", 0))],
 		"Orphan pages to remove: %d" % orphan_count,
 		"",
@@ -292,6 +301,10 @@ func _cook_runtime_dataset() -> void:
 		"Status: %s" % ("COMPLETE" if complete else "INCOMPLETE"),
 		"Authored regions discovered: %d" % int(result.get("discovered", 0)),
 		"Cooked now: %d" % int(result.get("cooked", 0)),
+		"Legacy pages replaced: %d" % int(result.get("legacy_recooked", 0)),
+		"Stale pages replaced: %d" % int(result.get("stale_recooked", 0)),
+		"Current-version incompatible pages replaced: %d" % int(result.get("incompatible_recooked", 0)),
+		"Invalid pages replaced: %d" % int(result.get("invalid_recooked", 0)),
 		"Validated unchanged: %d" % int(result.get("unchanged", 0)),
 		"Usable pages: %d" % int(result.get("usable", 0)),
 		"Failures: %d" % int(result.get("failed", 0)),

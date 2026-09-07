@@ -81,6 +81,7 @@ const TERRAIN_SCALAR_PROPERTIES: PackedStringArray = [
 	"lightmap_residency_budget_mb",
 	"gpu_region_cache_enabled",
 	"gpu_region_cache_budget_mb",
+	"gpu_region_cache_page_limit",
 	"gpu_region_upload_budget_layers",
 	"gpu_region_upload_budget_mb",
 	"gpu_region_spare_pages",

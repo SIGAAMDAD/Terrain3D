@@ -263,7 +263,8 @@ t3dMemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
 	gpu.m_bAutomatic = m_bGpuRegionCacheBudgetAuto;
 	gpu.m_nManualBytes = ( uint64_t )( m_nGpuRegionCacheBudgetMb )*s_nMemoryMib;
 	gpu.m_nMinimumBytes = m_pData ? ( uint64_t )( m_pData->getGpuRegionCacheMinimumBytes() ) : s_nMemoryMib;
-	gpu.m_nHardCapBytes = m_pData ? ( uint64_t )( m_pData->getGpuRegionCacheHardCapBytes() ) : 128u * s_nMemoryMib;
+	gpu.m_nHardCapBytes = m_pData ? ( uint64_t )( m_pData->getGpuRegionCacheHardCapBytes() )
+	                                : ( uint64_t )( s_nGpuRegionCacheMaxBudgetMb ) * s_nMemoryMib;
 	gpu.m_nWeight = 5u;
 
 	t3dMemorySubsystemInput_t &cpu = input.m_szSubsystems[TERRAIN3D_MEMORY_CPU_TERRAIN_PAGES];

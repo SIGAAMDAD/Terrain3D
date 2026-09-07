@@ -79,6 +79,16 @@ mesh_update = block('src/assets/terrain_3d_assets.cpp',
 if mesh_update.find('advanceMeshSourceGeneration();') < 0 or mesh_update.find('advanceMeshSourceGeneration();') > mesh_update.find('if ( bPersistentChange )'):
     failures.append('P06 preview/nonpersistent mesh changes do not advance mesh source generation')
 
+pending_mesh_commit = block('src/assets/terrain_3d_assets.cpp',
+                            'void Terrain3DAssets::loadPendingMeshes',
+                            'Error Terrain3DAssets::save')
+if 'commitMeshes();' not in pending_mesh_commit:
+    failures.append('P06 deferred mesh commit path disappeared')
+if 'advanceMeshSourceGeneration();' not in pending_mesh_commit:
+    failures.append('P06 deferred mesh commits do not invalidate the RD mesh-source generation')
+if 'updateMmis( ( int )( iMesh ), s_v2iMax, false )' not in pending_mesh_commit:
+    failures.append('P06 deferred mesh commits do not rebuild instance render-cell LOD/settings state')
+
 lighting_replace = block('src/data/terrain_3d_region.cpp',
                          'void Terrain3DRegion::setLighting',
                          'void Terrain3DRegion::setLocation')

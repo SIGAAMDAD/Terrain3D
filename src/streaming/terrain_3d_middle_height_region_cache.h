@@ -77,6 +77,7 @@ public:
 		return m_bSelectionDirty;
 	}
 	Ref<Image> makeHeightImage( const Vector2i &vLocation, bool bRuntimeResolution = false ) const;
+	Ref<Image> makeHeightImageForDivisor( const Vector2i &vLocation, int nResolutionDivisor ) const;
 	t3dMiddleHeightRegionCacheStats_t getStats( void ) const;
 	Dictionary getStatsDictionary( void ) const;
 	size_t getReservedBytes( void ) const;

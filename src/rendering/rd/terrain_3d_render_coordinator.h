@@ -112,6 +112,7 @@ private:
 	uint64_t m_nMaterialTextureGeneration = 0u;
 	t3dRdTerrainBindings_t m_lastPublishedResources;
 	bool m_bRegionMapInitialized = false;
+	bool m_bRegionMapHeightTextureReady = false;
 	bool m_bRegionCacheInitialized = false;
 	bool m_bPatchStateInitialized = false;
 	bool m_bMaterialStateInitialized = false;
@@ -173,9 +174,14 @@ private:
 	uint64_t m_nCapacityMissCount = 0u;
 	uint64_t m_nOwnerGrowthDeniedCount = 0u;
 	t3dAtomicBool_t m_bRendererInitialized{ false };
+	t3dAtomicBool_t m_bInstanceRendererInitialized{ false };
+	t3dAtomicBool_t m_bOceanRendererInitialized{ false };
 	t3dAtomicBool_t m_bRenderEnabled{ false };
 	t3dAtomicBool_t m_bRendererFailed{ false };
 	bool m_bFailureLatched = false;
+	uint64_t m_nFailureLatchTerrainTextureGeneration = 0u;
+	uint64_t m_nFailureLatchMaterialTextureGeneration = 0u;
+	uint64_t m_nRendererRecoveryCount = 0u;
 	bool m_bForwardBridgeAttached = false;
 	bool m_bCompositorDebugEnabled = false;
 	bool m_bMotionDebugEnabled = false;
@@ -211,6 +217,7 @@ private:
 	uint64_t m_nForwardViewportReconfigurations = 0u;
 	uint64_t m_nForwardViewportEvictions = 0u;
 	bool m_bForwardPreparedHasTerrain = false;
+	bool m_bForwardPreparedHasInstances = false;
 	bool m_bForwardPreparedHasOcean = false;
 	bool m_bForwardPreparedHasRenderWorld = false;
 	typedef struct t3dRenderWorldPendingPublication_s {

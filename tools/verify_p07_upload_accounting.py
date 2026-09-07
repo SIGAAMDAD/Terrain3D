@@ -68,10 +68,15 @@ full_upload = block(
     'bool Terrain3DGpuRegionCache::uploadGpuRegionLayer',
     'bool Terrain3DGpuRegionCache::serviceRuntimePages',
 )
-if 'prepared pages are authoritative' not in full_upload:
-    failures.append('P07 prepared-page authoritative full-publication boundary is missing')
-if 'return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false )' in full_upload:
-    failures.append('P07 cooked full-page failure can recurse into synchronous live synthesis')
+# Shipping/runtime keeps cooked pages authoritative, but editor Authoring must
+# retain P06's live-source authority. A stale/missing cook must not leave the
+# base terrain/instance presentation dormant until a forced edit.
+if 'if ( !m_pTerrain || !m_pTerrain->isEditorAuthoringMode() )' not in full_upload:
+    failures.append('P07 runtime cooked-page authority no longer distinguishes editor Authoring')
+if 'return uploadGpuRegionLayer( nLayer, vLocation, eMapType, false )' not in full_upload:
+    failures.append('P07 editor Authoring live fallback is missing for incompatible prepared pages')
+if 'The live retry remains bounded by P07' not in full_upload:
+    failures.append('P07 editor live fallback contract marker is missing')
 
 # Preserve the repaired P06 exact resident-layer grant rather than regressing to
 # the older cumulative P07/P08 archive's base-only capacity arithmetic.

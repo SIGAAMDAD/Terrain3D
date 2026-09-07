@@ -2426,12 +2426,28 @@ void Terrain3DAssets::updateMeshList( void ) {
 }
 
 void Terrain3DAssets::loadPendingMeshes( void ) {
-	// Reload meshes for all mesh assets that have changed. Used by the instancer after clearing
+	// Reload meshes for all mesh assets that have changed. Used by the instancer after clearing.
+	// A deferred commit changes the actual RD mesh source just as surely as an
+	// inspector/preview edit does. The old path swapped m_pendingMeshes into
+	// m_meshes without advancing the mesh-source generation, so the coordinator
+	// kept its startup mesh snapshot until some later forced asset update.
+	Terrain3DInstancer *const pInstancer = m_pTerrain ? m_pTerrain->getInstancer() : NULL;
+	bool bCommittedAny = false;
 	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( m_meshList ).size() ); iMesh++ ) {
 		const Ref<Terrain3DMeshAsset> pMa = ( m_meshList )[iMesh];
 		if ( pMa.is_valid() && pMa->isSceneFilePending() ) {
 			pMa->commitMeshes();
+			bCommittedAny = true;
+			// The render-cell LOD/settings image may also have been built from the
+			// pre-commit mesh set. Requeue only this asset after the swap so the
+			// instance scene and mesh-source snapshot converge together.
+			if ( pInstancer ) {
+				pInstancer->updateMmis( ( int )( iMesh ), s_v2iMax, false );
+			}
 		}
+	}
+	if ( bCommittedAny ) {
+		advanceMeshSourceGeneration();
 	}
 }
 

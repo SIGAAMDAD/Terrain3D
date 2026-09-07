@@ -943,6 +943,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 
 	const int region_size = s_nRegionSize;
 	const Vector2i location = pRegion->getLocation();
+	const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig();
 	// Collision and edge-derived cook data can touch the positive X/Z neighbor
 	// border. Keep only that 2x2 source footprint resident while the page is built.
 	if ( m_cpuRegionCache.isEnabled() ) {
@@ -969,7 +970,8 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 	if ( pRegion->hasChannel( TYPE_COLOR ) ) {
 		payload.m_color = makeGpuColorImage( pRegion->getColorMap() );
 	}
-	payload.m_middleHeight = m_middleHeightRegionCache.makeHeightImage( location, true );
+	payload.m_middleHeight =
+	        m_middleHeightRegionCache.makeHeightImageForDivisor( location, runtime_page_config.m_nMiddleHeightDivisor );
 	payload.m_derived = pRegion->getDerivedNormalSlopeMap();
 	if ( payload.m_derived.is_null() ) {
 		regenerateDerivedMaps( { location } );
@@ -1068,7 +1070,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 		}
 		return false;
 	}
-	return m_runtimePageStore.writePage( pRegion, getRuntimePageConfig(), payload, pError );
+	return m_runtimePageStore.writePage( pRegion, runtime_page_config, payload, pError );
 }
 
 int Terrain3DData::getRegionSlotReserve( void ) const {
@@ -2746,7 +2748,10 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 	if ( !preflight_ok ) {
 		result["current"] = 0;
 		result["missing"] = 0;
+		result["legacy"] = 0;
+		result["future"] = 0;
 		result["stale"] = 0;
+		result["incompatible"] = 0;
 		result["invalid"] = 0;
 		result["source_unavailable"] = errors.size();
 		result["needs_cook"] = discovered;
@@ -2762,9 +2767,13 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 	PackedStringArray orphan_pages;
 	int current = 0;
 	int missing = 0;
+	int legacy = 0;
+	int future = 0;
 	int stale = 0;
+	int incompatible = 0;
 	int invalid = 0;
 	int source_unavailable = 0;
+	Dictionary legacy_versions;
 	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( locations ).size() ); iLocation++ ) {
 		const Vector2i location = ( locations )[iLocation];
 		Terrain3DRegion *const pRegion = getRegionPtr( location );
@@ -2790,6 +2799,28 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 			continue;
 		}
 
+		t3dRuntimePageProbe_t probe;
+		m_runtimePageStore.probePage( page_path, probe );
+		if ( probe.m_state == RUNTIME_PAGE_PROBE_LEGACY ) {
+			++legacy;
+			needs_cook_regions.push_back( String( location ) );
+			const String version_key = String::num_int64( probe.m_nVersion );
+			legacy_versions[version_key] = ( int )( legacy_versions.get( version_key, 0 ) ) + 1;
+			continue;
+		}
+		if ( probe.m_state == RUNTIME_PAGE_PROBE_FUTURE ) {
+			++future;
+			errors.push_back( String( "Region " ) + String( location ) + String( ": runtime page version " )
+			        + String::num_int64( probe.m_nVersion ) + String( " is newer than supported version " )
+			        + String::num_int64( s_nRuntimePageVersion ) );
+			continue;
+		}
+		if ( probe.m_state != RUNTIME_PAGE_PROBE_CURRENT ) {
+			++invalid;
+			needs_cook_regions.push_back( String( location ) );
+			continue;
+		}
+
 		uint64_t existing_signature = 0u;
 		if ( !readGpuRuntimePageSourceSignature( page_path, existing_signature ) ) {
 			++invalid;
@@ -2803,7 +2834,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 		}
 
 		if ( !m_runtimePageStore.validatePageForRegion( pRegion, getRuntimePageConfig() ) ) {
-			++invalid;
+			++incompatible;
 			needs_cook_regions.push_back( String( location ) );
 			continue;
 		}
@@ -2822,10 +2853,14 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 	}
 
 	m_cpuRegionCache.releaseUntrackedMaps();
-	const int needs_cook = missing + stale + invalid + source_unavailable;
+	const int needs_cook = missing + legacy + stale + incompatible + invalid + source_unavailable;
 	result["current"] = current;
 	result["missing"] = missing;
+	result["legacy"] = legacy;
+	result["legacy_versions"] = legacy_versions;
+	result["future"] = future;
 	result["stale"] = stale;
+	result["incompatible"] = incompatible;
 	result["invalid"] = invalid;
 	result["source_unavailable"] = source_unavailable;
 	result["needs_cook"] = needs_cook;
@@ -2833,7 +2868,9 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 	result["orphan_pages"] = orphan_pages;
 	result["needs_cook_regions"] = needs_cook_regions;
 	result["errors"] = errors;
-	result["complete"] = source_unavailable == 0 && current + missing + stale + invalid == discovered;
+	result["complete"] =
+	        source_unavailable == 0 && current + missing + legacy + future + stale + incompatible + invalid == discovered;
+	result["safe_to_cook"] = future == 0;
 	return result;
 }
 
@@ -2882,6 +2919,11 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 
 	int cooked = 0;
 	int unchanged = 0;
+	int legacy_recooked = 0;
+	int stale_recooked = 0;
+	int incompatible_recooked = 0;
+	int invalid_recooked = 0;
+	int future_blocked = 0;
 	int failed = 0;
 	int orphan_removed = 0;
 	int orphan_failed = 0;
@@ -2901,13 +2943,36 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			continue;
 		}
 		const String page_path = getGpuRuntimePagePath( pRegion );
-		bool bCurrent = bCookDatabaseLoaded && FileAccess::file_exists( page_path )
-		        && cook_database.hasCurrentRegion( location, expected_signature );
-		if ( !bCurrent ) {
+		t3dRuntimePageProbe_t page_probe;
+		m_runtimePageStore.probePage( page_path, page_probe );
+		if ( page_probe.m_state == RUNTIME_PAGE_PROBE_FUTURE ) {
+			cook_database.clearRegion( location );
+			++future_blocked;
+			++failed;
+			errors.push_back( String( "Region " ) + String( location ) + String( ": refusing cook over newer runtime page version " )
+			        + String::num_int64( page_probe.m_nVersion ) + String( " (supported " )
+			        + String::num_int64( s_nRuntimePageVersion ) + String( ")" ) );
+			continue;
+		}
+
+		// The persistent cook database is an acceleration index, not artifact
+		// authority. A legacy/current-version-but-incompatible page can retain the
+		// same authored source signature, so every page must physically satisfy the
+		// current runtime-page contract before it may be counted unchanged.
+		bool bCurrent = false;
+		bool bStaleArtifact = false;
+		bool bIncompatibleArtifact = false;
+		bool bInvalidArtifact = page_probe.m_state == RUNTIME_PAGE_PROBE_INVALID;
+		if ( page_probe.m_state == RUNTIME_PAGE_PROBE_CURRENT ) {
 			uint64_t existing_signature = 0u;
-			bCurrent = readGpuRuntimePageSourceSignature( page_path, existing_signature ) && existing_signature == expected_signature;
-			if ( bCurrent ) {
-				bCurrent = m_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config );
+			if ( !readGpuRuntimePageSourceSignature( page_path, existing_signature ) ) {
+				bInvalidArtifact = true;
+			} else if ( existing_signature != expected_signature ) {
+				bStaleArtifact = true;
+			} else if ( !m_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config ) ) {
+				bIncompatibleArtifact = true;
+			} else {
+				bCurrent = true;
 			}
 		}
 		if ( bCurrent ) {
@@ -2915,10 +2980,19 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			++unchanged;
 			continue;
 		}
+
+		const bool bLegacyArtifact = page_probe.m_state == RUNTIME_PAGE_PROBE_LEGACY;
+		if ( bCookDatabaseLoaded && cook_database.hasCurrentRegion( location, expected_signature ) ) {
+			cook_database.clearRegion( location );
+		}
 		String cook_error;
 		if ( writeGpuRuntimePage( pRegion, &cook_error ) ) {
 			cook_database.setRegion( location, expected_signature );
 			++cooked;
+			legacy_recooked += bLegacyArtifact ? 1 : 0;
+			stale_recooked += bStaleArtifact ? 1 : 0;
+			incompatible_recooked += bIncompatibleArtifact ? 1 : 0;
+			invalid_recooked += bInvalidArtifact ? 1 : 0;
 		} else {
 			cook_database.clearRegion( location );
 			++failed;
@@ -2982,7 +3056,8 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	const bool bWorldManifestCooked =
 	        failed == 0 && m_runtimeWorldManifest.write( data_dir, m_regionRepository, m_runtimePageStore, runtime_page_config, &errors );
 	if ( !bWorldManifestCooked ) {
-		errors.push_back( "Cooked world manifest generation failed" );
+		errors.push_back( failed == 0 ? String( "Cooked world manifest generation failed" )
+		                                : String( "Cooked world manifest publication withheld because region-page cooking failed" ) );
 	}
 	PackedStringArray strip_safe_sources;
 	PackedStringArray region_strip_sources;
@@ -3082,6 +3157,11 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	result["valid"] = valid;
 	result["cooked"] = cooked;
 	result["unchanged"] = unchanged;
+	result["legacy_recooked"] = legacy_recooked;
+	result["stale_recooked"] = stale_recooked;
+	result["incompatible_recooked"] = incompatible_recooked;
+	result["invalid_recooked"] = invalid_recooked;
+	result["future_blocked"] = future_blocked;
 	result["usable"] = usable;
 	result["skipped"] = 0;
 	result["failed"] = failed;

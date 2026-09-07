@@ -139,9 +139,16 @@ int Terrain3DMiddleHeightRegionCache::findSlot( const Vector2i &vLocation ) cons
 }
 
 Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocation, const bool bRuntimeResolution ) const {
+	const int divisor = ( bRuntimeResolution || !m_config.m_bAuthoring ) ? m_config.m_nResolutionDivisor : 1;
+	return makeHeightImageForDivisor( vLocation, divisor );
+}
+
+Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImageForDivisor(
+        const Vector2i &vLocation, const int nResolutionDivisor ) const {
 	if ( !m_pRepository || !m_pSamplingStorage ) {
 		return Ref<Image>();
 	}
+	const int divisor = nResolutionDivisor <= 1 ? 1 : ( nResolutionDivisor <= 2 ? 2 : 4 );
 	Terrain3DActiveMapLease lease = m_pSamplingStorage->acquireActive( vLocation );
 	const uint16_t *pActiveHeight = NULL;
 	PackedByteArray source_bytes;
@@ -162,7 +169,6 @@ Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vL
 		}
 		pSourceBytes = source_bytes.ptr();
 	}
-	const int divisor = ( bRuntimeResolution || !m_config.m_bAuthoring ) ? m_config.m_nResolutionDivisor : 1;
 	const int side = MAX( 1, ( s_nRegionSize + divisor - 1 ) / divisor );
 	const size_t byte_count = ( size_t )( side ) * ( size_t )( side ) * sizeof( uint16_t );
 	PackedByteArray bytes;

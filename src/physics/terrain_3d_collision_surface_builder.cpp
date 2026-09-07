@@ -160,7 +160,11 @@ bool Terrain3DCollisionSurfaceBuilder::build( const Terrain3DData *const pData,
 		pHeightScratch = m_fullHeightRowScratch.data();
 	}
 	Terrain3DSampler sampler( pData->getSamplingSourceInternal() );
-	if ( !sampler.copyHeightRect( rPosition.x, rPosition.y, width, width, pHeightScratch, width, true ) ) {
+	// Canonical collision surfaces may touch the +X/+Z border outside authored
+	// coverage. Preserve genuinely absent border regions as NaN HeightMapShape
+	// hole samples instead of rejecting the whole surface. If an authored region
+	// exists but its sampling view is unavailable, copyHeightRect still fails.
+	if ( !sampler.copyHeightRect( rPosition.x, rPosition.y, width, width, pHeightScratch, width, true, false ) ) {
 		return false;
 	}
 	if ( rHeights.size() != sample_count ) {

@@ -122,6 +122,21 @@ int main( void ) {
 		return fail( "manual exact-byte override" );
 	}
 
+	// Hard-overcommit: an automatic subsystem minimum is advisory when fixed +
+	// allocator + transient ownership consumes the complete aggregate budget. This
+	// is why render-tier validity must never depend on the current page grant.
+	input = baseInput( 32u * mib, 16u * mib, 8u * mib, 8u * mib );
+	gpu = input.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES];
+	gpu.m_bEnabled = true;
+	gpu.m_bAutomatic = true;
+	gpu.m_nMinimumBytes = 4u * mib;
+	gpu.m_nHardCapBytes = 128u * mib;
+	result = Terrain3DMemoryBudgetCoordinator::calculate( input );
+	if ( result.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES].m_nEffectiveBytes != 0u
+	        || !result.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES].m_bBelowMinimum || !result.m_bHardOvercommit ) {
+		return fail( "hard-overcommit did not demonstrate zero-byte automatic minimum grant" );
+	}
+
 	// Near-overcommit: fixed reserves still fit, but the requested minimum is one byte too large.
 	input = baseInput( 32u * mib, 8u * mib, 16u * mib, 4u * mib );
 	gpu = input.m_szSubsystems[TERRAIN3D_MEMORY_GPU_TERRAIN_PAGES];
