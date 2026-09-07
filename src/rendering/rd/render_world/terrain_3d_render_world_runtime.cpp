@@ -91,6 +91,9 @@ Terrain3DRenderWorldRuntime::Terrain3DRenderWorldRuntime() : m_ForwardLighting( 
 	m_nPublishedClusterCount = 0u;
 	m_nPublishedMaterialCount = 0u;
 	m_nScenePublicationGeneration = 0u;
+	m_nTerrainPublicationGeneration = 0u;
+	m_preparedViewKey = t3dRenderWorldPreparedViewKey_t{};
+	m_nPreparedStatusBits = 0u;
 }
 
 Terrain3DRenderWorldRuntime::~Terrain3DRenderWorldRuntime() {
@@ -120,6 +123,35 @@ void Terrain3DRenderWorldRuntime::record_operation( const uint64_t pFrameId,
 	event.nResultCode = pResult;
 	event.nSourceTag = pSourceTag;
 	++m_nOperationWriteIndex;
+}
+
+uint64_t Terrain3DRenderWorldRuntime::hash_visibility_frame_hot( const T3DVisibilityFrame &rFrame ) const {
+	const uint8_t *const pBytes = ( const uint8_t * )( &rFrame );
+	uint64_t nHash = 1469598103934665603ull;
+	for ( size_t i = 0u; i < sizeof( rFrame ); ++i ) {
+		nHash ^= ( uint64_t )( pBytes[i] );
+		nHash *= 1099511628211ull;
+	}
+	return nHash == 0u ? 1u : nHash;
+}
+
+uint64_t Terrain3DRenderWorldRuntime::build_culling_generation_hot( void ) const {
+	uint64_t nHash = 1469598103934665603ull;
+	const uint64_t nValues[3] = {
+		m_Resources.get_stats().nResourceGeneration,
+		t3d_render_world_limits_signature( m_Limits ),
+		m_bHiZEnabled ? 1u : 0u,
+	};
+	for ( uint32_t i = 0u; i < 3u; ++i ) {
+		nHash ^= nValues[i];
+		nHash *= 1099511628211ull;
+	}
+	return nHash == 0u ? 1u : nHash;
+}
+
+void Terrain3DRenderWorldRuntime::invalidate_prepared_view( void ) {
+	m_preparedViewKey = t3dRenderWorldPreparedViewKey_t{};
+	m_nPreparedStatusBits = 0u;
 }
 
 bool Terrain3DRenderWorldRuntime::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone ) {
@@ -373,6 +405,8 @@ void Terrain3DRenderWorldRuntime::shutdown_cold() {
 	memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
 	release_cpu_image_cold();
 	m_nFramebufferFormat = RenderingDevice::INVALID_ID;
+	m_nTerrainPublicationGeneration = 0u;
+	invalidate_prepared_view();
 }
 
 bool Terrain3DRenderWorldRuntime::rebuild_raster_cold( const int64_t pFramebufferFormat ) {
@@ -410,6 +444,17 @@ bool Terrain3DRenderWorldRuntime::publish_terrain_generations_hot( const uint64_
 	if ( !m_bInitialized ) {
 		return false;
 	}
+	uint64_t terrain_generation = 1469598103934665603ull;
+	const uint64_t terrain_generations[5] = {
+		pLogicalTopologyGeneration, pPhysicalPageTableGeneration, pClipmapPlacementGeneration, pMaterialGeneration, pLightingGeneration
+	};
+	for ( uint32_t i = 0u; i < 5u; ++i ) {
+		terrain_generation ^= terrain_generations[i];
+		terrain_generation *= 1099511628211ull;
+	}
+	if ( terrain_generation == 0u ) {
+		terrain_generation = 1u;
+	}
 	if ( !t3d_terrain_render_world_stage_a_publish_terrain_hot( m_TerrainStageA,
 	             pLogicalTopologyGeneration,
 	             pPhysicalPageTableGeneration,
@@ -425,6 +470,9 @@ bool Terrain3DRenderWorldRuntime::publish_terrain_generations_hot( const uint64_
 		return false;
 	}
 	const bool bPublished = m_TerrainBridge.refresh_shared_bindings_hot( m_SharedVTBindings );
+	if ( bPublished ) {
+		m_nTerrainPublicationGeneration = terrain_generation;
+	}
 	record_operation( 0u, T3D_OP_PUBLISH, T3D_OPCLASS_HOT, 0u, bPublished ? 1u : 0u, bPublished ? 0u : 1u, 0x5447454Eu );
 	return bPublished;
 }
@@ -475,6 +523,8 @@ void Terrain3DRenderWorldRuntime::release_scene_cold() {
 	m_nPublishedLodCount = 0u;
 	m_nPublishedClusterCount = 0u;
 	m_nPublishedMaterialCount = 0u;
+	m_nScenePublicationGeneration = m_nScenePublicationGeneration == UINT64_MAX ? 1u : m_nScenePublicationGeneration + 1u;
+	invalidate_prepared_view();
 	record_operation( 0u, T3D_OP_PUBLISH, T3D_OPCLASS_COLD, 0u, 0u, 0u, 0x53434E52u );
 }
 
@@ -548,6 +598,7 @@ bool Terrain3DRenderWorldRuntime::render_main_camera_hot( const t3dRdForwardPass
         const uint32_t pLodCount,
         const uint32_t pClusterCount,
         T3DRenderWorldFrameResult &rResult ) {
+	memset( &rResult, 0, sizeof( rResult ) );
 	if ( !m_bInitialized || pContext.m_nDrawList < 0
 	        || ( pContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && pContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION ) ) {
 		return false;
@@ -559,12 +610,38 @@ bool Terrain3DRenderWorldRuntime::render_main_camera_hot( const t3dRdForwardPass
 	const uint32_t nLodCount = m_bScenePublished ? m_nPublishedLodCount : pLodCount;
 	const uint32_t nClusterCount = m_bScenePublished ? m_nPublishedClusterCount : pClusterCount;
 	build_visibility_frame_hot( pContext, nCellCount, nInstanceCount, nMeshCount, nLodCount, nClusterCount, frame );
-	const bool bRendered = m_RenderWorld.render_main_camera_hot( m_Limits, frame, pContext.m_nDrawList, rResult );
-	record_operation(
-	        pContext.m_nRenderFrame, T3D_OP_GPU_DISPATCH, T3D_OPCLASS_HOT, 0u, m_bHiZEnabled ? 4u : 3u, bRendered ? 0u : 1u, 0x56495330u );
-	if ( rResult.nVTUploadBytes > 0u ) {
-		record_operation( pContext.m_nRenderFrame, T3D_OP_GPU_UPLOAD, T3D_OPCLASS_HOT, rResult.nVTUploadBytes, 1u, 0u, 0x56545550u );
+
+	t3dRenderWorldPreparedViewKey_t key;
+	key.m_nRenderFrame = pContext.m_nRenderFrame;
+	key.m_nViewportKey = pContext.m_nViewportKey;
+	key.m_nViewStateHash = hash_visibility_frame_hot( frame );
+	key.m_nSceneGeneration = m_nScenePublicationGeneration;
+	key.m_nTerrainGeneration = m_nTerrainPublicationGeneration;
+	key.m_nCullingGeneration = build_culling_generation_hot();
+	key.m_nViewCount = pContext.m_nViewCount;
+	key.m_bValid = true;
+
+	const bool bReuse = m_preparedViewKey.matches( key );
+	T3DRenderWorldFrameResult prepared = {};
+	if ( bReuse ) {
+		prepared.nStatusBits = m_nPreparedStatusBits;
+		m_RenderWorld.record_compute_reuse_hot();
+	} else {
+		if ( !m_RenderWorld.prepare_camera_visibility_hot( m_Limits, frame, prepared ) ) {
+			rResult = prepared;
+			record_operation( pContext.m_nRenderFrame, T3D_OP_GPU_DISPATCH, T3D_OPCLASS_HOT, 0u, m_bHiZEnabled ? 4u : 3u, 1u, 0x56495330u );
+			return false;
+		}
+		m_preparedViewKey = key;
+		m_nPreparedStatusBits = prepared.nStatusBits;
+		record_operation( pContext.m_nRenderFrame, T3D_OP_GPU_DISPATCH, T3D_OPCLASS_HOT, 0u, m_bHiZEnabled ? 4u : 3u, 0u, 0x56495330u );
+		if ( prepared.nVTUploadBytes > 0u ) {
+			record_operation( pContext.m_nRenderFrame, T3D_OP_GPU_UPLOAD, T3D_OPCLASS_HOT, prepared.nVTUploadBytes, 1u, 0u, 0x56545550u );
+		}
 	}
+
+	rResult = prepared;
+	const bool bRendered = m_RenderWorld.submit_camera_pass_hot( frame, pContext.m_nDrawList, rResult );
 	record_operation( pContext.m_nRenderFrame, T3D_OP_GPU_DRAW, T3D_OPCLASS_HOT, 0u, rResult.nDrawCount, bRendered ? 0u : 1u, 0x44524157u );
 	return bRendered;
 }
@@ -583,6 +660,15 @@ uint64_t Terrain3DRenderWorldRuntime::get_cpu_image_bytes() const {
 }
 uint32_t Terrain3DRenderWorldRuntime::get_operation_event_count() const {
 	return MIN( m_nOperationWriteIndex, m_Limits.nOperationEventCapacity );
+}
+uint64_t Terrain3DRenderWorldRuntime::get_compute_prepare_count() const {
+	return m_RenderWorld.get_stats().nComputePrepareCount;
+}
+uint64_t Terrain3DRenderWorldRuntime::get_compute_reuse_count() const {
+	return m_RenderWorld.get_stats().nComputeReuseCount;
+}
+uint64_t Terrain3DRenderWorldRuntime::get_raster_submit_count() const {
+	return m_RenderWorld.get_stats().nRasterSubmitCount;
 }
 
 uint32_t Terrain3DRenderWorldRuntime::copy_operation_events_reference_debug(

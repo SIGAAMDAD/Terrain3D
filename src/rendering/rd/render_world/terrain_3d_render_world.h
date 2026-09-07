@@ -26,6 +26,9 @@ struct T3DRenderWorldFrameResult {
 
 struct T3DRenderWorldProductionStats {
 	uint64_t nFrameCount;
+	uint64_t nComputePrepareCount;
+	uint64_t nComputeReuseCount;
+	uint64_t nRasterSubmitCount;
 	uint64_t nDrawCount;
 	uint64_t nVTUploadBytes;
 	uint64_t nVTReadbackDeferredCount;
@@ -69,6 +72,10 @@ public:
 	        uint32_t &rAcceptedRequestCount );
 	bool claim_vt_stream_job_owner_hot( uint32_t &rJobIndex );
 	bool execute_vt_stream_job_async( uint32_t pJobIndex, T3DVTStreamReadDecodeFn pReadDecode, void *pUser );
+	bool prepare_camera_visibility_hot(
+	        const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame, T3DRenderWorldFrameResult &rResult );
+	bool submit_camera_pass_hot( const T3DVisibilityFrame &pFrame, int64_t pDrawList, T3DRenderWorldFrameResult &rResult );
+	void record_compute_reuse_hot( void );
 	bool render_main_camera_hot(
 	        const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame, int64_t pDrawList, T3DRenderWorldFrameResult &rResult );
 

@@ -13,6 +13,24 @@
 
 #include <stdint.h>
 
+struct t3dRenderWorldPreparedViewKey_t {
+	uint64_t m_nRenderFrame = 0u;
+	uint64_t m_nViewportKey = 0u;
+	uint64_t m_nViewStateHash = 0u;
+	uint64_t m_nSceneGeneration = 0u;
+	uint64_t m_nTerrainGeneration = 0u;
+	uint64_t m_nCullingGeneration = 0u;
+	uint32_t m_nViewCount = 0u;
+	bool m_bValid = false;
+
+	EA_FORCE_INLINE bool matches( const t3dRenderWorldPreparedViewKey_t &rOther ) const {
+		return m_bValid && rOther.m_bValid && m_nRenderFrame == rOther.m_nRenderFrame && m_nViewportKey == rOther.m_nViewportKey
+		        && m_nViewStateHash == rOther.m_nViewStateHash && m_nSceneGeneration == rOther.m_nSceneGeneration
+		        && m_nTerrainGeneration == rOther.m_nTerrainGeneration && m_nCullingGeneration == rOther.m_nCullingGeneration
+		        && m_nViewCount == rOther.m_nViewCount;
+	}
+};
+
 class Terrain3DRenderWorldRuntime {
 public:
 	Terrain3DRenderWorldRuntime();
@@ -49,6 +67,9 @@ public:
 	bool has_scene() const;
 	uint64_t get_cpu_image_bytes() const;
 	uint32_t get_operation_event_count() const;
+	uint64_t get_compute_prepare_count() const;
+	uint64_t get_compute_reuse_count() const;
+	uint64_t get_raster_submit_count() const;
 	uint32_t copy_operation_events_reference_debug( T3DOperationEvent *pOutEvents, uint32_t pCapacity ) const;
 	const T3DRenderWorldLimits &get_limits() const;
 	const Terrain3DRenderWorldResourceImage &get_resources() const;
@@ -61,6 +82,9 @@ private:
 	bool initialize_neutral_vt_cold();
 	void record_operation(
 	        uint64_t pFrameId, uint32_t pType, uint32_t pClass, uint64_t pBytes, uint32_t pCount, uint32_t pResult, uint32_t pSourceTag );
+	uint64_t hash_visibility_frame_hot( const T3DVisibilityFrame &rFrame ) const;
+	uint64_t build_culling_generation_hot( void ) const;
+	void invalidate_prepared_view( void );
 	void build_visibility_frame_hot( const t3dRdForwardPassContext_t &pContext,
 	        uint32_t pCellCount,
 	        uint32_t pInstanceCount,
@@ -113,6 +137,9 @@ private:
 	uint32_t m_nPublishedClusterCount;
 	uint32_t m_nPublishedMaterialCount;
 	uint64_t m_nScenePublicationGeneration;
+	uint64_t m_nTerrainPublicationGeneration;
+	t3dRenderWorldPreparedViewKey_t m_preparedViewKey;
+	uint32_t m_nPreparedStatusBits;
 };
 
 #endif // TERRAIN3D_RENDER_WORLD_RUNTIME_H

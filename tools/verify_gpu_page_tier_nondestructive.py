@@ -32,7 +32,7 @@ if 'effectiveGpuRegionCacheEnabled()' not in body:
     fail('capacity validation runs even when GPU paging is disabled')
 if 'm_bGpuRegionCapacityWarningActive = false;' not in header:
     fail('capacity warning latch missing')
-if '#define s_pszNativeBuildId' not in constants or 'p07-' not in constants:
+if '#define s_pszNativeBuildId' not in constants or ('p07-' not in constants and 'p08-' not in constants):
     fail('unique native build provenance marker missing')
 if '[build] native_build_id=' not in terrain:
     fail('startup build provenance log missing')

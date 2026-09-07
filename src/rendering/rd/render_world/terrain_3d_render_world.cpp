@@ -267,23 +267,20 @@ bool Terrain3DRenderWorld::execute_vt_stream_job_async( uint32_t pJobIndex, T3DV
 	return t3d_render_world_vt_streaming_execute_job_async( *m_pStreaming, pJobIndex, pReadDecode, pUser );
 }
 
-bool Terrain3DRenderWorld::render_main_camera_hot(
-        const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame, int64_t pDrawList, T3DRenderWorldFrameResult &rResult ) {
+bool Terrain3DRenderWorld::prepare_camera_visibility_hot(
+        const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame, T3DRenderWorldFrameResult &rResult ) {
 	memset( &rResult, 0, sizeof( rResult ) );
 	if ( !m_bSubmissionEnabled ) {
 		return true;
 	}
-	if ( !m_bInitialized || !m_bHotSealed || pDrawList < 0 || !validate_frame_contract_hot( pLimits, pFrame ) ) {
+	if ( !m_bInitialized || !m_bHotSealed || !validate_frame_contract_hot( pLimits, pFrame ) ) {
 		++m_Stats.nFailureCount;
 		return false;
 	}
 
-	// Retired VT slots keep their old backing and GPU mapping until invalidation is
-	// accepted. Service those retirements before claiming the permanent upload spare.
+	// Compute preparation is pass-independent for equivalent main-camera OPAQUE/MOTION
+	// callbacks. Retire/upload/visibility/VT work runs once for the prepared view.
 	m_pVT->service_retired_slots_hot( *m_pResidency );
-
-	// Bounded owner-side VT publication is the only CPU->GPU mutation here beyond the
-	// fixed 320-byte frame packet. Visibility, counts, tier lists and indirect args remain GPU-owned.
 	rResult.nVTUploadBytes = t3d_render_world_vt_streaming_service_uploads_hot(
 	        *m_pStreaming, pFrame.nFrameId, Terrain3DRenderWorldVTGpu::upload_commit_callback, m_pVT );
 
@@ -309,6 +306,23 @@ bool Terrain3DRenderWorld::render_main_camera_hot(
 		}
 	}
 
+	++m_Stats.nFrameCount;
+	++m_Stats.nComputePrepareCount;
+	m_Stats.nVTUploadBytes += rResult.nVTUploadBytes;
+	return true;
+}
+
+bool Terrain3DRenderWorld::submit_camera_pass_hot(
+        const T3DVisibilityFrame &pFrame, const int64_t pDrawList, T3DRenderWorldFrameResult &rResult ) {
+	rResult.nDrawCount = 0u;
+	if ( !m_bSubmissionEnabled ) {
+		return true;
+	}
+	if ( !m_bInitialized || !m_bHotSealed || pDrawList < 0 ) {
+		++m_Stats.nFailureCount;
+		return false;
+	}
+
 	T3DThreeTierRasterBindings Bindings;
 	if ( !m_pRaster->get_bindings_hot( Bindings ) ) {
 		++m_Stats.nFailureCount;
@@ -322,12 +336,35 @@ bool Terrain3DRenderWorld::render_main_camera_hot(
 	}
 
 	rResult.nDrawCount = DrawStats.nDrawCount;
-	++m_Stats.nFrameCount;
+	++m_Stats.nRasterSubmitCount;
 	m_Stats.nDrawCount += DrawStats.nDrawCount;
-	m_Stats.nVTUploadBytes += rResult.nVTUploadBytes;
 	if ( Terrain3DRdContext *const pContext = m_pResources->get_rd_context() ) {
 		pContext->recordSuccessfulPass( Terrain3DRdContext::PASS_RENDER_WORLD, pFrame.nFrameId );
 	}
+	return true;
+}
+
+void Terrain3DRenderWorld::record_compute_reuse_hot( void ) {
+	if ( m_bInitialized && m_bHotSealed ) {
+		++m_Stats.nComputeReuseCount;
+	}
+}
+
+bool Terrain3DRenderWorld::render_main_camera_hot( const T3DRenderWorldLimits &pLimits,
+        const T3DVisibilityFrame &pFrame,
+        const int64_t pDrawList,
+        T3DRenderWorldFrameResult &rResult ) {
+	T3DRenderWorldFrameResult prepared = {};
+	if ( !prepare_camera_visibility_hot( pLimits, pFrame, prepared ) ) {
+		rResult = prepared;
+		return false;
+	}
+	T3DRenderWorldFrameResult submitted = prepared;
+	if ( !submit_camera_pass_hot( pFrame, pDrawList, submitted ) ) {
+		rResult = submitted;
+		return false;
+	}
+	rResult = submitted;
 	return true;
 }
 

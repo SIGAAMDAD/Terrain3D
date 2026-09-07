@@ -2608,6 +2608,9 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["render_world_hiz_enabled"] = m_renderWorldRuntime.is_hiz_enabled();
 	result["render_world_cpu_image_bytes"] = ( int64_t )( m_renderWorldRuntime.get_cpu_image_bytes() );
 	result["render_world_operation_events"] = ( int64_t )( m_renderWorldRuntime.get_operation_event_count() );
+	result["render_world_compute_prepares"] = ( int64_t )( m_renderWorldRuntime.get_compute_prepare_count() );
+	result["render_world_compute_reuses"] = ( int64_t )( m_renderWorldRuntime.get_compute_reuse_count() );
+	result["render_world_raster_submits"] = ( int64_t )( m_renderWorldRuntime.get_raster_submit_count() );
 	result["coordinator_material_state_builds"] = ( int64_t )( m_nMaterialStateBuildCount );
 	result["coordinator_region_lighting_scans"] = ( int64_t )( m_nRegionLightingScanCount );
 	result["coordinator_mesh_source_builds"] = ( int64_t )( m_nMeshSourceBuildCount );

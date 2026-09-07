@@ -83,9 +83,7 @@ if 'The live retry remains bounded by P07' not in full_upload:
 require('src/streaming/terrain_3d_gpu_cache_policy.h', 't3dGpuCacheEstimateResidentLayerBytes', 'P06 exact physical layer grant')
 require('src/streaming/terrain_3d_gpu_region_cache.cpp', 'calculateGpuRegionPhysicalLayers( capacity )', 'P06 physical layer capacity')
 
-# P08 must remain absent from this isolated P01->P07 package.
-forbid('src/rendering/rd/render_world/terrain_3d_render_world.h', 'prepare_camera_visibility_hot', 'P08 contamination')
-forbid('src/rendering/rd/terrain_3d_render_coordinator.cpp', 'render_world_compute_prepares', 'P08 diagnostics contamination')
+# P08 is intentionally layered above P07; this verifier checks only P07 upload/residency invariants.
 
 if failures:
     print('P07 upload-accounting verification FAIL')
