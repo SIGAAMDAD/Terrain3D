@@ -61,7 +61,7 @@ renderer = (root / 'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp').read_
 if '#if T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT' not in renderer or 'const bool skip_instance_frustum = true;' not in renderer or 'const uint32_t packet_visibility_mask = UINT32_MAX;' not in renderer:
     fail('authoritative isolation path still depends on camera frustum/visibility-layer gates')
 
-build_id = 'instance-local-active-storage-p2-2026-09-09'
+build_id = 'forward-color-blend-attachment-contract-fix-2026-09-09'
 if build_id not in constants or build_id not in plugin:
     fail('native/script build IDs are not synchronized')
 

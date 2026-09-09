@@ -295,14 +295,19 @@ bool Terrain3DRdOceanRenderer::ensurePipeline( const t3dRdForwardPassContext_t &
 	blend.instantiate();
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT ) {
 		TypedArray<Ref<RDPipelineColorBlendStateAttachment>> attachments;
-		Ref<RDPipelineColorBlendStateAttachment> attachment;
-		attachment.instantiate();
-		attachment->set_enable_blend( true );
-		attachment->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
-		attachment->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-		attachment->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
-		attachment->set_dst_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-		attachments.push_back( attachment );
+		for ( uint32_t i = 0u; i < 3u; ++i ) {
+			Ref<RDPipelineColorBlendStateAttachment> attachment;
+			attachment.instantiate();
+			const bool blend_color = i == 0u;
+			attachment->set_enable_blend( blend_color );
+			if ( blend_color ) {
+				attachment->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
+				attachment->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
+				attachment->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
+				attachment->set_dst_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
+			}
+			attachments.push_back( attachment );
+		}
 		blend->set_attachments( attachments );
 	}
 	t3dRdOceanPipelineEntry_t entry;

@@ -14,7 +14,9 @@ checks = {
     "forward draw binds variant set0": "m_hszForwardShadowUniformSets[variant] : m_hszForwardUniformSets[variant]" in renderer,
     "forward draw binds variant material set": "getForwardMaterialBinding( packet.m_nMaterial, packet.m_nOverlayMaterial, variant )" in renderer,
     "transparent pass is accepted": "rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT" in renderer,
-    "transparent pipeline enables alpha blend": "a->set_enable_blend( transparent_pass )" in renderer
+    "transparent pipeline matches Forward+ three-slot blend contract": "blend_count = 3u;" in renderer
+        and "const bool blend_color = transparent_pass && i == 0u;" in renderer
+        and "a->set_enable_blend( blend_color )" in renderer
         and "BLEND_FACTOR_SRC_ALPHA" in renderer
         and "BLEND_FACTOR_ONE_MINUS_SRC_ALPHA" in renderer,
     "transparent pass disables depth writes": "set_enable_depth_write( !transparent_pass && !key.m_bDepthPrepassActive )" in renderer,

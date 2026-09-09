@@ -541,7 +541,12 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines(
 	blend.instantiate();
 	uint32_t blend_count = 0u;
 	if ( transparent_pass ) {
-		blend_count = 1u;
+		// Forward+ color framebuffers retain three logical color slots
+		// (color, separate specular, motion) even when transparent rendering
+		// marks the latter two ATTACHMENT_UNUSED. RenderingDevice validates
+		// the blend-state array against that logical slot count before it
+		// checks which attachments are unused.
+		blend_count = 3u;
 	} else if ( variant <= T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY ) {
 		blend_count = 3u;
 	} else if ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS ) {
@@ -554,8 +559,9 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines(
 		for ( uint32_t i = 0u; i < blend_count; ++i ) {
 			Ref<RDPipelineColorBlendStateAttachment> a;
 			a.instantiate();
-			a->set_enable_blend( transparent_pass );
-			if ( transparent_pass ) {
+			const bool blend_color = transparent_pass && i == 0u;
+			a->set_enable_blend( blend_color );
+			if ( blend_color ) {
 				a->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
 				a->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
 				a->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
