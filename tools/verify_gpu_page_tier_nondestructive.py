@@ -33,7 +33,7 @@ if 'effectiveGpuRegionCacheEnabled()' not in body:
 if 'm_bGpuRegionCapacityWarningActive = false;' not in header:
     fail('capacity warning latch missing')
 if '#define s_pszNativeBuildId' not in constants or not any(
-    tag in constants for tag in ('p07-', 'p08-', 'p09-', 'p10-', 'p11-', 'instancer-minimal-', 'instancer-fault-', 'instancer-direct-', 'instancer-rd-port-', 'memory-budget-zone-containment-p1-')
+    tag in constants for tag in ('p07-', 'p08-', 'p09-', 'p10-', 'p11-', 'instancer-minimal-', 'instancer-fault-', 'instancer-direct-', 'instancer-rd-port-', 'memory-budget-zone-containment-p1-', 'instance-local-active-storage-p2-')
 ):
     fail('unique native build provenance marker missing')
 if '[build] native_build_id=' not in terrain:

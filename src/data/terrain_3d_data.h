@@ -600,7 +600,7 @@ VARIANT_ENUM_CAST( t3dHeightFilter_t );
 
 // Inline Region Functions
 
-// Returns an index in the maximum 64x64 process-static region table.
+// Returns an index in the fixed logical region table.
 // Repository operations additionally enforce the active map size, which is
 // derived from the fixed 4096x4096 world resolution and current region size.
 EA_FORCE_INLINE int Terrain3DData::getRegionMapIndex( const Vector2i &rRegionLoc ) {

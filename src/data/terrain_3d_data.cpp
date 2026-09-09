@@ -235,7 +235,7 @@ static Rect2i t3dDataGetRegionBoundsForArea( const Rect2i &rArea ) {
 
 bool Terrain3DData::setRegionSizeInternal( void ) {
 	if ( !m_samplingStorage.claimOrReconfigureActive() ) {
-		LOG( ERROR, "Unable to claim process-static active terrain storage. Only one Terrain3DData owner is legal." );
+		LOG( ERROR, "Unable to initialize instance-local active terrain storage." );
 		return false;
 	}
 	m_activeHeightResidency.markDirty();
@@ -1824,7 +1824,7 @@ Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
 	}
 	m_regionRepository.setLoaded( true );
 
-	// A returning scene owns a complete repository but process-static height pages
+	// A returning scene owns a complete repository but its instance-local height pages
 	// were deliberately released while inactive. Rebuild the logical map from the
 	// retained slot table and repopulate active storage before any renderer sees it.
 	if ( !bLoadedDirectoryThisActivation && ( m_regionRepository.getActiveRegionCount() > 0 || m_regionRepository.getSlotCount() > 0 ) ) {
@@ -2211,7 +2211,7 @@ Error Terrain3DData::addRegionInternal( const Ref<Terrain3DRegion> &rRegion, con
 		if ( pStoredRegion && !pStoredRegion->isDeleted() ) {
 			syncActiveRegion( regionLoc, pStoredRegion );
 		}
-		LOG( ERROR, "Unable to publish region ", regionLoc, " into process-static active storage" );
+		LOG( ERROR, "Unable to publish region ", regionLoc, " into instance-local active storage" );
 		return ERR_INVALID_DATA;
 	}
 
@@ -3285,7 +3285,7 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 		}
 		m_regionPersistence.finishPublication( 0 );
 		m_regionPersistence.finishDirectoryLoad( false );
-		LOG( ERROR, "Failed to populate process-static active terrain storage; previous repository restored" );
+		LOG( ERROR, "Failed to populate instance-local active terrain storage; previous repository restored" );
 		return ERR_INVALID_DATA;
 	}
 

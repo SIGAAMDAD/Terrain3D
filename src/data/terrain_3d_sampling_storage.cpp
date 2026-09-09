@@ -23,7 +23,7 @@ int Terrain3DSamplingStorage::locationIndex( const Vector2i &rLocation ) {
 
 bool Terrain3DSamplingStorage::claimOrReconfigureActive( void ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	const bool configured = isActiveOwner() ? t3dActiveStorageReconfigure( this ) : t3dActiveStorageClaim( this );
+	const bool configured = m_activeStorage.reconfigure();
 	if ( !configured ) {
 		return false;
 	}
@@ -37,7 +37,7 @@ bool Terrain3DSamplingStorage::claimOrReconfigureActive( void ) {
 
 bool Terrain3DSamplingStorage::bindActive( void *const pBacking, const size_t nBackingBytes ) {
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	if ( !t3dActiveStorageBind( this, pBacking, nBackingBytes ) ) {
+	if ( !m_activeStorage.bind( pBacking, nBackingBytes ) ) {
 		return false;
 	}
 	const uint32_t currentGeneration = refreshActiveGeneration();
@@ -51,7 +51,7 @@ bool Terrain3DSamplingStorage::bindActive( void *const pBacking, const size_t nB
 void Terrain3DSamplingStorage::releaseActive( void ) {
 	const bool bHadPublishedState = m_nActiveStorageGeneration != 0u;
 	if ( isActiveOwner() ) {
-		t3dActiveStorageRelease( this );
+		m_activeStorage.release();
 	}
 	m_nActiveStorageGeneration = 0u;
 	if ( bHadPublishedState ) {
@@ -64,7 +64,7 @@ void Terrain3DSamplingStorage::resetActive( void ) {
 		return;
 	}
 	const uint32_t previousGeneration = m_nActiveStorageGeneration;
-	t3dActiveStorageReset( this );
+	m_activeStorage.reset();
 	const uint32_t currentGeneration = refreshActiveGeneration();
 	if ( currentGeneration != previousGeneration ) {
 		invalidateAllSamplers();
@@ -72,26 +72,26 @@ void Terrain3DSamplingStorage::resetActive( void ) {
 }
 
 uint32_t Terrain3DSamplingStorage::refreshActiveGeneration( void ) {
-	m_nActiveStorageGeneration = isActiveOwner() ? t3dActiveStorageGetOwnerGeneration( this ) : 0u;
+	m_nActiveStorageGeneration = isActiveOwner() ? m_activeStorage.getGeneration() : 0u;
 	return m_nActiveStorageGeneration;
 }
 
 bool Terrain3DSamplingStorage::containsActive( const Vector2i &rLocation ) const {
-	return isActiveOwner() && t3dActiveStorageContains( this, rLocation );
+	return isActiveOwner() && m_activeStorage.contains( rLocation );
 }
 
 bool Terrain3DSamplingStorage::syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *const pRegion ) {
-	return isActiveOwner() && t3dActiveStorageSyncRegion( this, rLocation, pRegion );
+	return isActiveOwner() && m_activeStorage.syncRegion( rLocation, pRegion );
 }
 
 bool Terrain3DSamplingStorage::syncActiveHeightPage(
         const Vector2i &rLocation, const uint8_t *const pHeightBytes, const size_t nHeightBytes ) {
-	return isActiveOwner() && t3dActiveStorageSyncHeightPage( this, rLocation, pHeightBytes, nHeightBytes );
+	return isActiveOwner() && m_activeStorage.syncHeightPage( rLocation, pHeightBytes, nHeightBytes );
 }
 
 bool Terrain3DSamplingStorage::replaceActiveHeightPages(
         const uint8_t *const *const ppHeightPages, const int *const pSlots, const size_t nPageCount ) {
-	if ( !isActiveOwner() || !t3dActiveStorageReplaceHeightPages( this, ppHeightPages, pSlots, nPageCount ) ) {
+	if ( !isActiveOwner() || !m_activeStorage.replaceHeightPages( ppHeightPages, pSlots, nPageCount ) ) {
 		return false;
 	}
 	refreshActiveGeneration();
@@ -101,38 +101,38 @@ bool Terrain3DSamplingStorage::replaceActiveHeightPages(
 
 bool Terrain3DSamplingStorage::syncActiveMap(
         const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const t3dMapType_t eType, const Rect2i &rDirtyRect ) {
-	return isActiveOwner() && t3dActiveStorageSyncMap( this, rLocation, pRegion, eType, rDirtyRect );
+	return isActiveOwner() && m_activeStorage.syncMap( rLocation, pRegion, eType, rDirtyRect );
 }
 
 bool Terrain3DSamplingStorage::syncActiveDerived(
         const Vector2i &rLocation, const Terrain3DRegion *const pRegion, const Rect2i &rDirtyRect ) {
-	return isActiveOwner() && t3dActiveStorageSyncDerived( this, rLocation, pRegion, rDirtyRect );
+	return isActiveOwner() && m_activeStorage.syncDerived( rLocation, pRegion, rDirtyRect );
 }
 
 void Terrain3DSamplingStorage::invalidateActive( const Vector2i &rLocation ) {
 	if ( isActiveOwner() ) {
-		t3dActiveStorageInvalidate( this, rLocation );
+		m_activeStorage.invalidate( rLocation );
 	}
 }
 
 size_t Terrain3DSamplingStorage::getActiveReservedBytes( void ) const {
-	return isActiveOwner() ? t3dActiveStorageGetReservedBytes() : 0u;
+	return isActiveOwner() ? m_activeStorage.getReservedBytes() : 0u;
 }
 
 int Terrain3DSamplingStorage::getActivePhysicalCapacity( void ) const {
-	return t3dActiveStorageGetPhysicalCapacity();
+	return m_activeStorage.getPhysicalCapacity();
 }
 
 uint64_t Terrain3DSamplingStorage::getActiveReaderRetryCount( void ) const {
-	return t3dActiveStorageGetReaderRetryCount();
+	return m_activeStorage.getReaderRetryCount();
 }
 
 uint64_t Terrain3DSamplingStorage::getActiveReaderMutexCount( void ) const {
-	return t3dActiveStorageGetReaderMutexCount();
+	return m_activeStorage.getReaderMutexCount();
 }
 
 uint64_t Terrain3DSamplingStorage::getActivePublicationCount( void ) const {
-	return t3dActiveStorageGetPublicationCount();
+	return m_activeStorage.getPublicationCount();
 }
 
 Terrain3DResidentMapLease Terrain3DSamplingStorage::acquireResident(

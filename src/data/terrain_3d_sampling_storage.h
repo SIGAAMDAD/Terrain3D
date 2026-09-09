@@ -39,7 +39,7 @@ public:
 	void releaseActive( void );
 	void resetActive( void );
 	EA_FORCE_INLINE bool isActiveOwner( void ) const {
-		return t3dActiveStorageIsOwner( this );
+		return m_activeStorage.isActive();
 	}
 	uint32_t refreshActiveGeneration( void );
 	EA_FORCE_INLINE uint32_t getActiveGeneration( void ) const {
@@ -47,7 +47,7 @@ public:
 	}
 
 	EA_FORCE_INLINE Terrain3DActiveMapLease acquireActive( const Vector2i &rLocation ) const {
-		return isActiveOwner() ? t3dActiveStorageAcquire( this, rLocation ) : Terrain3DActiveMapLease();
+		return isActiveOwner() ? m_activeStorage.acquire( rLocation ) : Terrain3DActiveMapLease();
 	}
 	bool containsActive( const Vector2i &rLocation ) const;
 	bool syncActiveRegion( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
@@ -86,6 +86,7 @@ public:
 	}
 
 private:
+	mutable Terrain3DActiveStorage m_activeStorage;
 	uint32_t m_nActiveStorageGeneration = 0u;
 	mutable Terrain3DResidentRegionPool m_residentPool;
 	t3dAtomic_t<uint64_t> m_nSamplingGeneration{ 1u };
