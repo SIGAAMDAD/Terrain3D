@@ -1211,11 +1211,11 @@ void Terrain3DEditor::storeUndo( void ) {
 		m_pTerrain->getPlugin()->call( "create_undo_action", action_name );
 
 		LOG( DEBUG, "Storing undo snapshot: " );
-		Terrain3DUtil::printDict( "_undo_data snapshot", m_undoData, DEBUG );
+		Terrain3DUtil::printDict( "_undo_data snapshot", m_undoData, EXTREME );
 		m_pTerrain->getPlugin()->call( "add_undo_method", Callable( this, "apply_undo" ).bind( m_undoData.duplicate() ) );
 
 		LOG( DEBUG, "Storing redo snapshot: " );
-		Terrain3DUtil::printDict( "redo_data snapshot", redo_data, DEBUG );
+		Terrain3DUtil::printDict( "redo_data snapshot", redo_data, EXTREME );
 		m_pTerrain->getPlugin()->call( "add_do_method", Callable( this, "apply_undo" ).bind( redo_data ) );
 
 		LOG( DEBUG, "Committing undo action" );
@@ -1241,7 +1241,7 @@ void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
 	}
 
 	if ( rData.has( "edited_regions" ) ) {
-		Terrain3DUtil::printArr( "Edited regions", rData["edited_regions"] );
+		Terrain3DUtil::printArr( "Edited regions", rData["edited_regions"], EXTREME );
 		const TypedArray<Terrain3DRegion> undo_regions = rData["edited_regions"];
 		LOG( DEBUG, "Backup has ", undo_regions.size(), " edited regions" );
 		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( undo_regions ).size() ); iRegion++ ) {

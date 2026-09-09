@@ -500,7 +500,7 @@ bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void ) {
 	format2d->set_mipmaps( 1u );
 	format2d->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
 	format2d->set_format( RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT );
-	format2d->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+	format2d->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 	Ref<RDTextureView> view;
 	view.instantiate();
 	PackedByteArray texel;
@@ -533,7 +533,7 @@ bool Terrain3DRdClipmapRenderer::ensureFallbackTextures( void ) {
 	format_array->set_mipmaps( 1u );
 	format_array->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D_ARRAY );
 	format_array->set_format( RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT );
-	format_array->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+	format_array->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 	m_hFallbackArrayTexture = rd->texture_create( format_array, view, initial_data );
 	if ( !m_hFallbackArrayTexture.is_valid() ) {
 		m_context.recordResourceCreationFailure( "T3D.Texture.ArrayFallback", Terrain3DRdContext::RESOURCE_TEXTURE );

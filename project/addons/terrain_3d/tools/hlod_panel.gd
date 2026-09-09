@@ -26,6 +26,7 @@ func _ready() -> void:
 	transient = true
 	exclusive = false
 	close_requested.connect(hide)
+	hide()
 	_build_ui()
 	_poll_timer = Timer.new()
 	_poll_timer.wait_time = 0.5
@@ -232,6 +233,8 @@ func _bake(dirty_only: bool) -> void:
 	_sync_active_terrain()
 	if not _ready_for_authoring():
 		return
+	_summary.text = "HLOD bake in progress…"
+	await get_tree().process_frame
 	var result: Dictionary = baker.bake(terrain, dirty_only)
 	if not bool(result.get("ok", false)):
 		_summary.text = "HLOD bake failed: %s" % String(result.get("error", "unknown error"))

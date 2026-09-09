@@ -7,6 +7,7 @@
 #include "assets/terrain_3d_assets.h"
 #include "core/logger.h"
 #include "instances/terrain_3d_instancer.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "lighting/terrain_3d_region_lighting.h"
 #include "memory/terrain_3d_memory.h"
@@ -31,6 +32,19 @@
 #include <math.h>
 #include <string.h>
 
+
+static Terrain3DHLODStreamer *t3dRdGetInstanceHlodStreamer( Terrain3D *const pTerrain ) {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	( void )pTerrain;
+	return NULL;
+#else
+	return pTerrain ? pTerrain->getHlodStreamer() : NULL;
+#endif
+}
+
+static bool t3dRdShouldReportInstanceFailure( const uint64_t nFailureCount ) {
+	return nFailureCount <= 4u || ( nFailureCount & ( nFailureCount - 1u ) ) == 0u;
+}
 
 static float t3dRdMaterialFloatParam( const Terrain3DMaterial *const pMaterial, const char *const pszName, const float fDefault ) {
 	if ( !pMaterial ) {
@@ -714,7 +728,7 @@ uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank( const uint32
 
 bool Terrain3DRenderCoordinator::hasInstancePublicationCapacity( void ) const {
 	Terrain3DInstancer *const instancer = m_pTerrain ? m_pTerrain->getInstancer() : NULL;
-	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain ? m_pTerrain->getHlodStreamer() : NULL;
+	Terrain3DHLODStreamer *const hlod_streamer = t3dRdGetInstanceHlodStreamer( m_pTerrain );
 	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
 	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
 	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
@@ -722,15 +736,22 @@ bool Terrain3DRenderCoordinator::hasInstancePublicationCapacity( void ) const {
 	const size_t combined_cells = regular_cells + hlod_entries;
 	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances
 	        || m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells
+	        || m_cachedRegularInstanceScene.m_dirtyRanges.capacity() < regular_cells
+	        || m_cachedRegularInstanceScene.m_dirtyCells.capacity() < regular_cells
 	        || m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries
 	        || m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries
+	        || m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_entries
+	        || m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_entries
 	        || m_cachedInstanceScene.m_instances.capacity() < combined_instances
-	        || m_cachedInstanceScene.m_cells.capacity() < combined_cells || m_cachedHlodMeshSources.capacity() < hlod_entries ) {
+	        || m_cachedInstanceScene.m_cells.capacity() < combined_cells
+	        || m_cachedInstanceScene.m_dirtyRanges.capacity() < combined_cells
+	        || m_cachedInstanceScene.m_dirtyCells.capacity() < combined_cells || m_cachedHlodMeshSources.capacity() < hlod_entries ) {
 		return false;
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
-		const t3dRdInstanceSceneBank_t &bank = ( m_instanceSceneBanks )[iBank];
-		if ( bank.m_snapshot.m_instances.capacity() < combined_instances || bank.m_snapshot.m_cells.capacity() < combined_cells ) {
+		const t3dRdInstanceSceneSnapshot_t &snapshot = ( m_instanceSceneBanks )[iBank].m_snapshot;
+		if ( snapshot.m_instances.capacity() < combined_instances || snapshot.m_cells.capacity() < combined_cells
+		        || snapshot.m_dirtyRanges.capacity() < combined_cells || snapshot.m_dirtyCells.capacity() < combined_cells ) {
 			return false;
 		}
 	}
@@ -775,7 +796,7 @@ bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
 		return false;
 	}
 	Terrain3DInstancer *const instancer = m_pTerrain ? m_pTerrain->getInstancer() : NULL;
-	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain ? m_pTerrain->getHlodStreamer() : NULL;
+	Terrain3DHLODStreamer *const hlod_streamer = t3dRdGetInstanceHlodStreamer( m_pTerrain );
 	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
 	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
 	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
@@ -784,49 +805,31 @@ bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
 
 	const bool needs_rebuild = m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances
 	        || m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells
+	        || m_cachedRegularInstanceScene.m_dirtyRanges.capacity() < regular_cells
+	        || m_cachedRegularInstanceScene.m_dirtyCells.capacity() < regular_cells
 	        || m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries
 	        || m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries
+	        || m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_entries
+	        || m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_entries
 	        || m_cachedInstanceScene.m_instances.capacity() < combined_instances
-	        || m_cachedInstanceScene.m_cells.capacity() < combined_cells || m_cachedHlodMeshSources.capacity() < hlod_entries;
+	        || m_cachedInstanceScene.m_cells.capacity() < combined_cells
+	        || m_cachedInstanceScene.m_dirtyRanges.capacity() < combined_cells
+	        || m_cachedInstanceScene.m_dirtyCells.capacity() < combined_cells || m_cachedHlodMeshSources.capacity() < hlod_entries;
 	bool bank_needs_rebuild = false;
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
-		const t3dRdInstanceSceneBank_t &bank = ( m_instanceSceneBanks )[iBank];
-		bank_needs_rebuild = bank_needs_rebuild || bank.m_snapshot.m_instances.capacity() < combined_instances
-		        || bank.m_snapshot.m_cells.capacity() < combined_cells;
+		const t3dRdInstanceSceneSnapshot_t &snapshot = ( m_instanceSceneBanks )[iBank].m_snapshot;
+		bank_needs_rebuild = bank_needs_rebuild || snapshot.m_instances.capacity() < combined_instances
+		        || snapshot.m_cells.capacity() < combined_cells || snapshot.m_dirtyRanges.capacity() < combined_cells
+		        || snapshot.m_dirtyCells.capacity() < combined_cells;
 	}
 	if ( !needs_rebuild && !bank_needs_rebuild ) {
 		return true;
 	}
 
-	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ) {
-		if ( !m_cachedRegularInstanceScene.m_instances.reserveCold( regular_instances ) ) {
-			return false;
-		}
-	}
-	if ( m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells ) {
-		if ( !m_cachedRegularInstanceScene.m_cells.reserveCold( regular_cells ) ) {
-			return false;
-		}
-	}
-	if ( m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries ) {
-		if ( !m_cachedHlodInstanceScene.m_instances.reserveCold( hlod_entries ) ) {
-			return false;
-		}
-	}
-	if ( m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries ) {
-		if ( !m_cachedHlodInstanceScene.m_cells.reserveCold( hlod_entries ) ) {
-			return false;
-		}
-	}
-	if ( m_cachedInstanceScene.m_instances.capacity() < combined_instances ) {
-		if ( !m_cachedInstanceScene.m_instances.reserveCold( combined_instances ) ) {
-			return false;
-		}
-	}
-	if ( m_cachedInstanceScene.m_cells.capacity() < combined_cells ) {
-		if ( !m_cachedInstanceScene.m_cells.reserveCold( combined_cells ) ) {
-			return false;
-		}
+	if ( !m_cachedRegularInstanceScene.reserveCold( regular_instances, regular_cells )
+	        || !m_cachedHlodInstanceScene.reserveCold( hlod_entries, hlod_entries )
+	        || !m_cachedInstanceScene.reserveCold( combined_instances, combined_cells ) ) {
+		return false;
 	}
 	if ( m_cachedHlodMeshSources.capacity() < hlod_entries ) {
 		if ( !t3dContainerReserveCold( m_cachedHlodMeshSources, hlod_entries ) ) {
@@ -834,16 +837,8 @@ bool Terrain3DRenderCoordinator::ensureInstancePublicationStorage( void ) {
 		}
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
-		t3dRdInstanceSceneBank_t &bank = ( m_instanceSceneBanks )[iBank];
-		if ( bank.m_snapshot.m_instances.capacity() < combined_instances ) {
-			if ( !bank.m_snapshot.m_instances.reserveCold( combined_instances ) ) {
-				return false;
-			}
-		}
-		if ( bank.m_snapshot.m_cells.capacity() < combined_cells ) {
-			if ( !bank.m_snapshot.m_cells.reserveCold( combined_cells ) ) {
-				return false;
-			}
+		if ( !( m_instanceSceneBanks )[iBank].m_snapshot.reserveCold( combined_instances, combined_cells ) ) {
+			return false;
 		}
 	}
 	return true;
@@ -944,7 +939,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	}
 	if ( !hasInstancePublicationCapacity() ) {
 		Terrain3DInstancer *const instancer = m_pTerrain->getInstancer();
-		Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain->getHlodStreamer();
+		Terrain3DHLODStreamer *const hlod_streamer = t3dRdGetInstanceHlodStreamer( m_pTerrain );
 		const size_t required = ( instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u )
 		        + ( hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u );
 		recordCapacityMiss( "RD instance publication", required, m_cachedInstanceScene.m_instances.capacity(), false );
@@ -1350,7 +1345,7 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 	snapshot.m_nMaterialTextureGeneration = m_nMaterialTextureGeneration;
 
 	const Ref<Terrain3DAssets> instance_assets = m_pTerrain->getAssets();
-	Terrain3DHLODStreamer *const hlod_streamer = m_pTerrain->getHlodStreamer();
+	Terrain3DHLODStreamer *const hlod_streamer = t3dRdGetInstanceHlodStreamer( m_pTerrain );
 	const uint64_t hlod_generation = hlod_streamer ? hlod_streamer->getRdPublicationGeneration() : 0u;
 	const bool hlod_changed = !m_bCachedHlodInstanceSceneValid || hlod_generation != m_nHlodSceneGeneration;
 	if ( hlod_changed ) {
@@ -1365,6 +1360,9 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		} else {
 			m_cachedHlodInstanceScene.m_instances.reset();
 			m_cachedHlodInstanceScene.m_cells.reset();
+			m_cachedHlodInstanceScene.m_dirtyRanges.reset();
+			m_cachedHlodInstanceScene.m_dirtyCells.reset();
+			m_cachedHlodInstanceScene.m_bTopologyChanged = true;
 			m_cachedHlodInstanceScene.m_nGeneration = 0u;
 		}
 		m_bCachedHlodInstanceSceneValid = true;
@@ -1420,6 +1418,9 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		} else {
 			m_cachedRegularInstanceScene.m_instances.reset();
 			m_cachedRegularInstanceScene.m_cells.reset();
+			m_cachedRegularInstanceScene.m_dirtyRanges.reset();
+			m_cachedRegularInstanceScene.m_dirtyCells.reset();
+			m_cachedRegularInstanceScene.m_bTopologyChanged = true;
 			m_cachedRegularInstanceScene.m_nGeneration = 0u;
 		}
 		m_bCachedRegularInstanceSceneValid = true;
@@ -1429,6 +1430,9 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 		t3dRdInstanceSceneSnapshot_t &combined = m_cachedInstanceScene;
 		combined.m_instances.reset();
 		combined.m_cells.reset();
+		combined.m_dirtyRanges.reset();
+		combined.m_dirtyCells.reset();
+		combined.m_bTopologyChanged = !m_bCachedInstanceSceneValid || hlod_changed || m_cachedRegularInstanceScene.m_bTopologyChanged;
 		m_nCombinedInstanceSceneGeneration = advanceGeneration( m_nCombinedInstanceSceneGeneration );
 		combined.m_nGeneration = m_nCombinedInstanceSceneGeneration;
 		const size_t combined_instance_count =
@@ -1444,6 +1448,13 @@ void Terrain3DRenderCoordinator::publishSnapshot( void ) {
 			return;
 		}
 		if ( !combined.m_cells.append( m_cachedRegularInstanceScene.m_cells.data(), m_cachedRegularInstanceScene.m_cells.size() ) ) {
+			return;
+		}
+		if ( !combined.m_bTopologyChanged
+		        && ( !combined.m_dirtyRanges.append(
+		                     m_cachedRegularInstanceScene.m_dirtyRanges.data(), m_cachedRegularInstanceScene.m_dirtyRanges.size() )
+		                || !combined.m_dirtyCells.append(
+		                        m_cachedRegularInstanceScene.m_dirtyCells.data(), m_cachedRegularInstanceScene.m_dirtyCells.size() ) ) ) {
 			return;
 		}
 		{
@@ -1753,32 +1764,61 @@ void Terrain3DRenderCoordinator::detachEffect( void ) {
 	m_bCreatedCompositor = false;
 }
 
-bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( void ) {
-	if ( m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
-		return true;
-	}
+bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( const uint64_t nRenderFrame ) {
 	const bool shader_ready = m_shaderLibrary.isReady();
-	const bool terrain_ready = shader_ready
-	        && m_renderer.initialize( m_shaderLibrary.getNear(),
-	                m_shaderLibrary.getMiddle(),
-	                m_shaderLibrary.getFar(),
-	                m_shaderLibrary.getCull(),
-	                m_shaderLibrary.getForwardBundle() );
-	bool instance_ready = false;
-	bool ocean_ready = false;
+	bool terrain_ready = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	bool instance_ready = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	bool ocean_ready = m_bOceanRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+
+	if ( !terrain_ready ) {
+		Terrain3DColdPhaseScope cold_phase_scope;
+		terrain_ready = shader_ready
+		        && m_renderer.initialize( m_shaderLibrary.getNear(),
+		                m_shaderLibrary.getMiddle(),
+		                m_shaderLibrary.getFar(),
+		                m_shaderLibrary.getCull(),
+		                m_shaderLibrary.getForwardBundle() );
+	}
+
 	if ( terrain_ready ) {
-		// Terrain is the functional lane. Instance/HLOD and ocean are companion
-		// renderers and must never veto a valid height-driven terrain renderer.
-		instance_ready = m_instanceRenderer.initialize(
-		        m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() );
-		ocean_ready = m_oceanRenderer.initialize( m_shaderLibrary.getOceanColor(), m_shaderLibrary.getOceanShadow() );
-		if ( !instance_ready ) {
-			LOG( WARN, "[RD instances] Companion renderer unavailable; terrain rendering remains active: ", m_instanceRenderer.getLastError() );
+		// Companion lanes recover independently. A valid height-driven terrain renderer
+		// must not permanently suppress a companion retry after a transient RD failure.
+		const bool instance_retry_allowed = !instance_ready
+		        && ( nRenderFrame == UINT64_MAX || m_nLastInstanceInitializationRenderFrame != nRenderFrame );
+		if ( instance_retry_allowed ) {
+			Terrain3DColdPhaseScope cold_phase_scope;
+			m_nLastInstanceInitializationRenderFrame = nRenderFrame;
+			++m_nInstanceInitializationAttempts;
+			const bool had_previous_failure = m_nInstanceInitializationFailures > 0u;
+			instance_ready = m_instanceRenderer.initialize( m_shaderLibrary.getInstances(),
+			        m_shaderLibrary.getHlodCull(),
+			        m_shaderLibrary.getInstanceCull(),
+			        m_shaderLibrary.getForwardBundle() );
+			if ( !instance_ready ) {
+				++m_nInstanceInitializationFailures;
+				const String instance_error = m_instanceRenderer.getLastError();
+				m_instanceRenderer.shutdown();
+				if ( t3dRdShouldReportInstanceFailure( m_nInstanceInitializationFailures ) ) {
+					LOG( WARN, "[RD instances] Companion renderer unavailable; terrain rendering remains active: ", instance_error );
+				}
+			} else if ( had_previous_failure ) {
+				++m_nInstanceInitializationRecoveries;
+				LOG( INFO, "[RD instances] Companion renderer recovered after initialization failure" );
+			}
 		}
-		if ( !ocean_ready ) {
-			LOG( WARN, "[RD ocean] Companion renderer unavailable; terrain rendering remains active: ", m_oceanRenderer.getLastError() );
+
+		const bool ocean_retry_allowed = !ocean_ready
+		        && ( nRenderFrame == UINT64_MAX || m_nLastOceanInitializationRenderFrame != nRenderFrame );
+		if ( ocean_retry_allowed ) {
+			Terrain3DColdPhaseScope cold_phase_scope;
+			m_nLastOceanInitializationRenderFrame = nRenderFrame;
+			ocean_ready = m_oceanRenderer.initialize( m_shaderLibrary.getOceanColor(), m_shaderLibrary.getOceanShadow() );
+			if ( !ocean_ready ) {
+				LOG( WARN, "[RD ocean] Companion renderer unavailable; terrain rendering remains active: ", m_oceanRenderer.getLastError() );
+			}
 		}
 	}
+
 	m_bRendererInitialized.store( terrain_ready, T3D_MEMORY_ORDER_RELEASE );
 	m_bInstanceRendererInitialized.store( instance_ready, T3D_MEMORY_ORDER_RELEASE );
 	m_bOceanRendererInitialized.store( ocean_ready, T3D_MEMORY_ORDER_RELEASE );
@@ -1847,10 +1887,32 @@ void Terrain3DRenderCoordinator::initialize( Terrain3D *const pTerrain ) {
 	m_instanceRenderer.setMotionDebugEnabled( m_bMotionDebugEnabled );
 	m_renderer.setCullingComparisonEnabled( bCompareCulling );
 	m_renderer.setDirectDrawDebugEnabled( bDirectDebug );
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	const bool bInstanceDirectDebug = true;
+#else
 	const bool bInstanceDirectDebug = os && os->get_environment( "TERRAIN3D_RD_INSTANCE_DIRECT_DRAW" ) == "1";
+#endif
 	m_instanceRenderer.setDirectDrawDebugEnabled( bDirectDebug || bInstanceDirectDebug );
 	m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+	m_nInstanceInitializationAttempts = 0u;
+	m_nInstanceInitializationFailures = 0u;
+	m_nInstanceInitializationRecoveries = 0u;
+	m_nLastInstanceInitializationRenderFrame = UINT64_MAX;
+	m_nLastOceanInitializationRenderFrame = UINT64_MAX;
+	m_nInstanceDepthPrepareAttempts = 0u;
+	m_nInstanceDepthPrepareSuccesses = 0u;
+	m_nInstanceDepthSubmitAttempts = 0u;
+	m_nInstanceDepthSubmitSuccesses = 0u;
+	m_nInstanceOpaquePrepareAttempts = 0u;
+	m_nInstanceOpaquePrepareSuccesses = 0u;
+	m_nInstanceOpaqueSubmitAttempts = 0u;
+	m_nInstanceOpaqueSubmitSuccesses = 0u;
+	m_nInstanceDepthPrepassFallbacks = 0u;
+	m_nInstanceOpaqueDepthPrepassRequested = 0u;
+	m_nInstanceOpaqueDepthPrepassUsed = 0u;
+	m_nInstanceLastSuccessfulDepthScenePass = UINT64_MAX;
+	m_bForwardPreparedInstanceDepthPrepassActive = false;
 	m_bFailureLatched = false;
 	m_nFailureLatchTerrainTextureGeneration = 0u;
 	m_nFailureLatchMaterialTextureGeneration = 0u;
@@ -2033,13 +2095,12 @@ void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
 	t3dScopedLock_t lock( m_previewStateMutex );
 	m_pendingPreviewImage.unref();
 	m_pendingPreviewError = String();
-	if ( !m_bPendingPreviewMeshesValid || !m_shaderLibrary.isReady() ) {
-		m_pendingPreviewError = "RD editor preview source/shaders are unavailable";
+	if ( !m_bPendingPreviewMeshesValid || m_shaderLibrary.getInstances().is_null() ) {
+		m_pendingPreviewError = "RD editor preview source/base instance shader is unavailable";
 		return;
 	}
 	if ( !m_bPreviewRendererInitialized ) {
-		m_bPreviewRendererInitialized = m_previewRenderer.initialize(
-		        m_shaderLibrary.getInstances(), m_shaderLibrary.getHlodCull(), m_shaderLibrary.getForwardBundle() );
+		m_bPreviewRendererInitialized = m_previewRenderer.initializePreview( m_shaderLibrary.getInstances() );
 	}
 	Ref<Image> image;
 	const bool ok = m_bPreviewRendererInitialized
@@ -2105,6 +2166,7 @@ Ref<Image> Terrain3DRenderCoordinator::createMeshPreview( const uint16_t nAssetI
 	}
 	t3dScopedLock_t lock( m_previewStateMutex );
 	if ( m_pendingPreviewImage.is_null() && !m_pendingPreviewError.is_empty() ) {
+		LOG( ERROR, "[RD instances] Mesh preview failed for asset ", nAssetId, ": ", m_pendingPreviewError );
 		t3dScopedLock_t diagnostics_lock( m_diagnosticsMutex );
 		m_initializationError = m_pendingPreviewError;
 	}
@@ -2264,6 +2326,24 @@ void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
 	m_bForwardPreparedHasInstances = false;
 	m_bForwardPreparedHasOcean = false;
 	m_bForwardPreparedHasRenderWorld = false;
+	m_bForwardPreparedInstanceDepthPrepassActive = false;
+	m_nForwardPrepareRequestedLaneMask = 0u;
+	m_nForwardPrepareReadyLaneMask = 0u;
+	m_nForwardPrepareFailedLaneMask = 0u;
+	m_nForwardSubmitAttemptedLaneMask = 0u;
+	m_nForwardSubmitSucceededLaneMask = 0u;
+	m_nForwardSubmitFailedLaneMask = 0u;
+	m_nForwardLaneScenePass = 0u;
+	m_nForwardLanePassKind = T3D_RD_FORWARD_PASS_INVALID;
+	m_nForwardPublishedInstanceCount = 0u;
+	m_nForwardPublishedInstanceCellCount = 0u;
+	m_bForwardInstanceLaneExpected = false;
+	m_bForwardInstancePrepareAttempted = false;
+	m_bForwardInstancePrepareSucceeded = false;
+	m_bForwardInstancePreparedHasDraws = false;
+	m_bForwardInstanceSubmitAttempted = false;
+	m_bForwardInstanceSubmitSucceeded = false;
+	m_nForwardInstanceSubmitDraws = 0u;
 }
 
 bool Terrain3DRenderCoordinator::prepareForwardLifecycle(
@@ -2297,8 +2377,12 @@ bool Terrain3DRenderCoordinator::prepareForwardLifecycle(
 		slot = oldest;
 		++m_nForwardViewportEvictions;
 	}
+	// A Forward+ viewport is stable across several native pass framebuffers. Depth,
+	// opaque, motion, and transparent passes may all use different framebuffer
+	// RIDs/formats while still belonging to the same viewport lifecycle. Keep
+	// framebuffer compatibility in the pass/pipeline keys; it must not invalidate
+	// temporal history or borrowed renderer state for the viewport itself.
 	const bool same = slot->m_bValid && slot->m_nViewportKey == rContext.m_nViewportKey
-	        && slot->m_hFramebuffer == rContext.m_hNativeFramebuffer && slot->m_nFramebufferFormat == rContext.m_nFramebufferFormat
 	        && slot->m_renderSize == rContext.m_renderSize && slot->m_renderRegion == rContext.m_renderRegion
 	        && slot->m_nViewCount == rContext.m_nViewCount && slot->m_nSampleCount == rContext.m_nSampleCount;
 	const bool reconfigured_this_frame = slot->m_bValid && slot->m_nReconfiguredRenderFrame == rContext.m_nRenderFrame;
@@ -2308,8 +2392,6 @@ bool Terrain3DRenderCoordinator::prepareForwardLifecycle(
 		++m_nForwardViewportReconfigurations;
 		slot->m_nReconfiguredRenderFrame = rContext.m_nRenderFrame;
 		slot->m_nViewportKey = rContext.m_nViewportKey;
-		slot->m_hFramebuffer = rContext.m_hNativeFramebuffer;
-		slot->m_nFramebufferFormat = rContext.m_nFramebufferFormat;
 		slot->m_renderSize = rContext.m_renderSize;
 		slot->m_renderRegion = rContext.m_renderRegion;
 		slot->m_nViewCount = rContext.m_nViewCount;
@@ -2359,9 +2441,26 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 	}
 
 	if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE ) {
+		m_nForwardPrepareRequestedLaneMask = 0u;
+		m_nForwardPrepareReadyLaneMask = 0u;
+		m_nForwardPrepareFailedLaneMask = 0u;
+		m_nForwardSubmitAttemptedLaneMask = 0u;
+		m_nForwardSubmitSucceededLaneMask = 0u;
+		m_nForwardSubmitFailedLaneMask = 0u;
+		m_nForwardLaneScenePass = rContext.m_nScenePass;
+		m_nForwardLanePassKind = ( uint32_t )( rContext.m_passKind );
+		m_nForwardPublishedInstanceCount = 0u;
+		m_nForwardPublishedInstanceCellCount = 0u;
+		m_bForwardInstanceLaneExpected = false;
+		m_bForwardInstancePrepareAttempted = false;
+		m_bForwardInstancePrepareSucceeded = false;
+		m_bForwardInstancePreparedHasDraws = false;
+		m_bForwardInstanceSubmitAttempted = false;
+		m_bForwardInstanceSubmitSucceeded = false;
+		m_nForwardInstanceSubmitDraws = 0u;
 		bool history_valid = false;
 		bool viewport_reconfigured = false;
-		if ( !prepareForwardLifecycle( rContext, history_valid, viewport_reconfigured ) || !initializeRendererOnRenderThread() ) {
+		if ( !prepareForwardLifecycle( rContext, history_valid, viewport_reconfigured ) || !initializeRendererOnRenderThread( rContext.m_nRenderFrame ) ) {
 			return false;
 		}
 		const t3dRdFrameSnapshotSlot_t *const publication = acquireSnapshotOnRenderThread();
@@ -2386,6 +2485,23 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		        shadow_pass ? ( rContext.m_nShadowCasterMask & rContext.m_nShadowLightCullMask ) : rContext.m_nCameraVisibleLayers;
 		const bool has_terrain = !transparent_pass && snapshot.m_nPatchCount > 0u && pRegionMap && !pRegionMap->m_bytes.is_empty()
 		        && ( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
+		m_nForwardPublishedInstanceCount = pScene ? ( uint32_t )( pScene->m_snapshot.m_instances.size() ) : 0u;
+		m_nForwardPublishedInstanceCellCount = pScene ? ( uint32_t )( pScene->m_snapshot.m_cells.size() ) : 0u;
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+		const bool bInstancePassEnabled = rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE;
+#else
+		const bool bInstancePassEnabled = true;
+#endif
+		m_bForwardInstanceLaneExpected = m_nForwardPublishedInstanceCount > 0u;
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+		m_bForwardInstanceLaneExpected = m_bForwardInstanceLaneExpected && bInstancePassEnabled;
+#endif
+		if ( has_terrain ) {
+			m_nForwardPrepareRequestedLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
+		}
+		if ( m_bForwardInstanceLaneExpected ) {
+			m_nForwardPrepareRequestedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+		}
 		m_nForwardPreparedScenePass = rContext.m_nScenePass;
 		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_bForwardPreparedHasTerrain = has_terrain;
@@ -2393,6 +2509,10 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		m_bForwardPreparedHasOcean = false;
 		m_bForwardPreparedHasRenderWorld = false;
 		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
+			const bool render_world_requested = m_renderWorldRuntime.has_scene();
+			if ( render_world_requested ) {
+				m_nForwardPrepareRequestedLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+			}
 			Terrain3DRdContext &render_world_context = Terrain3DRdContext::getShared();
 			bool render_world_ready = false;
 			{
@@ -2416,17 +2536,157 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 			// RenderWorld is a companion lane. Failure or an unsupported native pass
 			// capability must never suppress authoritative terrain/instance/ocean work.
 			m_bForwardPreparedHasRenderWorld = render_world_ready && render_world_generations_ok && m_renderWorldRuntime.has_scene();
+			if ( render_world_requested ) {
+				if ( m_bForwardPreparedHasRenderWorld ) {
+					m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+				} else {
+					m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+				}
+			}
 		}
 		Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
-		const bool instance_lane_ready = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
-		const bool instances_ok = transparent_pass || !instance_lane_ready
-		        || m_instanceRenderer.prepareForwardPass( rContext,
+		const bool instance_lane_ready = bInstancePassEnabled && m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+		m_bForwardInstancePrepareAttempted = instance_lane_ready;
+		if ( m_bForwardInstanceLaneExpected && !instance_lane_ready ) {
+			++m_nInstanceLaneUnavailablePrepares;
+			m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+		}
+		t3dRdForwardPassContext_t instance_context = rContext;
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
+			instance_context.m_bDepthPrepassActive = false;
+		}
+#endif
+		if ( instance_lane_ready && rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive ) {
+			++m_nInstanceOpaqueDepthPrepassRequested;
+		}
+		if ( instance_lane_ready
+		        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+		        && rContext.m_bDepthPrepassActive && m_nInstanceLastSuccessfulDepthScenePass != rContext.m_nScenePass ) {
+			// The native renderer may have a depth prepass without Terrain3D having
+			// successfully submitted its own instance depth for this scene pass. In
+			// that case COMPARE_OP_EQUAL would reject every instance color fragment.
+			// Fall back to the normal depth-tested color pipeline until the instance
+			// depth lane has demonstrably submitted for this exact scene pass.
+			instance_context.m_bDepthPrepassActive = false;
+			++m_nInstanceDepthPrepassFallbacks;
+			if ( !T3D_INSTANCER_MINIMAL_RENDER_PATH && t3dRdShouldReportInstanceFailure( m_nInstanceDepthPrepassFallbacks ) ) {
+				LOG( WARN,
+				        "[RD instances] Native depth prepass active without a successful instance depth submit for scene_pass=",
+				        rContext.m_nScenePass,
+				        "; using depth-tested color fallback" );
+			}
+		}
+		m_bForwardPreparedInstanceDepthPrepassActive = instance_context.m_bDepthPrepassActive;
+		if ( instance_lane_ready && rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && instance_context.m_bDepthPrepassActive ) {
+			++m_nInstanceOpaqueDepthPrepassUsed;
+		}
+		if ( instance_lane_ready && rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
+			++m_nInstanceDepthPrepareAttempts;
+		} else if ( instance_lane_ready && rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+			++m_nInstanceOpaquePrepareAttempts;
+		}
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+		const uint32_t instance_visibility_mask = UINT32_MAX;
+#else
+		const uint32_t instance_visibility_mask = visibility_mask;
+#endif
+		const bool instances_ok = !instance_lane_ready
+		        || m_instanceRenderer.prepareForwardPass( instance_context,
 		                pMeshes ? &pMeshes->m_snapshot : NULL,
 		                pScene ? &pScene->m_snapshot : NULL,
-		                visibility_mask,
+		                instance_visibility_mask,
 		                history_valid,
 		                viewport_reconfigured );
-		m_bForwardPreparedHasInstances = !transparent_pass && instance_lane_ready && instances_ok;
+		m_bForwardPreparedHasInstances = instance_lane_ready && instances_ok;
+		m_bForwardInstancePrepareSucceeded = m_bForwardPreparedHasInstances;
+		m_bForwardInstancePreparedHasDraws = m_bForwardPreparedHasInstances && m_instanceRenderer.hasForwardPreparedDraws();
+		if ( m_bForwardInstanceLaneExpected && instance_lane_ready ) {
+			if ( instances_ok ) {
+				m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+				if ( !m_bForwardInstancePreparedHasDraws ) {
+					const uint64_t no_draw_count = ++m_nInstancePreparedWithoutDraws;
+					if ( t3dRdShouldReportInstanceFailure( no_draw_count ) ) {
+						LOG( ERROR,
+						        "[RD instances] Forward+ PREPARE produced zero draws for a non-empty published scene; pass=",
+						        ( uint32_t )( rContext.m_passKind ),
+						        ", scene_pass=",
+						        rContext.m_nScenePass,
+						        ", records=",
+						        m_nForwardPublishedInstanceCount,
+						        ", cells=",
+						        m_nForwardPublishedInstanceCellCount,
+						        ", published_vertex_bytes=",
+						        pMeshes ? pMeshes->m_snapshot.m_vertexBytes.size() : 0,
+						        ", published_lods=",
+						        pMeshes ? pMeshes->m_snapshot.m_lods.size() : 0u,
+						        ", published_surfaces=",
+						        pMeshes ? pMeshes->m_snapshot.m_surfaces.size() : 0u,
+						        ", gpu_lods=",
+						        m_instanceRenderer.getMeshCacheLodCount(),
+						        ", gpu_surfaces=",
+						        m_instanceRenderer.getMeshCacheSurfaceCount(),
+						        ", packet_input_cells=",
+						        m_instanceRenderer.getPacketBuildInputCellCount(),
+						        ", resolved_cells=",
+						        m_instanceRenderer.getResolvedMeshCellCount(),
+						        ", unresolved_cells=",
+						        m_instanceRenderer.getUnresolvedMeshCellCount(),
+						        ", draw_packets=",
+						        m_instanceRenderer.getDrawPacketCount(),
+						        ", mesh_upload_failures=",
+						        m_instanceRenderer.getMeshUploadFailureCount(),
+						        ", texture_fallbacks=",
+						        m_instanceRenderer.getMeshTextureFallbackCount(),
+						        ", mesh_error=",
+						        m_instanceRenderer.getMeshCacheLastError() );
+					}
+				}
+			} else {
+				m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+			}
+		}
+		if ( instance_lane_ready && instances_ok ) {
+			if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
+				++m_nInstanceDepthPrepareSuccesses;
+			} else if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+				++m_nInstanceOpaquePrepareSuccesses;
+			}
+		}
+		if ( instance_lane_ready && !instances_ok ) {
+			const uint64_t failures = ++m_nInstanceForwardPrepareFailures;
+			if ( t3dRdShouldReportInstanceFailure( failures ) ) {
+				LOG( ERROR,
+				        "[RD instances] Forward+ PREPARE failed; pass=",
+				        ( uint32_t )( rContext.m_passKind ),
+				        ", scene_pass=",
+				        rContext.m_nScenePass,
+				        ", records=",
+				        m_nForwardPublishedInstanceCount,
+				        ", cells=",
+				        m_nForwardPublishedInstanceCellCount,
+				        ", published_vertex_bytes=",
+				        pMeshes ? pMeshes->m_snapshot.m_vertexBytes.size() : 0,
+				        ", published_lods=",
+				        pMeshes ? pMeshes->m_snapshot.m_lods.size() : 0u,
+				        ", published_surfaces=",
+				        pMeshes ? pMeshes->m_snapshot.m_surfaces.size() : 0u,
+				        ", packet_input_cells=",
+				        m_instanceRenderer.getPacketBuildInputCellCount(),
+				        ", resolved_cells=",
+				        m_instanceRenderer.getResolvedMeshCellCount(),
+				        ", unresolved_cells=",
+				        m_instanceRenderer.getUnresolvedMeshCellCount(),
+				        ", draw_packets=",
+				        m_instanceRenderer.getDrawPacketCount(),
+				        ", mesh_upload_failures=",
+				        m_instanceRenderer.getMeshUploadFailureCount(),
+				        ", texture_fallbacks=",
+				        m_instanceRenderer.getMeshTextureFallbackCount(),
+				        ", error=",
+				        m_instanceRenderer.getLastError() );
+			}
+		}
 		// Terrain and instance/HLOD resources are independent. Always prepare the
 		// terrain pass even when the companion instance lane reports a failure.
 		const bool terrain_ok = !has_terrain
@@ -2437,11 +2697,29 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		                publication->m_bindings,
 		                history_valid,
 		                viewport_reconfigured );
+		if ( has_terrain ) {
+			if ( terrain_ok ) {
+				m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
+			} else {
+				m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
+			}
+		}
 		const bool ocean_lane_ready = m_bOceanRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+		const bool ocean_requested = snapshot.m_ocean.m_nEnabled != 0u && snapshot.m_ocean.m_nPatchCount > 0u
+		        && ( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
+		if ( ocean_requested ) {
+			m_nForwardPrepareRequestedLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+		}
 		const bool ocean_ok = !ocean_lane_ready
 		        || m_oceanRenderer.prepareForwardPass( rContext, snapshot, pOcean ? &pOcean->m_snapshot : NULL, visibility_mask );
-		m_bForwardPreparedHasOcean = ocean_lane_ready && ocean_ok && snapshot.m_ocean.m_nEnabled != 0u
-		        && snapshot.m_ocean.m_nPatchCount > 0u && ( transparent_pass || ( shadow_pass && snapshot.m_ocean.m_nCastShadows != 0u ) );
+		m_bForwardPreparedHasOcean = ocean_lane_ready && ocean_ok && ocean_requested;
+		if ( ocean_requested ) {
+			if ( m_bForwardPreparedHasOcean ) {
+				m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+			} else {
+				m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+			}
+		}
 		if ( terrain_ok ) {
 			m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 			return true;
@@ -2462,16 +2740,92 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 		return false;
 	}
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
+	bool instances_ok = true;
 	if ( m_bForwardPreparedHasInstances ) {
-		( void )m_instanceRenderer.renderForwardPass( rContext );
+		m_bForwardInstanceSubmitAttempted = true;
+		if ( m_bForwardInstanceLaneExpected ) {
+			m_nForwardSubmitAttemptedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+		}
+		t3dRdForwardPassContext_t instance_context = rContext;
+		if ( ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+		        && rContext.m_bDepthPrepassActive && !m_bForwardPreparedInstanceDepthPrepassActive ) {
+			instance_context.m_bDepthPrepassActive = false;
+		}
+		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
+			++m_nInstanceDepthSubmitAttempts;
+		} else if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+			++m_nInstanceOpaqueSubmitAttempts;
+		}
+		const uint64_t submitted_draws_before = m_instanceRenderer.getForwardSubmittedDrawCount( rContext.m_passKind );
+		instances_ok = m_instanceRenderer.renderForwardPass( instance_context );
+		const uint64_t submitted_draws_after = m_instanceRenderer.getForwardSubmittedDrawCount( rContext.m_passKind );
+		m_nForwardInstanceSubmitDraws = submitted_draws_after >= submitted_draws_before
+		        ? submitted_draws_after - submitted_draws_before
+		        : 0u;
+		m_bForwardInstanceSubmitSucceeded = instances_ok;
+		if ( m_bForwardInstanceLaneExpected ) {
+			if ( instances_ok ) {
+				m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+			} else {
+				m_nForwardSubmitFailedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
+			}
+		}
+		if ( instances_ok ) {
+			if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
+				++m_nInstanceDepthSubmitSuccesses;
+				m_nInstanceLastSuccessfulDepthScenePass = rContext.m_nScenePass;
+			} else if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
+				++m_nInstanceOpaqueSubmitSuccesses;
+			}
+		}
+		if ( !instances_ok ) {
+			const uint64_t failures = ++m_nInstanceForwardSubmitFailures;
+			if ( t3dRdShouldReportInstanceFailure( failures ) ) {
+				LOG( ERROR,
+				        "[RD instances] Forward+ SUBMIT failed; pass=",
+				        ( uint32_t )( rContext.m_passKind ),
+				        ", scene_pass=",
+				        rContext.m_nScenePass,
+				        ", error=",
+				        m_instanceRenderer.getLastError() );
+			}
+			m_bForwardPreparedHasInstances = false;
+		}
+	}
+	if ( m_bForwardPreparedHasTerrain ) {
+		m_nForwardSubmitAttemptedLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
 	}
 	const bool terrain_ok = !m_bForwardPreparedHasTerrain || m_renderer.renderForwardPass( rContext );
+	if ( m_bForwardPreparedHasTerrain ) {
+		if ( terrain_ok ) {
+			m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
+		} else {
+			m_nForwardSubmitFailedLaneMask |= T3D_RD_FORWARD_LANE_TERRAIN;
+		}
+	}
+	bool ocean_submit_ok = true;
 	if ( m_bForwardPreparedHasOcean ) {
-		( void )m_oceanRenderer.renderForwardPass( rContext );
+		m_nForwardSubmitAttemptedLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+		ocean_submit_ok = m_oceanRenderer.renderForwardPass( rContext );
+		if ( ocean_submit_ok ) {
+			m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+		} else {
+			m_nForwardSubmitFailedLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
+		}
 	}
 	T3DRenderWorldFrameResult render_world_result = {};
+	if ( m_bForwardPreparedHasRenderWorld ) {
+		m_nForwardSubmitAttemptedLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+	}
 	const bool render_world_ok = !m_bForwardPreparedHasRenderWorld
 	        || m_renderWorldRuntime.render_main_camera_hot( rContext, 0u, 0u, 0u, 0u, 0u, render_world_result );
+	if ( m_bForwardPreparedHasRenderWorld ) {
+		if ( render_world_ok ) {
+			m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+		} else {
+			m_nForwardSubmitFailedLaneMask |= T3D_RD_FORWARD_LANE_RENDER_WORLD;
+		}
+	}
 	if ( !render_world_ok ) {
 		// Keep the last coherent RenderWorld publication, but isolate the failed
 		// companion submission from the native Terrain3D pipeline.
@@ -2506,8 +2860,9 @@ static size_t t3dRenderCoordinatorMeshSnapshotBytes( const t3dRdMeshSourceSnapsh
 }
 
 static size_t t3dRenderCoordinatorSceneSnapshotBytes( const t3dRdInstanceSceneSnapshot_t &rSnapshot ) {
-	return rSnapshot.m_instances.capacity() * sizeof( t3dRdInstanceRecord_t )
-	        + rSnapshot.m_cells.capacity() * sizeof( t3dRdInstanceCell_t );
+	return rSnapshot.m_instances.capacity() * sizeof( t3dRdInstanceRecord_t ) + rSnapshot.m_cells.capacity() * sizeof( t3dRdInstanceCell_t )
+	        + rSnapshot.m_dirtyRanges.capacity() * sizeof( t3dRdInstanceDirtyRange_t )
+	        + rSnapshot.m_dirtyCells.capacity() * sizeof( uint32_t );
 }
 
 size_t Terrain3DRenderCoordinator::getRetainedCpuBytes( void ) const {
@@ -2538,6 +2893,48 @@ size_t Terrain3DRenderCoordinator::getRetainedCpuBytes( void ) const {
 	bytes += m_instanceRenderer.getRetainedCpuBytes() + m_previewRenderer.getRetainedCpuBytes();
 	bytes += ( size_t )( m_renderWorldRuntime.get_cpu_image_bytes() );
 	return bytes;
+}
+
+Dictionary Terrain3DRenderCoordinator::getForwardLaneDiagnostics( void ) const {
+	Dictionary result;
+	result["scene_pass"] = ( int64_t )( m_nForwardLaneScenePass );
+	result["pass_kind"] = ( int64_t )( m_nForwardLanePassKind );
+	result["prepare_requested_mask"] = ( int64_t )( m_nForwardPrepareRequestedLaneMask );
+	result["prepare_ready_mask"] = ( int64_t )( m_nForwardPrepareReadyLaneMask );
+	result["prepare_failed_mask"] = ( int64_t )( m_nForwardPrepareFailedLaneMask );
+	result["submit_attempted_mask"] = ( int64_t )( m_nForwardSubmitAttemptedLaneMask );
+	result["submit_succeeded_mask"] = ( int64_t )( m_nForwardSubmitSucceededLaneMask );
+	result["submit_failed_mask"] = ( int64_t )( m_nForwardSubmitFailedLaneMask );
+	result["lane_bit_terrain"] = ( int64_t )( T3D_RD_FORWARD_LANE_TERRAIN );
+	result["lane_bit_instances"] = ( int64_t )( T3D_RD_FORWARD_LANE_INSTANCES );
+	result["lane_bit_ocean"] = ( int64_t )( T3D_RD_FORWARD_LANE_OCEAN );
+	result["lane_bit_render_world"] = ( int64_t )( T3D_RD_FORWARD_LANE_RENDER_WORLD );
+	result["instance_renderer_initialized"] = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["instance_published_records"] = ( int64_t )( m_nForwardPublishedInstanceCount );
+	result["instance_published_cells"] = ( int64_t )( m_nForwardPublishedInstanceCellCount );
+	result["instance_expected"] = m_bForwardInstanceLaneExpected;
+	result["instance_prepare_attempted"] = m_bForwardInstancePrepareAttempted;
+	result["instance_prepare_succeeded"] = m_bForwardInstancePrepareSucceeded;
+	result["instance_prepared_has_draws"] = m_bForwardInstancePreparedHasDraws;
+	result["instance_submit_attempted"] = m_bForwardInstanceSubmitAttempted;
+	result["instance_submit_succeeded"] = m_bForwardInstanceSubmitSucceeded;
+	result["instance_submit_draws"] = ( int64_t )( m_nForwardInstanceSubmitDraws );
+	result["instance_lane_unavailable_prepares"] = ( int64_t )( m_nInstanceLaneUnavailablePrepares );
+	result["instance_prepared_without_draws"] = ( int64_t )( m_nInstancePreparedWithoutDraws );
+	result["instance_prepare_failures"] = ( int64_t )( m_nInstanceForwardPrepareFailures );
+	result["instance_submit_failures"] = ( int64_t )( m_nInstanceForwardSubmitFailures );
+	result["instance_depth_submitted_draws"] =
+	        ( int64_t )( m_instanceRenderer.getForwardSubmittedDrawCount( T3D_RD_FORWARD_PASS_DEPTH ) );
+	result["instance_opaque_submitted_draws"] =
+	        ( int64_t )( m_instanceRenderer.getForwardSubmittedDrawCount( T3D_RD_FORWARD_PASS_OPAQUE ) );
+	result["instance_shadow_submitted_draws"] =
+	        ( int64_t )( m_instanceRenderer.getForwardSubmittedDrawCount( T3D_RD_FORWARD_PASS_SHADOW ) );
+	result["instance_motion_submitted_draws"] =
+	        ( int64_t )( m_instanceRenderer.getForwardSubmittedDrawCount( T3D_RD_FORWARD_PASS_MOTION ) );
+	result["instance_transparent_submitted_draws"] =
+	        ( int64_t )( m_instanceRenderer.getForwardSubmittedDrawCount( T3D_RD_FORWARD_PASS_TRANSPARENT ) );
+	result["instance_last_error"] = m_instanceRenderer.getLastError();
+	return result;
 }
 
 Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
@@ -2582,6 +2979,27 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["shadow_pass_callbacks"] = ( int64_t )( m_nShadowPassCallbacks );
 	result["motion_pass_callbacks"] = ( int64_t )( m_nMotionPassCallbacks );
 	result["transparent_pass_callbacks"] = ( int64_t )( m_nTransparentPassCallbacks );
+	result["instance_forward_prepare_failures"] = ( int64_t )( m_nInstanceForwardPrepareFailures );
+	result["instance_forward_submit_failures"] = ( int64_t )( m_nInstanceForwardSubmitFailures );
+	result["instance_initialization_attempts"] = ( int64_t )( m_nInstanceInitializationAttempts );
+	result["instance_initialization_failures"] = ( int64_t )( m_nInstanceInitializationFailures );
+	result["instance_initialization_recoveries"] = ( int64_t )( m_nInstanceInitializationRecoveries );
+	result["instance_depth_prepare_attempts"] = ( int64_t )( m_nInstanceDepthPrepareAttempts );
+	result["instance_depth_prepare_successes"] = ( int64_t )( m_nInstanceDepthPrepareSuccesses );
+	result["instance_depth_submit_attempts"] = ( int64_t )( m_nInstanceDepthSubmitAttempts );
+	result["instance_depth_submit_successes"] = ( int64_t )( m_nInstanceDepthSubmitSuccesses );
+	result["instance_opaque_prepare_attempts"] = ( int64_t )( m_nInstanceOpaquePrepareAttempts );
+	result["instance_opaque_prepare_successes"] = ( int64_t )( m_nInstanceOpaquePrepareSuccesses );
+	result["instance_opaque_submit_attempts"] = ( int64_t )( m_nInstanceOpaqueSubmitAttempts );
+	result["instance_opaque_submit_successes"] = ( int64_t )( m_nInstanceOpaqueSubmitSuccesses );
+	result["instance_depth_prepass_fallbacks"] = ( int64_t )( m_nInstanceDepthPrepassFallbacks );
+	result["instance_opaque_depth_prepass_requested_prepares"] = ( int64_t )( m_nInstanceOpaqueDepthPrepassRequested );
+	result["instance_opaque_depth_prepass_used_prepares"] = ( int64_t )( m_nInstanceOpaqueDepthPrepassUsed );
+	result["instance_last_successful_depth_scene_pass"] = m_nInstanceLastSuccessfulDepthScenePass == UINT64_MAX
+	        ? ( int64_t )-1
+	        : ( int64_t )( m_nInstanceLastSuccessfulDepthScenePass );
+	result["instance_forward_prepared_depth_prepass_active"] = m_bForwardPreparedInstanceDepthPrepassActive;
+	result["instance_forward_last_error"] = m_instanceRenderer.getLastError();
 	result["last_forward_scene_pass"] = ( int64_t )( m_nLastForwardScenePass );
 	result["last_forward_draw_list"] = m_nLastForwardDrawList;
 	result["last_forward_pass_kind"] = ( int64_t )( m_nLastForwardPassKind );
@@ -2615,6 +3033,15 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["coordinator_region_lighting_scans"] = ( int64_t )( m_nRegionLightingScanCount );
 	result["coordinator_mesh_source_builds"] = ( int64_t )( m_nMeshSourceBuildCount );
 	result["coordinator_ocean_static_state_builds"] = ( int64_t )( m_nOceanStaticStateBuildCount );
+	result["published_instance_records"] = ( int64_t )( m_cachedInstanceScene.m_instances.size() );
+	result["published_instance_cells"] = ( int64_t )( m_cachedInstanceScene.m_cells.size() );
+	result["published_instance_scene_generation"] = ( int64_t )( m_cachedInstanceScene.m_nGeneration );
+	result["published_mesh_lods"] = ( int64_t )( m_cachedInstanceMeshes.m_lods.size() );
+	result["published_mesh_surfaces"] = ( int64_t )( m_cachedInstanceMeshes.m_surfaces.size() );
+	result["published_mesh_vertex_bytes"] = ( int64_t )( m_cachedInstanceMeshes.m_vertexBytes.size() );
+	result["published_mesh_index16_bytes"] = ( int64_t )( m_cachedInstanceMeshes.m_index16Bytes.size() );
+	result["published_mesh_index32_bytes"] = ( int64_t )( m_cachedInstanceMeshes.m_index32Bytes.size() );
+	result["published_mesh_generation"] = ( int64_t )( m_cachedInstanceMeshes.m_nGeneration );
 	result["renderer_initialized"] = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
 	result["terrain_renderer_initialized"] = m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
 	result["instance_renderer_initialized"] = m_bInstanceRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE );
@@ -2623,6 +3050,7 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics( void ) const {
 	result["forward_prepared_has_instances"] = m_bForwardPreparedHasInstances;
 	result["forward_prepared_has_ocean"] = m_bForwardPreparedHasOcean;
 	result["forward_prepared_has_render_world"] = m_bForwardPreparedHasRenderWorld;
+	result["forward_lane_state"] = getForwardLaneDiagnostics();
 	result["renderer_failure_latched"] = m_bFailureLatched;
 	result["region_map_height_texture_ready"] = m_bRegionMapHeightTextureReady;
 	result["published_height_texture_valid"] = m_lastPublishedResources.m_hHeightTextureRd.is_valid();

@@ -192,6 +192,26 @@ private:
 	uint64_t m_nShadowPassCallbacks = 0u;
 	uint64_t m_nMotionPassCallbacks = 0u;
 	uint64_t m_nTransparentPassCallbacks = 0u;
+	uint64_t m_nInstanceForwardPrepareFailures = 0u;
+	uint64_t m_nInstanceForwardSubmitFailures = 0u;
+	uint64_t m_nInstanceInitializationAttempts = 0u;
+	uint64_t m_nInstanceInitializationFailures = 0u;
+	uint64_t m_nInstanceInitializationRecoveries = 0u;
+	uint64_t m_nLastInstanceInitializationRenderFrame = UINT64_MAX;
+	uint64_t m_nLastOceanInitializationRenderFrame = UINT64_MAX;
+	uint64_t m_nInstanceDepthPrepareAttempts = 0u;
+	uint64_t m_nInstanceDepthPrepareSuccesses = 0u;
+	uint64_t m_nInstanceDepthSubmitAttempts = 0u;
+	uint64_t m_nInstanceDepthSubmitSuccesses = 0u;
+	uint64_t m_nInstanceOpaquePrepareAttempts = 0u;
+	uint64_t m_nInstanceOpaquePrepareSuccesses = 0u;
+	uint64_t m_nInstanceOpaqueSubmitAttempts = 0u;
+	uint64_t m_nInstanceOpaqueSubmitSuccesses = 0u;
+	uint64_t m_nInstanceDepthPrepassFallbacks = 0u;
+	uint64_t m_nInstanceOpaqueDepthPrepassRequested = 0u;
+	uint64_t m_nInstanceOpaqueDepthPrepassUsed = 0u;
+	uint64_t m_nInstanceLastSuccessfulDepthScenePass = UINT64_MAX;
+	bool m_bForwardPreparedInstanceDepthPrepassActive = false;
 	uint64_t m_nLastForwardScenePass = 0u;
 	int64_t m_nLastForwardDrawList = -1;
 	uint32_t m_nLastForwardPassKind = T3D_RD_FORWARD_PASS_INVALID;
@@ -199,10 +219,34 @@ private:
 	uint32_t m_nLastForwardSampleCount = 0u;
 	int64_t m_nLastForwardFramebufferFormat = RenderingDevice::INVALID_ID;
 
+	typedef enum t3dRdForwardLaneMask_e : uint32_t {
+		T3D_RD_FORWARD_LANE_TERRAIN = 1u << 0u,
+		T3D_RD_FORWARD_LANE_INSTANCES = 1u << 1u,
+		T3D_RD_FORWARD_LANE_OCEAN = 1u << 2u,
+		T3D_RD_FORWARD_LANE_RENDER_WORLD = 1u << 3u,
+	} t3dRdForwardLaneMask_t;
+	uint32_t m_nForwardPrepareRequestedLaneMask = 0u;
+	uint32_t m_nForwardPrepareReadyLaneMask = 0u;
+	uint32_t m_nForwardPrepareFailedLaneMask = 0u;
+	uint32_t m_nForwardSubmitAttemptedLaneMask = 0u;
+	uint32_t m_nForwardSubmitSucceededLaneMask = 0u;
+	uint32_t m_nForwardSubmitFailedLaneMask = 0u;
+	uint64_t m_nForwardLaneScenePass = 0u;
+	uint32_t m_nForwardLanePassKind = T3D_RD_FORWARD_PASS_INVALID;
+	uint32_t m_nForwardPublishedInstanceCount = 0u;
+	uint32_t m_nForwardPublishedInstanceCellCount = 0u;
+	bool m_bForwardInstanceLaneExpected = false;
+	bool m_bForwardInstancePrepareAttempted = false;
+	bool m_bForwardInstancePrepareSucceeded = false;
+	bool m_bForwardInstancePreparedHasDraws = false;
+	bool m_bForwardInstanceSubmitAttempted = false;
+	bool m_bForwardInstanceSubmitSucceeded = false;
+	uint64_t m_nForwardInstanceSubmitDraws = 0u;
+	uint64_t m_nInstanceLaneUnavailablePrepares = 0u;
+	uint64_t m_nInstancePreparedWithoutDraws = 0u;
+
 	typedef struct t3dRdForwardViewportState_s {
 		uint64_t m_nViewportKey = 0u;
-		RID m_hFramebuffer;
-		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
 		Vector2i m_renderSize;
 		Rect2i m_renderRegion;
 		uint64_t m_nLastRenderFrame = UINT64_MAX;
@@ -257,7 +301,7 @@ private:
 	void recordStaleSnapshot( uint64_t nToken );
 	void attachEffectToActiveCamera( void );
 	void detachEffect( void );
-	bool initializeRendererOnRenderThread( void );
+	bool initializeRendererOnRenderThread( uint64_t nRenderFrame = UINT64_MAX );
 	bool attachForwardBridge( void );
 	void detachForwardBridge( void );
 	bool isForwardBridgeReady( void ) const;
@@ -277,6 +321,7 @@ public:
 	void update( void );
 	void render( RenderData *pRenderData );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
+	Dictionary getForwardLaneDiagnostics( void ) const;
 	void shutdownRendererOnRenderThread( void );
 	void renderPreviewOnRenderThread( void );
 	void serviceRenderWorldPublicationOnRenderThread( void );

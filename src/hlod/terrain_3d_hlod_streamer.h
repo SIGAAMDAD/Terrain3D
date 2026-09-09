@@ -41,12 +41,15 @@ typedef struct t3dEntry_s {
 	int64_t m_nEstimatedGpuBytes = 0;
 	int m_nParent = -1;
 	int m_szChildren[4] = { -1, -1, -1, -1 };
-	bool m_bDesired = false;
+	uint32_t m_nDesiredGeneration = 0u;
 	bool m_bRequestStarted = false;
 	bool m_bLoadFailed = false;
 	bool m_bActive = false;
 	bool m_bRetiring = false;
 	uint8_t m_nRetireReadyFrames = 0;
+	int m_iActiveListPosition = -1;
+	int m_iLoadingListPosition = -1;
+	int m_iRetiringListPosition = -1;
 	Ref<Terrain3DHLODPackage> m_ackage;
 } t3dEntry_t;
 
@@ -63,6 +66,10 @@ class Terrain3DHLODStreamer : public Object {
 	Ref<Terrain3DHLODManifest> m_manifest;
 	eastl::vector<t3dEntry_t, Terrain3DEastlAllocator> m_entries;
 	eastl::vector<int, Terrain3DEastlAllocator> m_roots;
+	eastl::vector<int, Terrain3DEastlAllocator> m_activeEntries;
+	eastl::vector<int, Terrain3DEastlAllocator> m_loadingEntries;
+	eastl::vector<int, Terrain3DEastlAllocator> m_retiringEntries;
+	eastl::vector<int, Terrain3DEastlAllocator> m_loadCandidates;
 	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_instancerMinLevels;
 	eastl::vector<t3dNodePolicy_t, Terrain3DEastlAllocator> m_nodePolicies;
 	uint32_t m_nodePolicyOffsets[s_nRegionSlots + 1]{};
@@ -93,6 +100,8 @@ class Terrain3DHLODStreamer : public Object {
 	bool m_bHasSelectionContext = false;
 	bool m_bSelectionDirty = true;
 	uint64_t m_nRdPublicationGeneration = 1u;
+	uint32_t m_nDesiredGeneration = 1u;
+	uint32_t m_nTransitionEntriesExaminedLastTick = 0u;
 	mutable uint64_t m_nCapacityMissCount = 0u;
 	uint64_t m_nColdRebuildCount = 0u;
 
@@ -106,6 +115,19 @@ class Terrain3DHLODStreamer : public Object {
 	bool compileLegacyNodePolicies( const Ref<Terrain3DHLODManifest> &rManifest );
 	bool buildHierarchy( void );
 	bool packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const;
+	EA_FORCE_INLINE bool isDesired( const t3dEntry_t &rEntry ) const {
+		return rEntry.m_nDesiredGeneration == m_nDesiredGeneration;
+	}
+	bool prepareTransitionStorageCold( void );
+	void beginSelectionGeneration( void );
+	void markDesired( int index );
+	void addActiveEntry( int index );
+	void removeActiveEntry( int index );
+	void addLoadingEntry( int index );
+	void removeLoadingEntry( int index );
+	void addRetiringEntry( int index );
+	void removeRetiringEntry( int index );
+	void refreshRetiringFromActive( void );
 	void selectRecursive( int index, const Vector3 &rLocalTarget );
 	void selectFallbackChildren( int index, const Vector3 &rLocalTarget );
 	void clearDesiredDescendants( int index );

@@ -105,6 +105,10 @@ bool Terrain3DHLODStreamer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZo
 	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
 	m_entries.set_allocator( allocator );
 	m_roots.set_allocator( allocator );
+	m_activeEntries.set_allocator( allocator );
+	m_loadingEntries.set_allocator( allocator );
+	m_retiringEntries.set_allocator( allocator );
+	m_loadCandidates.set_allocator( allocator );
 	m_instancerMinLevels.set_allocator( allocator );
 	m_nodePolicies.set_allocator( allocator );
 	return true;
@@ -126,12 +130,15 @@ void Terrain3DHLODStreamer::destroy( void ) {
 void Terrain3DHLODStreamer::suspend( void ) {
 	uint8_t old[s_nRegionSlots];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
-	for ( int i = 0; i < ( int )m_entries.size(); ++i ) {
-		deactivate( i );
-		m_entries[( size_t )i].m_bDesired = false;
-		m_entries[( size_t )i].m_bRetiring = false;
-		m_entries[( size_t )i].m_nRetireReadyFrames = 0;
+	while ( !m_activeEntries.empty() ) {
+		deactivate( m_activeEntries.back() );
 	}
+	while ( !m_loadingEntries.empty() ) {
+		deactivate( m_loadingEntries.back() );
+	}
+	m_retiringEntries.clear();
+	m_loadCandidates.clear();
+	beginSelectionGeneration();
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
 	if ( m_pTerrain ) {
@@ -147,11 +154,19 @@ void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleas
 	if ( bReleaseStorage ) {
 		t3dVectorRelease( m_entries );
 		t3dVectorRelease( m_roots );
+		t3dVectorRelease( m_activeEntries );
+		t3dVectorRelease( m_loadingEntries );
+		t3dVectorRelease( m_retiringEntries );
+		t3dVectorRelease( m_loadCandidates );
 		t3dVectorRelease( m_instancerMinLevels );
 		t3dVectorRelease( m_nodePolicies );
 	} else {
 		m_entries.clear();
 		m_roots.clear();
+		m_activeEntries.clear();
+		m_loadingEntries.clear();
+		m_retiringEntries.clear();
+		m_loadCandidates.clear();
 		m_instancerMinLevels.clear();
 		m_nodePolicies.clear();
 	}
@@ -160,6 +175,8 @@ void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleas
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
 	m_nResidentEstimatedBytes = 0;
+	m_nDesiredGeneration = 1u;
+	m_nTransitionEntriesExaminedLastTick = 0u;
 	m_bHasSelectionContext = false;
 	m_bSelectionDirty = true;
 	if ( bNotify && m_pTerrain ) {
@@ -301,7 +318,7 @@ bool Terrain3DHLODStreamer::compileManifest( const Ref<Terrain3DHLODManifest> &r
 		return false;
 	}
 	if ( compilePackedManifest( rManifest ) ) {
-		return true;
+		return prepareTransitionStorageCold();
 	}
 	m_entries.clear();
 	m_roots.clear();
@@ -358,7 +375,7 @@ bool Terrain3DHLODStreamer::compileManifest( const Ref<Terrain3DHLODManifest> &r
 	for ( int i = 0; i < expected; ++i ) {
 		m_instancerMinLevels[( size_t )i] = i < meshPolicy.size() ? meshPolicy[i] : 0;
 	}
-	if ( !compileLegacyNodePolicies( rManifest ) || !buildHierarchy() ) {
+	if ( !compileLegacyNodePolicies( rManifest ) || !buildHierarchy() || !prepareTransitionStorageCold() ) {
 		return false;
 	}
 	m_manifest = rManifest;
@@ -375,6 +392,146 @@ bool Terrain3DHLODStreamer::reloadManifest( void ) {
 	        ResourceLoader::get_singleton()->load( m_manifestPath, "Terrain3DHLODManifest", ResourceLoader::CACHE_MODE_REPLACE );
 	const Ref<Terrain3DHLODManifest> manifest = resource;
 	return compileManifest( manifest );
+}
+
+bool Terrain3DHLODStreamer::prepareTransitionStorageCold( void ) {
+	const size_t capacity = m_entries.size();
+	return t3dContainerReserveCold( m_activeEntries, capacity ) && t3dContainerReserveCold( m_loadingEntries, capacity )
+	        && t3dContainerReserveCold( m_retiringEntries, capacity ) && t3dContainerReserveCold( m_loadCandidates, capacity );
+}
+
+void Terrain3DHLODStreamer::beginSelectionGeneration( void ) {
+	++m_nDesiredGeneration;
+	if ( m_nDesiredGeneration != 0u ) {
+		return;
+	}
+	m_nDesiredGeneration = 1u;
+	for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+		m_entries[i].m_nDesiredGeneration = 0u;
+	}
+}
+
+void Terrain3DHLODStreamer::markDesired( const int index ) {
+	if ( index < 0 || index >= ( int )m_entries.size() ) {
+		return;
+	}
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	if ( entry.m_nDesiredGeneration == m_nDesiredGeneration ) {
+		return;
+	}
+	entry.m_nDesiredGeneration = m_nDesiredGeneration;
+	if ( !entry.m_bActive && !entry.m_bLoadFailed && entry.m_iLoadingListPosition < 0 ) {
+		t3dVectorPushBackWithinCapacity( m_loadCandidates, index );
+	}
+}
+
+void Terrain3DHLODStreamer::addActiveEntry( const int index ) {
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	if ( entry.m_iActiveListPosition >= 0 ) {
+		return;
+	}
+	entry.m_iActiveListPosition = ( int )m_activeEntries.size();
+	if ( !t3dVectorPushBackWithinCapacity( m_activeEntries, index ) ) {
+		entry.m_iActiveListPosition = -1;
+		++m_nCapacityMissCount;
+	}
+}
+
+void Terrain3DHLODStreamer::removeActiveEntry( const int index ) {
+	if ( index < 0 || index >= ( int )m_entries.size() ) {
+		return;
+	}
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	const int position = entry.m_iActiveListPosition;
+	if ( position < 0 || position >= ( int )m_activeEntries.size() ) {
+		entry.m_iActiveListPosition = -1;
+		return;
+	}
+	const int moved = m_activeEntries.back();
+	m_activeEntries.pop_back();
+	if ( position < ( int )m_activeEntries.size() ) {
+		m_activeEntries[( size_t )position] = moved;
+		m_entries[( size_t )moved].m_iActiveListPosition = position;
+	}
+	entry.m_iActiveListPosition = -1;
+}
+
+void Terrain3DHLODStreamer::addLoadingEntry( const int index ) {
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	if ( entry.m_iLoadingListPosition >= 0 ) {
+		return;
+	}
+	entry.m_iLoadingListPosition = ( int )m_loadingEntries.size();
+	if ( !t3dVectorPushBackWithinCapacity( m_loadingEntries, index ) ) {
+		entry.m_iLoadingListPosition = -1;
+		++m_nCapacityMissCount;
+	}
+}
+
+void Terrain3DHLODStreamer::removeLoadingEntry( const int index ) {
+	if ( index < 0 || index >= ( int )m_entries.size() ) {
+		return;
+	}
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	const int position = entry.m_iLoadingListPosition;
+	if ( position < 0 || position >= ( int )m_loadingEntries.size() ) {
+		entry.m_iLoadingListPosition = -1;
+		return;
+	}
+	const int moved = m_loadingEntries.back();
+	m_loadingEntries.pop_back();
+	if ( position < ( int )m_loadingEntries.size() ) {
+		m_loadingEntries[( size_t )position] = moved;
+		m_entries[( size_t )moved].m_iLoadingListPosition = position;
+	}
+	entry.m_iLoadingListPosition = -1;
+}
+
+void Terrain3DHLODStreamer::addRetiringEntry( const int index ) {
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	if ( entry.m_iRetiringListPosition >= 0 ) {
+		return;
+	}
+	entry.m_bRetiring = true;
+	entry.m_nRetireReadyFrames = 0;
+	entry.m_iRetiringListPosition = ( int )m_retiringEntries.size();
+	if ( !t3dVectorPushBackWithinCapacity( m_retiringEntries, index ) ) {
+		entry.m_bRetiring = false;
+		entry.m_iRetiringListPosition = -1;
+		++m_nCapacityMissCount;
+	}
+}
+
+void Terrain3DHLODStreamer::removeRetiringEntry( const int index ) {
+	if ( index < 0 || index >= ( int )m_entries.size() ) {
+		return;
+	}
+	t3dEntry_t &entry = m_entries[( size_t )index];
+	const int position = entry.m_iRetiringListPosition;
+	if ( position >= 0 && position < ( int )m_retiringEntries.size() ) {
+		const int moved = m_retiringEntries.back();
+		m_retiringEntries.pop_back();
+		if ( position < ( int )m_retiringEntries.size() ) {
+			m_retiringEntries[( size_t )position] = moved;
+			m_entries[( size_t )moved].m_iRetiringListPosition = position;
+		}
+	}
+	entry.m_iRetiringListPosition = -1;
+	entry.m_bRetiring = false;
+	entry.m_nRetireReadyFrames = 0;
+}
+
+void Terrain3DHLODStreamer::refreshRetiringFromActive( void ) {
+	for ( size_t position = 0u; position < m_activeEntries.size(); ++position ) {
+		const int index = m_activeEntries[position];
+		++m_nTransitionEntriesExaminedLastTick;
+		t3dEntry_t &entry = m_entries[( size_t )index];
+		if ( isDesired( entry ) ) {
+			removeRetiringEntry( index );
+		} else {
+			addRetiringEntry( index );
+		}
+	}
 }
 
 bool Terrain3DHLODStreamer::packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const {
@@ -434,7 +591,7 @@ void Terrain3DHLODStreamer::clearDesiredDescendants( const int index ) {
 		if ( child < 0 ) {
 			continue;
 		}
-		m_entries[( size_t )child].m_bDesired = false;
+		m_entries[( size_t )child].m_nDesiredGeneration = 0u;
 		clearDesiredDescendants( child );
 	}
 }
@@ -487,7 +644,7 @@ void Terrain3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLo
 	t3dEntry_t &entry = m_entries[( size_t )index];
 	const bool preferred = !entry.m_bLoadFailed && packageAcceptable( entry, rLocalTarget );
 	if ( preferred ) {
-		entry.m_bDesired = true;
+		markDesired( index );
 		if ( entry.m_bActive ) {
 			return;
 		}
@@ -558,8 +715,9 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 		m_nTransitionOvercommitBytesLastTick = m_nResidentEstimatedBytes + bytes - budget;
 	}
 	entry.m_bActive = true;
-	entry.m_bRetiring = false;
-	entry.m_nRetireReadyFrames = 0;
+	removeLoadingEntry( index );
+	removeRetiringEntry( index );
+	addActiveEntry( index );
 	m_bSelectionDirty = true;
 	// Fallback descendants were marked desired only while this proxy was not
 	// ready. Once the replacement exists they must immediately become retirement
@@ -583,8 +741,9 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 		m_nResidentEstimatedBytes = MAX<int64_t>( m_nResidentEstimatedBytes - MAX<int64_t>( bytes, 0 ), 0 );
 	}
 	entry.m_bActive = false;
-	entry.m_bRetiring = false;
-	entry.m_nRetireReadyFrames = 0;
+	removeActiveEntry( index );
+	removeLoadingEntry( index );
+	removeRetiringEntry( index );
 	entry.m_ackage.unref();
 	entry.m_bRequestStarted = false;
 	m_bSelectionDirty = true;
@@ -598,9 +757,9 @@ void Terrain3DHLODStreamer::publishRepresentationMap( void ) {
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
-	for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_entries ).size() ); iEntry++ ) {
-		const t3dEntry_t &entry = ( m_entries )[iEntry];
-		if ( !entry.m_bActive || entry.m_bRetiring || !entry.m_bDesired ) {
+	for ( size_t iActive = 0u; iActive < m_activeEntries.size(); ++iActive ) {
+		const t3dEntry_t &entry = m_entries[( size_t )m_activeEntries[iActive]];
+		if ( entry.m_bRetiring || !isDesired( entry ) ) {
 			continue;
 		}
 		for ( int z = entry.getRegionMin().y; z <= entry.getRegionMax().y; ++z ) {
@@ -630,6 +789,7 @@ void Terrain3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLeve
 void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, const bool bForce ) {
 	m_nLoadsLastTick = m_nUnloadsLastTick = m_nRequestsLastTick = m_nFailuresLastTick = m_nCapacityDeferredLastTick = 0;
 	m_nTransitionOvercommitBytesLastTick = 0;
+	m_nTransitionEntriesExaminedLastTick = 0u;
 	if ( !m_bEnabled || !m_pTerrain || m_manifest.is_null() ) {
 		suspend();
 		return;
@@ -651,89 +811,88 @@ void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, con
 	        || !Math::is_equal_approx( viewportHeight, m_fLastSelectionViewportHeight );
 	const bool rebuildSelection = bForce || m_bSelectionDirty || selectionContextChanged;
 
+	bool representationDirty = false;
 	if ( rebuildSelection ) {
-		for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_entries ).size() ); iEntry++ ) {
-			t3dEntry_t &entry = ( m_entries )[iEntry];
-			entry.m_bDesired = false;
+		beginSelectionGeneration();
+		m_loadCandidates.clear();
+		for ( size_t iRoot = 0u; iRoot < m_roots.size(); ++iRoot ) {
+			selectRecursive( m_roots[iRoot], localTarget );
 		}
-		for ( size_t iRoot = 0u; iRoot < ( size_t )( ( m_roots ).size() ); iRoot++ ) {
-			const int root = ( m_roots )[iRoot];
-			selectRecursive( root, localTarget );
-		}
+		refreshRetiringFromActive();
+		representationDirty = true;
 		m_lastSelectionTarget = localTarget;
 		m_fLastSelectionProjectionValue = projectionValue;
 		m_fLastSelectionViewportHeight = viewportHeight;
 		m_nLastSelectionProjection = projection;
 		m_bHasSelectionContext = true;
 		m_bSelectionDirty = false;
-	} else {
-		bool hasTransitionWork = false;
-		for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_entries ).size() ); iEntry++ ) {
-			const t3dEntry_t &entry = ( m_entries )[iEntry];
-			if ( ( entry.m_bDesired && !entry.m_bActive && !entry.m_bLoadFailed ) || entry.m_bRetiring
-			        || ( entry.m_bActive && !entry.m_bDesired ) ) {
-				hasTransitionWork = true;
-				break;
-			}
-		}
-		if ( !hasTransitionWork ) {
-			return;
-		}
+	} else if ( m_loadCandidates.empty() && m_loadingEntries.empty() && m_retiringEntries.empty() ) {
+		return;
 	}
 
-	bool representationDirty = rebuildSelection;
 	int loadBudget = m_nLoadBudget;
-	for ( int i = 0; i < ( int )m_entries.size() && loadBudget > 0; ++i ) {
-		t3dEntry_t &entry = m_entries[( size_t )i];
-		if ( entry.m_bDesired && !entry.m_bActive && !entry.m_bLoadFailed ) {
-			const bool wasRequested = entry.m_bRequestStarted;
-			const bool active = requestOrActivate( i );
-			if ( active ) {
-				representationDirty = true;
-			}
-			if ( active || ( !wasRequested && entry.m_bRequestStarted ) ) {
-				--loadBudget;
-			}
-		}
-	}
-
-	// Mark retirement/cancellation first, then publish once. The representation
-	// map must exclude newly retiring proxies before replacementReady() is tested.
-	for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_entries ).size() ); iEntry++ ) {
-		t3dEntry_t &entry = ( m_entries )[iEntry];
-		if ( !entry.m_bActive || entry.m_bDesired ) {
-			if ( entry.m_bRetiring ) {
-				representationDirty = true;
-			}
-			entry.m_bRetiring = false;
-			entry.m_nRetireReadyFrames = 0;
+	for ( int position = ( int )m_loadingEntries.size() - 1; position >= 0; --position ) {
+		const int index = m_loadingEntries[( size_t )position];
+		++m_nTransitionEntriesExaminedLastTick;
+		t3dEntry_t &entry = m_entries[( size_t )index];
+		if ( !isDesired( entry ) || entry.m_bLoadFailed ) {
+			removeLoadingEntry( index );
 			continue;
 		}
-		if ( !entry.m_bRetiring ) {
-			entry.m_bRetiring = true;
-			entry.m_nRetireReadyFrames = 0;
+		if ( requestOrActivate( index ) ) {
 			representationDirty = true;
 		}
 	}
+
+	for ( int position = ( int )m_loadCandidates.size() - 1; position >= 0 && loadBudget > 0; --position ) {
+		const int index = m_loadCandidates[( size_t )position];
+		++m_nTransitionEntriesExaminedLastTick;
+		t3dEntry_t &entry = m_entries[( size_t )index];
+		const bool candidate = isDesired( entry ) && !entry.m_bActive && !entry.m_bLoadFailed && entry.m_iLoadingListPosition < 0;
+		m_loadCandidates[( size_t )position] = m_loadCandidates.back();
+		m_loadCandidates.pop_back();
+		if ( !candidate ) {
+			continue;
+		}
+		const bool wasRequested = entry.m_bRequestStarted;
+		const bool active = requestOrActivate( index );
+		if ( entry.m_bRequestStarted && !active && !entry.m_bLoadFailed ) {
+			addLoadingEntry( index );
+		}
+		if ( active ) {
+			representationDirty = true;
+		}
+		if ( active || ( !wasRequested && entry.m_bRequestStarted ) ) {
+			--loadBudget;
+		}
+	}
+
 	if ( representationDirty ) {
+		refreshRetiringFromActive();
 		publishRepresentationMap();
 	}
 
 	int unloadBudget = m_nUnloadBudget;
-	for ( int i = 0; i < ( int )m_entries.size() && unloadBudget > 0; ++i ) {
-		t3dEntry_t &entry = m_entries[( size_t )i];
-		if ( !entry.m_bActive || !entry.m_bRetiring ) {
+	int position = 0;
+	while ( position < ( int )m_retiringEntries.size() && unloadBudget > 0 ) {
+		const int index = m_retiringEntries[( size_t )position];
+		++m_nTransitionEntriesExaminedLastTick;
+		t3dEntry_t &entry = m_entries[( size_t )index];
+		if ( !entry.m_bActive || isDesired( entry ) ) {
+			removeRetiringEntry( index );
 			continue;
 		}
 		if ( replacementReady( entry ) ) {
 			entry.m_nRetireReadyFrames = MIN<uint8_t>( ( uint8_t )( entry.m_nRetireReadyFrames + 1 ), 3 );
 			if ( entry.m_nRetireReadyFrames >= 2 ) {
-				deactivate( i );
+				deactivate( index );
 				--unloadBudget;
+				continue;
 			}
 		} else {
 			entry.m_nRetireReadyFrames = 0;
 		}
+		++position;
 	}
 }
 
@@ -776,6 +935,9 @@ bool Terrain3DHLODStreamer::fillRdMeshSources( eastl::vector<t3dRdExternalMeshSo
 bool Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
 	rSnapshot.m_instances.reset();
 	rSnapshot.m_cells.reset();
+	rSnapshot.m_dirtyRanges.reset();
+	rSnapshot.m_dirtyCells.reset();
+	rSnapshot.m_bTopologyChanged = true;
 	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain ) {
 		return true;
@@ -836,7 +998,7 @@ Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_entries ).size() ); iEntry++ ) {
 		const t3dEntry_t &e = ( m_entries )[iEntry];
 		active += e.m_bActive;
-		desired += e.m_bDesired;
+		desired += isDesired( e );
 		failed += e.m_bLoadFailed;
 		retiring += e.m_bRetiring;
 	}
@@ -845,6 +1007,11 @@ Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	d["desired"] = desired;
 	d["failed"] = failed;
 	d["retiring"] = retiring;
+	d["active_transition_entries"] = ( int )m_activeEntries.size();
+	d["loading_transition_entries"] = ( int )m_loadingEntries.size();
+	d["retiring_transition_entries"] = ( int )m_retiringEntries.size();
+	d["load_candidate_entries"] = ( int )m_loadCandidates.size();
+	d["transition_entries_examined_last_tick"] = ( int64_t )m_nTransitionEntriesExaminedLastTick;
 	d["loads_last_tick"] = m_nLoadsLastTick;
 	d["unloads_last_tick"] = m_nUnloadsLastTick;
 	d["requests_last_tick"] = m_nRequestsLastTick;
@@ -871,7 +1038,7 @@ Array Terrain3DHLODStreamer::getDebugEntries( void ) const {
 		d["region_max"] = e.getRegionMax();
 		d["local_bounds"] = e.m_localBounds;
 		d["package_path"] = e.m_packagePath;
-		d["desired"] = e.m_bDesired;
+		d["desired"] = isDesired( e );
 		d["active"] = e.m_bActive;
 		d["retiring"] = e.m_bRetiring;
 		d["load_failed"] = e.m_bLoadFailed;

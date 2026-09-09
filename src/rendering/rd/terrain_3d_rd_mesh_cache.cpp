@@ -6,6 +6,7 @@
 #include "assets/terrain_3d_assets.h"
 #include "assets/terrain_3d_mesh_asset.h"
 #include "data/terrain_3d_half_buffer.h"
+#include "core/logger.h"
 
 #include <EASTL/vector.h>
 #include <math.h>
@@ -163,20 +164,38 @@ static bool t3dRdAddTextureSource(
 	upload->copy_from( source );
 	PackedByteArray bytes = upload->get_data();
 	t3dRdTextureLayout_t layout;
-	if ( bytes.is_empty()
-	        || !Terrain3DRdTextureManager::buildLayout(
-	                upload, 1u, false, ( uint64_t )( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout ) ) {
+	bool layout_valid = !bytes.is_empty()
+	        && Terrain3DRdTextureManager::buildLayout(
+	                upload, 1u, false, ( uint64_t )( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout );
+	if ( !layout_valid && upload->has_mipmaps() ) {
+		// Imported textures occasionally expose an invalid/overflowed mip count. Drop
+		// only the broken mip chain and retain the source compression/base image.
+		upload->clear_mipmaps();
+		bytes = upload->get_data();
+		layout_valid = !bytes.is_empty()
+		        && Terrain3DRdTextureManager::buildLayout(
+		                upload, 1u, false, ( uint64_t )( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout );
+	}
+	if ( !layout_valid ) {
 		if ( upload->is_compressed() && upload->decompress() != OK ) {
 			return false;
 		}
+		if ( upload->has_mipmaps() ) {
+			upload->clear_mipmaps();
+		}
 		upload->convert( Image::FORMAT_RGBA8 );
 		bytes = upload->get_data();
-		if ( bytes.is_empty()
-		        || !Terrain3DRdTextureManager::buildLayout(
-		                upload, 1u, false, ( uint64_t )( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout ) ) {
+		layout_valid = !bytes.is_empty()
+		        && Terrain3DRdTextureManager::buildLayout(
+		                upload, 1u, false, ( uint64_t )( bytes.size() ), T3D_RD_TEXTURE_LINEAR_DATA, layout );
+		if ( !layout_valid ) {
 			return false;
 		}
 	}
+	// RenderingDevice routes non-empty texture_create() initialization through the update-capable path.
+	// Keep the resource immutable after publication, but retain CAN_UPDATE for the one cold initial upload.
+	layout.m_nUsageBits = ( uint64_t )( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT )
+	        | ( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 	t3dRdImportedTextureSource_t record;
 	record.m_nSourceId = source_id;
 	record.m_layout = layout;
@@ -544,6 +563,9 @@ bool Terrain3DRdMeshCache::bindRuntimeAllocator( Terrain3DMemoryZone *const pZon
 	m_index32ChunkHashes.set_allocator( allocator );
 	m_textureSyncNext.set_allocator( allocator );
 	m_textureSyncReused.set_allocator( allocator );
+#if T3D_INSTANCER_RD_PORT
+	m_directSurfaces.set_allocator( allocator );
+#endif
 	return true;
 }
 
@@ -552,6 +574,10 @@ Terrain3DRdMeshCache::Terrain3DRdMeshCache( void ) : m_context( Terrain3DRdConte
 
 Terrain3DRdMeshCache::~Terrain3DRdMeshCache( void ) {
 	shutdown();
+}
+
+void Terrain3DRdMeshCache::setError( const String &rError ) {
+	m_lastError = rError;
 }
 
 uint32_t Terrain3DRdMeshCache::nextArenaCapacity( const uint32_t nRequiredBytes, const uint32_t nMinimumBytes ) {
@@ -786,14 +812,22 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 	const uint32_t capacity = nextArenaCapacity( nRequiredBytes, minimum );
 	if ( capacity == 0u ) {
 		++m_nArenaRebuildFailureCount;
+		setError( String( "RD mesh arena capacity calculation overflowed; resource=" ) + rName + String( ", required=" )
+		        + String::num_int64( nRequiredBytes ) + String( ", minimum=" ) + String::num_int64( minimum ) );
 		return false;
 	}
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		++m_nArenaRebuildFailureCount;
+		setError( String( "RD mesh arena lost the RenderingDevice; resource=" ) + rName + String( ", required=" )
+		        + String::num_int64( nRequiredBytes ) );
 		return false;
 	}
 	if ( rBuffer.is_valid() ) {
+		// Array RIDs reference their parent buffers. Destroy every child view before
+		// replacing an arena so Godot never auto-invalidates a RID still tracked by
+		// Terrain3DRdContext.
+		discardArrays();
 		m_context.freeResource( rBuffer, rCapacityBytes );
 	}
 	if ( resourceType == Terrain3DRdContext::RESOURCE_VERTEX_BUFFER ) {
@@ -803,9 +837,19 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 		        rName.find( "16" ) >= 0 ? RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 : RenderingDevice::INDEX_BUFFER_FORMAT_UINT32;
 		rBuffer = rd->index_buffer_create( capacity / ( format == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? 2u : 4u ), format );
 	}
-	if ( !rBuffer.is_valid()
-	        || !m_context.registerResource( rBuffer, rName, resourceType, memoryCategory, capacity, Terrain3DRdContext::OWNER_TERRAIN ) ) {
+	if ( !rBuffer.is_valid() ) {
 		++m_nArenaRebuildFailureCount;
+		setError( String( "RD mesh arena creation returned an invalid RID; resource=" ) + rName + String( ", capacity=" )
+		        + String::num_int64( capacity ) );
+		return false;
+	}
+	if ( !m_context.registerResource(
+	             rBuffer, rName, resourceType, memoryCategory, capacity, Terrain3DRdContext::OWNER_INSTANCES ) ) {
+		rd->free_rid( rBuffer );
+		rBuffer = RID();
+		++m_nArenaRebuildFailureCount;
+		setError( String( "RD mesh arena registration failed; resource=" ) + rName + String( ", capacity=" )
+		        + String::num_int64( capacity ) );
 		return false;
 	}
 	rCapacityBytes = capacity;
@@ -813,7 +857,23 @@ bool Terrain3DRdMeshCache::ensureArena( RID &rBuffer,
 	return true;
 }
 
+#if T3D_INSTANCER_RD_PORT
+void Terrain3DRdMeshCache::discardDirectSurfaces( void ) {
+	for ( size_t iSurface = 0u; iSurface < m_directSurfaces.size(); ++iSurface ) {
+		t3dRdDirectSurfaceGpu_t &surface = m_directSurfaces[iSurface];
+		m_context.freeResource( surface.m_hVertexArray );
+		m_context.freeResource( surface.m_hIndexArray );
+		m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+		m_context.freeResource( surface.m_hIndexBuffer, surface.m_nIndexBytes );
+	}
+	m_directSurfaces.clear();
+}
+#endif
+
 void Terrain3DRdMeshCache::discardArrays( void ) {
+#if T3D_INSTANCER_RD_PORT
+	discardDirectSurfaces();
+#endif
 	m_context.freeResource( m_hVertexArray );
 	m_context.freeResource( m_hIndex16Array );
 	m_context.freeResource( m_hIndex32Array );
@@ -823,48 +883,224 @@ bool Terrain3DRdMeshCache::rebuildArrays( void ) {
 	discardArrays();
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
+		setError( "RD mesh array rebuild lost the RenderingDevice" );
 		return false;
 	}
 	if ( m_hVertexArena.is_valid() ) {
 		TypedArray<RID> buffers;
 		buffers.push_back( m_hVertexArena );
 		m_hVertexArray = rd->vertex_array_create( m_nVertexCapacityBytes / sizeof( t3dRdMeshVertex_t ), m_nVertexFormat, buffers );
-		if ( !m_hVertexArray.is_valid()
-		        || !m_context.registerResource( m_hVertexArray,
-		                "T3D.Instance.MeshVertexArray",
-		                Terrain3DRdContext::RESOURCE_VERTEX_ARRAY,
-		                Terrain3DRdContext::MEMORY_NONE,
-		                0u,
-		                Terrain3DRdContext::OWNER_TERRAIN ) ) {
+		if ( !m_hVertexArray.is_valid() ) {
+			setError( String( "RD mesh vertex-array creation failed; vertex_capacity_bytes=" ) + String::num_int64( m_nVertexCapacityBytes )
+			        + String( ", vertex_format=" ) + String::num_int64( m_nVertexFormat ) );
+			return false;
+		}
+		if ( !m_context.registerResource( m_hVertexArray,
+		             "T3D.Instance.MeshVertexArray",
+		             Terrain3DRdContext::RESOURCE_VERTEX_ARRAY,
+		             Terrain3DRdContext::MEMORY_NONE,
+		             0u,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( m_hVertexArray );
+			m_hVertexArray = RID();
+			setError( "RD mesh vertex-array registration failed" );
 			return false;
 		}
 	}
 	if ( m_hIndex16Arena.is_valid() ) {
 		m_hIndex16Array = rd->index_array_create( m_hIndex16Arena, 0u, m_nIndex16CapacityBytes / sizeof( uint16_t ) );
-		if ( !m_hIndex16Array.is_valid()
-		        || !m_context.registerResource( m_hIndex16Array,
-		                "T3D.Instance.MeshIndexArray16",
-		                Terrain3DRdContext::RESOURCE_INDEX_ARRAY,
-		                Terrain3DRdContext::MEMORY_NONE,
-		                0u,
-		                Terrain3DRdContext::OWNER_TERRAIN ) ) {
+		if ( !m_hIndex16Array.is_valid() ) {
+			setError( String( "RD mesh uint16 index-array creation failed; index_capacity_bytes=" )
+			        + String::num_int64( m_nIndex16CapacityBytes ) );
+			return false;
+		}
+		if ( !m_context.registerResource( m_hIndex16Array,
+		             "T3D.Instance.MeshIndexArray16",
+		             Terrain3DRdContext::RESOURCE_INDEX_ARRAY,
+		             Terrain3DRdContext::MEMORY_NONE,
+		             0u,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( m_hIndex16Array );
+			m_hIndex16Array = RID();
+			setError( "RD mesh uint16 index-array registration failed" );
 			return false;
 		}
 	}
 	if ( m_hIndex32Arena.is_valid() ) {
 		m_hIndex32Array = rd->index_array_create( m_hIndex32Arena, 0u, m_nIndex32CapacityBytes / sizeof( uint32_t ) );
-		if ( !m_hIndex32Array.is_valid()
-		        || !m_context.registerResource( m_hIndex32Array,
-		                "T3D.Instance.MeshIndexArray32",
-		                Terrain3DRdContext::RESOURCE_INDEX_ARRAY,
-		                Terrain3DRdContext::MEMORY_NONE,
-		                0u,
-		                Terrain3DRdContext::OWNER_TERRAIN ) ) {
+		if ( !m_hIndex32Array.is_valid() ) {
+			setError( String( "RD mesh uint32 index-array creation failed; index_capacity_bytes=" )
+			        + String::num_int64( m_nIndex32CapacityBytes ) );
+			return false;
+		}
+		if ( !m_context.registerResource( m_hIndex32Array,
+		             "T3D.Instance.MeshIndexArray32",
+		             Terrain3DRdContext::RESOURCE_INDEX_ARRAY,
+		             Terrain3DRdContext::MEMORY_NONE,
+		             0u,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( m_hIndex32Array );
+			m_hIndex32Array = RID();
+			setError( "RD mesh uint32 index-array registration failed" );
 			return false;
 		}
 	}
 	return m_hVertexArray.is_valid();
 }
+
+#if T3D_INSTANCER_RD_PORT
+bool Terrain3DRdMeshCache::rebuildDirectSurfaces( const t3dRdMeshSourceSnapshot_t *const pSnapshot ) {
+	discardDirectSurfaces();
+	if ( !pSnapshot ) {
+		setError( "RD direct-surface rebuild received a null mesh snapshot" );
+		return false;
+	}
+	RenderingDevice *const rd = m_context.getDevice();
+	if ( !rd ) {
+		setError( "RD direct-surface rebuild lost the RenderingDevice" );
+		return false;
+	}
+	if ( !t3dContainerReserveCold( m_directSurfaces, pSnapshot->m_surfaces.size() ) ) {
+		setError( String( "RD direct-surface view reserve failed; required=" ) + String::num_int64( pSnapshot->m_surfaces.size() ) );
+		return false;
+	}
+	for ( uint32_t iSurface = 0u; iSurface < ( uint32_t )( pSnapshot->m_surfaces.size() ); ++iSurface ) {
+		const t3dRdMeshSourceSurface_t &source = pSnapshot->m_surfaces[iSurface];
+		const uint64_t vertex_offset64 = ( uint64_t )( source.m_nVertexOffset ) * sizeof( t3dRdMeshVertex_t );
+		const uint64_t vertex_bytes64 = ( uint64_t )( source.m_nVertexCount ) * sizeof( t3dRdMeshVertex_t );
+		const uint32_t index_stride = source.m_nIndexFormat == ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 )
+		        ? sizeof( uint16_t )
+		        : sizeof( uint32_t );
+		const uint64_t index_offset64 = ( uint64_t )( source.m_nIndexOffset ) * index_stride;
+		const uint64_t index_bytes64 = ( uint64_t )( source.m_nIndexCount ) * index_stride;
+		const PackedByteArray &index_source = source.m_nIndexFormat == ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 )
+		        ? pSnapshot->m_index16Bytes
+		        : pSnapshot->m_index32Bytes;
+		if ( vertex_bytes64 == 0u || index_bytes64 == 0u || vertex_offset64 + vertex_bytes64 > ( uint64_t )( pSnapshot->m_vertexBytes.size() )
+		        || index_offset64 + index_bytes64 > ( uint64_t )( index_source.size() ) || vertex_bytes64 > UINT32_MAX
+		        || index_bytes64 > UINT32_MAX ) {
+			setError( String( "RD direct-surface source range is invalid; surface=" ) + String::num_int64( iSurface )
+			        + String( ", vertex_offset=" ) + String::num_int64( vertex_offset64 ) + String( ", vertex_bytes=" )
+			        + String::num_int64( vertex_bytes64 ) + String( ", index_offset=" ) + String::num_int64( index_offset64 )
+			        + String( ", index_bytes=" ) + String::num_int64( index_bytes64 ) );
+			discardDirectSurfaces();
+			return false;
+		}
+
+		t3dRdDirectSurfaceGpu_t surface;
+		surface.m_nVertexBytes = ( uint32_t )( vertex_bytes64 );
+		surface.m_nIndexBytes = ( uint32_t )( index_bytes64 );
+		const PackedByteArray vertex_bytes = pSnapshot->m_vertexBytes.slice( ( int64_t )( vertex_offset64 ), ( int64_t )( vertex_offset64 + vertex_bytes64 ) );
+		const PackedByteArray index_bytes = index_source.slice( ( int64_t )( index_offset64 ), ( int64_t )( index_offset64 + index_bytes64 ) );
+		surface.m_hVertexBuffer = rd->vertex_buffer_create( surface.m_nVertexBytes, vertex_bytes );
+		if ( !surface.m_hVertexBuffer.is_valid() ) {
+			setError( String( "RD direct-surface vertex-buffer creation failed; surface=" ) + String::num_int64( iSurface )
+			        + String( ", bytes=" ) + String::num_int64( surface.m_nVertexBytes ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		const String vertex_name = String( "T3D.Instance.DirectSurface.Vertex." ) + String::num_int64( iSurface );
+		if ( !m_context.registerResource( surface.m_hVertexBuffer,
+		             vertex_name,
+		             Terrain3DRdContext::RESOURCE_VERTEX_BUFFER,
+		             Terrain3DRdContext::MEMORY_MESH_VERTEX_ARENA,
+		             surface.m_nVertexBytes,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( surface.m_hVertexBuffer );
+			surface.m_hVertexBuffer = RID();
+			setError( String( "RD direct-surface vertex-buffer registration failed; surface=" ) + String::num_int64( iSurface ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		TypedArray<RID> vertex_buffers;
+		vertex_buffers.push_back( surface.m_hVertexBuffer );
+		surface.m_hVertexArray = rd->vertex_array_create( source.m_nVertexCount, m_nVertexFormat, vertex_buffers );
+		if ( !surface.m_hVertexArray.is_valid() ) {
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface vertex-array creation failed; surface=" ) + String::num_int64( iSurface )
+			        + String( ", vertices=" ) + String::num_int64( source.m_nVertexCount ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		const String vertex_array_name = String( "T3D.Instance.DirectSurface.VertexArray." ) + String::num_int64( iSurface );
+		if ( !m_context.registerResource( surface.m_hVertexArray,
+		             vertex_array_name,
+		             Terrain3DRdContext::RESOURCE_VERTEX_ARRAY,
+		             Terrain3DRdContext::MEMORY_NONE,
+		             0u,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( surface.m_hVertexArray );
+			surface.m_hVertexArray = RID();
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface vertex-array registration failed; surface=" ) + String::num_int64( iSurface ) );
+			discardDirectSurfaces();
+			return false;
+		}
+
+		const RenderingDevice::IndexBufferFormat index_format = ( RenderingDevice::IndexBufferFormat )( source.m_nIndexFormat );
+		surface.m_hIndexBuffer = rd->index_buffer_create( source.m_nIndexCount, index_format, index_bytes );
+		if ( !surface.m_hIndexBuffer.is_valid() ) {
+			m_context.freeResource( surface.m_hVertexArray );
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface index-buffer creation failed; surface=" ) + String::num_int64( iSurface )
+			        + String( ", indices=" ) + String::num_int64( source.m_nIndexCount ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		const String index_name = String( "T3D.Instance.DirectSurface.Index." ) + String::num_int64( iSurface );
+		if ( !m_context.registerResource( surface.m_hIndexBuffer,
+		             index_name,
+		             Terrain3DRdContext::RESOURCE_INDEX_BUFFER,
+		             Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA,
+		             surface.m_nIndexBytes,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( surface.m_hIndexBuffer );
+			surface.m_hIndexBuffer = RID();
+			m_context.freeResource( surface.m_hVertexArray );
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface index-buffer registration failed; surface=" ) + String::num_int64( iSurface ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		surface.m_hIndexArray = rd->index_array_create( surface.m_hIndexBuffer, 0u, source.m_nIndexCount );
+		if ( !surface.m_hIndexArray.is_valid() ) {
+			m_context.freeResource( surface.m_hIndexBuffer, surface.m_nIndexBytes );
+			m_context.freeResource( surface.m_hVertexArray );
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface index-array creation failed; surface=" ) + String::num_int64( iSurface )
+			        + String( ", indices=" ) + String::num_int64( source.m_nIndexCount ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		const String index_array_name = String( "T3D.Instance.DirectSurface.IndexArray." ) + String::num_int64( iSurface );
+		if ( !m_context.registerResource( surface.m_hIndexArray,
+		             index_array_name,
+		             Terrain3DRdContext::RESOURCE_INDEX_ARRAY,
+		             Terrain3DRdContext::MEMORY_NONE,
+		             0u,
+		             Terrain3DRdContext::OWNER_INSTANCES ) ) {
+			rd->free_rid( surface.m_hIndexArray );
+			surface.m_hIndexArray = RID();
+			m_context.freeResource( surface.m_hIndexBuffer, surface.m_nIndexBytes );
+			m_context.freeResource( surface.m_hVertexArray );
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface index-array registration failed; surface=" ) + String::num_int64( iSurface ) );
+			discardDirectSurfaces();
+			return false;
+		}
+		if ( !t3dVectorPushBackWithinCapacity( m_directSurfaces, surface ) ) {
+			m_context.freeResource( surface.m_hIndexArray );
+			m_context.freeResource( surface.m_hIndexBuffer, surface.m_nIndexBytes );
+			m_context.freeResource( surface.m_hVertexArray );
+			m_context.freeResource( surface.m_hVertexBuffer, surface.m_nVertexBytes );
+			setError( String( "RD direct-surface table exceeded reserved capacity; surface=" ) + String::num_int64( iSurface ) );
+			discardDirectSurfaces();
+			return false;
+		}
+	}
+	return true;
+}
+#endif
 
 void Terrain3DRdMeshCache::discardTextures( void ) {
 	Terrain3DRdTextureManager *const pManager = Terrain3DRdTextureManager::getSingleton();
@@ -879,20 +1115,29 @@ void Terrain3DRdMeshCache::discardTextures( void ) {
 
 bool Terrain3DRdMeshCache::syncTextures( const t3dRdMeshSourceSnapshot_t *const pSnapshot ) {
 	if ( !pSnapshot ) {
+		setError( "RD instance material texture synchronization received a null mesh snapshot" );
 		return false;
 	}
 	Terrain3DRdTextureManager *const pManager = Terrain3DRdTextureManager::getSingleton();
 	if ( !pManager ) {
-		return pSnapshot->m_textures.empty();
+		if ( !pSnapshot->m_textures.empty() ) {
+			++m_nTextureFallbackCount;
+			LOG( WARN, "RD instance material texture manager unavailable; retaining mesh geometry with fallback materials. textures=",
+			        pSnapshot->m_textures.size() );
+		}
+		return true;
 	}
 	m_textureSyncNext.clear();
 	m_textureSyncReused.clear();
 	if ( m_textureSyncNext.capacity() < pSnapshot->m_textures.size() ) {
 		if ( !t3dContainerReserveCold( m_textureSyncNext, pSnapshot->m_textures.size() ) ) {
+			setError( String( "RD instance texture sync could not reserve next-state table; required=" )
+			        + String::num_int64( pSnapshot->m_textures.size() ) );
 			return false;
 		}
 	}
 	if ( !t3dVectorResizeCold( m_textureSyncReused, m_textures.size(), 0u ) ) {
+		setError( String( "RD instance texture sync could not resize reuse table; required=" ) + String::num_int64( m_textures.size() ) );
 		return false;
 	}
 	eastl::vector<t3dRdImportedTextureGpu_t, Terrain3DEastlAllocator> &next = m_textureSyncNext;
@@ -906,6 +1151,7 @@ bool Terrain3DRdMeshCache::syncTextures( const t3dRdMeshSourceSnapshot_t *const 
 				continue;
 			}
 			if ( !t3dVectorPushBackWithinCapacity( next, m_textures[i] ) ) {
+				setError( "RD instance texture sync next-state table exceeded sealed capacity while retaining a resident texture" );
 				return false;
 			}
 			reused[i] = true;
@@ -918,28 +1164,31 @@ bool Terrain3DRdMeshCache::syncTextures( const t3dRdMeshSourceSnapshot_t *const 
 		TypedArray<PackedByteArray> initial_data;
 		initial_data.push_back( source.m_bytes );
 		const String name = String( "T3D.Instance.MaterialTexture." ) + String::num_uint64( source.m_nSourceId );
-		const RID texture =
-		        pManager->createTexture( source.m_layout, initial_data, name, ( int )( Terrain3DRdContext::MEMORY_MATERIAL_TABLE ) );
+		const RID texture = pManager->createTexture( source.m_layout,
+		        initial_data,
+		        name,
+		        ( int )( Terrain3DRdContext::MEMORY_MATERIAL_TABLE ),
+		        false );
 		if ( !texture.is_valid() ) {
-			for ( size_t iEntry = 0u; iEntry < ( size_t )( ( next ).size() ); iEntry++ ) {
-				const t3dRdImportedTextureGpu_t &created = ( next )[iEntry];
-				bool was_old = false;
-				for ( size_t iTexture = 0u; iTexture < ( size_t )( ( m_textures ).size() ); iTexture++ ) {
-					const t3dRdImportedTextureGpu_t &old = ( m_textures )[iTexture];
-					if ( old.m_hTexture == created.m_hTexture ) {
-						was_old = true;
-						break;
-					}
-				}
-				if ( !was_old ) {
-					pManager->freeTexture( created.m_hTexture, created.m_nBytes );
-				}
-			}
-			return false;
+			// Material textures are optional to mesh visibility. Keep the mesh resident
+			// and let material binding resolve this source ID to the fallback texture.
+			++m_nTextureFallbackCount;
+			LOG( WARN,
+			        "RD instance material texture upload failed; retaining mesh with fallback texture. source_id=",
+			        source.m_nSourceId,
+			        " size=",
+			        source.m_layout.m_nWidth,
+			        "x",
+			        source.m_layout.m_nHeight,
+			        " mips=",
+			        source.m_layout.m_nMipmaps );
+			continue;
 		}
 		if ( !t3dVectorPushBackWithinCapacity(
 		             next, t3dRdImportedTextureGpu_t{ source.m_nSourceId, source.m_nFingerprint, texture, source.m_layout.m_nBytes } ) ) {
 			pManager->freeTexture( texture, source.m_layout.m_nBytes );
+			setError( String( "RD instance texture sync next-state table exceeded sealed capacity after texture creation; source_id=" )
+			        + String::num_uint64( source.m_nSourceId ) );
 			return false;
 		}
 	}
@@ -992,15 +1241,75 @@ bool Terrain3DRdMeshCache::uploadChangedChunks( const RID &rBuffer,
 }
 
 bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnapshot ) {
+	++m_nUploadAttemptCount;
+	m_lastError = String();
 	if ( !pSnapshot ) {
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache upload received a null source snapshot" );
 		return false;
 	}
 	if ( pSnapshot->m_nGeneration == m_nSourceGeneration && isReady() ) {
+		m_lastError = String();
 		return true;
 	}
-	if ( !m_context.initialize() || !m_context.validateDevice() || !ensureVertexFormat() ) {
+	if ( !m_context.initialize() ) {
+		++m_nUploadFailureCount;
+		setError( String( "RD mesh-cache upload could not initialize shared RenderingDevice context; state=" )
+		        + String::num_int64( ( int64_t )( m_context.getState() ) ) + String( ", failure=" )
+		        + String::num_int64( ( int64_t )( m_context.getFailureCode() ) ) );
 		return false;
 	}
+	if ( !m_context.validateDevice() ) {
+		++m_nUploadFailureCount;
+		setError( String( "RD mesh-cache upload lost the shared RenderingDevice; state=" )
+		        + String::num_int64( ( int64_t )( m_context.getState() ) ) + String( ", failure=" )
+		        + String::num_int64( ( int64_t )( m_context.getFailureCode() ) ) );
+		return false;
+	}
+	if ( !ensureVertexFormat() ) {
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache upload failed to create/register the instance vertex format" );
+		return false;
+	}
+#if T3D_INSTANCER_RD_PORT
+	// The integrated RD instancer uses exact per-surface buffers/views rather
+	// than the experimental shared arena. Material metadata and imported
+	// textures are still retained because this is the production instancer
+	// presentation path, not the old magenta bring-up lane.
+	if ( !t3dVectorCopyCold( m_surfaces, pSnapshot->m_surfaces ) || !t3dVectorCopyCold( m_lods, pSnapshot->m_lods )
+	        || !t3dVectorCopyCold( m_materials, pSnapshot->m_materials ) ) {
+		++m_nUploadFailureCount;
+		setError( "RD instancer port failed to retain mesh/material metadata" );
+		return false;
+	}
+	m_context.beginResourceRebuild();
+	if ( !syncTextures( pSnapshot ) ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD instancer port failed while synchronizing material textures" );
+		}
+		return false;
+	}
+	const bool direct_ok = rebuildDirectSurfaces( pSnapshot );
+	m_context.endResourceRebuild();
+	if ( !direct_ok ) {
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD instancer port failed to build standalone surface geometry" );
+		}
+		return false;
+	}
+	m_nVertexUsedBytes = ( uint32_t )( pSnapshot->m_vertexBytes.size() );
+	m_nIndex16UsedBytes = ( uint32_t )( pSnapshot->m_index16Bytes.size() );
+	m_nIndex32UsedBytes = ( uint32_t )( pSnapshot->m_index32Bytes.size() );
+	m_nSourceGeneration = pSnapshot->m_nGeneration;
+	if ( ++m_nGeneration == 0u ) {
+		m_nGeneration = 1u;
+	}
+	m_lastError = String();
+	return true;
+#endif
 	const bool grow_vertex = !m_hVertexArena.is_valid() || m_nVertexCapacityBytes < ( uint32_t )( pSnapshot->m_vertexBytes.size() );
 	const bool grow_i16 = !pSnapshot->m_index16Bytes.is_empty()
 	        && ( !m_hIndex16Arena.is_valid() || m_nIndex16CapacityBytes < ( uint32_t )( pSnapshot->m_index16Bytes.size() ) );
@@ -1009,37 +1318,66 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 	m_context.beginResourceRebuild();
 	if ( !syncTextures( pSnapshot ) ) {
 		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD mesh-cache upload failed while synchronizing optional material textures" );
+		}
 		return false;
 	}
-	const bool arenas_ok = ensureArena( m_hVertexArena,
-	                               m_nVertexCapacityBytes,
-	                               ( uint32_t )( pSnapshot->m_vertexBytes.size() ),
-	                               "T3D.Instance.MeshVertexArena",
-	                               Terrain3DRdContext::RESOURCE_VERTEX_BUFFER,
-	                               Terrain3DRdContext::MEMORY_MESH_VERTEX_ARENA )
-	        && ensureArena( m_hIndex16Arena,
-	                m_nIndex16CapacityBytes,
-	                ( uint32_t )( pSnapshot->m_index16Bytes.size() ),
-	                "T3D.Instance.MeshIndexArena16",
-	                Terrain3DRdContext::RESOURCE_INDEX_BUFFER,
-	                Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA )
-	        && ensureArena( m_hIndex32Arena,
-	                m_nIndex32CapacityBytes,
-	                ( uint32_t )( pSnapshot->m_index32Bytes.size() ),
-	                "T3D.Instance.MeshIndexArena32",
-	                Terrain3DRdContext::RESOURCE_INDEX_BUFFER,
-	                Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA );
-	if ( !arenas_ok || ( ( grow_vertex || grow_i16 || grow_i32 || !m_hVertexArray.is_valid() ) && !rebuildArrays() ) ) {
+	if ( !ensureArena( m_hVertexArena,
+	             m_nVertexCapacityBytes,
+	             ( uint32_t )( pSnapshot->m_vertexBytes.size() ),
+	             "T3D.Instance.MeshVertexArena",
+	             Terrain3DRdContext::RESOURCE_VERTEX_BUFFER,
+	             Terrain3DRdContext::MEMORY_MESH_VERTEX_ARENA ) ) {
 		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD mesh-cache upload failed to establish the vertex arena" );
+		}
 		return false;
 	}
-
-	RenderingDevice *const rd = m_context.getDevice();
+	if ( !ensureArena( m_hIndex16Arena,
+	             m_nIndex16CapacityBytes,
+	             ( uint32_t )( pSnapshot->m_index16Bytes.size() ),
+	             "T3D.Instance.MeshIndexArena16",
+	             Terrain3DRdContext::RESOURCE_INDEX_BUFFER,
+	             Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA ) ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD mesh-cache upload failed to establish the uint16 index arena" );
+		}
+		return false;
+	}
+	if ( !ensureArena( m_hIndex32Arena,
+	             m_nIndex32CapacityBytes,
+	             ( uint32_t )( pSnapshot->m_index32Bytes.size() ),
+	             "T3D.Instance.MeshIndexArena32",
+	             Terrain3DRdContext::RESOURCE_INDEX_BUFFER,
+	             Terrain3DRdContext::MEMORY_MESH_INDEX_ARENA ) ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD mesh-cache upload failed to establish the uint32 index arena" );
+		}
+		return false;
+	}
+	if ( ( grow_vertex || grow_i16 || grow_i32 || !m_hVertexArray.is_valid() ) && !rebuildArrays() ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		if ( m_lastError.is_empty() ) {
+			setError( "RD mesh-cache upload failed to rebuild vertex/index array views" );
+		}
+		return false;
+	}
 
 	if ( m_dirtyUploadScratch.size() != ( int64_t )( s_nDirtyUploadChunkBytes ) ) {
 		m_dirtyUploadScratch.resize( s_nDirtyUploadChunkBytes );
 		if ( m_dirtyUploadScratch.size() != ( int64_t )( s_nDirtyUploadChunkBytes ) ) {
 			m_context.endResourceRebuild();
+			++m_nUploadFailureCount;
+			setError( "RD mesh-cache upload failed to establish dirty-upload scratch" );
 			return false;
 		}
 	}
@@ -1050,20 +1388,32 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 	             pSnapshot->m_vertexChunkHashes,
 	             m_vertexChunkHashes,
 	             grow_vertex || !has_previous,
-	             uploaded_bytes )
-	        || !uploadChangedChunks( m_hIndex16Arena,
-	                pSnapshot->m_index16Bytes,
-	                pSnapshot->m_index16ChunkHashes,
-	                m_index16ChunkHashes,
-	                grow_i16 || !has_previous,
-	                uploaded_bytes )
-	        || !uploadChangedChunks( m_hIndex32Arena,
-	                pSnapshot->m_index32Bytes,
-	                pSnapshot->m_index32ChunkHashes,
-	                m_index32ChunkHashes,
-	                grow_i32 || !has_previous,
-	                uploaded_bytes ) ) {
+	             uploaded_bytes ) ) {
 		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache vertex buffer_update failed" );
+		return false;
+	}
+	if ( !uploadChangedChunks( m_hIndex16Arena,
+	             pSnapshot->m_index16Bytes,
+	             pSnapshot->m_index16ChunkHashes,
+	             m_index16ChunkHashes,
+	             grow_i16 || !has_previous,
+	             uploaded_bytes ) ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache uint16 index buffer_update failed" );
+		return false;
+	}
+	if ( !uploadChangedChunks( m_hIndex32Arena,
+	             pSnapshot->m_index32Bytes,
+	             pSnapshot->m_index32ChunkHashes,
+	             m_index32ChunkHashes,
+	             grow_i32 || !has_previous,
+	             uploaded_bytes ) ) {
+		m_context.endResourceRebuild();
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache uint32 index buffer_update failed" );
 		return false;
 	}
 	m_context.recordBufferUpdate( uploaded_bytes );
@@ -1076,12 +1426,15 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 	        || !t3dVectorCopyCold( m_vertexChunkHashes, pSnapshot->m_vertexChunkHashes )
 	        || !t3dVectorCopyCold( m_index16ChunkHashes, pSnapshot->m_index16ChunkHashes )
 	        || !t3dVectorCopyCold( m_index32ChunkHashes, pSnapshot->m_index32ChunkHashes ) ) {
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache upload failed to retain published mesh metadata" );
 		return false;
 	}
 	m_nSourceGeneration = pSnapshot->m_nGeneration;
 	if ( ++m_nGeneration == 0u ) {
 		m_nGeneration = 1u;
 	}
+	m_lastError = String();
 	return true;
 }
 
@@ -1096,6 +1449,7 @@ void Terrain3DRdMeshCache::shutdown( void ) {
 	m_nVertexUsedBytes = m_nIndex16UsedBytes = m_nIndex32UsedBytes = 0u;
 	m_nGeneration = 0u;
 	m_nSourceGeneration = 0u;
+	m_lastError = String();
 	m_surfaces.clear();
 	m_lods.clear();
 	m_materials.clear();
@@ -1104,6 +1458,9 @@ void Terrain3DRdMeshCache::shutdown( void ) {
 	m_index32ChunkHashes.clear();
 	m_textureSyncNext.clear();
 	m_textureSyncReused.clear();
+#if T3D_INSTANCER_RD_PORT
+	m_directSurfaces.clear();
+#endif
 	m_dirtyUploadScratch.clear();
 }
 

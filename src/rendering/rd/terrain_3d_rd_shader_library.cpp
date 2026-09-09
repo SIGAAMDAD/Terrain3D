@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/terrain_3d_rd_shader_library.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 
 #include <godot_cpp/classes/rd_shader_file.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
@@ -90,20 +91,32 @@ bool Terrain3DRdShaderLibrary::load( void ) {
 		return false;
 	}
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+		m_forward.m_szInstances[variant] =
+		        loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( "bringup" ) );
+#else
 		m_forward.m_szInstances[variant] =
 		        loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( version_names[variant] ) );
+#endif
 		if ( m_forward.m_szInstances[variant].is_null() ) {
 			return false;
 		}
 	}
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	m_instances = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( "bringup" ) );
+#else
 	m_instances = loadShader( "res://addons/terrain_3d/rd/terrain_instances.glsl", StringName( "color" ) );
+#endif
 	if ( m_instances.is_null() ) {
 		return false;
 	}
+#if !T3D_INSTANCER_MINIMAL_RENDER_PATH
 	m_hlodCull = loadShader( "res://addons/terrain_3d/rd/terrain_hlod_cull.glsl" );
-	if ( m_hlodCull.is_null() ) {
+	m_instanceCull = loadShader( "res://addons/terrain_3d/rd/terrain_instance_cull.glsl" );
+	if ( m_hlodCull.is_null() || m_instanceCull.is_null() ) {
 		return false;
 	}
+#endif
 	m_oceanColor = loadShader( "res://addons/terrain_3d/rd/terrain_ocean.glsl", StringName( "color_native" ) );
 	m_oceanShadow = loadShader( "res://addons/terrain_3d/rd/terrain_ocean.glsl", StringName( "shadow" ) );
 	if ( m_oceanColor.is_null() || m_oceanShadow.is_null() ) {
@@ -175,6 +188,7 @@ void Terrain3DRdShaderLibrary::clear( void ) {
 	m_cull.unref();
 	m_instances.unref();
 	m_hlodCull.unref();
+	m_instanceCull.unref();
 	m_oceanColor.unref();
 	m_oceanShadow.unref();
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {

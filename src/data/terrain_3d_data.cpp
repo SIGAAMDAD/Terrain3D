@@ -561,8 +561,11 @@ Ref<Image> Terrain3DData::makeTerrainShadowMaskImage( const Terrain3DRegion *con
 	if ( pRegion && !pRegion->isDeleted() ) {
 		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-			const Ref<Resource> resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
-			image = resource;
+			const String shadow_path = lighting->getTerrainShadowMaskPath();
+			if ( FileAccess::file_exists( shadow_path ) ) {
+				const Ref<Resource> resource = ResourceLoader::get_singleton()->load( shadow_path );
+				image = resource;
+			}
 		}
 	}
 	if ( image.is_null() || image->is_empty() ) {
@@ -570,7 +573,7 @@ Ref<Image> Terrain3DData::makeTerrainShadowMaskImage( const Terrain3DRegion *con
 	}
 	image = image->duplicate();
 	if ( image->is_compressed() && image->decompress() != OK ) {
-		return Ref<Image>();
+		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
 	}
 	if ( image->has_mipmaps() ) {
 		image->clear_mipmaps();
@@ -582,7 +585,7 @@ Ref<Image> Terrain3DData::makeTerrainShadowMaskImage( const Terrain3DRegion *con
 		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
 	}
 	if ( image->generate_mipmaps() != OK ) {
-		return Ref<Image>();
+		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
 	}
 	return image;
 }
@@ -983,12 +986,16 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 	        payload.m_color.is_valid() ? payload.m_color : makeGpuColorImage( m_defaultColorMap ) );
 	const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 	if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-		const Ref<Resource> shadow_resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
-		const Ref<Image> shadow_mask = shadow_resource;
+		// Regional lighting is an optional render enhancement. A stale or missing
+		// shadow-mask sidecar must not make an otherwise valid terrain runtime page
+		// uncookable. makeTerrainShadowMaskImage() normalizes valid masks to the
+		// canonical region size and supplies a fully-lit L8 fallback when the sidecar
+		// is absent or unreadable.
+		const Ref<Image> shadow_mask = makeTerrainShadowMaskImage( pRegion );
 		if ( shadow_mask.is_null() || shadow_mask->is_empty() || shadow_mask->get_format() != Image::FORMAT_L8
 		        || !shadow_mask->has_mipmaps() || shadow_mask->get_width() != shadow_mask->get_height() ) {
 			if ( pError ) {
-				*pError = "regional terrain shadow mask is missing or invalid";
+				*pError = "regional terrain shadow-mask fallback could not be prepared";
 			}
 			return false;
 		}
@@ -1724,9 +1731,12 @@ size_t Terrain3DData::getMemoryRuntimePagePreparedBytes( void ) const {
 }
 
 size_t Terrain3DData::getMemoryNonPageTransientStagingBytes( void ) const {
-	size_t bytes = m_mapEditService.getTransientScratchBytes();
-	const size_t far_bytes = m_farSurfaceAtlasCache.getImageBytes();
-	return bytes > SIZE_MAX - far_bytes ? SIZE_MAX : bytes + far_bytes;
+	// Far-atlas CPU images are retained whole-world residency, not transient
+	// staging. Terrain3D::calculateFixedMemoryBytes() already reserves their
+	// canonical height/surface footprint through getGpuFarAtlasBytes(). Charging
+	// the same retained images against the transient reserve a second time can
+	// drive the runtime-page prepared-byte grant to zero after ensureFarAtlases().
+	return m_mapEditService.getTransientScratchBytes();
 }
 
 size_t Terrain3DData::getMemoryTransientStagingBytes( void ) const {

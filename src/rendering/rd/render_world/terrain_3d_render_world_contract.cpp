@@ -1,4 +1,5 @@
 #include "rendering/rd/render_world/terrain_3d_render_world_contract.h"
+#include "rendering/rd/render_world/terrain_3d_render_world_resource_plan.h"
 
 static bool t3d_rw_nonzero_u32( uint32_t pValue ) {
 	return pValue != 0u;
@@ -100,7 +101,11 @@ bool t3d_render_world_validate_limits( const T3DRenderWorldLimits &pLimits ) {
 	if ( !t3d_rw_nonzero_u32( pLimits.nMaxVtRequests ) ) {
 		return false;
 	}
-	if ( !t3d_rw_nonzero_u32( pLimits.nMaxStreamJobs ) ) {
+	if ( !t3d_rw_nonzero_u32( pLimits.nMaxStreamJobs ) || pLimits.nMaxStreamJobs > 0xffffu ) {
+		return false;
+	}
+	if ( pLimits.nMaxVtPhysicalAlbedoPages > 0xffffu || pLimits.nMaxVtPhysicalNormalPages > 0xffffu
+	        || pLimits.nMaxVtPhysicalSurfacePages > 0xffffu || pLimits.nMaxVtPhysicalHeightPages > 0xffffu ) {
 		return false;
 	}
 	if ( !t3d_rw_nonzero_u32( pLimits.nStreamScratchLaneCount ) ) {
@@ -165,7 +170,7 @@ T3DRenderWorldMemoryPlan t3d_render_world_compute_minimum_memory_plan( const T3D
 	        + ( uint64_t )pLimits.nMaxVisibleInstances * sizeof( uint32_t )
 	        + ( uint64_t )( pLimits.nMaxVisibleClusters[0] + pLimits.nMaxVisibleClusters[1] + pLimits.nMaxVisibleClusters[2] )
 	                * sizeof( T3DVisibleCluster )
-	        + 3u * sizeof( T3DDrawIndirectArgs );
+	        + T3D_RW_INDIRECT_BUFFER_BYTES;
 
 	// VT physical bytes and Hi-Z bytes depend on selected texture formats/resolution.
 	// They must be added by the profile/device-specific planner before initialization.

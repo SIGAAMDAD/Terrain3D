@@ -108,6 +108,7 @@ struct T3DVTResidencyBuffers {
 	uint32_t nPageTableCapacity;
 	T3DVTPhysicalSlot *pPhysicalSlots[T3D_RW_VT_CHANNELS];
 	uint32_t nPhysicalSlotCapacity[T3D_RW_VT_CHANNELS];
+	uint16_t *pRetiredSlots[T3D_RW_VT_CHANNELS];
 };
 
 struct T3DVTUploadReservation {
@@ -139,6 +140,7 @@ struct T3DVTResidencyState {
 	T3DVTResidencyStats Stats;
 	uint32_t nNeutralRootPage[T3D_RW_VT_CHANNELS];
 	uint32_t nClockHand[T3D_RW_VT_CHANNELS];
+	uint32_t nRetiredSlotCount[T3D_RW_VT_CHANNELS];
 	uint32_t nDatabaseGeneration;
 	uint32_t nPageTableGeneration;
 	bool bInitialized;

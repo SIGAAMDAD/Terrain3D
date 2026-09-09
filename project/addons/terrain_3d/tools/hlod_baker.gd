@@ -11,7 +11,7 @@ const REGION_MAP_MIN: int = -REGION_MAP_SIZE / 2
 const DEFAULT_REDUCTION: float = 0.42
 const HLOD_DIR: String = "_hlod"
 const MANIFEST_NAME: String = "terrain3d_hlod_manifest.tres"
-const BUILDER_VERSION: int = 5
+const BUILDER_VERSION: int = 6
 
 class GeometryPart extends RefCounted:
 	var mesh: Mesh
@@ -27,7 +27,11 @@ class Source extends RefCounted:
 	var parts: Array[GeometryPart] = []
 	var bounds: AABB = AABB()
 	var source_key: String = ""
+	var source_signature_token: String = ""
 	var source_triangles: int = 0
+	var base_geometric_error: float = 0.0
+	var deferred_instancer: bool = false
+	var deferred_region: Terrain3DRegion
 
 class BuiltCluster extends RefCounted:
 	var level: int = 1
@@ -75,21 +79,33 @@ func analyze(terrain: Terrain3D) -> Dictionary:
 func validate_generated(terrain: Terrain3D) -> Dictionary:
 	if not is_instance_valid(terrain) or terrain.data_directory.is_empty():
 		return {"ok": false, "error": "Terrain3D data directory is unavailable", "valid": 0, "missing": 0, "invalid": 0}
-	var manifest_path: String = terrain.hlod_manifest_path.strip_edges()
-	if manifest_path.is_empty():
-		manifest_path = terrain.data_directory.trim_suffix("/").path_join(MANIFEST_NAME)
-	if not FileAccess.file_exists(manifest_path):
+	var manifest_path: String = _resolve_manifest_path(terrain)
+	if manifest_path.is_empty() or not FileAccess.file_exists(manifest_path):
 		return {"ok": false, "error": "HLOD manifest is missing", "missing_manifest": true, "valid": 0, "missing": 0, "invalid": 0}
 	var manifest := ResourceLoader.load(manifest_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
 	if not is_instance_valid(manifest):
 		return {"ok": false, "error": "HLOD manifest could not be loaded", "valid": 0, "missing": 0, "invalid": 1}
-	var manifest_invalid: bool = manifest.format != 3
+
+	var max_level: int = clampi(terrain.hlod_max_level, 1, MAX_LEVEL)
+	var expected_build_signature: int = _current_build_signature(max_level)
+	var messages: PackedStringArray = PackedStringArray()
+	var manifest_invalid: bool = false
+	if manifest.format != 3:
+		manifest_invalid = true
+		messages.append("Manifest format %d is unsupported; expected format 3" % manifest.format)
+	if manifest.max_level != max_level:
+		manifest_invalid = true
+		messages.append("Manifest max level %d does not match active HLOD max level %d" % [manifest.max_level, max_level])
+	if manifest.build_signature != expected_build_signature:
+		manifest_invalid = true
+		messages.append("Manifest build signature is stale for the active HLOD configuration")
+	if manifest.runtime_blob.is_empty() or not manifest.validate_runtime_blob():
+		manifest_invalid = true
+		messages.append("Packed HLOD runtime hierarchy is missing or invalid")
+
 	var valid: int = 0
 	var missing: int = 0
 	var invalid: int = 1 if manifest_invalid else 0
-	var messages: PackedStringArray = PackedStringArray()
-	if manifest_invalid:
-		messages.append("Manifest terrain/build geometry contract does not match the active Terrain3D node")
 	for value: Variant in manifest.entries:
 		if not value is Dictionary:
 			invalid += 1
@@ -142,14 +158,15 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 		return _failure("No HLOD-eligible Terrain3D static sources were found")
 
 	var existing: Terrain3DHLODManifest = null
-	var manifest_path: String = data_dir.path_join(MANIFEST_NAME)
+	var manifest_path: String = _resolve_manifest_path(terrain)
+	var manifest_dir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(manifest_path.get_base_dir()))
+	if manifest_dir_error != OK and manifest_dir_error != ERR_ALREADY_EXISTS:
+		return _failure("Unable to create HLOD manifest directory: %s" % error_string(manifest_dir_error))
 	if dirty_only and ResourceLoader.exists(manifest_path):
 		existing = ResourceLoader.load(manifest_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
 	var existing_entries: Dictionary[String, Dictionary] = _index_existing_entries(existing)
 
-	var build_signature: int = _signature_int(
-		"terrain3d-hlod-v%d|max=%d|reduction=%.8f|geometry=128x1m" % [
-			BUILDER_VERSION, max_level, reduction_ratio])
+	var build_signature: int = _current_build_signature(max_level)
 	var level_clusters: Dictionary[Vector2i, BuiltCluster] = {}
 	var all_clusters: Array[BuiltCluster] = []
 	var package_updates: PackedStringArray = PackedStringArray()
@@ -216,6 +233,8 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 	_populate_source_policy(manifest, sources)
 	if not manifest.compile_runtime_blob():
 		return _failure("Unable to compile packed HLOD runtime hierarchy")
+	if not manifest.validate_runtime_blob():
+		return _failure("Compiled HLOD runtime hierarchy failed validation")
 
 	# Packages are complete before the fixed manifest is published. A failed
 	# package write therefore cannot make runtime detail suppression point at a
@@ -248,7 +267,7 @@ func clear_generated(terrain: Terrain3D) -> Dictionary:
 	if not is_instance_valid(terrain) or terrain.data_directory.is_empty():
 		return _failure("Terrain3D data directory is unavailable")
 	var data_dir: String = terrain.data_directory.trim_suffix("/")
-	var manifest_path: String = data_dir.path_join(MANIFEST_NAME)
+	var manifest_path: String = _resolve_manifest_path(terrain)
 	var output_dir: String = data_dir.path_join(HLOD_DIR)
 	if FileAccess.file_exists(manifest_path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(manifest_path))
@@ -273,36 +292,41 @@ func _collect_sources(terrain: Terrain3D, max_level: int) -> Array[Source]:
 
 func _collect_instancer_sources(terrain: Terrain3D, region: Terrain3DRegion,
 		location: Vector2i, world_region_size: float, max_level: int, output: Array[Source]) -> void:
-	# Read the native instance store directly. Exporting the full instance dictionary here
-	# duplicates every transform into Variant containers and scales terribly on
-	# authored worlds with dense static placement.
+	# Build only a compact descriptor here. Geometry is materialized lazily in
+	# _build_cluster after dirty-package reuse has already been decided. This
+	# keeps Analyze Sources cheap and makes Bake Dirty skip unchanged instancer
+	# geometry instead of rebuilding it merely to discover that it is unchanged.
 	for mesh_id: int in _native_builder.get_instancer_mesh_ids(region):
 		var asset := terrain.assets.get_mesh_asset(mesh_id) as Terrain3DMeshAsset
 		if not is_instance_valid(asset) or not asset.is_enabled() or not asset.is_hlod_eligible():
 			continue
-		var built: Dictionary = _native_builder.build_instancer_source(terrain, region, mesh_id)
-		if not bool(built.get("ok", false)):
+		var analyzed: Dictionary = _native_builder.analyze_instancer_source(terrain, region, mesh_id)
+		if not bool(analyzed.get("ok", false)):
 			_warnings.append("Mesh asset %d in region %s excluded from HLOD: %s" % [
-				mesh_id, location, String(built.get("error", "unsupported source"))])
+				mesh_id, location, String(analyzed.get("error", "unsupported source"))])
 			continue
-		var mesh: ArrayMesh = built.get("mesh") as ArrayMesh
-		if not is_instance_valid(mesh) or mesh.get_surface_count() == 0:
+		var mesh: Mesh = asset.get_mesh(0)
+		if not is_instance_valid(mesh):
 			continue
 		var source := Source.new()
 		source.owner_region = location
 		source.mesh_id = mesh_id
 		source.requested_min_level = clampi(asset.hlod_min_level, 1, MAX_LEVEL)
 		source.source_key = "instancer:%s:%d" % [location, mesh_id]
+		source.source_triangles = int(analyzed.get("source_triangles", 0))
+		source.deferred_instancer = true
+		source.deferred_region = region
+		var signature_parts: PackedStringArray = PackedStringArray([
+			source.source_key,
+			str(analyzed.get("instance_signature", 0)),
+			_mesh_content_signature(mesh),
+		])
+		for material: Material in _mesh_asset_materials(asset, mesh):
+			signature_parts.append(_material_signature(material))
+		source.source_signature_token = "|".join(signature_parts).md5_text()
 		var region_transform := Transform3D(Basis.IDENTITY,
 			Vector3(float(location.x) * world_region_size, 0.0, float(location.y) * world_region_size))
-		var part := GeometryPart.new()
-		part.mesh = mesh
-		part.transform = region_transform
-		for surface: int in range(mesh.get_surface_count()):
-			part.materials.append(mesh.surface_get_material(surface))
-		source.parts.append(part)
-		source.bounds = region_transform * AABB(built.get("bounds", mesh.get_aabb()))
-		source.source_triangles = int(built.get("source_triangles", _mesh_triangle_count(mesh)))
+		source.bounds = region_transform * AABB(analyzed.get("bounds", AABB()))
 		source.min_level = _minimum_legal_level(source.owner_region, source.bounds,
 			source.requested_min_level, world_region_size, max_level)
 		if source.min_level <= max_level:
@@ -394,11 +418,14 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 			var source: Source = input
 			signature_parts.append(source.source_key)
 			signature_parts.append(str(source.bounds))
-			for part: GeometryPart in source.parts:
-				signature_parts.append(str(part.transform))
-				signature_parts.append(_mesh_content_signature(part.mesh))
-				for material: Material in part.materials:
-					signature_parts.append(_material_signature(material))
+			if not source.source_signature_token.is_empty():
+				signature_parts.append(source.source_signature_token)
+			else:
+				for part: GeometryPart in source.parts:
+					signature_parts.append(str(part.transform))
+					signature_parts.append(_mesh_content_signature(part.mesh))
+					for material: Material in part.materials:
+						signature_parts.append(_material_signature(material))
 		elif input is BuiltCluster:
 			var child: BuiltCluster = input
 			signature_parts.append(str(child.source_signature))
@@ -418,6 +445,9 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 				reused.package_path = old_path; reused.package = loaded; reused.source_signature = source_signature
 				return {"ok": true, "cluster": reused, "reused": true}
 
+	var materialized: Dictionary = _materialize_deferred_instancer_sources(terrain, inputs)
+	if not bool(materialized.get("ok", false)):
+		return materialized
 	var exact_mesh: ArrayMesh = _merge_cluster_geometry(inputs, cluster_origin, world_region_size)
 	if not is_instance_valid(exact_mesh) or exact_mesh.get_surface_count() == 0:
 		return _failure("HLOD cluster L%d %s produced no geometry" % [level, cluster_key])
@@ -456,6 +486,45 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 	built.level = level; built.cluster = cluster_key; built.region_min = region_min; built.region_max = region_max
 	built.package_path = package_path; built.package = package; built.source_signature = source_signature
 	return {"ok": true, "cluster": built, "reused": false}
+
+
+func _materialize_deferred_instancer_sources(terrain: Terrain3D, inputs: Array) -> Dictionary:
+	for input: Variant in inputs:
+		if not input is Source:
+			continue
+		var source: Source = input
+		if not source.deferred_instancer or not source.parts.is_empty():
+			continue
+		if not is_instance_valid(source.deferred_region):
+			return _failure("HLOD instancer source region became unavailable during bake")
+		var built: Dictionary = _native_builder.build_instancer_source(terrain, source.deferred_region, source.mesh_id)
+		if not bool(built.get("ok", false)):
+			return _failure("HLOD instancer source %s failed: %s" % [source.source_key, String(built.get("error", "unknown error"))])
+		var chunks: Array = built.get("chunks", [])
+		if chunks.is_empty():
+			return _failure("HLOD instancer source %s produced no bounded chunks" % source.source_key)
+		var region_transform := Transform3D(Basis.IDENTITY,
+			Vector3(float(source.owner_region.x) * float(REGION_SIZE), 0.0, float(source.owner_region.y) * float(REGION_SIZE)))
+		for chunk_value: Variant in chunks:
+			if not chunk_value is Dictionary:
+				continue
+			var chunk: Dictionary = chunk_value
+			var mesh: ArrayMesh = chunk.get("mesh") as ArrayMesh
+			if not is_instance_valid(mesh) or mesh.get_surface_count() == 0:
+				continue
+			var part := GeometryPart.new()
+			part.mesh = mesh
+			part.transform = region_transform
+			for surface: int in range(mesh.get_surface_count()):
+				part.materials.append(mesh.surface_get_material(surface))
+			source.parts.append(part)
+		if source.parts.is_empty():
+			return _failure("HLOD instancer source %s produced no usable chunk geometry" % source.source_key)
+		source.base_geometric_error = float(built.get("geometric_error", 0.0))
+		if int(built.get("chunk_count", 1)) > 1:
+			_warnings.append("%s: %d bounded chunks, %d source -> %d preproxy triangles" % [
+				source.source_key, int(built.get("chunk_count", 0)), source.source_triangles, int(built.get("proxy_triangles", 0))])
+	return {"ok": true}
 
 
 func _merge_cluster_geometry(inputs: Array, cluster_origin: Vector3, world_region_size: float) -> ArrayMesh:
@@ -615,19 +684,63 @@ func _material_signature(material: Material) -> String:
 		if property_name == &"resource_path" or property_name == &"resource_name":
 			continue
 		var value: Variant = material.get(property_name)
-		if value is Resource:
-			parts.append(String(property_name) + "=" + _resource_content_signature(value as Resource))
-		else:
-			parts.append(String(property_name) + "=" + var_to_str(value))
+		var visited: Dictionary[int, bool] = {}
+		parts.append(String(property_name) + "=" + _variant_content_signature(value, visited, 0))
 	return "|".join(parts).md5_text()
 
 
 func _resource_content_signature(resource: Resource) -> String:
+	var visited: Dictionary[int, bool] = {}
+	return _resource_content_signature_recursive(resource, visited, 0)
+
+
+func _resource_content_signature_recursive(resource: Resource, visited: Dictionary[int, bool], depth: int) -> String:
 	if not is_instance_valid(resource):
 		return "null"
 	if not resource.resource_path.is_empty() and FileAccess.file_exists(resource.resource_path):
 		return resource.resource_path + ":" + FileAccess.get_md5(resource.resource_path)
-	return resource.get_class() + ":" + str(resource.get_instance_id())
+	if depth >= 12:
+		return resource.get_class() + ":depth-limit"
+	var instance_id: int = resource.get_instance_id()
+	if visited.has(instance_id):
+		return resource.get_class() + ":cycle"
+	visited[instance_id] = true
+	var names: PackedStringArray = PackedStringArray()
+	var values: Dictionary[String, String] = {}
+	for property_value: Dictionary in resource.get_property_list():
+		if (int(property_value.get("usage", 0)) & PROPERTY_USAGE_STORAGE) == 0:
+			continue
+		var property_name: StringName = property_value.get("name", &"")
+		if property_name == &"resource_path" or property_name == &"resource_name":
+			continue
+		var name: String = String(property_name)
+		names.append(name)
+		values[name] = _variant_content_signature(resource.get(property_name), visited, depth + 1)
+	names.sort()
+	var parts: PackedStringArray = PackedStringArray([resource.get_class()])
+	for name: String in names:
+		parts.append(name + "=" + values[name])
+	visited.erase(instance_id)
+	return "|".join(parts).md5_text()
+
+
+func _variant_content_signature(value: Variant, visited: Dictionary[int, bool], depth: int) -> String:
+	if value is Resource:
+		return _resource_content_signature_recursive(value as Resource, visited, depth)
+	if value is Array:
+		var array_value: Array = value
+		var array_parts: PackedStringArray = PackedStringArray()
+		for item: Variant in array_value:
+			array_parts.append(_variant_content_signature(item, visited, depth + 1))
+		return "array[" + ",".join(array_parts) + "]"
+	if value is Dictionary:
+		var dictionary_value: Dictionary = value
+		var dictionary_parts: PackedStringArray = PackedStringArray()
+		for key: Variant in dictionary_value:
+			dictionary_parts.append(_variant_content_signature(key, visited, depth + 1) + ":" + _variant_content_signature(dictionary_value[key], visited, depth + 1))
+		dictionary_parts.sort()
+		return "dict{" + ",".join(dictionary_parts) + "}"
+	return var_to_bytes(value).hex_encode().md5_text()
 
 
 func _mesh_asset_materials(asset: Terrain3DMeshAsset, mesh: Mesh) -> Array[Material]:
@@ -696,6 +809,9 @@ func _inherited_geometric_error(inputs: Array) -> float:
 			var child: BuiltCluster = input
 			if is_instance_valid(child.package):
 				error = maxf(error, child.package.geometric_error)
+		elif input is Source:
+			var source: Source = input
+			error = maxf(error, source.base_geometric_error)
 	return error
 
 
@@ -712,6 +828,27 @@ func _index_existing_entries(manifest: Terrain3DHLODManifest) -> Dictionary[Stri
 		var level: int = int(entry.get("level", 0))
 		result["%d:%d:%d" % [level, cluster.x, cluster.y]] = entry
 	return result
+
+
+func _resolve_manifest_path(terrain: Terrain3D) -> String:
+	if not is_instance_valid(terrain):
+		return ""
+	var configured: String = terrain.hlod_manifest_path.strip_edges()
+	if not configured.is_empty():
+		if configured.is_absolute_path():
+			configured = ProjectSettings.localize_path(configured)
+		elif not configured.begins_with("res://") and not configured.begins_with("user://"):
+			configured = terrain.data_directory.trim_suffix("/").path_join(configured)
+		return configured
+	if terrain.data_directory.is_empty():
+		return ""
+	return terrain.data_directory.trim_suffix("/").path_join(MANIFEST_NAME)
+
+
+func _current_build_signature(max_level: int) -> int:
+	return _signature_int(
+		"terrain3d-hlod-v%d|max=%d|reduction=%.8f|geometry=128x1m" % [
+			BUILDER_VERSION, max_level, reduction_ratio])
 
 
 func _signature_int(text: String) -> int:
@@ -751,8 +888,12 @@ func _region_map_index(location: Vector2i) -> int:
 
 func _publish_manifest_transactionally(manifest: Terrain3DHLODManifest, manifest_path: String) -> Error:
 	var directory: String = manifest_path.get_base_dir()
-	var staging_path: String = directory.path_join("terrain3d_hlod_manifest.staging.tres")
-	var previous_path: String = directory.path_join("terrain3d_hlod_manifest.previous.tres")
+	var stem: String = manifest_path.get_file().get_basename()
+	var extension: String = manifest_path.get_extension()
+	if extension.is_empty():
+		extension = "tres"
+	var staging_path: String = directory.path_join(stem + ".staging." + extension)
+	var previous_path: String = directory.path_join(stem + ".previous." + extension)
 	for cleanup_path: String in [staging_path, previous_path]:
 		if FileAccess.file_exists(cleanup_path):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(cleanup_path))
@@ -760,7 +901,7 @@ func _publish_manifest_transactionally(manifest: Terrain3DHLODManifest, manifest
 	if save_error != OK:
 		return save_error
 	var validation := ResourceLoader.load(staging_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
-	if not is_instance_valid(validation) or validation.entries.size() != manifest.entries.size():
+	if not is_instance_valid(validation) or validation.entries.size() != manifest.entries.size() or not validation.validate_runtime_blob():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(staging_path))
 		return ERR_FILE_CORRUPT
 	var absolute_final: String = ProjectSettings.globalize_path(manifest_path)

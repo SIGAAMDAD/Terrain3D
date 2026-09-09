@@ -194,8 +194,14 @@ private:
 	static Terrain3DRdForwardPlusBridgeAdapter *s_pSingleton;
 
 	Object *m_pEngineBridge = NULL;
-	t3dAtomic_t<Terrain3DRenderCoordinator *> m_szCoordinators[s_nMaxCoordinators]{};
+	// Coordinator mutation is cold/main-thread work. The release-published mask is
+	// the sole hot-path synchronization point; slots are immutable while their bit
+	// is visible to the render thread. Detach clears the bit, synchronizes Godot's
+	// render thread, then clears the pointer.
+	Terrain3DRenderCoordinator *m_szCoordinators[s_nMaxCoordinators]{};
+	mutable t3dMutex_t m_coordinatorMutex;
 	t3dAtomicU64_t m_nCoordinatorMask{ 0u };
+	uint64_t m_nPreparedCoordinatorMask = 0u;
 	t3dAtomicBool_t m_bBridgePresent{ false };
 	t3dAtomicBool_t m_bBridgeReady{ false };
 	t3dAtomicBool_t m_bCallbackRegistered{ false };
@@ -231,7 +237,7 @@ private:
 	bool convertResources( const t3dRdForwardBridgeResourcePacket_t &rResources );
 	bool convertPass( const t3dRdForwardBridgePassPacket_t &rPass );
 	bool convertShadow( const t3dRdForwardBridgeShadowPacket_t &rShadow );
-	bool dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext );
+	bool dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext, uint64_t nCoordinatorMask );
 	uint64_t prepare( const t3dRdForwardBridgeFramePacket_t *pFrame,
 	        const t3dRdForwardBridgeResourcePacket_t *pResources,
 	        const t3dRdForwardBridgePassPacket_t *pPass ) noexcept;

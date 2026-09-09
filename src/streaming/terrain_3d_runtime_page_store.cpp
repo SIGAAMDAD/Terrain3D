@@ -110,7 +110,13 @@ EA_FORCE_INLINE static uint32_t t3dRuntimePageStoreReadU32Raw( const uint8_t *&p
 }
 
 static bool t3dRuntimePageStoreEncodeHeader( PackedByteArray &rBytes, const t3dRuntimePageHeader_t &rHeader ) {
-	if ( rBytes.size() < s_nRuntimePageHeaderBytes ) {
+	// The v7 disk header deliberately reserves an aligned 1248-byte envelope.
+	// The currently defined scalar/channel fields consume 1236 bytes; the trailing
+	// 12 bytes are ABI padding so the first channel payload begins on the required
+	// 16-byte boundary. Keep that padding explicit instead of treating it as a
+	// serialization-size mismatch.
+	const size_t required_bytes = 40u + ( ( size_t )( s_nRuntimePageChannelCount ) * 48u ) + 44u;
+	if ( rBytes.size() < s_nRuntimePageHeaderBytes || required_bytes > s_nRuntimePageHeaderBytes ) {
 		return false;
 	}
 	uint8_t *const pBegin = rBytes.ptrw();
@@ -151,7 +157,14 @@ static bool t3dRuntimePageStoreEncodeHeader( PackedByteArray &rBytes, const t3dR
 	t3dRuntimePageStoreWriteU32Raw( pWrite, ( uint32_t )rHeader.m_nRegionZ );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nBoundsMinYBits );
 	t3dRuntimePageStoreWriteU32Raw( pWrite, rHeader.m_nBoundsMaxYBits );
-	return ( size_t )( pWrite - pBegin ) == s_nRuntimePageHeaderBytes;
+	const size_t written_bytes = ( size_t )( pWrite - pBegin );
+	if ( written_bytes != required_bytes ) {
+		return false;
+	}
+	if ( written_bytes < s_nRuntimePageHeaderBytes ) {
+		memset( pWrite, 0, s_nRuntimePageHeaderBytes - written_bytes );
+	}
+	return true;
 }
 
 static t3dRuntimePageHeader_t t3dRuntimePageStoreDecodeHeaderRaw( const uint8_t *pRead, const size_t nBytes ) {
@@ -1957,9 +1970,11 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS, rPayload.m_lightingReceivers ) )
 	        || ( !rPayload.m_multimeshFastStart.is_empty()
 	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.m_multimeshFastStart ) )
-	        || !t3dRuntimePageStoreFinalizePageBytes( page_build, header, file_bytes ) ) {
+	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.m_multimeshFastStart ) ) ) {
 		return t3dRuntimePageStoreWriteFail( pError, "runtime page channel serialization failed" );
+	}
+	if ( !t3dRuntimePageStoreFinalizePageBytes( page_build, header, file_bytes ) ) {
+		return t3dRuntimePageStoreWriteFail( pError, "runtime page header/final byte serialization failed" );
 	}
 	if ( !t3dRuntimePageValidateHeader( header, ( uint64_t )( file_bytes.size() ) ) ) {
 		return t3dRuntimePageStoreWriteFail( pError, "generated runtime page header failed validation" );

@@ -15,6 +15,17 @@ bool Terrain3DHLODManifest::compileRuntimeBlob( void ) {
 	return true;
 }
 
+bool Terrain3DHLODManifest::validateRuntimeBlob( void ) const {
+	if ( m_runtimeBlob.is_empty() ) {
+		return false;
+	}
+	t3dHlodRuntimeData_t decoded;
+	if ( !Terrain3DHLODRuntimeCodec::decode( m_runtimeBlob, decoded ) ) {
+		return false;
+	}
+	return decoded.m_entries.size() == ( size_t )m_entries.size();
+}
+
 void Terrain3DHLODManifest::_bind_methods( void ) {
 #define BIND_RW( name, setter, getter )                                                                                                    \
 	ClassDB::bind_method( D_METHOD( setter, "value" ), &Terrain3DHLODManifest::name );                                                     \
@@ -40,6 +51,7 @@ void Terrain3DHLODManifest::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_runtime_blob", "value" ), &Terrain3DHLODManifest::setRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "get_runtime_blob" ), &Terrain3DHLODManifest::getRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "compile_runtime_blob" ), &Terrain3DHLODManifest::compileRuntimeBlob );
+	ClassDB::bind_method( D_METHOD( "validate_runtime_blob" ), &Terrain3DHLODManifest::validateRuntimeBlob );
 	ClassDB::bind_method( D_METHOD( "get_entry_count" ), &Terrain3DHLODManifest::getEntryCount );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "format" ), "set_format", "get_format" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "max_level" ), "set_max_level", "get_max_level" );

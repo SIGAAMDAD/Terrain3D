@@ -14,11 +14,11 @@ for needle, label in [
     ("t3dAtomicBool_t m_bInstanceRendererInitialized{ false };", "instance companion readiness state"),
     ("t3dAtomicBool_t m_bOceanRendererInitialized{ false };", "ocean companion readiness state"),
     ("bool m_bForwardPreparedHasInstances = false;", "prepared instance companion state"),
-    ("const bool terrain_ready = shader_ready", "terrain-primary renderer initialization"),
+    ("terrain_ready = shader_ready", "terrain-primary renderer initialization"),
     ("m_bRendererInitialized.store( terrain_ready", "terrain-only primary initialized state"),
     ("const bool terrain_ok = !bHasTerrain", "compositor terrain result independent of instance result"),
     ("const bool terrain_ok = !has_terrain", "Forward+ terrain prepare result"),
-    ("m_bForwardPreparedHasInstances = !transparent_pass && instance_lane_ready && instances_ok;", "isolated Forward+ instance preparation"),
+    ("m_bForwardPreparedHasInstances = instance_lane_ready && instances_ok;", "isolated Forward+ instance preparation"),
     ("result[\"terrain_renderer_initialized\"]", "terrain renderer diagnostic"),
     ("result[\"instance_renderer_initialized\"]", "instance renderer diagnostic"),
     ("result[\"ocean_renderer_initialized\"]", "ocean renderer diagnostic"),
@@ -38,7 +38,9 @@ for forbidden, label in [
 prepare_tail = CPP[CPP.find("if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE )"):]
 if "if ( terrain_ok )" not in prepare_tail:
     fail("Forward+ PREPARE does not use terrain as the primary success condition")
-if "if ( m_bForwardPreparedHasInstances )" not in prepare_tail or "( void )m_instanceRenderer.renderForwardPass" not in prepare_tail:
+if "if ( m_bForwardPreparedHasInstances )" not in prepare_tail or "instances_ok = m_instanceRenderer.renderForwardPass" not in prepare_tail:
     fail("Forward+ SUBMIT does not isolate companion instance submission")
+if "if ( !instances_ok )" not in prepare_tail or "if ( terrain_ok )" not in prepare_tail:
+    fail("Forward+ instance failure is not diagnosed independently of terrain success")
 
 print("PASS: terrain rendering is the primary lane; instance/HLOD/ocean failures cannot veto a valid terrain pass")

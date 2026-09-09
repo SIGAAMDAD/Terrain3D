@@ -86,7 +86,8 @@ private:
 	        const TypedArray<PackedByteArray> &rInitialData,
 	        const String &rName,
 	        uint64_t nBytes,
-	        int nMemoryCategory );
+	        int nMemoryCategory,
+	        bool bFailureFatal );
 	bool renderUpdateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray &rData );
 	void renderTrackedTextureLayerBatch( uint32_t nSlot, uint64_t nGeneration );
 	bool renderUpdateTextureRegion( RID hTexture,
@@ -130,7 +131,8 @@ public:
 	RID createTexture( const t3dRdTextureLayout_t &rLayout,
 	        const TypedArray<PackedByteArray> &rInitialData,
 	        const String &rName,
-	        int nMemoryCategory = -1 );
+	        int nMemoryCategory = -1,
+	        bool bFailureFatal = true );
 	bool updateTexture( RID hTexture, uint32_t nLayer, const PackedByteArray &rData );
 	uint64_t nextTrackedTextureBatchGeneration( void );
 	bool submitTrackedTextureLayerBatch(

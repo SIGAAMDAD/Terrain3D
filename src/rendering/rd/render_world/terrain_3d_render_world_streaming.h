@@ -47,6 +47,12 @@ struct T3DVTStreamingBuffers {
 	uint32_t nScratchLaneBytes;
 	uint32_t *pScratchLaneOwner;
 	t3dAtomic_t<uint32_t> *pScratchLaneCompletion;
+	uint16_t *pPageToJob;
+	uint32_t nPageToJobCapacity;
+	uint16_t *pFreeJobs;
+	uint16_t *pQueuedJobs;
+	uint16_t *pJobQueuePosition;
+	uint16_t *pReadyJobs;
 };
 
 struct T3DVTStreamingStats {
@@ -69,6 +75,9 @@ struct T3DVTStreamingState {
 	T3DVTStreamingBuffers Buffers;
 	T3DVTStreamingStats Stats;
 	uint64_t nUploadBudgetBytesPerFrame;
+	uint32_t nFreeJobCount;
+	uint32_t nQueuedJobCount;
+	uint32_t nReadyJobCount;
 	bool bInitialized;
 };
 
@@ -99,6 +108,7 @@ uint32_t t3d_render_world_vt_streaming_ingest_readback_owner_hot( T3DVTStreaming
         uint32_t pFrameId,
         T3DVTGpuCounters &rCounters );
 bool t3d_render_world_vt_streaming_claim_job_owner_hot( T3DVTStreamingState &rState, uint32_t &rJobIndex );
+bool t3d_render_world_vt_streaming_cancel_claim_owner_hot( T3DVTStreamingState &rState, uint32_t pJobIndex );
 bool t3d_render_world_vt_streaming_execute_job_async(
         T3DVTStreamingState &rState, uint32_t pJobIndex, T3DVTStreamReadDecodeFn pReadDecode, void *pUser );
 uint64_t t3d_render_world_vt_streaming_service_uploads_hot(

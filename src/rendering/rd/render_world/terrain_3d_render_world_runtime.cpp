@@ -76,8 +76,22 @@ Terrain3DRenderWorldRuntime::Terrain3DRenderWorldRuntime() : m_ForwardLighting( 
 		m_pPhysicalSlots[i] = NULL;
 	}
 	m_pStreamJobs = NULL;
+	m_pStreamPageToJob = NULL;
+	m_pStreamFreeJobs = NULL;
+	m_pStreamQueuedJobs = NULL;
+	m_pStreamJobQueuePosition = NULL;
+	m_pStreamReadyJobs = NULL;
+	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+		m_pRetiredSlots[c] = NULL;
+	}
 	m_pStreamScratch = NULL;
 	m_pScratchLaneOwner = NULL;
+	m_pWorkerThreadPool = WorkerThreadPool::get_singleton();
+	m_pVtReadDecode = decode_vt_payload_raw;
+	m_pVtReadDecodeUser = NULL;
+	for ( uint32_t i = 0u; i < T3D_RW_MAX_STREAM_SCRATCH_LANES; ++i ) {
+		m_VtWorkerContexts[i].m_pOwner = this;
+	}
 	m_pOperationEvents = NULL;
 	m_nOperationWriteIndex = 0u;
 	m_nFramebufferFormat = RenderingDevice::INVALID_ID;
@@ -176,6 +190,17 @@ bool Terrain3DRenderWorldRuntime::allocate_cpu_image_cold() {
 		nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )nCapacity * sizeof( T3DVTPhysicalSlot );
 	}
 	nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nMaxStreamJobs * sizeof( T3DVTStreamJob );
+	nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint16_t );
+	for ( uint32_t i = 0u; i < 4u; ++i ) {
+		nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nMaxStreamJobs * sizeof( uint16_t );
+	}
+	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+		const uint32_t nCapacity = c == T3D_RW_VT_ALBEDO ? m_Limits.nMaxVtPhysicalAlbedoPages
+		        : c == T3D_RW_VT_NORMAL                  ? m_Limits.nMaxVtPhysicalNormalPages
+		        : c == T3D_RW_VT_SURFACE                 ? m_Limits.nMaxVtPhysicalSurfacePages
+		                                                 : m_Limits.nMaxVtPhysicalHeightPages;
+		nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )nCapacity * sizeof( uint16_t );
+	}
 	nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nStreamScratchLaneCount * m_Limits.nStreamScratchBytesPerLane;
 	nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nStreamScratchLaneCount * sizeof( uint32_t );
 	nBytes = t3dRwAlign64( nBytes ) + ( uint64_t )m_Limits.nOperationEventCapacity * sizeof( T3DOperationEvent );
@@ -206,6 +231,24 @@ bool Terrain3DRenderWorldRuntime::allocate_cpu_image_cold() {
 	nOffset = t3dRwAlign64( nOffset );
 	m_pStreamJobs = ( T3DVTStreamJob * )( pBase + nOffset );
 	nOffset += ( uint64_t )m_Limits.nMaxStreamJobs * sizeof( T3DVTStreamJob );
+	nOffset = t3dRwAlign64( nOffset );
+	m_pStreamPageToJob = ( uint16_t * )( pBase + nOffset );
+	nOffset += ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint16_t );
+	uint16_t **pJobArrays[4] = { &m_pStreamFreeJobs, &m_pStreamQueuedJobs, &m_pStreamJobQueuePosition, &m_pStreamReadyJobs };
+	for ( uint32_t i = 0u; i < 4u; ++i ) {
+		nOffset = t3dRwAlign64( nOffset );
+		*pJobArrays[i] = ( uint16_t * )( pBase + nOffset );
+		nOffset += ( uint64_t )m_Limits.nMaxStreamJobs * sizeof( uint16_t );
+	}
+	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+		nOffset = t3dRwAlign64( nOffset );
+		const uint32_t nCapacity = c == T3D_RW_VT_ALBEDO ? m_Limits.nMaxVtPhysicalAlbedoPages
+		        : c == T3D_RW_VT_NORMAL                  ? m_Limits.nMaxVtPhysicalNormalPages
+		        : c == T3D_RW_VT_SURFACE                 ? m_Limits.nMaxVtPhysicalSurfacePages
+		                                                 : m_Limits.nMaxVtPhysicalHeightPages;
+		m_pRetiredSlots[c] = ( uint16_t * )( pBase + nOffset );
+		nOffset += ( uint64_t )nCapacity * sizeof( uint16_t );
+	}
 	nOffset = t3dRwAlign64( nOffset );
 	m_pStreamScratch = pBase + nOffset;
 	nOffset += ( uint64_t )m_Limits.nStreamScratchLaneCount * m_Limits.nStreamScratchBytesPerLane;
@@ -289,6 +332,9 @@ bool Terrain3DRenderWorldRuntime::initialize_neutral_vt_cold() {
 	residencyBuffers.nPhysicalSlotCapacity[T3D_RW_VT_NORMAL] = m_Limits.nMaxVtPhysicalNormalPages;
 	residencyBuffers.nPhysicalSlotCapacity[T3D_RW_VT_SURFACE] = m_Limits.nMaxVtPhysicalSurfacePages;
 	residencyBuffers.nPhysicalSlotCapacity[T3D_RW_VT_HEIGHT] = m_Limits.nMaxVtPhysicalHeightPages;
+	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+		residencyBuffers.pRetiredSlots[c] = m_pRetiredSlots[c];
+	}
 	if ( !t3d_render_world_vt_initialize_residency_cold( m_NeutralDatabase, residencyBuffers, 1u, m_Residency ) ) {
 		return false;
 	}
@@ -301,6 +347,12 @@ bool Terrain3DRenderWorldRuntime::initialize_neutral_vt_cold() {
 	streamBuffers.nScratchLaneBytes = ( uint32_t )m_Limits.nStreamScratchBytesPerLane;
 	streamBuffers.pScratchLaneOwner = m_pScratchLaneOwner;
 	streamBuffers.pScratchLaneCompletion = m_ScratchLaneCompletion;
+	streamBuffers.pPageToJob = m_pStreamPageToJob;
+	streamBuffers.nPageToJobCapacity = m_Limits.nMaxVtVirtualPages;
+	streamBuffers.pFreeJobs = m_pStreamFreeJobs;
+	streamBuffers.pQueuedJobs = m_pStreamQueuedJobs;
+	streamBuffers.pJobQueuePosition = m_pStreamJobQueuePosition;
+	streamBuffers.pReadyJobs = m_pStreamReadyJobs;
 	for ( uint32_t i = 0u; i < m_Limits.nStreamScratchLaneCount; ++i ) {
 		m_ScratchLaneCompletion[i].store( T3D_VT_STREAM_COMPLETION_IDLE, T3D_MEMORY_ORDER_RELAXED );
 	}
@@ -331,11 +383,100 @@ bool Terrain3DRenderWorldRuntime::initialize_neutral_vt_cold() {
 	return t3d_render_world_vt_finalize_neutral_publication_warm( m_Residency );
 }
 
+bool Terrain3DRenderWorldRuntime::decode_vt_payload_raw( const T3DVTDatabaseView &pDatabase,
+        const T3DVTStreamJob &pJob,
+        uint8_t *pScratch,
+        const uint32_t pScratchCapacity,
+        uint32_t &rDecodedBytes,
+        void * ) {
+	rDecodedBytes = 0u;
+	if ( pDatabase.pHeader == NULL || pDatabase.pPayloads == NULL || pDatabase.pPayloadData == NULL
+	        || pJob.nPayloadId >= pDatabase.pHeader->nPayloadCount ) {
+		return false;
+	}
+	const T3DVTPayloadRecord &payload = pDatabase.pPayloads[pJob.nPayloadId];
+	if ( payload.nCodec != 0u || payload.nCompressedBytes != payload.nDecodedBytes || payload.nDecodedBytes == 0u
+	        || payload.nDecodedBytes > pScratchCapacity
+	        || payload.nOffset + payload.nCompressedBytes > pDatabase.pHeader->nPayloadDataBytes ) {
+		return false;
+	}
+	memcpy( pScratch, pDatabase.pPayloadData + payload.nOffset, payload.nDecodedBytes );
+	rDecodedBytes = payload.nDecodedBytes;
+	return true;
+}
+
+void Terrain3DRenderWorldRuntime::vt_stream_worker_entry( void *const pUser ) {
+	t3dVtWorkerContext_t *const pContext = ( t3dVtWorkerContext_t * )pUser;
+	if ( pContext == NULL || pContext->m_pOwner == NULL ) {
+		return;
+	}
+	Terrain3DRenderWorldRuntime *const pOwner = pContext->m_pOwner;
+	pOwner->m_RenderWorld.execute_vt_stream_job_async( pContext->m_nJobIndex, pOwner->m_pVtReadDecode, pOwner->m_pVtReadDecodeUser );
+	pContext->m_nBusy.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+}
+
+void Terrain3DRenderWorldRuntime::service_vt_stream_workers_hot() {
+	if ( !m_bInitialized || m_pWorkerThreadPool == NULL || m_pVtReadDecode == NULL ) {
+		return;
+	}
+	const uint32_t nWorkerCount = MIN( m_Limits.nStreamScratchLaneCount, ( uint32_t )T3D_RW_MAX_STREAM_SCRATCH_LANES );
+	for ( uint32_t i = 0u; i < nWorkerCount; ++i ) {
+		t3dVtWorkerContext_t &context = m_VtWorkerContexts[i];
+		if ( context.m_nBusy.load( T3D_MEMORY_ORDER_ACQUIRE ) != 0u ) {
+			continue;
+		}
+		if ( context.m_nTaskId != WorkerThreadPool::INVALID_TASK_ID ) {
+			if ( !m_pWorkerThreadPool->is_task_completed( context.m_nTaskId ) ) {
+				continue;
+			}
+			m_pWorkerThreadPool->wait_for_task_completion( context.m_nTaskId );
+			context.m_nTaskId = WorkerThreadPool::INVALID_TASK_ID;
+		}
+		uint32_t nJob = T3D_RW_INVALID_ID;
+		if ( !m_RenderWorld.claim_vt_stream_job_owner_hot( nJob ) ) {
+			break;
+		}
+		context.m_nJobIndex = nJob;
+		context.m_nBusy.store( 1u, T3D_MEMORY_ORDER_RELEASE );
+		context.m_nTaskId = m_pWorkerThreadPool->add_native_task( vt_stream_worker_entry, &context, false, "Terrain3D VT stream decode" );
+		if ( context.m_nTaskId == WorkerThreadPool::INVALID_TASK_ID ) {
+			context.m_nBusy.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+			t3d_render_world_vt_streaming_cancel_claim_owner_hot( m_Streaming, nJob );
+			break;
+		}
+	}
+}
+
+void Terrain3DRenderWorldRuntime::wait_vt_stream_workers_cold() {
+	if ( m_pWorkerThreadPool == NULL ) {
+		return;
+	}
+	for ( uint32_t i = 0u; i < T3D_RW_MAX_STREAM_SCRATCH_LANES; ++i ) {
+		t3dVtWorkerContext_t &context = m_VtWorkerContexts[i];
+		if ( context.m_nTaskId != WorkerThreadPool::INVALID_TASK_ID ) {
+			m_pWorkerThreadPool->wait_for_task_completion( context.m_nTaskId );
+			context.m_nTaskId = WorkerThreadPool::INVALID_TASK_ID;
+		}
+		context.m_nBusy.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+		context.m_nJobIndex = T3D_RW_INVALID_ID;
+	}
+}
+
+bool Terrain3DRenderWorldRuntime::configure_vt_stream_decode_cold( T3DVTStreamReadDecodeFn pReadDecode, void *const pUser ) {
+	if ( m_bInitialized ) {
+		return false;
+	}
+	m_pVtReadDecode = pReadDecode != NULL ? pReadDecode : decode_vt_payload_raw;
+	m_pVtReadDecodeUser = pUser;
+	return true;
+}
+
 bool Terrain3DRenderWorldRuntime::initialize_cold(
         Terrain3DRdContext &rContext, const t3dRdRenderWorldShaderBundle_t &rShaders, const int64_t pFramebufferFormat ) {
 	if ( m_bInitialized || pFramebufferFormat == RenderingDevice::INVALID_ID ) {
 		return false;
 	}
+	m_pWorkerThreadPool = WorkerThreadPool::get_singleton();
 	m_Limits = t3d_render_world_make_prototype_limits();
 	m_Profile = t3d_render_world_make_development_gpu_profile();
 	if ( !t3d_render_world_validate_limits( m_Limits ) || !t3d_render_world_validate_gpu_profile( m_Profile )
@@ -387,6 +528,7 @@ bool Terrain3DRenderWorldRuntime::initialize_cold(
 }
 
 void Terrain3DRenderWorldRuntime::shutdown_cold() {
+	wait_vt_stream_workers_cold();
 	m_bInitialized = false;
 	m_bHiZEnabled = false;
 	release_scene_cold();
@@ -610,6 +752,8 @@ bool Terrain3DRenderWorldRuntime::render_main_camera_hot( const t3dRdForwardPass
 	const uint32_t nLodCount = m_bScenePublished ? m_nPublishedLodCount : pLodCount;
 	const uint32_t nClusterCount = m_bScenePublished ? m_nPublishedClusterCount : pClusterCount;
 	build_visibility_frame_hot( pContext, nCellCount, nInstanceCount, nMeshCount, nLodCount, nClusterCount, frame );
+
+	service_vt_stream_workers_hot();
 
 	t3dRenderWorldPreparedViewKey_t key;
 	key.m_nRenderFrame = pContext.m_nRenderFrame;

@@ -615,6 +615,21 @@ typedef struct alignas( 16 ) t3dRdHlodCullDescriptor_s {
 static_assert( sizeof( t3dRdHlodCullDescriptor_t ) == 48u, "RD HLOD descriptor ABI changed" );
 static_assert( offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u, "RD HLOD descriptor flags ABI changed" );
 
+typedef struct alignas( 16 ) t3dRdInstanceCullDescriptor_s {
+	float m_szBoundsCenter[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float m_szBoundsExtent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	uint32_t m_nCommandIndex = 0u;
+	uint32_t m_nFirstInstance = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint32_t m_nFirstVisible = 0u;
+	uint32_t m_nVisibilityLayers = 1u;
+	uint32_t m_nFlags = 0u;
+	float m_fLodBegin = 0.0f;
+	float m_fLodEnd = 0.0f;
+} t3dRdInstanceCullDescriptor_t;
+static_assert( sizeof( t3dRdInstanceCullDescriptor_t ) == 64u, "RD instance cull descriptor ABI changed" );
+static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nCommandIndex ) == 32u, "RD instance cull command ABI changed" );
+
 // Material subset extracted from imported BaseMaterial3D resources. Texture
 // object IDs are immutable publication keys resolved by the direct-RD mesh
 // cache into Terrain3D-owned texture RIDs without native material proxies.

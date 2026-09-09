@@ -3,6 +3,7 @@
 #define TERRAIN3D_RD_MESH_CACHE_H
 
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
 
@@ -28,6 +29,16 @@ typedef struct t3dRdMeshSourceSurface_s {
 	uint32_t m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 );
 	AABB m_bounds;
 } t3dRdMeshSourceSurface_t;
+
+
+typedef struct t3dRdDirectSurfaceGpu_s {
+	RID m_hVertexBuffer;
+	RID m_hVertexArray;
+	RID m_hIndexBuffer;
+	RID m_hIndexArray;
+	uint32_t m_nVertexBytes = 0u;
+	uint32_t m_nIndexBytes = 0u;
+} t3dRdDirectSurfaceGpu_t;
 
 typedef struct t3dRdMeshSourceLod_s {
 	uint64_t m_nSourceKey = 0u;
@@ -107,6 +118,8 @@ typedef struct t3dRdMeshSourceSnapshot_s {
 
 class Terrain3DRdMeshCache {
 private:
+	CLASS_NAME_STATIC( "Terrain3DRdMeshCache" );
+
 	Terrain3DRdContext &m_context;
 	RID m_hVertexArena;
 	RID m_hVertexArray;
@@ -127,6 +140,10 @@ private:
 	uint64_t m_nArenaGrowthRequestCount = 0u;
 	uint64_t m_nArenaRebuildCount = 0u;
 	uint64_t m_nArenaRebuildFailureCount = 0u;
+	uint64_t m_nUploadAttemptCount = 0u;
+	uint64_t m_nUploadFailureCount = 0u;
+	uint64_t m_nTextureFallbackCount = 0u;
+	String m_lastError;
 	eastl::vector<t3dRdMeshSourceSurface_t, Terrain3DEastlAllocator> m_surfaces;
 	eastl::vector<t3dRdMeshSourceLod_t, Terrain3DEastlAllocator> m_lods;
 	eastl::vector<t3dRdInstanceMaterial_t, Terrain3DEastlAllocator> m_materials;
@@ -137,6 +154,9 @@ private:
 	PackedByteArray m_dirtyUploadScratch;
 	eastl::vector<t3dRdImportedTextureGpu_t, Terrain3DEastlAllocator> m_textureSyncNext;
 	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_textureSyncReused;
+#if T3D_INSTANCER_RD_PORT
+	eastl::vector<t3dRdDirectSurfaceGpu_t, Terrain3DEastlAllocator> m_directSurfaces;
+#endif
 
 	bool ensureVertexFormat( void );
 	bool ensureArena( RID &rBuffer,
@@ -146,6 +166,10 @@ private:
 	        Terrain3DRdContext::ResourceType resourceType,
 	        Terrain3DRdContext::MemoryCategory memoryCategory );
 	bool rebuildArrays( void );
+#if T3D_INSTANCER_RD_PORT
+	bool rebuildDirectSurfaces( const t3dRdMeshSourceSnapshot_t *pSnapshot );
+	void discardDirectSurfaces( void );
+#endif
 	bool syncTextures( const t3dRdMeshSourceSnapshot_t *pSnapshot );
 	bool uploadChangedChunks( const RID &rBuffer,
 	        const PackedByteArray &rCurrent,
@@ -155,6 +179,7 @@ private:
 	        uint64_t &nUploadedBytes );
 	void discardArrays( void );
 	void discardTextures( void );
+	void setError( const String &rError );
 
 public:
 	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
@@ -201,6 +226,9 @@ public:
 	EA_FORCE_INLINE size_t getSurfaceCount( void ) const {
 		return m_surfaces.size();
 	}
+	EA_FORCE_INLINE size_t getLodCount( void ) const {
+		return m_lods.size();
+	}
 	RID getTextureRid( uint64_t nSourceId ) const;
 	EA_FORCE_INLINE RID getVertexArray( void ) const {
 		return m_hVertexArray;
@@ -211,6 +239,17 @@ public:
 	EA_FORCE_INLINE RID getIndexArray( const RenderingDevice::IndexBufferFormat format ) const {
 		return format == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? m_hIndex16Array : m_hIndex32Array;
 	}
+#if T3D_INSTANCER_RD_PORT
+	EA_FORCE_INLINE RID getDirectSurfaceVertexArray( const uint32_t nSurfaceSlot ) const {
+		return nSurfaceSlot < m_directSurfaces.size() ? m_directSurfaces[nSurfaceSlot].m_hVertexArray : RID();
+	}
+	EA_FORCE_INLINE RID getDirectSurfaceIndexArray( const uint32_t nSurfaceSlot ) const {
+		return nSurfaceSlot < m_directSurfaces.size() ? m_directSurfaces[nSurfaceSlot].m_hIndexArray : RID();
+	}
+	EA_FORCE_INLINE uint32_t getDirectSurfaceCount( void ) const {
+		return ( uint32_t )( m_directSurfaces.size() );
+	}
+#endif
 	EA_FORCE_INLINE uint32_t getGeneration( void ) const {
 		return m_nGeneration;
 	}
@@ -224,18 +263,31 @@ public:
 			const t3dRdImportedTextureGpu_t &texture = ( m_textures )[iTexture];
 			bytes += texture.m_nBytes;
 		}
+#if T3D_INSTANCER_RD_PORT
+		for ( size_t iSurface = 0u; iSurface < m_directSurfaces.size(); ++iSurface ) {
+			bytes += m_directSurfaces[iSurface].m_nVertexBytes + m_directSurfaces[iSurface].m_nIndexBytes;
+		}
+#endif
 		return bytes;
 	}
 	EA_FORCE_INLINE uint32_t getTextureCount( void ) const {
 		return ( uint32_t )( m_textures.size() );
 	}
 	EA_FORCE_INLINE bool isReady( void ) const {
+#if T3D_INSTANCER_RD_PORT
+		return !m_directSurfaces.empty() && m_nGeneration != 0u;
+#else
 		return m_hVertexArray.is_valid() && m_nGeneration != 0u;
+#endif
 	}
 	EA_FORCE_INLINE uint64_t getArenaCapacityMissCount( void ) const { return m_nArenaCapacityMissCount; }
 	EA_FORCE_INLINE uint64_t getArenaGrowthRequestCount( void ) const { return m_nArenaGrowthRequestCount; }
 	EA_FORCE_INLINE uint64_t getArenaRebuildCount( void ) const { return m_nArenaRebuildCount; }
 	EA_FORCE_INLINE uint64_t getArenaRebuildFailureCount( void ) const { return m_nArenaRebuildFailureCount; }
+	EA_FORCE_INLINE uint64_t getUploadAttemptCount( void ) const { return m_nUploadAttemptCount; }
+	EA_FORCE_INLINE uint64_t getUploadFailureCount( void ) const { return m_nUploadFailureCount; }
+	EA_FORCE_INLINE uint64_t getTextureFallbackCount( void ) const { return m_nTextureFallbackCount; }
+	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }
 	EA_FORCE_INLINE uint32_t getVertexCapacityBytes( void ) const { return m_nVertexCapacityBytes; }
 	EA_FORCE_INLINE uint32_t getIndex16CapacityBytes( void ) const { return m_nIndex16CapacityBytes; }
 	EA_FORCE_INLINE uint32_t getIndex32CapacityBytes( void ) const { return m_nIndex32CapacityBytes; }

@@ -156,7 +156,7 @@ bool t3d_render_world_vt_initialize_residency_cold( const T3DVTDatabaseView &pDa
 		return false;
 	}
 	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
-		if ( pBuffers.pPhysicalSlots[c] == NULL || pBuffers.nPhysicalSlotCapacity[c] < 2u ) {
+		if ( pBuffers.pPhysicalSlots[c] == NULL || pBuffers.pRetiredSlots[c] == NULL || pBuffers.nPhysicalSlotCapacity[c] < 2u ) {
 			return false;
 		}
 	}
@@ -437,6 +437,13 @@ bool t3d_render_world_vt_commit_upload_hot( T3DVTResidencyState &rState, const T
 		pVictimSlot = &rState.Buffers.pPhysicalSlots[pReservation.nChannel][VictimEntry.nPhysicalSlot];
 	}
 
+	// Retired-slot bookkeeping is fixed-capacity. Validate it before mutating
+	// either the replacement or victim publication so commit remains atomic.
+	if ( pVictimSlot != NULL
+	        && rState.nRetiredSlotCount[pReservation.nChannel] >= rState.Buffers.nPhysicalSlotCapacity[pReservation.nChannel] ) {
+		return false;
+	}
+
 	// The owner prevalidated this exact reservation before publishing the GPU
 	// page-table entry. No owner-visible state may change between validation and
 	// this commit, so the CPU publication below is a non-failing mutation phase.
@@ -457,8 +464,10 @@ bool t3d_render_world_vt_commit_upload_hot( T3DVTResidencyState &rState, const T
 	// The victim remains logically and physically resident until its GPU page-table
 	// invalidation succeeds. RETIRED removes it from CLOCK/free-slot reuse only.
 	if ( pVictimSlot != NULL ) {
+		const uint32_t nVictimSlot = ( uint32_t )( pVictimSlot - rState.Buffers.pPhysicalSlots[pReservation.nChannel] );
 		pVictimSlot->nFlags |= T3D_VT_SLOT_RETIRED;
 		pVictimSlot->nPendingVictimPage = pReservation.nVictimPage;
+		rState.Buffers.pRetiredSlots[pReservation.nChannel][rState.nRetiredSlotCount[pReservation.nChannel]++] = ( uint16_t )nVictimSlot;
 	}
 	return true;
 }
@@ -494,6 +503,18 @@ bool t3d_render_world_vt_finalize_eviction_hot(
 	++rState.Stats.nEvictionCount;
 	++rState.Stats.nRetireFinalizeCount;
 	++rState.nPageTableGeneration;
+	for ( uint32_t i = 0u; i < rState.nRetiredSlotCount[pChannel]; ++i ) {
+		if ( rState.Buffers.pRetiredSlots[pChannel][i] != pPhysicalSlot ) {
+			continue;
+		}
+		if ( i + 1u < rState.nRetiredSlotCount[pChannel] ) {
+			memmove( rState.Buffers.pRetiredSlots[pChannel] + i,
+			        rState.Buffers.pRetiredSlots[pChannel] + i + 1u,
+			        ( rState.nRetiredSlotCount[pChannel] - i - 1u ) * sizeof( uint16_t ) );
+		}
+		--rState.nRetiredSlotCount[pChannel];
+		break;
+	}
 	return true;
 }
 

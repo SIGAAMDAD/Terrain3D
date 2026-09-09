@@ -285,21 +285,23 @@ void Terrain3DUtil::printDict( const String &strName, const Dictionary &rDict, c
 	LOG( nLevel, "Dictionary: ", strName );
 	const Array keys = rDict.keys();
 	for ( size_t iKey = 0u; iKey < ( size_t )( ( keys ).size() ); iKey++ ) {
-		const StringName key = ( keys )[iKey];
-		const Variant var = rDict[key];
+		const Variant key_variant = keys[( int64_t )( iKey )];
+		const String key = key_variant.stringify();
+		const Variant var = rDict.get( key_variant, Variant() );
 		switch ( var.get_type() ) {
 			case Variant::ARRAY: {
-				printArr( String( key ), var, nLevel );
+				printArr( key, var, nLevel );
 				break;
 			}
 			case Variant::DICTIONARY: {
-				printDict( String( key ), var, nLevel );
+				printDict( key, var, nLevel );
 				break;
 			}
 			case Variant::OBJECT: {
 				Object *const pObj = cast_to<Object>( var );
-				const String str =
-				        String( "Object#" ) + String::num_uint64( pObj->get_instance_id() ) + String( ", " ) + t3dPtrToStr( pObj );
+				const String str = pObj
+				        ? String( "Object#" ) + String::num_uint64( pObj->get_instance_id() ) + String( ", " ) + t3dPtrToStr( pObj )
+				        : String( "<null>" );
 				LOG( nLevel, "\"", key, "\": ", str );
 				break;
 			}

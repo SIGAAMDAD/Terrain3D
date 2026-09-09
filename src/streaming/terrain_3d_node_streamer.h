@@ -132,6 +132,9 @@ private:
 	int m_nGlobalTransformsReadLastTick = 0;
 	int m_nMigrationsLastTick = 0;
 	uint64_t m_nMigrationUsecLastTick = 0u;
+	uint32_t m_nMovableMigrationCadence = 4u;
+	uint32_t m_nMovableMigrationTick = 0u;
+	bool m_bMigrationScanSkippedLastTick = false;
 	uint64_t m_nNextSpawnId = 1u;
 	uint64_t m_nRuntimeGeneration = 1u;
 	Vector2i m_center = s_v2iMax;

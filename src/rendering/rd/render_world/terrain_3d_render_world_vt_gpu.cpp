@@ -35,6 +35,7 @@ Terrain3DRenderWorldVTGpu::Terrain3DRenderWorldVTGpu() {
 	m_bInitialized = false;
 	m_bDatabaseUploadedWarm = false;
 	m_bReadbackEnabled = false;
+	m_nLastReadbackScheduleFrame = T3D_RW_INVALID_ID;
 	m_bHotSealed = false;
 }
 
@@ -61,6 +62,7 @@ bool Terrain3DRenderWorldVTGpu::initialize_cold( const Terrain3DRenderWorldResou
 	m_pRenderingDevice = pRenderingDevice;
 	m_pResources = pResources;
 	m_Limits = pLimits;
+	m_nLastReadbackScheduleFrame = T3D_RW_INVALID_ID;
 	m_bReadbackEnabled = pReadbackCallbacks != NULL;
 	for ( uint32_t i = 0u; i < T3D_RW_GPU_FRAME_RING_COUNT; ++i ) {
 		if ( pReadbackCallbacks != NULL && pReadbackCallbacks[i].is_valid() ) {
@@ -103,8 +105,19 @@ bool Terrain3DRenderWorldVTGpu::initialize_cold( const Terrain3DRenderWorldResou
 		return false;
 	}
 	memcpy( m_CompactPush.ptrw(), &DispatchPush, sizeof( DispatchPush ) );
-	m_PageEntryUpload.resize( ( int64_t )sizeof( T3DVTPageTableEntry ) );
-	if ( m_PageEntryUpload.size() != ( int64_t )sizeof( T3DVTPageTableEntry ) ) {
+	const uint32_t nRetiredScratchCapacity = pLimits.nMaxVtPhysicalAlbedoPages + pLimits.nMaxVtPhysicalNormalPages
+	        + pLimits.nMaxVtPhysicalSurfacePages + pLimits.nMaxVtPhysicalHeightPages;
+	const uint64_t nPageScratchBytes64 = ( uint64_t )MAX( nRetiredScratchCapacity, 1u ) * sizeof( T3DVTPageTableEntry );
+	if ( nPageScratchBytes64 > INT32_MAX ) {
+		shutdown_cold();
+		return false;
+	}
+	m_PageEntryUpload.resize( ( int64_t )nPageScratchBytes64 );
+	m_RetiredPageScratch.resize( ( int64_t )MAX( nRetiredScratchCapacity, 1u ) );
+	m_RetiredSlotScratch.resize( ( int64_t )MAX( nRetiredScratchCapacity, 1u ) );
+	if ( m_PageEntryUpload.size() != ( int64_t )nPageScratchBytes64
+	        || m_RetiredPageScratch.size() != ( int64_t )MAX( nRetiredScratchCapacity, 1u )
+	        || m_RetiredSlotScratch.size() != ( int64_t )MAX( nRetiredScratchCapacity, 1u ) ) {
 		shutdown_cold();
 		return false;
 	}
@@ -145,6 +158,8 @@ void Terrain3DRenderWorldVTGpu::shutdown_cold() {
 	}
 	m_CompactPush.resize( 0 );
 	m_PageEntryUpload.resize( 0 );
+	m_RetiredPageScratch.resize( 0 );
+	m_RetiredSlotScratch.resize( 0 );
 	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNEL_COUNT; ++c ) {
 		m_PhysicalUpload[c].resize( 0 );
 	}
@@ -152,6 +167,7 @@ void Terrain3DRenderWorldVTGpu::shutdown_cold() {
 	memset( m_nReadbackFrameId, 0, sizeof( m_nReadbackFrameId ) );
 	m_pRenderingDevice = NULL;
 	m_pResources = NULL;
+	m_nLastReadbackScheduleFrame = T3D_RW_INVALID_ID;
 	m_bDatabaseUploadedWarm = false;
 	m_bReadbackEnabled = false;
 	m_bInitialized = false;
@@ -267,15 +283,19 @@ bool Terrain3DRenderWorldVTGpu::upload_neutral_backing_warm( T3DVTResidencyState
 }
 
 bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot( const T3DRenderWorldLimits &pLimits ) {
-	if ( !m_bInitialized || !m_bHotSealed || m_pRenderingDevice == NULL || !hot_epoch_unchanged() ) {
+	if ( !m_bInitialized || !m_bHotSealed || m_pRenderingDevice == NULL || m_pResources == NULL || !hot_epoch_unchanged() ) {
 		++m_Stats.nHotViolationCount;
 		return false;
 	}
 	const uint32_t nHashEntries = pLimits.nMaxVtRequests * 2u;
 	const uint32_t nHashGroups = ( nHashEntries + 63u ) / 64u;
-	if ( nHashGroups == 0u ) {
+	const RID &hIndirect = m_pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_INDIRECT_ARGS );
+	if ( nHashGroups == 0u || !hIndirect.is_valid() ) {
 		return false;
 	}
+	static const uint32_t s_szTierIndirectOffset[T3D_RW_TIER_COUNT] = {
+		T3D_RW_INDIRECT_VT_WORLD_OFFSET, T3D_RW_INDIRECT_VT_CLUTTER_OFFSET, T3D_RW_INDIRECT_VT_FOLIAGE_OFFSET
+	};
 	const int64_t nList = m_pRenderingDevice->compute_list_begin();
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_RESET] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformReset, 0u );
@@ -285,18 +305,17 @@ bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot( const T3DRenderWorldLim
 	m_pRenderingDevice->compute_list_add_barrier( nList );
 	++m_Stats.nBarrierCount;
 	for ( uint32_t tier = 0u; tier < T3D_RW_TIER_COUNT; ++tier ) {
-		const uint32_t nGroups = ( pLimits.nMaxVisibleClusters[tier] + 63u ) / 64u;
-		if ( nGroups == 0u ) {
-			continue;
-		}
 		m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_PREDICT] );
 		m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformPredict[tier], 0u );
 		m_pRenderingDevice->compute_list_set_push_constant( nList, m_TierPush[tier], ( uint32_t )m_TierPush[tier].size() );
-		m_pRenderingDevice->compute_list_dispatch( nList, nGroups, 1u, 1u );
+		m_pRenderingDevice->compute_list_dispatch_indirect( nList, hIndirect, s_szTierIndirectOffset[tier] );
 		++m_Stats.nDispatchCount;
+		++m_Stats.nVariableTierDispatchCount;
 		m_pRenderingDevice->compute_list_add_barrier( nList );
 		++m_Stats.nBarrierCount;
 	}
+	// Hash compaction still addresses the fixed hash domain. It is intentionally
+	// tracked separately from the live/indirect prediction tiers.
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPE_COMPACT] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformCompact, 0u );
 	m_pRenderingDevice->compute_list_set_push_constant( nList, m_CompactPush, ( uint32_t )m_CompactPush.size() );
@@ -315,6 +334,13 @@ bool Terrain3DRenderWorldVTGpu::schedule_request_readback_hot( uint32_t pFrameId
 	}
 	if ( !m_bReadbackEnabled ) {
 		return false;
+	}
+	// Readback service is intentionally decoupled from raster FPS. At 240-300 Hz
+	// this bounds D2H callback/copy pressure without changing the GPU request rate.
+	static const uint32_t s_nReadbackFrameCadence = 4u;
+	if ( m_nLastReadbackScheduleFrame != T3D_RW_INVALID_ID && pFrameId - m_nLastReadbackScheduleFrame < s_nReadbackFrameCadence ) {
+		++m_Stats.nReadbackCadenceSkipCount;
+		return true;
 	}
 	const uint32_t nSlot = pFrameId % T3D_RW_GPU_FRAME_RING_COUNT;
 	if ( m_bReadbackInFlight[nSlot] ) {
@@ -347,7 +373,9 @@ bool Terrain3DRenderWorldVTGpu::schedule_request_readback_hot( uint32_t pFrameId
 	}
 	m_bReadbackInFlight[nSlot] = true;
 	m_nReadbackFrameId[nSlot] = pFrameId;
+	m_nLastReadbackScheduleFrame = pFrameId;
 	++m_Stats.nAsyncReadbackCount;
+	m_Stats.nReadbackBytes += nTotal;
 	return true;
 }
 
@@ -380,16 +408,85 @@ bool Terrain3DRenderWorldVTGpu::service_retired_slots_hot( T3DVTResidencyState &
 	}
 	bool bAllRetiredPublished = true;
 	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNEL_COUNT; ++c ) {
-		for ( uint32_t s = 0u; s < rResidency.Buffers.nPhysicalSlotCapacity[c]; ++s ) {
-			T3DVTPhysicalSlot &Slot = rResidency.Buffers.pPhysicalSlots[c][s];
-			if ( ( Slot.nFlags & T3D_VT_SLOT_RETIRED ) == 0u ) {
-				continue;
+		const uint32_t nCount = rResidency.nRetiredSlotCount[c];
+		if ( nCount == 0u ) {
+			continue;
+		}
+		if ( nCount > ( uint32_t )m_RetiredPageScratch.size() || nCount > ( uint32_t )m_RetiredSlotScratch.size() ) {
+			return false;
+		}
+		int32_t *const pPages = m_RetiredPageScratch.ptrw();
+		int32_t *const pSlots = m_RetiredSlotScratch.ptrw();
+		for ( uint32_t i = 0u; i < nCount; ++i ) {
+			const uint32_t nSlot = rResidency.Buffers.pRetiredSlots[c][i];
+			if ( nSlot >= rResidency.Buffers.nPhysicalSlotCapacity[c] ) {
+				return false;
 			}
-			if ( !retire_victim_gpu_hot( rResidency, c, s, Slot.nVirtualPage ) ) {
+			const T3DVTPhysicalSlot &slot = rResidency.Buffers.pPhysicalSlots[c][nSlot];
+			if ( slot.nVirtualPage >= rResidency.pDatabase->pHeader->nPageCount ) {
+				return false;
+			}
+			uint32_t insert = i;
+			while ( insert > 0u && ( uint32_t )pPages[insert - 1u] > slot.nVirtualPage ) {
+				pPages[insert] = pPages[insert - 1u];
+				pSlots[insert] = pSlots[insert - 1u];
+				--insert;
+			}
+			pPages[insert] = ( int32_t )slot.nVirtualPage;
+			pSlots[insert] = ( int32_t )nSlot;
+		}
+
+		uint32_t first = 0u;
+		while ( first < nCount ) {
+			uint32_t last = first + 1u;
+			while ( last < nCount && ( uint32_t )pPages[last] == ( uint32_t )pPages[last - 1u] + 1u ) {
+				++last;
+			}
+			const uint32_t nRunCount = last - first;
+			const uint32_t nRunBytes = nRunCount * sizeof( T3DVTPageTableEntry );
+			if ( nRunBytes > ( uint32_t )m_PageEntryUpload.size() ) {
+				return false;
+			}
+			for ( uint32_t i = 0u; i < nRunCount; ++i ) {
+				const uint32_t nPage = ( uint32_t )pPages[first + i];
+				const uint32_t nSlot = ( uint32_t )pSlots[first + i];
+				const T3DVTPhysicalSlot &slot = rResidency.Buffers.pPhysicalSlots[c][nSlot];
+				const T3DVTPageTableEntry &cpuEntry = rResidency.Buffers.pPageTable[nPage];
+				if ( ( slot.nFlags & T3D_VT_SLOT_RETIRED ) == 0u || slot.nVirtualPage != nPage
+				        || ( cpuEntry.nFlags & T3D_VT_PAGE_RESIDENT ) == 0u || cpuEntry.nPhysicalSlot != nSlot ) {
+					return false;
+				}
+				T3DVTPageTableEntry invalid = cpuEntry;
+				invalid.nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
+				invalid.nFlags &= ( uint16_t )~T3D_VT_PAGE_RESIDENT;
+				memcpy( m_PageEntryUpload.ptrw() + i * sizeof( T3DVTPageTableEntry ), &invalid, sizeof( invalid ) );
+			}
+			const uint64_t nOffset64 = ( uint64_t )( ( uint32_t )pPages[first] ) * sizeof( T3DVTPageTableEntry );
+			if ( nOffset64 > UINT32_MAX
+			        || m_pRenderingDevice->buffer_update( m_pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_VT_PAGE_TABLE ),
+			                   ( uint32_t )nOffset64,
+			                   nRunBytes,
+			                   m_PageEntryUpload )
+			                != OK ) {
 				++m_Stats.nRetireRetryCount;
 				++rResidency.Stats.nRetireDeferredCount;
 				bAllRetiredPublished = false;
+				first = last;
+				continue;
 			}
+			if ( Terrain3DRdContext *const pContext = m_pResources->get_rd_context() ) {
+				pContext->recordBufferUpdate( nRunBytes );
+			}
+			m_Stats.nPageTableUpdateBytes += nRunBytes;
+			++m_Stats.nPageTableUpdateCalls;
+			for ( uint32_t i = first; i < last; ++i ) {
+				const uint32_t nPage = ( uint32_t )pPages[i];
+				const uint32_t nSlot = ( uint32_t )pSlots[i];
+				if ( !t3d_render_world_vt_finalize_eviction_hot( rResidency, c, nSlot, nPage ) ) {
+					return false;
+				}
+			}
+			first = last;
 		}
 	}
 	return bAllRetiredPublished;
@@ -609,6 +706,8 @@ bool Terrain3DRenderWorldVTGpu::update_page_entry_hot( uint32_t pVirtualPage, ui
 	if ( Terrain3DRdContext *const pContext = m_pResources->get_rd_context() ) {
 		pContext->recordBufferUpdate( sizeof( T3DVTPageTableEntry ) );
 	}
+	m_Stats.nPageTableUpdateBytes += sizeof( T3DVTPageTableEntry );
+	++m_Stats.nPageTableUpdateCalls;
 	return true;
 }
 

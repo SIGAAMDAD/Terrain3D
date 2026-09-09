@@ -126,31 +126,35 @@ bool Terrain3DRenderWorldGpuVisibility::publish_frame_hot( const T3DVisibilityFr
 	return true;
 }
 
-bool Terrain3DRenderWorldGpuVisibility::dispatch_m04_hot( const T3DRenderWorldLimits &pLimits ) {
-	return dispatch_internal_hot( pLimits, m_hPipeline[PIPELINE_CLUSTER], m_hUniformSet[PIPELINE_CLUSTER] );
+bool Terrain3DRenderWorldGpuVisibility::dispatch_m04_hot( const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame ) {
+	return dispatch_internal_hot( pLimits, pFrame, m_hPipeline[PIPELINE_CLUSTER], m_hUniformSet[PIPELINE_CLUSTER] );
 }
 
-bool Terrain3DRenderWorldGpuVisibility::dispatch_with_cluster_override_hot(
-        const T3DRenderWorldLimits &pLimits, const RID &pClusterPipeline, const RID &pClusterUniformSet ) {
+bool Terrain3DRenderWorldGpuVisibility::dispatch_with_cluster_override_hot( const T3DRenderWorldLimits &pLimits,
+        const T3DVisibilityFrame &pFrame,
+        const RID &pClusterPipeline,
+        const RID &pClusterUniformSet ) {
 	if ( !pClusterPipeline.is_valid() || !pClusterUniformSet.is_valid() ) {
 		return false;
 	}
-	return dispatch_internal_hot( pLimits, pClusterPipeline, pClusterUniformSet );
+	return dispatch_internal_hot( pLimits, pFrame, pClusterPipeline, pClusterUniformSet );
 }
 
-bool Terrain3DRenderWorldGpuVisibility::dispatch_internal_hot(
-        const T3DRenderWorldLimits &pLimits, const RID &pClusterPipeline, const RID &pClusterUniformSet ) {
-	if ( !m_bInitialized || !m_bHotSealed || m_pRenderingDevice == NULL ) {
+bool Terrain3DRenderWorldGpuVisibility::dispatch_internal_hot( const T3DRenderWorldLimits &pLimits,
+        const T3DVisibilityFrame &pFrame,
+        const RID &pClusterPipeline,
+        const RID &pClusterUniformSet ) {
+	if ( !m_bInitialized || !m_bHotSealed || m_pRenderingDevice == NULL || m_pResources == NULL ) {
 		return false;
 	}
 	if ( !hot_epoch_unchanged() ) {
 		++m_Stats.nHotViolationCount;
 		return false;
 	}
-	const uint32_t nCellGroups = ( pLimits.nMaxCells + 63u ) / 64u;
-	const uint32_t nVisibleCellGroups = ( pLimits.nMaxVisibleCells + 63u ) / 64u;
-	const uint32_t nVisibleInstanceGroups = ( pLimits.nMaxVisibleInstances + 63u ) / 64u;
-	if ( nCellGroups == 0u || nVisibleCellGroups == 0u || nVisibleInstanceGroups == 0u ) {
+	const uint32_t nLiveCells = pFrame.nCellCount < pLimits.nMaxCells ? pFrame.nCellCount : pLimits.nMaxCells;
+	const uint32_t nCellGroups = ( nLiveCells + 63u ) / 64u;
+	const RID &hIndirect = m_pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_INDIRECT_ARGS );
+	if ( !hIndirect.is_valid() ) {
 		return false;
 	}
 
@@ -162,27 +166,51 @@ bool Terrain3DRenderWorldGpuVisibility::dispatch_internal_hot(
 	m_pRenderingDevice->compute_list_add_barrier( nList );
 	++m_Stats.nBarrierCount;
 
-	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_CELL] );
-	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_CELL], 0u );
-	m_pRenderingDevice->compute_list_dispatch( nList, nCellGroups, 1u, 1u );
+	if ( nCellGroups != 0u ) {
+		m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_CELL] );
+		m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_CELL], 0u );
+		m_pRenderingDevice->compute_list_dispatch( nList, nCellGroups, 1u, 1u );
+		++m_Stats.nDispatchCount;
+		m_Stats.nLaunchedVariableGroups += nCellGroups;
+		m_Stats.nRequiredVariableGroups += nCellGroups;
+		m_pRenderingDevice->compute_list_add_barrier( nList );
+		++m_Stats.nBarrierCount;
+	}
+
+	// Materialize live GPU counters into compute-indirect args before every
+	// counter-dependent stage. The one-thread args pass is deliberately tiny.
+	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_ARGS] );
+	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_ARGS], 0u );
+	m_pRenderingDevice->compute_list_dispatch( nList, 1u, 1u, 1u );
 	++m_Stats.nDispatchCount;
 	m_pRenderingDevice->compute_list_add_barrier( nList );
 	++m_Stats.nBarrierCount;
 
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_INSTANCE] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_INSTANCE], 0u );
-	m_pRenderingDevice->compute_list_dispatch( nList, nVisibleCellGroups, 1u, 1u );
+	m_pRenderingDevice->compute_list_dispatch_indirect( nList, hIndirect, T3D_RW_INDIRECT_VIS_INSTANCE_OFFSET );
+	++m_Stats.nDispatchCount;
+	++m_Stats.nIndirectDispatchCount;
+	m_pRenderingDevice->compute_list_add_barrier( nList );
+	++m_Stats.nBarrierCount;
+
+	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_ARGS] );
+	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_ARGS], 0u );
+	m_pRenderingDevice->compute_list_dispatch( nList, 1u, 1u, 1u );
 	++m_Stats.nDispatchCount;
 	m_pRenderingDevice->compute_list_add_barrier( nList );
 	++m_Stats.nBarrierCount;
 
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, pClusterPipeline );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, pClusterUniformSet, 0u );
-	m_pRenderingDevice->compute_list_dispatch( nList, nVisibleInstanceGroups, 1u, 1u );
+	m_pRenderingDevice->compute_list_dispatch_indirect( nList, hIndirect, T3D_RW_INDIRECT_VIS_CLUSTER_OFFSET );
 	++m_Stats.nDispatchCount;
+	++m_Stats.nIndirectDispatchCount;
 	m_pRenderingDevice->compute_list_add_barrier( nList );
 	++m_Stats.nBarrierCount;
 
+	// Terminal args generation also prepares draw args and all three VT tier
+	// dispatch triplets from final live visible-cluster counters.
 	m_pRenderingDevice->compute_list_bind_compute_pipeline( nList, m_hPipeline[PIPELINE_ARGS] );
 	m_pRenderingDevice->compute_list_bind_uniform_set( nList, m_hUniformSet[PIPELINE_ARGS], 0u );
 	m_pRenderingDevice->compute_list_dispatch( nList, 1u, 1u, 1u );

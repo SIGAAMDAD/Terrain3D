@@ -26,6 +26,7 @@ class Terrain3DHLODBuilder : public RefCounted {
 
 public:
 	PackedInt32Array getInstancerMeshIds( Terrain3DRegion *pRegion ) const;
+	Dictionary analyzeInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
 	Dictionary buildInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
 	Dictionary simplifyMesh( const Ref<ArrayMesh> &rMesh, real_t fRatio ) const;
 

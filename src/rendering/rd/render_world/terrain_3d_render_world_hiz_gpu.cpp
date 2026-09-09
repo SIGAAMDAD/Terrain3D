@@ -165,11 +165,11 @@ bool Terrain3DRenderWorldHiZGpu::dispatch_hiz_hot( uint32_t pActiveWidth, uint32
 }
 
 bool Terrain3DRenderWorldHiZGpu::dispatch_visibility_m05_hot(
-        Terrain3DRenderWorldGpuVisibility &rVisibility, const T3DRenderWorldLimits &pLimits ) {
+        Terrain3DRenderWorldGpuVisibility &rVisibility, const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame ) {
 	if ( !m_bInitialized || !m_bHotSealed || !hot_epoch_unchanged() ) {
 		return false;
 	}
-	return rVisibility.dispatch_with_cluster_override_hot( pLimits, m_hClusterPipeline, m_hClusterUniformSet );
+	return rVisibility.dispatch_with_cluster_override_hot( pLimits, pFrame, m_hClusterPipeline, m_hClusterUniformSet );
 }
 
 bool Terrain3DRenderWorldHiZGpu::is_initialized() const {

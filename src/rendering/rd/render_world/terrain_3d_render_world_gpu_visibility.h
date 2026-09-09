@@ -15,7 +15,10 @@ struct T3DGpuVisibilityStats {
 	uint64_t nDispatchCount;
 	uint64_t nBarrierCount;
 	uint64_t nFrameUploadBytes;
+	uint64_t nLaunchedVariableGroups;
+	uint64_t nRequiredVariableGroups;
 	uint32_t nFrameUploadCount;
+	uint32_t nIndirectDispatchCount;
 	uint32_t nHotViolationCount;
 };
 
@@ -30,9 +33,11 @@ public:
 
 	bool upload_frame_reference_debug( const T3DVisibilityFrame &pFrame );
 	bool publish_frame_hot( const T3DVisibilityFrame &pFrame );
-	bool dispatch_m04_hot( const T3DRenderWorldLimits &pLimits );
-	bool dispatch_with_cluster_override_hot(
-	        const T3DRenderWorldLimits &pLimits, const godot::RID &pClusterPipeline, const godot::RID &pClusterUniformSet );
+	bool dispatch_m04_hot( const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame );
+	bool dispatch_with_cluster_override_hot( const T3DRenderWorldLimits &pLimits,
+	        const T3DVisibilityFrame &pFrame,
+	        const godot::RID &pClusterPipeline,
+	        const godot::RID &pClusterUniformSet );
 
 	bool is_initialized() const;
 	const T3DGpuVisibilityStats &get_stats() const;
@@ -50,8 +55,10 @@ private:
 	};
 
 	bool upload_frame_internal( const T3DVisibilityFrame &pFrame );
-	bool dispatch_internal_hot(
-	        const T3DRenderWorldLimits &pLimits, const godot::RID &pClusterPipeline, const godot::RID &pClusterUniformSet );
+	bool dispatch_internal_hot( const T3DRenderWorldLimits &pLimits,
+	        const T3DVisibilityFrame &pFrame,
+	        const godot::RID &pClusterPipeline,
+	        const godot::RID &pClusterUniformSet );
 	bool create_pipeline_cold( PipelineId pId, const godot::Ref<godot::RDShaderSPIRV> &rSpirv );
 	bool create_uniform_sets_cold();
 	bool create_uniform_set_cold( PipelineId pId, const T3DRenderWorldGpuBufferId *pBuffers, uint32_t pBufferCount );

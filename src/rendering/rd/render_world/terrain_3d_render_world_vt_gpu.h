@@ -9,6 +9,7 @@
 
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 
 struct T3DVTGpuStats {
@@ -20,9 +21,14 @@ struct T3DVTGpuStats {
 	uint64_t nUploadBytes;
 	uint64_t nReadbackConsumeCount;
 	uint64_t nAcceptedRequestCount;
+	uint64_t nReadbackBytes;
+	uint64_t nVariableTierDispatchCount;
 	uint64_t nRetireRetryCount;
+	uint64_t nPageTableUpdateBytes;
+	uint64_t nPageTableUpdateCalls;
 	uint32_t nReadbackRingBusyCount;
 	uint32_t nReadbackRejectCount;
+	uint32_t nReadbackCadenceSkipCount;
 	uint32_t nHotViolationCount;
 	uint32_t nReserved;
 };
@@ -100,10 +106,13 @@ private:
 	godot::PackedByteArray m_TierPush[T3D_RW_TIER_COUNT];
 	godot::PackedByteArray m_CompactPush;
 	godot::PackedByteArray m_PageEntryUpload;
+	godot::PackedInt32Array m_RetiredPageScratch;
+	godot::PackedInt32Array m_RetiredSlotScratch;
 	godot::PackedByteArray m_PhysicalUpload[T3D_RW_VT_CHANNEL_COUNT];
 	godot::Callable m_ReadbackCallback[T3D_RW_GPU_FRAME_RING_COUNT];
 	bool m_bReadbackInFlight[T3D_RW_GPU_FRAME_RING_COUNT];
 	uint32_t m_nReadbackFrameId[T3D_RW_GPU_FRAME_RING_COUNT];
+	uint32_t m_nLastReadbackScheduleFrame;
 	T3DVTGpuStats m_Stats;
 	uint64_t m_nHotCreateEpoch;
 	uint64_t m_nHotFreeEpoch;

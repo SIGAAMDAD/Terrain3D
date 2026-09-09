@@ -287,8 +287,8 @@ bool Terrain3DRenderWorld::prepare_camera_visibility_hot(
 	const bool bVisibilityOk = m_pHiZ != NULL
 	        ? ( m_pVisibility->publish_frame_hot( pFrame )
 	                  && m_pHiZ->dispatch_hiz_hot( pFrame.nHiZWidth, pFrame.nHiZHeight, pFrame.nHiZMipCount )
-	                  && m_pHiZ->dispatch_visibility_m05_hot( *m_pVisibility, pLimits ) )
-	        : ( m_pVisibility->publish_frame_hot( pFrame ) && m_pVisibility->dispatch_m04_hot( pLimits ) );
+	                  && m_pHiZ->dispatch_visibility_m05_hot( *m_pVisibility, pLimits, pFrame ) )
+	        : ( m_pVisibility->publish_frame_hot( pFrame ) && m_pVisibility->dispatch_m04_hot( pLimits, pFrame ) );
 	if ( !bVisibilityOk || !m_pVT->dispatch_prediction_hot( pLimits ) ) {
 		++m_Stats.nFailureCount;
 		return false;

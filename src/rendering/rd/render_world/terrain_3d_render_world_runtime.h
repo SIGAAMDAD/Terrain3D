@@ -12,6 +12,7 @@
 #include "rendering/rd/terrain_3d_rd_render_world_shader_bundle.h"
 
 #include <stdint.h>
+#include <godot_cpp/classes/worker_thread_pool.hpp>
 
 struct t3dRenderWorldPreparedViewKey_t {
 	uint64_t m_nRenderFrame = 0u;
@@ -46,6 +47,7 @@ public:
 	        uint64_t pClipmapPlacementGeneration,
 	        uint64_t pMaterialGeneration,
 	        uint64_t pLightingGeneration );
+	bool configure_vt_stream_decode_cold( T3DVTStreamReadDecodeFn pReadDecode, void *pUser );
 	bool upload_scene_database_warm( const T3DGeometryDatabase &pGeometry,
 	        const T3DSceneCell *pCells,
 	        uint32_t pCellCount,
@@ -85,6 +87,15 @@ private:
 	uint64_t hash_visibility_frame_hot( const T3DVisibilityFrame &rFrame ) const;
 	uint64_t build_culling_generation_hot( void ) const;
 	void invalidate_prepared_view( void );
+	static bool decode_vt_payload_raw( const T3DVTDatabaseView &pDatabase,
+	        const T3DVTStreamJob &pJob,
+	        uint8_t *pScratch,
+	        uint32_t pScratchCapacity,
+	        uint32_t &rDecodedBytes,
+	        void *pUser );
+	static void vt_stream_worker_entry( void *pUser );
+	void service_vt_stream_workers_hot();
+	void wait_vt_stream_workers_cold();
 	void build_visibility_frame_hot( const t3dRdForwardPassContext_t &pContext,
 	        uint32_t pCellCount,
 	        uint32_t pInstanceCount,
@@ -115,15 +126,32 @@ private:
 	T3DVTResidencyState m_Residency;
 	T3DVTStreamingState m_Streaming;
 
+	struct t3dVtWorkerContext_t {
+		Terrain3DRenderWorldRuntime *m_pOwner = NULL;
+		uint32_t m_nJobIndex = T3D_RW_INVALID_ID;
+		t3dAtomic_t<uint32_t> m_nBusy{ 0u };
+		godot::WorkerThreadPool::TaskID m_nTaskId = godot::WorkerThreadPool::INVALID_TASK_ID;
+	};
+
 	Terrain3DMemoryZone *m_pRuntimeAllocatorZone;
 	void *m_pCpuImage;
 	uint64_t m_nCpuImageBytes;
 	T3DVTPageTableEntry *m_pPageTable;
 	T3DVTPhysicalSlot *m_pPhysicalSlots[T3D_RW_VT_CHANNELS];
 	T3DVTStreamJob *m_pStreamJobs;
+	uint16_t *m_pStreamPageToJob;
+	uint16_t *m_pStreamFreeJobs;
+	uint16_t *m_pStreamQueuedJobs;
+	uint16_t *m_pStreamJobQueuePosition;
+	uint16_t *m_pStreamReadyJobs;
+	uint16_t *m_pRetiredSlots[T3D_RW_VT_CHANNELS];
 	uint8_t *m_pStreamScratch;
 	uint32_t *m_pScratchLaneOwner;
 	t3dAtomic_t<uint32_t> m_ScratchLaneCompletion[T3D_RW_MAX_STREAM_SCRATCH_LANES];
+	t3dVtWorkerContext_t m_VtWorkerContexts[T3D_RW_MAX_STREAM_SCRATCH_LANES];
+	godot::WorkerThreadPool *m_pWorkerThreadPool;
+	T3DVTStreamReadDecodeFn m_pVtReadDecode;
+	void *m_pVtReadDecodeUser;
 	T3DOperationEvent *m_pOperationEvents;
 	uint32_t m_nOperationWriteIndex;
 	int64_t m_nFramebufferFormat;

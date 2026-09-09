@@ -605,7 +605,7 @@ static const Vector3 s_v3Up{ 0.f, 1.f, 0.f };
 
 
 // Additional migrated constants.
-#define s_pszNativeBuildId ( "p08-render-world-prepare-submit-reuse-2026-09-06" )
+#define s_pszNativeBuildId ( "instancer-authoritative-store-publication-2026-09-09" )
 #define s_pszEngineSingletonName ( "Terrain3DForwardPlusBridge" )
 #define s_pszProfileKey ( "xbox360_experimental" )
 #define s_pszProfileDisplayName ( "Xbox 360 Experimental" )

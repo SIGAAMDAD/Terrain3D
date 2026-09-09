@@ -260,7 +260,7 @@ bool t3d_render_world_compute_gpu_resource_plan(
 	rPlan.nBufferBytes[T3D_RW_GPU_BUFFER_SELECTED_LOD] = nBytes;
 
 	rPlan.nBufferBytes[T3D_RW_GPU_BUFFER_COUNTERS] = pProfile.nGpuCounterBytes;
-	rPlan.nBufferBytes[T3D_RW_GPU_BUFFER_INDIRECT_ARGS] = ( uint64_t )T3D_RW_TIER_COUNT * sizeof( T3DDrawIndirectArgs );
+	rPlan.nBufferBytes[T3D_RW_GPU_BUFFER_INDIRECT_ARGS] = T3D_RW_INDIRECT_BUFFER_BYTES;
 
 	// Two hash slots per compact request keeps the fixed table at <= 50% occupancy.
 	if ( !t3d_rw_checked_mul_u64( pLimits.nMaxVtRequests, 2u, nCount ) ) {

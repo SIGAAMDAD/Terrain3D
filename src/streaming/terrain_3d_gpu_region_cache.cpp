@@ -21,6 +21,7 @@
 #include <math.h>
 #include <string.h>
 #include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <EASTL/algorithm.h>
@@ -450,8 +451,11 @@ Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DR
 	if ( pRegion && !pRegion->isDeleted() ) {
 		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
 		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-			const Ref<Resource> resource = ResourceLoader::get_singleton()->load( lighting->getTerrainShadowMaskPath() );
-			image = resource;
+			const String shadow_path = lighting->getTerrainShadowMaskPath();
+			if ( FileAccess::file_exists( shadow_path ) ) {
+				const Ref<Resource> resource = ResourceLoader::get_singleton()->load( shadow_path );
+				image = resource;
+			}
 		}
 	}
 	if ( image.is_null() || image->is_empty() ) {
@@ -459,7 +463,7 @@ Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DR
 	}
 	image = image->duplicate();
 	if ( image->is_compressed() && image->decompress() != OK ) {
-		return Ref<Image>();
+		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
 	}
 	if ( image->has_mipmaps() ) {
 		image->clear_mipmaps();
@@ -471,7 +475,7 @@ Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DR
 		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
 	}
 	if ( image->generate_mipmaps() != OK ) {
-		return Ref<Image>();
+		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
 	}
 	return image;
 }

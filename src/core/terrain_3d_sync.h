@@ -45,10 +45,13 @@ static inline int t3dNativeMemoryOrder( const t3dMemoryOrder_t eOrder ) {
 #if defined( _MSC_VER )
 template <typename T>
 static inline T t3dAtomicMsLoad( const volatile T *pValue ) noexcept {
-	static_assert( sizeof( T ) == 1u || sizeof( T ) == 4u || sizeof( T ) == 8u, "Unsupported atomic width" );
+	static_assert( sizeof( T ) == 1u || sizeof( T ) == 2u || sizeof( T ) == 4u || sizeof( T ) == 8u, "Unsupported atomic width" );
 	T value;
 	if constexpr ( sizeof( T ) == 1u ) {
 		const uint8_t nBits = ( uint8_t )_InterlockedCompareExchange8( ( volatile char * )pValue, 0, 0 );
+		memcpy( &value, &nBits, sizeof( value ) );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		const uint16_t nBits = ( uint16_t )_InterlockedCompareExchange16( ( volatile short * )pValue, 0, 0 );
 		memcpy( &value, &nBits, sizeof( value ) );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		const uint32_t nBits = ( uint32_t )_InterlockedCompareExchange( ( volatile long * )pValue, 0, 0 );
@@ -67,6 +70,11 @@ static inline T t3dAtomicMsExchange( volatile T *pValue, const T value ) noexcep
 		uint8_t nValueBits;
 		memcpy( &nValueBits, &value, sizeof( nValueBits ) );
 		const uint8_t nPreviousBits = ( uint8_t )_InterlockedExchange8( ( volatile char * )pValue, ( char )nValueBits );
+		memcpy( &previous, &nPreviousBits, sizeof( previous ) );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		uint16_t nValueBits;
+		memcpy( &nValueBits, &value, sizeof( nValueBits ) );
+		const uint16_t nPreviousBits = ( uint16_t )_InterlockedExchange16( ( volatile short * )pValue, ( short )nValueBits );
 		memcpy( &previous, &nPreviousBits, sizeof( previous ) );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		uint32_t nValueBits;
@@ -92,6 +100,14 @@ static inline bool t3dAtomicMsCompareExchange( volatile T *pValue, T &rExpected,
 		memcpy( &nDesiredBits, &desired, sizeof( nDesiredBits ) );
 		const uint8_t nObservedBits =
 		        ( uint8_t )_InterlockedCompareExchange8( ( volatile char * )pValue, ( char )nDesiredBits, ( char )nExpectedBits );
+		memcpy( &observed, &nObservedBits, sizeof( observed ) );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		uint16_t nExpectedBits;
+		uint16_t nDesiredBits;
+		memcpy( &nExpectedBits, &rExpected, sizeof( nExpectedBits ) );
+		memcpy( &nDesiredBits, &desired, sizeof( nDesiredBits ) );
+		const uint16_t nObservedBits = ( uint16_t )_InterlockedCompareExchange16(
+		        ( volatile short * )pValue, ( short )nDesiredBits, ( short )nExpectedBits );
 		memcpy( &observed, &nObservedBits, sizeof( observed ) );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		uint32_t nExpectedBits;
@@ -121,6 +137,8 @@ template <typename T>
 static inline T t3dAtomicMsFetchAdd( volatile T *pValue, const T value ) noexcept {
 	if constexpr ( sizeof( T ) == 1u ) {
 		return ( T )_InterlockedExchangeAdd8( ( volatile char * )pValue, ( char )value );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		return ( T )_InterlockedExchangeAdd16( ( volatile short * )pValue, ( short )value );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		return ( T )_InterlockedExchangeAdd( ( volatile long * )pValue, ( long )value );
 	} else {
@@ -132,6 +150,8 @@ template <typename T>
 static inline T t3dAtomicMsFetchOr( volatile T *pValue, const T value ) noexcept {
 	if constexpr ( sizeof( T ) == 1u ) {
 		return ( T )_InterlockedOr8( ( volatile char * )pValue, ( char )value );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		return ( T )_InterlockedOr16( ( volatile short * )pValue, ( short )value );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		return ( T )_InterlockedOr( ( volatile long * )pValue, ( long )value );
 	} else {
@@ -143,6 +163,8 @@ template <typename T>
 static inline T t3dAtomicMsFetchAnd( volatile T *pValue, const T value ) noexcept {
 	if constexpr ( sizeof( T ) == 1u ) {
 		return ( T )_InterlockedAnd8( ( volatile char * )pValue, ( char )value );
+	} else if constexpr ( sizeof( T ) == 2u ) {
+		return ( T )_InterlockedAnd16( ( volatile short * )pValue, ( short )value );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		return ( T )_InterlockedAnd( ( volatile long * )pValue, ( long )value );
 	} else {
@@ -367,6 +389,7 @@ public:
 
 typedef t3dAtomic_t<bool> t3dAtomicBool_t;
 typedef t3dAtomic_t<uint8_t> t3dAtomicU8_t;
+typedef t3dAtomic_t<uint16_t> t3dAtomicU16_t;
 typedef t3dAtomic_t<uint32_t> t3dAtomicU32_t;
 typedef t3dAtomic_t<uint64_t> t3dAtomicU64_t;
 

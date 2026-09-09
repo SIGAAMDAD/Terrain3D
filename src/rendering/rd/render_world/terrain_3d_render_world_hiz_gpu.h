@@ -34,7 +34,8 @@ public:
 	void seal_hot_runtime();
 
 	bool dispatch_hiz_hot( uint32_t pActiveWidth, uint32_t pActiveHeight, uint32_t pActiveMipCount );
-	bool dispatch_visibility_m05_hot( Terrain3DRenderWorldGpuVisibility &rVisibility, const T3DRenderWorldLimits &pLimits );
+	bool dispatch_visibility_m05_hot(
+	        Terrain3DRenderWorldGpuVisibility &rVisibility, const T3DRenderWorldLimits &pLimits, const T3DVisibilityFrame &pFrame );
 
 	bool is_initialized() const;
 	const godot::RID &get_borrowed_previous_depth_rid() const;

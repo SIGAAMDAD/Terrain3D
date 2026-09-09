@@ -11,6 +11,18 @@ static const uint32_t T3D_RW_GPU_FRAME_RING_COUNT = 3u;
 static const uint32_t T3D_RW_VT_CHANNEL_COUNT = 4u;
 static const uint32_t T3D_RW_MAX_VT_TEXTURE_BANKS = 16u;
 
+// Shared indirect buffer layout. Raster draw args occupy the first three 16-byte
+// records. Compute dispatch triplets follow at 4-byte aligned offsets.
+static const uint32_t T3D_RW_INDIRECT_DRAW_WORLD_OFFSET = 0u;
+static const uint32_t T3D_RW_INDIRECT_DRAW_CLUTTER_OFFSET = 16u;
+static const uint32_t T3D_RW_INDIRECT_DRAW_FOLIAGE_OFFSET = 32u;
+static const uint32_t T3D_RW_INDIRECT_VIS_INSTANCE_OFFSET = 48u;
+static const uint32_t T3D_RW_INDIRECT_VIS_CLUSTER_OFFSET = 60u;
+static const uint32_t T3D_RW_INDIRECT_VT_WORLD_OFFSET = 72u;
+static const uint32_t T3D_RW_INDIRECT_VT_CLUTTER_OFFSET = 84u;
+static const uint32_t T3D_RW_INDIRECT_VT_FOLIAGE_OFFSET = 96u;
+static const uint32_t T3D_RW_INDIRECT_BUFFER_BYTES = 108u;
+
 enum T3DRenderWorldGpuBufferId : uint32_t {
 	T3D_RW_GPU_BUFFER_GEOMETRY_VERTEX = 0,
 	T3D_RW_GPU_BUFFER_CLUSTER_VERTEX_INDEX,

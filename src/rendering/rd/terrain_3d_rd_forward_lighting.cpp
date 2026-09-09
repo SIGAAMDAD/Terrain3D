@@ -183,7 +183,7 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 			format->set_mipmaps( 1u );
 			format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
 			format->set_format( RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM );
-			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 			m_hFallbackColorTexture = rd->texture_create( format, view, initial_data );
 			if ( !t3dRdForwardLightAdopt( m_context,
 			             rd,
@@ -207,7 +207,7 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 			format->set_mipmaps( 1u );
 			format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D_ARRAY );
 			format->set_format( RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM );
-			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 			m_hFallbackColorArrayTexture = rd->texture_create( format, view, initial_data );
 			if ( !t3dRdForwardLightAdopt( m_context,
 			             rd,
@@ -240,7 +240,7 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 			format->set_mipmaps( 1u );
 			format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
 			format->set_format( RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM );
-			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 			m_hFallbackRadianceTexture = rd->texture_create( format, view, initial_data );
 			if ( !t3dRdForwardLightAdopt( m_context,
 			             rd,
@@ -264,7 +264,7 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 			format->set_mipmaps( 1u );
 			format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D_ARRAY );
 			format->set_format( RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM );
-			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT );
+			format->set_usage_bits( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT );
 			m_hFallbackRadianceArrayTexture = rd->texture_create( format, view, initial_data );
 			if ( !t3dRdForwardLightAdopt( m_context,
 			             rd,

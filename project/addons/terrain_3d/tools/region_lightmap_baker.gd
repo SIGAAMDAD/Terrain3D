@@ -65,9 +65,18 @@ func prepare_output_directory(terrain: Terrain3D = null) -> Dictionary:
 	if configured.is_empty():
 		configured = source_terrain.data_directory.trim_suffix("/").path_join("lighting")
 		source_terrain.region_lightmap_output_directory = configured
-	var normalized: String = configured.simplify_path().trim_suffix("/")
+	var normalized: String = ProjectSettings.localize_path(configured.simplify_path()).simplify_path()
+	if normalized != "res://":
+		normalized = normalized.trim_suffix("/")
 	if normalized.is_empty():
 		return {"ok": false, "path": "", "error": "The regional lightmap output path is empty."}
+	if not normalized.begins_with("res://"):
+		return {
+			"ok": false,
+			"path": normalized,
+			"error": "Regional LightmapGI output must be inside the project (res://) so Godot can import the generated lightmap textures.",
+		}
+	source_terrain.region_lightmap_output_directory = normalized
 	var mkdir_error: Error = DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(normalized))
 	if mkdir_error != OK:
 		return {"ok": false, "path": normalized, "error": error_string(mkdir_error)}
@@ -137,6 +146,25 @@ func bake_prepared_with_editor() -> Dictionary:
 	var lightmap: LightmapGI = get_prepared_lightmap()
 	if not is_instance_valid(lightmap):
 		return {"ok": false, "automatic": false, "error": "No prepared LightmapGI exists."}
+	if not is_instance_valid(lightmap.light_data):
+		return {"ok": false, "automatic": false, "error": "The prepared LightmapGI has no LightmapGIData."}
+	var data_path: String = lightmap.light_data.resource_path.simplify_path()
+	var expected_path: String = ""
+	var bake_world: Node = lightmap.get_parent()
+	if is_instance_valid(bake_world):
+		expected_path = String(bake_world.get_meta(META_WORKING_DATA_PATH, "")).simplify_path()
+	if data_path.is_empty() or not data_path.begins_with("res://") or not FileAccess.file_exists(data_path):
+		return {
+			"ok": false,
+			"automatic": false,
+			"error": "The prepared LightmapGIData has no valid res:// bake path. Re-prepare the region before baking.",
+		}
+	if not expected_path.is_empty() and data_path != expected_path:
+		return {
+			"ok": false,
+			"automatic": false,
+			"error": "The prepared LightmapGIData path does not match the Terrain3D working bake path.",
+		}
 	if not select_prepared_lightmap():
 		return {"ok": false, "automatic": false, "error": "Unable to select the prepared LightmapGI."}
 	# Selection drives Godot's built-in LightmapGI editor plugin. Give the editor one
@@ -185,13 +213,13 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	var texel_size: float = float(settings["texel_size"])
 	var bake_quality: int = int(settings["bake_quality"])
 	var shadowmask_mode: int = int(settings["shadowmask_mode"])
-	var output_paths: Dictionary = _region_output_paths(terrain, location)
-	var output_dir: String = String(output_paths["output_dir"])
 	var output_ready: Dictionary = prepare_output_directory(terrain)
 	if not bool(output_ready.get("ok", false)):
 		push_error("Unable to prepare Terrain3D lighting directory %s: %s" % [
-			String(output_ready.get("path", output_dir)), String(output_ready.get("error", "Unknown error"))])
+			String(output_ready.get("path", "")), String(output_ready.get("error", "Unknown error"))])
 		return false
+	var output_paths: Dictionary = _region_output_paths(terrain, location)
+	var output_dir: String = String(output_paths["output_dir"])
 	var working_data_path: String = String(output_paths["working_data"])
 	var light_data_path: String = String(output_paths["data"])
 	_remove_file_if_present(working_data_path)
@@ -222,6 +250,17 @@ func prepare_region_bake(location: Vector2i) -> bool:
 	var data_save_error: Error = ResourceSaver.save(light_data, working_data_path)
 	if data_save_error != OK:
 		push_error("Unable to create regional LightmapGIData: %s" % error_string(data_save_error))
+		_remove_existing_bake_world(root)
+		return false
+	# ResourceSaver.save() does not make a newly-created Resource adopt the save
+	# path. LightmapGI::bake() requires light_data.resource_path when the editor
+	# invokes its normal no-argument bake action, otherwise Godot returns
+	# BAKE_ERROR_NO_SAVE_PATH and opens its Save dialog instead of baking. Reload
+	# the working resource so the in-memory LightmapGIData owns the real res:// path.
+	light_data = ResourceLoader.load(
+		working_data_path, "LightmapGIData", ResourceLoader.CACHE_MODE_IGNORE) as LightmapGIData
+	if not is_instance_valid(light_data) or light_data.resource_path.simplify_path() != working_data_path.simplify_path():
+		push_error("Unable to bind regional LightmapGIData to its working bake path: %s" % working_data_path)
 		_remove_existing_bake_world(root)
 		return false
 	lightmap.light_data = light_data
@@ -493,7 +532,9 @@ func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
 	var output_dir: String = terrain.region_lightmap_output_directory.strip_edges()
 	if output_dir.is_empty():
 		output_dir = terrain.data_directory.trim_suffix("/").path_join("lighting")
-	output_dir = output_dir.simplify_path().trim_suffix("/")
+	output_dir = ProjectSettings.localize_path(output_dir.simplify_path()).simplify_path()
+	if output_dir != "res://":
+		output_dir = output_dir.trim_suffix("/")
 	var base_name: String = "Region_[%d_%d]" % [location.x, location.y]
 	return {
 		"output_dir": output_dir,
@@ -769,7 +810,15 @@ func _shadowmask_slice_image(textures: Array, slice_index: int) -> Image:
 			continue
 		if remaining < texture.get_layers():
 			var image: Image = texture.get_layer_data(remaining)
-			return image.duplicate() if image != null else null
+			if image == null or image.is_empty():
+				return null
+			var readable: Image = image.duplicate()
+			if readable.is_compressed():
+				var decompress_error: Error = readable.decompress()
+				if decompress_error != OK:
+					push_error("Unable to decompress baked shadowmask atlas slice: %s" % error_string(decompress_error))
+					return null
+			return readable
 		remaining -= texture.get_layers()
 	return null
 

@@ -1,5 +1,6 @@
 #[versions]
 color = "";
+bringup = "#define T3D_INSTANCE_BRINGUP";
 color_native = "#define T3D_FORWARD_NATIVE_LIGHTING";
 color_specular = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
 color_motion = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
@@ -52,9 +53,11 @@ layout(set = 0, binding = 1, std430) readonly buffer InstanceRecords {
 layout(set = 0, binding = 2, std430) readonly buffer VisibleIndices {
     uint visible_indices[];
 };
+#ifndef T3D_INSTANCE_BRINGUP
 layout(set = 0, binding = 4, std430) readonly buffer PreviousInstanceRecords {
     InstanceRecord previous_records[];
 };
+#endif
 
 layout(push_constant, std430) uniform InstancePush {
     uint material_index;
@@ -132,7 +135,9 @@ void main() {
 #version 450
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
+#ifndef T3D_INSTANCE_BRINGUP
 #include "terrain_forward_lighting_inc.glsl"
+#endif
 
 layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
     mat4 view_projection[2];
@@ -148,6 +153,7 @@ uint t3d_view_index() {
     return min(uint(gl_ViewIndex), 1u);
 }
 
+#ifndef T3D_INSTANCE_BRINGUP
 struct InstanceMaterial {
     vec4 albedo;
     vec4 pbr;
@@ -167,6 +173,7 @@ layout(set = 1, binding = 2) uniform sampler2D base_orm_texture;
 layout(set = 1, binding = 3) uniform sampler2D overlay_albedo_texture;
 layout(set = 1, binding = 4) uniform sampler2D overlay_normal_texture;
 layout(set = 1, binding = 5) uniform sampler2D overlay_orm_texture;
+#endif
 
 layout(push_constant, std430) uniform InstancePush {
     uint material_index;
@@ -207,6 +214,11 @@ layout(location = 2) out vec2 out_motion;
 #endif
 #endif
 
+#ifdef T3D_INSTANCE_BRINGUP
+void main() {
+    out_color = vec4(1.0, 0.0, 1.0, 1.0);
+}
+#else
 const uint MATERIAL_ALPHA_SCISSOR = 1u << 0u;
 const uint MATERIAL_HAS_ALBEDO_TEXTURE = 1u << 2u;
 const uint MATERIAL_HAS_NORMAL_TEXTURE = 1u << 3u;
@@ -260,6 +272,18 @@ vec3 tangent_to_world(vec3 tangent_normal) {
 }
 
 void main() {
+#ifndef T3D_FORWARD_DEPTH
+    if (push_data.reserved0 != 0u) {
+        out_color = vec4(1.0, 0.0, 1.0, 1.0);
+#ifdef T3D_FORWARD_SPECULAR
+        out_specular = vec4(0.0);
+#endif
+#ifdef T3D_FORWARD_MOTION
+        out_motion = vec2(0.0);
+#endif
+        return;
+    }
+#endif
     vec4 mesh_color = mesh_vertex_color;
     vec4 base_color = instance_color;
     vec3 normal = normalize(vertex_normal);
@@ -451,3 +475,4 @@ void main() {
 #endif
 #endif // T3D_FORWARD_DEPTH
 }
+#endif // T3D_INSTANCE_BRINGUP

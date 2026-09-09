@@ -9,6 +9,7 @@
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "eastl_config.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
@@ -71,11 +72,19 @@ bool Terrain3D::effectiveCpuRegionCacheEnabled( void ) const {
 }
 
 bool Terrain3D::effectiveInstanceRegionCacheEnabled( void ) const {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	return false;
+#else
 	return t3dIsStreamingEffectivelyEnabled( m_bInstanceRegionCacheEnabled, IS_EDITOR, ( int )( m_editorExecutionMode ) );
+#endif
 }
 
 bool Terrain3D::effectiveInstancerCellStreamingEnabled( void ) const {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	return false;
+#else
 	return t3dIsStreamingEffectivelyEnabled( m_bInstancerCellStreamingEnabled, IS_EDITOR, ( int )( m_editorExecutionMode ) );
+#endif
 }
 
 bool Terrain3D::effectiveDynamicNodeStreamingEnabled( void ) const {

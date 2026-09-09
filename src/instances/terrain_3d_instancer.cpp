@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "instances/terrain_3d_instancer.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 
 #include <EASTL/numeric_limits.h>
 #include <EASTL/sort.h>
@@ -1843,9 +1844,19 @@ void Terrain3DInstancer::serviceColdCapacity( void ) {
 }
 
 void Terrain3DInstancer::servicePendingUpdates( void ) {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	// Mesh scene replacements still need their deferred source swap, but the
+	// minimal render lane publishes authoritative instance-store data directly
+	// and therefore has no render-cell materialization queue to drain.
+	if ( m_pTerrain && m_pTerrain->getAssets().is_valid() ) {
+		m_pTerrain->getAssets()->loadPendingMeshes();
+	}
+	return;
+#else
 	if ( hasPendingUpdates() ) {
 		processUpdates();
 	}
+#endif
 }
 
 void Terrain3DInstancer::updateMmiByRegion( Terrain3DRegion *const pRegion, const int nMeshId ) {
@@ -1966,7 +1977,7 @@ void Terrain3DInstancer::updateMmiCell(
 void Terrain3DInstancer::ensureCellAabb( t3dInstanceCell_t &rCell, const AABB &rSourceMeshAabb ) {
 	bool initialized = false;
 	AABB bounds;
-	if ( rSourceMeshAabb.has_volume() ) {
+	if ( rSourceMeshAabb.has_surface() ) {
 		for ( size_t i = 0u; i < rCell.m_transforms.size(); ++i ) {
 			const AABB transformed = rCell.getTransform( i ).xform( rSourceMeshAabb );
 			if ( !initialized ) {
@@ -2127,8 +2138,287 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
 
 
 bool Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+#if T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT
+	// Publish directly from the authoritative resident stores. The production
+	// renderer still owns mesh/material upload, pass routing, reverse-Z depth,
+	// visibility packet construction and Forward+ submission; only the derived
+	// render-cell/streaming/HLOD publication layer is bypassed here.
 	rSnapshot.m_instances.reset();
 	rSnapshot.m_cells.reset();
+	rSnapshot.m_dirtyRanges.reset();
+	rSnapshot.m_dirtyCells.reset();
+	rSnapshot.m_bTopologyChanged = true;
+	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
+	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() ) {
+		return true;
+	}
+	if ( rSnapshot.m_instances.capacity() < m_nLogicalCellCapacity || rSnapshot.m_cells.capacity() < m_nRenderCellCapacity ) {
+		LOG( ERROR, "RD authoritative-store instance snapshot publication storage was not cold-preallocated" );
+		return false;
+	}
+
+	Terrain3DData *const pData = m_pTerrain->getData();
+	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
+	Terrain3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
+	const real_t fRegionWorldSize = ( real_t )( s_nRegionWorldSizeMeters );
+	uint64_t nResidentSourceRecords = 0u;
+	uint64_t nPublishedRecords = 0u;
+	uint64_t nPublishedCells = 0u;
+	uint64_t nSkippedMissingAssetRecords = 0u;
+
+	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
+		Terrain3DRegion *const pRegion = ppRegions[iRegion];
+		if ( !pRegion || pRegion->isDeleted() ) {
+			continue;
+		}
+		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
+		if ( !pStore ) {
+			continue;
+		}
+
+		const Vector2i regionLocation = pRegion->getLocation();
+		const Vector3 regionOffset(
+		        ( real_t )( regionLocation.x ) * fRegionWorldSize, 0.0, ( real_t )( regionLocation.y ) * fRegionWorldSize );
+
+		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
+			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
+			uint64_t nMeshRecords = 0u;
+			for ( size_t iCellCount = 0u; iCellCount < mesh.m_cells.size(); ++iCellCount ) {
+				nMeshRecords += ( uint64_t )( mesh.m_cells[iCellCount].m_transforms.size() );
+			}
+			nResidentSourceRecords += nMeshRecords;
+			const int nMeshId = mesh.m_nId;
+			if ( nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
+				nSkippedMissingAssetRecords += nMeshRecords;
+				continue;
+			}
+			const Ref<Terrain3DMeshAsset> asset = assets->getMeshAsset( nMeshId );
+			if ( asset.is_null() || !asset->isEnabled() || asset->getLodCount() <= 0 ) {
+				nSkippedMissingAssetRecords += nMeshRecords;
+				continue;
+			}
+			const Ref<Mesh> sourceMesh = asset->getMesh( 0 );
+			if ( sourceMesh.is_null() ) {
+				nSkippedMissingAssetRecords += nMeshRecords;
+				continue;
+			}
+			const AABB sourceAabb = sourceMesh->get_aabb();
+			const ShadowCasting cast = asset->getLodCastShadows( 0 );
+
+			for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
+				const t3dInstanceCell_t &sourceCell = mesh.m_cells[iCell];
+				const size_t nSourceCount = sourceCell.m_transforms.size();
+				if ( nSourceCount == 0u ) {
+					continue;
+				}
+				if ( nSourceCount > UINT32_MAX || rSnapshot.m_instances.size() + nSourceCount > rSnapshot.m_instances.capacity()
+				        || rSnapshot.m_cells.size() >= rSnapshot.m_cells.capacity() ) {
+					LOG( ERROR,
+					        "RD authoritative-store instance snapshot capacity exceeded: region=",
+					        regionLocation,
+					        ", mesh=",
+					        nMeshId,
+					        ", cell=",
+					        sourceCell.m_location,
+					        ", records=",
+					        ( uint64_t )( nSourceCount ) );
+					return false;
+				}
+
+				t3dRdInstanceCell_t cell;
+				cell.m_nRegionX = regionLocation.x;
+				cell.m_nRegionZ = regionLocation.y;
+				cell.m_nCellX = ( int16_t )( CLAMP( sourceCell.m_location.x, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+				cell.m_nCellZ = ( int16_t )( CLAMP( sourceCell.m_location.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+				cell.m_nMeshAssetId = ( uint16_t )( nMeshId );
+				cell.m_nLod = 0;
+				cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, 0 );
+				cell.m_nFirstInstance = ( uint32_t )( rSnapshot.m_instances.size() );
+				cell.m_nInstanceCount = ( uint32_t )( nSourceCount );
+				cell.m_nRevision = sourceCell.m_nRevision;
+				cell.m_nSettingsRevision = m_szMeshSettingsRevision[nMeshId];
+				cell.m_nVisibilityLayers = UINT32_MAX;
+				cell.m_nFlags = 0u;
+				cell.m_fLodBegin = 0.0f;
+				cell.m_fLodEnd = 0.0f;
+				cell.m_fFadeMargin = 0.0f;
+
+				if ( cast != s_shadowCastingOff ) {
+					cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS;
+				}
+				if ( cast == GeometryInstance3D::SHADOW_CASTING_SETTING_DOUBLE_SIDED ) {
+					cell.m_nFlags |= T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED;
+				}
+				if ( cast == s_shadowCastingOnly ) {
+					cell.m_nFlags |= T3D_RD_INSTANCE_SHADOWS_ONLY;
+				}
+				if ( asset->isHighlighted() ) {
+					cell.m_nFlags |= T3D_RD_INSTANCE_HIGHLIGHTED;
+				}
+
+				bool bBoundsInitialized = false;
+				for ( size_t iInstance = 0u; iInstance < nSourceCount; ++iInstance ) {
+					Transform3D transform = sourceCell.getTransform( iInstance );
+					transform.origin += regionOffset;
+					const uint32_t color = iInstance < sourceCell.m_colors.size() ? sourceCell.m_colors[iInstance] : s_nInstanceWhiteRgba8;
+					if ( !rSnapshot.m_instances.pushBack( t3dPackRdInstanceRecord( transform, color ) ) ) {
+						LOG( ERROR, "RD authoritative-store instance record publication exceeded fixed capacity" );
+						return false;
+					}
+					const AABB transformed = transform.xform( sourceAabb );
+					if ( !bBoundsInitialized ) {
+						cell.m_bounds = transformed;
+						bBoundsInitialized = true;
+					} else {
+						cell.m_bounds.merge_with( transformed );
+					}
+				}
+				if ( !bBoundsInitialized ) {
+					continue;
+				}
+				if ( !rSnapshot.m_cells.pushBack( cell ) ) {
+					LOG( ERROR, "RD authoritative-store instance cell publication exceeded fixed capacity" );
+					return false;
+				}
+				nPublishedRecords += ( uint64_t )( nSourceCount );
+				++nPublishedCells;
+			}
+		}
+	}
+	if ( nResidentSourceRecords > 0u && nPublishedRecords == 0u ) {
+		LOG( ERROR,
+		        "RD authoritative-store snapshot found resident instance data but published zero renderable records: resident_records=",
+		        nResidentSourceRecords,
+		        ", skipped_missing_asset_records=",
+		        nSkippedMissingAssetRecords,
+		        ", asset_count=",
+		        assets->getMeshCount() );
+	} else if ( Terrain3D::s_debugLevel >= DEBUG ) {
+		LOG( DEBUG,
+		        "RD authoritative-store snapshot: resident_records=",
+		        nResidentSourceRecords,
+		        ", published_records=",
+		        nPublishedRecords,
+		        ", published_cells=",
+		        nPublishedCells,
+		        ", skipped_missing_asset_records=",
+		        nSkippedMissingAssetRecords );
+	}
+	return true;
+#elif T3D_INSTANCER_MINIMAL_RENDER_PATH
+	rSnapshot.m_instances.reset();
+	rSnapshot.m_cells.reset();
+	rSnapshot.m_dirtyRanges.reset();
+	rSnapshot.m_dirtyCells.reset();
+	rSnapshot.m_bTopologyChanged = true;
+	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
+	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() ) {
+		return true;
+	}
+	if ( rSnapshot.m_instances.capacity() < m_nLogicalCellCapacity || rSnapshot.m_cells.capacity() < m_nRenderCellCapacity ) {
+		LOG( ERROR, "RD minimal instance snapshot publication storage was not cold-preallocated" );
+		return false;
+	}
+
+	Terrain3DData *const pData = m_pTerrain->getData();
+	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
+	Terrain3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
+	const real_t fRegionWorldSize = ( real_t )( s_nRegionWorldSizeMeters );
+
+	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
+		Terrain3DRegion *const pRegion = ppRegions[iRegion];
+		if ( !pRegion || pRegion->isDeleted() ) {
+			continue;
+		}
+		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
+		if ( !pStore ) {
+			continue;
+		}
+		const Vector2i regionLocation = pRegion->getLocation();
+		const Vector3 regionOffset(
+		        ( real_t )( regionLocation.x ) * fRegionWorldSize, 0.0, ( real_t )( regionLocation.y ) * fRegionWorldSize );
+
+		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
+			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
+			const int nMeshId = mesh.m_nId;
+			if ( nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
+				continue;
+			}
+			const Ref<Terrain3DMeshAsset> asset = assets->getMeshAsset( nMeshId );
+			if ( asset.is_null() || !asset->isEnabled() || asset->getLodCount() <= 0 ) {
+				continue;
+			}
+			const Ref<Mesh> sourceMesh = asset->getMesh( 0 );
+			if ( sourceMesh.is_null() ) {
+				continue;
+			}
+			const AABB sourceAabb = sourceMesh->get_aabb();
+
+			for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
+				const t3dInstanceCell_t &sourceCell = mesh.m_cells[iCell];
+				const size_t nSourceCount = sourceCell.m_transforms.size();
+				if ( nSourceCount == 0u ) {
+					continue;
+				}
+				if ( nSourceCount > UINT32_MAX || rSnapshot.m_instances.size() + nSourceCount > rSnapshot.m_instances.capacity()
+				        || rSnapshot.m_cells.size() >= rSnapshot.m_cells.capacity() ) {
+					LOG( ERROR, "RD minimal instance snapshot capacity exceeded" );
+					return false;
+				}
+
+				t3dRdInstanceCell_t cell;
+				cell.m_nRegionX = regionLocation.x;
+				cell.m_nRegionZ = regionLocation.y;
+				cell.m_nCellX = ( int16_t )( CLAMP( sourceCell.m_location.x, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+				cell.m_nCellZ = ( int16_t )( CLAMP( sourceCell.m_location.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
+				cell.m_nMeshAssetId = ( uint16_t )( nMeshId );
+				cell.m_nLod = 0;
+				cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, 0 );
+				cell.m_nFirstInstance = ( uint32_t )( rSnapshot.m_instances.size() );
+				cell.m_nInstanceCount = ( uint32_t )( nSourceCount );
+				cell.m_nRevision = sourceCell.m_nRevision;
+				cell.m_nSettingsRevision = 0u;
+				cell.m_nVisibilityLayers = UINT32_MAX;
+				cell.m_nFlags = 0u;
+				cell.m_fLodBegin = 0.0f;
+				cell.m_fLodEnd = 0.0f;
+				cell.m_fFadeMargin = 0.0f;
+
+				bool bBoundsInitialized = false;
+				for ( size_t iInstance = 0u; iInstance < nSourceCount; ++iInstance ) {
+					Transform3D transform = sourceCell.getTransform( iInstance );
+					transform.origin += regionOffset;
+					const uint32_t color = iInstance < sourceCell.m_colors.size() ? sourceCell.m_colors[iInstance] : s_nInstanceWhiteRgba8;
+					if ( !rSnapshot.m_instances.pushBack( t3dPackRdInstanceRecord( transform, color ) ) ) {
+						LOG( ERROR, "RD minimal instance record publication exceeded fixed capacity" );
+						return false;
+					}
+					const AABB transformed = transform.xform( sourceAabb );
+					if ( !bBoundsInitialized ) {
+						cell.m_bounds = transformed;
+						bBoundsInitialized = true;
+					} else {
+						cell.m_bounds.merge_with( transformed );
+					}
+				}
+				if ( !rSnapshot.m_cells.pushBack( cell ) ) {
+					LOG( ERROR, "RD minimal instance cell publication exceeded fixed capacity" );
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+#else
+
+	const size_t nPreviousInstanceCount = rSnapshot.m_instances.size();
+	const size_t nPreviousCellCount = rSnapshot.m_cells.size();
+	const t3dRdInstanceCell_t *const pPreviousCells = rSnapshot.m_cells.data();
+	rSnapshot.m_instances.reset();
+	rSnapshot.m_cells.reset();
+	rSnapshot.m_dirtyRanges.reset();
+	rSnapshot.m_dirtyCells.reset();
+	rSnapshot.m_bTopologyChanged = nPreviousCellCount == 0u && nPreviousInstanceCount == 0u;
 	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain || !m_pTerrain->getData() || m_pTerrain->getAssets().is_null() || m_renderCells.empty() ) {
 		return true;
@@ -2253,12 +2543,35 @@ bool Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &
 			LOG( ERROR, "RD instance snapshot cell capacity exceeded during publication" );
 			return false;
 		}
+		const size_t nOutputCell = rSnapshot.m_cells.size();
+		if ( nOutputCell >= nPreviousCellCount ) {
+			rSnapshot.m_bTopologyChanged = true;
+		} else {
+			const t3dRdInstanceCell_t &previous = pPreviousCells[nOutputCell];
+			const bool sameTopology = previous.m_nMeshSourceKey == cell.m_nMeshSourceKey && previous.m_nRegionX == cell.m_nRegionX
+			        && previous.m_nRegionZ == cell.m_nRegionZ && previous.m_nCellX == cell.m_nCellX && previous.m_nCellZ == cell.m_nCellZ
+			        && previous.m_nMeshAssetId == cell.m_nMeshAssetId && previous.m_nLod == cell.m_nLod
+			        && previous.m_nFirstInstance == cell.m_nFirstInstance && previous.m_nInstanceCount == cell.m_nInstanceCount;
+			if ( !sameTopology || previous.m_nSettingsRevision != cell.m_nSettingsRevision ) {
+				rSnapshot.m_bTopologyChanged = true;
+			} else if ( previous.m_nRevision != cell.m_nRevision ) {
+				if ( !rSnapshot.m_dirtyRanges.pushBack( t3dRdInstanceDirtyRange_t{ cell.m_nFirstInstance, cell.m_nInstanceCount } )
+				        || !rSnapshot.m_dirtyCells.pushBack( ( uint32_t )nOutputCell ) ) {
+					LOG( ERROR, "RD instance dirty publication capacity exceeded" );
+					return false;
+				}
+			}
+		}
 		if ( !rSnapshot.m_cells.pushBack( cell ) ) {
 			LOG( ERROR, "RD instance snapshot cell capacity exceeded during publication" );
 			return false;
 		}
 	}
+	if ( nPreviousCellCount != rSnapshot.m_cells.size() || nPreviousInstanceCount != rSnapshot.m_instances.size() ) {
+		rSnapshot.m_bTopologyChanged = true;
+	}
 	return true;
+#endif
 }
 
 Vector2i Terrain3DInstancer::getCellForLocalPosition( const Vector3 &rLocalPosition, const uint8_t nCellShift ) const {
@@ -2287,6 +2600,7 @@ t3dUsableHeight_t Terrain3DInstancer::getUsableHeight( Terrain3DSampler &rSample
 	bool raycast_hit = false;
 	real_t fRaycastHeight = -FLT_MAX;
 	Vector3 raycast_normal = s_v3Up;
+#if !T3D_INSTANCER_MINIMAL_RENDER_PATH
 	if ( bOnCollision ) {
 		const real_t fBaseHeight = isnan( fHeight ) ? rGlobalPosition.y : fHeight;
 		const Vector3 start( rGlobalPosition.x, fBaseHeight + fRaycastStart, rGlobalPosition.z );
@@ -2297,6 +2611,10 @@ t3dUsableHeight_t Terrain3DInstancer::getUsableHeight( Terrain3DSampler &rSample
 			raycast_normal = hit["normal"];
 		}
 	}
+#else
+	( void )bOnCollision;
+	( void )fRaycastStart;
+#endif
 	if ( isnan( fHeight ) ) {
 		if ( !raycast_hit ) {
 			return result;
@@ -2579,6 +2897,12 @@ void Terrain3DInstancer::initialize( Terrain3D *const pTerrain ) {
 	}
 	IS_DATA_INIT_MESG( "Terrain3D not initialized yet", VOID );
 	LOG( INFO, "Initializing Instancer" );
+#if T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT
+	LOG( INFO, "Instancer RD authoritative-store publication enabled: resident store -> LOD0 -> production RD renderer" );
+#endif
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	LOG( INFO, "Instancer direct-surface bring-up enabled: direct store -> LOD0 -> standalone surface buffers -> CPU-visible indexed Forward+" );
+#endif
 	t3dInstanceLayout_t active_layout;
 	if ( !t3dInstanceLayoutForCellSize( m_nCellSize, active_layout ) ) {
 		LOG( ERROR, "Instancer cell layout is incompatible with region size" );
@@ -3775,6 +4099,50 @@ void Terrain3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
 }
 
 void Terrain3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionLoc, const bool bRebuild ) {
+#if T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT
+	// RD publication no longer derives from m_renderCells, so invalidate it at
+	// the authoritative mutation boundary even if streaming/HLOD materialization
+	// later rejects or defers every render cell.
+	markRdPublicationDirty();
+#endif
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
+	( void )bRebuild;
+	if ( !m_pTerrain || !m_pTerrain->getData() ) {
+		return;
+	}
+	const int meshId = CLAMP( nMeshId, -1, s_nMaxMeshAssets - 1 );
+	if ( rRegionLoc == s_v2iMax ) {
+		if ( meshId < 0 ) {
+			rebuildLogicalCountsFromStore();
+		} else {
+			publishLogicalMeshCount( meshId );
+		}
+	} else {
+		Terrain3DRegion *const pRegion = m_pTerrain->getData()->getRegionPtr( rRegionLoc );
+		if ( pRegion && !pRegion->isDeleted() ) {
+			reconcileLogicalRegion( pRegion, meshId );
+		} else if ( meshId >= 0 ) {
+			eraseLogicalCellsByLocation( rRegionLoc, meshId );
+		} else {
+			eraseLogicalCellsByRegion( rRegionLoc );
+		}
+	}
+
+	// The bring-up lane deliberately has no render-cell, streaming-transition,
+	// HLOD-suppression, or per-LOD materialization state. Any authoritative store
+	// mutation invalidates the complete immutable RD instance snapshot directly.
+	cancelPendingCellUpdates();
+	clearSingleLodTransitionBuckets();
+	m_bRebuildAll = false;
+	m_bUpdateAll = false;
+	m_globalMeshUpdates.reset();
+	clearRegionUpdates( false );
+	m_streamingUpdates.clear();
+	destroyRenderCells();
+	markRdPublicationDirty();
+	return;
+#else
+
 	const int mesh_id = CLAMP( nMeshId, -1, s_nMaxMeshAssets - 1 );
 	const bool bRendererSuspended = m_mode == INSTANCER_DISABLED || !m_pTerrain || !m_pTerrain->is_visible_in_tree();
 	if ( bRendererSuspended ) {
@@ -3842,6 +4210,7 @@ void Terrain3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionL
 		}
 	}
 	scheduleUpdateProcessing();
+#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -3978,6 +4347,38 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 	        m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u;
 	stats["enabled"] = isEnabled();
 	stats["mode"] = ( int )( m_mode );
+	stats["minimal_render_path"] = T3D_INSTANCER_MINIMAL_RENDER_PATH != 0;
+	stats["rd_authoritative_store_snapshot"] = T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT != 0;
+	uint64_t rd_authoritative_records = 0u;
+	uint64_t rd_authoritative_cells = 0u;
+#if T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT
+	if ( m_pTerrain && m_pTerrain->getData() ) {
+		Terrain3DRegion *const *ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
+		for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
+			const Terrain3DRegion *const pRegion = ppRegions[iRegion];
+			if ( !pRegion || pRegion->isDeleted() ) {
+				continue;
+			}
+			const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
+			if ( !pStore ) {
+				continue;
+			}
+			for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
+				const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
+				for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
+					const size_t count = mesh.m_cells[iCell].m_transforms.size();
+					if ( count == 0u ) {
+						continue;
+					}
+					rd_authoritative_records += ( uint64_t )( count );
+					++rd_authoritative_cells;
+				}
+			}
+		}
+	}
+#endif
+	stats["rd_authoritative_records"] = ( int64_t )( rd_authoritative_records );
+	stats["rd_authoritative_cells"] = ( int64_t )( rd_authoritative_cells );
 	stats["render_cells"] = ( int )( m_renderCells.size() );
 	stats["render_cells_lod0"] = lod0_cells;
 	stats["render_cells_lod1"] = lod1_cells;

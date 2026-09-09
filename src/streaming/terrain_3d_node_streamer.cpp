@@ -1176,6 +1176,7 @@ void Terrain3DNodeStreamer::deferUpdateForFrame( void ) {
 	m_nGlobalTransformsReadLastTick = 0;
 	m_nMigrationsLastTick = 0;
 	m_nMigrationUsecLastTick = 0u;
+	m_bMigrationScanSkippedLastTick = false;
 	m_bDeferredLastTick = true;
 }
 
@@ -1206,7 +1207,6 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 	if ( fRegionWorldSize <= 0.0f ) {
 		return;
 	}
-	const bool bOwnershipChanged = migrateActiveNodes();
 	const Transform3D inverse = m_pTerrain->get_global_transform().affine_inverse();
 	const Vector3 local_position = inverse.xform( rTargetPosition );
 	const int map_size = m_pTerrain->getData()->getRegionMapSizeInternal();
@@ -1214,7 +1214,12 @@ void Terrain3DNodeStreamer::updateResidency( const Vector3 &rTargetPosition, con
 	const Vector2i rawCenter(
 	        ( int )( Math::floor( local_position.x / fRegionWorldSize ) ), ( int )( Math::floor( local_position.z / fRegionWorldSize ) ) );
 	const Vector2i center( CLAMP( rawCenter.x, -half, half - 1 ), CLAMP( rawCenter.y, -half, half - 1 ) );
-	const bool bRebuildDesired = bForce || bOwnershipChanged || center != m_center;
+	const bool bCenterChanged = center != m_center;
+	const bool bMigrationDue = bForce || bCenterChanged || m_nMovableNodeCount == 0u
+	        || ( ++m_nMovableMigrationTick % MAX( m_nMovableMigrationCadence, 1u ) ) == 0u;
+	const bool bOwnershipChanged = bMigrationDue ? migrateActiveNodes() : false;
+	m_bMigrationScanSkippedLastTick = !bMigrationDue && m_nMovableNodeCount > 0u;
+	const bool bRebuildDesired = bForce || bOwnershipChanged || bCenterChanged;
 	if ( !bRebuildDesired && m_nLoadingRegionCount == 0 && !m_bHasPendingActivation ) {
 		bool bPendingUnload = false;
 		for ( int active_i = 0; active_i < ( int )( m_activeRegionIndices.size() ); ++active_i ) {
@@ -1303,6 +1308,7 @@ void Terrain3DNodeStreamer::suspend( void ) {
 	m_desiredRegionIndices.clear();
 	m_bHasPendingActivation = false;
 	m_center = s_v2iMax;
+	m_nMovableMigrationTick = 0u;
 }
 
 void Terrain3DNodeStreamer::destroy( const bool bCaptureState ) {
@@ -1593,6 +1599,8 @@ Dictionary Terrain3DNodeStreamer::getStats( void ) const {
 	stats["cold_rebuild_failures"] = ( int64_t )( m_nColdRebuildFailures );
 	stats["capacity_misses"] = ( int64_t )( m_nCapacityMissCount );
 	stats["migration_cpu_usec_last_tick"] = ( int64_t )( m_nMigrationUsecLastTick );
+	stats["migration_scan_skipped_last_tick"] = m_bMigrationScanSkippedLastTick;
+	stats["movable_migration_cadence"] = ( int )( m_nMovableMigrationCadence );
 	int virtual_nodes = 0;
 	int pending_spawns = 0;
 	int pending_regions = 0;

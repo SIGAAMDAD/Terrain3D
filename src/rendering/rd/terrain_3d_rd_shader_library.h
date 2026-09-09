@@ -3,6 +3,7 @@
 #ifndef TERRAIN3D_RD_SHADER_LIBRARY_H
 #define TERRAIN3D_RD_SHADER_LIBRARY_H
 #include "core/terrain_3d_compiler.h"
+#include "instances/terrain_3d_instancer_bringup.h"
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_render_world_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
@@ -21,6 +22,7 @@ private:
 	Ref<RDShaderSPIRV> m_cull;
 	Ref<RDShaderSPIRV> m_instances;
 	Ref<RDShaderSPIRV> m_hlodCull;
+	Ref<RDShaderSPIRV> m_instanceCull;
 	Ref<RDShaderSPIRV> m_oceanColor;
 	Ref<RDShaderSPIRV> m_oceanShadow;
 	t3dRdForwardShaderBundle_t m_forward;
@@ -34,8 +36,13 @@ public:
 	void clear( void );
 
 	EA_FORCE_INLINE bool isReady( void ) const {
+#if T3D_INSTANCER_MINIMAL_RENDER_PATH
 		return m_near.is_valid() && m_middle.is_valid() && m_far.is_valid() && m_cull.is_valid() && m_instances.is_valid()
-		        && m_hlodCull.is_valid() && m_oceanColor.is_valid() && m_oceanShadow.is_valid();
+		        && m_oceanColor.is_valid() && m_oceanShadow.is_valid();
+#else
+		return m_near.is_valid() && m_middle.is_valid() && m_far.is_valid() && m_cull.is_valid() && m_instances.is_valid()
+		        && m_hlodCull.is_valid() && m_instanceCull.is_valid() && m_oceanColor.is_valid() && m_oceanShadow.is_valid();
+#endif
 	}
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getNear( void ) const {
 		return m_near;
@@ -54,6 +61,9 @@ public:
 	}
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getHlodCull( void ) const {
 		return m_hlodCull;
+	}
+	EA_FORCE_INLINE Ref<RDShaderSPIRV> getInstanceCull( void ) const {
+		return m_instanceCull;
 	}
 	EA_FORCE_INLINE Ref<RDShaderSPIRV> getOceanColor( void ) const {
 		return m_oceanColor;

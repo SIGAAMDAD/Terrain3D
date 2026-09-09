@@ -126,6 +126,7 @@ public:
 		return m_runtimeBlob;
 	}
 	bool compileRuntimeBlob( void );
+	bool validateRuntimeBlob( void ) const;
 	EA_FORCE_INLINE int getEntryCount( void ) const {
 		return m_entries.size();
 	}

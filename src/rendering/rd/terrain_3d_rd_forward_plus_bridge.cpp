@@ -10,6 +10,7 @@
 #include <string.h>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/memory.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/projection.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -84,10 +85,7 @@ static bool t3dRdForwardOrdinaryPassKind( const uint32_t nPassKind ) {
 }
 
 Terrain3DRdForwardPlusBridgeAdapter::Terrain3DRdForwardPlusBridgeAdapter( void ) {
-	for ( size_t iCoordinator = 0u; iCoordinator < T3D_ARRAY_COUNT( m_szCoordinators ); iCoordinator++ ) {
-		t3dAtomic_t<Terrain3DRenderCoordinator *> &slot = ( m_szCoordinators )[iCoordinator];
-		slot.store( NULL, T3D_MEMORY_ORDER_RELAXED );
-	}
+	memset( m_szCoordinators, 0, sizeof( m_szCoordinators ) );
 	resetConnectionState();
 }
 
@@ -104,13 +102,16 @@ void Terrain3DRdForwardPlusBridgeAdapter::shutdownSingleton( void ) {
 	if ( !adapter ) {
 		return;
 	}
+	// disconnectEngineBridge() unregisters the callback and synchronizes Godot's
+	// render thread before retired engine callback storage is collected. No second
+	// force_sync is required before clearing the cold coordinator table.
 	adapter->disconnectEngineBridge();
 	adapter->m_nCoordinatorMask.store( 0u, T3D_MEMORY_ORDER_RELEASE );
-	Terrain3DRdContext::forceSync();
-	for ( size_t iCoordinator = 0u; iCoordinator < T3D_ARRAY_COUNT( adapter->m_szCoordinators ); iCoordinator++ ) {
-		t3dAtomic_t<Terrain3DRenderCoordinator *> &slot = ( adapter->m_szCoordinators )[iCoordinator];
-		slot.store( NULL, T3D_MEMORY_ORDER_RELEASE );
+	{
+		t3dScopedLock_t lock( adapter->m_coordinatorMutex );
+		memset( adapter->m_szCoordinators, 0, sizeof( adapter->m_szCoordinators ) );
 	}
+	adapter->m_nPreparedCoordinatorMask = 0u;
 	s_pSingleton = NULL;
 	memdelete( adapter );
 }
@@ -129,6 +130,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState( void ) {
 	m_nCachedFrameGeneration = 0u;
 	m_nCachedResourceGeneration = 0u;
 	m_nCachedPassSerial = 0u;
+	m_nPreparedCoordinatorMask = 0u;
 	m_mainCallbackContext = t3dRdForwardPassContext_t{};
 	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
 	m_pPreparedContext = NULL;
@@ -243,6 +245,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::disconnectEngineBridge( void ) {
 	}
 	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
+	m_nPreparedCoordinatorMask = 0u;
 	m_pEngineBridge = NULL;
 	m_bBridgePresent.store( false, T3D_MEMORY_ORDER_RELEASE );
 }
@@ -251,14 +254,17 @@ bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator( Terrain3DRenderCoor
 	if ( !pCoordinator ) {
 		return false;
 	}
+	t3dScopedLock_t lock( m_coordinatorMutex );
 	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		if ( m_szCoordinators[i].load( T3D_MEMORY_ORDER_ACQUIRE ) == pCoordinator ) {
+		if ( m_szCoordinators[i] == pCoordinator ) {
 			return true;
 		}
 	}
 	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		Terrain3DRenderCoordinator *expected = NULL;
-		if ( m_szCoordinators[i].compare_exchange_strong( expected, pCoordinator, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE ) ) {
+		if ( !m_szCoordinators[i] ) {
+			m_szCoordinators[i] = pCoordinator;
+			// Publish the fully initialized pointer with one release operation. The
+			// render thread performs one acquire load of this mask per PREPARE.
 			m_nCoordinatorMask.fetch_or( uint64_t( 1u ) << i, T3D_MEMORY_ORDER_RELEASE );
 			return true;
 		}
@@ -272,33 +278,48 @@ void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoor
 		return;
 	}
 	uint64_t removed_mask = 0u;
-	for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
-		if ( m_szCoordinators[i].load( T3D_MEMORY_ORDER_ACQUIRE ) == pCoordinator ) {
-			removed_mask |= uint64_t( 1u ) << i;
+	{
+		t3dScopedLock_t lock( m_coordinatorMutex );
+		for ( uint32_t i = 0u; i < s_nMaxCoordinators; ++i ) {
+			if ( m_szCoordinators[i] == pCoordinator ) {
+				removed_mask |= uint64_t( 1u ) << i;
+			}
 		}
+		if ( removed_mask == 0u ) {
+			return;
+		}
+		// Stop publishing the coordinator before waiting for the render thread.
+		m_nCoordinatorMask.fetch_and( ~removed_mask, T3D_MEMORY_ORDER_ACQ_REL );
 	}
-	if ( removed_mask == 0u ) {
-		return;
-	}
-	m_nCoordinatorMask.fetch_and( ~removed_mask, T3D_MEMORY_ORDER_ACQ_REL );
+
+	// A PREPARE that acquired the old mask may still be in flight and its paired
+	// SUBMIT intentionally reuses that same mask. Synchronize before clearing the
+	// pointer or allowing the coordinator to be destroyed.
 	Terrain3DRdContext::forceSync();
-	while ( removed_mask != 0u ) {
-		const uint32_t index = t3dRdForwardCtz64( removed_mask );
-		removed_mask &= removed_mask - 1u;
-		Terrain3DRenderCoordinator *expected = pCoordinator;
-		m_szCoordinators[index].compare_exchange_strong( expected, NULL, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE );
+	{
+		t3dScopedLock_t lock( m_coordinatorMutex );
+		while ( removed_mask != 0u ) {
+			const uint32_t index = t3dRdForwardCtz64( removed_mask );
+			removed_mask &= removed_mask - 1u;
+			if ( m_szCoordinators[index] == pCoordinator ) {
+				m_szCoordinators[index] = NULL;
+			}
+		}
 	}
 }
 
 bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
-	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) || rFrame.m_nGeneration == 0u
-	        || rFrame.m_nViewCount == 0u || rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews
-	        || !t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
+	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) || rFrame.m_nGeneration == 0u ) {
 		setError( "Terrain3D ABI 11 frame packet validation failed" );
 		return false;
 	}
 	if ( rFrame.m_nGeneration == m_nCachedFrameGeneration ) {
 		return true;
+	}
+	if ( rFrame.m_nViewCount == 0u || rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews
+	        || !t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
+		setError( "Terrain3D ABI 11 frame packet validation failed" );
+		return false;
 	}
 
 	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
@@ -435,20 +456,25 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext ) {
-	uint64_t mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators(
+        const t3dRdForwardPassContext_t &rContext, uint64_t nCoordinatorMask ) {
 	bool dispatched = false;
 	bool accepted = true;
-	while ( mask != 0u ) {
-		const uint32_t index = t3dRdForwardCtz64( mask );
-		mask &= mask - 1u;
-		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index].load( T3D_MEMORY_ORDER_ACQUIRE );
+	while ( nCoordinatorMask != 0u ) {
+		const uint32_t index = t3dRdForwardCtz64( nCoordinatorMask );
+		nCoordinatorMask &= nCoordinatorMask - 1u;
+		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index];
 		if ( coordinator ) {
 			dispatched = true;
 			accepted = coordinator->renderForwardPass( rContext ) && accepted;
 		}
 	}
 	return dispatched && accepted;
+}
+
+static bool t3dRdForwardPassRequiresBorrowedResources( const t3dRdForwardPassKind_t passKind ) noexcept {
+	return passKind == T3D_RD_FORWARD_PASS_OPAQUE || passKind == T3D_RD_FORWARD_PASS_MOTION
+	        || passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeFramePacket_t *const pFrame,
@@ -459,16 +485,27 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeF
 #endif
 	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
-	if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || !pPass
-	        || ( pFrame ? !convertFrame( *pFrame ) : m_nCachedFrameGeneration == 0u )
-	        || ( pResources ? !convertResources( *pResources ) : m_nCachedResourceGeneration == 0u ) || !convertPass( *pPass )
-	        || !dispatchToCoordinators( m_mainCallbackContext ) ) {
+	m_nPreparedCoordinatorMask = 0u;
+	const uint64_t coordinator_mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+	bool accepted = m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) && coordinator_mask != 0u && pPass
+	        && ( pFrame ? convertFrame( *pFrame ) : m_nCachedFrameGeneration != 0u ) && convertPass( *pPass );
+	if ( accepted && pResources ) {
+		accepted = convertResources( *pResources );
+	}
+	if ( accepted && !pResources && t3dRdForwardPassRequiresBorrowedResources( m_mainCallbackContext.m_passKind ) ) {
+		accepted = m_nCachedResourceGeneration != 0u;
+	}
+	if ( accepted ) {
+		accepted = dispatchToCoordinators( m_mainCallbackContext, coordinator_mask );
+	}
+	if ( !accepted ) {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 		++m_nPacketsRejected;
 #endif
 		return 0u;
 	}
 	m_nCachedPassSerial = pPass->m_nSerial;
+	m_nPreparedCoordinatorMask = coordinator_mask;
 	m_pPreparedContext = &m_mainCallbackContext;
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsAccepted;
@@ -484,14 +521,17 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow( const t3dRdForwardB
 #endif
 	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
-	if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || !pShadow || !convertShadow( *pShadow )
-	        || !dispatchToCoordinators( m_shadowCallbackContext ) ) {
+	m_nPreparedCoordinatorMask = 0u;
+	const uint64_t coordinator_mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+	if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || coordinator_mask == 0u || !pShadow || !convertShadow( *pShadow )
+	        || !dispatchToCoordinators( m_shadowCallbackContext, coordinator_mask ) ) {
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 		++m_nPacketsRejected;
 #endif
 		return 0u;
 	}
 	m_nCachedPassSerial = pShadow->m_nSerial;
+	m_nPreparedCoordinatorMask = coordinator_mask;
 	m_pPreparedContext = &m_shadowCallbackContext;
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	++m_nPacketsAccepted;
@@ -507,12 +547,13 @@ uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit( const uint64_t nPreparedSe
 	}
 	m_pPreparedContext->m_phase = T3D_RD_FORWARD_PHASE_SUBMIT;
 	m_pPreparedContext->m_nDrawList = nDrawList;
-	dispatchToCoordinators( *m_pPreparedContext );
+	dispatchToCoordinators( *m_pPreparedContext, m_nPreparedCoordinatorMask );
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	m_nLastDrawList = nDrawList;
 #endif
 	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
+	m_nPreparedCoordinatorMask = 0u;
 	return 1u;
 }
 
@@ -547,7 +588,24 @@ Dictionary Terrain3DRdForwardPlusBridgeAdapter::getDiagnostics( void ) {
 	result["bridge_present"] = isBridgePresent();
 	result["bridge_ready"] = isBridgeReady();
 	result["callback_registered"] = isCallbackRegistered();
-	result["active_coordinator_mask"] = ( int64_t )( m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	const uint64_t coordinator_mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+	result["active_coordinator_mask"] = ( int64_t )( coordinator_mask );
+	Array coordinator_lanes;
+	{
+		t3dScopedLock_t lock( m_coordinatorMutex );
+		uint64_t lane_mask = coordinator_mask;
+		while ( lane_mask != 0u ) {
+			const uint32_t index = t3dRdForwardCtz64( lane_mask );
+			lane_mask &= lane_mask - 1u;
+			Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index];
+			if ( coordinator ) {
+				Dictionary lane = coordinator->getForwardLaneDiagnostics();
+				lane["coordinator_slot"] = ( int64_t )( index );
+				coordinator_lanes.push_back( lane );
+			}
+		}
+	}
+	result["coordinator_lanes"] = coordinator_lanes;
 	result["cached_frame_generation"] = ( int64_t )( m_nCachedFrameGeneration );
 	result["cached_resource_generation"] = ( int64_t )( m_nCachedResourceGeneration );
 	result["environment_flags"] = ( int64_t )( m_mainCallbackContext.m_nEnvironmentFlags );

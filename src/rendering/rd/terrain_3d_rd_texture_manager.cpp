@@ -49,7 +49,7 @@ bool Terrain3DRdTextureManager::imageFormatToDataFormat(
 				rFormat = RenderingDevice::DATA_FORMAT_R8G8B8A8_SRGB;
 				return true;
 			case Image::FORMAT_DXT1:
-				rFormat = RenderingDevice::DATA_FORMAT_BC1_RGB_SRGB_BLOCK;
+				rFormat = RenderingDevice::DATA_FORMAT_BC1_RGBA_SRGB_BLOCK;
 				return true;
 			case Image::FORMAT_DXT3:
 				rFormat = RenderingDevice::DATA_FORMAT_BC2_SRGB_BLOCK;
@@ -129,7 +129,7 @@ bool Terrain3DRdTextureManager::imageFormatToDataFormat(
 			rFormat = RenderingDevice::DATA_FORMAT_E5B9G9R9_UFLOAT_PACK32;
 			return true;
 		case Image::FORMAT_DXT1:
-			rFormat = RenderingDevice::DATA_FORMAT_BC1_RGB_UNORM_BLOCK;
+			rFormat = RenderingDevice::DATA_FORMAT_BC1_RGBA_UNORM_BLOCK;
 			return true;
 		case Image::FORMAT_DXT3:
 			rFormat = RenderingDevice::DATA_FORMAT_BC2_UNORM_BLOCK;
@@ -207,11 +207,36 @@ bool Terrain3DRdTextureManager::imageFormatToDataFormat(
 	return false;
 }
 
+static uint32_t t3dRdMaximumMipCount( const uint32_t nWidth, const uint32_t nHeight ) {
+	if ( nWidth == 0u || nHeight == 0u ) {
+		return 0u;
+	}
+	uint32_t dimension = MAX( nWidth, nHeight );
+	uint32_t count = 1u;
+	while ( dimension > 1u ) {
+		dimension >>= 1u;
+		++count;
+	}
+	return count;
+}
+
 uint32_t Terrain3DRdTextureManager::getImageMipmapCount( const Ref<Image> &rImage ) {
 	if ( rImage.is_null() || rImage->is_empty() ) {
 		return 0u;
 	}
-	return rImage->has_mipmaps() ? ( uint32_t )( rImage->get_mipmap_count() + 1 ) : 1u;
+	if ( !rImage->has_mipmaps() ) {
+		return 1u;
+	}
+	const int32_t encoded_mipmaps = rImage->get_mipmap_count();
+	if ( encoded_mipmaps < 0 ) {
+		return 0u;
+	}
+	const uint64_t total_mipmaps = ( uint64_t )( encoded_mipmaps ) + 1u;
+	const uint32_t maximum_mipmaps = t3dRdMaximumMipCount( ( uint32_t )( rImage->get_width() ), ( uint32_t )( rImage->get_height() ) );
+	if ( total_mipmaps == 0u || total_mipmaps > maximum_mipmaps ) {
+		return 0u;
+	}
+	return ( uint32_t )( total_mipmaps );
 }
 
 bool Terrain3DRdTextureManager::buildLayout( const Ref<Image> &rImage,
@@ -229,6 +254,9 @@ bool Terrain3DRdTextureManager::buildLayout( const Ref<Image> &rImage,
 	rLayout.m_nHeight = ( uint32_t )( rImage->get_height() );
 	rLayout.m_nLayers = nLayers;
 	rLayout.m_nMipmaps = getImageMipmapCount( rImage );
+	if ( rLayout.m_nMipmaps == 0u ) {
+		return false;
+	}
 	rLayout.m_type = bLayered ? RenderingDevice::TEXTURE_TYPE_2D_ARRAY : RenderingDevice::TEXTURE_TYPE_2D;
 	rLayout.m_nUsageBits = ( uint64_t )( RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT )
 	        | ( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT )
@@ -241,8 +269,33 @@ bool Terrain3DRdTextureManager::buildLayout( const Ref<Image> &rImage,
 RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayout,
         const TypedArray<PackedByteArray> &rInitialData,
         const String &rName,
-        const int nMemoryCategory ) {
+        const int nMemoryCategory,
+        const bool bFailureFatal ) {
 	if ( !rLayout.valid() || rInitialData.size() != ( int64_t )( rLayout.m_nLayers ) ) {
+		return RID();
+	}
+	if ( !rInitialData.is_empty()
+	        && ( rLayout.m_nUsageBits & ( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT ) ) == 0u ) {
+		LOG( ERROR,
+		        "Rejected RD texture initial upload without TEXTURE_USAGE_CAN_UPDATE_BIT: ",
+		        rName,
+		        " usage=",
+		        rLayout.m_nUsageBits );
+		return RID();
+	}
+	const uint32_t maximum_mipmaps = t3dRdMaximumMipCount( rLayout.m_nWidth, rLayout.m_nHeight );
+	if ( rLayout.m_nMipmaps > maximum_mipmaps ) {
+		LOG( ERROR,
+		        "Rejected invalid RD texture mip chain before RenderingDevice creation: ",
+		        rName,
+		        " requested=",
+		        rLayout.m_nMipmaps,
+		        " maximum=",
+		        maximum_mipmaps,
+		        " size=",
+		        rLayout.m_nWidth,
+		        "x",
+		        rLayout.m_nHeight );
 		return RID();
 	}
 	if ( !Terrain3DRdContext::getGlobalDevice() ) {
@@ -266,10 +319,10 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 		m_bCreateSucceeded = false;
 	}
 	if ( Terrain3DRdContext::isOnRenderThread() ) {
-		renderCreateTexture( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory );
+		renderCreateTexture( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory, bFailureFatal );
 	} else {
 		if ( !Terrain3DRdContext::enqueueOnRenderThread( callable_mp( this, &Terrain3DRdTextureManager::renderCreateTexture )
-		                     .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory ) ) ) {
+		                     .bind( pFormat, rInitialData, rName, rLayout.m_nBytes, nMemoryCategory, bFailureFatal ) ) ) {
 			return RID();
 		}
 		// Creation/recreation is a cold path and requires the RID before publication.
@@ -399,28 +452,39 @@ void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> 
         const TypedArray<PackedByteArray> &rInitialData,
         const String &rName,
         const uint64_t nBytes,
-        const int nMemoryCategory ) {
+        const int nMemoryCategory,
+        const bool bFailureFatal ) {
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
 	if ( !context.isReady() && !context.initialize() ) {
 		return;
 	}
 	RenderingDevice *const pRd = context.getDevice();
-	if ( !pRd || !pRd->texture_is_format_supported_for_usage( rFormat->get_format(), rFormat->get_usage_bits() ) ) {
-		context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
+	if ( !pRd ) {
+		if ( bFailureFatal ) {
+			context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "RenderingDevice unavailable for texture creation" );
+		}
+		return;
+	}
+	if ( !pRd->texture_is_format_supported_for_usage( rFormat->get_format(), rFormat->get_usage_bits() ) ) {
+		if ( bFailureFatal ) {
+			context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
+		}
 		return;
 	}
 	Ref<RDTextureView> pView;
 	pView.instantiate();
 	RID texture = pRd->texture_create( rFormat, pView, rInitialData );
 	if ( !texture.is_valid() ) {
-		context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE );
+		if ( bFailureFatal ) {
+			context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE );
+		}
 		return;
 	}
 	const Terrain3DRdContext::MemoryCategory category = nMemoryCategory >= 0 && nMemoryCategory < Terrain3DRdContext::MEMORY_CATEGORY_COUNT
 	        ? ( Terrain3DRdContext::MemoryCategory )( nMemoryCategory )
 	        : Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE;
 	if ( !context.registerResource(
-	             texture, rName, Terrain3DRdContext::RESOURCE_TEXTURE, category, nBytes, Terrain3DRdContext::OWNER_TERRAIN ) ) {
+	             texture, rName, Terrain3DRdContext::RESOURCE_TEXTURE, category, nBytes, Terrain3DRdContext::OWNER_UNSPECIFIED ) ) {
 		pRd->free_rid( texture );
 		return;
 	}

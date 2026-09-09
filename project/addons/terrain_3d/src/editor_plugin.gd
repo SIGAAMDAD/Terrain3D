@@ -23,7 +23,7 @@ const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
 const EXPECTED_NATIVE_API_REVISION: int = 2026090601
-const EXPECTED_NATIVE_BUILD_ID: String = "p08-render-world-prepare-submit-reuse-2026-09-06"
+const EXPECTED_NATIVE_BUILD_ID: String = "instancer-authoritative-store-publication-2026-09-09"
 
 # Editor Plugin
 var ui: Terrain3DUI
@@ -102,6 +102,7 @@ func _enter_tree() -> void:
 	add_child(region_lightmap_panel)
 	hlod_baker = HLODBaker.new()
 	hlod_panel = HLODPanel.new()
+	hlod_panel.visible = false
 	hlod_panel.plugin = self
 	hlod_panel.baker = hlod_baker
 	add_child(hlod_panel)
