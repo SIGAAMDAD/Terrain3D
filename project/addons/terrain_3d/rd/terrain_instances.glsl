@@ -264,10 +264,17 @@ vec3 decode_normal(sampler2D normal_texture, vec2 uv, float normal_scale) {
     return normalize(vec3(xy, z));
 }
 
+vec3 face_oriented_normal(vec3 normal_value) {
+    vec3 n = normalize(normal_value);
+    return gl_FrontFacing ? n : -n;
+}
+
 vec3 tangent_to_world(vec3 tangent_normal) {
-    vec3 n = normalize(vertex_normal);
-    vec3 t = normalize(vertex_tangent.xyz - n * dot(n, vertex_tangent.xyz));
-    vec3 b = normalize(cross(n, t)) * vertex_tangent.w;
+    vec3 base_n = normalize(vertex_normal);
+    vec3 n = gl_FrontFacing ? base_n : -base_n;
+    vec3 t = normalize(vertex_tangent.xyz - base_n * dot(base_n, vertex_tangent.xyz));
+    float handedness = gl_FrontFacing ? vertex_tangent.w : -vertex_tangent.w;
+    vec3 b = normalize(cross(n, t)) * handedness;
     return normalize(mat3(t, b, n) * tangent_normal);
 }
 
@@ -286,7 +293,7 @@ void main() {
 #endif
     vec4 mesh_color = mesh_vertex_color;
     vec4 base_color = instance_color;
-    vec3 normal = normalize(vertex_normal);
+    vec3 normal = face_oriented_normal(vertex_normal);
     float metallic = 0.0;
     float roughness = 1.0;
     float ao = 1.0;
