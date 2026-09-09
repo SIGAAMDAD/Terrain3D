@@ -44,6 +44,7 @@ expected_builds = (
     'instancer-rd-arraymesh-surface-binding-p0-2026-09-09',
     'memory-budget-zone-containment-p1-2026-09-09',
     'forward-color-blend-attachment-contract-fix-2026-09-09',
+    'instancer-authoritative-visible-index-fix-2026-09-09',
 )
 if not any(build in constants and build in plugin for build in expected_builds):
     fail('native/script build ID contract does not identify this patch lineage')
@@ -93,8 +94,10 @@ for token in (
     if token not in renderer:
         fail(f'instance diagnostics missing {token}')
 
+if 'Forward+ PREPARE produced zero draws for a non-empty published scene' in coordinator:
+    fail('successful pass-specific zero-draw PREPARE is still treated as a fault')
 for token in (
-    'Forward+ PREPARE produced zero draws for a non-empty published scene',
+    '[RD instances] Forward+ PREPARE failed; pass=',
     'packet_input_cells=',
     'resolved_cells=',
     'unresolved_cells=',

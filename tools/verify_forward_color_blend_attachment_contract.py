@@ -14,8 +14,10 @@ checks = [
     ('ocean transparent path supplies all three Forward+ color slots',
      'for ( uint32_t i = 0u; i < 3u; ++i )' in ocean and 'const bool blend_color = i == 0u;' in ocean),
     ('native/editor build IDs agree',
-     'forward-color-blend-attachment-contract-fix-2026-09-09' in constants
-     and 'forward-color-blend-attachment-contract-fix-2026-09-09' in plugin),
+     any(build in constants and build in plugin for build in (
+         'forward-color-blend-attachment-contract-fix-2026-09-09',
+         'instancer-authoritative-visible-index-fix-2026-09-09',
+     ))),
 ]
 
 failed = [name for name, ok in checks if not ok]

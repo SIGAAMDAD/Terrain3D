@@ -605,7 +605,7 @@ static const Vector3 s_v3Up{ 0.f, 1.f, 0.f };
 
 
 // Additional migrated constants.
-#define s_pszNativeBuildId ( "forward-color-blend-attachment-contract-fix-2026-09-09" )
+#define s_pszNativeBuildId ( "instancer-authoritative-visible-index-fix-2026-09-09" )
 #define s_pszEngineSingletonName ( "Terrain3DForwardPlusBridge" )
 #define s_pszProfileKey ( "xbox360_experimental" )
 #define s_pszProfileDisplayName ( "Xbox 360 Experimental" )

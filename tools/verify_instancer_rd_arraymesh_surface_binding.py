@@ -17,7 +17,7 @@ required = [
 for token in required[:-1]:
     if token not in source:
         raise SystemExit(f'MISSING: {token}')
-if not any(build in constants for build in (required[-1], 'memory-budget-zone-containment-p1-2026-09-09', 'forward-color-blend-attachment-contract-fix-2026-09-09')):
+if not any(build in constants for build in (required[-1], 'memory-budget-zone-containment-p1-2026-09-09', 'forward-color-blend-attachment-contract-fix-2026-09-09', 'instancer-authoritative-visible-index-fix-2026-09-09')):
     raise SystemExit('MISSING: P0 or descendant native build lineage')
 
 for forbidden in (

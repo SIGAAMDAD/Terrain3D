@@ -2131,7 +2131,18 @@ bool Terrain3DRdInstanceRenderer::buildPacketsForPass( const t3dRdInstanceSceneS
 	} else {
 		m_nVisibleIndexCount = ( uint32_t )( total_visible64 );
 	}
-	if ( !bSkipFrustum ) {
+	// bSkipFrustum only means that packet construction must accept the
+	// authoritative publication without applying the CPU camera test. The normal
+	// GPU-cull path also uses that mode while deliberately leaving the visible
+	// index/indirect outputs for compute to populate, but the direct RD port does
+	// not dispatch that compute path. Keep those two concerns separate or the
+	// direct path submits N instances through stale visible-index entries.
+#if T3D_INSTANCER_RD_PORT || T3D_INSTANCER_MINIMAL_RENDER_PATH
+	const bool defer_visibility_output = false;
+#else
+	const bool defer_visibility_output = bSkipFrustum;
+#endif
+	if ( !defer_visibility_output ) {
 		for ( size_t iEntry = 0u; iEntry < ( size_t )( ( m_packetBuildEntries ).size() ); iEntry++ ) {
 			const t3dRdPacketBuildEntry_t &entry = ( m_packetBuildEntries )[iEntry];
 			t3dRdPacketBuildSlot_t &slot = m_packetBuildSlots[entry.m_nPacketIndex];
@@ -2154,7 +2165,7 @@ bool Terrain3DRdInstanceRenderer::buildPacketsForPass( const t3dRdInstanceSceneS
 			return false;
 		}
 		slot.m_packet.m_command.m_nIndexCount = pSurface->m_nIndexCount;
-		slot.m_packet.m_command.m_nInstanceCount = bSkipFrustum ? 0u : slot.m_packet.m_nVisibleCount;
+		slot.m_packet.m_command.m_nInstanceCount = defer_visibility_output ? 0u : slot.m_packet.m_nVisibleCount;
 		slot.m_packet.m_command.m_nFirstIndex = pSurface->m_nIndexOffset;
 		slot.m_packet.m_command.m_nVertexOffset = ( int32_t )( pSurface->m_nVertexOffset );
 		slot.m_packet.m_command.m_nFirstInstance = slot.m_packet.m_nFirstVisible;
@@ -4020,6 +4031,8 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 #endif
 	result["static_instances"] = ( int64_t )( m_nStaticInstances );
 	result["visible_instances"] = ( int64_t )( m_nVisibleInstances );
+	result["visible_index_count"] = ( int64_t )( m_nVisibleIndexCount );
+	result["shadow_visible_index_count"] = ( int64_t )( m_nShadowVisibleIndexCount );
 	result["instance_scene_uploads"] = ( int64_t )( m_nSceneUploads );
 	result["instance_dirty_upload_bytes"] = ( int64_t )( m_nDirtyUploadBytes );
 	result["instance_dirty_upload_ranges"] = ( int64_t )( m_nDirtyUploadRanges );

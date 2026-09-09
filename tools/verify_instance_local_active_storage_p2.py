@@ -55,7 +55,7 @@ for stale in ['process-static active terrain storage', 'Only one Terrain3DData o
     if stale in data_cpp:
         errors.append('stale singleton diagnostic: ' + stale)
 
-build_id = 'forward-color-blend-attachment-contract-fix-2026-09-09'
+build_id = 'instancer-authoritative-visible-index-fix-2026-09-09'
 if build_id not in constants or build_id not in plugin:
     errors.append('native/editor build id mismatch for P2')
 

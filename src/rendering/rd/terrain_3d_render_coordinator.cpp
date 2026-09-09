@@ -2605,42 +2605,12 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 			if ( instances_ok ) {
 				m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;
 				if ( !m_bForwardInstancePreparedHasDraws ) {
-					const uint64_t no_draw_count = ++m_nInstancePreparedWithoutDraws;
-					if ( t3dRdShouldReportInstanceFailure( no_draw_count ) ) {
-						LOG( ERROR,
-						        "[RD instances] Forward+ PREPARE produced zero draws for a non-empty published scene; pass=",
-						        ( uint32_t )( rContext.m_passKind ),
-						        ", scene_pass=",
-						        rContext.m_nScenePass,
-						        ", records=",
-						        m_nForwardPublishedInstanceCount,
-						        ", cells=",
-						        m_nForwardPublishedInstanceCellCount,
-						        ", published_vertex_bytes=",
-						        pMeshes ? pMeshes->m_snapshot.m_vertexBytes.size() : 0,
-						        ", published_lods=",
-						        pMeshes ? pMeshes->m_snapshot.m_lods.size() : 0u,
-						        ", published_surfaces=",
-						        pMeshes ? pMeshes->m_snapshot.m_surfaces.size() : 0u,
-						        ", gpu_lods=",
-						        m_instanceRenderer.getMeshCacheLodCount(),
-						        ", gpu_surfaces=",
-						        m_instanceRenderer.getMeshCacheSurfaceCount(),
-						        ", packet_input_cells=",
-						        m_instanceRenderer.getPacketBuildInputCellCount(),
-						        ", resolved_cells=",
-						        m_instanceRenderer.getResolvedMeshCellCount(),
-						        ", unresolved_cells=",
-						        m_instanceRenderer.getUnresolvedMeshCellCount(),
-						        ", draw_packets=",
-						        m_instanceRenderer.getDrawPacketCount(),
-						        ", mesh_upload_failures=",
-						        m_instanceRenderer.getMeshUploadFailureCount(),
-						        ", texture_fallbacks=",
-						        m_instanceRenderer.getMeshTextureFallbackCount(),
-						        ", mesh_error=",
-						        m_instanceRenderer.getMeshCacheLastError() );
-					}
+					// A non-empty publication does not imply that every native pass must
+					// produce a draw. Shadow/depth/transparent eligibility is pass-specific,
+					// and a successful PREPARE with zero packets is therefore a valid no-op.
+					// Keep the counter for diagnostics; actual prepare failures are reported
+					// by the instances_ok == false path below.
+					++m_nInstancePreparedWithoutDraws;
 				}
 			} else {
 				m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES;

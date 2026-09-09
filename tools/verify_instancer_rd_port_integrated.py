@@ -37,6 +37,7 @@ builds = (
     'instancer-rd-arraymesh-surface-binding-p0-2026-09-09',
     'memory-budget-zone-containment-p1-2026-09-09',
     'forward-color-blend-attachment-contract-fix-2026-09-09',
+    'instancer-authoritative-visible-index-fix-2026-09-09',
 )
 if not any(build in constants and build in plugin for build in builds):
     fail('native/script build IDs do not identify the integrated port lineage')

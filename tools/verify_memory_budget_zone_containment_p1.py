@@ -40,7 +40,7 @@ if 'getMemoryAllocatorContainedRepositoryBytes' not in data_h:
 if 'return m_samplingStorage.getResidentReservedBytes();' not in data_cpp:
     fail('resident sampling pool is not classified as allocator-contained')
 
-build_id = 'forward-color-blend-attachment-contract-fix-2026-09-09'
+build_id = 'instancer-authoritative-visible-index-fix-2026-09-09'
 if build_id not in constants or build_id not in plugin:
     fail('native/editor build IDs are not synchronized to P1')
 
