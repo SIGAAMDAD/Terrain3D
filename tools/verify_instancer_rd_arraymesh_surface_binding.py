@@ -17,8 +17,8 @@ required = [
 for token in required[:-1]:
     if token not in source:
         raise SystemExit(f'MISSING: {token}')
-if required[-1] not in constants:
-    raise SystemExit(f'MISSING: {required[-1]}')
+if not any(build in constants for build in (required[-1], 'memory-budget-zone-containment-p1-2026-09-09')):
+    raise SystemExit('MISSING: P0 or descendant native build lineage')
 
 for forbidden in (
     'rMesh->_surface_get_primitive_type(',

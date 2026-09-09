@@ -547,6 +547,7 @@ private:
 	void serviceMemoryBudgetPolicy( bool bForce );
 	t3dMemoryBudgetInput_t buildMemoryBudgetInput( void ) const;
 	uint64_t calculateFixedMemoryBytes( void ) const;
+	uint64_t calculateAllocatorContainedFixedMemoryBytes( void ) const;
 	uint64_t calculateTransientMemoryBytes( void ) const;
 	size_t calculateRuntimeAllocatorZoneBytes( void ) const;
 	void applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult, bool bForce );

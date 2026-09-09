@@ -236,6 +236,20 @@ uint64_t Terrain3D::calculateFixedMemoryBytes( void ) const {
 	return bytes;
 }
 
+uint64_t Terrain3D::calculateAllocatorContainedFixedMemoryBytes( void ) const {
+	uint64_t bytes = 0u;
+	if ( m_pData ) {
+		bytes = t3dSaturatingAddMemoryBytes( bytes, ( uint64_t )( m_pData->getMemoryAllocatorContainedRepositoryBytes() ) );
+	}
+	if ( m_pInstancer ) {
+		bytes = t3dSaturatingAddMemoryBytes( bytes, ( uint64_t )( m_pInstancer->getRetainedContainerBytes() ) );
+	}
+	if ( m_pNodeStreamer ) {
+		bytes = t3dSaturatingAddMemoryBytes( bytes, ( uint64_t )( m_pNodeStreamer->getRetainedCapacityBytes() ) );
+	}
+	return bytes;
+}
+
 uint64_t Terrain3D::calculateTransientMemoryBytes( void ) const {
 	uint64_t bytes = 0u;
 	if ( m_pData ) {
@@ -254,6 +268,7 @@ t3dMemoryBudgetInput_t Terrain3D::buildMemoryBudgetInput( void ) const {
 	t3dMemoryBudgetInput_t input;
 	input.m_nTotalBudgetBytes = ( uint64_t )( m_nTotalMemoryBudgetMb )*s_nMemoryMib;
 	input.m_nFixedBytes = calculateFixedMemoryBytes();
+	input.m_nAllocatorContainedFixedBytes = calculateAllocatorContainedFixedMemoryBytes();
 	input.m_nAllocatorReserveBytes = m_runtimeMemoryZone.capacity() > 0u ? ( uint64_t )m_runtimeMemoryZone.capacity()
 	                                                                     : ( uint64_t )calculateRuntimeAllocatorZoneBytes();
 	input.m_nTransientReserveBytes = ( uint64_t )( m_nMemoryTransientReserveMb )*s_nMemoryMib;
@@ -577,6 +592,8 @@ Dictionary Terrain3D::getMemoryBudgetStats( void ) const {
 	stats["total_budget_bytes"] = ( int64_t )( ( uint64_t )( m_nTotalMemoryBudgetMb )*s_nMemoryMib );
 	stats["transient_reserve_mb"] = m_nMemoryTransientReserveMb;
 	stats["fixed_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nFixedBytes );
+	stats["allocator_contained_fixed_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nAllocatorContainedFixedBytes );
+	stats["fixed_logical_bytes"] = ( int64_t )calculateFixedMemoryBytes();
 	stats["allocator_reserve_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nAllocatorReserveBytes );
 	stats["allocator_target_bytes"] = ( int64_t )calculateRuntimeAllocatorZoneBytes();
 	stats["allocator_overflow_policy"] =
@@ -649,6 +666,8 @@ Dictionary Terrain3D::getTrackedCurrentResidency( void ) const {
 
 	Dictionary fixed;
 	fixed["bytes"] = ( int64_t )( fixed_bytes );
+	fixed["budget_external_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nFixedBytes );
+	fixed["allocator_contained_bytes"] = ( int64_t )( m_nMemoryBudgetResult.m_nAllocatorContainedFixedBytes );
 	fixed["accuracy"] = "estimated";
 	fixed["material_texture_arrays_bytes"] = ( int64_t )( m_assets.is_valid() ? m_assets->getGeneratedTexturePayloadBytes() : 0u );
 	fixed["far_atlas_bytes"] = ( int64_t )( getGpuFarAtlasBytes() );
@@ -804,6 +823,7 @@ Dictionary Terrain3D::getRuntimeMemoryStatsFast( void ) const {
 	memory["current_known_bytes"] = ( int64_t )tracked_bytes;
 	memory["logical_tracked_bytes"] = ( int64_t )tracked_bytes;
 	memory["allocator_reserve_bytes"] = ( int64_t )m_nMemoryBudgetResult.m_nAllocatorReserveBytes;
+	memory["allocator_contained_fixed_bytes"] = ( int64_t )m_nMemoryBudgetResult.m_nAllocatorContainedFixedBytes;
 	memory["budget_committed_bytes"] =
 	        ( int64_t )( fixed_bytes + m_nMemoryBudgetResult.m_nAllocatorReserveBytes + managed_bytes + transient_bytes );
 	memory["peak_known_bytes"] = ( int64_t )( m_nTrackedMemoryPeakBytes );

@@ -439,6 +439,7 @@ public:
 	size_t getMemoryNonPageTransientStagingBytes( void ) const;
 	size_t getMemoryTransientStagingBytes( void ) const;
 	size_t getMemoryFixedRepositoryBytes( void ) const;
+	size_t getMemoryAllocatorContainedRepositoryBytes( void ) const;
 	uint64_t getMemoryComputeLocalGpuBytes( void ) const;
 	Dictionary getRuntimeResidencyGrid( int nRadius = 6 ) const;
 	void invalidateGpuFarSurface( void );

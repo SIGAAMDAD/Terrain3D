@@ -113,7 +113,7 @@ if precheck < 0 or commit < 0 or precheck > commit:
     failures.append('P10 retired-list capacity is not validated before upload publication mutation')
 
 build_id = text('src/Terrain3DConstants.h')
-if not any(tag in build_id for tag in ('p10-vt-stream-index-worker-batching-2026-09-07', 'p11-instance-gpu-cull-dirty-ranges-2026-09-07', 'p11-runtime-page-header-padding-fix-2026-09-07', 'instancer-minimal-indirect-addressing-fix-2026-09-08', 'instancer-fault-reporting-texture-fallback-fix-2026-09-09', 'instancer-direct-surface-bringup-2026-09-09', 'instancer-rd-port-integrated-2026-09-09', 'instancer-authoritative-store-publication-2026-09-09', 'instancer-rd-arraymesh-surface-binding-p0-2026-09-09')):
+if not any(tag in build_id for tag in ('p10-vt-stream-index-worker-batching-2026-09-07', 'p11-instance-gpu-cull-dirty-ranges-2026-09-07', 'p11-runtime-page-header-padding-fix-2026-09-07', 'instancer-minimal-indirect-addressing-fix-2026-09-08', 'instancer-fault-reporting-texture-fallback-fix-2026-09-09', 'instancer-direct-surface-bringup-2026-09-09', 'instancer-rd-port-integrated-2026-09-09', 'instancer-authoritative-store-publication-2026-09-09', 'instancer-rd-arraymesh-surface-binding-p0-2026-09-09', 'memory-budget-zone-containment-p1-2026-09-09')):
     failures.append('P10-or-later native build provenance is not updated')
 
 # P10 remains a required cumulative contract under P11.

@@ -1749,6 +1749,10 @@ size_t Terrain3DData::getMemoryFixedRepositoryBytes( void ) const {
 	return sizeof( *this ) + m_samplingStorage.getActiveReservedBytes() + m_samplingStorage.getResidentReservedBytes();
 }
 
+size_t Terrain3DData::getMemoryAllocatorContainedRepositoryBytes( void ) const {
+	return m_samplingStorage.getResidentReservedBytes();
+}
+
 uint64_t Terrain3DData::getMemoryComputeLocalGpuBytes( void ) const {
 	return m_pCompute ? m_pCompute->getRetainedLocalGpuBufferBytes() : 0u;
 }

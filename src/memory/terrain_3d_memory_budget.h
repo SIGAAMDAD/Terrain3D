@@ -37,6 +37,7 @@ typedef struct t3dMemorySubsystemInput_s {
 typedef struct t3dMemoryBudgetInput_s {
 	uint64_t m_nTotalBudgetBytes = 0u;
 	uint64_t m_nFixedBytes = 0u;
+	uint64_t m_nAllocatorContainedFixedBytes = 0u;
 	uint64_t m_nAllocatorReserveBytes = 0u;
 	uint64_t m_nTransientReserveBytes = 0u;
 	t3dMemorySubsystemInput_t m_szSubsystems[TERRAIN3D_MEMORY_SUBSYSTEM_COUNT]{};
@@ -52,6 +53,7 @@ typedef struct t3dMemorySubsystemAllocation_s {
 typedef struct t3dMemoryBudgetResult_s {
 	uint64_t m_nTotalBudgetBytes = 0u;
 	uint64_t m_nFixedBytes = 0u;
+	uint64_t m_nAllocatorContainedFixedBytes = 0u;
 	uint64_t m_nAllocatorReserveBytes = 0u;
 	uint64_t m_nTransientReserveBytes = 0u;
 	uint64_t m_nManagedBudgetBytes = 0u;
@@ -81,11 +83,19 @@ public:
 	static t3dMemoryBudgetResult_t calculate( const t3dMemoryBudgetInput_t &rInput ) {
 		t3dMemoryBudgetResult_t result;
 		result.m_nTotalBudgetBytes = rInput.m_nTotalBudgetBytes;
-		result.m_nFixedBytes = rInput.m_nFixedBytes;
+		// Fixed logical capacity physically served by the reserved zone is already
+		// paid for by m_nAllocatorReserveBytes. Charge only any excess once.
+		const uint64_t allocator_contained = rInput.m_nAllocatorContainedFixedBytes < rInput.m_nFixedBytes
+		        ? rInput.m_nAllocatorContainedFixedBytes
+		        : rInput.m_nFixedBytes;
+		result.m_nAllocatorContainedFixedBytes = allocator_contained < rInput.m_nAllocatorReserveBytes
+		        ? allocator_contained
+		        : rInput.m_nAllocatorReserveBytes;
+		result.m_nFixedBytes = rInput.m_nFixedBytes - result.m_nAllocatorContainedFixedBytes;
 		result.m_nAllocatorReserveBytes = rInput.m_nAllocatorReserveBytes;
 		result.m_nTransientReserveBytes = rInput.m_nTransientReserveBytes;
 		bool arithmetic_overflow = false;
-		const uint64_t fixed_and_allocator = addChecked( rInput.m_nFixedBytes, rInput.m_nAllocatorReserveBytes, arithmetic_overflow );
+		const uint64_t fixed_and_allocator = addChecked( result.m_nFixedBytes, result.m_nAllocatorReserveBytes, arithmetic_overflow );
 		const uint64_t fixed_and_transient = addChecked( fixed_and_allocator, rInput.m_nTransientReserveBytes, arithmetic_overflow );
 		result.m_nManagedBudgetBytes =
 		        rInput.m_nTotalBudgetBytes > fixed_and_transient ? rInput.m_nTotalBudgetBytes - fixed_and_transient : 0u;

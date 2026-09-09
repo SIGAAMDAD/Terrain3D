@@ -42,6 +42,7 @@ expected_builds = (
     'instancer-rd-port-integrated-2026-09-09',
     'instancer-authoritative-store-publication-2026-09-09',
     'instancer-rd-arraymesh-surface-binding-p0-2026-09-09',
+    'memory-budget-zone-containment-p1-2026-09-09',
 )
 if not any(build in constants and build in plugin for build in expected_builds):
     fail('native/script build ID contract does not identify this patch lineage')
