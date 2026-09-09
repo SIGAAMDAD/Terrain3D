@@ -23,7 +23,7 @@ const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
 const EXPECTED_NATIVE_API_REVISION: int = 2026090601
-const EXPECTED_NATIVE_BUILD_ID: String = "instancer-authoritative-store-publication-2026-09-09"
+const EXPECTED_NATIVE_BUILD_ID: String = "instancer-rd-arraymesh-surface-binding-p0-2026-09-09"
 
 # Editor Plugin
 var ui: Terrain3DUI

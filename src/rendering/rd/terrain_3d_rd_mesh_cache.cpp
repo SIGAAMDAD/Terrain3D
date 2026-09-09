@@ -11,6 +11,7 @@
 #include <EASTL/vector.h>
 #include <math.h>
 #include <string.h>
+#include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/base_material3d.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh.hpp>
@@ -377,6 +378,11 @@ static bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 		t3dRdSetError( pError, "RD static mesh source key is invalid" );
 		return false;
 	}
+	ArrayMesh *const pArrayMesh = Object::cast_to<ArrayMesh>( rMesh.ptr() );
+	if ( !pArrayMesh ) {
+		t3dRdSetError( pError, "RD static mesh source is not an ArrayMesh" );
+		return false;
+	}
 	const size_t surface_capacity = rResult.m_surfaces.size() + ( size_t )( rMesh->get_surface_count() );
 	if ( !t3dContainerReserveCold( rResult.m_surfaces, surface_capacity )
 	        || !t3dContainerReserveCold( rResult.m_lods, rResult.m_lods.size() + 1u ) ) {
@@ -390,7 +396,7 @@ static bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 	lod_record.m_nFirstSurface = ( uint32_t )( rResult.m_surfaces.size() );
 	lod_record.m_bounds = rMesh->get_aabb();
 	for ( int surface = 0; surface < rMesh->get_surface_count(); ++surface ) {
-		if ( rMesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+		if ( pArrayMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
 		const Array arrays = rMesh->surface_get_arrays( surface );
@@ -539,11 +545,13 @@ static bool t3dRdAppendMeshSource( const Ref<Mesh> &rMesh,
 		}
 	}
 	lod_record.m_nSurfaceCount = ( uint32_t )( rResult.m_surfaces.size() ) - lod_record.m_nFirstSurface;
-	if ( lod_record.m_nSurfaceCount > 0u ) {
-		if ( !t3dVectorPushBackWithinCapacity( rResult.m_lods, lod_record ) ) {
-			t3dRdSetError( pError, "RD static mesh LOD capacity exhausted" );
-			return false;
-		}
+	if ( lod_record.m_nSurfaceCount == 0u ) {
+		t3dRdSetError( pError, "RD static mesh source produced no usable triangle surfaces" );
+		return false;
+	}
+	if ( !t3dVectorPushBackWithinCapacity( rResult.m_lods, lod_record ) ) {
+		t3dRdSetError( pError, "RD static mesh LOD capacity exhausted" );
+		return false;
 	}
 	return true;
 }
@@ -626,10 +634,14 @@ uint64_t Terrain3DRdMeshCache::computeSourceFingerprint(
 			const AABB bounds = mesh->get_aabb();
 			hash = t3dRdHashVector3( hash, bounds.position );
 			hash = t3dRdHashVector3( hash, bounds.size );
+			ArrayMesh *const pArrayMesh = Object::cast_to<ArrayMesh>( mesh.ptr() );
+			hash = t3dRdHashU64( hash, pArrayMesh ? 1u : 0u );
 			for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-				hash = t3dRdHashU64( hash, ( uint64_t )( mesh->_surface_get_primitive_type( surface ) ) );
-				hash = t3dRdHashU64( hash, ( uint64_t )( MAX( mesh->_surface_get_array_len( surface ), 0 ) ) );
-				hash = t3dRdHashU64( hash, ( uint64_t )( MAX( mesh->_surface_get_array_index_len( surface ), 0 ) ) );
+				if ( pArrayMesh ) {
+					hash = t3dRdHashU64( hash, ( uint64_t )( pArrayMesh->surface_get_primitive_type( surface ) ) );
+					hash = t3dRdHashU64( hash, ( uint64_t )( MAX( pArrayMesh->surface_get_array_len( surface ), 0 ) ) );
+					hash = t3dRdHashU64( hash, ( uint64_t )( MAX( pArrayMesh->surface_get_array_index_len( surface ), 0 ) ) );
+				}
 				hash = t3dRdHashMaterial( hash, mesh->surface_get_material( surface ) );
 			}
 		}
@@ -646,10 +658,14 @@ uint64_t Terrain3DRdMeshCache::computeSourceFingerprint(
 		const AABB bounds = source.m_mesh->get_aabb();
 		hash = t3dRdHashVector3( hash, bounds.position );
 		hash = t3dRdHashVector3( hash, bounds.size );
+		ArrayMesh *const pArrayMesh = Object::cast_to<ArrayMesh>( source.m_mesh.ptr() );
+		hash = t3dRdHashU64( hash, pArrayMesh ? 1u : 0u );
 		for ( int surface = 0; surface < source.m_mesh->get_surface_count(); ++surface ) {
-			hash = t3dRdHashU64( hash, ( uint64_t )( source.m_mesh->_surface_get_primitive_type( surface ) ) );
-			hash = t3dRdHashU64( hash, ( uint64_t )( MAX( source.m_mesh->_surface_get_array_len( surface ), 0 ) ) );
-			hash = t3dRdHashU64( hash, ( uint64_t )( MAX( source.m_mesh->_surface_get_array_index_len( surface ), 0 ) ) );
+			if ( pArrayMesh ) {
+				hash = t3dRdHashU64( hash, ( uint64_t )( pArrayMesh->surface_get_primitive_type( surface ) ) );
+				hash = t3dRdHashU64( hash, ( uint64_t )( MAX( pArrayMesh->surface_get_array_len( surface ), 0 ) ) );
+				hash = t3dRdHashU64( hash, ( uint64_t )( MAX( pArrayMesh->surface_get_array_index_len( surface ), 0 ) ) );
+			}
 			hash = t3dRdHashMaterial( hash, source.m_mesh->surface_get_material( surface ) );
 		}
 	}
