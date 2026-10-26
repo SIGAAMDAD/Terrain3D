@@ -356,9 +356,7 @@ void Terrain3D::applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult,
 	const int shader_mb = 0;
 
 	const int hysteresis_mb = ( int )( T3D_MEMORY_POLICY_HYSTERESIS_BYTES / T3D_MEMORY_MIB );
-	const uint64_t gpu_delta = previous_gpu_bytes > managed_gpu_page_budget_bytes ? previous_gpu_bytes - managed_gpu_page_budget_bytes
-	                                                                              : managed_gpu_page_budget_bytes - previous_gpu_bytes;
-	const bool bGpuChanged = bForce || managed_gpu_page_budget_bytes < previous_gpu_bytes || gpu_delta >= T3D_MEMORY_POLICY_HYSTERESIS_BYTES;
+	const bool bGpuChanged = bForce || managed_gpu_page_budget_bytes != previous_gpu_bytes;
 	const bool bCpuChanged = bForce || cpu_mb < m_nEffectiveCpuRegionCacheBudgetMb || abs( cpu_mb - m_nEffectiveCpuRegionCacheBudgetMb ) >= hysteresis_mb;
 	const bool bInstanceChanged = bForce || instance_mb < m_nEffectiveInstanceRegionCacheBudgetMb || abs( instance_mb - m_nEffectiveInstanceRegionCacheBudgetMb ) >= hysteresis_mb;
 	const bool bLightmapChanged = bForce || lightmap_mb < m_nEffectiveLightmapResidencyBudgetMb || abs( lightmap_mb - m_nEffectiveLightmapResidencyBudgetMb ) >= hysteresis_mb;

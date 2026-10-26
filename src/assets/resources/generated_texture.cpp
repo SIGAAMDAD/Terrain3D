@@ -104,6 +104,17 @@ bool Terrain3DGeneratedTexture::buildTrackedLayerBatchUpdate(
 	}
 	return true;
 }
+bool Terrain3DGeneratedTexture::buildTrackedLayerCopy( const int source_layer, const int layer,
+        t3dRdTextureBatchUpdate_t &update ) {
+	update = t3dRdTextureBatchUpdate_t{};
+	if ( !isLayered() || m_bDirty || source_layer < 0 || layer < 0
+	        || source_layer >= ( int )m_texture.layout().m_nLayers || layer >= ( int )m_texture.layout().m_nLayers ) { return false; }
+	update.m_pTexture = &m_texture;
+	update.m_nTextureGeneration = m_texture.generation();
+	update.m_nCopySourceLayer = ( uint32_t )source_layer;
+	return true;
+}
+
 RID Terrain3DGeneratedTexture::create( const Ref<Image> &rImage, const t3dRdTextureSemantic_t semantic ) {
 	const Ref<Image> image = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
 	if ( image.is_null() || image->is_empty() ) { m_bDirty = true; return RID(); }

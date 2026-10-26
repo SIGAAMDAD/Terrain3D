@@ -38,7 +38,7 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet( t3dRdShaderId_t id );
 // the shared raster aliases, compute programs and fixed shadow programs.
 constexpr bool t3dRdShaderNeedsStartupPhysical( const t3dRdShaderId_t id )
 {
-	return id >= T3D_RD_SHADER_NEAR_ALIAS && id < T3D_RD_SHADER_COUNT && !( id >= T3D_RD_SHADER_INSTANCE_FORWARD_BASE && id < T3D_RD_SHADER_INSTANCE_ALIAS ) && !( id >= T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE && id < T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) && id != T3D_RD_SHADER_BRUSH_COMPUTE && id != T3D_RD_SHADER_DERIVED_COMPUTE;
+	return id >= T3D_RD_SHADER_NEAR_ALIAS && id < T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE && !( id >= T3D_RD_SHADER_INSTANCE_FORWARD_BASE && id < T3D_RD_SHADER_INSTANCE_ALIAS ) && !( id >= T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE && id < T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) && id != T3D_RD_SHADER_BRUSH_COMPUTE && id != T3D_RD_SHADER_DERIVED_COMPUTE;
 }
 
 uint32_t t3dRdShaderCatalogGlobalSourceCount();

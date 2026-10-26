@@ -191,13 +191,13 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 			Legacy.nMip0WidthPages = SourceChannel.m_nMip0WidthPages;
 			Legacy.nMip0HeightPages = SourceChannel.m_nMip0HeightPages;
 			Legacy.nMipCount = SourceChannel.m_nMipCount;
-			Legacy.nChannel = ( uint16_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )iChannel );
+			Legacy.nChannel = ( uint16_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )iChannel, SourceChannel.m_nFlags );
 			Legacy.nFlags = SourceChannel.m_nFlags;
 			Legacy.nRootPage = SourceChannel.m_nPageCount != 0u ? SourceChannel.m_nBaseVirtualPage + SourceChannel.m_nPageCount - 1u : 0u;
 			Legacy.nReserved1 = SourceAllocation.m_nContentId;
 
 			t3dVTTailMetadata_t &RuntimeTail = Candidate.pRuntimeTails[nRuntimeId];
-			const uint32_t nFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )iChannel );
+			const uint32_t nFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )iChannel, SourceChannel.m_nFlags );
 			// Allocate positions independently per physical texture family. Instance
 			// ALBEDO and ORM share BC1 and must occupy distinct positions.
 			const uint32_t nAtlasSlot = nFamilyTailSlots[nFamily]++;
@@ -233,7 +233,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 		RuntimePage.nAllocationId = t3d_vt_v3_runtime_allocation_base( SourcePage.m_nAllocationId ) + nSlot;
 		RuntimePage.nPayloadId = SourcePage.m_nPayloadId;
 		RuntimePage.nMip = SourcePage.m_nMip;
-		RuntimePage.nChannel = ( uint16_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )SourcePage.m_nChannel );
+		RuntimePage.nChannel = ( uint16_t )Candidate.PackViewV3.m_pPayloads[SourcePage.m_nPayloadId].m_nFormat;
 		RuntimePage.nFlags = SourcePage.m_nFlags;
 		RuntimePage.nGeneration = SourcePage.m_nGeneration;
 		RuntimePage.nReserved1 = SourcePage.m_nContentId;

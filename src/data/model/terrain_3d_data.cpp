@@ -859,6 +859,10 @@ bool Terrain3DData::prepareSamplingArea( const Vector3 &rWorldPosition, const in
 	return m_residency.cpuRegionCache().ensureSampleArea( rWorldPosition, nRadiusTexels );
 }
 
+bool Terrain3DData::tryPrepareSamplingArea( const Vector3 &position, const int radius ) {
+	return m_residency.cpuRegionCache().ensureSampleArea( position, radius, false );
+}
+
 void Terrain3DData::updateCpuRegionResidencyInternal( const t3dResidencyFrameState_s &rFrame, const bool bForce ) {
 	m_residency.cpuRegionCache().update( rFrame, bForce, getEffectiveCpuRegionLoadBudgetLayers() );
 }
@@ -4901,4 +4905,17 @@ Ref<Terrain3DAssets> Terrain3DData::getErosionAssets( void ) const {
 
 Ref<Terrain3DMaterial> Terrain3DData::getErosionMaterial( void ) const {
 	return m_pTerrain ? m_pTerrain->materialResource() : Ref<Terrain3DMaterial>();
+}
+
+bool Terrain3DData::publishRuntimeVirtualTexturesCold( String &rOutputPath, uint32_t &rGeneration, uint32_t &rMaterialCount, String &rError ) {
+	if ( m_pTerrain == NULL || m_pTerrain->getDataDirectory().is_empty() ) {
+		rError = "Set a terrain data directory before saving runtime virtual textures"; return false;
+	}
+	rOutputPath = m_pTerrain->getDataDirectory().path_join( "terrain3d_instances.t3dvt" );
+	PackedByteArray bytes;
+	if ( !t3d_vt_godot_cook_runtime_assets_package( m_pTerrain->assetsResource(), bytes, rGeneration, rMaterialCount, &rError )
+	        || !Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
+	                { *this, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit( m_pTerrain->getMemoryAccountInternal() ) }, bytes, rGeneration, rError ) ) { return false; }
+	if ( bytes.is_empty() ) { rError = "No authored virtual-texture sources to save"; return false; }
+	return t3dPublishPackedFile( rOutputPath, bytes, &rError ) == OK;
 }

@@ -1257,6 +1257,7 @@ bool Terrain3DRdClipmapRenderer::updateFrameUniforms( const t3dRdFrameSnapshot_t
 	frame.m_fLightColorA = ( float )( rSnapshot.m_lightColor.a );
 	frame.m_fTerrainPadding0 = pSharedVTBindings ? ( float )( pSharedVTBindings->nAllocationCount ) : 0.0f;
 	frame.m_fTerrainPadding1 = pSharedVTBindings ? ( float )( pSharedVTBindings->nVirtualPageCount ) : 0.0f;
+	memcpy( frame.m_szInstanceTextureMipBias, rSnapshot.m_szInstanceTextureMipBias, sizeof( frame.m_szInstanceTextureMipBias ) );
 	frame.m_fHeightMin = rSnapshot.m_fHeightMin;
 	frame.m_fHeightRange = rSnapshot.m_fHeightRange;
 	frame.m_fVertexSpacing = rSnapshot.m_fVertexSpacing;

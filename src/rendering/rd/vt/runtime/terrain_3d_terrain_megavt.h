@@ -66,6 +66,7 @@ public:
 	bool buildCookRequest( uint32_t nRegionMapIndex, t3dTerrainMegaVTCookRequest_t& rRequest ) const;
 	bool setTexelsPerMeterCold( uint32_t nTexelsPerMeter );
 
+	uint32_t requestForceRecookAllRegionsCold( void );
 	bool markEditorDirtyBoundsHot( const t3dTerrainMegaVTEditBounds_t& rBounds );
 	bool importPersistentEditorStateHot( uint32_t nRegionMapIndex, uint32_t nSourceGeneration, uint32_t nDirtyMip0Mask );
 	bool getPersistentEditorState( uint32_t nRegionMapIndex, uint32_t& rSourceGeneration, uint32_t& rDirtyMip0Mask ) const;

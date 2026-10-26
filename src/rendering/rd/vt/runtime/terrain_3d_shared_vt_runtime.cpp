@@ -243,6 +243,10 @@ bool Terrain3DSharedVTRuntime::service_shared_vt_publication_cold(
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
 	}
+	// Initial tables and persistent storage are published. Seal the owner so
+	// admitted requests can use its existing bounded streaming/upload path.
+	m_Resources.seal_hot_runtime();
+	m_pVirtualTexture->seal_hot_runtime();
 	return true;
 }
 
@@ -286,9 +290,34 @@ void Terrain3DSharedVTRuntime::shutdown_cold( const bool bPreserveTailStaging ) 
     m_bSharedResourcesInitialized = false;
     m_eSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
     m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
+    // Retained world descriptors key on this generation. Reusing generation 1
+    // after a VT-only replacement would let them bind retired resource handles.
+    const uint64_t nBindingGeneration = m_SharedVTBindings.nBindingGeneration;
     memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
+    m_SharedVTBindings.nBindingGeneration = nBindingGeneration;
     memset( &m_Limits, 0, sizeof( m_Limits ) );
     memset( &m_Profile, 0, sizeof( m_Profile ) );
+}
+
+bool Terrain3DSharedVTRuntime::replacePackageResourcesCold( Terrain3DRdContext &rContext,
+        const void *const pBytes, const uint64_t nBytes, const bool bNeutral,
+        const t3dVTSharedResourceClass_t eResourceClass,
+        const t3dWorldResourceLimits_t *const pProductionWorldLimits ) {
+	if ( !Terrain3DRdContext::isOnRenderThread() || m_pVirtualTexture == NULL || m_pRuntimeAllocatorZone == NULL
+	        || ( eResourceClass != T3D_VT_SHARED_RESOURCES_PREVIEW && eResourceClass != T3D_VT_SHARED_RESOURCES_PRODUCTION )
+	        || ( eResourceClass == T3D_VT_SHARED_RESOURCES_PRODUCTION && pProductionWorldLimits == NULL )
+	        || ( !bNeutral && ( pBytes == NULL || nBytes == 0u ) ) ) {
+		return false;
+	}
+	// The caller retains last-good package bytes for rollback. Free only VT
+	// ownership to admit the candidate without simultaneous old/new storage.
+	shutdown_cold( true );
+	if ( !( bNeutral ? m_pVirtualTexture->clearPackageCold() : m_pVirtualTexture->loadPackageCold( pBytes, nBytes ) ) ) {
+		return false;
+	}
+	const uint32_t nMaterials = MAX( 1u, m_pVirtualTexture->getLoadedPackageAllocationCountCold() );
+	const uint32_t nPages = MAX( 1u, m_pVirtualTexture->getLoadedPackageVirtualPageCountCold() );
+	return ensure_shared_resources_cold( rContext, eResourceClass, nMaterials, nPages, pProductionWorldLimits );
 }
 
 bool Terrain3DSharedVTRuntime::stagePackageWarm( const void *const pBytes, const uint64_t nBytes ) {

@@ -37,7 +37,7 @@
 
 // t3dRdInstanceFrame_s centralized in Terrain3DTypes.h.
 
-static_assert( sizeof( t3dRdInstanceFrame_t ) == 448u, "Instance frame ABI changed" );
+static_assert( sizeof( t3dRdInstanceFrame_t ) == 464u, "Instance frame ABI changed" );
 
 // t3dRdInstancePush_s centralized in Terrain3DTypes.h.
 
@@ -725,7 +725,18 @@ bool Terrain3DRdInstanceRenderer::ensureForwardShaderVariant( const t3dRdForward
 	}
 	m_context.beginResourceRebuild();
 	const String name = String( "T3D.Forward.Shader.Instance." ) + String::num_int64( variant );
-	const bool created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_INSTANCES, name, ( t3dRdShaderId_t )( T3D_RD_SHADER_INSTANCE_FORWARD_BASE + variant ) );
+	bool created = false;
+	if ( variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT && m_pVirtualTexture && m_pVirtualTexture->get_gpu().is_readback_enabled() ) {
+		m_context.beginRecoverableFailureScope();
+		created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_INSTANCES, name,
+		        ( t3dRdShaderId_t )( T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE + variant ) );
+		m_context.endRecoverableFailureScope();
+		m_bForwardFeedback[variant] = created;
+	}
+	if ( !created ) {
+		created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_INSTANCES, name,
+		        ( t3dRdShaderId_t )( T3D_RD_SHADER_INSTANCE_FORWARD_BASE + variant ) );
+	}
 	m_context.endResourceRebuild();
 	if ( !created ) {
 		setError( String( "Failed to create Terrain3D Forward+ instance shader variant " ) + String::num_int64( variant ) );
@@ -1930,54 +1941,230 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void ) {
 	return true;
 }
 
-void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot( const uint32_t nFrameId ) {
+static float t3dRdInstancePredictionDistanceSq( const AABB &rBounds, const Vector3 &rCamera ) {
+	const Vector3 delta = ( rCamera - rBounds.get_center() ).abs() - rBounds.size * 0.5f;
+	return ( float )Vector3( MAX( delta.x, 0.0f ), MAX( delta.y, 0.0f ), MAX( delta.z, 0.0f ) ).length_squared();
+}
+
+static Transform3D t3dRdInstancePredictionTransform( const t3dRdInstanceRecord_t &rInstance ) {
+	const float snorm = 1.0f / 32767.0f;
+	Quaternion rotation( MAX( ( int16_t )rInstance.m_nQuaternion01 * snorm, -1.0f ),
+	        MAX( ( int16_t )( rInstance.m_nQuaternion01 >> 16u ) * snorm, -1.0f ),
+	        MAX( ( int16_t )rInstance.m_nQuaternion23 * snorm, -1.0f ),
+	        MAX( ( int16_t )( rInstance.m_nQuaternion23 >> 16u ) * snorm, -1.0f ) );
+	rotation = rotation.length_squared() > 0.000001f ? rotation.normalized() : Quaternion();
+	const Vector3 scale( t3dHalfDecode( ( uint16_t )rInstance.m_nScale01 ),
+	        t3dHalfDecode( ( uint16_t )( rInstance.m_nScale01 >> 16u ) ),
+	        t3dHalfDecode( ( uint16_t )rInstance.m_nScale2Flags ) );
+	Basis basis( rotation );
+	basis.scale_local( scale );
+	return Transform3D( basis, Vector3( rInstance.m_szPosition[0], rInstance.m_szPosition[1], rInstance.m_szPosition[2] ) );
+}
+
+static float t3dRdInstancePredictionPixels( const AABB &rBounds, const t3dRdForwardPassContext_t &rContext ) {
+	float pixels = 1.0f;
+	for ( uint32_t view = 0u; view < MIN( rContext.m_nViewCount, ( uint32_t )T3D_RD_FORWARD_MAX_VIEWS ); ++view ) {
+		Vector2 screen_min( 1.0f, 1.0f );
+		Vector2 screen_max( -1.0f, -1.0f );
+		for ( uint32_t corner = 0u; corner < 8u; ++corner ) {
+			const Vector3 point = rBounds.position + Vector3( ( corner & 1u ) ? rBounds.size.x : 0.0f,
+			        ( corner & 2u ) ? rBounds.size.y : 0.0f, ( corner & 4u ) ? rBounds.size.z : 0.0f );
+			const Vector4 clip = rContext.m_szViewProjection[view].xform( Vector4( point.x, point.y, point.z, 1.0f ) );
+			// An intersecting near-plane bound needs fine detail, not an unstable division.
+			if ( clip.w <= 0.0001f ) {
+				return ( float )MAX( rContext.m_renderSize.x, rContext.m_renderSize.y );
+			}
+			for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
+				const float screen = CLAMP( ( float )( clip[axis] / clip.w ), -1.0f, 1.0f );
+				screen_min[axis] = MIN( screen_min[axis], screen );
+				screen_max[axis] = MAX( screen_max[axis], screen );
+			}
+		}
+		pixels = MAX( pixels, ( float )( screen_max.x - screen_min.x ) * 0.5f * rContext.m_renderSize.x );
+		pixels = MAX( pixels, ( float )( screen_max.y - screen_min.y ) * 0.5f * rContext.m_renderSize.y );
+	}
+	return pixels;
+}
+
+void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot( const t3dRdForwardPassContext_t &rContext,
+        const t3dRdInstanceSceneSnapshot_t &rScene, const uint32_t nVisibilityMask ) {
+	const uint32_t nFrameId = ( uint32_t )rContext.m_nRenderFrame;
 	if ( m_pVirtualTexture == NULL || nFrameId == m_nLastVtResidencyRequestFrame || m_commandTable.m_drawPackets.empty() ) {
 		return;
 	}
+	if ( !m_pVirtualTexture->shouldRefreshMaterialDemandHot( 1u, rContext, rScene.m_nGeneration ) ) { return; }
 	m_nLastVtResidencyRequestFrame = nFrameId;
+	++m_nVtFootprintSweep;
 	const size_t nMaterialCount = m_geometryArena.m_meshCache.getVtMaterialCount();
 	const uint64_t nRequiredBytes = nMaterialCount * sizeof( t3dRenderingMaterialGpu_t );
-	if ( nMaterialCount == 0u || nRequiredBytes > ( uint64_t )m_uploadState.m_materialBytes.size() ) {
+	const t3dVTResidencyState_t &residency = m_pVirtualTexture->get_residency();
+	if ( nMaterialCount == 0u || nRequiredBytes > ( uint64_t )m_uploadState.m_materialBytes.size()
+	        || !residency.bInitialized || residency.Buffers.pAllocations == NULL ) {
 		return;
 	}
 	const t3dRenderingMaterialGpu_t *const pMaterials = ( const t3dRenderingMaterialGpu_t * )m_uploadState.m_materialBytes.ptr();
-	uint64_t seen[1024];
-	memset( seen, 0, sizeof( seen ) );
-	const uint32_t nMaterialLimit = MIN( ( uint32_t )nMaterialCount, 65536u );
-	const float uvMin[2] = { 0.0f, 0.0f };
-	const float uvMax[2] = { 1.0f, 1.0f };
-	for ( size_t iPacket = 0u; iPacket < m_commandTable.m_drawPackets.size(); ++iPacket ) {
-		const t3dRdInstanceDrawPacket_t &packet = m_commandTable.m_drawPackets[iPacket];
-		const uint32_t material_indices[2] = { packet.m_nMaterial, packet.m_nOverlayMaterial };
-		for ( uint32_t iMaterialSlot = 0u; iMaterialSlot < 2u; ++iMaterialSlot ) {
-			const uint32_t nMaterial = material_indices[iMaterialSlot];
-			if ( nMaterial == UINT16_MAX || nMaterial >= nMaterialLimit ) {
-				continue;
+	const Vector3 camera = rContext.m_cameraTransform.origin;
+	t3dRdFrustum_t frustums[T3D_RD_FORWARD_MAX_VIEWS];
+	const uint32_t view_count = MIN( rContext.m_nViewCount, ( uint32_t )T3D_RD_FORWARD_MAX_VIEWS );
+	for ( uint32_t view = 0u; view < view_count; ++view ) {
+		frustums[view] = t3dRdExtractFrustum( rContext.m_szViewProjection[view] );
+	}
+	// GPU packet bounds can describe only the first cell in a grouped draw.
+	// Predict from the published cells instead; no GPU readback or hot allocation.
+	t3dRdInstanceVtCellPrediction_t cells[64];
+	uint32_t cell_count = 0u;
+	for ( size_t iCell = 0u; iCell < rScene.m_cells.size(); ++iCell ) {
+		const t3dRdInstanceCell_t &cell = rScene.m_cells[iCell];
+		if ( ( cell.m_nVisibilityLayers & nVisibilityMask ) == 0u || ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) != 0u ) { continue; }
+		bool visible = false;
+		for ( uint32_t view = 0u; view < view_count && !visible; ++view ) {
+			visible = t3dRdInstanceCellVisible( cell, frustums[view], camera, ( cell.m_nFlags & T3D_RD_INSTANCE_HLOD ) != 0u );
+		}
+		if ( !visible ) { continue; }
+		const float distance_sq = t3dRdInstancePredictionDistanceSq( cell.m_bounds, camera );
+		uint32_t insert = cell_count;
+		while ( insert > 0u && cells[insert - 1u].m_fDistanceSq > distance_sq ) { --insert; }
+		if ( insert >= T3D_ARRAY_COUNT( cells ) ) { continue; }
+		cell_count = MIN( cell_count + 1u, ( uint32_t )T3D_ARRAY_COUNT( cells ) );
+		for ( uint32_t move = cell_count - 1u; move > insert; --move ) { cells[move] = cells[move - 1u]; }
+		cells[insert] = { ( uint32_t )iCell, distance_sq };
+	}
+	t3dRdInstanceVtMaterialPrediction_t demands[128];
+	uint32_t demand_count = 0u;
+	for ( uint32_t candidate = 0u; candidate < cell_count; ++candidate ) {
+		const t3dRdInstanceCell_t &cell = rScene.m_cells[cells[candidate].m_nCell];
+		const t3dRdMeshHandle_t mesh = m_geometryArena.m_meshCache.getMeshHandleBySourceKey( cell.m_nMeshSourceKey != 0u
+		        ? cell.m_nMeshSourceKey : t3dRdRegularMeshSourceKey( cell.m_nMeshAssetId, cell.m_nLod ) );
+		const t3dRdMeshSourceLod_t *const lod = m_geometryArena.m_meshCache.resolveMesh( mesh );
+		if ( !t3dRdInstanceMeshIdentityMatchesCell( cell, lod )
+		        || cell.m_nFirstInstance > rScene.m_instances.size()
+		        || cell.m_nInstanceCount > rScene.m_instances.size() - cell.m_nFirstInstance ) { continue; }
+		float nearest_sq = INFINITY;
+		Transform3D nearest_transform;
+		// A fixed spatially distributed sample bounds work for unusually dense cells.
+		const uint32_t sample_count = MIN( cell.m_nInstanceCount, 128u );
+		for ( uint32_t sample = 0u; sample < sample_count; ++sample ) {
+			const uint32_t offset = ( uint32_t )( ( uint64_t )sample * cell.m_nInstanceCount / sample_count );
+			const Transform3D transform = t3dRdInstancePredictionTransform( rScene.m_instances[cell.m_nFirstInstance + offset] );
+			const AABB bounds = transform.xform( lod->m_bounds );
+			bool visible = false;
+			for ( uint32_t view = 0u; view < view_count && !visible; ++view ) {
+				visible = t3dRdInstanceAabbVisible( bounds, frustums[view] );
 			}
-			const uint32_t nWord = nMaterial >> 6u;
-			const uint64_t nBit = 1ull << ( nMaterial & 63u );
-			if ( ( seen[nWord] & nBit ) != 0u ) {
-				continue;
+			if ( !visible ) { continue; }
+			const float distance_sq = t3dRdInstancePredictionDistanceSq( bounds, camera );
+			if ( distance_sq < nearest_sq ) { nearest_sq = distance_sq; nearest_transform = transform; }
+		}
+		if ( !isfinite( nearest_sq ) ) { continue; }
+		const uint32_t category = MIN( ( cell.m_nFlags & T3D_RD_INSTANCE_CATEGORY_MASK ) >> T3D_RD_INSTANCE_CATEGORY_SHIFT, 2u );
+		for ( uint32_t iSurface = 0u; iSurface < lod->m_nSurfaceCount; ++iSurface ) {
+			const t3dRdMeshSourceSurface_t *const surface = m_geometryArena.m_meshCache.resolveSurface(
+			        m_geometryArena.m_meshCache.getSurfaceHandle( mesh, iSurface ) );
+			if ( surface == NULL || surface->m_nIndexCount == 0u ) { continue; }
+			const AABB bounds = nearest_transform.xform( surface->m_bounds );
+			bool visible = false;
+			for ( uint32_t view = 0u; view < view_count && !visible; ++view ) {
+				visible = t3dRdInstanceAabbVisible( bounds, frustums[view] );
 			}
-			seen[nWord] |= nBit;
-			const uint32_t nAllocation = pMaterials[nMaterial].m_nVtAllocation;
-			if ( nAllocation == T3D_VT_INVALID_ALLOCATION ) {
-				continue;
-			}
-			// GPU-P01 removes the rotating four-page mip-0 window. A coherent
-			// material footprint is requested instead; large allocations coarsen
-			// deterministically until the rectangle fits this per-material cap.
-			for ( uint32_t iChannel = 0u; iChannel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION; ++iChannel ) {
-				const uint32_t nRuntimeAllocation = nAllocation + iChannel;
-				if ( nRuntimeAllocation >= m_pVirtualTexture->getActiveAllocationCount() ) {
-					break;
+			if ( !visible ) { continue; }
+			const float pixels = MAX( t3dRdInstancePredictionPixels( bounds, rContext ), 1.0f );
+			const uint32_t materials[2] = { surface->m_nMaterial, surface->m_nOverlayMaterial };
+			for ( uint32_t slot = 0u; slot < 2u; ++slot ) {
+				const uint32_t material_index = materials[slot];
+				if ( material_index == UINT16_MAX || material_index >= nMaterialCount
+				        || pMaterials[material_index].m_nVtAllocation == T3D_VT_INVALID_ALLOCATION ) { continue; }
+				uint32_t index = 0u;
+				while ( index < demand_count && ( demands[index].m_nMaterial != material_index || demands[index].m_nCategory != category ) ) { ++index; }
+				if ( index == T3D_ARRAY_COUNT( demands ) ) { continue; }
+				const bool fresh = index == demand_count;
+				if ( fresh ) {
+					++demand_count;
+					demands[index].m_nMaterial = material_index;
+					demands[index].m_nCategory = category;
+					demands[index].m_fDistanceSq = nearest_sq;
 				}
-				const t3dVTAllocation_t &rAllocation = m_pVirtualTexture->get_residency().Buffers.pAllocations[nRuntimeAllocation];
-				if ( rAllocation.m_nPageCount == 0u ) {
-					continue;
+				const t3dRenderingMaterialGpu_t &material = pMaterials[material_index];
+				for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
+					const float a = surface->m_szUvMin[axis] * material.m_vUvScaleBias[axis] + material.m_vUvScaleBias[axis + 2u];
+					const float b = surface->m_szUvMax[axis] * material.m_vUvScaleBias[axis] + material.m_vUvScaleBias[axis + 2u];
+					const float uv_min = MIN( a, b ), uv_max = MAX( a, b );
+					const float gradient = ( uv_max - uv_min ) / pixels;
+					demands[index].m_szUvMin[axis] = fresh ? uv_min : MIN( demands[index].m_szUvMin[axis], uv_min );
+					demands[index].m_szUvMax[axis] = fresh ? uv_max : MAX( demands[index].m_szUvMax[axis], uv_max );
+					demands[index].m_szUvPerPixel[axis] = fresh ? gradient : MIN( demands[index].m_szUvPerPixel[axis], gradient );
 				}
-				m_nVtResidencyRequestAttempts += m_pVirtualTexture->stage_material_footprint_hot(
-				        nRuntimeAllocation, nFrameId, uvMin, uvMax, 0u, 16u, T3D_VT_PRIORITY_NEAR_MIN, T3D_VT_REQUEST_PRODUCER_INSTANCE );
+				demands[index].m_fDistanceSq = MIN( demands[index].m_fDistanceSq, nearest_sq );
+			}
+		}
+	}
+	// Stable nearest-first ordering prevents far candidates from admitting ahead of close clutter.
+	for ( uint32_t i = 1u; i < demand_count; ++i ) {
+		const t3dRdInstanceVtMaterialPrediction_t demand = demands[i];
+		uint32_t j = i;
+		while ( j > 0u && demands[j - 1u].m_fDistanceSq > demand.m_fDistanceSq ) { demands[j] = demands[j - 1u]; --j; }
+		demands[j] = demand;
+	}
+	uint32_t attempts_left = 1024u;
+	for ( uint32_t i = 0u; i < demand_count && attempts_left > 0u; ++i ) {
+		const t3dRdInstanceVtMaterialPrediction_t &demand = demands[i];
+		const t3dRenderingMaterialGpu_t &material = pMaterials[demand.m_nMaterial];
+		const uint32_t filter = t3dRdInstanceTextureFilterMode(
+		        ( material.m_nPackedScalars1 & T3D_VT_MATERIAL_FILTER_MASK ) >> T3D_VT_MATERIAL_FILTER_SHIFT,
+		        m_szTextureMipBias[3], demand.m_nCategory );
+		const bool trilinear = filter == T3D_VT_FILTER_LINEAR_MIPMAP || filter == T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC;
+		const bool repeat = material.m_nSamplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || material.m_nSamplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT;
+		float intervals[2][2][2];
+		uint32_t interval_count[2] = { 1u, 1u };
+		for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
+			const float a = demand.m_szUvMin[axis], b = demand.m_szUvMax[axis];
+			if ( !repeat ) {
+				intervals[axis][0][0] = CLAMP( a, 0.0f, 0.999999f );
+				intervals[axis][0][1] = CLAMP( b, 0.0f, 0.999999f );
+			} else if ( b - a >= 1.0f ) {
+				intervals[axis][0][0] = 0.0f; intervals[axis][0][1] = 0.999999f;
+			} else {
+				const float start = a - floorf( a ), end = start + b - a;
+				intervals[axis][0][0] = start; intervals[axis][0][1] = MIN( end, 0.999999f );
+				if ( end >= 1.0f ) {
+					interval_count[axis] = 2u;
+					intervals[axis][1][0] = 0.0f; intervals[axis][1][1] = MIN( end - 1.0f, 0.999999f );
+				}
+			}
+		}
+		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION && attempts_left > 0u; ++channel ) {
+			const uint32_t allocation_id = material.m_nVtAllocation + channel;
+			if ( allocation_id >= residency.nAllocationCount ) { break; }
+			const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[allocation_id];
+			if ( allocation.m_nPageCount == 0u || allocation.m_nMipCount == 0u || !t3d_vt_allocation_quality_enabled( allocation.m_nFlags ) ) { continue; }
+			const uint32_t base_mip = MIN( t3d_vt_allocation_quality_base_mip( allocation.m_nFlags ), ( uint32_t )allocation.m_nMipCount - 1u );
+			const float scale = ldexpf( ( float )T3D_VT_PAGE_INTERIOR, -( int )base_mip );
+			const bool anisotropic = filter == T3D_VT_FILTER_NEAREST_MIPMAP_ANISOTROPIC || filter == T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC;
+			const float major_bound = MAX( demand.m_szUvPerPixel[0] * allocation.m_nMip0WidthPages * scale,
+			        demand.m_szUvPerPixel[1] * allocation.m_nMip0HeightPages * scale );
+			const float lod = filter < T3D_VT_FILTER_NEAREST_MIPMAP ? 0.0f : CLAMP(
+			        // The GLSL footprint is max(minor, major / anisotropy). Unknown
+			        // minor axes require its finest bound, not the rectangle average.
+			        log2f( MAX( major_bound / ( anisotropic ? ( float )T3D_VT_MAX_ANISOTROPY : 1.0f ), 1.0e-8f ) ) + m_szTextureMipBias[demand.m_nCategory],
+			        0.0f, ( float )( allocation.m_nMipCount - 1u - base_mip ) );
+			const uint16_t wanted_mip = ( uint16_t )floorf( lod );
+			const uint16_t priority = demand.m_fDistanceSq <= 64.0f * 64.0f && wanted_mip <= 1u
+			        ? T3D_VT_PRIORITY_NEAR_MIN + ( wanted_mip == 0u ? 1024u : 512u )
+			        : wanted_mip <= 3u ? T3D_VT_PRIORITY_NORMAL_MIN : T3D_VT_PRIORITY_PREFETCH_MIN;
+			if ( priority == T3D_VT_PRIORITY_PREFETCH_MIN && ( nFrameId & 7u ) != 0u ) { continue; }
+			for ( uint32_t y = 0u; y < interval_count[1]; ++y ) {
+				for ( uint32_t x = 0u; x < interval_count[0]; ++x ) {
+					const float uv_min[2] = { intervals[0][x][0], intervals[1][y][0] };
+					const float uv_max[2] = { intervals[0][x][1], intervals[1][y][1] };
+					for ( uint32_t mip = 0u; mip < ( trilinear && base_mip + wanted_mip + 1u < allocation.m_nMipCount ? 2u : 1u ); ++mip ) {
+						const uint32_t limit = MIN( attempts_left, mip == 0u ? 32u : 8u );
+						const uint32_t attempts = m_pVirtualTexture->stage_material_footprint_hot( allocation_id,
+						        nFrameId, uv_min, uv_max, ( uint16_t )( wanted_mip + mip ), limit, priority,
+						        T3D_VT_REQUEST_PRODUCER_INSTANCE, m_nVtFootprintSweep );
+						attempts_left -= attempts;
+						m_nVtResidencyRequestAttempts += attempts;
+						m_szVtPredictedMipRequests[MIN( base_mip + wanted_mip + mip, ( uint32_t )T3D_VT_MAX_MIPS - 1u )] += attempts;
+					}
+				}
 			}
 		}
 	}
@@ -3547,6 +3734,7 @@ bool Terrain3DRdInstanceRenderer::drawView(
 		frame.m_szCamera[view_index][2] = ( float )( rCamera.z );
 	}
 	copyStylizedSunGlobals( frame.m_szNomadSunShape, frame.m_szNomadSunDiffuse, frame.m_szNomadSunSpecular, frame.m_szNomadSunRim );
+	memcpy( frame.m_szInstanceTextureMipBias, m_szTextureMipBias, sizeof( frame.m_szInstanceTextureMipBias ) );
 	memcpy( m_uploadState.m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( !rd ) {
 		setError( "RD instance draw lost the RenderingDevice" );
@@ -3717,6 +3905,8 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_visibility.m_hInstanceCullShader.releaseTracked( m_context );
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
 		m_hszForwardShaders[variant].releaseTracked( m_context );
+		m_bForwardFeedback[variant] = false;
+		m_hszForwardFeedbackSets[variant] = RID();
 	}
 	m_hShader.releaseTracked( m_context );
 	m_uploadState.m_nUploadedSceneGeneration = m_geometryArena.m_nUploadedMeshGeneration = 0u;
@@ -3810,7 +4000,9 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_nVtInvalidAllocationReferenceCount = 0u;
 	m_nVtOutOfRangePageReferenceCount = 0u;
 	m_nLastVtResidencyRequestFrame = UINT64_MAX;
+	m_nVtFootprintSweep = 0u;
 	m_nVtResidencyRequestAttempts = 0u;
+	memset( m_szVtPredictedMipRequests, 0, sizeof( m_szVtPredictedMipRequests ) );
 	m_nVtResidencyRequestsAccepted = 0u;
 	m_forwardPreparedPacketPassKind = T3D_RD_FORWARD_PASS_INVALID;
 	m_nForwardPreparedVisibilityMask = UINT32_MAX;
@@ -4070,6 +4262,10 @@ bool Terrain3DRdInstanceRenderer::prepareForwardResources( const t3dRdForwardPas
 	if ( !ensureForwardShaderVariant( variant ) ) {
 		return false;
 	}
+	if ( m_bForwardFeedback[variant] ) {
+		m_hszForwardFeedbackSets[variant] = m_pVirtualTexture->get_gpu().get_fragment_feedback_set_cold( m_hszForwardShaders[variant].rid(), variant );
+		if ( !m_hszForwardFeedbackSets[variant].is_valid() ) { return false; }
+	}
 	if ( !pMeshes ) {
 		setError( "Terrain3D native Forward+ instance prepare lost the mesh publication" );
 		return false;
@@ -4207,6 +4403,7 @@ bool Terrain3DRdInstanceRenderer::updateForwardFrameBuffer( const t3dRdForwardPa
 	frame.m_szMotionParams[1] = m_bMotionDebug ? 1.0f : 0.0f;
 	frame.m_szMotionParams[2] = ( float )( rContext.m_nViewCount );
 	copyStylizedSunGlobals( frame.m_szNomadSunShape, frame.m_szNomadSunDiffuse, frame.m_szNomadSunSpecular, frame.m_szNomadSunRim );
+	memcpy( frame.m_szInstanceTextureMipBias, m_szTextureMipBias, sizeof( frame.m_szInstanceTextureMipBias ) );
 	memcpy( m_uploadState.m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	if ( !m_uploadState.m_hFrameBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_frameBytes, sizeof( frame ), T3D_GPU_HOT_FRAME ) ) {
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" );
@@ -4443,7 +4640,7 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 	if ( !shadow_pass
 	        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION
 	                || rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT ) ) {
-		requestPublishedMaterialResidencyHot( ( uint32_t )rContext.m_nRenderFrame );
+		requestPublishedMaterialResidencyHot( rContext, *pScene, nVisibilityMask );
 	}
 	commitForwardPreparedState( rContext, *pScene, nVisibilityMask, shadow_pass, gpu_visibility );
 	return true;
@@ -4488,6 +4685,9 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		return false;
 	}
 	rd->draw_list_bind_uniform_set( draw_list, material_vt_set, 1u );
+	if ( m_bForwardFeedback[variant] ) {
+		rd->draw_list_bind_uniform_set( draw_list, m_hszForwardFeedbackSets[variant], 3u );
+	}
 	++m_descriptorState.m_nVtDescriptorBindsInstancerPass;
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || transparent_pass ) {
 		const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[variant].rid() );
@@ -4768,6 +4968,9 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_vt_invalid_allocation_references"] = ( int64_t )( m_nVtInvalidAllocationReferenceCount );
 	result["instance_vt_out_of_range_page_references"] = ( int64_t )( m_nVtOutOfRangePageReferenceCount );
 	result["instance_vt_residency_request_attempts"] = ( int64_t )( m_nVtResidencyRequestAttempts );
+	PackedInt64Array predicted_mips; predicted_mips.resize( T3D_VT_MAX_MIPS );
+	for ( uint32_t i = 0u; i < T3D_VT_MAX_MIPS; ++i ) { predicted_mips.set( i, ( int64_t )m_szVtPredictedMipRequests[i] ); }
+	result["instance_vt_predicted_mip_requests"] = predicted_mips;
 	result["instance_vt_residency_requests_accepted"] = ( int64_t )( m_nVtResidencyRequestsAccepted );
 	result["instance_draws"] = ( int64_t )( m_commandTable.m_nDraws );
 	result["instance_indirect_draws"] = ( int64_t )( m_commandTable.m_nGpuProductionIndirectSubmissions );
@@ -4936,4 +5139,3 @@ uint64_t Terrain3DRdInstanceRenderer::getForwardSubmittedDrawCount( const t3dRdF
 				return 0u;
 		}
 	}
-

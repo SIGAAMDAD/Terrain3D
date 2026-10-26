@@ -88,8 +88,40 @@ static const char *const s_worldMeshVersions[T3D_RD_FORWARD_SHADER_VARIANT_MAX] 
 	"mesh_depth_normal_roughness_voxel_gi",
 };
 
+static const char *const s_worldMeshFeedbackVersions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
+	"feedback_mesh_color_native",
+	"feedback_mesh_color_specular",
+	"feedback_mesh_color_motion",
+	"feedback_mesh_color_specular_motion",
+	"feedback_mesh_color_native_radiance_array",
+	"feedback_mesh_color_specular_radiance_array",
+	"feedback_mesh_color_motion_radiance_array",
+	"feedback_mesh_color_specular_motion_radiance_array"
+};
+
+static const char *const s_instanceFeedbackVersions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
+	"feedback_color_native",
+	"feedback_color_specular",
+	"feedback_color_motion",
+	"feedback_color_specular_motion",
+	"feedback_color_native_radiance_array",
+	"feedback_color_specular_radiance_array",
+	"feedback_color_motion_radiance_array",
+	"feedback_color_specular_motion_radiance_array"
+};
+
 t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet( const t3dRdShaderId_t id ) {
 	const uint32_t value = ( uint32_t )id;
+	if ( value >= T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE && value < T3D_RD_SHADER_COUNT ) {
+		return { id, "res://addons/terrain_3d/rd/terrain_world_raster.glsl",
+		        s_worldMeshFeedbackVersions[value - T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE],
+		        T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_WORLD, false };
+	}
+	if ( value >= T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE && value < T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE ) {
+		return { id, "res://addons/terrain_3d/rd/terrain_instances.glsl",
+		        s_instanceFeedbackVersions[value - T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE],
+		        T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_INSTANCE, false };
+	}
 	if ( value < T3D_RD_SHADER_TERRAIN_ONE_SUN_BASE ) {
 		const uint32_t group = value / T3D_RD_FORWARD_SHADER_VARIANT_MAX;
 		const uint32_t path = group / 3u;

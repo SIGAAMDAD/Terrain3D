@@ -498,6 +498,11 @@ void Terrain3D::serviceStartup( void ) {
 		LOG( INFO, "[Terrain3D][Startup][Coordinator] PREPARED generation=", nGeneration, " elapsed=", m_nStartupCoordinatorInitializeUsecLast, " us" );
 		return;
 	}
+	// Advance the initial terrain footprint while rendering is still gated.
+	// The first residency pass only queues a fraction of the pages; without this
+	// service, preparation and upload resume only after the scene becomes active.
+	// Keep the ordinary byte/layer limits and retained tracked-batch completion.
+	m_pData->updateGpuRegionResidency( m_startupInitialTarget, false );
 	if ( m_pRenderCoordinator ) {
 		m_pRenderCoordinator->serviceStartupCold( nGeneration );
 		const t3dStartupDomainSnapshot_t rShaderState = m_pRenderCoordinator->getShaderStartupState();

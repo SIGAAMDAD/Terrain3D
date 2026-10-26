@@ -4,11 +4,13 @@
 #include "diagnostics/tests/systems/cooking_fixture.h"
 #include "diagnostics/tests/systems/test_harness.h"
 #include "rendering/rd/preview/terrain_3d_rd_preview_service.h"
+#include "authoring/vt/build/terrain_3d_incremental_megavt_cooker.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
 #include "diagnostics/tests/unit_testing.h"
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
 #include <string.h>
 
 namespace terrain3d_tests {
@@ -35,10 +37,15 @@ struct PreviewCookFixture : Terrain3DPreviewHost {
 	t3dAtomicU32_t generation{1u};
 	Terrain3DMutex diagnostics;
 	int published = 0;
+	bool live = false;
+	bool change_during_composition = false;
 	t3dPreviewServices_t services() {
 		return {nullptr, virtual_texture, shared_vt, shaders, publications, effect, generation, diagnostics, *this};
 	}
-	bool composePreviewTerrainPackageCold(PackedByteArray &, uint32_t &, uint64_t &, Terrain3DSharedMemoryReservation &) override { return true; }
+	bool composePreviewTerrainPackageCold(PackedByteArray &, uint32_t &, uint64_t &, Terrain3DSharedMemoryReservation &) override {
+		if (change_during_composition) { preview.requestPackageRecomposeCold(); }
+		return true;
+	}
 	bool loadPreviewPackage(const void *, uint64_t) override { ++published; return true; }
 	bool stagePreviewPackageWarm(const void *, uint64_t) override { return false; }
 	bool servicePreviewPackageWarm(uint64_t, uint32_t) override { return false; }
@@ -46,11 +53,92 @@ struct PreviewCookFixture : Terrain3DPreviewHost {
 	bool ensurePreviewSharedVt(t3dVTSharedResourceClass_t) override { return false; }
 	void setPreviewReady(uint32_t, uint32_t) override {}
 	void clearPreviewReady(uint32_t) override {}
-	t3dRenderLifecycleStatus_t previewLifecycleStatus() const override { return {}; }
+	t3dRenderLifecycleStatus_t previewLifecycleStatus() const override {
+		t3dRenderLifecycleStatus_t status{};
+		if (live) { status.m_nSharedResourceClass = T3D_VT_SHARED_RESOURCES_PRODUCTION; }
+		return status;
+	}
+};
+struct ExportRegionFixture : Terrain3DRegionSource {
+	Ref<Terrain3DRegion> region;
+	ExportRegionFixture() {
+		region.instantiate();
+		const auto color = Image::create(8, 8, false, Image::FORMAT_RGBA8);
+		color->fill(Color(0.2, 0.4, 0.1, 0.5)); region->setColorMap(color);
+	}
+	int getRegionCount() const override { return 1; }
+	bool hasRegion(const Vector2i &location) const override { return location == Vector2i(); }
+	TypedArray<Vector2i> getRegionLocations() const override {
+		TypedArray<Vector2i> locations; locations.push_back(Vector2i()); return locations;
+	}
+	Ref<Terrain3DRegion> getRegion(const Vector2i &location) const override { return hasRegion(location) ? region : Ref<Terrain3DRegion>(); }
+	bool ensureCpuRegionResident(const Vector2i &location) override { return hasRegion(location); }
 };
 } // namespace
 
 void register_cooking_tests(TestRunner &runner) {
+	const String asset_fixture = OS::get_singleton()->get_environment("TERRAIN3D_VT_ASSET_FIXTURE");
+	if (!asset_fixture.is_empty()) {
+		runner.run("cooking", "captured_assets_shipping_v3_merge_and_validate", [asset_fixture](TestContext &test) {
+			const Ref<Terrain3DAssets> assets = ResourceLoader::get_singleton()->load(asset_fixture);
+			T3D_REQUIRE(test, assets.is_valid());
+			Terrain3DMemoryAccountOwner owner(256ull * 1024 * 1024);
+			Terrain3DMemoryAccountScope scope(owner.get());
+			Terrain3DMemoryReservation pressure;
+			const uint64_t pressure_mb = OS::get_singleton()->get_environment("TERRAIN3D_VT_TEST_PRESSURE_MB").to_int();
+			if (pressure_mb) { T3D_REQUIRE(test, pressure.resize(pressure_mb * 1024 * 1024)); }
+			PackedByteArray package; uint32_t generation = 0, materials = 0; String error;
+			const bool success = t3d_vt_godot_cook_runtime_assets_package(assets, package, generation, materials, &error);
+			UtilityFunctions::print("SHIPPING_CAPTURED_ASSETS success=", success, " materials=", materials,
+			        " output_bytes=", package.size(), " peak_bytes=", owner.get()->stats().peak, " error=", error);
+			T3D_REQUIRE(test, success);
+			t3dVTPackViewV3_t view{};
+			T3D_REQUIRE(test, t3d_vt_pack_open_view_v3(package.ptr(), package.size(), view));
+			T3D_CHECK(test, generation != 0u && materials == view.m_pHeader->m_nAllocationCount);
+			T3D_CHECK(test, owner.get()->stats().peak <= owner.get()->stats().limit && owner.get()->stats().denied == 0);
+			const String output_path = OS::get_singleton()->get_environment("TERRAIN3D_VT_TEST_PACKAGE_OUTPUT");
+			if (!output_path.is_empty()) {
+				const auto output = FileAccess::open(output_path, FileAccess::WRITE);
+				T3D_REQUIRE(test, output.is_valid()); output->store_buffer(package);
+			}
+		});
+	}
+	runner.run("cooking", "shipping_v3_mixed_instance_channels_merge_and_validate", [](TestContext &test) {
+		Ref<Terrain3DAssets> assets; assets.instantiate();
+		for (int i = 0; i < 6; ++i) {
+			Ref<Terrain3DMeshAsset> mesh; mesh.instantiate();
+			Ref<Terrain3DRenderingMaterial> material; material.instantiate();
+			material->setVtStableKey(1000 + i);
+			const auto image = Image::create(i % 2 == 0 ? 256 : 512, i % 2 == 0 ? 256 : 512, false, Image::FORMAT_RGBA8);
+			image->fill(Color(0.1 * (i + 1), 0.2, 0.3, i % 2 == 0 ? 0.3 : 1.0));
+			material->setAlbedoTexture(ImageTexture::create_from_image(image));
+			material->setAlphaScissor(i % 2 == 0);
+			if (i >= 2) {
+				const auto normal = Image::create(256, 256, false, Image::FORMAT_RGBA8);
+				normal->fill(Color(0.5, 0.5, 1.0, 1.0));
+				material->setNormalTexture(ImageTexture::create_from_image(normal));
+			}
+			if (i >= 4) {
+				const auto surface = Image::create(256, 256, false, Image::FORMAT_RGBA8);
+				surface->fill(Color(1.0, 0.4, 0.1, 1.0));
+				material->setSurfaceTexture(ImageTexture::create_from_image(surface));
+			}
+			mesh->setRenderingMaterialOverride(material); assets->setMeshAsset(i, mesh);
+		}
+		Terrain3DMemoryAccountOwner owner(64ull * 1024 * 1024);
+		Terrain3DMemoryAccountScope scope(owner.get());
+		PackedByteArray package; uint32_t generation = 0, materials = 0; String error;
+		const bool success = t3d_vt_godot_cook_runtime_assets_package(assets, package, generation, materials, &error);
+		UtilityFunctions::print("SHIPPING_V3_FIXTURE success=", success, " materials=", materials, " bytes=", package.size(), " error=", error);
+		T3D_REQUIRE(test, success);
+		t3dVTPackViewV3_t view{};
+		T3D_REQUIRE(test, t3d_vt_pack_open_view_v3(package.ptr(), package.size(), view));
+		T3D_CHECK(test, materials == 6u && generation != 0u && view.m_pHeader->m_nAllocationCount == 6u);
+		for (uint32_t i = 0; i < materials; ++i) {
+			T3D_CHECK(test, (view.m_pAllocations[i].m_nFlags & T3D_VT_ALLOCATION_SHIPPING_IMMUTABLE) != 0u);
+			T3D_CHECK(test, (view.m_pAllocations[i].m_nFlags & T3D_VT_ALLOCATION_EDITOR_DYNAMIC) == 0u);
+		}
+	});
 	// Optional source manifests reproduce project-specific staging using raw
 	// images, without opening the project or importing/writing its resources.
 	const String input_list = OS::get_singleton()->get_environment("TERRAIN3D_VT_MATERIAL_SOURCE_LIST");
@@ -433,6 +521,81 @@ void register_cooking_tests(TestRunner &runner) {
 		t3dVTPackViewV3_t view{};
 		T3D_CHECK(test, t3d_vt_pack_open_view_v3(input.ptr(), input.size(), view));
 	});
+	runner.run("cooking", "package_merge_fits_output_and_metadata_without_a_second_payload_buffer", [](TestContext &test) {
+		CookingSource source;
+		PackedByteArray input, expected, merged;
+		T3D_REQUIRE(test, source.fragment(input));
+		T3D_REQUIRE(test, t3d_vt_godot_merge_packages_v3(&input, 1, 11, expected));
+		t3dVTPackViewV3_t view{};
+		T3D_REQUIRE(test, t3d_vt_pack_open_view_v3(expected.ptr(), expected.size(), view));
+		T3D_REQUIRE(test, view.m_pHeader->m_nPayloadDataBytes > 16 * 1024);
+		const uint64_t budget = uint64_t(expected.size()) + 64 + 16 * 1024;
+		Terrain3DMemoryAccountOwner owner(budget);
+		Terrain3DMemoryAccountScope scope(owner.get());
+		Terrain3DSharedMemoryReservation memory;
+		T3D_REQUIRE(test, t3d_vt_godot_merge_packages_v3(&input, 1, 11, merged, budget, nullptr, &memory));
+		T3D_CHECK(test, merged == expected);
+		T3D_CHECK(test, owner.get()->stats().denied == 0 && owner.get()->stats().peak <= budget);
+	});
+	runner.run("cooking", "v3_writer_preserves_payloads_already_in_the_destination", [](TestContext &test) {
+		CookingSource source; CookedPackage cooked;
+		T3D_REQUIRE(test, cooked.cook(source));
+		t3dVTPackSourceV3_t pack{};
+		T3D_REQUIRE(test, t3d_vt_cooker_build_pack_source_v3(cooked.package, pack));
+		const uint64_t bytes = t3d_vt_pack_compute_bytes_v3(pack);
+		PackedByteArray external, in_place;
+		T3D_REQUIRE(test, bytes > 0 && external.resize(bytes) == OK && in_place.resize(bytes) == OK);
+		uint64_t written = 0;
+		T3D_REQUIRE(test, t3d_vt_pack_write_v3(pack, external.ptrw(), bytes, written) && written == bytes);
+		const uint64_t metadata = t3d_vt_pack_compute_metadata_bytes_v3(pack);
+		T3D_CHECK(test, metadata + pack.m_nPayloadDataBytes == bytes);
+		memcpy(in_place.ptrw() + metadata, pack.m_pPayloadData, pack.m_nPayloadDataBytes);
+		pack.m_pPayloadData = in_place.ptr() + metadata;
+		T3D_REQUIRE(test, t3d_vt_pack_write_v3(pack, in_place.ptrw(), bytes, written) && written == bytes);
+		T3D_CHECK(test, external == in_place);
+		t3dVTPackViewV3_t view{};
+		T3D_CHECK(test, t3d_vt_pack_open_view_v3(in_place.ptr(), in_place.size(), view));
+	});
+	runner.run("cooking", "runtime_region_export_charges_actual_buffers_under_live_budget_pressure", [](TestContext &test) {
+		ExportRegionFixture source;
+		Terrain3DMemoryAccountOwner owner(40ull * 1024 * 1024);
+		Terrain3DMemoryAccountScope scope(owner.get());
+		Terrain3DMemoryReservation pressure;
+		T3D_REQUIRE(test, pressure.resize(32ull * 1024 * 1024));
+		t3dMegaVTAuthoringInputs_t inputs{source, String(), 64ull * 1024 * 1024};
+		PackedByteArray package; uint32_t generation = 0; String error;
+		T3D_REQUIRE(test, Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(inputs, package, generation, error));
+		t3dVTPackViewV3_t view{};
+		T3D_REQUIRE(test, t3d_vt_pack_open_view_v3(package.ptr(), package.size(), view));
+		T3D_CHECK(test, generation != 0u && view.m_pHeader->m_nAllocationCount == 1u);
+		T3D_CHECK(test, owner.get()->stats().denied == 0 && owner.get()->stats().committed == pressure.bytes());
+	});
+	for (const bool during_cook : {false, true}) {
+		runner.run("cooking", during_cook ? "forced_preview_source_change_during_cook_fails_explicitly"
+		                                 : "forced_preview_source_change_before_publication_fails_explicitly", [during_cook](TestContext &test) {
+			Ref<Terrain3DAssets> assets; assets.instantiate();
+			Ref<Terrain3DMeshAsset> mesh; mesh.instantiate();
+			Ref<Terrain3DRenderingMaterial> material; material.instantiate(); material->setVtStableKey(101);
+			const auto image = Image::create(256, 256, false, Image::FORMAT_RGBA8); image->fill(Color(0.8, 0.2, 0.1, 1));
+			material->setAlbedoTexture(ImageTexture::create_from_image(image));
+			mesh->setRenderingMaterialOverride(material); assets->setMeshAsset(0, mesh);
+			PreviewCookFixture fixture; String error;
+			T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true));
+			const auto previous = fixture.preview.getDiagnosticsView().m_previewVtPublishedPackageBytes;
+			fixture.live = true; fixture.change_during_composition = during_cook;
+			const bool staged = fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true, true, 1);
+			if (during_cook) { T3D_CHECK(test, !staged && !error.is_empty()); }
+			else {
+				T3D_REQUIRE(test, staged);
+				fixture.preview.requestPackageRecomposeCold();
+				fixture.preview.servicePreviewVtRepublishOnRenderThread(fixture.services());
+				const auto status = fixture.preview.getForceRebakeStatusCold();
+				T3D_CHECK(test, !(bool)status["pending"] && !String(status["error"]).is_empty());
+				T3D_CHECK(test, uint64_t(status["published_serial"]) == 0u);
+			}
+			T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_previewVtPublishedPackageBytes == previous);
+		});
+	}
 	runner.run("cooking", "denied_merge_releases_scratch_and_can_retry_the_same_inputs", [](TestContext &test) {
 		CookingSource source;
 		PackedByteArray input, merged;
@@ -450,6 +613,49 @@ void register_cooking_tests(TestRunner &runner) {
 		T3D_REQUIRE(test, t3d_vt_godot_merge_packages_v3(&input, 1, 11, merged,
 		    T3D_VT_COOK_WORKING_BYTE_LIMIT, nullptr, &output_memory));
 		T3D_CHECK(test, !merged.is_empty() && owner.get()->stats().peak <= owner.get()->stats().limit);
+	});
+	runner.run("cooking", "failed_warm_preview_is_quiet_until_explicit_retry_or_changed_content", [](TestContext &test) {
+		Ref<Terrain3DAssets> assets; assets.instantiate();
+		Ref<Terrain3DMeshAsset> mesh; mesh.instantiate();
+		Ref<Terrain3DRenderingMaterial> material; material.instantiate();
+		material->setVtStableKey(101);
+		const auto image = Image::create(256, 256, false, Image::FORMAT_RGBA8);
+		image->fill(Color(0.8, 0.2, 0.1, 1));
+		material->setAlbedoTexture(ImageTexture::create_from_image(image));
+		mesh->setRenderingMaterialOverride(material); assets->setMeshAsset(0, mesh);
+		PreviewCookFixture fixture;
+		String error;
+		T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true));
+		const auto previous = fixture.preview.getDiagnosticsView().m_previewVtPublishedPackageBytes;
+		fixture.live = true;
+		T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true, true, 1));
+		fixture.preview.servicePreviewVtRepublishOnRenderThread(fixture.services());
+		T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_nPreviewVtRepublishFailureCount == 1);
+		const auto failed_status = fixture.preview.getForceRebakeStatusCold();
+		T3D_CHECK(test, !String(failed_status["error"]).is_empty() && !(bool)failed_status["pending"]);
+		for (int i = 0; i < 5; ++i) {
+			error = String();
+			T3D_CHECK(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error));
+			T3D_CHECK(test, error.is_empty());
+			fixture.preview.servicePreviewVtRepublishOnRenderThread(fixture.services());
+		}
+		fixture.preview.requestPackageRecomposeCold();
+		T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true));
+		T3D_CHECK(test, !fixture.preview.getDiagnosticsView().m_bPreviewVtRepublishPending);
+		T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_nPreviewVtRepublishFailureCount == 1);
+		T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_previewVtPublishedPackageBytes == previous);
+		// A new force action clears quarantine even for deterministic same bytes.
+		fixture.preview.requestPackageRecomposeCold();
+		T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true, true, 2));
+		fixture.preview.servicePreviewVtRepublishOnRenderThread(fixture.services());
+		T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_nPreviewVtRepublishFailureCount == 2);
+		const auto changed_image = Image::create(256, 256, false, Image::FORMAT_RGBA8);
+		changed_image->fill(Color(0.1, 0.7, 0.2, 1));
+		material->setAlbedoTexture(ImageTexture::create_from_image(changed_image));
+		fixture.preview.requestPackageRecomposeCold();
+		T3D_REQUIRE(test, fixture.preview.preparePreviewAuthoringPackageCold(fixture.services(), assets, &error, true));
+		fixture.preview.servicePreviewVtRepublishOnRenderThread(fixture.services());
+		T3D_CHECK(test, fixture.preview.getDiagnosticsView().m_nPreviewVtRepublishFailureCount == 3);
 	});
 	runner.run("cooking", "preview_budget_denial_does_not_quarantine_unchanged_instance_materials", [](TestContext &test) {
 		Ref<Terrain3DAssets> assets; assets.instantiate();

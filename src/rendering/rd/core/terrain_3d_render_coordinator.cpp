@@ -419,6 +419,10 @@ bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dVTSharedRes
 	if ( !m_shaderLibrary.isReady() ) {
 		return false;
 	}
+	if ( m_effect.is_valid() && !m_virtualTexture.get_gpu().has_fragment_feedback_callback() ) {
+		m_virtualTexture.get_gpu().set_fragment_feedback_callback_cold(
+		        callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::consumeFragmentFeedbackOnRenderThread ) );
+	}
 	const t3dVTSharedResourceClass_t eCurrentClass = m_sharedVtRuntime.get_shared_resource_class();
 	if ( m_sharedVtRuntime.are_shared_resources_ready()
 	        && ( eCurrentClass == eResourceClass
@@ -472,21 +476,27 @@ void Terrain3DRenderCoordinator::servicePreviewVtRepublishOnRenderThread( void )
 
 bool Terrain3DRenderCoordinator::rebuildPreviewPackageResourcesCold( const void *const pBytes, const uint64_t nBytes,
         const bool bNeutral, const t3dVTSharedResourceClass_t eClass ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
 	if ( eClass == T3D_VT_SHARED_RESOURCES_NONE || ( !bNeutral && ( pBytes == NULL || nBytes == 0u ) ) ) {
 		return false;
 	}
-	// This is the only live-authoring cold path: the package no longer fits the
-	// retained resource plan. Ordinary content revisions must stay on warm republish.
-	shutdownRendererOnRenderThread( true );
-	const bool bLoaded = bNeutral ? m_virtualTexture.clearPackageCold()
-	                              : loadVirtualTexturePackageCold( pBytes, nBytes );
-	if ( !bLoaded ) {
-		return false;
+	// Package capacity is independent of terrain/world/instance/ocean pipelines.
+	// Their descriptor keys detect the new VT handles on the next preparation.
+	t3dRenderLifecycleStatus_t lifecycle = snapshotRenderLifecycleStatusOnOwnerThread();
+	lifecycle.m_nReadyMask &= ~( T3D_RENDER_READY_VT_STORAGE | T3D_RENDER_READY_VT_EXECUTABLE | T3D_RENDER_READY_VT_PUBLISHED );
+	lifecycle.m_nSharedResourceClass = ( uint32_t )T3D_VT_SHARED_RESOURCES_NONE;
+	publishRenderLifecycleStatusOnRenderThread( lifecycle );
+	Terrain3DColdPhaseScope cold_phase_scope;
+	const bool bReady = m_sharedVtRuntime.replacePackageResourcesCold( Terrain3DRdContext::getShared(),
+	        pBytes, nBytes, bNeutral, eClass,
+	        eClass == T3D_VT_SHARED_RESOURCES_PRODUCTION ? &m_worldRuntime.getLimits() : NULL );
+	if ( bReady ) {
+		publishRenderSharedResourceReadyOnRenderThread( eClass );
 	}
-	return ensurePreviewSharedVt( eClass );
+	return bReady;
 }
 
 bool Terrain3DRenderCoordinator::ensurePreviewSharedVt( const t3dVTSharedResourceClass_t eClass ) {
@@ -1882,7 +1892,13 @@ void Terrain3DRenderCoordinator::update( void ) {
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
 		Terrain3DData *const pSource = m_pTerrain->dataObject();
 		if ( pSource != NULL ) { m_incrementalMegaVTCooker.updateCold( { *pSource, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit(m_pTerrain->getMemoryAccountInternal()) }, m_terrainMegaVT, *this ); }
-		m_previewService.updateAuthoringCold( previewServices() );
+		serviceForceRebakeCold();
+		// A forced owner pauses automatic recooking, but publications deferred by
+		// streaming/readbacks still need render-thread callbacks on later ticks.
+		if ( m_bForceRebakeActive || m_bForceRebakeQueued ) {
+			( void )m_previewService.queuePreviewVtRepublishCold( previewServices() );
+		}
+		if ( !m_bForceRebakeActive && !m_bForceRebakeQueued ) { m_previewService.updateAuthoringCold( previewServices() ); }
 	}
 	publishSnapshot();
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint()
@@ -2322,4 +2338,96 @@ uint64_t Terrain3DRenderCoordinator::getVirtualTextureCpuBytes( void ) const {
 }
 bool Terrain3DRenderCoordinator::isEditorAuthoringMode( void ) const {
 	return m_pTerrain && m_pTerrain->isEditorAuthoringMode();
+}
+
+Dictionary Terrain3DRenderCoordinator::forceRebakeVirtualTexturesCold( void ) {
+	if ( m_pTerrain == NULL || !m_pTerrain->isEditorAuthoringMode() || Engine::get_singleton() == NULL
+	        || !Engine::get_singleton()->is_editor_hint() ) {
+		Dictionary result; result["state"] = "failed"; result["error"] = "Forced VT rebuild is editor-only"; return result;
+	}
+	if ( m_pTerrain->dataObject() == NULL || m_pTerrain->getDataDirectory().is_empty() ) {
+		Dictionary result; result["state"] = "failed"; result["error"] = "Set a terrain data directory before forcing and saving VT rebuilds"; return result;
+	}
+	++m_nForceRebakeRequestSerial;
+	m_bForceRebakeQueued = true; // Multiple clicks coalesce to one following request.
+	m_previewService.setForceOwnerPendingCold( true );
+	if ( !m_bForceRebakeActive ) { m_forceRebakeState = "queued"; m_forceRebakeError = String(); }
+	return getForceRebakeVirtualTexturesStatusCold();
+}
+
+Dictionary Terrain3DRenderCoordinator::getForceRebakeVirtualTexturesStatusCold( void ) const {
+	Dictionary result = m_previewService.getForceRebakeStatusCold();
+	result["state"] = m_forceRebakeState;
+	result["complete"] = m_forceRebakeState == "saved" && !m_bForceRebakeQueued;
+	result["request_serial"] = m_nForceRebakeRequestSerial;
+	result["completion_serial"] = m_nForceRebakeCompletionSerial;
+	result["forced_megavt_regions"] = m_nForceRegionCount;
+	result["cooked_megavt_regions"] = m_incrementalMegaVTCooker.getForceCookedCountCold();
+	result["shipping_package_generation"] = m_nForceShippingGeneration;
+	result["output_path"] = m_forceRebakeOutput;
+	// Queued/working requests must not repeatedly display a cached failure from
+	// an earlier automatic publication. The force owner records its own error.
+	result["error"] = m_forceRebakeError;
+	return result;
+}
+
+void Terrain3DRenderCoordinator::serviceForceRebakeCold( void ) {
+	Terrain3DData *const data = m_pTerrain != NULL ? m_pTerrain->dataObject() : NULL;
+	if ( data == NULL ) { return; }
+	const t3dMegaVTAuthoringInputs_t inputs{ *data, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit( m_pTerrain->getMemoryAccountInternal() ) };
+	Dictionary status = m_previewService.getForceRebakeStatusCold();
+	if ( !m_bForceRebakeActive && m_bForceRebakeQueued ) {
+		if ( !m_terrainMegaVT.isReady() || ( bool )status.get( "pending", false ) ) { return; }
+		m_bForceRebakeQueued = false; m_bForceRebakeActive = true; m_bForceMaterialsStaged = false;
+		m_nForceRebakeActiveSerial = m_nForceRebakeRequestSerial;
+		m_forceRebakeState = "working"; m_forceRebakeError = String(); m_forceRebakeOutput = String();
+		m_incrementalMegaVTCooker.requestForceRecookAllRegionsCold();
+		return;
+	}
+	if ( !m_bForceRebakeActive ) { return; }
+	m_nForceRegionCount = m_incrementalMegaVTCooker.getForceRegionCountCold();
+	bool failed = m_incrementalMegaVTCooker.isForceRecookFailedCold();
+	if ( failed ) { m_forceRebakeError = m_incrementalMegaVTCooker.getLastErrorCold(); }
+	if ( !failed && !m_bForceMaterialsStaged && m_incrementalMegaVTCooker.isForceRecookReadyCold() ) {
+		m_nForceRegionCount = m_incrementalMegaVTCooker.getForceRegionCountCold();
+		if ( !m_incrementalMegaVTCooker.validateForceRecookSnapshotCold( m_terrainMegaVT ) ) {
+			m_forceRebakeError = "Terrain sources changed during forced region cook"; failed = true;
+		} else {
+			m_bForceMaterialsStaged = true;
+			if ( !m_previewService.bakePreviewVirtualTexturesCold( previewServices(), &m_forceRebakeError, true, m_nForceRebakeActiveSerial ) ) { failed = true; }
+			status = m_previewService.getForceRebakeStatusCold();
+		}
+	}
+	if ( m_bForceMaterialsStaged && !failed ) {
+		if ( !m_incrementalMegaVTCooker.validateForceRecookSnapshotCold( m_terrainMegaVT ) ) {
+			m_forceRebakeError = "Terrain sources changed before forced VT publication"; failed = true;
+		}
+	}
+	if ( m_bForceMaterialsStaged && !failed ) {
+		const String error = status.get( "error", String() );
+		if ( !error.is_empty() && !( bool )status.get( "pending", false ) ) { m_forceRebakeError = error; failed = true; }
+		else if ( ( uint64_t )status.get( "published_serial", 0u ) >= m_nForceRebakeActiveSerial ) {
+			m_forceRebakeState = "published";
+			if ( !m_incrementalMegaVTCooker.finishForceRecookAllRegionsCold( inputs, m_terrainMegaVT, *this, true ) ) {
+				m_forceRebakeError = m_incrementalMegaVTCooker.getLastErrorCold(); failed = true;
+			} else {
+				uint32_t materials = 0u;
+				if ( !data->publishRuntimeVirtualTexturesCold( m_forceRebakeOutput, m_nForceShippingGeneration, materials, m_forceRebakeError ) ) { failed = true; }
+				else { m_forceRebakeState = "saved"; }
+			}
+		}
+	}
+	if ( failed || m_forceRebakeState == "saved" ) {
+		if ( failed ) {
+			( void )m_incrementalMegaVTCooker.finishForceRecookAllRegionsCold( inputs, m_terrainMegaVT, *this, false );
+			m_forceRebakeState = "failed";
+		}
+		m_nForceRebakeCompletionSerial = m_nForceRebakeActiveSerial; m_bForceRebakeActive = false;
+		m_previewService.setForceOwnerPendingCold( m_bForceRebakeQueued );
+		if ( m_bForceRebakeQueued ) { m_forceRebakeState = "queued"; }
+	}
+}
+
+void Terrain3DRenderCoordinator::consumeFragmentFeedbackOnRenderThread( const PackedByteArray &rBytes ) {
+	m_virtualTexture.get_gpu().consume_fragment_feedback_readback_hot( rBytes );
 }

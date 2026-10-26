@@ -266,6 +266,10 @@ bool Terrain3DRenderingMaterial::importBaseMaterialCold( const Ref<Material> &rM
 		}
 	}
 	setBaseColor( pBase->get_albedo() );
+	const Vector3 uv_scale = pBase->get_uv1_scale();
+	const Vector3 uv_offset = pBase->get_uv1_offset();
+	setUvScale( Vector2( uv_scale.x, uv_scale.y ) );
+	setUvOffset( Vector2( uv_offset.x, uv_offset.y ) );
 	setMetallic( ( float )( pBase->get_metallic() ) );
 	setRoughness( ( float )( pBase->get_roughness() ) );
 	setAoStrength( ( float )( pBase->get_ao_light_affect() ) );
@@ -321,7 +325,8 @@ bool Terrain3DRenderingMaterial::compileInstanceRecordCold( t3dRdInstanceMateria
 	if ( isTwoSided() ) {
 		rRecord.m_nFlags |= T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED;
 	}
-	if ( getSamplerClass() == ( int32_t )( T3D_VT_SAMPLER_LINEAR_REPEAT ) ) {
+	if ( getSamplerClass() == ( int32_t )( T3D_VT_SAMPLER_LINEAR_REPEAT )
+	        || getSamplerClass() == ( int32_t )( T3D_VT_SAMPLER_NEAREST_REPEAT ) ) {
 		rRecord.m_nFlags |= T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT;
 	}
 	if ( m_bUnshaded ) {

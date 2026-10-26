@@ -267,6 +267,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_rd_renderer_diagnostics" ), &Terrain3D::getRdRendererDiagnostics );
 	ClassDB::bind_method(D_METHOD("get_gpu_upload_diagnostics"), &Terrain3D::getGpuUploadDiagnostics);
 	ClassDB::bind_method( D_METHOD( "bake_virtual_textures" ), &Terrain3D::bakeVirtualTextures );
+	ClassDB::bind_method( D_METHOD( "force_rebake_virtual_textures" ), &Terrain3D::forceRebakeVirtualTextures );
+	ClassDB::bind_method( D_METHOD( "get_force_rebake_virtual_textures_status" ), &Terrain3D::getForceRebakeVirtualTexturesStatus );
 
 	// Terrain Mesh
 
@@ -391,6 +393,21 @@ void Terrain3D::_bind_methods( void ) {
 	                      PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 	        "",
 	        "get_performance_profile_signature" );
+
+	ADD_GROUP( "Instance Texturing", "" );
+	// Negative bias requests finer mips; positive bias reduces texture detail and residency demand.
+	T3D_BIND_PROPERTY( Terrain3D, setClutterTextureMipBias, getClutterTextureMipBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "clutter_texture_mip_bias", PROPERTY_HINT_RANGE, "-4,4,0.1" ), "set_clutter_texture_mip_bias", "get_clutter_texture_mip_bias" );
+	T3D_BIND_PROPERTY( Terrain3D, setClutterTextureFiltering, getClutterTextureFiltering, "filter",
+	                   PropertyInfo( Variant::INT, "clutter_texture_filtering", PROPERTY_HINT_ENUM, "Use Material:-1,Nearest:0,Linear:1,Nearest Mipmap:2,Linear Mipmap:3,Nearest Mipmap Anisotropic:4,Linear Mipmap Anisotropic:5" ), "set_clutter_texture_filtering", "get_clutter_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3D, setGroundCoverTextureMipBias, getGroundCoverTextureMipBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "ground_cover_texture_mip_bias", PROPERTY_HINT_RANGE, "-4,4,0.1" ), "set_ground_cover_texture_mip_bias", "get_ground_cover_texture_mip_bias" );
+	T3D_BIND_PROPERTY( Terrain3D, setGroundCoverTextureFiltering, getGroundCoverTextureFiltering, "filter",
+	                   PropertyInfo( Variant::INT, "ground_cover_texture_filtering", PROPERTY_HINT_ENUM, "Use Material:-1,Nearest:0,Linear:1,Nearest Mipmap:2,Linear Mipmap:3,Nearest Mipmap Anisotropic:4,Linear Mipmap Anisotropic:5" ), "set_ground_cover_texture_filtering", "get_ground_cover_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3D, setOccluderTextureMipBias, getOccluderTextureMipBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "occluder_texture_mip_bias", PROPERTY_HINT_RANGE, "-4,4,0.1" ), "set_occluder_texture_mip_bias", "get_occluder_texture_mip_bias" );
+	T3D_BIND_PROPERTY( Terrain3D, setOccluderTextureFiltering, getOccluderTextureFiltering, "filter",
+	                   PropertyInfo( Variant::INT, "occluder_texture_filtering", PROPERTY_HINT_ENUM, "Use Material:-1,Nearest:0,Linear:1,Nearest Mipmap:2,Linear Mipmap:3,Nearest Mipmap Anisotropic:4,Linear Mipmap Anisotropic:5" ), "set_occluder_texture_filtering", "get_occluder_texture_filtering" );
 
 	ADD_GROUP( "Terrain Rendering", "" );
 

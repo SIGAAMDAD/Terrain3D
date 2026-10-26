@@ -91,6 +91,10 @@ public:
 	virtual uint8_t getHlodNodeMinimumLevel( const Vector2i& rRegion, int64_t nSpawnId ) const = 0;
 	virtual int getInstanceRegionLoadBudgetMb( void ) const = 0;
 	virtual int getInstanceRegionLoadBudgetPages( void ) const = 0;
+	virtual float getClutterTextureMipBias( void ) const = 0;
+	virtual float getGroundCoverTextureMipBias( void ) const = 0;
+	virtual float getOccluderTextureMipBias( void ) const = 0;
+	virtual uint32_t getInstanceTextureFilterOverrides( void ) const = 0;
 	virtual Node3D * getLightTarget( void ) const = 0;
 	virtual int getMeshLods( void ) const = 0;
 	virtual int getMeshSize( void ) const = 0;

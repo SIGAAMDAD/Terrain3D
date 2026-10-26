@@ -344,7 +344,8 @@ bool Terrain3DRdTextureManager::submitTrackedTextureLayerBatch( const uint32_t n
 	}
 	for ( uint32_t i = 0u; i < nUpdateCount; ++i ) {
 		if ( !pUpdates[i].m_pTexture || !pUpdates[i].m_pTexture->isValid()
-		        || pUpdates[i].m_nTextureGeneration == 0u || pUpdates[i].m_data.is_empty() ) {
+		        || pUpdates[i].m_nTextureGeneration == 0u
+		        || ( pUpdates[i].m_nCopySourceLayer == UINT32_MAX && pUpdates[i].m_data.is_empty() ) ) {
 			return false;
 		}
 	}
@@ -364,6 +365,7 @@ bool Terrain3DRdTextureManager::submitTrackedTextureLayerBatch( const uint32_t n
 		slot.m_szTextures[i] = pUpdates[i].m_pTexture;
 		slot.m_szTextureGenerations[i] = pUpdates[i].m_nTextureGeneration;
 		slot.m_szData[i] = pUpdates[i].m_data;
+		slot.m_szCopySourceLayers[i] = pUpdates[i].m_nCopySourceLayer;
 	}
 	slot.m_nLayer = nLayer;
 	slot.m_nCount = nUpdateCount;
@@ -590,6 +592,24 @@ void Terrain3DRdTextureManager::clearTrackedTextureBatchPayload( t3dTrackedTextu
 	rSlot.m_nCount = 0u;
 }
 
+bool Terrain3DRdTextureManager::copyOwnedTextureLayer( Terrain3DRdTexture *const texture,
+        const uint32_t generation, const uint32_t source_layer, const uint32_t destination_layer ) {
+	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+	if ( !texture || texture->generation() != generation || !texture->isValid()
+	        || source_layer >= texture->layout().m_nLayers || destination_layer >= texture->layout().m_nLayers ) { return false; }
+	const auto &layout = texture->layout();
+	for ( uint32_t mip = 0u; mip < layout.m_nMipmaps; ++mip ) {
+		const Vector3 size( MAX( 1u, layout.m_nWidth >> mip ), MAX( 1u, layout.m_nHeight >> mip ), 1.0 );
+		if ( !texture->copyRegionToTracked( context, *texture, Vector3(), Vector3(), size,
+		             mip, mip, source_layer, destination_layer ) ) {
+			context.recordFailure( T3D_RD_CONTEXT_FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture layer copy" );
+			return false;
+		}
+	}
+	m_nUpdateCount.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+	return true;
+}
+
 void Terrain3DRdTextureManager::renderTrackedTextureLayerBatch( const uint32_t nSlot, const uint64_t nGeneration ) {
 	if ( nSlot >= T3D_TRACKED_BATCH_SLOT_COUNT || nGeneration == 0u ) {
 		return;
@@ -601,7 +621,10 @@ void Terrain3DRdTextureManager::renderTrackedTextureLayerBatch( const uint32_t n
 	}
 	bool bSucceeded = true;
 	for ( uint32_t i = 0u; i < slot.m_nCount; ++i ) {
-		if ( !updateOwnedTexture( slot.m_szTextures[i], slot.m_szTextureGenerations[i], slot.m_nLayer, slot.m_szData[i] ) ) {
+		const bool succeeded = slot.m_szCopySourceLayers[i] != UINT32_MAX
+		        ? copyOwnedTextureLayer( slot.m_szTextures[i], slot.m_szTextureGenerations[i], slot.m_szCopySourceLayers[i], slot.m_nLayer )
+		        : updateOwnedTexture( slot.m_szTextures[i], slot.m_szTextureGenerations[i], slot.m_nLayer, slot.m_szData[i] );
+		if ( !succeeded ) {
 			bSucceeded = false;
 			break;
 		}

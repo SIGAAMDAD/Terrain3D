@@ -891,7 +891,8 @@ void Terrain3DRuntimePageStore::setPreparedByteBudget( const uint64_t nBytes ) {
 		return;
 	}
 	m_nPreparedByteBudget = nBytes;
-	m_bRuntimeSourcesDirty = true;
+	// Compatible grants do not invalidate sources, workers, or prepared pages.
+	m_bRuntimeCapacityDirty = m_nPreparedReservedBytes == 0u || m_nPreparedReservedBytes > nBytes;
 	m_bCapacityFailureLatched = false;
 }
 
@@ -913,6 +914,7 @@ void Terrain3DRuntimePageStore::reset( void ) {
 	}
 	m_nPreparedPageCount = 0;
 	m_nPrepareWorkPageCount = 0;
+	m_nPendingWorkPageCount = 0;
 	m_nQueuedCount = 0;
 	m_nStreamingGenerationLast = 0u;
 	m_nSourceTopologyGeneration = 0u;
@@ -2113,7 +2115,7 @@ void Terrain3DRuntimePageStore::stopWorkers( void ) {
 }
 
 void Terrain3DRuntimePageStore::prepareWorkIndex( const int nWorkIndex, const int nWorkerIndex ) {
-	if ( nWorkIndex < 0 || nWorkIndex >= m_nPrepareWorkPageCount || nWorkerIndex < 0 || nWorkerIndex >= m_nWorkerThreadCount ) {
+	if ( nWorkIndex < 0 || nWorkIndex >= T3D_GPU_CACHE_MAX_LAYERS || nWorkerIndex < 0 || nWorkerIndex >= m_nWorkerThreadCount ) {
 		return;
 	}
 	t3dRuntimePageMeta_t &meta = m_workPages[( size_t )( nWorkIndex )];
@@ -2191,7 +2193,7 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 	        && numeric.m_nMiddleHeightDivisor == m_sourceNumericConfig.m_nMiddleHeightDivisor
 	        && numeric.m_nPrepareThreads == m_sourceNumericConfig.m_nPrepareThreads
 	        && rState.m_config.m_bEditorAuthoring == m_bSourceEditorAuthoring;
-	if ( same_config && m_nWorkerThreadCount == m_nEffectivePrepareThreads ) {
+	if ( same_config && !m_bRuntimeCapacityDirty && m_nWorkerThreadCount == m_nEffectivePrepareThreads ) {
 		return true;
 	}
 
@@ -2209,6 +2211,10 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 		return false;
 	}
 	m_bCapacityFailureLatched = false;
+	// Drain outstanding I/O over ordinary ticks instead of waiting in this tick.
+	if ( m_bPrepareJobActive ) {
+		return false;
+	}
 
 	// Source discovery is a cold rebuild: it waits for workers, reads page
 	// headers, may load authored region Resources to resolve source signatures,
@@ -2230,7 +2236,16 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 	uint32_t largest_scratch_uncompressed_bytes = 0u;
 	Vector2i largest_scratch_location = s_v2iMax;
 	int runtime_source_count = 0;
-	for ( int slot = 0; slot < m_pRepository->getSlotCount(); ++slot ) {
+	const bool reuse_sources = same_config && m_nPayloadBytesPerSlot > 0u;
+	if ( reuse_sources ) {
+		source_candidates = m_pageSources;
+		channel_capacities = m_runtimeChannelCapacities;
+		scratch_bytes = m_nWorkerScratchBytes;
+		for ( const auto &source : source_candidates ) {
+			runtime_source_count += source.m_bPresent ? 1 : 0;
+		}
+	}
+	for ( int slot = 0; !reuse_sources && slot < m_pRepository->getSlotCount(); ++slot ) {
 		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
 		if ( location == s_v2iMax ) {
 			continue;
@@ -2431,6 +2446,7 @@ bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServi
 	m_bSourceEditorAuthoring = rState.m_config.m_bEditorAuthoring;
 	m_nEffectivePrepareThreads = effective_prepare_threads;
 	m_bRuntimeSourcesDirty = false;
+	m_bRuntimeCapacityDirty = false;
 	m_bCapacityFailureLatched = false;
 	if ( m_nEffectivePrepareThreads > 0 ) {
 		startWorkers( m_nEffectivePrepareThreads );
@@ -2527,26 +2543,29 @@ void Terrain3DRuntimePageStore::poll( const bool bWait ) {
 	if ( !m_bPrepareJobActive ) {
 		return;
 	}
+	eastl::array<int16_t, T3D_GPU_CACHE_MAX_LAYERS> completed_indices{};
+	int completed_count = 0;
 	{
 		Terrain3DUniqueLock lock( m_workerMutex );
 		if ( bWait ) {
-			while ( m_nCompletionRingCount < m_nPrepareWorkPageCount && !m_bWorkersStop ) {
+			while ( m_nCompletionRingCount < m_nPendingWorkPageCount && !m_bWorkersStop ) {
 				m_completionWake.wait( lock );
 			}
-		} else if ( m_nCompletionRingCount < m_nPrepareWorkPageCount ) {
-			return;
 		}
-		if ( m_nCompletionRingCount < m_nPrepareWorkPageCount ) {
-			return;
-		}
-		for ( int completed = 0; completed < m_nPrepareWorkPageCount; ++completed ) {
+		completed_count = m_nCompletionRingCount;
+		for ( int completed = 0; completed < completed_count; ++completed ) {
+			completed_indices[( size_t )completed] = m_completionRing[( size_t )m_iCompletionRead];
 			m_iCompletionRead = ( m_iCompletionRead + 1 ) % T3D_GPU_CACHE_MAX_LAYERS;
 			--m_nCompletionRingCount;
 		}
 	}
+	if ( completed_count == 0 ) { return; }
+	uint64_t oldest_requested_usec = UINT64_MAX;
 
-	for ( int work_index = 0; work_index < m_nPrepareWorkPageCount; ++work_index ) {
+	for ( int completed = 0; completed < completed_count; ++completed ) {
+		const int work_index = completed_indices[( size_t )completed];
 		t3dRuntimePageMeta_t &work_meta = m_workPages[( size_t )( work_index )];
+		oldest_requested_usec = MIN( oldest_requested_usec, work_meta.m_nRequestedUsec );
 		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( work_meta.m_location );
 		m_nPrepareQueueWaitUsecLast = MAX( m_nPrepareQueueWaitUsecLast,
 		        work_meta.m_nWorkerStartedUsec >= work_meta.m_nRequestedUsec ? work_meta.m_nWorkerStartedUsec - work_meta.m_nRequestedUsec
@@ -2599,10 +2618,11 @@ void Terrain3DRuntimePageStore::poll( const bool bWait ) {
 	}
 	Time *const pTime = Time::get_singleton();
 	const uint64_t finished = pTime ? pTime->get_ticks_usec() : m_nPrepareJobStartedUsec;
-	m_nPrepareLatencyUsecLast = finished >= m_nPrepareJobStartedUsec ? finished - m_nPrepareJobStartedUsec : 0u;
-	m_nPrepareWorkPageCount = 0;
-	m_bPrepareJobActive = false;
-	m_nPrepareJobWorkers = 0;
+	m_nPrepareLatencyUsecLast = finished >= oldest_requested_usec ? finished - oldest_requested_usec : 0u;
+	m_nPendingWorkPageCount -= completed_count;
+	m_bPrepareJobActive = m_nPendingWorkPageCount > 0;
+	m_nPrepareJobWorkers = MIN( m_nPendingWorkPageCount, m_nWorkerThreadCount );
+	if ( !m_bPrepareJobActive ) { m_nPrepareWorkPageCount = 0; }
 }
 
 int Terrain3DRuntimePageStore::getPreparedIndex( const Vector2i &rLocation ) const {
@@ -2698,13 +2718,15 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 		}
 	}
 	m_nStreamingGenerationLast = rState.m_nStreamingGeneration;
-	if ( m_bPrepareJobActive || m_nQueuedCount <= 0 || m_nFreePayloadCount <= 0 ) {
+	if ( m_nQueuedCount <= 0 || m_nFreePayloadCount <= 0 || m_nWorkerThreadCount <= 0 ) {
 		return;
 	}
 
-	const int batch_limit = MIN( m_nFreePayloadCount, MIN( m_nRuntimePayloadLimit, MAX( 2, m_nEffectivePrepareThreads * 2 ) ) );
-	m_nPrepareWorkPageCount = 0;
-	while ( m_nPrepareWorkPageCount < batch_limit && m_nQueuedCount > 0 ) {
+	const int work_limit = MIN( m_nRuntimePayloadLimit, MAX( 2, m_nEffectivePrepareThreads * 2 ) );
+	const int admission_limit = MIN( m_nFreePayloadCount, MAX( 0, work_limit - m_nPendingWorkPageCount ) );
+	eastl::array<int16_t, T3D_GPU_CACHE_MAX_LAYERS> admitted_indices{};
+	int admitted_count = 0;
+	while ( admitted_count < admission_limit && m_nQueuedCount > 0 ) {
 		const int map_index = popBestQueued( rState.m_predictedCenter );
 		if ( map_index < 0 ) {
 			break;
@@ -2720,12 +2742,19 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 			m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
 			continue;
 		}
+		int work_index = 0;
+		while ( work_index < T3D_GPU_CACHE_MAX_LAYERS && m_workPages[( size_t )work_index].m_iPayloadSlot >= 0 ) {
+			++work_index;
+		}
+		if ( work_index >= T3D_GPU_CACHE_MAX_LAYERS ) { queueLink( map_index, 1u ); break; }
 		const int payload_slot = acquirePayloadSlot();
 		if ( payload_slot < 0 ) {
 			queueLink( map_index, 1u );
 			break;
 		}
-		const int work_index = m_nPrepareWorkPageCount++;
+		m_nPrepareWorkPageCount = MAX( m_nPrepareWorkPageCount, work_index + 1 );
+		++m_nPendingWorkPageCount;
+		admitted_indices[( size_t )admitted_count++] = ( int16_t )work_index;
 		t3dRuntimePageMeta_t &meta = m_workPages[( size_t )( work_index )];
 		t3dRuntimePageStoreResetMeta( meta );
 		meta.m_location = location;
@@ -2744,17 +2773,17 @@ void Terrain3DRuntimePageStore::service( const t3dRuntimePageServiceState_t &rSt
 		m_queuedConsumers[( size_t )( map_index )] = 0u;
 		m_nQueuedCount = MAX( 0, m_nQueuedCount - 1 );
 	}
-	if ( m_nPrepareWorkPageCount <= 0 ) {
-		return;
-	}
+	if ( admitted_count <= 0 ) { return; }
 
-	m_nPrepareJobWorkers = MIN( m_nPrepareWorkPageCount, m_nWorkerThreadCount );
-	Time *const pTime = Time::get_singleton();
-	m_nPrepareJobStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
+	m_nPrepareJobWorkers = MIN( m_nPendingWorkPageCount, m_nWorkerThreadCount );
+	if ( !m_bPrepareJobActive ) {
+		Time *const pTime = Time::get_singleton();
+		m_nPrepareJobStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
+	}
 	{
 		Terrain3DScopedLock lock( m_workerMutex );
-		for ( int index = 0; index < m_nPrepareWorkPageCount; ++index ) {
-			m_workRing[( size_t )( m_iWorkWrite )] = ( int16_t )index;
+		for ( int index = 0; index < admitted_count; ++index ) {
+			m_workRing[( size_t )( m_iWorkWrite )] = admitted_indices[( size_t )index];
 			m_iWorkWrite = ( m_iWorkWrite + 1 ) % T3D_GPU_CACHE_MAX_LAYERS;
 			++m_nWorkRingCount;
 		}
@@ -3059,7 +3088,7 @@ bool Terrain3DRuntimePageStore::takeGpuPage( const Vector2i &rLocation, t3dRunti
 t3dRuntimePageStats_t Terrain3DRuntimePageStore::getStats( void ) const {
 	t3dRuntimePageStats_t stats;
 	stats.m_nPreparedPages = m_nPreparedPageCount;
-	stats.m_nPendingPages = m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0;
+	stats.m_nPendingPages = m_nPendingWorkPageCount;
 	stats.m_nQueuedPages = m_nQueuedCount;
 	stats.m_nPrepareWorkers = m_bPrepareJobActive ? m_nPrepareJobWorkers : 0;
 	stats.m_bPrepareJobActive = m_bPrepareJobActive;

@@ -467,6 +467,14 @@ static bool t3dRdAppendMeshSource( const Ref<Mesh>& rMesh,
 			}
 		}
 		record.m_bounds = surface_bounds;
+		for ( uint32_t vertex = 0u; vertex < vertexCount; ++vertex ) {
+			const Vector2 uv = vertex < ( uint32_t )uvs.size() ? uvs[vertex] : Vector2();
+			for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
+				const float value = ( float )uv[axis];
+				record.m_szUvMin[axis] = vertex == 0u ? value : MIN( record.m_szUvMin[axis], value );
+				record.m_szUvMax[axis] = vertex == 0u ? value : MAX( record.m_szUvMax[axis], value );
+			}
+		}
 		const Terrain3DRenderingMaterial *const pRenderingMaterial = pExternalSource && pExternalSource->m_pResolveRenderingMaterial
 		                                                                 ? pExternalSource->m_pResolveRenderingMaterial( pExternalSource->m_pMaterialContext, (uint32_t)( surface ) )
 		                                                                 : NULL;
@@ -1448,4 +1456,3 @@ const t3dRdMeshSourceSurface_t *Terrain3DRdMeshCache::resolveSurface( const t3dR
 bool Terrain3DRdMeshCache::isReady( void ) const {
 		return m_arenaView.hasVertex() && !m_surfaceViews.empty() && m_nGeneration != 0u;
 	}
-

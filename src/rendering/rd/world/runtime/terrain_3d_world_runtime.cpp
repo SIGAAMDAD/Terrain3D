@@ -258,8 +258,8 @@ bool Terrain3DWorldRuntime::prepareVisibilityPass(
 
 bool Terrain3DWorldRuntime::prepareRasterPass( const t3dRdForwardPassContext_t &rContext,
         const t3dRdWorldTerrainRasterBindings_t &rTerrain,
-        const t3dSharedVTBindings_t &rVT ) {
-	return m_bReady && m_raster.prepareCold( rContext, m_resources, rTerrain, rVT );
+        const t3dSharedVTBindings_t &rVT, Terrain3DVTGpu *pFeedbackOwner ) {
+	return m_bReady && m_raster.prepareCold( rContext, m_resources, rTerrain, rVT, pFeedbackOwner );
 }
 
 bool Terrain3DWorldRuntime::submitRasterPass( const t3dRdForwardPassContext_t &rContext ) {

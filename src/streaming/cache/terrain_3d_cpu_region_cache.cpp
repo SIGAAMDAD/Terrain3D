@@ -122,7 +122,7 @@ void Terrain3DCpuRegionCache::invalidate( const Vector2i &vLocation ) {
 	m_bSelectionDirty = true;
 }
 
-bool Terrain3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) const {
+bool Terrain3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource, const bool bAllowBlocking ) const {
 	rSource.unref();
 	if ( !m_pRepository || !m_pPersistence ) {
 		return false;
@@ -135,7 +135,7 @@ bool Terrain3DCpuRegionCache::loadSource( const Vector2i &vLocation, Ref<Terrain
 		rSource = Ref<Terrain3DRegion>( pRegion );
 		return true;
 	}
-	return m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), rSource );
+	return bAllowBlocking && m_pPersistence->loadRuntimeRegionSource( pRegion->get_path(), rSource );
 }
 
 bool Terrain3DCpuRegionCache::requestSourceAsync( const Vector2i &vLocation ) {
@@ -386,7 +386,7 @@ bool Terrain3DCpuRegionCache::evictSlot( const int iSlot ) {
 	return true;
 }
 
-bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bDemandLoad ) {
+bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const bool bDemandLoad, const bool bAllowBlocking ) {
 	if ( !m_bEnabled ) {
 		return !m_pRepository || m_pRepository->getRegionPtr( vLocation ) != NULL;
 	}
@@ -404,10 +404,14 @@ bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const b
 	Ref<Image> pHeight, pControl, pColor, pDerived;
 	const bool bCooked = cookedRuntimeEnabled();
 	if ( bCooked ) {
-		if ( !loadCookedMapsNow( vLocation, pHeight, pControl, pColor, pDerived ) ) {
+		const bool ready = bAllowBlocking
+		        ? loadCookedMapsNow( vLocation, pHeight, pControl, pColor, pDerived )
+		        : ( m_pRuntimePageStore && m_pRuntimePageStore->takeCpuMaps( vLocation, pHeight, pControl, pColor, pDerived ) );
+		if ( !ready ) {
+			if ( !bAllowBlocking ) { requestSourceAsync( vLocation ); }
 			return false;
 		}
-	} else if ( !loadSource( vLocation, pSource ) ) {
+	} else if ( !( bAllowBlocking ? loadSource( vLocation, pSource ) : takeSourceAsync( vLocation, pSource ) ) ) {
 		return false;
 	}
 	int targetSlot = t3dRegionResidencyFindFirstSlot( m_nCapacity,
@@ -432,6 +436,11 @@ bool Terrain3DCpuRegionCache::ensureResident( const Vector2i &vLocation, const b
 	if ( bCooked ? !publishCookedSlot( targetSlot, vLocation, pHeight, pControl, pColor, pDerived )
 	             : !publishSlot( targetSlot, vLocation, pSource ) ) {
 		return false;
+	}
+	const int async_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
+	if ( async_index >= 0 && m_szAsyncState[async_index] == 1u ) {
+		m_szAsyncState[async_index] = 0u;
+		m_nAsyncOutstanding = MAX( 0, m_nAsyncOutstanding - 1 );
 	}
 	if ( bDemandLoad ) {
 		++m_nDemandLoads;
@@ -539,7 +548,7 @@ bool Terrain3DCpuRegionCache::configure( const bool bEnabled, const int nBudgetM
 	return true;
 }
 
-bool Terrain3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels ) {
+bool Terrain3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels, const bool bAllowBlocking ) {
 	if ( !m_pRepository || !rWorldPosition.is_finite() || nRadiusTexels < 0
 	        || nRadiusTexels > T3D_REGION_MAP_SIZE * T3D_REGION_SIZE ) {
 		return false;
@@ -580,7 +589,7 @@ bool Terrain3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, c
 		for ( int x = bounds.position.x; x < end.x; ++x ) {
 			const Vector2i location( x, y );
 			const Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
-			if ( pRegion && !pRegion->isDeleted() && !ensureResident( location, true ) ) {
+			if ( pRegion && !pRegion->isDeleted() && !ensureResident( location, true, bAllowBlocking ) ) {
 				bSuccess = false;
 			}
 		}

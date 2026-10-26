@@ -12,6 +12,7 @@
 #include "core/utility/terrain_3d_util.h"
 #include "physics/build/terrain_3d_collision_surface_builder.h"
 
+#include <EASTL/bitset.h>
 #include <godot_cpp/classes/collision_shape3d.hpp>
 #include <godot_cpp/classes/physics_material.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
@@ -46,6 +47,7 @@ typedef struct t3dCollisionShapeRecord_s {
 	uint8_t m_nUploadedHeightBuffer = 0;
 	uint8_t m_nPendingHeightBuffer = 1;
 	bool m_bDisabled = true;
+	bool m_bEmptySurface = false;
 } t3dCollisionShapeRecord_t;
 
 
@@ -106,6 +108,8 @@ private:
 	bool m_bInitialized = false;
 	bool m_bRegionMapUpdatePending = false;
 	Vector2i m_lastSnappedPos = s_v2iMax;
+	bool m_bDynamicUpdatePending = false;
+	eastl::bitset<T3D_MAX_COLLISION_SHAPE_RECORDS> m_emptyGridCells;
 	t3dRegionCoord_t m_szFullRegionSlots[T3D_REGION_SLOTS];
 	int m_nFullRegionSlotCount = 0;
 	uint64_t m_nStreamingGenerationLast = 0u;

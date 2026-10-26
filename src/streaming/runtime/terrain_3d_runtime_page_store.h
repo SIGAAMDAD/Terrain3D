@@ -220,7 +220,7 @@ public:
 		return m_nPreparedPageCount;
 	}
 	EA_FORCE_INLINE int getPendingPageCount( void ) const {
-		return m_bPrepareJobActive ? m_nPrepareWorkPageCount : 0;
+		return m_nPendingWorkPageCount;
 	}
 	EA_FORCE_INLINE int getQueuedPageCount( void ) const {
 		return m_nQueuedCount;
@@ -232,7 +232,7 @@ public:
 		return m_bPrepareJobActive;
 	}
 	EA_FORCE_INLINE int getTransientPageCount( void ) const {
-		return m_nPreparedPageCount + m_nPrepareWorkPageCount;
+		return m_nPreparedPageCount + m_nPendingWorkPageCount;
 	}
 
 private:
@@ -250,6 +250,7 @@ private:
 	eastl::array<int16_t, T3D_REGION_SLOTS> m_workByRegion{};
 	int m_nPreparedPageCount = 0;
 	int m_nPrepareWorkPageCount = 0;
+	int m_nPendingWorkPageCount = 0;
 	int m_nFreePayloadCount = 0;
 	int m_nRuntimePayloadLimit = T3D_GPU_CACHE_RUNTIME_MAX_LAYERS;
 	bool m_bPrepareJobActive = false;
@@ -278,6 +279,7 @@ private:
 	t3dRuntimePageNumericConfig_t m_sourceNumericConfig;
 	bool m_bSourceEditorAuthoring = false;
 	bool m_bRuntimeSourcesDirty = true;
+	bool m_bRuntimeCapacityDirty = true;
 	int m_nEffectivePrepareThreads = 0;
 	bool m_bCapacityFailureLatched = false;
 	uint64_t m_nCapacityFailureTopologyGeneration = 0u;

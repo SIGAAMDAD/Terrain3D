@@ -129,6 +129,9 @@ private:
 	uint64_t m_nPreviewVtStagedMaterialSourceGeneration = 0u;
 	uint64_t m_nPreviewVtFailedMaterialSourceGeneration = 0u;
 	uint64_t m_nPreviewVtPublishCount = 0u;
+	bool m_bForceOwnerPending = false;
+	uint64_t m_nForceStagedSerial = 0u;
+	uint64_t m_nForcePublishedSerial = 0u;
 	uint64_t m_nPreviewVtRepublishSuccessCount = 0u;
 	uint64_t m_nPreviewVtRepublishFailureCount = 0u;
 	uint64_t m_nPreviewVtRepublishRetryCount = 0u;
@@ -191,9 +194,11 @@ public:
 	bool bindRuntimeAllocator( const t3dPreviewServices_t &rServices,
 	        Terrain3DMemoryZone *pZone,
 	        t3dAllocatorOverflowPolicy_t ePolicy );
-	bool bakePreviewVirtualTexturesCold( const t3dPreviewServices_t &rServices, String *pError );
+	bool bakePreviewVirtualTexturesCold( const t3dPreviewServices_t &rServices, String *pError, bool bForceRebuild = false, uint64_t nForceSerial = 0u );
+	Dictionary getForceRebakeStatusCold() const;
+	void setForceOwnerPendingCold( bool bPending );
 	bool preparePreviewAuthoringPackageCold(
-	        const t3dPreviewServices_t &rServices, const Ref<Terrain3DAssets> &rAssets, String *pError, bool bImmediate = false );
+	        const t3dPreviewServices_t &rServices, const Ref<Terrain3DAssets> &rAssets, String *pError, bool bImmediate = false, bool bForceRebuild = false, uint64_t nForceSerial = 0u );
 	bool queuePreviewVtRepublishCold( const t3dPreviewServices_t &rServices );
 	bool reloadPublishedPreviewVtPackageCold( const t3dPreviewServices_t &rServices );
 	void servicePreviewVtRepublishOnRenderThread( const t3dPreviewServices_t &rServices );

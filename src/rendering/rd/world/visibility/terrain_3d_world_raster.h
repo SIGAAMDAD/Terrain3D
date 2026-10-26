@@ -15,6 +15,8 @@
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 
+class Terrain3DVTGpu;
+
 class Terrain3DWorldRaster {
 private:
 typedef struct t3dPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
@@ -42,6 +44,9 @@ typedef struct t3dPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
 	Terrain3DRdContext &m_context;
 	Terrain3DRdForwardLighting m_forwardLighting;
 	Terrain3DRdShader m_hShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	Terrain3DVTGpu *m_pFeedbackOwner = NULL; // Borrowed shared VT owner.
+	bool m_bMeshFeedback[T3D_RD_FORWARD_COLOR_VARIANT_COUNT]{};
+	godot::RID m_hCurrentFeedbackSet;
 	Terrain3DRdShader m_hShadowShader[T3D_PRIMITIVE_CLASS_COUNT];
 	godot::RID m_hSet0[T3D_PRIMITIVE_CLASS_COUNT][T3D_WORLD_DESCRIPTOR_LAYOUT_COUNT];
 	godot::RID m_hSet1[T3D_PRIMITIVE_CLASS_COUNT][T3D_WORLD_DESCRIPTOR_LAYOUT_COUNT];
@@ -80,7 +85,7 @@ public:
 	bool prepareCold( const t3dRdForwardPassContext_t &rContext,
 	        Terrain3DWorldResources &rResources,
 	        const t3dRdWorldTerrainRasterBindings_t &rTerrain,
-	        const t3dSharedVTBindings_t &rVT );
+	        const t3dSharedVTBindings_t &rVT, Terrain3DVTGpu *pFeedbackOwner = NULL );
 	bool submitHot( const t3dRdForwardPassContext_t &rContext, Terrain3DWorldResources &rResources );
 	void shutdownCold( void );
 	bool isReady( void ) const;

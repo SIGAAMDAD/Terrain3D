@@ -151,6 +151,13 @@ Ref<Image> t3dRegionImageCookMiddleComposite( const Vector2i &rLocation,
 	uint8_t *const pWrite = rOutput.ptrw();
 	const uint8_t *const pControl = control_bytes.ptr();
 	const uint8_t *const pColor = color_bytes.ptr();
+	float rotation_cos[16];
+	float rotation_sin[16];
+	for ( uint32_t rotation = 0u; rotation < 16u; ++rotation ) {
+		const float angle = ( float )rotation * Math::TAU / 16.0f;
+		rotation_cos[rotation] = Math::cos( angle );
+		rotation_sin[rotation] = Math::sin( angle );
+	}
 	for ( int y = 0; y < height; ++y ) {
 		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
 		for ( int x = 0; x < width; ++x ) {
@@ -162,9 +169,9 @@ Ref<Image> t3dRegionImageCookMiddleComposite( const Vector2i &rLocation,
 			const Color base_color = base < rMaterialColors.size() ? rMaterialColors[base] : s_colorWhite;
 			const Color overlay_color = overlay < rMaterialColors.size() ? rMaterialColors[overlay] : base_color;
 			const float control_scale = 0.9f - ( float )( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
-			const float angle = ( float )( t3dGetUvRotation( control ) )*Math::TAU / 16.0f;
-			const float cs = Math::cos( angle );
-			const float sn = Math::sin( angle );
+			const uint32_t rotation = t3dGetUvRotation( control );
+			const float cs = rotation_cos[rotation];
+			const float sn = rotation_sin[rotation];
 			const float local_x = ( ( float )( x ) + 0.5f ) * ( float )( T3D_REGION_SIZE ) / ( float )( width );
 			const float local_y = ( ( float )( y ) + 0.5f ) * ( float )( T3D_REGION_SIZE ) / ( float )( height );
 			const float world_x = ( ( float )( rLocation.x * T3D_REGION_SIZE ) + local_x ) * ( float )( s_fRegionVertexSpacing );
@@ -179,7 +186,7 @@ Ref<Image> t3dRegionImageCookMiddleComposite( const Vector2i &rLocation,
 			        world_x,
 			        world_y,
 			        control_scale );
-			const Color overlay_sample = t3dRegionImageSampleMiddleCompositeMaterial( pMaterialImages,
+			const Color overlay_sample = overlay == base ? base_sample : t3dRegionImageSampleMiddleCompositeMaterial( pMaterialImages,
 			        nMaterialImageCount,
 			        rMaterialScales,
 			        overlay,

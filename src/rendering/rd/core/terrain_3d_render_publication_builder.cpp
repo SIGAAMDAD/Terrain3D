@@ -568,6 +568,10 @@ void Terrain3DRenderPublicationBuilder::publishPatchState( const t3dPublicationS
 	snapshot.m_nEditorExecutionMode = ( uint32_t )( rServices.m_pTerrain->getEditorExecutionMode() );
 	snapshot.m_bEditorAuthoringMode = rServices.m_pTerrain->isEditorAuthoringMode();
 	snapshot.m_bDominantSunOnly = rServices.m_pTerrain->isDominantSunOnly();
+	snapshot.m_szInstanceTextureMipBias[0] = rServices.m_pTerrain->getClutterTextureMipBias();
+	snapshot.m_szInstanceTextureMipBias[1] = rServices.m_pTerrain->getGroundCoverTextureMipBias();
+	snapshot.m_szInstanceTextureMipBias[2] = rServices.m_pTerrain->getOccluderTextureMipBias();
+	snapshot.m_szInstanceTextureMipBias[3] = ( float )rServices.m_pTerrain->getInstanceTextureFilterOverrides();
 	snapshot.m_nShadowLodCount = rServices.m_pTerrain->getShadowLodCount();
 	snapshot.m_nNearShadowLodCount = rServices.m_pTerrain->getNearShadowLodCount();
 	snapshot.m_nMiddleShadowLodCount = rServices.m_pTerrain->getMiddleShadowLodCount();

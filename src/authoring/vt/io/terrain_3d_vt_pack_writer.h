@@ -47,6 +47,8 @@ uint32_t t3d_vt_pack_expected_tile_bytes( uint32_t nFormat );
 uint32_t t3d_vt_pack_expected_physical_tile_bytes_v3( uint32_t nPhysicalFamily );
 bool t3d_vt_pack_init_format_family_records_v3( t3dVTPackFormatFamilyRecordV3_t *pRecords, uint32_t nRecordCount );
 bool t3d_vt_pack_validate_source_v3( const t3dVTPackSourceV3_t &rSource );
+// Directory sizing only; callers must validate the completed source before writing.
+uint64_t t3d_vt_pack_compute_metadata_bytes_v3( const t3dVTPackSourceV3_t &rSource );
 uint64_t t3d_vt_pack_compute_bytes_v3( const t3dVTPackSourceV3_t &rSource );
 bool t3d_vt_pack_write_v3( const t3dVTPackSourceV3_t &rSource, void *pDestination, uint64_t nDestinationBytes, uint64_t &rWrittenBytes );
 bool t3d_vt_pack_open_view_v3( const void *pPackage, uint64_t nPackageBytes, t3dVTPackViewV3_t &rView );

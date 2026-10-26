@@ -1292,3 +1292,11 @@ bool Terrain3D::requestRdMeshPreviewAsync( const uint16_t nAssetId,
 	return m_pRenderCoordinator
 	        && m_pRenderCoordinator->requestMeshPreviewAsync( nAssetId, rSize, nCompletionOwnerId, nCompletionGeneration, pFailure );
 }
+
+Dictionary Terrain3D::forceRebakeVirtualTextures( void ) {
+	if ( m_pRenderCoordinator ) { return m_pRenderCoordinator->forceRebakeVirtualTexturesCold(); }
+	Dictionary result; result["state"] = "failed"; result["error"] = "Terrain3D RD coordinator is unavailable"; return result;
+}
+Dictionary Terrain3D::getForceRebakeVirtualTexturesStatus( void ) const {
+	return m_pRenderCoordinator ? m_pRenderCoordinator->getForceRebakeVirtualTexturesStatusCold() : Dictionary();
+}

@@ -1119,6 +1119,18 @@ t3dWorldResourceLimits_t Terrain3D::getWorldResourceLimitsInternal( void ) const
 	return limits;
 }
 
+void Terrain3D::setInstanceTextureFiltering( const uint32_t nCategory, const int nFilter ) {
+	if ( nCategory < 3u && nFilter >= -1 && nFilter <= ( int )T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC ) {
+		m_szInstanceTextureFiltering[nCategory] = nFilter;
+	}
+}
+
+void Terrain3D::setInstanceTextureMipBias( const uint32_t nCategory, const float fBias ) {
+	if ( nCategory < 3u && Math::is_finite( fBias ) ) {
+		m_szInstanceTextureMipBias[nCategory] = CLAMP( fBias, -4.0f, 4.0f );
+	}
+}
+
 void Terrain3D::setVirtualTextureQualityProfile( const int nProfile ) {
 	if ( nProfile < 0 || nProfile >= ( int )T3D_VT_QUALITY_PROFILE_COUNT ) { return; }
 	const uint32_t nPreviousProfile = m_nVirtualTextureQualityProfile;

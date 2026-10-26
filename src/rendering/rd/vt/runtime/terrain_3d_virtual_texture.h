@@ -14,6 +14,8 @@
 
 #include <godot_cpp/variant/dictionary.hpp>
 
+struct t3dRdForwardPassContext_s;
+
 // t3dVirtualTextureStats_s centralized in Terrain3DTypes.h.
 
 
@@ -127,6 +129,9 @@ public:
 	const Terrain3DVTGpu &get_gpu() const;
 	const t3dVirtualTextureStats_t &get_stats() const;
 	t3dVTFinalTelemetry_t get_final_telemetry_reference_debug() const;
+	void service_fragment_feedback_hot( uint32_t nFrameId );
+	void service_streaming_hot( uint32_t nFrameId );
+	bool shouldRefreshMaterialDemandHot( uint32_t nLane, const t3dRdForwardPassContext_s &rContext, uint64_t nSourceSignature );
 	uint32_t stage_material_footprint_hot( uint32_t nAllocationId,
 	        uint32_t nFrameId,
 	        const float pUvMin[2],
@@ -134,7 +139,8 @@ public:
 	        uint16_t nWantedMip,
 	        uint32_t nMaxRequests,
 	        uint16_t nPriority,
-	        t3dVTRequestProducer_t eProducer );
+	        t3dVTRequestProducer_t eProducer,
+	        uint32_t nFootprintWindow = UINT32_MAX );
 	bool flush_staged_material_requests_hot(
 	        uint32_t nFrameId, uint32_t &rTerrainAccepted, uint32_t &rInstanceAccepted );
 
@@ -145,6 +151,9 @@ public:
 	bool service_retired_slots_hot( uint32_t pFrameId );
 
 private:
+	void streamWorkerMain( void );
+	void stopStreamWorkerCold( void );
+	bool dispatchStreamJobHot( uint32_t nJob );
 	bool open_package_candidate( const void *pBytes, uint64_t nBytes, t3dVTPackRuntimeStorage_t &rCandidate );
 	bool validate_package_limits( const t3dVTPackRuntimeStorage_t &rCandidate ) const;
 	bool publish_package_state_warm( const t3dVTDatabaseView_t &rDatabase, bool bNeutral,
@@ -163,6 +172,16 @@ private:
 	Terrain3DVTResourceImage *m_pResources;
 	Terrain3DMemoryZone *m_pRuntimeAllocatorZone;
 	Terrain3DVTGpu m_Gpu;
+	uint32_t m_nStreamingServiceFrame = UINT32_MAX;
+	uint64_t m_szDemandSignature[3]{}; // Terrain, visible instances, world candidates.
+	uint32_t m_szDemandRefreshFrame[3]{ UINT32_MAX, UINT32_MAX, UINT32_MAX };
+	Terrain3DThread m_streamWorker;
+	Terrain3DMutex m_streamWorkerMutex;
+	Terrain3DCondition m_streamWorkerCondition;
+	uint32_t m_szStreamWorkerJobs[T3D_VT_MAX_STREAM_SCRATCH_LANES]{};
+	uint32_t m_nStreamWorkerHead = 0u;
+	uint32_t m_nStreamWorkerCount = 0u;
+	bool m_bStreamWorkerStop = false;
 	t3dWorldLimits_t m_Limits;
 	t3dVTResidencyState_t m_Residency;
 	t3dVTStreamingState_t m_Streaming;
@@ -205,9 +224,12 @@ private:
 	t3dVTRetiredPageSet_t *m_pRetiredPageSets;
 	uint32_t *m_pLastEvictedFrame;
 	t3dVTStagedRequest_t *m_pStagedRequests;
+	uint32_t *m_pStagedByPage;
 	uint32_t m_nStagedRequestCount;
 	uint32_t m_nStagedRequestFrame;
 	uint32_t m_nFrameRequestBudget = 1u;
+	uint32_t m_nFragmentRequestFrame = UINT32_MAX;
+	uint32_t m_nFragmentRequestsUsed = 0u;
 	uint8_t *m_pStreamScratch;
 	uint32_t *m_pScratchLaneOwner;
 	Terrain3DAtomic<uint32_t> m_ScratchLaneCompletion[T3D_VT_MAX_STREAM_SCRATCH_LANES];

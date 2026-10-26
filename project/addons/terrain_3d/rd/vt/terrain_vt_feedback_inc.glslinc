@@ -228,8 +228,7 @@ T3DVTContinuousLod t3d_vt_fragment_filter_lod(T3DVTAllocation allocation,
     bool trilinear) {
     uint mip_count = t3d_vt_allocation_mip_count(allocation);
     uint base_mip = min(t3d_vt_allocation_quality_base_mip(allocation), max(mip_count, 1u) - 1u);
-    vec2 virtual_texels = vec2(float(t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_width(allocation), base_mip)) * float(T3D_VT_PAGE_INTERIOR),
-        float(t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_height(allocation), base_mip)) * float(T3D_VT_PAGE_INTERIOR));
+    vec2 virtual_texels = t3d_vt_filter_base_texels(allocation, base_mip);
     return t3d_vt_filter_continuous_lod(
         uv_ddx, uv_ddy, virtual_texels, base_mip, mip_count, lod_bias, anisotropic, trilinear);
 }
@@ -396,9 +395,8 @@ bool t3d_vt_fragment_request_allocation(
         virtual_page, wanted_mip, priority, T3D_VT_REQUEST_PRODUCER_FRAGMENT, vt_fragment_feedback.limits.x, vt_fragment_feedback.limits.z);
 }
 
-// WG-F P16 canonical request identity. For V3 material sampling the base runtime
-// allocation identifies the material page set; channel siblings remain an
-// internal sampling/residency detail and must not multiply fragment feedback.
+// Request one runtime channel allocation. V3 consumers request their sampled
+// siblings explicitly because each channel has independent page residency.
 bool t3d_vt_fragment_request_material_page_set(uint page_set_allocation,
     vec2 uv,
     vec2 uv_ddx,
@@ -407,14 +405,15 @@ bool t3d_vt_fragment_request_material_page_set(uint page_set_allocation,
     uint priority,
     bool repeat_uv,
     uint filter_mode) {
-    return t3d_vt_fragment_request_allocation_filtered(page_set_allocation, uv, uv_ddx, uv_ddy, lod_bias, priority, repeat_uv,
+    bool mipmapped = t3d_vt_filter_mode_uses_mipmaps(filter_mode);
+    return t3d_vt_fragment_request_allocation_filtered(page_set_allocation, uv,
+        mipmapped ? uv_ddx : vec2(0.0), mipmapped ? uv_ddy : vec2(0.0), mipmapped ? lod_bias : 0.0, priority, repeat_uv,
         t3d_vt_filter_mode_is_anisotropic(filter_mode), t3d_vt_filter_mode_is_trilinear(filter_mode));
 }
 
-// Page-set residency means opacity-bearing Surface.A uses the same logical page
-// identity as the other channels. Alpha/depth feedback stays narrow in channel
-// scope but derives the same virtual mip pair as the material sample policy.
-bool t3d_vt_fragment_request_surface_a_if_missing(uint allocation_id,
+// Clutter opacity is Albedo.A. The albedo allocation owns its alpha pages.
+// Derive the same virtual mip pair as the material sample policy.
+bool t3d_vt_fragment_request_albedo_alpha_if_missing(uint allocation_id,
     vec2 uv,
     vec2 uv_ddx,
     vec2 uv_ddy,
@@ -422,8 +421,14 @@ bool t3d_vt_fragment_request_surface_a_if_missing(uint allocation_id,
     uint priority,
     bool repeat_uv,
     uint filter_mode) {
-    return t3d_vt_fragment_request_allocation_filtered(allocation_id, uv, uv_ddx, uv_ddy, lod_bias, priority, repeat_uv,
+    bool mipmapped = t3d_vt_filter_mode_uses_mipmaps(filter_mode);
+    return t3d_vt_fragment_request_allocation_filtered(allocation_id, uv,
+        mipmapped ? uv_ddx : vec2(0.0), mipmapped ? uv_ddy : vec2(0.0), mipmapped ? lod_bias : 0.0, priority, repeat_uv,
         t3d_vt_filter_mode_is_anisotropic(filter_mode), t3d_vt_filter_mode_is_trilinear(filter_mode));
+}
+bool t3d_vt_fragment_request_surface_a_if_missing(uint allocation_id, vec2 uv, vec2 uv_ddx, vec2 uv_ddy,
+    float lod_bias, uint priority, bool repeat_uv, uint filter_mode) {
+    return t3d_vt_fragment_request_albedo_alpha_if_missing(allocation_id, uv, uv_ddx, uv_ddy, lod_bias, priority, repeat_uv, filter_mode);
 }
 #endif
 

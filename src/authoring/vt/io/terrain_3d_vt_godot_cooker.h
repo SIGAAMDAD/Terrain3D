@@ -120,7 +120,7 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const godot::Ref<Terrain3D
         uint64_t &rFingerprint,
         uint32_t &rPackageGeneration,
         t3dVTEditorCookTelemetryV3_t &rTelemetry,
-        godot::String *pError, Terrain3DSharedMemoryReservation *pPackageMemory = NULL );
+        godot::String *pError, Terrain3DSharedMemoryReservation *pPackageMemory = NULL, bool bForceRebuild = false );
 bool t3d_vt_godot_cook_runtime_package( const godot::Ref<Terrain3DAssets> &rAssets,
         const uint64_t *pStableKeys,
         const t3dRenderingMaterialGpu_t *pMaterialRecords,

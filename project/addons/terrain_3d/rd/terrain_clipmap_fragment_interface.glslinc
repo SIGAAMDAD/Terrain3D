@@ -108,6 +108,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
     vec4 fog_params;
     vec4 fog_depth_params;
     vec4 displacement_params;
+    vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
 }
 frame_data;
 

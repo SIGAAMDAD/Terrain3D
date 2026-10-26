@@ -20,7 +20,7 @@
 // feedback parameters. These mirrors make the disabled policy machine-checkable
 // instead of relying on an accidentally absent shader version define.
 #define T3D_RD_TERRAIN_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 1
-#define T3D_RD_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 1
+#define T3D_RD_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 0
 
 using namespace godot;
 

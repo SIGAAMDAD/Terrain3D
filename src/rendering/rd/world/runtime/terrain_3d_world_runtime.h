@@ -61,7 +61,7 @@ public:
 	        const t3dRdForwardPassContext_t &rContext, const t3dRdFrameSnapshot_t &rSnapshot, uint32_t nVisibilityMask );
 	bool prepareRasterPass( const t3dRdForwardPassContext_t &rContext,
 	        const t3dRdWorldTerrainRasterBindings_t &rTerrain,
-	        const t3dSharedVTBindings_t &rVT );
+	        const t3dSharedVTBindings_t &rVT, Terrain3DVTGpu *pFeedbackOwner = NULL );
 	bool submitRasterPass( const t3dRdForwardPassContext_t &rContext );
 	void shutdownCold( void );
 	bool isReady( void ) const;

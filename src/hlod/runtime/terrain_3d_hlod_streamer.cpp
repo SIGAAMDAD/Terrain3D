@@ -123,7 +123,7 @@ void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleas
 	uint8_t old[T3D_REGION_SLOTS];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	for ( int i = 0; i < ( int )( m_entries.size() ); ++i ) {
-		deactivate( i );
+		deactivate( i, true );
 	}
 	if ( bReleaseStorage ) {
 		t3dVectorRelease( m_entries );
@@ -151,6 +151,8 @@ void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleas
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
 	m_nResidentEstimatedBytes = 0;
+	m_nReservedBytes = 0u;
+	m_nLoadCandidateCursor = 0u;
 	m_nDesiredGeneration = 1u;
 	m_nTransitionEntriesExaminedLastTick = 0u;
 	m_bHasSelectionContext = false;
@@ -608,19 +610,19 @@ void Terrain3DHLODStreamer::selectRecursive( const int index, const Vector3 &rLo
 
 bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	t3dEntry_t &entry = m_entries[( size_t )index];
-	if ( entry.m_bActive || entry.m_bLoadFailed || entry.m_packagePath.is_empty() || !m_pTerrain || !m_pTerrain->sceneNode().is_inside_tree() ) {
+	if ( entry.m_bActive || entry.m_bLoadFailed || entry.m_bCancelPending || entry.m_packagePath.is_empty() || !m_pTerrain || !m_pTerrain->sceneNode().is_inside_tree() ) {
 		return entry.m_bActive;
 	}
 	Terrain3DMemoryAccountScope memory_scope(m_pTerrain->getMemoryAccountInternal());
 	if (!entry.m_bRequestStarted && entry.m_memory.bytes() == 0) {
 		const uint64_t budget = uint64_t(m_nMemoryBudgetMb) * 1024ull * 1024ull;
 		const uint64_t incoming = uint64_t(MAX<int64_t>(0, entry.m_nEstimatedGpuBytes));
-		uint64_t reserved = 0;
-		for (const auto &candidate : m_entries) { reserved += candidate.m_memory.bytes(); }
+		const uint64_t reserved = m_nReservedBytes;
 		if (budget == 0 || incoming > budget || reserved > budget - incoming || !entry.m_memory.reserve(incoming)) {
 			++m_nCapacityDeferredLastTick;
 			return false;
 		}
+		m_nReservedBytes += entry.m_memory.bytes();
 	}
 	ResourceLoader *loader = ResourceLoader::get_singleton();
 	if ( !loader ) {
@@ -695,11 +697,13 @@ void Terrain3DHLODStreamer::setMemoryBudgetMb(int nMb) {
 		deactivate(m_activeEntries.back());
 	}
 	// A loaded-but-unpublished package must not retain an implicit spare grant.
-	while (!m_loadingEntries.empty()) { deactivate(m_loadingEntries.back()); }
+	for ( int position = ( int )m_loadingEntries.size() - 1; position >= 0; --position ) {
+		deactivate( m_loadingEntries[( size_t )position] );
+	}
 	publishRepresentationMap();
 }
 
-void Terrain3DHLODStreamer::deactivate( const int index ) {
+void Terrain3DHLODStreamer::deactivate( const int index, const bool bWait ) {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return;
 	}
@@ -715,8 +719,14 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 		ResourceLoader *loader = ResourceLoader::get_singleton();
 		if (loader) {
 			const auto status = loader->load_threaded_get_status(entry.m_packagePath);
+			if ( status == ResourceLoader::THREAD_LOAD_IN_PROGRESS && !bWait ) {
+				// Keep the reservation until Godot's worker finishes, without joining
+				// it from a residency or memory-policy update.
+				entry.m_bCancelPending = true;
+				addLoadingEntry( index );
+				return;
+			}
 			if (status == ResourceLoader::THREAD_LOAD_IN_PROGRESS || status == ResourceLoader::THREAD_LOAD_LOADED) {
-				// Godot owns this worker. Join it before returning its reservation.
 				const Ref<Resource> retired = loader->load_threaded_get(entry.m_packagePath);
 			}
 		}
@@ -726,8 +736,10 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 	removeLoadingEntry( index );
 	removeRetiringEntry( index );
 	entry.m_ackage.unref();
+	m_nReservedBytes -= MIN( m_nReservedBytes, entry.m_memory.bytes() );
 	entry.m_memory.reset();
 	entry.m_bRequestStarted = false;
+	entry.m_bCancelPending = false;
 	m_bSelectionDirty = true;
 	if ( wasPublished ) {
 		markRdPublicationDirty();
@@ -833,35 +845,35 @@ void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, con
 		const int index = m_loadingEntries[( size_t )position];
 		++m_nTransitionEntriesExaminedLastTick;
 		t3dEntry_t &entry = m_entries[( size_t )index];
-		if ( !isDesired( entry ) || entry.m_bLoadFailed ) {
-			removeLoadingEntry( index );
+		if ( !isDesired( entry ) || entry.m_bLoadFailed || entry.m_bCancelPending ) {
+			deactivate( index );
 			continue;
 		}
-		if ( requestOrActivate( index ) ) {
+		if ( loadBudget > 0 && requestOrActivate( index ) ) {
+			--loadBudget;
 			representationDirty = true;
 		}
 	}
 
-	for ( int position = ( int )m_loadCandidates.size() - 1; position >= 0 && loadBudget > 0; --position ) {
-		const int index = m_loadCandidates[( size_t )position];
-		++m_nTransitionEntriesExaminedLastTick;
-		t3dEntry_t &entry = m_entries[( size_t )index];
-		const bool candidate = isDesired( entry ) && !entry.m_bActive && !entry.m_bLoadFailed && entry.m_iLoadingListPosition < 0;
-		m_loadCandidates[( size_t )position] = m_loadCandidates.back();
+	while ( !m_loadCandidates.empty() && loadBudget > 0 ) {
+		const size_t position = m_nLoadCandidateCursor % m_loadCandidates.size();
+		const int index = m_loadCandidates[position];
+		m_loadCandidates[position] = m_loadCandidates.back();
 		m_loadCandidates.pop_back();
-		if ( !candidate ) {
-			continue;
-		}
-		const bool wasRequested = entry.m_bRequestStarted;
+		++m_nTransitionEntriesExaminedLastTick;
+		--loadBudget;
+		t3dEntry_t &entry = m_entries[( size_t )index];
+		if ( !isDesired( entry ) || entry.m_bActive || entry.m_bLoadFailed || entry.m_iLoadingListPosition >= 0 ) { continue; }
 		const bool active = requestOrActivate( index );
-		if ( entry.m_bRequestStarted && !active && !entry.m_bLoadFailed ) {
-			addLoadingEntry( index );
-		}
-		if ( active ) {
-			representationDirty = true;
-		}
-		if ( active || ( !wasRequested && entry.m_bRequestStarted ) ) {
-			--loadBudget;
+		if ( entry.m_bRequestStarted && !active && !entry.m_bLoadFailed ) { addLoadingEntry( index ); }
+		if ( active ) { representationDirty = true; }
+		if ( !active && !entry.m_bRequestStarted && !entry.m_bLoadFailed ) {
+			// Keep a denied candidate and rotate past it without rebuilding the
+			// manifest selection or starving the rest of the candidate queue.
+			m_loadCandidates.push_back( index );
+			m_nLoadCandidateCursor = position + 1u;
+		} else {
+			m_nLoadCandidateCursor = position;
 		}
 	}
 

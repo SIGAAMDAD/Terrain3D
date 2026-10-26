@@ -4,6 +4,10 @@
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "rendering/rd/vt/runtime/terrain_3d_shared_vt_runtime.h"
 #include "rendering/rd/world/resources/terrain_3d_world_resources.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_shader.h"
+#include "rendering/rd/infrastructure/pipeline/terrain_3d_rd_pipeline.h"
+#include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
+#include <godot_cpp/classes/rd_shader_source.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace {
@@ -170,6 +174,16 @@ bool t3dRunVTWarmGpuTests() {
 			shared.abortPackageRepublishWarm();
 			expect( !vt.isPackageRepublishPendingWarm() && vt.getPackageContentSignature() == signature,
 			        "aborted candidate leaves last-good package intact" );
+			const size_t free_extent = zone->freeExtentBytes();
+			void *pressure = free_extent > 4096u ? zone->allocate(free_extent - 4096u, 64u) : NULL;
+			expect(pressure != NULL, "warm fixture can reproduce insufficient candidate coexistence capacity");
+			if (pressure != NULL) {
+				expect(!shared.stagePackageWarm(second.ptr(), second.size()) && vt.isPackageResourceRebuildRequiredWarm(),
+				        "valid candidate storage denial requests controlled rebuild rather than permanent rejection");
+				expect(vt.getPackageContentSignature() == signature && vt.isPackageRollbackReadyWarm(),
+				        "storage-denied candidate keeps the live package and rollback available");
+				zone->deallocate(pressure);
+			}
 			expect( shared.stagePackageWarm( second.ptr(), second.size() ) && shared.servicePackageRepublishWarm( 4096, 1 )
 			        && !vt.isPackageRepublishPendingWarm(), "small upload slices commit one complete warm publication" );
 			expect( vt.getPackageContentSignature() != signature && vt.getPackagePublicationGeneration() == 2,
@@ -208,6 +222,7 @@ bool t3dRunVTWarmGpuTests() {
 			const uint64_t goodSignature = vt.getPackageContentSignature();
 			expect( !shared.stagePackageWarm( damaged.ptr(), damaged.size() ) && vt.getPackageContentSignature() == goodSignature
 			        && vt.getPackagePublicationGeneration() == 2, "invalid candidate retains previous GPU publication and generation" );
+			expect(!vt.isPackageResourceRebuildRequiredWarm(), "invalid package cannot trigger a destructive capacity rebuild");
 			expect( shared.stagePackageWarm( NULL, 0 ) && shared.servicePackageRepublishWarm( 4096, 1 )
 			        && vt.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_LEGACY_NEUTRAL && vt.getPackagePublicationGeneration() == 3,
 			        "neutral warm publication removes old package without resource restart" );
@@ -218,7 +233,69 @@ bool t3dRunVTWarmGpuTests() {
 			expect( (int64_t)diagnostics["cpu_image_prepare_count"] == 1 && (int64_t)diagnostics["gpu_storage_prepare_count"] == 1
 			        && (int64_t)diagnostics["initial_publication_count"] == 1, "warm edits leave every cold preparation counter at one" );
 			expect( (int64_t)diagnostics["warm_publication_success_count"] == 3
-			        && (int64_t)diagnostics["warm_publication_failure_count"] == 1, "warm diagnostics distinguish commits from rejected candidates" );
+			        && (int64_t)diagnostics["warm_publication_failure_count"] == 2, "warm diagnostics distinguish commits from rejected candidates" );
+
+			// Keep a real consumer shader/pipeline/buffer alive while replacing VT.
+			// This exercises descriptor retirement/rebinding without scene startup.
+			RenderingDevice *const rd = context.getDevice();
+			Ref<RDShaderSource> source; source.instantiate();
+			source->set_stage_source(RenderingDevice::SHADER_STAGE_COMPUTE,
+			        "#version 450\nlayout(local_size_x=1) in;\n"
+			        "layout(set=0,binding=0,std430) readonly buffer VT { uint words[]; } vt;\n"
+			        "layout(set=0,binding=1,std430) buffer Output { uint value; } result;\n"
+			        "void main() { result.value = vt.words[0]; }\n");
+			Terrain3DRdShader shader;
+			Terrain3DRdPipeline pipeline;
+			Terrain3DRdGpuBuffer output;
+			t3dRdGpuBufferSpec_t spec;
+			spec.m_pName = "AuthoringReuse.ConsumerOutput"; spec.m_owner = T3D_RD_CONTEXT_OWNER_WORLD;
+			spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER; spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
+			const bool consumerReady = shader.createTracked(context, T3D_RD_CONTEXT_OWNER_WORLD,
+			        "AuthoringReuse.ConsumerShader", rd->shader_compile_spirv_from_source(source))
+			        && pipeline.createTrackedCompute(context, T3D_RD_CONTEXT_OWNER_WORLD, "AuthoringReuse.ConsumerPipeline", shader.rid())
+			        && output.configure(spec) && output.createTracked(context, 4);
+			expect(consumerReady, "VT capacity fixture retains a real consumer pipeline and output buffer");
+			if (consumerReady) {
+				Terrain3DRdUniformSet descriptor;
+				const auto bindConsumer = [&]() {
+					TypedArray<Ref<RDUniform>> uniforms;
+					uniforms.push_back(Terrain3DRdBindingBuilder::single(0, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+					        shared.get_shared_vt_bindings().hAllocationTable));
+					uniforms.push_back(Terrain3DRdBindingBuilder::single(1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, output.rid()));
+					return descriptor.createTracked(context, T3D_RD_CONTEXT_OWNER_WORLD, "AuthoringReuse.ConsumerSet", uniforms, shader.rid(), 0);
+				};
+				const RID shaderRid = shader.rid(), pipelineRid = pipeline.rid(), outputRid = output.rid();
+				expect(bindConsumer(), "consumer descriptor initially binds the published VT allocation table");
+				const RID retiredDescriptor = descriptor.rid();
+				const auto oldBindings = shared.get_shared_vt_bindings();
+				expect(shared.replacePackageResourcesCold(context, second.ptr(), second.size(), false, T3D_VT_SHARED_RESOURCES_PREVIEW),
+				        "capacity fallback publishes replacement by recreating only VT ownership");
+				expect(shared.get_shared_vt_bindings().nBindingGeneration > oldBindings.nBindingGeneration
+				        && shared.get_shared_vt_bindings().nResourceGeneration > oldBindings.nResourceGeneration,
+				        "capacity replacement advances both generations used by retained consumers");
+				expect(vt.getTerrainMegaVTCookedGenerationCold(7, cookedGeneration) && cookedGeneration == 8u
+				        && vt.getPackageContentSignature() != signature,
+				        "capacity replacement exposes the new database to retained material readers");
+				expect(!rd->uniform_set_is_valid(retiredDescriptor), "VT retirement invalidates the old consumer descriptor");
+				descriptor.releaseTracked(context);
+				expect(bindConsumer() && rd->uniform_set_is_valid(descriptor.rid()), "retained shader accepts a descriptor for the replacement VT tables");
+				expect(shader.rid() == shaderRid && pipeline.rid() == pipelineRid && output.rid() == outputRid
+				        && rd->compute_pipeline_is_valid(pipelineRid), "capacity replacement preserves consumer shader, pipeline, and output storage");
+				if (descriptor.isValid() && rd->compute_pipeline_is_valid(pipelineRid)) {
+					const int64_t list = rd->compute_list_begin();
+					rd->compute_list_bind_compute_pipeline(list, pipelineRid);
+					rd->compute_list_bind_uniform_set(list, descriptor.rid(), 0);
+					rd->compute_list_dispatch(list, 1, 1, 1);
+					rd->compute_list_end();
+				}
+				expect(vt.is_hot_sealed() && vt.validate_hot_plateau_reference_debug(), "VT-only replacement establishes a new sealed runtime plateau");
+				const uint64_t generation = shared.get_shared_vt_bindings().nBindingGeneration;
+				expect(shared.replacePackageResourcesCold(context, first.ptr(), first.size(), false, T3D_VT_SHARED_RESOURCES_PREVIEW)
+				        && shared.get_shared_vt_bindings().nBindingGeneration > generation && vt.getPackageContentSignature() == signature,
+				        "last-good rollback also refreshes retained consumer generations");
+				descriptor.releaseTracked(context);
+			}
+			output.releaseTracked(context); pipeline.releaseTracked(context); shader.releaseTracked(context);
 		}
 		shared.shutdown_cold();
 		expect(owner.get()->stats().domains[Terrain3DMemoryAccount::VIRTUAL_TEXTURE].committed == 0,

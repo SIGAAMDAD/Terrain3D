@@ -226,7 +226,8 @@ bool t3dWorldCookMeshClustersCold( const t3dWorldClusterCookSource_t &rSource,
 				}
 				local[i] = ( uint32_t )found;
 			}
-			triangles[triCount++] = t3dWorldPackTriangle( local[0], local[1], local[2] );
+			triangles[triCount++] = t3dWorldPackTriangle( local[0], local[1], local[2] )
+			        | ( winding ? T3D_WORLD_TRIANGLE_BACKSIDE : 0u );
 		}
 	}
 	if ( !t3dWorldFlushClusterCold( rSource, rBuffers, rStats, localVertices, localCount, triangles, triCount ) ) {

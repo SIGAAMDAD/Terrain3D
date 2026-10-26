@@ -32,6 +32,7 @@ typedef struct t3dRdTextureBatchUpdate_s {
 	Terrain3DRdTexture *m_pTexture = NULL;
 	uint32_t m_nTextureGeneration = 0u;
 	PackedByteArray m_data;
+	uint32_t m_nCopySourceLayer = UINT32_MAX;
 } t3dRdTextureBatchUpdate_t;
 
 typedef struct t3dRdTextureUpdateRect_s {
@@ -86,6 +87,7 @@ typedef struct t3dAsyncTextureOperationSlot_s {
 		Terrain3DRdTexture *m_szTextures[T3D_TRACKED_BATCH_UPDATE_COUNT]{};
 		uint32_t m_szTextureGenerations[T3D_TRACKED_BATCH_UPDATE_COUNT]{};
 		PackedByteArray m_szData[T3D_TRACKED_BATCH_UPDATE_COUNT];
+		uint32_t m_szCopySourceLayers[T3D_TRACKED_BATCH_UPDATE_COUNT]{};
 		uint32_t m_nLayer = 0u;
 		uint32_t m_nCount = 0u;
 	} t3dTrackedTextureBatchSlot_t;
@@ -116,6 +118,7 @@ typedef struct t3dAsyncTextureOperationSlot_s {
 	uint64_t nextAsyncTextureOperationGeneration( void );
 	bool submitAsyncTextureOperation( const t3dRdTextureOperationRequest_t &rRequest );
 	bool updateOwnedTexture( Terrain3DRdTexture *pTexture, uint32_t nGeneration, uint32_t nLayer, const PackedByteArray &rData );
+	bool copyOwnedTextureLayer( Terrain3DRdTexture *pTexture, uint32_t nGeneration, uint32_t nSourceLayer, uint32_t nLayer );
 	bool updateOwnedTextureRegion( Terrain3DRdTexture *pTexture, uint32_t nTextureGeneration,
 	        Terrain3DRdTexture *pStaging, uint32_t nStagingGeneration,
 	        uint32_t nDestinationX, uint32_t nDestinationY, uint32_t nWidth, uint32_t nHeight,

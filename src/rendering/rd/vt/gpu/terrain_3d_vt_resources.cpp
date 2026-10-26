@@ -46,6 +46,9 @@ static const char *t3d_vt_buffer_name( const t3dVTGpuBufferId_t pBuffer ) {
 		case T3D_VT_GPU_BUFFER_PAGE_TABLE: return "VT page table";
 		case T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE: return "VT mip layout";
 		case T3D_VT_GPU_BUFFER_TAIL_METADATA: return "VT tail metadata";
+		case T3D_VT_GPU_BUFFER_FRAGMENT_HASH: return "VT fragment request hash";
+		case T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS: return "VT fragment counters";
+		case T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS: return "VT fragment params";
 		default: return "VT buffer";
 	}
 }
@@ -407,7 +410,7 @@ bool Terrain3DVTResourceImage::create_storage_buffer_cold( t3dVTGpuBufferId_t pB
 	t3dRdGpuBufferSpec_t spec;
 	spec.m_pName = t3d_vt_buffer_name( pBuffer );
 	spec.m_owner = T3D_RD_CONTEXT_OWNER_VT;
-	spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
+	spec.m_type = pBuffer == T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS ? T3D_RD_CONTEXT_RESOURCE_UNIFORM_BUFFER : T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
 	spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
 	spec.m_growth = T3D_GPU_EXACT;
 	if ( !m_buffers[pBuffer].configure( spec ) || !m_buffers[pBuffer].createTracked( *m_pContext, ( uint32_t )pBytes ) ) {

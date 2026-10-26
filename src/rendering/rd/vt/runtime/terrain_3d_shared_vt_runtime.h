@@ -36,6 +36,10 @@ public:
 	        uint32_t nPreviewMaterialCapacity = 0u, uint32_t nPreviewVirtualPageCapacity = 0u,
 	        const t3dWorldResourceLimits_t *pProductionWorldLimits = NULL );
 	void shutdown_cold( bool bPreserveTailStaging = false );
+	// Render-thread capacity fallback; graphics consumers retain their pipelines.
+	bool replacePackageResourcesCold( Terrain3DRdContext &rContext, const void *pBytes, uint64_t nBytes,
+	        bool bNeutral, t3dVTSharedResourceClass_t eResourceClass,
+	        const t3dWorldResourceLimits_t *pProductionWorldLimits = NULL );
 	bool stagePackageWarm( const void *pBytes, uint64_t nBytes );
 	bool servicePackageRepublishWarm( uint64_t nMaxBytes, uint32_t nMaxWorkUnits );
 	void abortPackageRepublishWarm();

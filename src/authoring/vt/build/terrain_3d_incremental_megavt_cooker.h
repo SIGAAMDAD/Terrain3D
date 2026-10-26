@@ -60,6 +60,14 @@ private:
 	PackedByteArray m_workerFragment;
 	PackedByteArray m_pendingFragment;
 	PackedByteArray m_fragments[T3D_REGION_SLOTS];
+	PackedByteArray m_forceFragments[T3D_REGION_SLOTS];
+	t3dTerrainMegaVTCookTicket_t m_forceTickets[T3D_REGION_SLOTS]{};
+	uint32_t m_forceSourceGenerations[T3D_REGION_SLOTS]{};
+	bool m_bForceRequested = false;
+	bool m_bForceActive = false;
+	bool m_bForceFailed = false;
+	uint32_t m_nForceRegionCount = 0u;
+	uint32_t m_nForceCookedCount = 0u;
 	bool m_bCacheRestoreAttempted[T3D_REGION_SLOTS]{};
 	eastl::vector<t3dMegaVTRegionPixels_t, Terrain3DEastlAllocator> m_pixelCache;
 	uint64_t m_nPendingFingerprint = 0u;
@@ -103,6 +111,14 @@ public:
 	void restoreCachedRegionsCold( const t3dMegaVTAuthoringInputs_t &rInputs, uint32_t nTexelsPerMeter );
 	void updateCold( const t3dMegaVTAuthoringInputs_t &rInputs, Terrain3DTerrainMegaVT &rMegaVT, Terrain3DMegaVTCookHost &rHost );
 	void retryDirtyRegionsCold( void );
+	void requestForceRecookAllRegionsCold( void ) { m_bForceRequested = true; }
+	bool isForceRecookReadyCold() const { return m_bForceActive && !m_bForceFailed && m_nForceCookedCount == m_nForceRegionCount; }
+	bool isForceRecookFailedCold() const { return m_bForceFailed; }
+	uint32_t getForceRegionCountCold() const { return m_nForceRegionCount; }
+	uint32_t getForceCookedCountCold() const { return m_nForceCookedCount; }
+	bool validateForceRecookSnapshotCold( Terrain3DTerrainMegaVT &rMegaVT ) const;
+	bool finishForceRecookAllRegionsCold( const t3dMegaVTAuthoringInputs_t &rInputs,
+	        Terrain3DTerrainMegaVT &rMegaVT, Terrain3DMegaVTCookHost &rHost, bool bCommit );
 	void shutdownCold( Terrain3DTerrainMegaVT &rMegaVT );
 	bool composePackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint,
 	        Terrain3DSharedMemoryReservation *pPackageMemory = NULL );

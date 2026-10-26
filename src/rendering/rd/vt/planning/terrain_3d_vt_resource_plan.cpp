@@ -137,6 +137,11 @@ bool t3d_vt_compute_resource_plan(
 	}
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_TAIL_METADATA] = nBytes;
 	rPlan.nVtTailEntryCapacity = ( uint32_t )nTailEntries;
+	const uint32_t feedback_entries = MAX( 2u, MIN( pLimits.nMaxVtRequests, ( pLimits.nMaxReadbackBytesPerFrame > sizeof( t3dVTRequestGpuCounters_t )
+	        ? pLimits.nMaxReadbackBytesPerFrame - ( uint32_t )sizeof( t3dVTRequestGpuCounters_t ) : 0u ) / ( uint32_t )sizeof( t3dVTRequestHashEntry_t ) ) );
+	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_FRAGMENT_HASH] = ( uint64_t )feedback_entries * sizeof( t3dVTRequestHashEntry_t );
+	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS] = sizeof( t3dVTRequestGpuCounters_t );
+	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS] = sizeof( t3dVTFragmentFeedbackParams_t );
 	rPlan.nVtTailAtlasWidth = T3D_VT_PACK_TAIL_ATLAS_WIDTH > T3D_VT_TAIL_ATLAS_WIDTH
 	        ? T3D_VT_PACK_TAIL_ATLAS_WIDTH : T3D_VT_TAIL_ATLAS_WIDTH;
 	const uint64_t nLegacyTailRows64 = ( nTailEntries + T3D_VT_TAIL_TILES_PER_ROW - 1u ) / T3D_VT_TAIL_TILES_PER_ROW;

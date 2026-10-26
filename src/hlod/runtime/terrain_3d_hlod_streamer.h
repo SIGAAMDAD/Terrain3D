@@ -29,6 +29,7 @@ typedef struct t3dEntry_s : public t3dHLODEntryDescriptor_t {
 
 	uint32_t m_nDesiredGeneration = 0u;
 	bool m_bRequestStarted = false;
+	bool m_bCancelPending = false;
 	bool m_bLoadFailed = false;
 	bool m_bActive = false;
 	bool m_bRetiring = false;
@@ -75,6 +76,8 @@ class Terrain3DHLODStreamer : public Object {
 	int m_nMaxShadowLevel = 3;
 	int m_nForcedDebugLevel = -1;
 	int64_t m_nResidentEstimatedBytes = 0;
+	uint64_t m_nReservedBytes = 0u;
+	size_t m_nLoadCandidateCursor = 0u;
 	int m_nLoadsLastTick = 0;
 	int m_nUnloadsLastTick = 0;
 	int m_nRequestsLastTick = 0;
@@ -123,7 +126,7 @@ class Terrain3DHLODStreamer : public Object {
 	bool hasActiveDescendant( int index ) const;
 	bool replacementReady( const t3dEntry_t &rEntry ) const;
 	bool requestOrActivate( int index );
-	void deactivate( int index );
+	void deactivate( int index, bool bWait = false );
 	void publishRepresentationMap( void );
 	void notifyRepresentationChanges( const uint8_t *pOldLevels );
 	void markRdPublicationDirty( void );

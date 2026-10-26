@@ -11,6 +11,7 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <limits.h>
+#include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 #include <string.h>
 
 using namespace godot;
@@ -148,6 +149,14 @@ bool Terrain3DVTGpu::prepare_cpu_cold( const t3dVTGpuResourcePlan_t& pPlan, cons
 		return false;
 	}
 	UtilityFunctions::print( "[Terrain3D][VTInit] NEUTRAL PAYLOAD PREP READY bytes=", nNeutralTailBytesTotal );
+	const uint64_t feedback_bytes = m_Plan.nBufferBytes[T3D_VT_GPU_BUFFER_FRAGMENT_HASH];
+	if ( !m_stagingMemory.resize( m_stagingMemory.bytes() + 2u * feedback_bytes + sizeof( t3dVTRequestGpuCounters_t ) + sizeof( t3dVTFragmentFeedbackParams_t ) ) ) { shutdown_cold(); return false; }
+	m_feedbackReset.resize( feedback_bytes );
+	m_feedbackCounterReset.resize( sizeof( t3dVTRequestGpuCounters_t ) );
+	m_feedbackParams.resize( sizeof( t3dVTFragmentFeedbackParams_t ) );
+	memset( m_feedbackCounterReset.ptrw(), 0, ( size_t )m_feedbackCounterReset.size() );
+	t3dVTRequestHashEntry_t *entries = ( t3dVTRequestHashEntry_t * )m_feedbackReset.ptrw();
+	for ( uint32_t i = 0u; i < feedback_bytes / sizeof( *entries ); ++i ) { entries[i] = { UINT32_MAX, UINT32_MAX, 0u, 0u }; }
 	m_bCpuPrepared = true;
 	return true;
 }
@@ -212,6 +221,11 @@ bool Terrain3DVTGpu::initialize_cold( const Terrain3DVTResourceImage *pResources
 void Terrain3DVTGpu::shutdown_cold( const bool bPreserveTailStaging )
 {
 	m_bHotSealed = false;
+	++m_nFeedbackEpoch; m_nFeedbackFrame = UINT32_MAX; m_bFeedbackPending = false; m_bFeedbackCountersPending = false; m_bFeedbackWritten = false;
+	if ( m_pResources != NULL && m_pResources->get_rd_context() != NULL ) {
+		for ( uint32_t i = 0u; i < 2u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++i ) { m_feedbackSets[i].releaseTracked( *m_pResources->get_rd_context() ); m_feedbackSetShaders[i] = RID(); }
+	}
+	m_feedbackReadback.clear(); m_feedbackReset.clear(); m_feedbackCounterReset.clear(); m_feedbackParams.clear();
 	m_AllocationUpload.resize( 0 );
 	m_DatabaseUpload.resize( 0 );
 	m_PageEntryUpload.resize( 0 );
@@ -848,7 +862,9 @@ bool Terrain3DVTGpu::upload_commit_callback( t3dVTResidencyState_t& rResidency,
 
 bool Terrain3DVTGpu::is_readback_enabled() const
 {
-	return false;
+	return m_bInitialized && m_feedbackCallback.is_valid()
+	        && ( uint64_t )m_feedbackReset.size() + sizeof( t3dVTRequestGpuCounters_t ) <= m_Limits.nMaxReadbackBytesPerFrame
+	        && m_feedbackReset.size() >= 2 * ( int64_t )sizeof( t3dVTRequestHashEntry_t );
 }
 
 bool Terrain3DVTGpu::is_initialized() const
@@ -874,6 +890,9 @@ uint64_t Terrain3DVTGpu::get_reserved_gpu_bytes() const
 		T3D_VT_GPU_BUFFER_PAGE_TABLE,
 		T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE,
 		T3D_VT_GPU_BUFFER_TAIL_METADATA,
+		T3D_VT_GPU_BUFFER_FRAGMENT_HASH,
+		T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS,
+		T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS,
 	};
 	for ( size_t iBuffer = 0u; iBuffer < sizeof( s_vtBuffers ) / sizeof( s_vtBuffers[ 0 ] ); ++iBuffer ) {
 		nBytes += m_Plan.nBufferBytes[ s_vtBuffers[ iBuffer ] ];
@@ -1104,4 +1123,92 @@ uint32_t Terrain3DVTGpu::physical_layer_bytes( uint32_t pChannel ) const
 bool Terrain3DVTGpu::hot_epoch_unchanged() const
 {
 	return m_Stats.nGpuCreateCount == m_nHotCreateEpoch && m_Stats.nGpuFreeCount == m_nHotFreeEpoch;
+}
+
+void Terrain3DVTGpu::consume_fragment_feedback_readback_hot( const PackedByteArray &rBytes ) {
+	if ( m_bInitialized && rBytes.size() == sizeof( t3dVTRequestGpuCounters_t ) ) {
+		const auto &counters = *( const t3dVTRequestGpuCounters_t * )rBytes.ptr();
+		// RequestCapacity is an owner epoch tag for this hash-only producer.
+		if ( counters.m_nRequestCapacity != m_nFeedbackEpoch ) { return; }
+		m_bFeedbackCountersPending = false;
+		if ( counters.m_nGeneration == m_nFeedbackDatabase ) {
+			m_nFeedbackMisses += counters.m_nFragmentMissCount;
+			m_nFeedbackOverflow += counters.m_nProbeOverflowCount;
+		}
+		return;
+	}
+	if ( !m_bInitialized || rBytes.size() != m_feedbackReset.size() || rBytes.size() < ( int64_t )sizeof( t3dVTRequestHashEntry_t ) ) { return; }
+	const t3dVTRequestHashEntry_t &tag = *( const t3dVTRequestHashEntry_t * )rBytes.ptr();
+	if ( tag.m_nVirtualPage != UINT32_MAX - 1u || tag.m_nPriority != m_nFeedbackEpoch ) { return; }
+	m_bFeedbackPending = false;
+	if ( tag.m_nWantedMip != m_nFeedbackDatabase ) { ++m_nFeedbackDropped; return; }
+	m_feedbackReadback = rBytes; // Borrow the bounded engine-owned asynchronous result.
+}
+
+RID Terrain3DVTGpu::get_fragment_feedback_set_cold( const RID &rShader, const uint32_t nVariant ) {
+	if ( !is_readback_enabled() || nVariant >= 2u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT || m_pResources == NULL ) { return RID(); }
+	Terrain3DRdContext &context = *m_pResources->get_rd_context();
+	if ( m_feedbackSets[nVariant].isValid() && m_feedbackSetShaders[nVariant] == rShader ) { return m_feedbackSets[nVariant].rid(); }
+	m_feedbackSets[nVariant].releaseTracked( context );
+	TypedArray<Ref<RDUniform>> uniforms;
+	const t3dVTGpuBufferId_t buffers[5] = { T3D_VT_GPU_BUFFER_ALLOCATION_TABLE, T3D_VT_GPU_BUFFER_PAGE_TABLE,
+	        T3D_VT_GPU_BUFFER_FRAGMENT_HASH, T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS, T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS };
+	for ( uint32_t binding = 0u; binding < 5u; ++binding ) {
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( binding, binding == 4u ? RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER
+		        : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_pResources->get_buffer_rid( buffers[binding] ) ) );
+	}
+	if ( !m_feedbackSets[nVariant].createTracked( context, T3D_RD_CONTEXT_OWNER_VT, "T3D.VT.FragmentFeedback", uniforms, rShader, 3u ) ) { return RID(); }
+	m_feedbackSetShaders[nVariant] = rShader;
+	return m_feedbackSets[nVariant].rid();
+}
+
+uint32_t Terrain3DVTGpu::service_fragment_feedback_hot( t3dVTResidencyState_t &rResidency,
+        t3dVTStreamingState_t &rStreaming, const uint32_t nFrameId, const uint32_t nRequestBudget ) {
+	if ( !is_readback_enabled() || m_nFeedbackFrame == nFrameId || m_pResources == NULL ) { return 0u; }
+	m_nFeedbackFrame = nFrameId;
+	m_nFeedbackDatabase = rResidency.nDatabaseGeneration;
+	uint32_t attempts = 0u;
+	if ( !m_feedbackReadback.is_empty() ) {
+		const t3dVTRequestHashEntry_t *entries = ( const t3dVTRequestHashEntry_t * )m_feedbackReadback.ptr();
+		if ( entries[0].m_nWantedMip == rResidency.nDatabaseGeneration ) {
+			for ( uint32_t i = 1u; i < m_feedbackReadback.size() / ( int64_t )sizeof( *entries ); ++i ) {
+				if ( entries[i].m_nVirtualPage == UINT32_MAX || entries[i].m_nVirtualPage >= rResidency.pDatabase->pHeader->nPageCount ) { continue; }
+				if ( t3d_vt_touch_page_hot( rResidency, entries[i].m_nVirtualPage, nFrameId ) ) { continue; }
+				if ( attempts >= nRequestBudget ) { ++m_nFeedbackDropped; continue; }
+				++attempts;
+				t3dVTRuntimeRequest_t request{};
+				request.nVirtualPage = entries[i].m_nVirtualPage;
+				request.nWantedMip = ( uint16_t )entries[i].m_nWantedMip;
+				request.nPriority = ( uint16_t )entries[i].m_nPriority;
+				const t3dVTAdmissionStatus_t status = t3d_vt_streaming_admit_request_hot( rStreaming, request, nFrameId );
+				if ( status == T3D_VT_ADMISSION_ACCEPTED_NEW || status == T3D_VT_ADMISSION_MERGED_EXISTING ) { ++m_nFeedbackConsumed; }
+				else { ++m_nFeedbackDropped; }
+			}
+		}
+		m_feedbackReadback.clear();
+	}
+	// Capture the previous raster's writes asynchronously. RenderingDevice's
+	// transfer dependencies order this copy before subsequent reset and draws.
+	if ( m_bFeedbackWritten && !m_bFeedbackPending && !m_bFeedbackCountersPending ) {
+		m_bFeedbackPending = m_pRenderingDevice->buffer_get_data_async( m_pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_FRAGMENT_HASH ),
+		        m_feedbackCallback, 0u, ( uint32_t )m_feedbackReset.size() ) == OK;
+		m_bFeedbackCountersPending = m_pRenderingDevice->buffer_get_data_async(
+		        m_pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS ), m_feedbackCallback,
+		        0u, ( uint32_t )sizeof( t3dVTRequestGpuCounters_t ) ) == OK;
+	}
+	auto &counters = *( t3dVTRequestGpuCounters_t * )m_feedbackCounterReset.ptrw();
+	counters.m_nFrameId = nFrameId;
+	counters.m_nGeneration = rResidency.nDatabaseGeneration;
+	counters.m_nHashCapacity = ( uint32_t )( m_feedbackReset.size() / sizeof( t3dVTRequestHashEntry_t ) );
+	counters.m_nRequestCapacity = m_nFeedbackEpoch;
+	t3dVTRequestHashEntry_t *reset = ( t3dVTRequestHashEntry_t * )m_feedbackReset.ptrw();
+	reset[0] = { UINT32_MAX - 1u, rResidency.nDatabaseGeneration, m_nFeedbackEpoch, nFrameId };
+	t3dVTFragmentFeedbackParams_t params{ ( uint32_t )( m_feedbackReset.size() / sizeof( *reset ) ), rResidency.nAllocationCount,
+	        rResidency.pDatabase->pHeader->nPageCount, T3D_VT_FRAGMENT_FEEDBACK_ENABLED };
+	memcpy( m_feedbackParams.ptrw(), &params, sizeof( params ) );
+	const bool reset_ok = t3dVtUpload( m_pResources, T3D_VT_GPU_BUFFER_FRAGMENT_HASH, 0u, ( uint32_t )m_feedbackReset.size(), m_feedbackReset )
+	        && t3dVtUpload( m_pResources, T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS, 0u, ( uint32_t )m_feedbackCounterReset.size(), m_feedbackCounterReset )
+	        && t3dVtUpload( m_pResources, T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS, 0u, ( uint32_t )m_feedbackParams.size(), m_feedbackParams );
+	m_bFeedbackWritten = reset_ok;
+	return attempts;
 }

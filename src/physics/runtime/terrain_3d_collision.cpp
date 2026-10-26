@@ -158,6 +158,8 @@ void Terrain3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 		}
 	}
 
+	int loaded_tiles = 0;
+	const uint64_t cache_work_started = Time::get_singleton()->get_ticks_usec();
 	for ( int z = min_region.y; z <= max_region.y; ++z ) {
 		for ( int x = min_region.x; x <= max_region.x; ++x ) {
 			const Vector2i location( x, z );
@@ -175,12 +177,14 @@ void Terrain3DCollision::refreshBakedRegionCache( const Vector2i &rCenter ) {
 				return;
 			}
 			pData->requestCookedCollisionTile( location, 1u );
+			if ( loaded_tiles >= 2 || ( loaded_tiles > 0 && Time::get_singleton()->get_ticks_usec() - cache_work_started >= 2000u ) ) { continue; }
 			PackedByteArray height_blob;
 			PackedByteArray bounds_blob;
 			PackedByteArray hole_blob;
 			if ( !pData->takeCookedCollisionTile( location, height_blob, bounds_blob, hole_blob ) ) {
 				continue;
 			}
+			++loaded_tiles;
 			t3dCollisionRegionCacheEntry_t &entry = m_bakedRegionCache[( size_t )( m_nBakedRegionCacheCount )];
 			int width = 0;
 			float min_height = 0.0f;
@@ -275,6 +279,7 @@ bool Terrain3DCollision::copyBakedTile(
 // This is the canonical live fallback used by both dynamic and full collision.
 bool Terrain3DCollision::getShapeData(
         const Vector2i &rPosition, const int nSize, t3dCollisionShapeRecord_t &rRecord, PackedRealArray &rHeights ) {
+	rRecord.m_bEmptySurface = false;
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Terrain not initialized" ); return false; }
 	const Ref<Terrain3DMaterial> material = m_pTerrain->materialResource();
 	float min_height = 0.0f;
@@ -297,6 +302,7 @@ bool Terrain3DCollision::getShapeData(
 		has_solid_sample = has_solid_sample || !isnan( input[index] );
 	}
 	if ( !has_solid_sample ) {
+		rRecord.m_bEmptySurface = true;
 		rRecord.m_data.m_bValid = false;
 		return false;
 	}
@@ -720,7 +726,7 @@ void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild
 		const Vector2i snapped_position = snapToGrid( m_pTerrain->getClipmapTargetPosition() / fSpacing );
 		LOG( EXTREME, "Updating collision at ", snapped_position );
 		refreshBakedRegionCache( snapped_position );
-		if ( !bRebuild && m_lastSnappedPos == snapped_position ) {
+		if ( !bRebuild && !m_bDynamicUpdatePending && m_lastSnappedPos == snapped_position ) {
 			m_bUpdateSkippedUnchangedLast = true;
 			m_nUpdateUsecLast = Time::get_singleton()->get_ticks_usec() - start_time;
 			return;
@@ -774,51 +780,78 @@ void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild
 			m_inactiveShapeIds.push_back( shape_id );
 		}
 
-		for ( int grid_index = 0; grid_index < grid_count; ++grid_index ) {
-			if ( !bRebuild && m_gridScratch[( size_t )( grid_index )] >= 0 ) {
-				continue;
-			}
-			const Vector2i gridLocation( grid_index % grid_width, grid_index / grid_width );
-			const Vector2i shape_position = grid_corner + gridLocation * m_nShapeSize;
-			const Vector2i shape_center = shape_position + shape_offset;
-			if ( shape_center.distance_squared_to( snapped_position ) > radius_squared ) {
-				continue;
-			}
-			if ( !shapeAllowsCollision( shape_position, m_nShapeSize ) ) {
-				continue;
-			}
-			if ( m_inactiveShapeIds.empty() ) {
-				LOG( ERROR, "No more unused collision shapes; aborting grid update" );
-				break;
-			}
+		if ( bRebuild || m_lastSnappedPos != snapped_position || rRegionLoc != s_v2iMax ) { m_emptyGridCells.reset(); }
+		m_bDynamicUpdatePending = false;
+		const uint64_t shape_work_started = Time::get_singleton()->get_ticks_usec();
+		const int64_t immediate_radius = ( int64_t )m_nShapeSize * 2;
+		const int64_t immediate_radius_squared = immediate_radius * immediate_radius;
+		// Complete the collision nearest the target first. Outer shapes are
+		// admitted over subsequent ticks rather than ingested in a startup burst.
+		for ( int priority_pass = 0; priority_pass < 2; ++priority_pass ) {
+			for ( int grid_index = 0; grid_index < grid_count; ++grid_index ) {
+				if ( !bRebuild && ( m_gridScratch[( size_t )( grid_index )] >= 0 || m_emptyGridCells.test( ( size_t )grid_index ) ) ) {
+					continue;
+				}
+				const Vector2i gridLocation( grid_index % grid_width, grid_index / grid_width );
+				const Vector2i shape_position = grid_corner + gridLocation * m_nShapeSize;
+				const Vector2i shape_center = shape_position + shape_offset;
+				if ( shape_center.distance_squared_to( snapped_position ) > radius_squared ) {
+					continue;
+				}
+				const bool immediate = shape_center.distance_squared_to( snapped_position ) <= immediate_radius_squared;
+				if ( immediate != ( priority_pass == 0 ) ) { continue; }
+				if ( !immediate && ( m_nShapesRebuiltLastUpdate >= 32
+				        || Time::get_singleton()->get_ticks_usec() - shape_work_started >= 2000u ) ) {
+					m_bDynamicUpdatePending = true;
+					break;
+				}
+				if ( !shapeAllowsCollision( shape_position, m_nShapeSize ) ) {
+					continue;
+				}
+				if ( m_inactiveShapeIds.empty() ) {
+					LOG( ERROR, "No more unused collision shapes; aborting grid update" );
+					break;
+				}
 
-			const int shape_id = m_inactiveShapeIds.back();
-			t3dCollisionShapeRecord_t &record = m_szShapeRecords[( size_t )( shape_id )];
-			record.m_nPendingHeightBuffer = ( uint8_t )( record.m_nUploadedHeightBuffer ^ 1u );
-			PackedRealArray &height_buffer = record.m_dynamicHeightBuffers[record.m_nPendingHeightBuffer];
-			const uint64_t preparation_started = Time::get_singleton()->get_ticks_usec();
-			bool shape_ready = copyBakedTile( shape_position, m_nShapeSize, record, height_buffer );
-			if ( !shape_ready ) {
-				shape_ready = getShapeData( shape_position, m_nShapeSize, record, height_buffer );
-			}
-			m_nPreparationUsecLast += Time::get_singleton()->get_ticks_usec() - preparation_started;
-			if ( !shape_ready ) {
-				continue;
-			}
-			m_inactiveShapeIds.pop_back();
+				const int shape_id = m_inactiveShapeIds.back();
+				t3dCollisionShapeRecord_t &record = m_szShapeRecords[( size_t )( shape_id )];
+				record.m_nPendingHeightBuffer = ( uint8_t )( record.m_nUploadedHeightBuffer ^ 1u );
+				PackedRealArray &height_buffer = record.m_dynamicHeightBuffers[record.m_nPendingHeightBuffer];
+				const uint64_t preparation_started = Time::get_singleton()->get_ticks_usec();
+				record.m_bEmptySurface = false;
+				bool shape_ready = copyBakedTile( shape_position, m_nShapeSize, record, height_buffer );
+				if ( !shape_ready ) {
+					const Vector3 sample_center = t3dVector2iToVector3( shape_center ) * fSpacing;
+					if ( !immediate && !m_pTerrain->dataObject()->tryPrepareSamplingArea( sample_center, m_nShapeSize / 2 + 2 ) ) {
+						m_bDynamicUpdatePending = true;
+						continue;
+					}
+					shape_ready = getShapeData( shape_position, m_nShapeSize, record, height_buffer );
+				}
+				if ( !shape_ready ) {
+					if ( record.m_bEmptySurface ) { m_emptyGridCells.set( ( size_t )grid_index ); }
+					const Terrain3DRegion *const source = m_pTerrain->dataObject()->getRegionPtr( t3dRegionCoordinateFromGrid( shape_position ) );
+					if ( source && source->getHeightMap().is_null() ) { m_bDynamicUpdatePending = true; }
+				}
+				m_nPreparationUsecLast += Time::get_singleton()->get_ticks_usec() - preparation_started;
+				if ( !shape_ready ) {
+					continue;
+				}
+				m_inactiveShapeIds.pop_back();
 
-			Transform3D transform = record.m_data.m_transform;
-			transform.scale( Vector3( fSpacing, 1.0f, fSpacing ) );
-			record.m_gridPosition = shape_position;
-			shapeSetTransform( shape_id, transform );
-			const uint64_t upload_started = Time::get_singleton()->get_ticks_usec();
-			shapeSetData( shape_id, height_buffer );
-			m_nUploadUsecLast += Time::get_singleton()->get_ticks_usec() - upload_started;
-			record.m_nUploadedHeightBuffer = record.m_nPendingHeightBuffer;
-			shapeSetDisabled( shape_id, false );
-			m_gridScratch[( size_t )( grid_index )] = shape_id;
-			++m_nShapesRebuiltLastUpdate;
-			m_nHeightSamplesUploadedLastUpdate += height_buffer.size();
+				Transform3D transform = record.m_data.m_transform;
+				transform.scale( Vector3( fSpacing, 1.0f, fSpacing ) );
+				record.m_gridPosition = shape_position;
+				shapeSetTransform( shape_id, transform );
+				const uint64_t upload_started = Time::get_singleton()->get_ticks_usec();
+				shapeSetData( shape_id, height_buffer );
+				m_nUploadUsecLast += Time::get_singleton()->get_ticks_usec() - upload_started;
+				record.m_nUploadedHeightBuffer = record.m_nPendingHeightBuffer;
+				shapeSetDisabled( shape_id, false );
+				m_gridScratch[( size_t )( grid_index )] = shape_id;
+				++m_nShapesRebuiltLastUpdate;
+				m_nHeightSamplesUploadedLastUpdate += height_buffer.size();
+			}
 		}
 		m_lastSnappedPos = snapped_position;
 	} else {
@@ -892,6 +925,8 @@ void Terrain3DCollision::servicePendingRegionMapUpdate( void ) {
 void Terrain3DCollision::destroy( void ) {
 	m_bInitialized = false;
 	m_lastSnappedPos = s_v2iMax;
+	m_bDynamicUpdatePending = false;
+	m_emptyGridCells.reset();
 	m_bRegionMapUpdatePending = false;
 	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
 		m_szFullRegionSlots[i] = t3dInvalidRegionCoord();
@@ -1133,6 +1168,7 @@ Dictionary Terrain3DCollision::getStats( void ) const {
 	stats["height_samples_uploaded_last_update"] = m_nHeightSamplesUploadedLastUpdate;
 	stats["full_regions_updated_last_update"] = m_nFullRegionsUpdatedLastUpdate;
 	stats["update_skipped_unchanged_last"] = m_bUpdateSkippedUnchangedLast;
+	stats["dynamic_update_pending"] = m_bDynamicUpdatePending;
 	stats["rebuild_requested_last"] = m_bRebuildRequestedLast;
 	stats["full_region_slots"] = m_nFullRegionSlotCount;
 	stats["physics_layer"] = ( int64_t )( m_nLayer );

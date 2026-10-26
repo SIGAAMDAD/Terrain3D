@@ -348,7 +348,7 @@ typedef struct t3dErosionKernelContext_s {
 
 // t3dErosionApplyContext_s centralized in Terrain3DTypes.h.
 
-typedef struct t3dErosionStepExecution_t {
+struct t3dErosionStepExecution_t {
 	const ParallelExecutor &m_executor;
 	t3dErosionKernelContext_t &m_context;
 	size_t m_nGrainAlignment;

@@ -140,6 +140,9 @@ private:
 	uint64_t m_nForwardInstanceSubmitDraws = 0u;
 	uint64_t m_nInstanceLaneUnavailablePrepares = 0u;
 	uint64_t m_nInstancePreparedWithoutDraws = 0u;
+	uint64_t m_nLastWorldVtResidencyRequestFrame = UINT64_MAX;
+	size_t m_nWorldVtCandidateCursor = 0u;
+	uint32_t m_nWorldVtCandidateSweep = 0u;
 	uint64_t m_nLastTerrainVtResidencyRequestFrame = UINT64_MAX;
 	uint64_t m_nTerrainVtResidencyRequestAttempts = 0u;
 	uint64_t m_nTerrainVtResidencyRequestsAccepted = 0u;

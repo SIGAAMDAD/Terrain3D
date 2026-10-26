@@ -462,6 +462,28 @@ static void t3d_vt_page_builder_write_orm_sample(
 	pDestination[3] = 255u;
 }
 
+// Extend only the RGB of fully transparent pixels from nearby visible texels.
+// Alpha stays authored; this prevents bilinear filtering from adding dark fringes.
+static void t3d_vt_page_builder_bleed_albedo_rgb( uint8_t *pPixels, const uint32_t nWidth, const uint32_t nHeight ) {
+	for ( uint32_t y = 0u; y < nHeight; ++y ) {
+		for ( uint32_t x = 0u; x < nWidth; ++x ) {
+			uint8_t *out = pPixels + ( ( uint64_t )y * nWidth + x ) * 4u;
+			if ( out[3] != 0u ) { continue; }
+			const uint8_t *nearest = NULL; int32_t best_distance = 9;
+			for ( int32_t dy = -2; dy <= 2; ++dy ) {
+				for ( int32_t dx = -2; dx <= 2; ++dx ) {
+					const int32_t sx = ( int32_t )x + dx, sy = ( int32_t )y + dy;
+					const int32_t distance = dx * dx + dy * dy;
+					if ( sx < 0 || sy < 0 || sx >= ( int32_t )nWidth || sy >= ( int32_t )nHeight || distance >= best_distance ) { continue; }
+					const uint8_t *pixel = pPixels + ( ( uint64_t )sy * nWidth + sx ) * 4u;
+					if ( pixel[3] != 0u ) { nearest = pixel; best_distance = distance; }
+				}
+			}
+			if ( nearest != NULL ) { memcpy( out, nearest, 3u ); }
+		}
+	}
+}
+
 bool t3d_vt_page_builder_normalize_logical_channel_u8( const t3dVTLogicalChannel_t Channel,
         const uint32_t nOrmSourceLayout,
         const t3dVTCookImageView_t &rSource,
@@ -504,6 +526,7 @@ bool t3d_vt_page_builder_normalize_logical_channel_u8( const t3dVTLogicalChannel
 			}
 		}
 	}
+	if ( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO ) { t3d_vt_page_builder_bleed_albedo_rgb( pDestination, rSource.m_nWidth, rSource.m_nHeight ); }
 	return true;
 }
 
@@ -712,15 +735,20 @@ bool t3d_vt_page_builder_resample_logical_channel_u8( const t3dVTLogicalChannel_
 			const uint8_t *p11 = pRow1 + x1 * rSource.m_nComponents;
 			uint8_t *pOut = pDestination + ( ( uint64_t )y * nTargetWidth + x ) * nTargetComponents;
 			switch ( Channel ) {
-				case T3D_VT_LOGICAL_CHANNEL_ALBEDO:
+				case T3D_VT_LOGICAL_CHANNEL_ALBEDO: {
+					const float a00 = rSource.m_nComponents >= 4u ? p00[3] / 255.0f : 1.0f;
+					const float a10 = rSource.m_nComponents >= 4u ? p10[3] / 255.0f : 1.0f;
+					const float a01 = rSource.m_nComponents >= 4u ? p01[3] / 255.0f : 1.0f;
+					const float a11 = rSource.m_nComponents >= 4u ? p11[3] / 255.0f : 1.0f;
+					const float alpha = t3d_vt_page_builder_bilerp_float( a00, a10, a01, a11, nWeightX, nWeightY );
 					for ( uint32_t iComponent = 0u; iComponent < 3u; ++iComponent ) {
-						const float fValue = t3d_vt_page_builder_bilerp_float( t3d_vt_page_builder_srgb_to_linear( p00[iComponent] ),
-						        t3d_vt_page_builder_srgb_to_linear( p10[iComponent] ),
-						        t3d_vt_page_builder_srgb_to_linear( p01[iComponent] ),
-						        t3d_vt_page_builder_srgb_to_linear( p11[iComponent] ),
+						const float fValue = t3d_vt_page_builder_bilerp_float( t3d_vt_page_builder_srgb_to_linear( p00[iComponent] ) * a00,
+						        t3d_vt_page_builder_srgb_to_linear( p10[iComponent] ) * a10,
+						        t3d_vt_page_builder_srgb_to_linear( p01[iComponent] ) * a01,
+						        t3d_vt_page_builder_srgb_to_linear( p11[iComponent] ) * a11,
 						        nWeightX,
 						        nWeightY );
-						pOut[iComponent] = t3d_vt_page_builder_linear_to_srgb( fValue );
+						pOut[iComponent] = t3d_vt_page_builder_linear_to_srgb( alpha > 0.00001f ? fValue / alpha : 0.0f );
 					}
 					pOut[3] = t3d_vt_page_builder_bilerp_u8( rSource.m_nComponents >= 4u ? p00[3] : 255u,
 					        rSource.m_nComponents >= 4u ? p10[3] : 255u,
@@ -729,6 +757,7 @@ bool t3d_vt_page_builder_resample_logical_channel_u8( const t3dVTLogicalChannel_
 					        nWeightX,
 					        nWeightY );
 					break;
+				}
 				case T3D_VT_LOGICAL_CHANNEL_PBR:
 					t3d_vt_page_builder_bilerp_normal( p00, p10, p01, p11, nWeightX, nWeightY, pOut );
 					pOut[2] = t3d_vt_page_builder_bilerp_u8( p00[2], p10[2], p01[2], p11[2], nWeightX, nWeightY );
@@ -760,6 +789,7 @@ bool t3d_vt_page_builder_resample_logical_channel_u8( const t3dVTLogicalChannel_
 	if ( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO && bAlphaScissor ) {
 		t3d_vt_page_builder_preserve_alpha_coverage( rSource, nAlphaThreshold, pDestination, nTargetWidth, nTargetHeight );
 	}
+	if ( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO ) { t3d_vt_page_builder_bleed_albedo_rgb( pDestination, nTargetWidth, nTargetHeight ); }
 	return true;
 }
 

@@ -9,6 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define T3D_WORLD_TRIANGLE_BACKSIDE (1u << 18u)
+
 
 // P09 fixed envelope buckets. Every strip cluster is routed to the smallest
 // envelope that can contain its actual vertex count. All six terrain commands

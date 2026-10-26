@@ -4,6 +4,7 @@
 #include "rendering/rd/forward/terrain_3d_rd_forward_variant.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 #include "Terrain3DConstants.h"
+#include "rendering/rd/vt/gpu/terrain_3d_vt_gpu.h"
 
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
@@ -75,18 +76,38 @@ bool Terrain3DWorldRaster::ensureShaderCold( const t3dPrimitiveClass_t primitive
 	if ( shader.isValid() ) {
 		return true;
 	}
-	const t3dRdShaderId_t id = (t3dRdShaderId_t)( ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP
+	bool feedback = primitive == T3D_PRIMITIVE_MESH && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT
+	        && m_pFeedbackOwner && m_pFeedbackOwner->is_readback_enabled();
+	const t3dRdShaderId_t fallback_id = (t3dRdShaderId_t)( ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP
 	                                                    ? T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE
 	                                                    : T3D_RD_SHADER_WORLD_RASTER_MESH_BASE ) +
 	                                              variant );
-	const Ref<RDShaderSPIRV> spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+	t3dRdShaderId_t id = feedback ? ( t3dRdShaderId_t )( T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE + variant ) : fallback_id;
+	Ref<RDShaderSPIRV> spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+	if ( feedback && spirv.is_null() ) {
+		feedback = false;
+		id = fallback_id;
+		spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+	}
 	if ( spirv.is_null() ) {
 		return false;
 	}
 	t3dWorldMarkDynamicBuffers( spirv, m_bPersistentFrameBuffer, m_bPersistentCpuBuffers, primitive == T3D_PRIMITIVE_TERRAIN_STRIP );
 	const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
 	const String name = String( "T3D.World.Raster." ) + class_name + String( ".Shader." ) + String::num_uint64( variant );
-	return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, id );
+	if ( feedback ) { m_context.beginRecoverableFailureScope(); }
+	const bool created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, id );
+	if ( feedback ) {
+		m_context.endRecoverableFailureScope();
+		m_bMeshFeedback[variant] = created;
+		if ( !created ) {
+			const Ref<RDShaderSPIRV> fallback_spirv = Terrain3DRdShaderLibrary::borrowSpirv( fallback_id );
+			if ( fallback_spirv.is_null() ) { return false; }
+			t3dWorldMarkDynamicBuffers( fallback_spirv, m_bPersistentFrameBuffer, m_bPersistentCpuBuffers, false );
+			return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, fallback_id );
+		}
+	}
+	return created;
 }
 
 void Terrain3DWorldRaster::freeSetsCold( void ) {
@@ -300,7 +321,9 @@ bool Terrain3DWorldRaster::ensurePipelineCold(
 bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContext,
         Terrain3DWorldResources &rResources,
         const t3dRdWorldTerrainRasterBindings_t &rTerrain,
-        const t3dSharedVTBindings_t &rVT ) {
+        const t3dSharedVTBindings_t &rVT, Terrain3DVTGpu *pFeedbackOwner ) {
+	m_pFeedbackOwner = pFeedbackOwner;
+	m_hCurrentFeedbackSet = RID();
 	if ( !m_bInitialized || rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE || rContext.m_nViewCount == 0u ) {
 		return false;
 	}
@@ -326,6 +349,11 @@ bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContex
 		const uint32_t primitive = ( uint32_t )primitive_class;
 		if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && !ensureShaderCold( primitive_class, variant ) ) {
 			return false;
+		}
+		if ( primitive_class == T3D_PRIMITIVE_MESH && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT && m_bMeshFeedback[variant] ) {
+			m_hCurrentFeedbackSet = m_pFeedbackOwner->get_fragment_feedback_set_cold( m_hShader[primitive][variant].rid(),
+			        T3D_RD_FORWARD_COLOR_VARIANT_COUNT + ( uint32_t )variant );
+			if ( !m_hCurrentFeedbackSet.is_valid() ) { return false; }
 		}
 		const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
 		        ? m_hShadowShader[primitive].rid()
@@ -374,6 +402,9 @@ bool Terrain3DWorldRaster::submitHot( const t3dRdForwardPassContext_t &rContext,
 		if ( m_hLightingSet[primitive].is_valid() ) {
 			rd->draw_list_bind_uniform_set( rContext.m_nDrawList, m_hLightingSet[primitive], 2u );
 		}
+		if ( primitive == T3D_PRIMITIVE_MESH && m_hCurrentFeedbackSet.is_valid() ) {
+			rd->draw_list_bind_uniform_set( rContext.m_nDrawList, m_hCurrentFeedbackSet, 3u );
+		}
 		if ( active == 0u ) {
 			rd->draw_list_draw_indirect( rContext.m_nDrawList,
 			        false,
@@ -410,6 +441,8 @@ void Terrain3DWorldRaster::shutdownCold( void )
 			m_hShader[primitive][i].releaseTracked( m_context );
 		}
 	}
+	memset( m_bMeshFeedback, 0, sizeof( m_bMeshFeedback ) );
+	m_hCurrentFeedbackSet = RID(); m_pFeedbackOwner = NULL;
 	m_bInitialized = false;
 }
 

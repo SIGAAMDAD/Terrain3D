@@ -82,15 +82,8 @@ static void t3dNodeStreamerApplyStreamedLightingMetadata( Node *pNode,
 	}
 }
 
-static Node *t3dNodeStreamerCreateShadowProxy( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
-	Ref<PackedScene> proxy_scene = rDescriptor.m_shadowProxyScene;
-	if ( proxy_scene.is_null() && !rDescriptor.m_shadowProxyScenePath.is_empty() ) {
-		proxy_scene = ResourceLoader::get_singleton()->load( rDescriptor.m_shadowProxyScenePath, "PackedScene" );
-	}
-	if ( proxy_scene.is_null() ) {
-		return NULL;
-	}
-	return proxy_scene->instantiate();
+static Node *t3dNodeStreamerCreateShadowProxy( const Ref<PackedScene> &rScene ) {
+	return rScene.is_valid() ? rScene->instantiate() : NULL;
 }
 
 Terrain3DNodeStreamer::~Terrain3DNodeStreamer( void ) {
@@ -455,6 +448,9 @@ Node3D *Terrain3DNodeStreamer::ensureRegionRoot( const int iIndex, Terrain3DRegi
 	setRegionLoading( runtime, true );
 	runtime.m_bActive = false;
 	runtime.m_nNextSpawn = 0;
+	runtime.m_pendingScene.unref();
+	runtime.m_pendingShadowProxy.unref();
+	runtime.m_nPendingSpawnId = 0;
 	runtime.m_bRequestsStarted = false;
 	return runtime.m_pRoot;
 }
@@ -843,6 +839,9 @@ void Terrain3DNodeStreamer::deactivateRegion( const int iIndex, const bool bCapt
 	runtime.m_bActive = false;
 	untrackActiveRegion( iIndex );
 	runtime.m_nNextSpawn = 0;
+	runtime.m_pendingScene.unref();
+	runtime.m_pendingShadowProxy.unref();
+	runtime.m_nPendingSpawnId = 0;
 	runtime.m_bRequestsStarted = false;
 	++m_nUnloadsLastTick;
 }
@@ -871,7 +870,12 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn(
 		LOG( ERROR, "Streamed-node movable metadata capacity exceeded during activation" );
 		return SPAWN_ACTIVATION_FAILED;
 	}
-	Ref<PackedScene> scene = rSpawn.m_scene;
+	if ( rRuntime.m_nPendingSpawnId != rSpawn.m_nId ) {
+		rRuntime.m_nPendingSpawnId = rSpawn.m_nId;
+		rRuntime.m_pendingScene.unref();
+		rRuntime.m_pendingShadowProxy.unref();
+	}
+	Ref<PackedScene> scene = rSpawn.m_scene.is_valid() ? rSpawn.m_scene : rRuntime.m_pendingScene;
 	const String scene_path = rSpawn.m_scenePath;
 	if ( scene.is_null() && !scene_path.is_empty() ) {
 		if ( !scene_path.is_empty() ) {
@@ -907,6 +911,32 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn(
 		}
 		return SPAWN_ACTIVATION_FAILED;
 	}
+	rRuntime.m_pendingScene = scene;
+	Ref<PackedScene> shadow_proxy = rSpawn.m_shadowProxyScene.is_valid()
+	        ? rSpawn.m_shadowProxyScene : rRuntime.m_pendingShadowProxy;
+	if ( rSpawn.m_bDynamicShadowEligible && shadow_proxy.is_null() && !rSpawn.m_shadowProxyScenePath.is_empty() ) {
+		ResourceLoader *const loader = ResourceLoader::get_singleton();
+		if ( !loader ) { return SPAWN_ACTIVATION_FAILED; }
+		const String &path = rSpawn.m_shadowProxyScenePath;
+		const auto status = loader->load_threaded_get_status( path );
+		if ( status == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
+			const Error error = loader->load_threaded_request( path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
+			if ( error == OK || error == ERR_BUSY ) {
+				if ( error == OK ) { ++m_nSceneRequestsLastTick; }
+				return SPAWN_ACTIVATION_PENDING;
+			}
+		} else if ( status == ResourceLoader::THREAD_LOAD_IN_PROGRESS ) {
+			return SPAWN_ACTIVATION_PENDING;
+		} else if ( status == ResourceLoader::THREAD_LOAD_LOADED ) {
+			const Ref<Resource> resource = loader->load_threaded_get( path );
+			shadow_proxy = resource;
+			rRuntime.m_pendingShadowProxy = shadow_proxy;
+		}
+		if ( shadow_proxy.is_null() ) {
+			// Preserve the visible node and its normal shadow if a proxy fails.
+			LOG( ERROR, "Failed loading streamed shadow proxy ", path );
+		}
+	}
 	Node *pNode = scene->instantiate();
 	if ( !pNode ) {
 		LOG( ERROR, "Failed instantiating streamed scene ", scene_path );
@@ -922,10 +952,10 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn(
 	if ( pNode3d ) {
 		pNode3d->set_transform( rSpawn.m_transform );
 	}
-	const bool bHasShadowProxy = rSpawn.m_shadowProxyScene.is_valid() || !rSpawn.m_shadowProxyScenePath.is_empty();
+	const bool bHasShadowProxy = rSpawn.m_bDynamicShadowEligible && shadow_proxy.is_valid();
 	t3dNodeStreamerApplyStreamedLightingMetadata( pNode, rSpawn, false, bHasShadowProxy );
 	if ( bHasShadowProxy && rSpawn.m_bDynamicShadowEligible ) {
-		Node *const proxy = t3dNodeStreamerCreateShadowProxy( rSpawn );
+		Node *const proxy = t3dNodeStreamerCreateShadowProxy( shadow_proxy );
 		if ( proxy ) {
 			proxy->set_name( m_shadowProxyName );
 			t3dNodeStreamerApplyStreamedLightingMetadata( proxy, rSpawn, true, false );
@@ -971,27 +1001,20 @@ t3dSpawnActivationResult_t Terrain3DNodeStreamer::activateSpawn(
 
 void Terrain3DNodeStreamer::requestRegionScenes(
         const Vector2i &rOwnerLocation, const eastl::vector<t3dStreamedNodeRuntimeDescriptor_t, Terrain3DEastlAllocator> &rSpawns ) {
-	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
-	if ( !pLoader ) {
-		return;
-	}
-	for ( size_t iSpawn = 0u; iSpawn < ( size_t )( ( rSpawns ).size() ); iSpawn++ ) {
-		const t3dStreamedNodeRuntimeDescriptor_t &spawn = ( rSpawns )[iSpawn];
-		if ( isHlodVisualSuppressed( rOwnerLocation, spawn ) ) {
-			continue;
-		}
-		if ( spawn.m_scene.is_valid() || spawn.m_scenePath.is_empty() ) {
-			continue;
-		}
-		const String &scene_path = spawn.m_scenePath;
-		if ( scene_path.is_empty() || pLoader->load_threaded_get_status( scene_path ) != ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
-			continue;
-		}
-		const Error error = pLoader->load_threaded_request( scene_path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
-		if ( error != OK ) {
-			LOG( ERROR, "Failed requesting streamed scene ", scene_path, ": ", error );
-		} else {
-			++m_nSceneRequestsLastTick;
+	ResourceLoader *const loader = ResourceLoader::get_singleton();
+	if ( !loader ) { return; }
+	for ( const auto &spawn : rSpawns ) {
+		if ( isHlodVisualSuppressed( rOwnerLocation, spawn ) ) { continue; }
+		const String *paths[2] = { &spawn.m_scenePath, &spawn.m_shadowProxyScenePath };
+		const bool needed[2] = { spawn.m_scene.is_null(),
+			spawn.m_bDynamicShadowEligible && spawn.m_shadowProxyScene.is_null() };
+		for ( int dependency = 0; dependency < 2; ++dependency ) {
+			const String &path = *paths[dependency];
+			if ( !needed[dependency] || path.is_empty()
+			        || loader->load_threaded_get_status( path ) != ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) { continue; }
+			const Error error = loader->load_threaded_request( path, "PackedScene", true, ResourceLoader::CACHE_MODE_REUSE );
+			if ( error == OK ) { ++m_nSceneRequestsLastTick; }
+			else if ( error != ERR_BUSY ) { LOG( ERROR, "Failed requesting streamed scene ", path, ": ", error ); }
 		}
 	}
 }
@@ -1045,6 +1068,9 @@ bool Terrain3DNodeStreamer::activateRegion( const int iIndex, int &nNodeBudget )
 			++m_nScenePendingPollsLastTick;
 			break;
 		}
+		runtime.m_pendingScene.unref();
+		runtime.m_pendingShadowProxy.unref();
+		runtime.m_nPendingSpawnId = 0;
 		++runtime.m_nNextSpawn;
 		--nNodeBudget;
 		if ( result == SPAWN_ACTIVATION_FAILED ) {

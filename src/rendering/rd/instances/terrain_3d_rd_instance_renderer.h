@@ -327,6 +327,8 @@ private:
 	t3dRdInstanceViewState_t m_szViewStates[T3D_MAX_VIEWS]{};
 	Terrain3DRdShader m_hShader;
 	Terrain3DRdShader m_hszForwardShaders[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	bool m_bForwardFeedback[T3D_RD_FORWARD_SHADER_VARIANT_MAX]{};
+	RID m_hszForwardFeedbackSets[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	RID m_hPreviewColorTexture;
 	RID m_hPreviewDepthTexture;
 	Vector2i m_previewSize;
@@ -355,8 +357,11 @@ private:
 	uint64_t m_nVtStableKeyMissCount = 0u;
 	uint64_t m_nVtInvalidAllocationReferenceCount = 0u;
 	uint64_t m_nVtOutOfRangePageReferenceCount = 0u;
+	float m_szTextureMipBias[4] = {};
 	uint64_t m_nLastVtResidencyRequestFrame = UINT64_MAX;
+	uint32_t m_nVtFootprintSweep = 0u;
 	uint64_t m_nVtResidencyRequestAttempts = 0u;
+	uint64_t m_szVtPredictedMipRequests[T3D_VT_MAX_MIPS]{};
 	uint64_t m_nVtResidencyRequestsAccepted = 0u;
 
 	bool ensureDevice( void );
@@ -447,7 +452,8 @@ private:
 	        bool bShadowPass,
 	        bool bGpuVisibility );
 	bool uploadMaterials( void );
-	void requestPublishedMaterialResidencyHot( uint32_t nFrameId );
+	void requestPublishedMaterialResidencyHot( const t3dRdForwardPassContext_t &rContext,
+	        const t3dRdInstanceSceneSnapshot_t &rScene, uint32_t nVisibilityMask );
 	template <bool t_bShadowPass>
 	bool beginPacketBuildForPass( const t3dRdInstanceSceneSnapshot_t &rScene, bool bSkipFrustum );
 	template <bool t_bShadowPass>
@@ -555,6 +561,9 @@ public:
 		m_visibility.m_bCullingComparisonEnabled = bEnabled;
 	}
 	void setStylizedSunGlobals( const Vector4 &rShape, const Vector4 &rDiffuse, const Vector4 &rSpecular, const Vector4 &rRim );
+	EA_FORCE_INLINE void setTextureMipBiasHot( const float *pBias ) {
+		memcpy( m_szTextureMipBias, pBias, sizeof( m_szTextureMipBias ) );
+	}
 	EA_FORCE_INLINE void recordVtResidencyAcceptedHot( const uint32_t nAccepted ) {
 		m_nVtResidencyRequestsAccepted += nAccepted;
 	}

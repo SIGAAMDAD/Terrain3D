@@ -317,6 +317,13 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm( const Terrain3DWorldP
 	return true;
 }
 
+const t3dRenderingMaterialGpu_t *Terrain3DWorldResources::getResolvedMaterialHot( const uint32_t nMaterial ) const {
+	const uint64_t nOffset = ( uint64_t )nMaterial * sizeof( t3dRenderingMaterialGpu_t );
+	if ( !m_bPublicationUploadCached[WORLD_BUFFER_MATERIALS]
+	        || nOffset + sizeof( t3dRenderingMaterialGpu_t ) > m_buffers[WORLD_BUFFER_MATERIALS].usedBytes() ) { return NULL; }
+	return reinterpret_cast<const t3dRenderingMaterialGpu_t *>( m_uploadScratch[WORLD_BUFFER_MATERIALS].ptr() + nOffset );
+}
+
 uint64_t Terrain3DWorldResources::estimatePublicationUploadBytes( const Terrain3DWorldPublication &rPublication ) {
 	uint64_t nBytes = 0u;
 	for ( uint32_t i = 0u; i < WORLD_BUFFER_COUNT; ++i ) {

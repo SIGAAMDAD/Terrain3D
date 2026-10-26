@@ -350,6 +350,7 @@ typedef enum t3dVTOuterCompression_e : uint32_t {
 typedef enum t3dVTGodotSourceFlagsV3_e : uint32_t {
 	T3D_VT_GODOT_SOURCE_V3_DIRECT_ORM = 1u << 0u,
 	T3D_VT_GODOT_SOURCE_V3_HAS_ALPHA = 1u << 1u,
+	T3D_VT_GODOT_SOURCE_V3_ALBEDO_RGBA = 1u << 2u,
 } t3dVTGodotSourceFlagsV3_t;
 
 // From src/authoring/vt/io/terrain_3d_vt_godot_cooker.h
@@ -1318,6 +1319,7 @@ typedef enum t3dVTAllocationFlags_e : uint16_t {
 	T3D_VT_ALLOCATION_QUALITY_BASE_MIP_SHIFT = 9u,
 	T3D_VT_ALLOCATION_QUALITY_BASE_MIP_MASK = 0x0fu << T3D_VT_ALLOCATION_QUALITY_BASE_MIP_SHIFT,
 	T3D_VT_ALLOCATION_QUALITY_DISABLED = 1u << 13u,
+	T3D_VT_ALLOCATION_ALBEDO_RGBA = 1u << 14u,
 } t3dVTAllocationFlags_t;
 
 // From src/rendering/rd/vt/core/terrain_3d_vt_contract.h
@@ -1411,6 +1413,9 @@ typedef enum t3dVTGpuBufferId_e : uint32_t {
 	T3D_VT_GPU_BUFFER_PAGE_TABLE,
 	T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE,
 	T3D_VT_GPU_BUFFER_TAIL_METADATA,
+	T3D_VT_GPU_BUFFER_FRAGMENT_HASH,
+	T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS,
+	T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS,
 	T3D_VT_GPU_BUFFER_COUNT
 } t3dVTGpuBufferId_t;
 
@@ -1875,7 +1880,9 @@ typedef enum t3dRdShaderId_e : uint32_t {
 	T3D_RD_SHADER_BRUSH_COMPUTE,
 	T3D_RD_SHADER_DERIVED_COMPUTE,
 	T3D_RD_SHADER_DISPLACEMENT_COMPUTE,
-	T3D_RD_SHADER_COUNT,
+	T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE,
+	T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE = T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE + T3D_RD_FORWARD_COLOR_VARIANT_COUNT,
+	T3D_RD_SHADER_COUNT = T3D_RD_SHADER_WORLD_MESH_FEEDBACK_BASE + T3D_RD_FORWARD_COLOR_VARIANT_COUNT,
 } t3dRdShaderId_t;
 
 // From src/rendering/material/terrain_3d_shader_specializer.h
@@ -2359,6 +2366,7 @@ typedef struct t3dVTEncodeTileRequest_s {
 	uint32_t m_nComponents;
 	uint32_t m_nQuality;
 	uint32_t m_nContractVersion;
+	uint8_t m_nAlphaThreshold = 0u; // Zero disables cutoff-constrained encoding.
 	uint8_t *m_pDestination;
 	uint32_t m_nDestinationCapacity;
 } t3dVTEncodeTileRequest_t;
@@ -2410,7 +2418,8 @@ typedef struct t3dVTGodotSourceChannelV3_s {
 	uint8_t m_nConsumer;
 	uint8_t m_nWrapMode;
 	uint8_t m_bAlphaScissor;
-	uint8_t m_nReserved1[3];
+	uint8_t m_nAlphaThreshold;
+	uint8_t m_nReserved1[2];
 } t3dVTGodotSourceChannelV3_t;
 
 // From src/authoring/vt/io/terrain_3d_vt_godot_cooker.h
@@ -3375,6 +3384,7 @@ typedef struct alignas( 16 ) t3dRdInstanceFrame_s {
 	float m_szNomadSunDiffuse[4];
 	float m_szNomadSunSpecular[4];
 	float m_szNomadSunRim[4];
+	float m_szInstanceTextureMipBias[4]; // xyz: mip bias; w: packed category filter overrides
 } t3dRdInstanceFrame_t;
 
 // From src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp
@@ -3458,6 +3468,9 @@ typedef struct t3dRdMeshSourceSurface_s {
 	uint32_t m_nWorldClusterOffset = 0u;
 	uint32_t m_nWorldClusterCount = 0u;
 	AABB m_bounds;
+	// CPU prediction metadata; never serialized or uploaded as a shader record.
+	float m_szUvMin[2] = { 0.0f, 0.0f };
+	float m_szUvMax[2] = { 0.0f, 0.0f };
 } t3dRdMeshSourceSurface_t;
 
 // From src/rendering/rd/instances/terrain_3d_rd_mesh_cache.h
@@ -3725,6 +3738,7 @@ typedef struct alignas( 16 ) t3dRdFrameUniforms_s {
 	float m_fDisplacementEnabled = 0.0f;
 	float m_fDisplacementPadding0 = 0.0f;
 	float m_fDisplacementPadding1 = 0.0f;
+	float m_szInstanceTextureMipBias[4]; // xyz: mip bias; w: packed category filter overrides
 } t3dRdFrameUniforms_t;
 
 // From src/rendering/rd/core/terrain_3d_rd_types.h
@@ -5743,6 +5757,21 @@ typedef struct t3dRdCpuCullResult_s {
 } t3dRdCpuCullResult_t;
 
 // From src/rendering/rd/instances/terrain_3d_rd_instance_renderer_contracts.h
+// Fixed CPU-only scratch records for bounded visible-material prediction.
+typedef struct t3dRdInstanceVtCellPrediction_s {
+	uint32_t m_nCell = 0u;
+	float m_fDistanceSq = 0.0f;
+} t3dRdInstanceVtCellPrediction_t;
+
+typedef struct t3dRdInstanceVtMaterialPrediction_s {
+	uint32_t m_nMaterial = UINT16_MAX;
+	uint32_t m_nCategory = 0u;
+	float m_szUvMin[2]{};
+	float m_szUvMax[2]{};
+	float m_szUvPerPixel[2]{};
+	float m_fDistanceSq = 0.0f;
+} t3dRdInstanceVtMaterialPrediction_t;
+
 typedef struct t3dRdInstanceDrawPacket_s {
 	uint32_t m_nSurfaceSlot = UINT32_MAX;
 	uint32_t m_nDrawSlot = UINT32_MAX;

@@ -84,7 +84,7 @@ public:
 	bool republish( const Vector2i &vLocation, Terrain3DCompute *pCompute = NULL );
 	bool republishAllResidents( Terrain3DCompute *pCompute = NULL );
 	bool refreshTerrainShadowMasks( void );
-	void queueRepublish( const Vector2i &vLocation );
+	void queueRepublish( const Vector2i &vLocation, uint8_t nDirtyMaps = UINT8_MAX );
 	bool updateResidentLocation( const Vector2i &vLocation, t3dMapType_t eMapType, Terrain3DCompute *pCompute = NULL );
 	void armPendingRetirements( void );
 	EA_FORCE_INLINE void markSelectionDirty( void ) {
@@ -171,6 +171,7 @@ public:
 	Dictionary getStatsDictionary( bool bDetailed ) const;
 	EA_FORCE_INLINE void recordPageTableUpdate( void ) {
 		++m_nGpuRegionPageTableUpdatesLastTick;
+		m_nGpuRegionUploadBytesLastTick += ( uint64_t )T3D_REGION_SLOTS * sizeof( t3dRdTerrainRegionGpu_t );
 	}
 
 private:
@@ -178,6 +179,9 @@ private:
 public:
 
 		int m_nLayer = -1;
+		int m_nCopyFromLayer = -1;
+		uint8_t m_nDirtyMaps = UINT8_MAX;
+		uint8_t m_nCopyChannels = 0u;
 		Vector2i m_location;
 		t3dMapType_t m_eMapType = REGION_TYPE_MAX;
 		bool m_bAllowCookedPage = true;
@@ -322,9 +326,16 @@ public:
 	int m_nMiddleCompositeScratchBytes = 0;
 	int m_nMiddleCompositeScratchLayerCount = 0;
 	uint64_t m_nGpuRegionServiceUsecLast = 0u;
+	uint64_t m_nGpuPreparationTickStartedUsec = 0u;
+	bool m_bGpuPreparationDeferred = false;
 	uint64_t m_nGpuPreparePublicationUsecLast = 0u;
 	uint64_t m_nGpuPrepareEndToEndUsecLast = 0u;
 	bool m_bPageTableChangedThisTick = false;
+	bool m_bPageTableUploadReserved = false;
+	uint64_t m_nGrantChangeCount = 0u;
+	uint64_t m_nPhysicalCacheRebuildCount = 0u;
+	uint64_t m_nStorageResetCount = 0u;
+	const char *m_pStorageResetReason = "initialization";
 
 	int calculateGpuRegionCacheCapacity( void ) const;
 	int calculateGpuRegionRequiredRadius( void ) const;
@@ -348,9 +359,15 @@ public:
 	void resolveGpuRegionLayerMetadata( t3dGpuRegionLayerUploadState_t &rState ) const;
 	bool submitGpuRegionLayerTrackedBatch( t3dGpuRegionLayerUploadState_t &rState );
 	bool uploadGpuRegionLayerDirect( t3dGpuRegionLayerUploadState_t &rState );
-	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType, bool bAllowCookedPage = true );
+	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType, bool bAllowCookedPage = true,
+	        uint8_t nDirtyMaps = UINT8_MAX, int nCopyFromLayer = -1 );
 	void refillGpuUploadTokens( int nCallBurst );
 	int processPendingGpuRegionRepublishes( int nLimit );
+	bool uploadRepublish( const Vector2i &vLocation );
+	bool reserveGpuRegionUpload( const Terrain3DRegion *pRegion, int nLayer );
+	bool submitBudgetedGpuRegionUpload( int nLayer, const Vector2i &vLocation,
+	        uint8_t nDirtyMaps = UINT8_MAX, int nCopyFromLayer = -1 );
+	void trimGpuRegionCapacity( void );
 	int collectDesiredGpuRegions( const t3dResidencyFrameState_s &rFrame,
 	        const Vector2i &rCenter,
 	        Vector2i *pLocations,

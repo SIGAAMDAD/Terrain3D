@@ -9,6 +9,14 @@ color_native_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_
 color_specular_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
 color_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
 color_specular_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_native = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING";
+feedback_color_specular = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
+feedback_color_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
+feedback_color_specular_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+feedback_color_native_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
@@ -36,6 +44,7 @@ layout(set = 0, binding = 0, std140) uniform InstanceFrame {
     vec4 nomad_sun_diffuse;
     vec4 nomad_sun_specular;
     vec4 nomad_sun_rim;
+    vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
 }
 frame_data;
 
@@ -185,7 +194,11 @@ void main() {
 // WG-C SH05 production policy: instance fragment feedback remains explicitly
 // disabled until the shared set-3 frame/reset publication owner is available.
 // The dormant adapters below are still compiled by the SH-B/WG-C fixture lane.
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+#define T3D_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 0
+#else
 #define T3D_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 1
+#endif
 #ifndef T3D_INSTANCE_BRINGUP
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "vt/terrain_vt_filter_math_inc.glslinc"
@@ -217,6 +230,7 @@ layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
     vec4 nomad_sun_diffuse;
     vec4 nomad_sun_specular;
     vec4 nomad_sun_rim;
+    vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
 }
 frame_data;
 
@@ -364,7 +378,9 @@ bool t3d_inst_sampler_nearest(uint sampler_class) {
 }
 
 uint t3d_inst_filter_mode(T3DRenderingMaterialGpu material) {
-    return (material.packedScalars1 & T3D_VT_MATERIAL_FILTER_MASK) >> T3D_VT_MATERIAL_FILTER_SHIFT;
+    return t3d_vt_instance_filter_mode(
+        (material.packedScalars1 & T3D_VT_MATERIAL_FILTER_MASK) >> T3D_VT_MATERIAL_FILTER_SHIFT,
+        frame_data.instance_texture_mip_bias.w, (draw_flags >> 26u) & 3u);
 }
 
 uint t3d_inst_effective_sampler_class(T3DRenderingMaterialGpu material) {
@@ -398,17 +414,21 @@ void t3d_vt_instance_fragment_feedback(uint material_index, uint material_flags,
     }
     bool repeat_uv = T3D_VT_INSTANCE_FEEDBACK_REPEAT_UV(material_index);
     uint filter_mode = t3d_inst_filter_mode(materials[material_index]);
+    float mip_bias = frame_data.instance_texture_mip_bias[min((draw_flags >> 26u) & 3u, 2u)];
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     // Pure depth/shadow stays feedback-free for opaque materials. Alpha-scissor
-    // only requests the page containing opacity-bearing Surface.A.
+    // only requests the page containing opacity-bearing Albedo.A.
     if ((material_flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u) {
         return;
     }
-    t3d_vt_fragment_request_surface_a_if_missing(
-        allocation_id, uv, dFdx(uv), dFdy(uv), 0.0, T3D_VT_FRAGMENT_PRIORITY_ALPHA_SCISSOR, repeat_uv, filter_mode);
+    t3d_vt_fragment_request_albedo_alpha_if_missing(
+        allocation_id, uv, dFdx(uv), dFdy(uv), mip_bias, T3D_VT_FRAGMENT_PRIORITY_ALPHA_SCISSOR, repeat_uv, filter_mode);
 #else
-    t3d_vt_fragment_request_material_page_set(
-        allocation_id, uv, dFdx(uv), dFdy(uv), 0.0, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+    // V3 channels own distinct virtual pages; request the same siblings as sampling.
+    for (uint channel = 0u; channel < 3u; ++channel) {
+        t3d_vt_fragment_request_material_page_set(
+            allocation_id + channel, uv, dFdx(uv), dFdy(uv), mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+    }
 #endif
 }
 #endif
@@ -451,7 +471,8 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     bool repeat_uv = t3d_inst_sampler_repeats(sampler_class);
     uint filter_mode = t3d_inst_filter_mode(material);
     T3DVTConsumerFootprint footprint = t3d_vt_consumer_prepare_footprint(
-        material_uv, dFdx(material_uv), dFdy(material_uv), 0.0, repeat_uv, filter_mode, push_data.reserved1, push_data.reserved2);
+        material_uv, dFdx(material_uv), dFdy(material_uv), frame_data.instance_texture_mip_bias[min((draw_flags >> 26u) & 3u, 2u)],
+        repeat_uv, filter_mode, push_data.reserved1, push_data.reserved2);
     T3DVTConsumerPageSet3 page_set = t3d_vt_consumer_resolve_page_set3_v3(material.vtAllocation, footprint);
     T3DVTConsumerAddress albedo_address = page_set.channel0;
     vt_address = page_set.channel1;

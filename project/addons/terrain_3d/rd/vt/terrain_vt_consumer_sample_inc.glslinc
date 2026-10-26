@@ -77,6 +77,7 @@ struct T3DVTConsumerAddress {
     uint allocation_count;
     uint page_count;
     uint layer;
+    uint physical_family;
     uint tail_index;
     uint tail_channel_mask;
     uint resolved_mip;
@@ -109,6 +110,7 @@ T3DVTConsumerAddress t3d_vt_consumer_invalid_address() {
     address.allocation_count = 0u;
     address.page_count = 0u;
     address.layer = 0u;
+    address.physical_family = T3D_VT_PHYSICAL_FORMAT_BC1_UNORM;
     address.tail_index = T3D_VT_INVALID_TAIL;
     address.tail_channel_mask = 0u;
     address.resolved_mip = 0xffffffffu;
@@ -215,14 +217,15 @@ bool t3d_vt_consumer_prepare_address_plan(uint allocation_id,
     uint base_width = t3d_vt_mip_layout_width(base_layout);
     uint base_height = t3d_vt_mip_layout_height(base_layout);
     if (base_layout.baseVirtualPage == T3D_VT_INVALID_PAGE || base_width == 0u || base_height == 0u) return false;
-    vec2 virtual_texels = vec2(float(base_width * T3D_VT_PAGE_INTERIOR), float(base_height * T3D_VT_PAGE_INTERIOR));
+    vec2 virtual_texels = t3d_vt_filter_base_texels(allocation, base_mip);
+    bool mipmapped = t3d_vt_filter_mode_uses_mipmaps(footprint.filter_mode);
     T3DVTContinuousLod filter_lod = t3d_vt_filter_continuous_lod(
-        footprint.ddx_uv,
-        footprint.ddy_uv,
+        mipmapped ? footprint.ddx_uv : vec2(0.0),
+        mipmapped ? footprint.ddy_uv : vec2(0.0),
         virtual_texels,
         base_mip,
         mip_count,
-        footprint.mip_bias,
+        mipmapped ? footprint.mip_bias : 0.0,
         footprint.anisotropic != 0u,
         footprint.trilinear != 0u);
     uint requested_mip = filter_lod.mip0;
@@ -288,6 +291,7 @@ T3DVTConsumerAddress t3d_vt_consumer_finalize_address(uint allocation_id,
             }
         }
         address.layer = t3d_vt_v3_physical_slot(result.physicalSlot);
+        address.physical_family = t3d_vt_v3_physical_family(result.physicalSlot);
         address.resolved_mip = resolved_mip;
         address.resolved_packed_extent = resolved_layout.packedExtent;
         address.valid = 1u;
@@ -297,6 +301,8 @@ T3DVTConsumerAddress t3d_vt_consumer_finalize_address(uint allocation_id,
         T3DVTTailMetadata tail = T3D_VT_CONSUMER_TAIL(result.tailIndex);
         address.tail_index = result.tailIndex;
         address.tail_channel_mask = tail.channelMask;
+        address.physical_family = (tail.channelMask & (1u << T3D_VT_PHYSICAL_FORMAT_BC7_UNORM)) != 0u
+            ? T3D_VT_PHYSICAL_FORMAT_BC7_UNORM : T3D_VT_PHYSICAL_FORMAT_BC1_UNORM;
         address.resolved_mip = t3d_vt_resolve_resolved_mip(result);
         address.valid = 2u;
     }
@@ -374,17 +380,6 @@ T3DVTConsumerPageSet3 t3d_vt_consumer_resolve_page_set3_v3(uint base_allocation,
     return page_set;
 }
 
-void t3d_vt_consumer_physical_gradients(T3DVTConsumerAddress address,
-    out vec2 grad_x,
-    out vec2 grad_y) {
-    uint resolved_width = max(address.resolved_packed_extent & 0xffffu, 1u);
-    uint resolved_height = max(address.resolved_packed_extent >> 16u, 1u);
-    vec2 physical_scale = vec2(float(resolved_width), float(resolved_height))
-        * (float(T3D_VT_PAGE_INTERIOR) / float(T3D_VT_PHYSICAL_TILE));
-    grad_x = address.ddx_uv * physical_scale;
-    grad_y = address.ddy_uv * physical_scale;
-}
-
 T3DVTBoundedFilterPlan t3d_vt_consumer_tail_plan(T3DVTConsumerAddress address, ivec2 atlas_size) {
     T3DVTTailMetadata tail = T3D_VT_CONSUMER_TAIL(address.tail_index);
     return t3d_vt_tail_filter_plan(tail, address.resolved_mip, address.wrapped_uv, address.ddx_uv, address.ddy_uv,
@@ -394,19 +389,28 @@ T3DVTBoundedFilterPlan t3d_vt_consumer_tail_plan(T3DVTConsumerAddress address, i
 vec4 t3d_vt_consumer_sample_albedo_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(1.0);
     if (address.valid == 1u) {
-        vec2 grad_x;
-        vec2 grad_y;
-        t3d_vt_consumer_physical_gradients(address, grad_x, grad_y);
-        return t3d_vt_decode_srgb_albedo(
-            T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(address.layer, address.tile_uv, grad_x, grad_y));
+        T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
+            address.resolved_packed_extent, address.nearest != 0u, address.anisotropic != 0u);
+        vec4 sum = vec4(0.0);
+        for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
+            if (i >= plan.tap_count) break;
+            // Virtual LOD and anisotropy are handled above; zero gradients keep the hardware sampler from filtering twice.
+            sum += address.physical_family == T3D_VT_PHYSICAL_FORMAT_BC7_UNORM
+                ? T3D_VT_CONSUMER_SURFACE_BANK_GRAD(address.layer, t3d_vt_bounded_filter_tap_uv(plan, i), vec2(0.0), vec2(0.0))
+                : T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(address.layer, t3d_vt_bounded_filter_tap_uv(plan, i), vec2(0.0), vec2(0.0));
+        }
+        return t3d_vt_decode_srgb_albedo(sum / float(max(plan.tap_count, 1u)));
     }
-    if ((address.tail_channel_mask & (1u << T3D_VT_CHANNEL_ALBEDO)) == 0u) return vec4(1.0);
-    ivec2 atlas_size = T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE();
+    if ((address.tail_channel_mask & (1u << address.physical_family)) == 0u) return vec4(1.0);
+    ivec2 atlas_size = address.physical_family == T3D_VT_PHYSICAL_FORMAT_BC7_UNORM
+        ? T3D_VT_CONSUMER_SURFACE_TAIL_SIZE() : T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE();
     T3DVTBoundedFilterPlan plan = t3d_vt_consumer_tail_plan(address, atlas_size);
     vec4 sum = vec4(0.0);
     for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
         if (i >= plan.tap_count) break;
-        sum += T3D_VT_CONSUMER_ALBEDO_TAIL_LOD0(t3d_vt_bounded_filter_tap_uv(plan, i));
+        sum += address.physical_family == T3D_VT_PHYSICAL_FORMAT_BC7_UNORM
+            ? T3D_VT_CONSUMER_SURFACE_TAIL_LOD0(t3d_vt_bounded_filter_tap_uv(plan, i))
+            : T3D_VT_CONSUMER_ALBEDO_TAIL_LOD0(t3d_vt_bounded_filter_tap_uv(plan, i));
     }
     return t3d_vt_decode_srgb_albedo(sum / float(max(plan.tap_count, 1u)));
 }
@@ -414,10 +418,15 @@ vec4 t3d_vt_consumer_sample_albedo_single(T3DVTConsumerAddress address) {
 vec4 t3d_vt_consumer_sample_normal_v3_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(0.5, 0.5, 1.0, 1.0);
     if (address.valid == 1u) {
-        vec2 grad_x;
-        vec2 grad_y;
-        t3d_vt_consumer_physical_gradients(address, grad_x, grad_y);
-        return T3D_VT_CONSUMER_NORMAL_BANK_GRAD(address.layer, address.tile_uv, grad_x, grad_y);
+        T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
+            address.resolved_packed_extent, address.nearest != 0u, address.anisotropic != 0u);
+        vec4 sum = vec4(0.0);
+        for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
+            if (i >= plan.tap_count) break;
+            // Virtual LOD and anisotropy are handled above; zero gradients keep the hardware sampler from filtering twice.
+            sum += T3D_VT_CONSUMER_NORMAL_BANK_GRAD(address.layer, t3d_vt_bounded_filter_tap_uv(plan, i), vec2(0.0), vec2(0.0));
+        }
+        return sum / float(max(plan.tap_count, 1u));
     }
     if ((address.tail_channel_mask & (1u << T3D_VT_PHYSICAL_FORMAT_BC5_UNORM)) == 0u) return vec4(0.5, 0.5, 1.0, 1.0);
     ivec2 atlas_size = T3D_VT_CONSUMER_NORMAL_TAIL_SIZE();
@@ -433,10 +442,15 @@ vec4 t3d_vt_consumer_sample_normal_v3_single(T3DVTConsumerAddress address) {
 vec4 t3d_vt_consumer_sample_surface_v3_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(1.0);
     if (address.valid == 1u) {
-        vec2 grad_x;
-        vec2 grad_y;
-        t3d_vt_consumer_physical_gradients(address, grad_x, grad_y);
-        return T3D_VT_CONSUMER_SURFACE_BANK_GRAD(address.layer, address.tile_uv, grad_x, grad_y);
+        T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
+            address.resolved_packed_extent, address.nearest != 0u, address.anisotropic != 0u);
+        vec4 sum = vec4(0.0);
+        for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
+            if (i >= plan.tap_count) break;
+            // Virtual LOD and anisotropy are handled above; zero gradients keep the hardware sampler from filtering twice.
+            sum += T3D_VT_CONSUMER_SURFACE_BANK_GRAD(address.layer, t3d_vt_bounded_filter_tap_uv(plan, i), vec2(0.0), vec2(0.0));
+        }
+        return sum / float(max(plan.tap_count, 1u));
     }
     if ((address.tail_channel_mask & (1u << T3D_VT_PHYSICAL_FORMAT_BC7_UNORM)) == 0u) return vec4(1.0);
     ivec2 atlas_size = T3D_VT_CONSUMER_SURFACE_TAIL_SIZE();
@@ -452,10 +466,15 @@ vec4 t3d_vt_consumer_sample_surface_v3_single(T3DVTConsumerAddress address) {
 vec4 t3d_vt_consumer_sample_orm_v3_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(1.0);
     if (address.valid == 1u) {
-        vec2 grad_x;
-        vec2 grad_y;
-        t3d_vt_consumer_physical_gradients(address, grad_x, grad_y);
-        return T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(address.layer, address.tile_uv, grad_x, grad_y);
+        T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
+            address.resolved_packed_extent, address.nearest != 0u, address.anisotropic != 0u);
+        vec4 sum = vec4(0.0);
+        for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
+            if (i >= plan.tap_count) break;
+            // Virtual LOD and anisotropy are handled above; zero gradients keep the hardware sampler from filtering twice.
+            sum += T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(address.layer, t3d_vt_bounded_filter_tap_uv(plan, i), vec2(0.0), vec2(0.0));
+        }
+        return sum / float(max(plan.tap_count, 1u));
     }
     if ((address.tail_channel_mask & (1u << T3D_VT_PHYSICAL_FORMAT_BC1_UNORM)) == 0u) return vec4(1.0);
     ivec2 atlas_size = T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE();

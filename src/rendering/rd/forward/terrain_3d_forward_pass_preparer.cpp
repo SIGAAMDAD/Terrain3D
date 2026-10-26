@@ -4,6 +4,8 @@
 #include "terrain_3d_forward_pass_preparer.h"
 
 #include "core/utility/logger.h"
+#include "data/formats/terrain_3d_half.h"
+#include "rendering/rd/instances/terrain_3d_rd_frustum.h"
 #include "rendering/rd/core/terrain_3d_rd_context.h"
 #include "rendering/rd/world/core/terrain_3d_world_render_authority.h"
 #include "rendering/rd/vt/streaming/terrain_3d_vt_streaming.h"
@@ -28,6 +30,113 @@ static void t3dTerrainRepeatFootprint( const float fMinimum, const float fMaximu
 	const float fBase = floorf( fMin );
 	rMinimum = fMin - fBase;
 	rMaximum = fMax - fBase;
+}
+
+// The unified world lane owns its own VT demand: the legacy instance lane is not prepared here.
+// Scan a bounded rotating candidate window and deduplicate identical cluster/channel footprints.
+static void t3dStageWorldMaterialFootprintsHot( Terrain3DVirtualTexture &rVT,
+        const Terrain3DWorldPublication &rWorld, const Terrain3DWorldResources &rResources,
+        const t3dRdFrameSnapshot_t &rSnapshot, const t3dRdForwardPassContext_t &rContext, size_t &rCursor, uint32_t &rSweep ) {
+	const t3dVTResidencyState_t &residency = rVT.get_residency();
+	if ( rWorld.m_visibilityCandidates.empty() || !residency.bInitialized || !residency.Buffers.pAllocations ) { return; }
+	uint64_t seenKeys[256];
+	uint16_t seenMips[256];
+	memset( seenKeys, 0xff, sizeof( seenKeys ) );
+	const uint32_t nViews = CLAMP( rContext.m_nViewCount, 1u, T3D_RD_FORWARD_MAX_VIEWS );
+	t3dRdFrustum_t frustums[T3D_RD_FORWARD_MAX_VIEWS];
+	for ( uint32_t v = 0u; v < nViews; ++v ) { frustums[v] = t3dRdExtractFrustum( rContext.m_szViewProjection[v] ); }
+	const size_t nCandidates = rWorld.m_visibilityCandidates.size();
+	const size_t nScanCount = MIN( nCandidates, ( size_t )4096u );
+	for ( size_t scan = 0u; scan < nScanCount; ++scan ) {
+		if ( rCursor >= nCandidates ) { rCursor = 0u; ++rSweep; }
+		const t3dWorldVisibleItem_t &item = rWorld.m_visibilityCandidates[rCursor++];
+		if ( item.m_nGeometryKind == T3D_WORLD_GEOMETRY_TERRAIN || item.m_nClusterOrTerrainId >= rWorld.m_clusters.size()
+		        || item.m_nClusterOrTerrainId >= rWorld.m_clusterVtMetadata.size() || item.m_nInstanceOrPatchId >= rWorld.m_instances.size() ) { continue; }
+		const t3dWorldInstance_t &instance = rWorld.m_instances[item.m_nInstanceOrPatchId];
+		if ( ( instance.m_nVisibilityLayers & rContext.m_nCameraVisibleLayers ) == 0u
+		        || instance.m_nTransformIndex >= rWorld.m_transforms.size() ) { continue; }
+		const t3dWorldCluster_t &cluster = rWorld.m_clusters[item.m_nClusterOrTerrainId];
+		const uint32_t nMaterial = instance.m_nMaterialOverride == T3D_WORLD_INVALID_ID ? cluster.m_nMaterial : instance.m_nMaterialOverride;
+		const t3dRenderingMaterialGpu_t *const pMaterial = rResources.getResolvedMaterialHot( nMaterial );
+		if ( !pMaterial || pMaterial->m_nVtAllocation == T3D_VT_INVALID_ALLOCATION ) { continue; }
+		const t3dWorldTransform_t &tr = rWorld.m_transforms[instance.m_nTransformIndex];
+		const Vector3 local( cluster.m_fCenter[0], cluster.m_fCenter[1], cluster.m_fCenter[2] );
+		const Vector3 center(
+		        tr.m_fRow0[0] * local.x + tr.m_fRow0[1] * local.y + tr.m_fRow0[2] * local.z + tr.m_fRow0[3],
+		        tr.m_fRow1[0] * local.x + tr.m_fRow1[1] * local.y + tr.m_fRow1[2] * local.z + tr.m_fRow1[3],
+		        tr.m_fRow2[0] * local.x + tr.m_fRow2[1] * local.y + tr.m_fRow2[2] * local.z + tr.m_fRow2[3] );
+		float fScale = 0.0001f;
+		const float *rows[3] = { tr.m_fRow0, tr.m_fRow1, tr.m_fRow2 };
+		for ( uint32_t row = 0u; row < 3u; ++row ) {
+			fScale = MAX( fScale, ( float )Vector3( rows[row][0], rows[row][1], rows[row][2] ).length() );
+		}
+		const float fRadius = MAX( cluster.m_fRadius * fScale, 0.001f );
+		float fPixels = 0.0f;
+		for ( uint32_t v = 0u; v < nViews; ++v ) {
+			bool bVisible = true;
+			for ( uint32_t plane = 0u; plane < 6u; ++plane ) {
+				const Vector4 &p = frustums[v].m_szPlanes[plane];
+				if ( p.x * center.x + p.y * center.y + p.z * center.z + p.w < -fRadius ) { bVisible = false; break; }
+			}
+			if ( !bVisible ) { continue; }
+			const Vector3 eye = rContext.m_cameraTransform.origin + rContext.m_cameraTransform.basis.xform( rContext.m_szEyeOffset[v] );
+			const float fDistance = ( float )center.distance_to( eye );
+			if ( fDistance + fRadius < instance.m_fLodBegin - instance.m_fFadeMargin
+			        || ( instance.m_fLodEnd > 0.0f && fDistance - fRadius > instance.m_fLodEnd + instance.m_fFadeMargin ) ) { continue; }
+			// The length of the VP Y row is invariant to camera rotation; its Y component alone is not.
+			const Projection &vp = rContext.m_szViewProjection[v];
+			const float fProjectionScale = ( float )Vector3( vp[0].y, vp[1].y, vp[2].y ).length();
+			fPixels = MAX( fPixels, fRadius * fProjectionScale * ( float )MAX( rContext.m_renderSize.y, 1 ) / MAX( fDistance - fRadius, 0.25f ) );
+		}
+		if ( fPixels <= 0.0f ) { continue; }
+		const t3dWorldClusterVTMetadata_t &meta = rWorld.m_clusterVtMetadata[item.m_nClusterOrTerrainId];
+		float uvMin[2], uvMax[2];
+		float fUvSpan = 0.0f;
+		for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
+			const float a = t3dHalfDecode( ( uint16_t )( meta.m_nPackedUvMin >> ( axis * 16u ) ) ) * pMaterial->m_vUvScaleBias[axis] + pMaterial->m_vUvScaleBias[axis + 2u];
+			const float b = t3dHalfDecode( ( uint16_t )( meta.m_nPackedUvMax >> ( axis * 16u ) ) ) * pMaterial->m_vUvScaleBias[axis] + pMaterial->m_vUvScaleBias[axis + 2u];
+			fUvSpan = MAX( fUvSpan, fabsf( b - a ) );
+			if ( pMaterial->m_nSamplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || pMaterial->m_nSamplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT ) {
+				t3dTerrainRepeatFootprint( a, b, uvMin[axis], uvMax[axis] );
+			} else { uvMin[axis] = CLAMP( MIN( a, b ), 0.0f, 1.0f ); uvMax[axis] = CLAMP( MAX( a, b ), 0.0f, 1.0f ); }
+		}
+		const uint32_t nCategory = instance.m_nGeometryKind == T3D_WORLD_GEOMETRY_STATIC_CLUSTER ? 2u
+		        : MIN( ( instance.m_nFlags & T3D_RD_INSTANCE_CATEGORY_MASK ) >> T3D_RD_INSTANCE_CATEGORY_SHIFT, 2u );
+		const uint16_t nPriority = ( uint16_t )CLAMP( fPixels * 32.0f, ( float )T3D_VT_PRIORITY_NEAR_MIN, 65535.0f );
+		const uint32_t nFilter = t3dRdInstanceTextureFilterMode(
+		        ( pMaterial->m_nPackedScalars1 & T3D_VT_MATERIAL_FILTER_MASK ) >> T3D_VT_MATERIAL_FILTER_SHIFT,
+		        rSnapshot.m_szInstanceTextureMipBias[3], nCategory );
+		const bool bAnisotropic = nFilter == T3D_VT_FILTER_NEAREST_MIPMAP_ANISOTROPIC || nFilter == T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC;
+		const bool bTrilinear = nFilter == T3D_VT_FILTER_LINEAR_MIPMAP || nFilter == T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC;
+		// Sphere-based demand cannot measure the fragment ellipse: conservatively cover its bounded anisotropic LOD.
+		const float fFilterScale = bAnisotropic ? ( float )T3D_VT_MAX_ANISOTROPY : 1.0f;
+		const bool bMipmapped = nFilter >= T3D_VT_FILTER_NEAREST_MIPMAP;
+		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION; ++channel ) {
+			if ( pMaterial->m_nVtAllocation >= residency.nAllocationCount || channel >= residency.nAllocationCount - pMaterial->m_nVtAllocation ) { break; }
+			const uint32_t nAllocation = pMaterial->m_nVtAllocation + channel;
+			const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[nAllocation];
+			if ( allocation.m_nMipCount == 0u || !t3d_vt_allocation_quality_enabled( allocation.m_nFlags ) ) { continue; }
+			const uint32_t nBaseMip = t3d_vt_allocation_quality_base_mip( allocation.m_nFlags );
+			const float fExtent = ( float )MAX( allocation.m_nMip0WidthPages, allocation.m_nMip0HeightPages ) * ( float )T3D_VT_PAGE_INTERIOR / exp2f( ( float )nBaseMip );
+			const float fAutomaticLod = bMipmapped ? log2f( MAX( fUvSpan * fExtent / ( MAX( fPixels, 1.0f ) * fFilterScale ), 1.0f ) ) : 0.0f;
+			const uint16_t nMip = ( uint16_t )CLAMP( floorf( fAutomaticLod + rSnapshot.m_szInstanceTextureMipBias[nCategory] ),
+			        0.0f, ( float )( allocation.m_nMipCount - 1u ) );
+			const uint64_t nKey = ( ( uint64_t )item.m_nClusterOrTerrainId << 32u ) | nAllocation;
+			uint32_t slot = ( uint32_t )( ( nKey ^ ( nKey >> 32u ) ) * 2654435761u ) & 255u;
+			uint32_t probes = 0u;
+			while ( probes < 256u && seenKeys[slot] != UINT64_MAX && seenKeys[slot] != nKey ) { slot = ( slot + 1u ) & 255u; ++probes; }
+			if ( probes == 256u ) { --rCursor; return; } // Retry this candidate with an empty dedup table next frame.
+			if ( seenKeys[slot] == nKey && seenMips[slot] <= nMip ) { continue; }
+			seenKeys[slot] = nKey;
+			seenMips[slot] = nMip;
+			rVT.stage_material_footprint_hot( nAllocation, ( uint32_t )rContext.m_nRenderFrame, uvMin, uvMax, nMip,
+			        T3D_FORWARD_PASS_MATERIAL_REQUEST_CAP, nPriority, T3D_VT_REQUEST_PRODUCER_INSTANCE, rSweep );
+			if ( bTrilinear && nBaseMip + nMip + 1u < allocation.m_nMipCount ) {
+				rVT.stage_material_footprint_hot( nAllocation, ( uint32_t )rContext.m_nRenderFrame, uvMin, uvMax,
+				        ( uint16_t )( nMip + 1u ), T3D_FORWARD_PASS_MATERIAL_REQUEST_CAP, nPriority, T3D_VT_REQUEST_PRODUCER_INSTANCE, rSweep );
+			}
+		}
+	}
 }
 
 static uint32_t t3dStageTerrainMaterialFootprintHot( Terrain3DVirtualTexture &rVirtualTexture,
@@ -128,6 +237,9 @@ void Terrain3DForwardPassPreparer::reset( void ) {
 	m_bForwardInstanceSubmitSucceeded = false;
 	m_nForwardInstanceSubmitDraws = 0u;
 	m_nLastTerrainVtResidencyRequestFrame = UINT64_MAX;
+	m_nLastWorldVtResidencyRequestFrame = UINT64_MAX;
+	m_nWorldVtCandidateCursor = 0u;
+	m_nWorldVtCandidateSweep = 0u;
 }
 
 bool Terrain3DForwardPassPreparer::prepareLifecycle(
@@ -322,8 +434,14 @@ bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
 	m_bForwardInstanceLaneExpected = m_nForwardPublishedInstanceCount > 0u && ( unified_world_pass || editor_authoring_mode );
 	const bool shared_vt_needed = has_terrain || m_bForwardInstanceLaneExpected || unified_world_pass;
 	const bool shared_vt_ready = !shared_vt_needed || rHost.ensureForwardSharedVt();
+	if ( shared_vt_ready ) {
+		rServices.m_virtualTexture.service_fragment_feedback_hot( ( uint32_t )rContext.m_nRenderFrame );
+	}
 	if ( has_terrain && shared_vt_ready && m_nLastTerrainVtResidencyRequestFrame != rContext.m_nRenderFrame
-	        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) ) {
+	        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+	        && rServices.m_virtualTexture.shouldRefreshMaterialDemandHot( 0u, rContext,
+	                snapshot.m_nMaterialGeneration ^ ( snapshot.m_nRegionMapGeneration << 1u )
+	                        ^ ( snapshot.m_generations.m_nPatchGeneration << 2u ) ) ) {
 		m_nLastTerrainVtResidencyRequestFrame = rContext.m_nRenderFrame;
 		const uint32_t nFrameId = ( uint32_t )rContext.m_nRenderFrame;
 		const uint32_t nMaterialCount = MIN( snapshot.m_nMaterialLayerCount, ( uint32_t )T3D_RD_MATERIAL_LAYER_COUNT );
@@ -367,8 +485,18 @@ bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
 	lanes.m_bEditorAuthoringMode = editor_authoring_mode;
 	lanes.m_bSharedVtReady = shared_vt_ready;
 	lanes.m_bHasTerrain = has_terrain;
+	rServices.m_instanceRenderer.setTextureMipBiasHot( snapshot.m_szInstanceTextureMipBias );
 	prepareInstanceLane( rServices, rContext, lanes );
 
+	if ( shared_vt_ready && unified_world_pass && pWorld
+	        && rServices.m_worldRuntime.getPreparedPublicationGeneration() == pWorld->m_publication.m_nGeneration
+	        && m_nLastWorldVtResidencyRequestFrame != rContext.m_nRenderFrame
+	        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
+	        && rServices.m_virtualTexture.shouldRefreshMaterialDemandHot( 2u, rContext, pWorld->m_publication.m_nGeneration ) ) {
+		m_nLastWorldVtResidencyRequestFrame = rContext.m_nRenderFrame;
+		t3dStageWorldMaterialFootprintsHot( rServices.m_virtualTexture, pWorld->m_publication,
+		        rServices.m_worldRuntime.getResources(), snapshot, rContext, m_nWorldVtCandidateCursor, m_nWorldVtCandidateSweep );
+	}
 	if ( shared_vt_ready ) {
 		uint32_t nTerrainAccepted = 0u;
 		uint32_t nInstanceAccepted = 0u;
@@ -377,6 +505,7 @@ bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
 			m_nTerrainVtResidencyRequestsAccepted += nTerrainAccepted;
 			rServices.m_instanceRenderer.recordVtResidencyAcceptedHot( nInstanceAccepted );
 		}
+		rServices.m_virtualTexture.service_streaming_hot( ( uint32_t )rContext.m_nRenderFrame );
 	}
 
 	// Terrain and instance/HLOD resources are independent. Snapshot shared VT
@@ -670,7 +799,7 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes( Terrain3DForward
 	if ( rPreparation.m_bUnifiedWorldPass && terrain_ok ) {
 		t3dRdWorldTerrainRasterBindings_t world_terrain_bindings = {};
 		world_ok = rServices.m_renderer.snapshotWorldRasterBindingsHot( world_terrain_bindings )
-		        && rServices.m_worldRuntime.prepareRasterPass( rContext, world_terrain_bindings, shared_vt_bindings );
+		        && rServices.m_worldRuntime.prepareRasterPass( rContext, world_terrain_bindings, shared_vt_bindings, &rServices.m_virtualTexture.get_gpu() );
 		m_bForwardPreparedHasWorld = world_ok;
 		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ) {
 			rHost.publishForwardWorldReadiness( rPreparation.m_pWorld->m_publication, world_ok );

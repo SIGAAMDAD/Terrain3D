@@ -26,101 +26,149 @@ static uint32_t t3d_vt_reference_rgb_distance( const uint8_t *pPixel, const uint
 	return ( uint32_t )( dr * dr + dg * dg + db * db );
 }
 
-static void t3d_vt_reference_encode_bc1_block( const uint8_t *pPixels, const uint32_t nStride, uint8_t *pBlock ) {
-	uint32_t nMinLuma = UINT32_MAX;
-	uint32_t nMaxLuma = 0u;
-	uint8_t MinColor[3] = { 0u, 0u, 0u };
-	uint8_t MaxColor[3] = { 255u, 255u, 255u };
-	bool bHasAlpha = false;
-	for ( uint32_t y = 0u; y < 4u; ++y ) {
-		for ( uint32_t x = 0u; x < 4u; ++x ) {
-			const uint8_t *pPixel = pPixels + y * nStride + x * 4u;
-			if ( pPixel[3] < 128u ) {
-				bHasAlpha = true;
-				continue;
-			}
-			const uint32_t nLuma = ( uint32_t )pPixel[0] * 77u + ( uint32_t )pPixel[1] * 150u + ( uint32_t )pPixel[2] * 29u;
-			if ( nLuma < nMinLuma ) {
-				nMinLuma = nLuma;
-				MinColor[0] = pPixel[0];
-				MinColor[1] = pPixel[1];
-				MinColor[2] = pPixel[2];
-			}
-			if ( nLuma >= nMaxLuma ) {
-				nMaxLuma = nLuma;
-				MaxColor[0] = pPixel[0];
-				MaxColor[1] = pPixel[1];
-				MaxColor[2] = pPixel[2];
-			}
-		}
-	}
-	if ( nMinLuma == UINT32_MAX ) {
-		MinColor[0] = MinColor[1] = MinColor[2] = 0u;
-		MaxColor[0] = MaxColor[1] = MaxColor[2] = 0u;
-	}
-
-	uint16_t nMin565 = t3d_vt_reference_rgb565( MinColor[0], MinColor[1], MinColor[2] );
-	uint16_t nMax565 = t3d_vt_reference_rgb565( MaxColor[0], MaxColor[1], MaxColor[2] );
-	uint16_t nColor0 = bHasAlpha ? nMin565 : nMax565;
-	uint16_t nColor1 = bHasAlpha ? nMax565 : nMin565;
-	if ( bHasAlpha && nColor0 > nColor1 ) {
-		const uint16_t nSwap = nColor0;
-		nColor0 = nColor1;
-		nColor1 = nSwap;
-	}
-	if ( !bHasAlpha && nColor0 <= nColor1 ) {
-		if ( nColor1 < 0xffffu ) {
-			nColor0 = nColor1 + 1u;
-		} else if ( nColor0 > 0u ) {
-			nColor1 = nColor0 - 1u;
-		}
-	}
-
-	pBlock[0] = ( uint8_t )nColor0;
-	pBlock[1] = ( uint8_t )( nColor0 >> 8u );
-	pBlock[2] = ( uint8_t )nColor1;
-	pBlock[3] = ( uint8_t )( nColor1 >> 8u );
+static uint32_t t3d_vt_reference_bc1_indices( const uint8_t *pPixels, const uint32_t nStride,
+        const uint16_t nColor0, const uint16_t nColor1, const bool bHasAlpha, uint32_t &rIndices ) {
 	uint8_t Palette[4][3];
 	t3d_vt_reference_rgb565_decode( nColor0, Palette[0] );
 	t3d_vt_reference_rgb565_decode( nColor1, Palette[1] );
-	if ( nColor0 > nColor1 ) {
-		for ( uint32_t c = 0u; c < 3u; ++c ) {
-			Palette[2][c] = ( uint8_t )( ( 2u * Palette[0][c] + Palette[1][c] + 1u ) / 3u );
-			Palette[3][c] = ( uint8_t )( ( Palette[0][c] + 2u * Palette[1][c] + 1u ) / 3u );
-		}
-	} else {
-		for ( uint32_t c = 0u; c < 3u; ++c ) {
-			Palette[2][c] = ( uint8_t )( ( Palette[0][c] + Palette[1][c] + 1u ) >> 1u );
+	for ( uint32_t c = 0u; c < 3u; ++c ) {
+		if ( bHasAlpha ) {
+			Palette[2][c] = ( uint8_t )( ( Palette[0][c] + Palette[1][c] ) / 2u );
 			Palette[3][c] = 0u;
+		} else {
+			Palette[2][c] = ( uint8_t )( ( 2u * Palette[0][c] + Palette[1][c] ) / 3u );
+			Palette[3][c] = ( uint8_t )( ( Palette[0][c] + 2u * Palette[1][c] ) / 3u );
 		}
 	}
-
-	uint32_t nIndices = 0u;
+	uint32_t error = 0u;
+	rIndices = 0u;
 	for ( uint32_t y = 0u; y < 4u; ++y ) {
 		for ( uint32_t x = 0u; x < 4u; ++x ) {
-			const uint32_t nPixelIndex = y * 4u + x;
-			const uint8_t *pPixel = pPixels + y * nStride + x * 4u;
-			uint32_t nBest = 0u;
-			if ( bHasAlpha && pPixel[3] < 128u ) {
-				nBest = 3u;
-			} else {
-				uint32_t nBestDistance = UINT32_MAX;
-				const uint32_t nPaletteCount = nColor0 > nColor1 ? 4u : 3u;
-				for ( uint32_t iPalette = 0u; iPalette < nPaletteCount; ++iPalette ) {
-					const uint32_t nDistance = t3d_vt_reference_rgb_distance( pPixel, Palette[iPalette] );
-					if ( nDistance < nBestDistance ) {
-						nBestDistance = nDistance;
-						nBest = iPalette;
-					}
+			const uint8_t *pixel = pPixels + y * nStride + x * 4u;
+			uint32_t best = 3u;
+			if ( pixel[3] >= 128u ) {
+				uint32_t best_error = UINT32_MAX;
+				for ( uint32_t index = 0u; index < ( bHasAlpha ? 3u : 4u ); ++index ) {
+					const uint32_t distance = t3d_vt_reference_rgb_distance( pixel, Palette[index] );
+					if ( distance < best_error ) { best_error = distance; best = index; }
 				}
+				error += best_error;
 			}
-			nIndices |= nBest << ( nPixelIndex * 2u );
+			rIndices |= best << ( ( y * 4u + x ) * 2u );
 		}
 	}
-	pBlock[4] = ( uint8_t )nIndices;
-	pBlock[5] = ( uint8_t )( nIndices >> 8u );
-	pBlock[6] = ( uint8_t )( nIndices >> 16u );
-	pBlock[7] = ( uint8_t )( nIndices >> 24u );
+	return error;
+}
+
+static void t3d_vt_reference_bc1_try_endpoints( const uint8_t *pPixels, const uint32_t nStride,
+        uint16_t nColor0, uint16_t nColor1, const bool bHasAlpha,
+        uint32_t &rBestError, uint16_t *pBestColors, uint32_t &rBestIndices ) {
+	if ( ( bHasAlpha && nColor0 > nColor1 ) || ( !bHasAlpha && nColor0 < nColor1 ) ) {
+		const uint16_t swap = nColor0; nColor0 = nColor1; nColor1 = swap;
+	}
+	if ( !bHasAlpha && nColor0 == nColor1 ) {
+		if ( nColor0 < 0xffffu ) { ++nColor0; } else { --nColor1; }
+	}
+	uint32_t indices = 0u;
+	const uint32_t error = t3d_vt_reference_bc1_indices( pPixels, nStride, nColor0, nColor1, bHasAlpha, indices );
+	if ( error < rBestError ) {
+		rBestError = error;
+		pBestColors[0] = nColor0; pBestColors[1] = nColor1;
+		rBestIndices = indices;
+	}
+}
+
+static uint16_t t3d_vt_reference_bc1_quantize( const float *pColor ) {
+	uint32_t quantized[3];
+	const uint32_t maxima[3] = { 31u, 63u, 31u };
+	for ( uint32_t c = 0u; c < 3u; ++c ) {
+		const float value = pColor[c] < 0.0f ? 0.0f : pColor[c] > 255.0f ? 255.0f : pColor[c];
+		quantized[c] = ( uint32_t )( value * maxima[c] / 255.0f + 0.5f );
+	}
+	return ( uint16_t )( ( quantized[0] << 11u ) | ( quantized[1] << 5u ) | quantized[2] );
+}
+
+static void t3d_vt_reference_encode_bc1_block( const uint8_t *pPixels, const uint32_t nStride, uint8_t *pBlock ) {
+	uint16_t candidates[16];
+	uint32_t candidate_count = 0u;
+	bool has_alpha = false;
+	uint32_t min_luma = UINT32_MAX, max_luma = 0u;
+	uint16_t min_color = 0u, max_color = 0u;
+	for ( uint32_t y = 0u; y < 4u; ++y ) {
+		for ( uint32_t x = 0u; x < 4u; ++x ) {
+			const uint8_t *pixel = pPixels + y * nStride + x * 4u;
+			if ( pixel[3] < 128u ) { has_alpha = true; continue; }
+			const uint32_t luma = pixel[0] * 77u + pixel[1] * 150u + pixel[2] * 29u;
+			const uint16_t color = t3d_vt_reference_rgb565( pixel[0], pixel[1], pixel[2] );
+			if ( luma < min_luma ) { min_luma = luma; min_color = color; }
+			if ( luma >= max_luma ) { max_luma = luma; max_color = color; }
+			const float rgb[3] = { ( float )pixel[0], ( float )pixel[1], ( float )pixel[2] };
+			const uint16_t rounded = t3d_vt_reference_bc1_quantize( rgb );
+			uint32_t i = 0u;
+			while ( i < candidate_count && candidates[i] != rounded ) { ++i; }
+			if ( i == candidate_count ) { candidates[candidate_count++] = rounded; }
+		}
+	}
+	if ( candidate_count == 0u ) {
+		// Transparent colors never influence endpoints or visible blade colors.
+		memset( pBlock, 0, 4u ); memset( pBlock + 4u, 0xff, 4u );
+		return;
+	}
+	uint16_t best_colors[2] = { 0u, 0u };
+	uint32_t best_error = UINT32_MAX, best_indices = 0u;
+	// Retain the old extrema pair as a candidate, then search opaque RGB565 pairs.
+	t3d_vt_reference_bc1_try_endpoints( pPixels, nStride, min_color, max_color, has_alpha, best_error, best_colors, best_indices );
+	for ( uint32_t a = 0u; a < candidate_count; ++a ) {
+		for ( uint32_t b = a; b < candidate_count; ++b ) {
+			t3d_vt_reference_bc1_try_endpoints( pPixels, nStride, candidates[a], candidates[b], has_alpha, best_error, best_colors, best_indices );
+		}
+	}
+	// Four fixed least-squares/index iterations fit interpolated colors too.
+	for ( uint32_t iteration = 0u; iteration < 4u && best_error != 0u; ++iteration ) {
+		float aa = 0.0f, ab = 0.0f, bb = 0.0f;
+		float ar[3] = {}, br[3] = {};
+		for ( uint32_t y = 0u; y < 4u; ++y ) {
+			for ( uint32_t x = 0u; x < 4u; ++x ) {
+				const uint8_t *pixel = pPixels + y * nStride + x * 4u;
+				if ( pixel[3] < 128u ) { continue; }
+				const uint32_t index = ( best_indices >> ( ( y * 4u + x ) * 2u ) ) & 3u;
+				const float a = index == 0u ? 1.0f : index == 1u ? 0.0f : has_alpha ? 0.5f : index == 2u ? 2.0f / 3.0f : 1.0f / 3.0f;
+				const float b = 1.0f - a;
+				aa += a * a; ab += a * b; bb += b * b;
+				for ( uint32_t c = 0u; c < 3u; ++c ) { ar[c] += a * pixel[c]; br[c] += b * pixel[c]; }
+			}
+		}
+		const float determinant = aa * bb - ab * ab;
+		if ( determinant <= 0.000001f ) { break; }
+		float color0[3], color1[3];
+		for ( uint32_t c = 0u; c < 3u; ++c ) {
+			color0[c] = ( ar[c] * bb - br[c] * ab ) / determinant;
+			color1[c] = ( br[c] * aa - ar[c] * ab ) / determinant;
+		}
+		const uint32_t previous_error = best_error;
+		t3d_vt_reference_bc1_try_endpoints( pPixels, nStride, t3d_vt_reference_bc1_quantize( color0 ),
+		        t3d_vt_reference_bc1_quantize( color1 ), has_alpha, best_error, best_colors, best_indices );
+		if ( best_error == previous_error ) { break; }
+	}
+	// Bounded RGB565 neighbor refinement catches quantization and single-color cases.
+	const uint32_t shifts[3] = { 11u, 5u, 0u }, maxima[3] = { 31u, 63u, 31u };
+	for ( uint32_t pass = 0u; pass < 2u && best_error != 0u; ++pass ) {
+		for ( uint32_t endpoint = 0u; endpoint < 2u; ++endpoint ) {
+			for ( uint32_t c = 0u; c < 3u; ++c ) {
+				for ( int32_t delta = -1; delta <= 1; delta += 2 ) {
+					uint16_t colors[2] = { best_colors[0], best_colors[1] };
+					const int32_t component = ( colors[endpoint] >> shifts[c] ) & maxima[c];
+					if ( component + delta < 0 || component + delta > ( int32_t )maxima[c] ) { continue; }
+					colors[endpoint] = ( uint16_t )( ( colors[endpoint] & ~( maxima[c] << shifts[c] ) )
+					        | ( ( uint32_t )( component + delta ) << shifts[c] ) );
+					t3d_vt_reference_bc1_try_endpoints( pPixels, nStride, colors[0], colors[1], has_alpha, best_error, best_colors, best_indices );
+				}
+			}
+		}
+	}
+	pBlock[0] = ( uint8_t )best_colors[0]; pBlock[1] = ( uint8_t )( best_colors[0] >> 8u );
+	pBlock[2] = ( uint8_t )best_colors[1]; pBlock[3] = ( uint8_t )( best_colors[1] >> 8u );
+	for ( uint32_t byte = 0u; byte < 4u; ++byte ) { pBlock[4u + byte] = ( uint8_t )( best_indices >> ( byte * 8u ) ); }
 }
 
 static void t3d_vt_reference_bc4_palette( const uint8_t nEndpoint0, const uint8_t nEndpoint1, uint8_t *pPalette ) {
@@ -188,39 +236,107 @@ static void t3d_vt_reference_write_bits( t3dVTReferenceBitWriter_t &rWriter, uin
 	}
 }
 
-static void t3d_vt_reference_encode_bc7_mode6_block( const uint8_t *pPixels, const uint32_t nStride, uint8_t *pBlock ) {
-	uint32_t Sums[4] = { 0u, 0u, 0u, 0u };
-	for ( uint32_t y = 0u; y < 4u; ++y ) {
-		for ( uint32_t x = 0u; x < 4u; ++x ) {
-			const uint8_t *pPixel = pPixels + y * nStride + x * 4u;
+// Bounded mode-6 RGBA fit. Keep alpha continuous and constrain cutoff classes
+// after quantization; constant-color averaging destroys foliage edge detail.
+static void t3d_vt_reference_encode_bc7_mode6_block( const uint8_t *pPixels, const uint32_t nStride,
+        const uint8_t nThreshold, uint8_t *pBlock ) {
+	static const uint32_t weights[16] = { 0u, 4u, 9u, 13u, 17u, 21u, 26u, 30u, 34u, 38u, 43u, 47u, 51u, 55u, 60u, 64u };
+	uint8_t pixels[16][4];
+	uint32_t visible = 0u, min_alpha = 255u, max_alpha = 0u;
+	for ( uint32_t i = 0u; i < 16u; ++i ) {
+		memcpy( pixels[i], pPixels + ( i / 4u ) * nStride + ( i % 4u ) * 4u, 4u );
+		if ( pixels[i][3] > pixels[visible][3] ) { visible = i; }
+		min_alpha = MIN( min_alpha, ( uint32_t )pixels[i][3] );
+		max_alpha = MAX( max_alpha, ( uint32_t )pixels[i][3] );
+	}
+	// Transparent RGB carries no authored color; avoid a black endpoint fringe.
+	for ( uint32_t i = 0u; i < 16u; ++i ) {
+		if ( pixels[i][3] == 0u ) { memcpy( pixels[i], pixels[visible], 3u ); }
+	}
+	uint32_t first = 0u, last = 0u, largest = 0u;
+	for ( uint32_t i = 0u; i < 16u; ++i ) {
+		for ( uint32_t j = i + 1u; j < 16u; ++j ) {
+			uint32_t distance = 0u;
 			for ( uint32_t c = 0u; c < 4u; ++c ) {
-				Sums[c] += pPixel[c];
+				const int32_t d = ( int32_t )pixels[i][c] - pixels[j][c];
+				distance += d * d * ( c == 3u ? 4u : 1u );
+			}
+			if ( distance > largest ) { largest = distance; first = i; last = j; }
+		}
+	}
+	float endpoints[2][4];
+	for ( uint32_t c = 0u; c < 4u; ++c ) { endpoints[0][c] = pixels[first][c]; endpoints[1][c] = pixels[last][c]; }
+	uint32_t quantized[2][4]{}, pbits[2]{}, indices[16]{};
+	const bool cutoff_crosses = nThreshold != 0u && min_alpha < nThreshold && max_alpha >= nThreshold;
+	for ( uint32_t iteration = 0u; iteration < 5u; ++iteration ) {
+		if ( cutoff_crosses ) {
+			const bool ascending = endpoints[0][3] <= endpoints[1][3];
+			endpoints[0][3] = ascending ? 0.0f : 255.0f;
+			endpoints[1][3] = ascending ? 255.0f : 0.0f;
+		}
+		for ( uint32_t end = 0u; end < 2u; ++end ) {
+			float best_error = 1e30f;
+			for ( uint32_t parity = 0u; parity < 2u; ++parity ) {
+				uint32_t q[4]; float error = 0.0f;
+				for ( uint32_t c = 0u; c < 4u; ++c ) {
+					const int32_t v = CLAMP( ( int32_t )( ( endpoints[end][c] - parity ) * 0.5f + 0.5f ), 0, 127 );
+					q[c] = ( uint32_t )v * 2u + parity;
+					if ( c == 3u && nThreshold != 0u ) {
+						if ( min_alpha >= nThreshold && q[c] < nThreshold ) { q[c] = nThreshold + ( ( nThreshold & 1u ) != parity ? 1u : 0u ); }
+						if ( max_alpha < nThreshold && q[c] >= nThreshold ) { q[c] = nThreshold - 1u - ( ( ( nThreshold - 1u ) & 1u ) != parity ? 1u : 0u ); }
+					}
+					if ( q[c] > 255u ) { error = 1e30f; break; }
+					const float d = endpoints[end][c] - q[c]; error += d * d * ( c == 3u ? 4.0f : 1.0f );
+				}
+				if ( error < best_error ) { best_error = error; pbits[end] = parity; memcpy( quantized[end], q, sizeof( q ) ); }
+			}
+		}
+		for ( uint32_t i = 0u; i < 16u; ++i ) {
+			uint64_t best_error = UINT64_MAX;
+			for ( uint32_t index = 0u; index < 16u; ++index ) {
+				uint64_t error = 0u;
+				for ( uint32_t c = 0u; c < 4u; ++c ) {
+					const uint32_t value = ( ( 64u - weights[index] ) * quantized[0][c] + weights[index] * quantized[1][c] + 32u ) >> 6u;
+					const int32_t d = ( int32_t )value - pixels[i][c];
+					error += ( uint64_t )( d * d ) * ( c == 3u ? 4u : pixels[i][3] == 0u ? 0u : 1u );
+					if ( c == 3u && nThreshold != 0u && ( value >= nThreshold ) != ( pixels[i][3] >= nThreshold ) ) { error += 1ull << 40u; }
+				}
+				if ( error < best_error ) { best_error = error; indices[i] = index; }
+			}
+		}
+		if ( iteration == 4u ) { break; }
+		// Least-squares endpoints for the selected palette, fixed work per block.
+		for ( uint32_t c = 0u; c < 4u; ++c ) {
+			float aa = 0.0f, ab = 0.0f, bb = 0.0f, ax = 0.0f, bx = 0.0f;
+			for ( uint32_t i = 0u; i < 16u; ++i ) {
+				if ( c < 3u && pixels[i][3] == 0u ) { continue; }
+				const float beta = weights[indices[i]] / 64.0f, alpha = 1.0f - beta;
+				aa += alpha * alpha; ab += alpha * beta; bb += beta * beta;
+				ax += alpha * pixels[i][c]; bx += beta * pixels[i][c];
+			}
+			const float determinant = aa * bb - ab * ab;
+			if ( determinant > 0.0001f ) {
+				endpoints[0][c] = CLAMP( ( ax * bb - bx * ab ) / determinant, 0.0f, 255.0f );
+				endpoints[1][c] = CLAMP( ( bx * aa - ax * ab ) / determinant, 0.0f, 255.0f );
 			}
 		}
 	}
-	uint8_t Average[4];
-	uint32_t nOddCount = 0u;
-	for ( uint32_t c = 0u; c < 4u; ++c ) {
-		Average[c] = ( uint8_t )( ( Sums[c] + 8u ) >> 4u );
-		nOddCount += Average[c] & 1u;
+	// The anchor has only three index bits. Endpoint exchange preserves colors.
+	if ( indices[0] >= 8u ) {
+		for ( uint32_t c = 0u; c < 4u; ++c ) { const uint32_t q = quantized[0][c]; quantized[0][c] = quantized[1][c]; quantized[1][c] = q; }
+		const uint32_t p = pbits[0]; pbits[0] = pbits[1]; pbits[1] = p;
+		for ( uint32_t i = 0u; i < 16u; ++i ) { indices[i] = 15u - indices[i]; }
 	}
-	const uint32_t nPBit = nOddCount >= 2u ? 1u : 0u;
-
 	memset( pBlock, 0, 16u );
-	t3dVTReferenceBitWriter_t Writer;
-	Writer.m_pBytes = pBlock;
-	Writer.m_nBit = 0u;
-	t3d_vt_reference_write_bits( Writer, 0x40u, 7u );
+	t3dVTReferenceBitWriter_t writer{ pBlock, 0u };
+	t3d_vt_reference_write_bits( writer, 0x40u, 7u );
 	for ( uint32_t c = 0u; c < 4u; ++c ) {
-		t3d_vt_reference_write_bits( Writer, Average[c] >> 1u, 7u );
-		t3d_vt_reference_write_bits( Writer, Average[c] >> 1u, 7u );
+		t3d_vt_reference_write_bits( writer, quantized[0][c] >> 1u, 7u );
+		t3d_vt_reference_write_bits( writer, quantized[1][c] >> 1u, 7u );
 	}
-	t3d_vt_reference_write_bits( Writer, nPBit, 1u );
-	t3d_vt_reference_write_bits( Writer, nPBit, 1u );
-	t3d_vt_reference_write_bits( Writer, 0u, 3u );
-	for ( uint32_t iTexel = 1u; iTexel < 16u; ++iTexel ) {
-		t3d_vt_reference_write_bits( Writer, 0u, 4u );
-	}
+	t3d_vt_reference_write_bits( writer, pbits[0], 1u );
+	t3d_vt_reference_write_bits( writer, pbits[1], 1u );
+	for ( uint32_t i = 0u; i < 16u; ++i ) { t3d_vt_reference_write_bits( writer, indices[i], i == 0u ? 3u : 4u ); }
 }
 
 static bool t3d_vt_reference_encode_tile( void *pUser, const t3dVTEncodeTileRequest_t &rRequest, uint32_t &rWrittenBytes ) {
@@ -254,7 +370,7 @@ static bool t3d_vt_reference_encode_tile( void *pUser, const t3dVTEncodeTileRequ
 				t3d_vt_reference_encode_bc4_block( pBlockPixels, nSourceStride, 2u, 1u, pOut + 8u );
 				pOut += 16u;
 			} else if ( rRequest.m_nFormat == nBc7Format ) {
-				t3d_vt_reference_encode_bc7_mode6_block( pBlockPixels, nSourceStride, pOut );
+				t3d_vt_reference_encode_bc7_mode6_block( pBlockPixels, nSourceStride, rRequest.m_nAlphaThreshold, pOut );
 				pOut += 16u;
 			} else {
 				return false;

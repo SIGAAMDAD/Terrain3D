@@ -20,6 +20,7 @@ struct T3DVTBoundedFilterPlan {
     vec2 major_dir;
     float span_texels;
     uint tap_count;
+    uint nearest;
 };
 
 T3DVTBoundedFilterPlan t3d_vt_bounded_filter_plan(vec2 center_texel,
@@ -39,10 +40,10 @@ T3DVTBoundedFilterPlan t3d_vt_bounded_filter_plan(vec2 center_texel,
     plan.major_dir = vec2(1.0, 0.0);
     plan.span_texels = 0.0;
     plan.tap_count = 1u;
+    plan.nearest = nearest ? 1u : 0u;
 
     if (nearest) {
         plan.center_texel = clamp(floor(plan.center_texel) + vec2(0.5), plan.safe_min_texel, plan.safe_max_texel);
-        return plan;
     }
     if (!anisotropic) return plan;
 
@@ -64,6 +65,7 @@ vec2 t3d_vt_bounded_filter_tap_uv(T3DVTBoundedFilterPlan plan, uint tap_index) {
     uint clamped_index = min(tap_index, tap_count - 1u);
     float centered = (float(clamped_index) + 0.5) / float(tap_count) - 0.5;
     vec2 texel = plan.center_texel + plan.major_dir * (centered * plan.span_texels);
+    if (plan.nearest != 0u) texel = floor(texel) + vec2(0.5);
     texel = clamp(texel, plan.safe_min_texel, plan.safe_max_texel);
     return texel / plan.atlas_extent;
 }

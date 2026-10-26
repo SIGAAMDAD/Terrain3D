@@ -32,6 +32,7 @@ public:
 	void recoverRendererLifecycleOnRenderThread( int64_t nStartupGeneration, int64_t nRecoveryRevision );
 	void acknowledgeStartupCancellationOnRenderThread( int64_t nStartupGeneration );
 	void serviceStartupWorldPublicationOnRenderThread( int64_t nStartupGeneration, int64_t nSnapshotGeneration );
+	void consumeFragmentFeedbackOnRenderThread( const godot::PackedByteArray &rBytes );
 	void consumePreviewReadbackOnRenderThread( const godot::PackedByteArray &rReadbackBytes, int32_t nSlot, int64_t nRequestGeneration );
 	void _render_callback( int32_t nEffectCallbackType, godot::RenderData *pRenderData ) override;
 };

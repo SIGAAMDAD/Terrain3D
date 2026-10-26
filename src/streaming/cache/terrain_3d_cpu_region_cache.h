@@ -35,11 +35,11 @@ public:
 	void refreshCapacity( void );
 	void invalidate( const Vector2i &vLocation );
 
-	bool loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource ) const;
+	bool loadSource( const Vector2i &vLocation, Ref<Terrain3DRegion> &rSource, bool bAllowBlocking = true ) const;
 	void releaseUntrackedMaps( void );
 	bool requestSourceAsync( const Vector2i &vLocation );
-	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad = true );
-	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels );
+	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad = true, bool bAllowBlocking = true );
+	bool ensureSampleArea( const Vector3 &rWorldPosition, int nRadiusTexels, bool bAllowBlocking = true );
 	void update( const t3dResidencyFrameState_s &rFrame, bool bForce, int nEffectiveLoadLayers );
 
 	EA_FORCE_INLINE bool isEnabled( void ) const {

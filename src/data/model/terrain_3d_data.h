@@ -392,6 +392,7 @@ public:
 	// Explicit demand loading for cold/editor callers. Sampling getters only
 	// read currently published planes and return their missing-data sentinel.
 	bool prepareSamplingArea( const Vector3 &rWorldPosition, int nRadiusTexels = 1 );
+	bool tryPrepareSamplingArea( const Vector3 &rWorldPosition, int nRadiusTexels );
 
 	EA_FORCE_INLINE uint64_t getCookedWorldMaterialSignatureInternal( void ) const {
 		return m_runtimeArtifacts.worldManifest().isLoaded() ? m_runtimeArtifacts.worldManifest().getMaterialSignature() : 0u;
@@ -468,6 +469,7 @@ public:
 	Dictionary inspectGpuRegionPageMigration( void ) const;
 	Dictionary migrateGpuRegionPages( bool bRepair = false );
 	Dictionary cookGpuRegionPages( void );
+	bool publishRuntimeVirtualTexturesCold( String &rOutputPath, uint32_t &rGeneration, uint32_t &rMaterialCount, String &rError );
 	Dictionary getCpuRegionCacheStats( void ) const;
 	Dictionary getCpuRegionCacheStatsFast( void ) const;
 	Dictionary getInstanceRegionCacheStats( void ) const;

@@ -306,11 +306,13 @@ bool t3d_vt_cooker_encode_tile_v3(
 		return false;
 	}
 	const t3dVTLogicalChannel_t Channel = ( t3dVTLogicalChannel_t )rRequest.m_nChannel;
-	const uint32_t nExpectedFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( Channel );
+	const uint32_t nExpectedFamily = rRequest.m_nFormat;
 	const uint32_t nExpectedBytes = t3d_vt_pack_expected_physical_tile_bytes_v3( nExpectedFamily );
 	const uint32_t nExpectedComponents = t3d_vt_page_builder_logical_channel_components( Channel );
 	if ( rEncoder.m_pEncodeTile == NULL || rRequest.m_pSourcePixels == NULL || rRequest.m_pDestination == NULL
-	        || rRequest.m_nContractVersion != T3D_VT_FILE_VERSION_V3 || rRequest.m_nFormat != nExpectedFamily
+	        || rRequest.m_nContractVersion != T3D_VT_FILE_VERSION_V3
+	        || ( nExpectedFamily != ( uint32_t )t3d_vt_logical_channel_physical_family( Channel )
+	                && !( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO && nExpectedFamily == T3D_VT_PHYSICAL_FORMAT_BC7_UNORM ) )
 	        || rRequest.m_nWidth != T3D_VT_PHYSICAL_TILE || rRequest.m_nHeight != T3D_VT_PHYSICAL_TILE
 	        || rRequest.m_nComponents != nExpectedComponents || nExpectedComponents == 0u
 	        || rRequest.m_nSourceBytes != T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE * nExpectedComponents
@@ -407,6 +409,8 @@ typedef struct t3dVTCookTileTable_s {
 typedef struct t3dVTCookTileRequest_s {
 	t3dVTLogicalChannel_t m_channel;
 	uint32_t m_nPayloadFlags;
+	uint16_t m_nAllocationFlags;
+	uint8_t m_nAlphaThreshold;
 	uint32_t m_nCompressionQuality;
 	const uint8_t *m_pTileBytes;
 } t3dVTCookTileRequest_t;
@@ -426,7 +430,7 @@ static bool t3d_vt_cooker_encode_and_add_payload_v3( t3dVTCookTileTable_t &rTabl
 	const uint8_t *const pTileBytes = rRequest.m_pTileBytes;
 	const uint32_t nComponents = t3d_vt_page_builder_logical_channel_components( Channel );
 	const uint32_t nRawBytes = T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE * nComponents;
-	const uint32_t nFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( Channel );
+	const uint32_t nFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( Channel, rRequest.m_nAllocationFlags );
 	const uint32_t nChannel = ( uint32_t )Channel;
 	const uint64_t nHashA = t3d_vt_cooker_raw_hash_v3( pTileBytes, nRawBytes, nFamily, nChannel, 1469598103934665603ull );
 	const uint64_t nHashB = t3d_vt_cooker_raw_hash_v3( pTileBytes, nRawBytes, nFamily, nChannel, 7809847782465536322ull );
@@ -451,6 +455,7 @@ static bool t3d_vt_cooker_encode_and_add_payload_v3( t3dVTCookTileTable_t &rTabl
 	Request.m_nComponents = nComponents;
 	Request.m_nQuality = nCompressionQuality;
 	Request.m_nContractVersion = T3D_VT_FILE_VERSION_V3;
+	Request.m_nAlphaThreshold = rRequest.m_nAlphaThreshold;
 	Request.m_pDestination = pEncodedBytes;
 	Request.m_nDestinationCapacity = T3D_VT_COOK_MAX_ENCODED_TILE_BYTES;
 	uint32_t nWrittenBytes = 0u;
@@ -1033,7 +1038,8 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 						}
 						uint32_t nPayloadId = 0u;
 						if ( !t3d_vt_cooker_encode_and_add_payload_v3( TileTable,
-				             t3dVTCookTileRequest_t{ Channel, 0u, rSettings.m_nCompressionQuality, pTileBytes }, nPayloadId ) ) {
+				             t3dVTCookTileRequest_t{ Channel, 0u, rSource.m_nAllocationFlags,
+				             ( uint8_t )( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO && rSource.m_bAlphaScissor ? rSource.m_nAlphaThreshold : 0u ), rSettings.m_nCompressionQuality, pTileBytes }, nPayloadId ) ) {
 							bOk = false;
 							break;
 						}
@@ -1088,7 +1094,8 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 					if ( bOk ) {
 						uint32_t nTailPayload = 0u;
 						if ( !t3d_vt_cooker_encode_and_add_payload_v3( TileTable,
-						             t3dVTCookTileRequest_t{ Channel, T3D_VT_PACK_PAYLOAD_FLAG_TAIL, rSettings.m_nCompressionQuality, pTileBytes }, nTailPayload ) ) {
+						             t3dVTCookTileRequest_t{ Channel, T3D_VT_PACK_PAYLOAD_FLAG_TAIL, rSource.m_nAllocationFlags,
+					             ( uint8_t )( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO && rSource.m_bAlphaScissor ? rSource.m_nAlphaThreshold : 0u ), rSettings.m_nCompressionQuality, pTileBytes }, nTailPayload ) ) {
 							bOk = false;
 						} else {
 							t3dVTPackTailRecordV3_t &rTail = rPackage.m_pTails[nTailCursor];

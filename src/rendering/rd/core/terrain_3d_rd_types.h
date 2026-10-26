@@ -338,6 +338,11 @@ EA_FORCE_INLINE uint32_t t3dRdInstanceCategoryIndex( const int32_t nCategory ) {
 	return nCategory < 0 ? 0u : ( nCategory > 2 ? 2u : ( uint32_t )( nCategory ) );
 }
 
+EA_FORCE_INLINE uint32_t t3dRdInstanceTextureFilterMode( const uint32_t nMaterialFilter, const float fOverrides, const uint32_t nCategory ) {
+	const uint32_t nChoice = ( ( uint32_t )fOverrides >> ( MIN( nCategory, 2u ) * 4u ) ) & 15u;
+	return nChoice > 0u && nChoice <= T3D_VT_FILTER_LINEAR_MIPMAP_ANISOTROPIC + 1u ? nChoice - 1u : nMaterialFilter;
+}
+
 EA_FORCE_INLINE uint32_t t3dRdInstanceCategoryFlags( const int32_t nCategory ) {
 	return ( t3dRdInstanceCategoryIndex( nCategory ) << T3D_RD_INSTANCE_CATEGORY_SHIFT ) & T3D_RD_INSTANCE_CATEGORY_MASK;
 }
@@ -421,6 +426,7 @@ typedef struct t3dRdFrameSnapshot_s {
 	uint32_t m_nEditorExecutionMode = 0u;
 	bool m_bEditorAuthoringMode = false;
 	bool m_bDominantSunOnly = false;
+	float m_szInstanceTextureMipBias[4] = {}; // xyz: category mip bias; w: three 4-bit filter overrides (0 inherits)
 	int32_t m_nShadowLodCount = 2;
 	int32_t m_nNearShadowLodCount = -1;
 	int32_t m_nMiddleShadowLodCount = -1;
@@ -456,7 +462,7 @@ typedef struct t3dRdFrameSnapshot_s {
 
 // t3dRdFrameUniforms_s centralized in Terrain3DTypes.h.
 
-static_assert( sizeof( t3dRdFrameUniforms_t ) == 512u, "RD frame UBO must match GLSL std140 layout" );
+static_assert( sizeof( t3dRdFrameUniforms_t ) == 528u, "RD frame UBO must match GLSL std140 layout" );
 
 EA_FORCE_INLINE void t3dRdFrameUniformsInit( t3dRdFrameUniforms_t *pFrame ) {
 	memset( pFrame, 0, sizeof( *pFrame ) );

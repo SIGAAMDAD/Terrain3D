@@ -15,11 +15,11 @@
 #define T3D_VT_FILE_VERSION T3D_VT_FILE_VERSION_V3
 #define T3D_VT_V3_ABI_VERSION 3u
 #define T3D_VT_V3_FILTER_ABI_VERSION 1u
-#define T3D_VT_V3_COMPRESSOR_ABI_VERSION 1u
+#define T3D_VT_V3_COMPRESSOR_ABI_VERSION 2u
 static_assert( T3D_VT_FILE_VERSION_V3 == 3u, "Sparse VT V3 file ABI version is frozen" );
 static_assert( T3D_VT_V3_ABI_VERSION == 3u, "Sparse VT V3 ABI version is frozen" );
 static_assert( T3D_VT_V3_FILTER_ABI_VERSION == 1u, "Sparse VT V3 filter ABI version is frozen" );
-static_assert( T3D_VT_V3_COMPRESSOR_ABI_VERSION == 1u, "Sparse VT V3 compressor ABI version is frozen" );
+static_assert( T3D_VT_V3_COMPRESSOR_ABI_VERSION == 2u, "Sparse VT V3 RGBA compressor recipe revision" );
 #define T3D_VT_PAGE_INTERIOR 128u
 #define T3D_VT_PAGE_GUTTER 4u
 #define T3D_VT_PHYSICAL_TILE 136u
@@ -144,7 +144,7 @@ inline bool t3d_vt_is_terrain_region_stable_key( const uint64_t nStableKey ) {
 
 
 // V3 physical residency is format-family based. Logical ALBEDO and ORM both
-// occupy the BC1 UNORM family; the shader applies semantic decode from the
+// normally occupy the BC1 UNORM family; the shader applies semantic decode from the
 // logical channel rather than from the physical bank.
 // t3dVTPhysicalFormatFamily_e centralized in Terrain3DTypes.h.
 
@@ -191,7 +191,12 @@ static inline uint32_t t3d_vt_physical_family_legacy_resource_channel( const t3d
 	}
 }
 
-static inline t3dVTPhysicalFormatFamily_t t3d_vt_logical_channel_physical_family( const t3dVTLogicalChannel_t Channel ) {
+// ALBEDO RGBA is an allocation-wide choice, shared by regular pages and tails.
+#define T3D_VT_FORMAT_MAP_ALBEDO_RGBA 1u
+static inline t3dVTPhysicalFormatFamily_t t3d_vt_logical_channel_physical_family( const t3dVTLogicalChannel_t Channel, const uint16_t nFlags = 0u ) {
+	if ( Channel == T3D_VT_LOGICAL_CHANNEL_ALBEDO && ( nFlags & T3D_VT_ALLOCATION_ALBEDO_RGBA ) != 0u ) {
+		return T3D_VT_PHYSICAL_FORMAT_BC7_UNORM;
+	}
 	switch ( Channel ) {
 		case T3D_VT_LOGICAL_CHANNEL_ALBEDO:
 		case T3D_VT_LOGICAL_CHANNEL_ORM:

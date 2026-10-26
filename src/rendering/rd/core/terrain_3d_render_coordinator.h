@@ -65,6 +65,18 @@ private:
 	Terrain3DVirtualTexture m_virtualTexture;
 	Terrain3DTerrainMegaVT m_terrainMegaVT;
 	Terrain3DIncrementalMegaVTCooker m_incrementalMegaVTCooker;
+	uint64_t m_nForceRebakeRequestSerial = 0u;
+	uint64_t m_nForceRebakeActiveSerial = 0u;
+	uint64_t m_nForceRebakeCompletionSerial = 0u;
+	bool m_bForceRebakeQueued = false;
+	bool m_bForceRebakeActive = false;
+	bool m_bForceMaterialsStaged = false;
+	String m_forceRebakeState = "idle";
+	String m_forceRebakeError;
+	String m_forceRebakeOutput;
+	uint32_t m_nForceRegionCount = 0u;
+	uint32_t m_nForceShippingGeneration = 0u;
+	void serviceForceRebakeCold( void );
 	// RENDER THREAD OWNED: RD renderer/runtime resource creation, mutation, and
 	// destruction. Owner-thread lifecycle code may control policy but must not
 	// inspect or mutate these resource internals as a synchronization mechanism.
@@ -237,6 +249,8 @@ public:
 	bool setVirtualTextureQualityProfile( uint32_t nProfile );
 	bool resolveVirtualTextureMaterialAllocationCold( uint64_t nStableKey, uint32_t &rAllocationId ) const;
 	bool bakePreviewVirtualTexturesCold( godot::String *pError = NULL );
+	Dictionary forceRebakeVirtualTexturesCold( void );
+	Dictionary getForceRebakeVirtualTexturesStatusCold( void ) const;
 	void serviceColdCapacity( void );
 	Terrain3DRenderCoordinator( void ) = default;
 	~Terrain3DRenderCoordinator( void );
@@ -282,6 +296,7 @@ public:
 	void serviceShaderStartupOnRenderThread( uint32_t nStartupGeneration );
 	void acknowledgeStartupCancellationOnRenderThread( uint32_t nStartupGeneration );
 	void serviceStartupWorldPublicationOnRenderThread( uint32_t nStartupGeneration, uint64_t nSnapshotGeneration );
+	void consumeFragmentFeedbackOnRenderThread( const PackedByteArray &rBytes ) override;
 	void consumePreviewReadbackOnRenderThread( uint32_t nSlot, uint64_t nRequestGeneration, const PackedByteArray &rReadbackBytes );
 	bool publishStaticWorldCold( uint64_t nProducerId, const Terrain3DWorldPublication &rWorld );
 	void releaseStaticSceneDatabaseCold( uint64_t nProducerId );

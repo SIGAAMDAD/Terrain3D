@@ -8,6 +8,7 @@ class Terrain3DRenderCoordinatorAccess {
 protected:
 	~Terrain3DRenderCoordinatorAccess( void ) = default;
 public:
+	virtual void consumeFragmentFeedbackOnRenderThread( const godot::PackedByteArray & ) {}
 	virtual void render( godot::RenderData *pRenderData ) = 0;
 	virtual void shutdownRendererOnRenderThread( void ) = 0;
 	virtual void shutdownRendererLifecycleOnRenderThread( uint32_t nGeneration ) = 0;

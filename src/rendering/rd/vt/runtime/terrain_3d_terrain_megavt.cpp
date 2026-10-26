@@ -581,3 +581,17 @@ bool Terrain3DTerrainMegaVT::isReady() const
 {
 	return m_bAttached && m_pVirtualTexture != NULL && m_pVirtualTexture->is_initialized();
 }
+
+uint32_t Terrain3DTerrainMegaVT::requestForceRecookAllRegionsCold( void ) {
+	uint32_t count = 0u;
+	for ( uint32_t index = 0u; index < T3D_REGION_SLOTS; ++index ) {
+		const t3dTerrainMegaVTRegion_t &region = m_szRegions[index];
+		if ( ( region.m_nFlags & T3D_TERRAIN_MEGAVT_REGION_PRESENT ) == 0u ) { continue; }
+		const uint32_t pages = region.m_nMip0WidthPages * region.m_nMip0HeightPages;
+		const uint32_t mask = pages >= 32u ? UINT32_MAX : ( 1u << pages ) - 1u;
+		// A forced derived-data rebuild is not an authored source edit.
+		importPersistentEditorStateHot( index, region.m_nGeneration, mask );
+		++count;
+	}
+	return count;
+}

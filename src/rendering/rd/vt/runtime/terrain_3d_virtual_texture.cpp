@@ -3,6 +3,8 @@
 #include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"
 #include "core/utility/terrain_3d_checked_math.h"
 #include "core/utility/terrain_3d_generation.h"
+#include "core/utility/terrain_3d_hash_bytes.h"
+#include "rendering/rd/core/terrain_3d_rd_types.h"
 
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -33,6 +35,22 @@ static t3dVTPackRuntimeAllocator_t t3dVtRuntimePackAllocator( Terrain3DMemoryZon
 	Allocator.pAllocate = t3dVtRuntimePackAllocate;
 	Allocator.pFree = t3dVtRuntimePackFree;
 	return Allocator;
+}
+
+struct t3dVtWarmPackAllocator_t {
+	Terrain3DMemoryZone *m_pZone;
+	bool m_bDenied = false;
+};
+
+static void *t3dVtWarmPackAllocate( void *const pUser, const size_t nBytes, const size_t nAlignment ) {
+	auto &allocator = *( t3dVtWarmPackAllocator_t * )pUser;
+	void *const memory = allocator.m_pZone->allocate( nBytes, nAlignment );
+	allocator.m_bDenied |= memory == NULL;
+	return memory;
+}
+
+static void t3dVtWarmPackFree( void *const pUser, void *const pMemory ) {
+	( ( t3dVtWarmPackAllocator_t * )pUser )->m_pZone->deallocate( pMemory );
 }
 
 Terrain3DVirtualTexture::Terrain3DVirtualTexture() {
@@ -68,6 +86,7 @@ Terrain3DVirtualTexture::Terrain3DVirtualTexture() {
 	m_pRetiredPageSets = NULL;
 	m_pLastEvictedFrame = NULL;
 	m_pStagedRequests = NULL;
+	m_pStagedByPage = NULL;
 	m_nStagedRequestCount = 0u;
 	m_nStagedRequestFrame = UINT32_MAX;
 	m_pStreamScratch = NULL;
@@ -210,6 +229,10 @@ void Terrain3DVirtualTexture::cancel_startup_cold( const uint32_t nGeneration ) 
 godot::Dictionary Terrain3DVirtualTexture::get_startup_diagnostics() const {
 	Terrain3DScopedLock packageLock( m_packageMutex );
 	godot::Dictionary result;
+	result["fragment_requests_accepted"] = ( int64_t )m_Gpu.get_fragment_feedback_consumed();
+	result["fragment_requests_dropped"] = ( int64_t )m_Gpu.get_fragment_feedback_dropped();
+	result["fragment_misses"] = ( int64_t )m_Gpu.get_fragment_feedback_misses();
+	result["fragment_hash_overflow"] = ( int64_t )m_Gpu.get_fragment_feedback_overflow();
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
 	result["startup_generation"] = ( int64_t )( m_nStartupGeneration );
 	const t3dStartupStage_t eStartupStage = startup.m_eStage;
@@ -310,7 +333,21 @@ bool Terrain3DVirtualTexture::stagePackageWarm( const void *const pBytes, const 
 	++m_nWarmPublicationAttemptCount;
 	m_bWarmResourceRebuildRequired = false;
 	m_bWarmCandidateNeutral = nBytes == 0u;
-	bool bValid = m_bWarmCandidateNeutral || open_package_candidate( pBytes, nBytes, m_WarmCandidate );
+	t3dVtWarmPackAllocator_t allocation{ m_pRuntimeAllocatorZone };
+	const t3dVTPackRuntimeAllocator_t allocator{ &allocation, t3dVtWarmPackAllocate, t3dVtWarmPackFree };
+	bool bValid = m_bWarmCandidateNeutral || t3d_vt_pack_runtime_open_cold( pBytes, nBytes, allocator, m_WarmCandidate );
+	const char *failure_stage = allocation.m_bDenied ? "candidate runtime storage capacity" : "candidate package validation";
+	if ( allocation.m_bDenied ) {
+		// A validated package may fit alone but not alongside the retained live
+		// package. Use the existing controlled rebuild/rollback transaction.
+		m_bWarmResourceRebuildRequired = true;
+	}
+	if ( bValid && !m_bWarmCandidateNeutral ) {
+		t3dVTQualityRuntimeStats_t quality{};
+		bValid = t3d_vt_pack_runtime_apply_quality_profile_v3( m_WarmCandidate.Database, m_WarmCandidate.pRuntimeAllocations,
+		        m_WarmCandidate.Database.pHeader->nAllocationCount, m_nRequestedQualityProfile, quality );
+		failure_stage = "candidate quality profile";
+	}
 	if ( bValid && !m_bWarmCandidateNeutral ) {
 		uint32_t nHeight = 0u;
 		const bool bLimitsFit = validate_package_limits( m_WarmCandidate );
@@ -318,13 +355,16 @@ bool Terrain3DVirtualTexture::stagePackageWarm( const void *const pBytes, const 
 		        m_WarmCandidate.Database.nRuntimeTailCount, nHeight )
 		        && nHeight <= m_Gpu.get_cpu_resource_plan().nVtTailAtlasHeight;
 		m_bWarmResourceRebuildRequired = !bLimitsFit || !bTailsFit;
+		failure_stage = !bLimitsFit ? "runtime table capacity" : "tail atlas capacity";
 		bValid = bLimitsFit && bTailsFit;
 	}
 	if ( !bValid ) {
 		t3d_vt_pack_runtime_release_cold( t3dVtRuntimePackAllocator( m_pRuntimeAllocatorZone ), m_WarmCandidate );
 		++m_nWarmPublicationFailureCount;
 		godot::UtilityFunctions::print( "[Terrain3D][VT] WARM PACKAGE REJECTED publication_generation=",
-		        m_nPackagePublicationGeneration, " resource_rebuild_required=", m_bWarmResourceRebuildRequired );
+		        m_nPackagePublicationGeneration, " resource_rebuild_required=", m_bWarmResourceRebuildRequired,
+		        " reason=", failure_stage, " candidate_bytes=", nBytes,
+		        " runtime_free_extent_bytes=", m_pRuntimeAllocatorZone->freeExtentBytes() );
 		return false;
 	}
 	m_bWarmPackagePending = true;
@@ -521,6 +561,7 @@ bool Terrain3DVirtualTexture::allocate_cpu_image_cold() {
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nMaxVtPhysicalPageSets * sizeof( uint32_t );
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nMaxVtPhysicalPageSets * sizeof( t3dVTRetiredPageSet_t );
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint32_t );
+	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint32_t );
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nMaxVtRequests * sizeof( t3dVTStagedRequest_t );
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nStreamScratchLaneCount * m_Limits.nStreamScratchBytesPerLane;
 	nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )m_Limits.nStreamScratchLaneCount * sizeof( uint32_t );
@@ -574,6 +615,10 @@ bool Terrain3DVirtualTexture::allocate_cpu_image_cold() {
 	m_pLastEvictedFrame = ( uint32_t * )( pBase + nOffset );
 	nOffset += ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint32_t );
 	nOffset = t3dAlignUpOrZero<uint64_t>( nOffset, 64u );
+	m_pStagedByPage = ( uint32_t * )( pBase + nOffset );
+	nOffset += ( uint64_t )m_Limits.nMaxVtVirtualPages * sizeof( uint32_t );
+	memset( m_pStagedByPage, 0xff, ( size_t )m_Limits.nMaxVtVirtualPages * sizeof( uint32_t ) );
+	nOffset = t3dAlignUpOrZero<uint64_t>( nOffset, 64u );
 	m_pStagedRequests = ( t3dVTStagedRequest_t * )( pBase + nOffset );
 	nOffset += ( uint64_t )m_Limits.nMaxVtRequests * sizeof( t3dVTStagedRequest_t );
 	m_nStagedRequestCount = 0u;
@@ -608,6 +653,7 @@ void Terrain3DVirtualTexture::release_cpu_image_cold() {
 	m_pRetiredPageSets = NULL;
 	m_pLastEvictedFrame = NULL;
 	m_pStagedRequests = NULL;
+	m_pStagedByPage = NULL;
 	m_nStagedRequestCount = 0u;
 	m_nStagedRequestFrame = UINT32_MAX;
 	m_pStreamScratch = NULL;
@@ -808,6 +854,13 @@ bool Terrain3DVirtualTexture::prepare_cpu_cold( const t3dWorldLimits_t &pLimits,
 		shutdown_cold();
 		return false;
 	}
+	// Persistent dispatch and fixed scratch lanes are prepared before the hot seal.
+	if ( !m_streamWorker.joinable() ) {
+		m_bStreamWorkerStop = false;
+		m_nStreamWorkerHead = 0u;
+		m_nStreamWorkerCount = 0u;
+		m_streamWorker = Terrain3DThread( &Terrain3DVirtualTexture::streamWorkerMain, this );
+	}
 	m_bCpuPrepared = true;
 	if ( bTrackStartup ) {
 		t3dStartupDomainSetCompletedUnits( m_startupState, 1u );
@@ -964,6 +1017,9 @@ bool Terrain3DVirtualTexture::service_initial_publication_cold( const uint64_t n
 
 
 void Terrain3DVirtualTexture::shutdown_cold( const bool bPreserveTailStaging ) {
+	// Cold teardown may join; the render service only polls lane completion.
+	// Keep the old database, job records and scratch image alive until this drain.
+	stopStreamWorkerCold();
 	abortPackageRepublishWarm();
 	m_bInitialPublicationStarted = false;
 	m_bWarmRollbackReady = true;
@@ -973,6 +1029,7 @@ void Terrain3DVirtualTexture::shutdown_cold( const bool bPreserveTailStaging ) {
 		++m_Stats.nShutdownCount;
 	}
 	m_bHotSealed = false;
+	for ( uint32_t i = 0u; i < 3u; ++i ) { m_szDemandRefreshFrame[i] = UINT32_MAX; }
 	m_bCpuPrepared = false;
 	m_bGpuStoragePrepared = false;
 	m_bExecutableBound = false;
@@ -1323,6 +1380,58 @@ t3dVTFinalTelemetry_t Terrain3DVirtualTexture::get_final_telemetry_reference_deb
 	return Result;
 }
 
+bool Terrain3DVirtualTexture::shouldRefreshMaterialDemandHot( const uint32_t nLane,
+        const t3dRdForwardPassContext_s &rContext, const uint64_t nSourceSignature ) {
+	if ( nLane >= 3u || !m_bInitialized || m_bWarmPackagePending ) { return false; }
+	uint64_t signature = t3dHashCombine64( nSourceSignature, rContext.m_nViewportKey );
+	signature = t3dHashCombine64( signature, m_nQualityGeneration );
+	signature = t3dHashCombine64( signature, m_Residency.nDatabaseGeneration );
+	// Newly resident pages do not change the view's desired footprint. Re-scan
+	// on storage replacement or eviction, not after each ordinary upload batch.
+	signature = t3dHashCombine64( signature, m_Stats.nPhysicalCacheCreateEpoch );
+	signature = t3dHashCombine64( signature, m_Residency.Stats.nEvictionCount );
+	signature = t3dHashCombine64( signature, rContext.m_nCameraVisibleLayers );
+	signature = t3dHashCombine64( signature, rContext.m_nViewCount );
+	signature = t3dHashFnv1a64( &rContext.m_cameraTransform, sizeof( rContext.m_cameraTransform ), signature );
+	signature = t3dHashFnv1a64( &rContext.m_renderSize, sizeof( rContext.m_renderSize ), signature );
+	// Exclude temporal projection jitter; a periodic sweep also covers FOV and
+	// demand that was displaced by admission limits, without forgetting evictions.
+	const uint32_t frame = ( uint32_t )rContext.m_nRenderFrame;
+	const uint32_t period = nLane == 1u ? 4u : 8u;
+	if ( m_szDemandRefreshFrame[nLane] != UINT32_MAX && m_szDemandSignature[nLane] == signature
+	        && frame - m_szDemandRefreshFrame[nLane] < period ) { return false; }
+	m_szDemandSignature[nLane] = signature;
+	m_szDemandRefreshFrame[nLane] = frame;
+	return true;
+}
+
+static void t3dVtRestoreStagedPriorityHeap( t3dVTStagedRequest_t *requests, uint32_t *by_page,
+        const uint32_t count, uint32_t index ) {
+	auto swap_requests = [requests, by_page]( const uint32_t a, const uint32_t b ) {
+		const t3dVTStagedRequest_t temporary = requests[a];
+		requests[a] = requests[b];
+		requests[b] = temporary;
+		by_page[requests[a].Request.nVirtualPage] = a;
+		by_page[requests[b].Request.nVirtualPage] = b;
+	};
+	while ( index > 0u ) {
+		const uint32_t parent = ( index - 1u ) / 2u;
+		if ( requests[parent].Request.nPriority <= requests[index].Request.nPriority ) { break; }
+		swap_requests( parent, index );
+		index = parent;
+	}
+	for ( ;; ) {
+		uint32_t lowest = index;
+		const uint32_t left = index * 2u + 1u;
+		const uint32_t right = left + 1u;
+		if ( left < count && requests[left].Request.nPriority < requests[lowest].Request.nPriority ) { lowest = left; }
+		if ( right < count && requests[right].Request.nPriority < requests[lowest].Request.nPriority ) { lowest = right; }
+		if ( lowest == index ) { break; }
+		swap_requests( index, lowest );
+		index = lowest;
+	}
+}
+
 uint32_t Terrain3DVirtualTexture::stage_material_footprint_hot( const uint32_t nAllocationId,
         const uint32_t nFrameId,
         const float pUvMin[2],
@@ -1330,7 +1439,8 @@ uint32_t Terrain3DVirtualTexture::stage_material_footprint_hot( const uint32_t n
         const uint16_t nWantedMip,
         const uint32_t nMaxRequests,
         const uint16_t nPriority,
-        const t3dVTRequestProducer_t eProducer ) {
+        const t3dVTRequestProducer_t eProducer,
+        const uint32_t nFootprintWindow ) {
 	if ( !m_bInitialized || !m_Streaming.bInitialized || m_pStagedRequests == NULL || nMaxRequests == 0u
 	        || nAllocationId >= m_Residency.nAllocationCount || m_Residency.Buffers.pAllocations == NULL
 	        || eProducer >= T3D_VT_REQUEST_PRODUCER_COUNT ) {
@@ -1345,61 +1455,92 @@ uint32_t Terrain3DVirtualTexture::stage_material_footprint_hot( const uint32_t n
 	const uint32_t nBaseMip = t3d_vt_allocation_quality_base_mip( allocation.m_nFlags );
 	const uint16_t nAdjustedMip = ( uint16_t )( nBaseMip + nWantedMip < allocation.m_nMipCount ? nBaseMip + nWantedMip : allocation.m_nMipCount - 1u );
 	t3dVTPredictedPageRect_t rect;
-	if ( !t3d_vt_predict_page_rect_reference_debug( allocation, pUvMin, pUvMax, nAdjustedMip, nMaxRequests, rect ) ) {
+	const bool bInstance = eProducer == T3D_VT_REQUEST_PRODUCER_INSTANCE;
+	if ( !t3d_vt_predict_page_rect_reference_debug( allocation, pUvMin, pUvMax, nAdjustedMip,
+	             bInstance ? UINT32_MAX : nMaxRequests, rect ) ) {
 		return 0u;
 	}
-	const uint32_t nAvailableFrameRequests =
-	        m_nStagedRequestCount < m_nFrameRequestBudget ? m_nFrameRequestBudget - m_nStagedRequestCount : 0u;
-	const uint32_t nRequestLimit = MIN( nMaxRequests, nAvailableFrameRequests );
+	// Admission can be full while visible resident pages still need a hot touch.
+	const uint32_t nRequestLimit = nMaxRequests;
 	uint32_t nAttempted = 0u;
-	for ( uint32_t y = rect.nMinPageY; y <= rect.nMaxPageY && nAttempted < nRequestLimit; ++y ) {
-		for ( uint32_t x = rect.nMinPageX; x <= rect.nMaxPageX && nAttempted < nRequestLimit; ++x ) {
-			uint32_t nVirtualPage = T3D_VT_INVALID_PAGE;
-			if ( !t3d_vt_allocation_page_id( allocation, rect.nMip, x, y, nVirtualPage ) ) {
-				continue;
+	const uint32_t nRectWidth = rect.nMaxPageX - rect.nMinPageX + 1u;
+	const uint32_t nRectPages = nRectWidth * ( rect.nMaxPageY - rect.nMinPageY + 1u );
+	const uint32_t nWindowPages = MIN( nRequestLimit, nRectPages );
+	// Advance by a candidate sweep in the unified lane, where a footprint need not be visited every frame.
+	// This avoids repeating the same page window when the scan period divides the rectangle size.
+	const uint32_t nWindow = nFootprintWindow == UINT32_MAX ? nFrameId : nFootprintWindow;
+	const uint32_t nStartPage = bInstance && nRectPages > nWindowPages
+	        ? ( uint32_t )( ( uint64_t )nWindow * nWindowPages % nRectPages ) : 0u;
+	for ( uint32_t iPage = 0u; iPage < nWindowPages; ++iPage ) {
+		const uint32_t nRectPage = ( nStartPage + iPage ) % nRectPages;
+		const uint32_t x = rect.nMinPageX + nRectPage % nRectWidth;
+		const uint32_t y = rect.nMinPageY + nRectPage / nRectWidth;
+		uint32_t nVirtualPage = T3D_VT_INVALID_PAGE;
+		if ( !t3d_vt_allocation_page_id( allocation, rect.nMip, x, y, nVirtualPage ) ) {
+			continue;
+		}
+		++nAttempted;
+		if ( ( nFrameId & 63u ) == 0u ) {
+			if ( m_nResolverTelemetrySampleFrame != nFrameId ) {
+				m_nResolverTelemetrySampleFrame = nFrameId;
+				m_nResolverTelemetrySamplesThisFrame = 0u;
 			}
-			++nAttempted;
-			if ( ( nFrameId & 63u ) == 0u ) {
-				if ( m_nResolverTelemetrySampleFrame != nFrameId ) {
-					m_nResolverTelemetrySampleFrame = nFrameId;
-					m_nResolverTelemetrySamplesThisFrame = 0u;
-				}
-				if ( m_nResolverTelemetrySamplesThisFrame < 32u ) {
-					++m_nResolverTelemetrySamplesThisFrame;
-					t3dVTResolveResult_t Resolve = {};
-					if ( t3d_vt_resolve_allocation_page_reference_debug(
-					             m_Residency, nAllocationId, nVirtualPage, ( uint16_t )rect.nMip, Resolve ) ) {
-						if ( ( Resolve.m_nFlags & T3D_VT_RESOLVE_TAIL ) != 0u ) {
-							++m_nResolverTailSamples;
-						} else if ( Resolve.m_nFallbackDepth == 0u ) {
-							++m_nResolverDepth0Samples;
-						} else if ( Resolve.m_nFallbackDepth == 1u ) {
-							++m_nResolverDepth1Samples;
-						} else if ( Resolve.m_nFallbackDepth <= 3u ) {
-							++m_nResolverDepth2To3Samples;
-						} else {
-							++m_nResolverDepth4PlusSamples;
-						}
+			if ( m_nResolverTelemetrySamplesThisFrame < 32u ) {
+				++m_nResolverTelemetrySamplesThisFrame;
+				t3dVTResolveResult_t Resolve = {};
+				if ( t3d_vt_resolve_allocation_page_reference_debug(
+				             m_Residency, nAllocationId, nVirtualPage, ( uint16_t )rect.nMip, Resolve ) ) {
+					if ( ( Resolve.m_nFlags & T3D_VT_RESOLVE_TAIL ) != 0u ) {
+						++m_nResolverTailSamples;
+					} else if ( Resolve.m_nFallbackDepth == 0u ) {
+						++m_nResolverDepth0Samples;
+					} else if ( Resolve.m_nFallbackDepth == 1u ) {
+						++m_nResolverDepth1Samples;
+					} else if ( Resolve.m_nFallbackDepth <= 3u ) {
+						++m_nResolverDepth2To3Samples;
+					} else {
+						++m_nResolverDepth4PlusSamples;
 					}
 				}
 			}
-			// Visible resident pages still refresh the existing hot/warm hysteresis;
-			// only misses enter the shared CPU admission phase.
-			if ( t3d_vt_touch_page_hot( m_Residency, nVirtualPage, nFrameId ) ) {
-				++m_Streaming.Stats.nPageHitCount;
-				++m_Streaming.Stats.nResidentRequestCount;
-				continue;
-			}
-			if ( m_nStagedRequestCount >= m_Limits.nMaxVtRequests ) {
-				continue;
-			}
-			t3dVTStagedRequest_t &staged = m_pStagedRequests[m_nStagedRequestCount++];
-			staged.Request.nVirtualPage = nVirtualPage;
-			staged.Request.nWantedMip = ( uint16_t )rect.nMip;
-			staged.Request.nPriority = nPriority;
-			staged.nProducer = ( uint16_t )eProducer;
-			staged.nReserved = 0u;
 		}
+		// Visible resident pages still refresh the existing hot/warm hysteresis;
+		// only misses enter the shared CPU admission phase.
+		if ( t3d_vt_touch_page_hot( m_Residency, nVirtualPage, nFrameId ) ) {
+			++m_Streaming.Stats.nPageHitCount;
+			++m_Streaming.Stats.nResidentRequestCount;
+			continue;
+		}
+		if ( nVirtualPage >= m_Limits.nMaxVtVirtualPages ) { continue; }
+		const uint32_t existing_index = m_pStagedByPage[nVirtualPage];
+		// Validate the index against this frame's array; old-frame and displaced
+		// entries need no full-table clear on the hot path.
+		if ( existing_index < m_nStagedRequestCount
+		        && m_pStagedRequests[existing_index].Request.nVirtualPage == nVirtualPage ) {
+			t3dVTStagedRequest_t &existing = m_pStagedRequests[existing_index];
+			if ( nPriority > existing.Request.nPriority ) { existing.nProducer = ( uint16_t )eProducer; }
+			existing.Request.nPriority = MAX( existing.Request.nPriority, nPriority );
+			existing.Request.nWantedMip = MIN( existing.Request.nWantedMip, ( uint16_t )rect.nMip );
+			t3dVtRestoreStagedPriorityHeap( m_pStagedRequests, m_pStagedByPage, m_nStagedRequestCount, existing_index );
+			continue;
+		}
+		uint32_t nStagedIndex = m_nStagedRequestCount;
+		if ( m_nStagedRequestCount >= ( m_nFrameRequestBudget - MIN( m_nFrameRequestBudget, m_nFragmentRequestFrame == nFrameId ? m_nFragmentRequestsUsed : 0u ) ) || m_nStagedRequestCount >= m_Limits.nMaxVtRequests ) {
+			// Close visible demand may displace lower-priority prediction, within
+			// the same staging budget. Streaming still owns admission and eviction.
+			if ( m_nStagedRequestCount == 0u || m_pStagedRequests[0].Request.nPriority >= nPriority ) { continue; }
+			nStagedIndex = 0u;
+		} else {
+			++m_nStagedRequestCount;
+		}
+		m_pStagedByPage[nVirtualPage] = nStagedIndex;
+		t3dVTStagedRequest_t &staged = m_pStagedRequests[nStagedIndex];
+		staged.Request.nVirtualPage = nVirtualPage;
+		staged.Request.nWantedMip = ( uint16_t )rect.nMip;
+		staged.Request.nPriority = nPriority;
+		staged.nProducer = ( uint16_t )eProducer;
+		staged.nReserved = 0u;
+		t3dVtRestoreStagedPriorityHeap( m_pStagedRequests, m_pStagedByPage, m_nStagedRequestCount, nStagedIndex );
 	}
 	return nAttempted;
 }
@@ -1521,4 +1662,95 @@ uint64_t Terrain3DVirtualTexture::service_uploads_hot( const uint32_t pFrameId )
 
 bool Terrain3DVirtualTexture::service_retired_slots_hot( const uint32_t pFrameId ) {
 	return m_bInitialized && m_bHotSealed && m_Gpu.service_retired_slots_hot( m_Residency, pFrameId );
+}
+
+void Terrain3DVirtualTexture::service_fragment_feedback_hot( const uint32_t nFrameId ) {
+	if ( !m_bInitialized || !m_Streaming.bInitialized || m_nFragmentRequestFrame == nFrameId ) { return; }
+	m_nFragmentRequestFrame = nFrameId;
+	m_nFragmentRequestsUsed = m_Gpu.service_fragment_feedback_hot( m_Residency, m_Streaming, nFrameId, m_nFrameRequestBudget );
+}
+
+static bool t3dVtCopyResidentPackagePayloadHot( const t3dVTDatabaseView_t &rDatabase,
+        const t3dVTStreamJob_t &rJob, uint8_t *pScratch, const uint32_t nScratchBytes,
+        uint32_t &rDecodedBytes, void * ) {
+	rDecodedBytes = 0u;
+	if ( rDatabase.pHeader == NULL || rDatabase.pPayloads == NULL || rDatabase.pPayloadData == NULL
+	        || rJob.nPayloadId >= rDatabase.pHeader->nPayloadCount || rJob.nReadBytes > nScratchBytes
+	        || rJob.nReadOffset > rDatabase.pHeader->nPayloadDataBytes
+	        || rJob.nReadBytes > rDatabase.pHeader->nPayloadDataBytes - rJob.nReadOffset ) { return false; }
+	const t3dVTPayloadRecord_t &payload = rDatabase.pPayloads[rJob.nPayloadId];
+	if ( rDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ) {
+		if ( rDatabase.pRuntimePayloads == NULL || rJob.nPayloadId >= rDatabase.nRuntimePayloadCount
+		        || rDatabase.pHeader->nInteriorTexels != T3D_VT_PAGE_INTERIOR
+		        || rDatabase.pHeader->nGutterTexels != T3D_VT_PAGE_GUTTER ) { return false; }
+		const t3dVTRuntimePayloadRecord_t &physical = rDatabase.pRuntimePayloads[rJob.nPayloadId];
+		const uint32_t tile_bytes = t3d_vt_pack_expected_physical_tile_bytes_v3( physical.nChannel );
+		if ( tile_bytes == 0u || physical.nChannel != rJob.nChannel || physical.nBytes != tile_bytes
+		        || physical.nOffset != rJob.nReadOffset || rJob.nExpectedDecodedBytes != tile_bytes ) { return false; }
+	}
+	// Package open already validated checksums and supports uncompressed
+	// clusters only. These are bounded memory copies, with no file/GPU waits.
+	if ( payload.nCodec != T3D_VT_PACK_CODEC_NONE || payload.nOffset != rJob.nReadOffset
+	        || payload.nCompressedBytes != rJob.nReadBytes || payload.nDecodedBytes != rJob.nReadBytes
+	        || payload.nDecodedBytes != rJob.nExpectedDecodedBytes ) { return false; }
+	memcpy( pScratch, rDatabase.pPayloadData + rJob.nReadOffset, rJob.nReadBytes );
+	rDecodedBytes = rJob.nReadBytes;
+	return true;
+}
+
+void Terrain3DVirtualTexture::streamWorkerMain( void ) {
+	for ( ;; ) {
+		uint32_t job = T3D_VT_INVALID_ID;
+		{
+			Terrain3DUniqueLock lock( m_streamWorkerMutex );
+			while ( m_nStreamWorkerCount == 0u && !m_bStreamWorkerStop ) { m_streamWorkerCondition.wait( lock ); }
+			if ( m_nStreamWorkerCount == 0u && m_bStreamWorkerStop ) { return; }
+			job = m_szStreamWorkerJobs[m_nStreamWorkerHead];
+			m_nStreamWorkerHead = ( m_nStreamWorkerHead + 1u ) % T3D_VT_MAX_STREAM_SCRATCH_LANES;
+			--m_nStreamWorkerCount;
+		}
+		// Only this claimed record and its fixed scratch lane are mutable here.
+		// The streaming executor release-publishes completion as its last access.
+		( void )t3d_vt_streaming_execute_job_async( m_Streaming, job, t3dVtCopyResidentPackagePayloadHot, NULL );
+	}
+}
+
+bool Terrain3DVirtualTexture::dispatchStreamJobHot( const uint32_t nJob ) {
+	if ( !m_streamWorker.joinable() ) { return false; }
+	{
+		Terrain3DScopedLock lock( m_streamWorkerMutex );
+		if ( m_bStreamWorkerStop || m_nStreamWorkerCount >= T3D_VT_MAX_STREAM_SCRATCH_LANES ) { return false; }
+		m_szStreamWorkerJobs[( m_nStreamWorkerHead + m_nStreamWorkerCount ) % T3D_VT_MAX_STREAM_SCRATCH_LANES] = nJob;
+		++m_nStreamWorkerCount;
+	}
+	m_streamWorkerCondition.notifyOne();
+	return true;
+}
+
+void Terrain3DVirtualTexture::stopStreamWorkerCold( void ) {
+	if ( !m_streamWorker.joinable() ) { return; }
+	{
+		Terrain3DScopedLock lock( m_streamWorkerMutex );
+		m_bStreamWorkerStop = true;
+	}
+	m_streamWorkerCondition.notifyAll();
+	m_streamWorker.join();
+}
+
+void Terrain3DVirtualTexture::service_streaming_hot( const uint32_t nFrameId ) {
+	if ( !m_bInitialized || !m_bHotSealed || m_bWarmPackagePending || m_nStreamingServiceFrame == nFrameId ) { return; }
+	m_nStreamingServiceFrame = nFrameId;
+	( void )service_retired_slots_hot( nFrameId );
+	// Release completed scratch lanes before admitting replacement work.
+	( void )service_uploads_hot( nFrameId );
+	uint64_t remaining = m_Streaming.Limits.nMaxUploadBytesPerFrame;
+	const uint32_t work_limit = MIN( m_Streaming.Limits.nMaxPageSetsPerFrame, m_Streaming.Limits.nMaxInFlightIoJobs );
+	for ( uint32_t i = 0u; i < work_limit; ++i ) {
+		uint32_t job = T3D_VT_INVALID_ID;
+		if ( !claim_stream_job_owner_hot( job ) ) { break; }
+		const uint32_t bytes = m_Streaming.Buffers.pJobs[job].nReadBytes;
+		if ( bytes > remaining ) { ( void )cancel_stream_job_owner_hot( job ); break; }
+		remaining -= bytes;
+		if ( !dispatchStreamJobHot( job ) ) { ( void )cancel_stream_job_owner_hot( job ); break; }
+	}
 }

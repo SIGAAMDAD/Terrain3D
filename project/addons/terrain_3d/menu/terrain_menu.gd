@@ -23,6 +23,9 @@ var baker: LodBaker = LodBaker.new()
 var _runtime_page_cook_confirm: ConfirmationDialog
 var _runtime_page_migrate_confirm: ConfirmationDialog
 var _runtime_page_cook_result: AcceptDialog
+var _vt_rebake_timer: Timer
+var _vt_rebake_terrain: Terrain3D
+var _vt_rebake_result: AcceptDialog
 
 # These are IDs and order must remain consistent with add_item and set_disabled calls.
 enum {
@@ -92,7 +95,7 @@ func _enter_tree() -> void:
 
 	_set_item_tooltip(popup, MENU_DIRECTORY_SETUP, "Choose the directory containing Terrain3D region resources.")
 	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Bake independent lightmaps for every authored Terrain3D region in the active data directory.")
-	_set_item_tooltip(popup, MENU_BAKE_VIRTUAL_TEXTURES, "Incrementally bake dirty V3 virtual-texture allocations/channels and publish the refreshed authoring package without discarding the VT cache.")
+	_set_item_tooltip(popup, MENU_BAKE_VIRTUAL_TEXTURES, "Bypass caches, rebuild every VT material and MegaVT fragment, republish the preview, and save terrain3d_instances.t3dvt.")
 	_set_item_tooltip(popup, MENU_HLOD, "Analyze, bake, validate, and preview Terrain3D hierarchical LOD proxies.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
 	_set_item_tooltip(popup, MENU_MIGRATE_RUNTIME_PAGES, "Scan only runtime-page headers and regenerate legacy .t3dpage files from authoritative region resources. Current pages are left untouched.")
@@ -162,27 +165,54 @@ func _bake_virtual_textures() -> void:
 	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain):
 		push_error("Select a Terrain3D node before baking virtual textures")
 		return
-	var result: Dictionary = plugin.terrain.bake_virtual_textures()
-	var complete: bool = bool(result.get("complete", false))
+	if is_instance_valid(_vt_rebake_timer):
+		_vt_rebake_timer.stop()
+	_vt_rebake_terrain = plugin.terrain
+	var result: Dictionary = _vt_rebake_terrain.force_rebake_virtual_textures()
+	_show_vt_rebake_result(result, true)
+	if _vt_rebake_timer == null:
+		_vt_rebake_timer = Timer.new()
+		_vt_rebake_timer.wait_time = 0.5
+		_vt_rebake_timer.timeout.connect(_poll_vt_rebake)
+		add_child(_vt_rebake_timer)
+	if String(result.get("state", "failed")) not in ["saved", "failed"]:
+		_vt_rebake_timer.start()
+
+
+func _poll_vt_rebake() -> void:
+	if not is_instance_valid(_vt_rebake_terrain):
+		_vt_rebake_timer.stop()
+		return
+	var result: Dictionary = _vt_rebake_terrain.get_force_rebake_virtual_textures_status()
+	_show_vt_rebake_result(result)
+	if String(result.get("state", "")) in ["saved", "failed"]:
+		_vt_rebake_timer.stop()
+
+
+func _show_vt_rebake_result(result: Dictionary, open_dialog: bool = false) -> void:
 	var lines: PackedStringArray = PackedStringArray([
-		"Status: %s" % ("COMPLETE" if complete else "FAILED"),
-		"Dirty allocations: %d" % int(result.get("dirty_allocations", 0)),
-		"Cache hits / misses: %d / %d" % [int(result.get("cache_hits", 0)), int(result.get("cache_misses", 0))],
+		"Status: %s" % String(result.get("state", "queued")).to_upper(),
+		"Request / completion serial: %d / %d" % [int(result.get("request_serial", 0)), int(result.get("completion_serial", 0))],
+		"Forced material allocations: %d" % int(result.get("forced_material_allocations", 0)),
+		"Forced MegaVT regions: %d" % int(result.get("forced_megavt_regions", 0)),
 		"Package generation: %d" % int(result.get("package_generation", 0)),
-		"Package bytes: %d" % int(result.get("package_bytes", 0)),
-		"Publication queued: %s" % ("YES" if bool(result.get("republish_queued", false)) else "NO"),
-		"Publication pending: %s" % ("YES" if bool(result.get("republish_pending", false)) else "NO"),
-		"Cook ms (extract/filter/page/encode/pack): %.2f / %.2f / %.2f / %.2f / %.2f" % [
-			float(result.get("cook_ms_extract", 0.0)), float(result.get("cook_ms_filter", 0.0)),
-			float(result.get("cook_ms_page", 0.0)), float(result.get("cook_ms_encode", 0.0)),
-			float(result.get("cook_ms_pack", 0.0)),
-		],
+		"Publication serial: %d" % int(result.get("publication_serial", 0)),
+		"Output: %s" % String(result.get("output_path", "")),
 	])
 	var error_text: String = String(result.get("error", ""))
 	if not error_text.is_empty():
-		lines.append("")
 		lines.append("Error: %s" % error_text)
-	_show_runtime_page_result("Terrain3D Virtual Texture Bake", "\n".join(lines))
+	if not is_instance_valid(_vt_rebake_result):
+		_vt_rebake_result = AcceptDialog.new()
+		_vt_rebake_result.title = "Terrain3D Virtual Texture Rebuild"
+		_vt_rebake_result.ok_button_text = "Close"
+		_vt_rebake_result.min_size = Vector2i(600, 300)
+		add_child(_vt_rebake_result)
+	_vt_rebake_result.dialog_text = "\n".join(lines)
+	# Polling updates progress without reopening a dismissed dialog or replacing
+	# the results of a different menu action. Only a new bake click opens it.
+	if open_dialog and not _vt_rebake_result.visible:
+		_vt_rebake_result.popup_centered()
 
 
 func _open_runtime_page_migrate_confirmation() -> void:
@@ -361,7 +391,8 @@ func _show_runtime_page_result(dialog_title: String, dialog_text: String) -> voi
 		add_child(_runtime_page_cook_result)
 	_runtime_page_cook_result.title = dialog_title
 	_runtime_page_cook_result.dialog_text = dialog_text
-	_runtime_page_cook_result.popup_centered()
+	if not _runtime_page_cook_result.visible:
+		_runtime_page_cook_result.popup_centered()
 
 
 func _on_menu_about_to_popup() -> void:

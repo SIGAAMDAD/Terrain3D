@@ -149,6 +149,8 @@ private:
 	t3dPerformanceTarget_t m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 	t3dPerformanceProfileStatus_t m_performanceProfileStatus = PERFORMANCE_PROFILE_CUSTOM;
 	uint32_t m_nVirtualTextureQualityProfile = 2u; // Normal
+	float m_szInstanceTextureMipBias[3] = {};
+	int32_t m_szInstanceTextureFiltering[3] = { -1, -1, -1 }; // -1 inherits the material filter
 	bool m_bApplyingPerformanceTarget = false;
 	bool m_bPerformanceProfileMaterialPendingApply = false;
 	// Runtime settings remain stored in every mode. Authoring changes only the
@@ -713,6 +715,26 @@ public:
 	}
 	void setPerformanceTarget( const t3dPerformanceTarget_t target );
 	void setVirtualTextureQualityProfile( int nProfile );
+	void setInstanceTextureMipBias( uint32_t nCategory, float fBias );
+	void setInstanceTextureFiltering( uint32_t nCategory, int nFilter );
+	EA_FORCE_INLINE void setClutterTextureFiltering( int nFilter ) { setInstanceTextureFiltering( 0u, nFilter ); }
+	EA_FORCE_INLINE void setGroundCoverTextureFiltering( int nFilter ) { setInstanceTextureFiltering( 1u, nFilter ); }
+	EA_FORCE_INLINE void setOccluderTextureFiltering( int nFilter ) { setInstanceTextureFiltering( 2u, nFilter ); }
+	EA_FORCE_INLINE int getClutterTextureFiltering() const { return m_szInstanceTextureFiltering[0]; }
+	EA_FORCE_INLINE int getGroundCoverTextureFiltering() const { return m_szInstanceTextureFiltering[1]; }
+	EA_FORCE_INLINE int getOccluderTextureFiltering() const { return m_szInstanceTextureFiltering[2]; }
+	// Three 4-bit choices: 0 inherits, 1..6 select the corresponding VT filter plus one.
+	EA_FORCE_INLINE uint32_t getInstanceTextureFilterOverrides() const override {
+		return ( uint32_t )( m_szInstanceTextureFiltering[0] + 1 )
+		        | ( ( uint32_t )( m_szInstanceTextureFiltering[1] + 1 ) << 4u )
+		        | ( ( uint32_t )( m_szInstanceTextureFiltering[2] + 1 ) << 8u );
+	}
+	EA_FORCE_INLINE void setClutterTextureMipBias( float fBias ) { setInstanceTextureMipBias( 0u, fBias ); }
+	EA_FORCE_INLINE void setGroundCoverTextureMipBias( float fBias ) { setInstanceTextureMipBias( 1u, fBias ); }
+	EA_FORCE_INLINE void setOccluderTextureMipBias( float fBias ) { setInstanceTextureMipBias( 2u, fBias ); }
+	EA_FORCE_INLINE float getClutterTextureMipBias() const override { return m_szInstanceTextureMipBias[0]; }
+	EA_FORCE_INLINE float getGroundCoverTextureMipBias() const override { return m_szInstanceTextureMipBias[1]; }
+	EA_FORCE_INLINE float getOccluderTextureMipBias() const override { return m_szInstanceTextureMipBias[2]; }
 	EA_FORCE_INLINE int getVirtualTextureQualityProfile( void ) const
 	{
 		return (int)m_nVirtualTextureQualityProfile;
@@ -1743,6 +1765,8 @@ public:
 	Dictionary getRdRendererDiagnostics( void ) const;
 	Dictionary getGpuUploadDiagnostics(void) const;
 	Dictionary bakeVirtualTextures( void );
+	Dictionary forceRebakeVirtualTextures( void );
+	Dictionary getForceRebakeVirtualTexturesStatus( void ) const;
 	Ref<Image> createRdMeshPreview( uint16_t nAssetId, const Vector2i& rSize, t3dRdPreviewFailure_t *pFailure = NULL );
 	bool requestRdMeshPreviewAsync( uint16_t nAssetId,
 	                                const Vector2i& rSize,

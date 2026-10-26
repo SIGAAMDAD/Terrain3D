@@ -9,6 +9,7 @@
 #include "rendering/rd/vt/streaming/terrain_3d_vt_streaming.h"
 
 #include <godot_cpp/variant/callable.hpp>
+#include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_uniform_set.h"
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
@@ -63,6 +64,15 @@ public:
 	bool is_storage_ready() const;
 	bool is_executable_ready() const;
 	bool is_readback_enabled() const;
+	bool has_fragment_feedback_callback() const { return m_feedbackCallback.is_valid(); }
+	void set_fragment_feedback_callback_cold( const godot::Callable &rCallback ) { m_feedbackCallback = rCallback; }
+	void consume_fragment_feedback_readback_hot( const godot::PackedByteArray &rBytes );
+	uint32_t service_fragment_feedback_hot( t3dVTResidencyState_t &rResidency, t3dVTStreamingState_t &rStreaming, uint32_t nFrameId, uint32_t nRequestBudget );
+	godot::RID get_fragment_feedback_set_cold( const godot::RID &rShader, uint32_t nVariant );
+	uint64_t get_fragment_feedback_consumed() const { return m_nFeedbackConsumed; }
+	uint64_t get_fragment_feedback_misses() const { return m_nFeedbackMisses; }
+	uint64_t get_fragment_feedback_overflow() const { return m_nFeedbackOverflow; }
+	uint64_t get_fragment_feedback_dropped() const { return m_nFeedbackDropped; }
 	bool get_physical_family_binding_v3( uint32_t pFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
 	bool validate_physical_format_families_v3_cold() const;
 	uint64_t get_reserved_gpu_bytes() const;
@@ -81,6 +91,23 @@ private:
 	uint32_t physical_layer_bytes( uint32_t pChannel ) const;
 	bool hot_epoch_unchanged() const;
 
+	godot::Callable m_feedbackCallback;
+	godot::PackedByteArray m_feedbackReset;
+	godot::PackedByteArray m_feedbackCounterReset;
+	godot::PackedByteArray m_feedbackParams;
+	godot::PackedByteArray m_feedbackReadback;
+	Terrain3DRdUniformSet m_feedbackSets[2u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+	godot::RID m_feedbackSetShaders[2u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+	uint32_t m_nFeedbackEpoch = 1u;
+	uint32_t m_nFeedbackFrame = UINT32_MAX;
+	uint32_t m_nFeedbackDatabase = 0u;
+	bool m_bFeedbackPending = false;
+	bool m_bFeedbackCountersPending = false;
+	bool m_bFeedbackWritten = false;
+	uint64_t m_nFeedbackConsumed = 0u;
+	uint64_t m_nFeedbackDropped = 0u;
+	uint64_t m_nFeedbackMisses = 0u;
+	uint64_t m_nFeedbackOverflow = 0u;
 	godot::RenderingDevice *m_pRenderingDevice;
 	const Terrain3DVTResourceImage *m_pResources;
 	const t3dVTDatabaseView_t *m_pDatabaseView;

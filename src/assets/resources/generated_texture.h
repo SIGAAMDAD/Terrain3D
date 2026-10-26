@@ -42,6 +42,7 @@ public:
 		return m_texture.isValid() && !m_bDirty && isLayered() && nLayer >= 0 && nLayer < ( int )m_texture.layout().m_nLayers && matchesLayout( rImage );
 	}
 	bool buildTrackedLayerBatchUpdate( const Ref<Image> &rImage, int nLayer, t3dRdTextureBatchUpdate_t &rUpdate );
+	bool buildTrackedLayerCopy( int nSourceLayer, int nLayer, t3dRdTextureBatchUpdate_t &rUpdate );
 	EA_FORCE_INLINE void commitLayerImage( const Ref<Image> &rImage, const int nLayer ) {
 		if ( m_sourceRetentionPolicy == T3D_RETAIN_CPU_SOURCE && canUpdateLayer( rImage, nLayer ) ) m_layers[nLayer] = rImage;
 	}

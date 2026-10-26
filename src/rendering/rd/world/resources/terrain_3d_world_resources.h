@@ -51,6 +51,8 @@ public:
 	bool uploadFrameHot( const t3dWorldFrame_t &rFrame );
 	void shutdownCold( void );
 	bool isInitialized( void ) const;
+	// Borrow the resolved CPU upload record for a render-thread residency request.
+	const t3dRenderingMaterialGpu_t *getResolvedMaterialHot( uint32_t nMaterial ) const;
 	const godot::RID &getBuffer( t3dWorldBufferId_t eBuffer ) const;
 	uint32_t getCapacityBytes( t3dWorldBufferId_t eBuffer ) const;
 	uint32_t getUsedBytes( t3dWorldBufferId_t eBuffer ) const;

@@ -344,6 +344,11 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const t3dDiagnosticInp
 	result[ "vt_request_dropped" ] = (int64_t)( VtTelemetry.nRequestDropped );
 	result[ "vt_page_hits" ] = (int64_t)( VtTelemetry.nPageHits );
 	result[ "vt_page_misses" ] = (int64_t)( VtTelemetry.nPageMisses );
+	const Terrain3DVTGpu &feedback_gpu = rInputs.m_virtualTexture.get_gpu();
+	result[ "vt_fragment_requests_accepted" ] = ( int64_t )feedback_gpu.get_fragment_feedback_consumed();
+	result[ "vt_fragment_requests_dropped" ] = ( int64_t )feedback_gpu.get_fragment_feedback_dropped();
+	result[ "vt_fragment_misses" ] = ( int64_t )feedback_gpu.get_fragment_feedback_misses();
+	result[ "vt_fragment_hash_overflow" ] = ( int64_t )feedback_gpu.get_fragment_feedback_overflow();
 	result[ "vt_parent_fallback_hits" ] = (int64_t)( VtTelemetry.nParentFallbackHits );
 	result[ "vt_tail_fallback_hits" ] = (int64_t)( VtTelemetry.nTailFallbackHits );
 	result[ "vt_resolver_depth_0_samples" ] = (int64_t)( VtTelemetry.nResolverDepth0Samples );

@@ -52,6 +52,9 @@ typedef struct t3dRegionRuntime_s {
 	uint32_t m_nNodeCapacity = 0u;
 	int m_iRootPoolIndex = -1;
 	int m_nNextSpawn = 0;
+	int64_t m_nPendingSpawnId = 0;
+	Ref<PackedScene> m_pendingScene;
+	Ref<PackedScene> m_pendingShadowProxy;
 	int m_iActiveListPosition = -1;
 	bool m_bRequestsStarted = false;
 	bool m_bLoading = false;

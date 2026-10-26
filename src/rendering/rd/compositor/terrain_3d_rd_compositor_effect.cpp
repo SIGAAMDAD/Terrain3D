@@ -92,3 +92,7 @@ void Terrain3DRdCompositorEffect::_render_callback( const int32_t nEffectCallbac
 	}
 	m_pCoordinator->render( pRenderData );
 }
+
+void Terrain3DRdCompositorEffect::consumeFragmentFeedbackOnRenderThread( const godot::PackedByteArray &rBytes ) {
+	if ( m_pCoordinator ) { m_pCoordinator->consumeFragmentFeedbackOnRenderThread( rBytes ); }
+}
