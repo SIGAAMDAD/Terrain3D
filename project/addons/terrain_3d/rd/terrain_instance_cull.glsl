@@ -1,7 +1,6 @@
 #[versions]
 legacy = "";
 grouped = "#define T3D_INSTANCE_CULL_PREFIX 1";
-command_owner = "#define T3D_INSTANCE_CULL_PREFIX 1\n#define T3D_INSTANCE_CULL_COMMAND_OWNER 1";
 
 #[compute]
 #version 450

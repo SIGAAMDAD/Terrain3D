@@ -37,13 +37,10 @@ bool Terrain3DRdOceanRenderer::ensureShaders(
 	if ( !m_context.getDevice() ) {
 		return false;
 	}
-	if ( !m_hColorShader.isValid() ) {
-		m_bPreparedFragmentVariant = Terrain3DRdShaderLibrary::isOceanPreparedFragmentEnabledCold();
-	}
+	// Color and ENV color both compile the same prepared fragment evaluator.
+	// The existing shader IDs stay stable; CPU frame packing is always prepared.
 	if ( !m_hColorShader.isValid() && !m_hColorShader.createTracked( m_context,
-																	 T3D_RD_CONTEXT_OWNER_OCEAN,
-																	 "T3D.Ocean.Shader.Color",
-																	 m_bPreparedFragmentVariant ? T3D_RD_SHADER_OCEAN_PREPARED_COLOR : T3D_RD_SHADER_OCEAN_COLOR ) ) {
+		T3D_RD_CONTEXT_OWNER_OCEAN, "T3D.Ocean.Shader.Color", T3D_RD_SHADER_OCEAN_COLOR ) ) {
 		return false;
 	}
 	if ( !m_hShadowShader.isValid() && !m_hShadowShader.createTracked( m_context,
@@ -57,7 +54,7 @@ bool Terrain3DRdOceanRenderer::ensureShaders(
         m_context.beginRecoverableFailureScope();
         const bool environmentColor = m_hEnvironmentColorShader.createTracked( m_context,
             T3D_RD_CONTEXT_OWNER_OCEAN, "T3D.Ocean.Environment.Color",
-            m_bPreparedFragmentVariant ? T3D_RD_SHADER_OCEAN_ENV_PREPARED_COLOR : T3D_RD_SHADER_OCEAN_ENV_COLOR );
+            T3D_RD_SHADER_OCEAN_ENV_COLOR );
         const bool environmentShadow = environmentColor && m_hEnvironmentShadowShader.createTracked( m_context,
             T3D_RD_CONTEXT_OWNER_OCEAN, "T3D.Ocean.Environment.Shadow", T3D_RD_SHADER_OCEAN_ENV_SHADOW );
         m_context.endRecoverableFailureScope();
@@ -365,14 +362,13 @@ bool Terrain3DRdOceanRenderer::updateFrame(
 	frame.m_szModeParams[2] = ( float ) ( rState.m_nRefractionMode );
 	frame.m_szModeParams[3] =
 		( float ) ( rState.m_nFoamMode + 4u * rState.m_nScatteringMode + 16u * rState.m_nShadingMode );
-	if ( m_bPreparedFragmentVariant ) {
-		// Frame-invariant sunlight direction and foam scale replace fragment work.
-		const Vector3 sun_direction = ( -rSnapshot.m_lightDirection ).normalized();
-		frame.m_szScatterParams[0] = ( float ) sun_direction.x;
-		frame.m_szScatterParams[1] = ( float ) sun_direction.y;
-		frame.m_szScatterParams[2] = ( float ) sun_direction.z;
-		frame.m_szScatterParams[3] = 0.1f * MAX( rState.m_fFoamNoiseScale, 0.1f );
-	}
+	// Frame-invariant sunlight direction and foam scale are shared by both
+	// ordinary and ENV ocean color receivers.
+	const Vector3 sun_direction = ( -rSnapshot.m_lightDirection ).normalized();
+	frame.m_szScatterParams[0] = ( float ) sun_direction.x;
+	frame.m_szScatterParams[1] = ( float ) sun_direction.y;
+	frame.m_szScatterParams[2] = ( float ) sun_direction.z;
+	frame.m_szScatterParams[3] = 0.1f * MAX( rState.m_fFoamNoiseScale, 0.1f );
 	memcpy( m_frameBytes.ptrw(), &frame, sizeof( frame ) );
 	memset( m_patchBytes.ptrw(), 0, m_patchBytes.size() );
 	memcpy( m_patchBytes.ptrw(),
@@ -641,7 +637,7 @@ Dictionary Terrain3DRdOceanRenderer::getDiagnostics(
     result["ocean_environment_variant_active"] = m_bCurrentEnvironmentShader;
     result["ocean_environment_generation"] = ( int64_t ) m_nLastEnvironmentGeneration;
     result["ocean_environment_stale_set_misses"] = ( int64_t ) m_nStaleEnvironmentSetMisses;
-	result["ocean_prepared_fragment_variant"] = m_bPreparedFragmentVariant;
+	result["ocean_prepared_fragment_variant"] = true;
 	result["ocean_strip_generation"] = ( int64_t ) ( m_nStripGeneration );
 	result["ocean_strip_descriptor_uploads"] = ( int64_t ) ( m_nStripDescriptorUploads );
 	result["ocean_strip_descriptor_bytes"] = ( int64_t ) ( sizeof( m_szStripParts ) );

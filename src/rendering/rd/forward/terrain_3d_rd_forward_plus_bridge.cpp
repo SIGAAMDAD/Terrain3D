@@ -247,37 +247,9 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge(
 	}
 	const uint64_t capabilities = ( uint64_t ) ( ( int64_t ) ( capabilities_value ) );
 	m_nObservedCapabilities.store( capabilities, T3D_MEMORY_ORDER_RELEASE );
-    // BR18: optional cold Vulkan subgroup-properties handshake. Godot's
-    // RenderingDevice API does not expose supported subgroup operations;
-    // an engine bridge must explicitly report the Vulkan properties.
-    // Missing/partial capability evidence keeps the experiment disabled.
-    OS *const pOS = OS::get_singleton();
-    m_bBr24SubgroupRequested = pOS &&
-        pOS->get_environment( "TERRAIN3D_FRAGMENT_SUBGROUP_EXPERIMENT" ) == "1";
-    if ( m_bBr24SubgroupRequested &&
-         m_pEngineBridge->has_method( StringName( "get_fragment_subgroup_properties" ) ) ) {
-        const Variant properties = m_pEngineBridge->call( StringName( "get_fragment_subgroup_properties" ) );
-        if ( properties.get_type() == Variant::DICTIONARY ) {
-            const Dictionary values = ( Dictionary ) properties;
-            if ( values.has( "supported_stages" ) && values.has( "supported_operations" ) &&
-                 values.has( "subgroup_size" ) &&
-                 values["supported_stages"].get_type() == Variant::INT &&
-                 values["supported_operations"].get_type() == Variant::INT &&
-                 values["subgroup_size"].get_type() == Variant::INT ) {
-                const int64_t stages = ( int64_t ) ( values["supported_stages"] );
-                const int64_t operations = ( int64_t ) ( values["supported_operations"] );
-                const int64_t size = ( int64_t ) ( values["subgroup_size"] );
-                if ( stages >= 0 && stages <= UINT32_MAX &&
-                     operations >= 0 && operations <= UINT32_MAX &&
-                     size > 0 && size <= 128 ) {
-                    m_br24FragmentSubgroup.m_nStageMask = ( uint32_t ) stages;
-                    m_br24FragmentSubgroup.m_nOperationMask = ( uint32_t ) operations;
-                    m_br24FragmentSubgroup.m_nSubgroupSize = ( uint32_t ) size;
-                    m_br24FragmentSubgroup.m_nPropertiesValid = 1u;
-                }
-            }
-        }
-    }
+    // No shipping shader consumes the former BR24 subgroup experiment.
+    m_bBr24SubgroupRequested = false;
+
 
 	if ( ( capabilities & T3D_FORWARD_BRIDGE_REQUIRED_CAPABILITIES ) != T3D_FORWARD_BRIDGE_REQUIRED_CAPABILITIES ) {
 		return failConnection(

@@ -79,6 +79,42 @@ func _run() -> void:
 	for batch: Dictionary in sample:
 		instance_total += (batch["transforms"] as Array).size()
 	_check(instance_total > 0, "Foliage fixture produces nonempty placements")
+	var positive_status: Dictionary = initial.get("status", {})
+	_check(int(positive_status.get("instances", -1)) == instance_total and
+		int(positive_status.get("rejection_total", -1)) + instance_total == int(positive_status.get("candidate_tests", -2)),
+		"Positive placements and rejection categories account for all tested candidates")
+	var preview: Dictionary = _foliage_editor(terrain).prepare_owned_regions(sample)
+	_check(bool(preview.get("ok", false)) and int(preview.get("instances", -1)) == instance_total and
+		int(preview.get("staged_pages", -1)) == neighbor_pair.size() * 2 and
+		int(preview.get("staged_bytes", 0)) > 0 and
+		int(preview.get("logical_instances", -1)) >= instance_total,
+		"Non-publishing staged pages report exact transform and byte counts")
+	# Every eligible material is excluded to produce a completed zero-placement job.
+	# This must still supply empty owner-replacement batches for an explicit save.
+	var empty_config: Dictionary = rule_config.duplicate(true)
+	var empty_rules: Array = empty_config["rules"]
+	var exclusions := PackedInt32Array()
+	for material_index: int in range(mini(128, terrain.assets.get_texture_count())):
+		exclusions.append(material_index)
+	for index: int in range(empty_rules.size()):
+		var empty_rule: Dictionary = empty_rules[index]
+		empty_rule["excluded_materials"] = exclusions
+		empty_rules[index] = empty_rule
+	empty_config["rules"] = empty_rules
+	var empty_generation: Dictionary = _generate(terrain, empty_config, neighbor_pair)
+	var empty_status: Dictionary = empty_generation.get("status", {})
+	var empty_batches: Array = empty_generation.get("batches", [])
+	var empty_count: int = 0
+	for batch: Dictionary in empty_batches:
+		empty_count += (batch["transforms"] as Array).size()
+	_check(bool(empty_generation.get("ok", false)) and not empty_batches.is_empty() and
+		empty_count == 0 and String(empty_status.get("placement_state", "")) == "zero_instances" and
+		int(empty_status.get("rejected", {}).get("excluded_material", 0)) > 0,
+		"Zero placement returns valid empty replacement batches with exclusion cause")
+	var empty_preview: Dictionary = _foliage_editor(terrain).prepare_owned_regions(empty_batches)
+	_check(bool(empty_preview.get("ok", false)) and int(empty_preview.get("instances", -1)) == 0 and
+		int(empty_preview.get("staged_pages", -1)) == neighbor_pair.size() * 2,
+		"Zero-placement replacement stages valid empty owner pages without publication")
 	var valid_terrain: bool = true
 	var unique_positions: Dictionary[String, bool] = {}
 	for batch: Dictionary in sample:
@@ -200,7 +236,7 @@ func _generate(terrain: Terrain3D, config: Dictionary, regions: Array[Vector2i])
 	var status: Dictionary = generator.status()
 	if not bool(status.get("ready", false)):
 		return {"ok": false, "error": status.get("error", "budget exceeded")}
-	return {"ok": true, "batches": generator.take_batches(), "steps": steps}
+	return {"ok": true, "batches": generator.take_batches(), "steps": steps, "status": status}
 
 func _batch_digest(batches: Array) -> PackedByteArray:
 	var records: Array[Dictionary] = []

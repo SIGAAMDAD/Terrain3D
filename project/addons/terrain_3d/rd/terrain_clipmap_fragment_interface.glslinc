@@ -3,48 +3,8 @@
 // Stage roots include this explicitly so reusable material evaluation cannot silently add descriptors or stage I/O.
 
 
-// Shared clipmap/world-raster VT descriptor ABI. The standalone clipmap path
-// keeps the historical set-0 bindings; embedded world-raster callers override
-// these before including this file so the same fragment implementation can use
-// their set-1 VT layout without declaring a second, stale set-0 resource block.
-#ifndef T3D_TERRAIN_VT_DESCRIPTOR_SET
-#define T3D_TERRAIN_VT_DESCRIPTOR_SET 0
-#endif
-#ifndef T3D_TERRAIN_VT_ALLOCATION_BINDING
-#define T3D_TERRAIN_VT_ALLOCATION_BINDING 26
-#endif
-#ifndef T3D_TERRAIN_VT_PAGE_TABLE_BINDING
-#define T3D_TERRAIN_VT_PAGE_TABLE_BINDING 27
-#endif
-#ifndef T3D_TERRAIN_VT_ALBEDO_BINDING
-#define T3D_TERRAIN_VT_ALBEDO_BINDING 28
-#endif
-#ifndef T3D_TERRAIN_VT_NORMAL_BINDING
-#define T3D_TERRAIN_VT_NORMAL_BINDING 29
-#endif
-#ifndef T3D_TERRAIN_VT_SURFACE_BINDING
-#define T3D_TERRAIN_VT_SURFACE_BINDING 30
-#endif
-#ifndef T3D_TERRAIN_VT_HEIGHT_BINDING
-#define T3D_TERRAIN_VT_HEIGHT_BINDING 31
-#endif
-#ifndef T3D_TERRAIN_VT_TAIL_METADATA_BINDING
-#define T3D_TERRAIN_VT_TAIL_METADATA_BINDING 32
-#endif
-#ifndef T3D_TERRAIN_VT_ALBEDO_TAIL_BINDING
-#define T3D_TERRAIN_VT_ALBEDO_TAIL_BINDING 33
-#endif
-#ifndef T3D_TERRAIN_VT_NORMAL_TAIL_BINDING
-#define T3D_TERRAIN_VT_NORMAL_TAIL_BINDING 34
-#endif
-#ifndef T3D_TERRAIN_VT_SURFACE_TAIL_BINDING
-#define T3D_TERRAIN_VT_SURFACE_TAIL_BINDING 35
-#endif
-#ifndef T3D_TERRAIN_VT_HEIGHT_TAIL_BINDING
-#define T3D_TERRAIN_VT_HEIGHT_TAIL_BINDING 36
-#endif
-#ifndef T3D_TERRAIN_VT_MIP_LAYOUT_BINDING
-#define T3D_TERRAIN_VT_MIP_LAYOUT_BINDING 37
+#ifndef TERRAIN3D_MATERIAL_VT_CONTRACT_GLSLINC
+#error "terrain_clipmap_fragment_interface.glslinc requires terrain_material_vt_contract.glslinc at the shader stage root"
 #endif
 
 #ifndef T3D_WORLD_RASTER_MESH
@@ -181,9 +141,6 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_MIP_LAYOUT_
     T3DVTMipLayout terrain_vt_mip_layouts[];
 };
 #if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
-#ifndef T3D_TERRAIN_VT_HINT_BINDING
-#define T3D_TERRAIN_VT_HINT_BINDING 43
-#endif
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDING, std430) readonly buffer TerrainVTAncestorHints {
     T3DVTAncestorHint terrain_vt_ancestor_hints[];
 };
@@ -192,15 +149,6 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDIN
 // Independently versioned composed-result descriptor extension, cold-specialized.
 // Legacy variants declare no additional bindings or descriptor requirements.
 #ifdef T3D_CS_ACTIVE
-#ifndef T3D_CS_DESCRIPTOR_SET
-#define T3D_CS_DESCRIPTOR_SET T3D_TERRAIN_VT_DESCRIPTOR_SET
-#endif
-#ifndef T3D_CS_PAGE_TABLE_BINDING
-#define T3D_CS_PAGE_TABLE_BINDING 39
-#define T3D_CS_ALBEDO_BINDING 40
-#define T3D_CS_NORMAL_BINDING 41
-#define T3D_CS_SURFACE_BINDING 42
-#endif
 struct T3DComposedGpuEntry {
     ivec2 world_page;
     uint mip;
@@ -221,14 +169,6 @@ layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_ALBEDO_BINDING) uniform sam
 layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_NORMAL_BINDING) uniform sampler2DArray terrain_cs_normal;
 layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_SURFACE_BINDING) uniform sampler2DArray terrain_cs_surface;
 #endif
-
-// The stage root includes the resolver body after this fragment has declared
-// its VT resources. Keeping only the prototype here avoids a nested filesystem
-// include, which Godot 4.7.2 does not expand.
-bool t3d_vt_resolve_page_core(
-    uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount, out T3DVTResolveResult result);
-bool t3d_vt_resolve_page_core_loaded(uint allocationId, uint requestedPage, uint requestedMip,
-    uint allocationCount, uint pageCount, T3DVTAllocation allocation, out T3DVTResolveResult result);
 
 #ifndef T3D_WORLD_RASTER_MESH
 layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {

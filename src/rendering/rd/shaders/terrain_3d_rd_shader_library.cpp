@@ -31,14 +31,9 @@ typedef struct t3dRdShaderSharedState_s
 	t3dAtomicU32_t		 m_nPhysicalUsers{ 0u };
 	t3dAtomicU64_t		 m_nPhysicalDeviceGeneration{ 0u };
 	bool				 m_bPhysicalMetadataPrepared = false;
-	bool				 m_bComposedShaderExperiment = false;
 	bool m_bCompactClusters = false;
-	bool m_bScreenSpacePilot = false;
 	bool m_bEnvironmentFields = false;
-	uint32_t m_nMaterialShaderTrial = 0u;
-	uint32_t m_nVtSamplingTrial = 0u;
 	bool m_bTerrainGpuTimestamp = false;
-	bool m_bMultiFeedbackExperiment = false;
 	String				 m_instanceDiagnosticSuffix;
 	String				 m_instanceDiagnosticMode = "production";
 	uint32_t			 m_nInstanceDiagnosticMode = 0u;
@@ -59,25 +54,6 @@ static t3dRdShaderSharedState_t &t3dRdShaderSharedState(
 	return *s_pRdShaderSharedState;
 }
 
-// Parse trial names once, before the shared RD shader source cache is filled.
-static uint32_t t3dRdParseMaterialTrial( const String &rName ) {
-	if ( rName == "auto" ) return 255u;
-	for ( uint32_t i = 1u; i <= T3D_RD_MATERIAL_SHADER_TRIAL_COUNT; ++i ) {
-		const char *const name = t3dRdMaterialTrialName( i );
-		if ( name && rName == String( name ) ) return i;
-		// Permit concise profile names without the shader-version suffix.
-		if ( name && rName == String( name ).trim_suffix( "_native" ) ) return i;
-	}
-	return 0u;
-}
-static uint32_t t3dRdParseVtSamplingTrial( const String &rName ) {
-	for ( uint32_t i = 1u; i <= T3D_RD_VT_SAMPLING_TRIAL_COUNT; ++i ) {
-		const char *const name = t3dRdVtSamplingTrialName( i );
-		if ( name && ( rName == String( name ) ||
-			rName == String( name ).trim_suffix( "_native" ) ) ) return i;
-	}
-	return 0u;
-}
 // Cold-start environment settings override SCons-configured defaults.
 static bool t3dRdEnvironmentFlagOrDefault( OS *const pOS, const char *const pName,
 	const bool bDefault ) {
@@ -92,36 +68,21 @@ bool Terrain3DRdShaderLibrary::initializeSharedState(
 	}
 	s_pRdShaderSharedState = new ( std::nothrow ) t3dRdShaderSharedState_t();
 	if ( s_pRdShaderSharedState ) {
-		// Shipping cull/reduce kernels are loaded as workload-specific implementations.
-		// Experimental shader families retain their independent cold-start policy.
-		OS *const pOS = OS::get_singleton();
-		s_pRdShaderSharedState->m_bComposedShaderExperiment = t3dRdEnvironmentFlagOrDefault(
-			pOS, "TERRAIN3D_COMPOSED_SHADER_EXPERIMENT", T3D_DEFAULT_COMPOSED_SHADER_EXPERIMENT != 0u );
 		// Compact clusters are a supported renderer profile, not a shader trial.
 		// Standard Forward+ lighting is the default and remains a legal fallback.
 		ProjectSettings *const pSettings = ProjectSettings::get_singleton();
 		s_pRdShaderSharedState->m_bCompactClusters = pSettings &&
 			pSettings->has_setting( "terrain3d/rendering/compact_clusters" ) &&
 			bool( pSettings->get_setting( "terrain3d/rendering/compact_clusters" ) );
-		// Pilot shaders may be imported without activating a new render pass.
-		s_pRdShaderSharedState->m_bScreenSpacePilot = pOS &&
-			pOS->get_environment( "TERRAIN3D_SCREEN_SPACE_PILOT" ) == "1";
+		OS *const pOS = OS::get_singleton();
 		s_pRdShaderSharedState->m_bEnvironmentFields = pOS &&
 			pOS->get_environment( "TERRAIN3D_ENVIRONMENT_FIELDS" ) == "1";
 		if ( pOS ) {
-			const String materialTrial = pOS->get_environment( "TERRAIN3D_MATERIAL_SHADER_TRIAL" ).to_lower();
-			const String vtTrial = pOS->get_environment( "TERRAIN3D_VT_SAMPLING_TRIAL" ).to_lower();
-			s_pRdShaderSharedState->m_nMaterialShaderTrial = materialTrial.is_empty() ?
-				T3D_DEFAULT_MATERIAL_SHADER_TRIAL : t3dRdParseMaterialTrial( materialTrial );
-			s_pRdShaderSharedState->m_nVtSamplingTrial = vtTrial.is_empty() ?
-				T3D_DEFAULT_VT_SAMPLING_TRIAL : t3dRdParseVtSamplingTrial( vtTrial );
 			s_pRdShaderSharedState->m_bTerrainGpuTimestamp = t3dRdEnvironmentFlagOrDefault(
 				pOS, "TERRAIN3D_TERRAIN_GPU_TIMESTAMPS", T3D_DEFAULT_TERRAIN_GPU_TIMESTAMPS != 0u );
 		}
 		// The legacy preview instance cull retains the grouped shader.
 		// Command-ownership/exclusive trials are not production dispatch paths.
-		s_pRdShaderSharedState->m_bMultiFeedbackExperiment = pOS &&
-			pOS->get_environment( "TERRAIN3D_GPU_VT_MULTI_FEEDBACK" ) == "1";
 #ifdef DEBUG_ENABLED
 		// Cold selection is process-wide because the physical shader cache is shared.
 		const String mode = OS::get_singleton()->get_environment( "TERRAIN3D_INSTANCE_GPU_DIAGNOSTIC" ).to_lower();
@@ -157,39 +118,22 @@ uint32_t Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode(
 	return state ? state->m_nInstanceDiagnosticMode : 0u;
 }
 
-bool Terrain3DRdShaderLibrary::isComposedShaderExperimentEnabledCold( void ) {
-	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
-	return pState && pState->m_bComposedShaderExperiment;
-}
-
 bool Terrain3DRdShaderLibrary::isCompactClustersEnabledCold( void ) {
 	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
 	return pState && pState->m_bCompactClusters;
 }
 
-bool Terrain3DRdShaderLibrary::isScreenSpacePilotEnabledCold( void ) {
-	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
-	return pState && pState->m_bScreenSpacePilot;
-}
 bool Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold( void ) {
 	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
 	return pState && pState->m_bEnvironmentFields;
 }
 
-uint32_t Terrain3DRdShaderLibrary::getMaterialShaderTrialCold( void ) {
-	const auto *const pState = t3dRdShaderSharedStateGet();
-	return pState ? pState->m_nMaterialShaderTrial : 0u;
-}
-uint32_t Terrain3DRdShaderLibrary::getVtSamplingTrialCold( void ) {
-	const auto *const pState = t3dRdShaderSharedStateGet();
-	return pState ? pState->m_nVtSamplingTrial : 0u;
-}
 bool Terrain3DRdShaderLibrary::isTerrainGpuTimestampEnabledCold( void ) {
 	const auto *const pState = t3dRdShaderSharedStateGet();
 	return pState && pState->m_bTerrainGpuTimestamp;
 }
 
-// The public query names remain ABI-stable until SHD-05 removes retired trials.
+// Preserve existing internal query entrypoints for current callers.
 // Grouped, small, and scan dispatch are normal shaders in the same WORLD owner.
 bool Terrain3DRdShaderLibrary::isGroupedCullEnabledCold( void ) {
 	return t3dRdShaderSharedStateGet() != NULL;
@@ -212,9 +156,10 @@ bool Terrain3DRdShaderLibrary::isInstanceExclusiveEnabledCold( void ) {
 	return false;
 }
 
+// The former multi-feedback GPU pilot has no production producer. Keep the
+// borrowed API returning false until its unused experimental service is retired.
 bool Terrain3DRdShaderLibrary::isMultiFeedbackExperimentEnabledCold( void ) {
-	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
-	return pState && pState->m_bMultiFeedbackExperiment;
+    return false;
 }
 
 bool Terrain3DRdShaderLibrary::isPageReductionEnabledCold( void ) {
@@ -242,73 +187,65 @@ static uint64_t t3dRdShaderTicksUsec(
 	return pTime ? pTime->get_ticks_usec() : 0u;
 }
 
-static bool t3dRdShaderCatalogEntryEnabled(
-    const t3dRdShaderId_t id ) {
+// Shader ID slots remain append-stable. Only real, reachable shader versions
+// are loaded and physically prewarmed; retired slots have no catalog source.
+static bool t3dRdShaderCatalogEntryEnabled( const t3dRdShaderId_t id ) {
     if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_COUNT ) {
         return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
     }
-
-	if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
+    if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE &&
+         id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
 #if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-		const uint32_t selected = Terrain3DRdShaderLibrary::getVtSamplingTrialCold();
-		const uint32_t variant = ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) %
-			T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT + 2u;
-		return variant == 3u || selected == variant;
+        return ( ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) %
+            T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT ) == 1u;
 #else
-		return false;
+        return false;
 #endif
-	}
-    if ( id >= T3D_RD_SHADER_ENVIRONMENT_STATE && id < T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE ) {
-        return Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold();
     }
-	if ( id >= T3D_RD_SHADER_MATERIAL_TRIAL_BASE && id < T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE ) {
-		const uint32_t selected = Terrain3DRdShaderLibrary::getMaterialShaderTrialCold();
-		const uint32_t trial = ( ( uint32_t ) id - T3D_RD_SHADER_MATERIAL_TRIAL_BASE ) % T3D_RD_MATERIAL_SHADER_TRIAL_COUNT + 1u;
-		return selected == trial || ( selected == 255u && trial >= 2u && trial <= 8u );
-	}
-	// Trial IDs remain allocated until SHD-05, but have no active consumer.
-	if ( id >= T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE && id < T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE ) {
-		return false;
-	}
-	if ( id >= T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE && id < T3D_RD_SHADER_OCEAN_PREPARED_COLOR ) {
-		const uint32_t selected = Terrain3DRdShaderLibrary::getVtSamplingTrialCold();
-		const uint32_t trial = ( ( uint32_t ) id - T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE ) % T3D_RD_VT_SAMPLING_TRIAL_COUNT + 1u;
-#if !defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) || !T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-		if ( trial == 2u || trial == 3u ) return false;
+    if ( id >= T3D_RD_SHADER_ENVIRONMENT_STATE &&
+         id < T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE ) {
+        return id != T3D_RD_SHADER_RETIRED_OCEAN_ENV_PREPARED_COLOR &&
+            Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold();
+    }
+    if ( id >= T3D_RD_SHADER_RETIRED_MATERIAL_BASE &&
+         id < T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) {
+#if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
+        return id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE &&
+            id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR &&
+            ( ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE ) %
+                T3D_RD_VT_COLOR_HINT_ID_STRIDE ) == 2u;
+#else
+        return false;
 #endif
-		return trial == 3u || selected == trial;
-	}
-	// Canonical ocean color IDs now contain the existing prepared fragment code.
-	// Old dedicated prepared IDs remain allocated until SHD-05, but unselected.
-	if ( id == T3D_RD_SHADER_OCEAN_PREPARED_COLOR || id == T3D_RD_SHADER_OCEAN_ENV_PREPARED_COLOR )
-		return false;
-	// Production scene instance rendering is unified; preview still uses legacy shaders.
-	// Material-preview rendering retains its separate instance shader family.
-	if ( id == T3D_RD_SHADER_SCREEN_SPACE_COVERAGE || id == T3D_RD_SHADER_SCREEN_SPACE_SHADE )
-		return Terrain3DRdShaderLibrary::isScreenSpacePilotEnabledCold();
-	if ( id == T3D_RD_SHADER_CLUSTER_COMPACT ||
-		( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE && id < T3D_RD_SHADER_SCREEN_SPACE_COVERAGE ) )
-		return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
-	if ( id == T3D_RD_SHADER_VT_FEEDBACK_MULTI )
-		return Terrain3DRdShaderLibrary::isMultiFeedbackExperimentEnabledCold();
-	if ( id >= T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE && id <= T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL ) {
-		return Terrain3DRdShaderLibrary::isPageReductionEnabledCold();
-	}
-	if ( id >= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_CLASSIFY &&
-		 id <= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_FINALIZE ) {
-		return Terrain3DRdShaderLibrary::isWorldScanEnabledCold();
-	}
-	if ( id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_SMALL ) {
-		return Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold();
-	}
-	if ( id == T3D_RD_SHADER_INSTANCE_CULL_COMMAND_OWNER ) {
-		return Terrain3DRdShaderLibrary::isInstanceCommandOwnerEnabledCold();
-	}
-	if ( id == T3D_RD_SHADER_INSTANCE_CULL_GROUPED || id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_GROUPED ) {
-		return Terrain3DRdShaderLibrary::isGroupedCullEnabledCold();
-	}
-	return id != T3D_RD_SHADER_TERRAIN_CULL && id >= T3D_RD_SHADER_NEAR_ALIAS &&
-		( id < T3D_RD_SHADER_WORLD_CS_BASE || Terrain3DRdShaderLibrary::isComposedShaderExperimentEnabledCold() );
+    }
+    if ( id == T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE ||
+         id == T3D_RD_SHADER_RETIRED_SCREEN_SPACE_SHADE ||
+         id == T3D_RD_SHADER_RETIRED_INSTANCE_CULL_COMMAND_OWNER ||
+         id == T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI ||
+         ( id >= T3D_RD_SHADER_WORLD_CS_BASE && id < T3D_RD_SHADER_WORLD_CS_END ) ) {
+        return false;
+    }
+    if ( id == T3D_RD_SHADER_CLUSTER_COMPACT ||
+         ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE &&
+           id < T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE ) ) {
+        return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
+    }
+    if ( id >= T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE &&
+         id <= T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL ) {
+        return Terrain3DRdShaderLibrary::isPageReductionEnabledCold();
+    }
+    if ( id >= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_CLASSIFY &&
+         id <= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_FINALIZE ) {
+        return Terrain3DRdShaderLibrary::isWorldScanEnabledCold();
+    }
+    if ( id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_SMALL ) {
+        return Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold();
+    }
+    if ( id == T3D_RD_SHADER_INSTANCE_CULL_GROUPED ||
+         id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_GROUPED ) {
+        return Terrain3DRdShaderLibrary::isGroupedCullEnabledCold();
+    }
+    return id != T3D_RD_SHADER_TERRAIN_CULL && id >= T3D_RD_SHADER_NEAR_ALIAS;
 }
 
 static uint32_t t3dRdExpectedPhysicalShaderCount(
@@ -1050,8 +987,6 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics(
 	t3dRdShaderSharedState_t		&state = t3dRdShaderSharedState();
 	Dictionary						 result;
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
-	result["material_shader_trial_requested"] = ( int64_t ) getMaterialShaderTrialCold();
-	result["vt_sampling_trial_requested"] = ( int64_t ) getVtSamplingTrialCold();
 	result["world_instance_alpha_coverage"] = "canonical";
 	result["terrain_gpu_timestamp_capture_enabled"] = isTerrainGpuTimestampEnabledCold();
 	result["instance_gpu_diagnostic_mode"] = state.m_instanceDiagnosticMode;

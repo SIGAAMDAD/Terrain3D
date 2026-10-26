@@ -441,18 +441,28 @@ Dictionary Terrain3DFoliageEditor::replaceOwnedRegionsInternal(
 	if ( !bPublish ) {
 		Dictionary pages;
 		Dictionary beforePages;
+		uint64_t afterInstances = 0u;
+		uint64_t beforeInstances = 0u;
+		uint64_t stagedBytes = 0u;
 		for ( size_t j = 0; j < stages.size(); ++j ) {
 			PackedByteArray page;
 			PackedByteArray beforePage;
 			uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
 			uint32_t count = 0u;
 			uint16_t meshCount = 0u;
-			if ( !Terrain3DInstancePageCodec::encode( stages[j].m_store, page, counts, count, meshCount ) ||
-				 !Terrain3DInstancePageCodec::encode( *stages[j].m_pCommitStore, beforePage, counts, count, meshCount ) ) {
+			if ( !Terrain3DInstancePageCodec::encode( stages[j].m_store, page, counts, count, meshCount ) ) {
 				result["error"] = "Cannot encode staged foliage instance pages";
 				t3dInstancerClosePreparedPages( pData, stages );
 				return result;
 			}
+			afterInstances += count;
+			if ( !Terrain3DInstancePageCodec::encode( *stages[j].m_pCommitStore, beforePage, counts, count, meshCount ) ) {
+				result["error"] = "Cannot encode original foliage instance pages";
+				t3dInstancerClosePreparedPages( pData, stages );
+				return result;
+			}
+			beforeInstances += count;
+			stagedBytes += page.size() + beforePage.size();
 			pages[stages[j].m_location] = page;
 			beforePages[stages[j].m_location] = beforePage;
 		}
@@ -462,6 +472,10 @@ Dictionary Terrain3DFoliageEditor::replaceOwnedRegionsInternal(
 		result["pages"] = pages;
 		result["before_pages"] = beforePages;
 		result["instances"] = added;
+		result["logical_instances"] = (int64_t)afterInstances;
+		result["previous_logical_instances"] = (int64_t)beforeInstances;
+		result["staged_pages"] = (int64_t)(2u * stages.size());
+		result["staged_bytes"] = (int64_t)stagedBytes;
 		return result;
 	}
 	// No fallible allocations after this point; every affected store is ready to publish.

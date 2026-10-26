@@ -1,10 +1,8 @@
 #[versions]
-color_native = "";
-color_prepared = "#define T3D_OCEAN_PREPARED_FRAGMENT";
+color_native = "#define T3D_OCEAN_PREPARED_FRAGMENT";
 shadow = "#define T3D_OCEAN_SHADOW";
 // ENV-P05: water receives the shared interaction field without replacing existing waves.
-env_color_native = "#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
-env_color_prepared = "#define T3D_OCEAN_PREPARED_FRAGMENT\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
+env_color_native = "#define T3D_OCEAN_PREPARED_FRAGMENT\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
 env_shadow = "#define T3D_OCEAN_SHADOW\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
 
 #[vertex]

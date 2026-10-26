@@ -76,16 +76,6 @@ mesh_shadow_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERR
 mesh_shadow_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_SHADOW\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 
 // CS18: opt-in Forward+ terrain-strip composed-result variants.
-cs_terrain_strip_color_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_specular = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_motion = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_specular_motion = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_native_radiance_array = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_specular_radiance_array = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_motion_radiance_array = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_color_specular_motion_radiance_array = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_depth_normal_roughness = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
-cs_terrain_strip_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_CS_ACTIVE";
 
 mesh_color_native_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
 mesh_color_specular_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
@@ -106,10 +96,6 @@ terrain_strip_color_specular_motion_radiance_array_compact = "#define T3D_TERRAI
 
 
 // Consumer-only VT alpha sampling trials; normal shader selection unchanged.
-alpha_gather_depth = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_VT_ALPHA_GATHER 1";
-alpha_edge_depth = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
-alpha_gather_dnr = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_VT_ALPHA_GATHER 1";
-alpha_edge_dnr = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
 
 // Environmental WORLD terrain strip versions; all original variants stay unchanged.
 env_terrain_strip_color_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_ENVIRONMENT_FIELD 1";
@@ -383,35 +369,11 @@ void main() {
 #extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
-// Subgroup extension declarations follow RDShaderFile variant definitions.
-#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING) && T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING
-#extension GL_KHR_shader_subgroup_basic : require
-#extension GL_KHR_shader_subgroup_vote : require
-#extension GL_KHR_shader_subgroup_ballot : require
-#endif
 #define T3D_TIER 0
 #define T3D_RUNTIME_TIER
 #define T3D_WORLD_RASTER_EMBEDDED
-#define T3D_TERRAIN_VT_DESCRIPTOR_SET 1
-#define T3D_TERRAIN_VT_ALLOCATION_BINDING 1
-#define T3D_TERRAIN_VT_PAGE_TABLE_BINDING 2
-#define T3D_TERRAIN_VT_ALBEDO_BINDING 3
-#define T3D_TERRAIN_VT_NORMAL_BINDING 4
-#define T3D_TERRAIN_VT_SURFACE_BINDING 5
-#define T3D_TERRAIN_VT_HEIGHT_BINDING 6
-#define T3D_TERRAIN_VT_TAIL_METADATA_BINDING 7
-#define T3D_TERRAIN_VT_ALBEDO_TAIL_BINDING 8
-#define T3D_TERRAIN_VT_NORMAL_TAIL_BINDING 9
-#define T3D_TERRAIN_VT_SURFACE_TAIL_BINDING 10
-#define T3D_TERRAIN_VT_HEIGHT_TAIL_BINDING 11
-#define T3D_TERRAIN_VT_MIP_LAYOUT_BINDING 12
-#define T3D_TERRAIN_VT_HINT_BINDING 17
-#define T3D_CS_DESCRIPTOR_SET 1
-#define T3D_CS_PAGE_TABLE_BINDING 13
-#define T3D_CS_ALBEDO_BINDING 14
-#define T3D_CS_NORMAL_BINDING 15
-#define T3D_CS_SURFACE_BINDING 16
 #include "vt/terrain_vt_common_inc.glslinc"
+#include "terrain_material_vt_contract.glslinc"
 #include "vt/terrain_vt_filter_math_inc.glslinc"
 #include "vt/terrain_vt_tail_filter_inc.glslinc"
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
@@ -502,6 +464,7 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #undef T3D_VT_CONSUMER_ALBEDO_TAIL_LINEAR
 #undef T3D_VT_CONSUMER_SURFACE_TAIL_LINEAR
 #include "terrain_world_contract.glslinc"
+#include "terrain_alpha_coverage_inc.glslinc"
 #ifdef T3D_WORLD_RASTER_MESH
 layout(set = 1, binding = 0, std430) readonly buffer WorldMaterialBuffer {
     T3DRenderingMaterialGpu world_materials[];
@@ -564,7 +527,7 @@ void t3d_world_mesh_fragment_evaluate() {
 #endif
     if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
 #ifdef T3D_FORWARD_DEPTH
-        base.a *= world_mesh_color.a;
+        base.a = t3d_alpha_coverage_vertex(base.a, world_mesh_color.a);
 #else
         vec4 mesh_color = world_mesh_color;
         if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
@@ -574,10 +537,8 @@ void t3d_world_mesh_fragment_evaluate() {
     }
     // P48: only opacity affects coverage. Delay roughness/metallic, AO,
     // layout and half-float normal unpack until the fragment survives.
-    if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u) {
-        float alpha_threshold = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
-        if (base.a < alpha_threshold) discard;
-    }
+    if (!t3d_alpha_coverage_scissor(material.flags, material.packedScalars0, base.a))
+        discard;
     float metallic = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_METALLIC_SHIFT);
     float roughness = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ROUGHNESS_SHIFT);
     float ao_strength = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);

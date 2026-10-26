@@ -42,7 +42,7 @@ bool Terrain3DVTFeedbackMultiGpu::initializeCold(
 	m_layout = rLayout;
 	m_nDeviceGeneration = rContext.getDeviceGeneration();
 	if ( !m_shader.createTracked( rContext, T3D_RD_CONTEXT_OWNER_TERRAIN,
-		"T3D.VT.MultiFeedback.Shader", T3D_RD_SHADER_VT_FEEDBACK_MULTI ) ||
+		"T3D.VT.MultiFeedback.Shader", T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI ) ||
 		!m_pipeline.createTrackedCompute( rContext, T3D_RD_CONTEXT_OWNER_TERRAIN,
 			"T3D.VT.MultiFeedback.Pipeline", m_shader.rid() ) ) {
 		shutdownCold( rContext );

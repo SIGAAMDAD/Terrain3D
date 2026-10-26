@@ -334,6 +334,7 @@ bool Terrain3DVTGpu::initialize_cold(
 
 void Terrain3DVTGpu::shutdown_cold(
 	const bool bPreserveTailStaging ) {
+	++m_nFeedbackShaderGeneration;
 	// Global RenderingDevice is submitted by Godot, not this extension.
 	// sync() is only legal on a local device. Epoch invalidation below makes
 	// already queued readbacks harmless when their callbacks arrive.
@@ -1333,6 +1334,34 @@ bool Terrain3DVTGpu::upload_commit_callback(
 		   pSelf->upload_commit_hot( rResidency, pReservation, pDecodedBytes, pDecodedByteCount, pFrameId );
 }
 
+void Terrain3DVTGpu::set_fragment_feedback_callback_cold( const godot::Callable &rCallback ) {
+	m_feedbackCallback = rCallback;
+	++m_nFeedbackShaderGeneration;
+}
+
+bool Terrain3DVTGpu::is_fragment_feedback_shader_ready() const {
+	if ( !m_bFeedbackGridEnabled || !is_readback_enabled() || !m_pResources ) {
+		return false;
+	}
+	Terrain3DRdContext *const pContext = m_pResources->get_rd_context();
+	if ( !pContext || !pContext->getDevice() || !pContext->tryGetGlobalDescriptorCacheHot() ) {
+		return false;
+	}
+	const t3dVTGpuBufferId_t buffers[5] = {
+		T3D_VT_GPU_BUFFER_ALLOCATION_TABLE,
+		T3D_VT_GPU_BUFFER_PAGE_TABLE,
+		T3D_VT_GPU_BUFFER_FEEDBACK_GRID,
+		T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS,
+		T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS
+	};
+	for ( uint32_t i = 0u; i < 5u; ++i ) {
+		if ( !m_pResources->get_buffer_rid( buffers[i] ).is_valid() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool Terrain3DVTGpu::is_readback_enabled() const {
 	if ( !m_bInitialized || !m_feedbackCallback.is_valid() ) {
 		return false;
@@ -1704,7 +1733,10 @@ bool Terrain3DVTGpu::enable_feedback_grid_cold( const bool bEnable ) {
 	if ( bEnable && !m_feedbackCallback.is_valid() )
 		return false;
 	invalidate_feedback_grid_hot();
-	m_bFeedbackGridEnabled = bEnable;
+	if ( m_bFeedbackGridEnabled != bEnable ) {
+		m_bFeedbackGridEnabled = bEnable;
+		++m_nFeedbackShaderGeneration;
+	}
 	return true;
 }
 
@@ -1930,7 +1962,8 @@ void Terrain3DVTGpu::consume_fragment_feedback_readback_hot(
 RID Terrain3DVTGpu::get_fragment_feedback_set_cold(
 	const RID	  &rShader,
 	const uint32_t nVariant ) {
-	if ( !is_readback_enabled() || nVariant >= 8u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT || !m_pResources ) {
+	if ( !is_fragment_feedback_shader_ready() || !rShader.is_valid() ||
+		nVariant >= 8u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
 		return RID();
 	}
 	Terrain3DRdContext *const				pContext = m_pResources->get_rd_context();
@@ -1957,7 +1990,7 @@ RID Terrain3DVTGpu::get_fragment_feedback_set_cold(
 	}
 	const t3dVTGpuBufferId_t buffers[5] = { T3D_VT_GPU_BUFFER_ALLOCATION_TABLE,
 											T3D_VT_GPU_BUFFER_PAGE_TABLE,
-											m_bFeedbackGridEnabled ? T3D_VT_GPU_BUFFER_FEEDBACK_GRID : T3D_VT_GPU_BUFFER_FRAGMENT_HASH,
+											T3D_VT_GPU_BUFFER_FEEDBACK_GRID,
 											T3D_VT_GPU_BUFFER_FRAGMENT_COUNTERS,
 											T3D_VT_GPU_BUFFER_FRAGMENT_PARAMS };
 	for ( uint32_t binding = 0u; binding < 5u; ++binding ) {
@@ -1987,7 +2020,7 @@ RID Terrain3DVTGpu::get_fragment_feedback_set_cold(
 
 RID Terrain3DVTGpu::resolve_fragment_feedback_set_hot(
 	const RID &rPrevious ) {
-	if ( !rPrevious.is_valid() || !m_pResources || !m_pResources->get_rd_context() ) {
+	if ( !rPrevious.is_valid() || !is_fragment_feedback_shader_ready() ) {
 		return RID();
 	}
 	Terrain3DRdGlobalDescriptorCache *const pCache = m_pResources->get_rd_context()->tryGetGlobalDescriptorCacheHot();

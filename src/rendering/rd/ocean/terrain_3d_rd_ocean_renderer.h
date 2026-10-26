@@ -74,7 +74,6 @@ private:
     RID m_hCurrentEnvironmentSet;
     uint64_t m_nLastEnvironmentGeneration = 0u;
     uint64_t m_nStaleEnvironmentSetMisses = 0u;
-	bool m_bPreparedFragmentVariant = false;
 	Terrain3DRdGpuBuffer  m_hFrameBuffer;
 	Terrain3DRdGpuBuffer  m_hPatchBuffer;
 	Terrain3DRdGpuBuffer  m_hStripPartBuffer;

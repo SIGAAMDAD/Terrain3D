@@ -427,9 +427,9 @@ func open_autoshader_baker() -> void:
 		return
 	if is_instance_valid(autoshader_panel):
 		autoshader_panel.set_terrain(terrain)
+		autoshader_panel.open()
 	if is_instance_valid(foliage_panel):
 		foliage_panel.set_terrain(terrain)
-		autoshader_panel.open()
 
 
 func convert_selected_to_region_streaming() -> void:

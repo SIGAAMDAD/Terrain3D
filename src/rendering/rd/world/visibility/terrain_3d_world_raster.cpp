@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/visibility/terrain_3d_world_raster.h"
 #include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
+#include "rendering/rd/shaders/terrain_3d_rd_material_vt_contract.h"
 #include "rendering/rd/forward/terrain_3d_rd_forward_variant.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 #include "Terrain3DConstants.h"
@@ -41,7 +42,7 @@ Terrain3DWorldRaster::~Terrain3DWorldRaster(
 }
 
 bool Terrain3DWorldRaster::configureComposedExperimentalCold( const bool bEnable ) {
-	if ( m_bInitialized || ( bEnable && !Terrain3DRdShaderLibrary::isComposedShaderExperimentEnabledCold() ) ) return false;
+	if ( m_bInitialized || bEnable ) return false;
 	m_bExperimentalComposed = bEnable;
 	return true;
 }
@@ -97,6 +98,21 @@ bool Terrain3DWorldRaster::initializeCold(
 	return true;
 }
 
+void Terrain3DWorldRaster::invalidateMaterialShadersCold( void ) {
+	m_bCurrentValid = false;
+	m_pipelines.clear();
+	freeSetsCold();
+	m_forwardLighting.clearShaderSetsCold();
+	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
+		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+			m_hShader[primitive][variant].releaseTracked( m_context );
+		}
+	}
+	memset( m_bMeshFeedback, 0, sizeof( m_bMeshFeedback ) );
+	memset( m_bCompactShader, 0, sizeof( m_bCompactShader ) );
+	m_hCurrentFeedbackSet = RID();
+}
+
 bool Terrain3DWorldRaster::ensureShaderCold(
 	const t3dPrimitiveClass_t		  primitive,
 	const t3dRdForwardShaderVariant_t variant ) {
@@ -108,7 +124,7 @@ bool Terrain3DWorldRaster::ensureShaderCold(
         return true;
     }
 	bool feedback = primitive == T3D_PRIMITIVE_MESH && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT &&
-					m_pFeedbackOwner && m_pFeedbackOwner->is_readback_enabled();
+					m_shaderCapabilities.m_bFeedbackReady;
 	const bool composed_variant = m_bExperimentalComposed &&
 		primitive == T3D_PRIMITIVE_TERRAIN_STRIP && ( uint32_t ) variant != 8u;
 	const t3dRdShaderId_t fallback_id =
@@ -140,13 +156,6 @@ bool Terrain3DWorldRaster::ensureShaderCold(
         }
         m_bEnvironmentShader[primitive][variant] = true;
     }
-	if ( primitive == T3D_PRIMITIVE_MESH && !feedback && !m_bEnvironmentShader[primitive][variant] ) {
-		const uint32_t trial = Terrain3DRdShaderLibrary::getWorldAlphaTrialCold();
-		if ( ( ( trial == 1u || trial == 2u ) && variant == T3D_RD_FORWARD_SHADER_DEPTH ) ||
-			( ( trial == 3u || trial == 4u ) && variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS ) ) {
-			id = t3dRdAlphaSamplingTrialId( true, trial );
-		}
-	}
     Ref< RDShaderSPIRV > spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
     if ( m_bEnvironmentShader[primitive][variant] && spirv.is_null() ) {
         // A missing optional variant cannot remove the baseline WORLD shader.
@@ -385,33 +394,33 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 														   rResources.getBuffer( WORLD_BUFFER_MATERIALS ) ) );
 	}
 	set1.push_back(
-		Terrain3DRdBindingBuilder::single( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hAllocationTable ) );
+		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_ALLOCATION_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hAllocationTable ) );
 	set1.push_back(
-		Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hPageTable ) );
+		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_PAGE_TABLE_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hPageTable ) );
 	for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
-		set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( 3 + ( int ) channel,
+		set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_VT_PHYSICAL_BINDING_BASE + ( int ) channel,
 																   rTerrain.m_hMaterialSampler,
 																   rVT.hPhysical[channel][0] ) );
 	}
 	set1.push_back(
-		Terrain3DRdBindingBuilder::single( 7, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hTailMetadata ) );
+		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_TAIL_METADATA_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hTailMetadata ) );
 	for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
-		set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( 8 + ( int ) channel,
+		set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_VT_TAIL_TEXTURE_BINDING_BASE + ( int ) channel,
 																   rTerrain.m_hMapSampler,
 																   rVT.hTail[channel] ) );
 	}
 	set1.push_back(
-		Terrain3DRdBindingBuilder::single( 12, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hMipLayoutTable ) );
+		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_MIP_LAYOUT_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hMipLayoutTable ) );
 // BR20: this consumer keeps its original descriptor ABI until a hint-specific shader version is selected.
 	if ( pComposed && primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP ) {
 		if ( !pComposed->m_hPageTable.is_valid() || !pComposed->m_nTableCapacity ||
 			!pComposed->m_nDeviceGeneration ) return false;
 		for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i )
 			if ( !pComposed->m_hChannels[i].is_valid() ) return false;
-		set1.push_back( Terrain3DRdBindingBuilder::single( 13,
+		set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_COMPOSED_PAGE_TABLE_BINDING,
 			RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, pComposed->m_hPageTable ) );
 		for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i )
-			set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( 14 + ( int ) i,
+			set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_VT_COMPOSED_TEXTURE_BINDING_BASE + ( int ) i,
 				rTerrain.m_hMaterialSampler, pComposed->m_hChannels[i] ) );
 	}
 	hSet1 = m_set1Cache.getOrCreate( set1_key,
@@ -419,7 +428,7 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 										 String::num_uint64( nDescriptorSlot ),
 									 set1,
 									 rShader,
-									 1u );
+									 T3D_RD_WORLD_VT_DESCRIPTOR_SET );
 	if ( !hSet1.is_valid() ) {
 		return false;
 	}
@@ -570,18 +579,32 @@ bool Terrain3DWorldRaster::prepareCold(
 	Terrain3DVTGpu							*pFeedbackOwner,
 	const t3dComposedSurfaceGpuBindings_t *pComposed,
     const t3dRdEnvironmentBindings_t *pEnvironment ) {
-	m_pFeedbackOwner = pFeedbackOwner;
-    m_bEnvironmentReady = pEnvironment && pEnvironment->m_bAvailable;
-    for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
-        m_hCurrentEnvironmentSet[primitive] = RID();
-        m_bCurrentEnvironmentShader[primitive] = false;
-    }
-	if ( m_bExperimentalComposed && !pComposed ) return false;
-	m_hCurrentFeedbackSet = RID();
 	if ( !m_bInitialized || rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE || rContext.m_nViewCount == 0u ) {
 		return false;
 	}
 	m_bCurrentValid = false;
+	if ( m_bExperimentalComposed && !pComposed ) return false;
+	const t3dWorldShaderCapabilityKey_t capabilities{
+		pFeedbackOwner,
+		pFeedbackOwner ? pFeedbackOwner->get_fragment_feedback_shader_generation() : 0u,
+		pFeedbackOwner && pFeedbackOwner->is_fragment_feedback_shader_ready(),
+		pEnvironment && pEnvironment->m_bAvailable,
+		m_forwardLighting.compactRequested()
+	};
+	if ( m_bShaderCapabilitiesValid && !( m_shaderCapabilities == capabilities ) ) {
+		// The first no-feedback material shader must not survive VT readiness or
+		// coarse-grid ABI changes. Retire dependent pipelines/sets before its RID.
+		invalidateMaterialShadersCold();
+	}
+	m_shaderCapabilities = capabilities;
+	m_bShaderCapabilitiesValid = true;
+	m_pFeedbackOwner = pFeedbackOwner;
+	m_bEnvironmentReady = capabilities.m_bEnvironmentReady;
+	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
+		m_hCurrentEnvironmentSet[primitive] = RID();
+		m_bCurrentEnvironmentShader[primitive] = false;
+	}
+	m_hCurrentFeedbackSet = RID();
 	++m_nPrepareCount;
 	t3dRdForwardShaderVariant_t variant;
 	if ( !t3dRdSelectForwardVariant( rContext, T3D_RD_FORWARD_VARIANT_SHADOW_ANY_NATIVE_MODE, variant ) ) {
@@ -755,6 +778,8 @@ void Terrain3DWorldRaster::shutdownCold(
 	m_hCurrentFeedbackSet = RID();
     m_bEnvironmentReady = false;
 	m_pFeedbackOwner = NULL;
+	m_shaderCapabilities = t3dWorldShaderCapabilityKey_t{};
+	m_bShaderCapabilitiesValid = false;
     m_hEnvironmentMeshShadowShader.releaseTracked( m_context );
 	m_bInitialized = false;
 }

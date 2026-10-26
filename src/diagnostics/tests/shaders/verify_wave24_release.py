@@ -19,7 +19,7 @@ REGRESSIONS = (
     'test_wave13_fragment_work.py', 'test_wave14_fragment_work.py',
     'test_wave15_fragment_work.py', 'test_wave16_fragment_work.py',
     'test_wave17_fragment_work.py', 'test_wave18_fragment_samples.py',
-    'test_wave19_branch_loop.py', 'test_wave23_screen_space.py',
+    'test_wave19_branch_loop.py',
     'test_wave8_feedback_comparator.py',
 )
 REQUIRED_RUNTIME = (
@@ -75,15 +75,9 @@ def main():
              '--out', str(args.out / 'fragment_matrix')], args.out)
     matrix = json.loads(report_path.read_text()) if report_path.is_file() else {}
     stages['standard_variants'] = len(matrix.get('patched', {}))
-    tests['br18_subgroup'] = run_case('br18_subgroup',
-        [python, str(HERE / 'verify_wave24_subgroup.py'), '--root', str(root),
-         '--glslang', str(args.glslang)], args.out)
     tests['br21_compact_compute'] = run_case('br21_compact_compute',
         [python, str(HERE / 'verify_wave21_compact_shaders.py'), '--root', str(root),
          '--glslang', str(args.glslang), '--compute-only'], args.out)
-    tests['br23_screen'] = run_case('br23_screen',
-        [python, str(HERE / 'compile_wave23_screen_space.py'), '--root', str(root),
-         '--glslang', str(args.glslang), '--out', str(args.out / 'br23_stages')], args.out)
     for name in REGRESSIONS:
         tests[name] = run_case(name.removesuffix('.py'), [python, str(HERE / name)], args.out)
     runtime = {name: {'status': 'not_run', 'evidence': None} for name in REQUIRED_RUNTIME}

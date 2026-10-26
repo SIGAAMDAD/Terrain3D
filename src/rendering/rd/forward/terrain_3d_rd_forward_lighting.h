@@ -177,6 +177,7 @@ public:
 		 const RID &rSet ) const {
 		return m_descriptors.resolve( rSet );
 	}
+	void       clearShaderSetsCold( void );
 	void	   invalidateBorrowedState( void );
 	void	   shutdown( void );
 	Dictionary getDiagnostics( void ) const;

@@ -319,7 +319,8 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 				nAllocation = T3D_VT_INVALID_ALLOCATION;
 			} else {
 				const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[nAllocation];
-				if ( allocation.m_nBaseVirtualPage >= nPageCount ||
+				if ( allocation.m_nMipCount == 0u || allocation.m_nMipCount > T3D_VT_MAX_MIPS ||
+					 allocation.m_nBaseVirtualPage >= nPageCount ||
 					 allocation.m_nPageCount > nPageCount - allocation.m_nBaseVirtualPage ) {
 					nAllocation = T3D_VT_INVALID_ALLOCATION;
 				}

@@ -2,6 +2,7 @@
 #include "diagnostics/core/terrain_3d_streaming_profiler.h"
 #include "data/persistence/terrain_3d_file_publication.h"
 #include "data/runtime/terrain_3d_runtime_page_format.h"
+#include "streaming/io/terrain_3d_cold_chunk_format.h"
 #include <godot_cpp/classes/dir_access.hpp>
 #include <string.h>
 #include <atomic>
@@ -92,27 +93,14 @@ static bool verifyRecord(
 	if ( r.m_key.m_nCompression != TERRAIN3D_RUNTIME_PAGE_COMPRESSION_RLE ) {
 		return false;
 	}
-	uint32_t		written = 0u;
 	PackedByteArray decoded;
 	decoded.resize( r.m_key.m_nDecodedBytes );
 	if ( decoded.size() != ( int64_t ) r.m_key.m_nDecodedBytes ) {
 		return false;
 	}
-	const uint8_t *const p = r.m_bytes.ptr();
-	uint8_t *const		 q = decoded.ptrw();
-	for ( uint32_t pos = 0u; pos < r.m_key.m_nStoredBytes; ) {
-		if ( r.m_key.m_nStoredBytes - pos < 2u ) {
-			return false;
-		}
-		const uint32_t run = p[pos++];
-		const uint8_t  value = p[pos++];
-		if ( run == 0u || run > r.m_key.m_nDecodedBytes - written ) {
-			return false;
-		}
-		memset( q + written, value, run );
-		written += run;
-	}
-	return written == r.m_key.m_nDecodedBytes && t3dRuntimePageChecksum( q, written ) == r.m_key.m_nChecksum;
+	return t3dColdChunkDecodeRle( r.m_bytes.ptr(), r.m_key.m_nStoredBytes,
+		decoded.ptrw(), r.m_key.m_nDecodedBytes ) &&
+		t3dRuntimePageChecksum( decoded.ptr(), r.m_key.m_nDecodedBytes ) == r.m_key.m_nChecksum;
 }
 static bool writeZeros(
 	const Ref< FileAccess > &rFile,

@@ -11,9 +11,10 @@
 #define T3D_VT_QUALITY_PROFILE_COUNT				   ( 6u )
 #define T3D_VT_INVALID_ALLOCATION					   ( 0xffffffffu )
 #define T3D_VT_MAX_MIPS								   ( 16u )
-#define T3D_RD_MATERIAL_SHADER_TRIAL_COUNT ( 14u )
-#define T3D_RD_ALPHA_SAMPLING_TRIAL_COUNT   ( 4u )
-#define T3D_RD_VT_SAMPLING_TRIAL_COUNT ( 3u )
+// Retired numeric spans are retained so downstream shader IDs never shift.
+#define T3D_RD_RETIRED_MATERIAL_ID_SLOTS ( 42u )
+#define T3D_RD_RETIRED_ALPHA_ID_SLOTS ( 4u )
+#define T3D_RD_VT_COLOR_HINT_ID_STRIDE ( 3u )
 #define T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT ( 2u )
 
 // Native feature gates are explicit build toggles; shader variants are selected
@@ -25,33 +26,9 @@
 #define T3D_ENABLE_COLD_MATERIAL_CLASSES ( 0 )
 #endif
 
-// SCons-configurable shader experiment defaults. Process environment settings
-// override these values when present; zero preserves baseline behavior.
-#ifndef T3D_DEFAULT_VT_SAMPLING_TRIAL
-#define T3D_DEFAULT_VT_SAMPLING_TRIAL ( 0u )
-#endif
-#ifndef T3D_DEFAULT_MATERIAL_SHADER_TRIAL
-#define T3D_DEFAULT_MATERIAL_SHADER_TRIAL ( 0u )
-#endif
-#ifndef T3D_DEFAULT_INSTANCE_ALPHA_TRIAL
-#define T3D_DEFAULT_INSTANCE_ALPHA_TRIAL ( 0u )
-#endif
-#ifndef T3D_DEFAULT_WORLD_ALPHA_TRIAL
-#define T3D_DEFAULT_WORLD_ALPHA_TRIAL ( 0u )
-#endif
-#ifndef T3D_DEFAULT_OCEAN_PREPARED_FRAGMENT
-#define T3D_DEFAULT_OCEAN_PREPARED_FRAGMENT ( 0u )
-#endif
-#ifndef T3D_DEFAULT_COMPOSED_SHADER_EXPERIMENT
-#define T3D_DEFAULT_COMPOSED_SHADER_EXPERIMENT ( 0u )
-#endif
 #ifndef T3D_DEFAULT_TERRAIN_GPU_TIMESTAMPS
 #define T3D_DEFAULT_TERRAIN_GPU_TIMESTAMPS ( 0u )
 #endif
-#ifndef T3D_DEFAULT_VRS_TRIAL
-#define T3D_DEFAULT_VRS_TRIAL ( 0u )
-#endif
-
 #define T3D_RD_INSTANCE_DRAW_META_INVALID_MATERIAL	   ( 0x0000FFFFu )
 #define T3D_RD_INSTANCE_DRAW_META_DYNAMIC_VISIBLE_BASE ( 0xFFFFFFFFu )
 
@@ -291,11 +268,6 @@ using namespace godot;
 #define T3D_TERRAIN_SCENE_INTEGRATION_CLASS_COUNT		  ( 2u )
 #define T3D_TERRAIN_SPEC_CONSTANT_DNR_OUTPUT_CLASS		  ( 27u )
 #define T3D_TERRAIN_SPEC_CONSTANT_MIDDLE_SURFACE_CLASS	  ( 28u )
-// Fragment branch-optimization experiments are inactive until native SPIR-V and GPU parity/timing
-// gates accept them. Rebuild with T3D_ENABLE_TERRAIN_SHADER_COLD_CLASSES=1 to A/B.
-#ifndef T3D_ENABLE_TERRAIN_SHADER_COLD_CLASSES
-#define T3D_ENABLE_TERRAIN_SHADER_COLD_CLASSES ( 0 )
-#endif
 // noise-cache specialization: bounded cold noise and exclusive editor diagnostic classes.
 #define T3D_TERRAIN_SPEC_CONSTANT_EDITOR_DIAGNOSTIC_CLASS ( 29u )
 #define T3D_TERRAIN_SPEC_CONSTANT_NOISE_SOURCE_CLASS ( 30u )

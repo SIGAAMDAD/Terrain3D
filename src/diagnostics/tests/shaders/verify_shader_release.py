@@ -19,7 +19,7 @@ REGRESSIONS = (
     'test_fragment_material_work.py', 'test_fragment_alpha_work.py',
     'test_fragment_zero_contribution.py', 'test_fragment_precalculation.py',
     'test_fragment_transform_reuse.py', 'test_fragment_sample_reuse.py',
-    'test_fragment_branch_loop.py', 'test_screen_space_shading.py',
+    'test_fragment_branch_loop.py',
     'test_feedback_comparator.py',
 )
 REQUIRED_RUNTIME = (
@@ -75,15 +75,9 @@ def main():
              '--out', str(args.out / 'fragment_matrix')], args.out)
     matrix = json.loads(report_path.read_text()) if report_path.is_file() else {}
     stages['standard_variants'] = len(matrix.get('patched', {}))
-    tests['br18_subgroup'] = run_case('br18_subgroup',
-        [python, str(HERE / 'verify_subgroup_shaders.py'), '--root', str(root),
-         '--glslang', str(args.glslang)], args.out)
     tests['br21_compact_compute'] = run_case('br21_compact_compute',
         [python, str(HERE / 'verify_compact_shader_variants.py'), '--root', str(root),
          '--glslang', str(args.glslang), '--compute-only'], args.out)
-    tests['br23_screen'] = run_case('br23_screen',
-        [python, str(HERE / 'compile_screen_space_shaders.py'), '--root', str(root),
-         '--glslang', str(args.glslang), '--out', str(args.out / 'br23_stages')], args.out)
     for name in REGRESSIONS:
         tests[name] = run_case(name.removesuffix('.py'), [python, str(HERE / name)], args.out)
     runtime = {name: {'status': 'not_run', 'evidence': None} for name in REQUIRED_RUNTIME}

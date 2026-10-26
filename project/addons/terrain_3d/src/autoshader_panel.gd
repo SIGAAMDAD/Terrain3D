@@ -28,6 +28,7 @@ var _display_rule_indices: Array[int] = []
 var _preview_snapshot: Dictionary[Vector2i, Image] = {}
 var _preview_auto_shader_enabled: bool = false
 var _auto_rebake_timer: Timer
+var _region_reconcile_scheduled: bool = false
 
 var _profile_picker: EditorResourcePicker
 var _mode: OptionButton
@@ -79,8 +80,11 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 		_set_profile(_terrain.auto_shader_profile as Terrain3DAutoShaderProfile, false, false)
 		_connected_data = _terrain.data
 		_connected_assets = _terrain.assets
-		if is_instance_valid(_connected_data) and not _connected_data.maps_edited.is_connected(_on_maps_edited):
-			_connected_data.maps_edited.connect(_on_maps_edited)
+		if is_instance_valid(_connected_data):
+			if not _connected_data.maps_edited.is_connected(_on_maps_edited):
+				_connected_data.maps_edited.connect(_on_maps_edited)
+			if not _connected_data.region_map_changed.is_connected(_on_region_map_changed):
+				_connected_data.region_map_changed.connect(_on_region_map_changed)
 		if is_instance_valid(_connected_assets) and not _connected_assets.textures_changed.is_connected(_on_textures_changed):
 			_connected_assets.textures_changed.connect(_on_textures_changed)
 	_mark_unbaked_regions_dirty()
@@ -88,6 +92,7 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 
 
 func shutdown() -> void:
+	_cancel_auto_rebake()
 	_revert_preview(false)
 	_disconnect_sources()
 	_terrain = null
@@ -101,8 +106,11 @@ func _cancel_auto_rebake() -> void:
 
 
 func _disconnect_sources() -> void:
-	if is_instance_valid(_connected_data) and _connected_data.maps_edited.is_connected(_on_maps_edited):
-		_connected_data.maps_edited.disconnect(_on_maps_edited)
+	if is_instance_valid(_connected_data):
+		if _connected_data.maps_edited.is_connected(_on_maps_edited):
+			_connected_data.maps_edited.disconnect(_on_maps_edited)
+		if _connected_data.region_map_changed.is_connected(_on_region_map_changed):
+			_connected_data.region_map_changed.disconnect(_on_region_map_changed)
 	if is_instance_valid(_connected_assets) and _connected_assets.textures_changed.is_connected(_on_textures_changed):
 		_connected_assets.textures_changed.disconnect(_on_textures_changed)
 	if is_instance_valid(_profile) and _profile.changed.is_connected(_on_profile_changed):
@@ -693,10 +701,17 @@ func _scope_locations() -> Array[Vector2i]:
 		BakeScope.ALL_REGIONS:
 			locations.assign(_terrain.data.get_region_locations())
 		BakeScope.DIRTY_REGIONS:
-			for location: Vector2i in _dirty_regions:
-				var region_location := Vector2i(location)
-				if _terrain.data.has_region(region_location):
-					locations.append(region_location)
+			return _dirty_scope_locations()
+	return locations
+
+
+func _dirty_scope_locations() -> Array[Vector2i]:
+	var locations: Array[Vector2i] = []
+	if not is_instance_valid(_terrain) or not is_instance_valid(_terrain.data):
+		return locations
+	for location: Vector2i in _dirty_regions:
+		if _terrain.data.has_region(location):
+			locations.append(location)
 	return locations
 
 
@@ -711,20 +726,37 @@ func _capture_snapshot(locations: Array[Vector2i]) -> Dictionary[Vector2i, Image
 	return snapshot
 
 
+func _control_maps_equal(left: Image, right: Image) -> bool:
+	if not is_instance_valid(left) or not is_instance_valid(right):
+		return left == right
+	return left.get_size() == right.get_size() and left.get_format() == right.get_format() and \
+		left.has_mipmaps() == right.has_mipmaps() and left.get_data() == right.get_data()
+
+
+func _request_viewport_refresh() -> void:
+	if is_instance_valid(plugin):
+		plugin.update_overlays()
+
+
 func _apply_snapshot(p_terrain: Terrain3D, snapshot: Dictionary[Vector2i, Image]) -> void:
 	if not is_instance_valid(p_terrain) or not is_instance_valid(p_terrain.data):
 		return
+	var changed: bool = false
 	_suppress_dirty_tracking = true
 	for region_location: Vector2i in snapshot:
 		var region: Terrain3DRegion = p_terrain.data.get_region(region_location)
 		if not is_instance_valid(region):
 			continue
 		var image: Image = snapshot[region_location]
+		if _control_maps_equal(region.control_map, image):
+			continue
 		region.set_control_map(image.duplicate() if is_instance_valid(image) else null)
-		# Material-only rebakes preserve hole/height state. Resnapping instances here
-		# can issue editor Jolt raycasts outside a physics notification.
+		# Material-only changes must not resnap foliage or query editor physics.
 		p_terrain.data.commit_map_edit(int(Terrain3DRegion.TYPE_CONTROL), region_location, Rect2i(), false)
+		changed = true
 	_suppress_dirty_tracking = false
+	if changed:
+		_request_viewport_refresh()
 
 
 func _copy_signatures(source: Dictionary[String, int]) -> Dictionary[String, int]:
@@ -779,6 +811,8 @@ func _apply_bake_transaction(
 			_dirty_regions.erase(location)
 		_mark_unbaked_regions_dirty()
 		_refresh_ui()
+		EditorInterface.mark_scene_as_unsaved()
+		_request_viewport_refresh()
 
 
 func _texture_resource_signature(texture: Texture2D) -> int:
@@ -850,6 +884,8 @@ func _preview_bake_locations(locations: Array[Vector2i], action: String) -> void
 	var result := _run_bake(locations, false)
 	if not result.ok:
 		_revert_preview(false)
+	elif result.changed_regions > 0:
+		_request_viewport_refresh()
 	_set_status(_format_result(action, result))
 	_refresh_ui()
 
@@ -1008,6 +1044,7 @@ func _on_maps_edited(area: AABB) -> void:
 	var world_size := float(_terrain.region_size) * _terrain.vertex_spacing
 	if world_size <= 0.0 or area.size.x <= 0.0 or area.size.z <= 0.0:
 		_mark_all_dirty()
+		_schedule_auto_rebake()
 		return
 	var dependency_margin := maxf(_terrain.vertex_spacing, 0.001)
 	var start_position := area.position - Vector3(dependency_margin, 0.0, dependency_margin)
@@ -1024,21 +1061,48 @@ func _on_maps_edited(area: AABB) -> void:
 
 
 func _on_textures_changed() -> void:
+	_cancel_auto_rebake()
 	_mark_all_dirty()
-	_schedule_auto_rebake()
+	if is_instance_valid(_profile) and _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+		_schedule_auto_rebake()
 
 
 func _on_profile_changed() -> void:
 	if _suppress_profile_change_tracking:
 		return
+	_cancel_auto_rebake()
 	EditorInterface.mark_scene_as_unsaved()
 	_mark_all_dirty()
 	_refresh_ui()
-	_schedule_auto_rebake()
+	if is_instance_valid(_profile) and _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+		_schedule_auto_rebake()
+
+
+func _on_region_map_changed() -> void:
+	if _region_reconcile_scheduled:
+		return
+	_region_reconcile_scheduled = true
+	_reconcile_region_layout.call_deferred()
+
+
+func _reconcile_region_layout() -> void:
+	_region_reconcile_scheduled = false
+	if not is_inside_tree() or not is_instance_valid(_terrain):
+		return
+	_mark_unbaked_regions_dirty()
+	_refresh_ui()
+	if is_instance_valid(_profile) and _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
+		_schedule_auto_rebake()
 
 
 func _mark_unbaked_regions_dirty() -> void:
-	if not is_instance_valid(_terrain) or not is_instance_valid(_profile) or not is_instance_valid(_baker):
+	if not is_instance_valid(_terrain) or not is_instance_valid(_terrain.data):
+		_dirty_regions.clear()
+		return
+	for location: Vector2i in _dirty_regions.keys():
+		if not _terrain.data.has_region(location):
+			_dirty_regions.erase(location)
+	if not is_instance_valid(_profile) or not is_instance_valid(_baker):
 		return
 	var locations: Array[Vector2i] = []
 	locations.assign(_terrain.data.get_region_locations())
@@ -1120,11 +1184,11 @@ func _on_auto_rebake_timeout() -> void:
 	if _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		_refresh_editor_preview()
 		return
-	if _dirty_regions.is_empty():
+	if _profile.mode != Terrain3DAutoShaderProfile.Mode.BAKED or not _profile.auto_rebake_after_sculpt:
 		return
-	var previous_scope := _scope.selected
-	_scope.select(_scope.get_item_index(BakeScope.DIRTY_REGIONS))
-	var locations := _scope_locations()
+	var locations := _dirty_scope_locations()
+	if locations.is_empty():
+		return
 	var before := _capture_snapshot(locations)
 	var before_mode: int = _profile.mode
 	var before_auto_shader := bool(_terrain.material.auto_shader_enabled) if is_instance_valid(_terrain.material) else false
@@ -1166,7 +1230,6 @@ func _on_auto_rebake_timeout() -> void:
 			before_signatures,
 		)
 		undo.commit_action(false)
-	_scope.select(previous_scope)
 	_set_status(_format_result("Automatic rebake", result))
 	_refresh_ui()
 

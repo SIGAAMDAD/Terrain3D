@@ -774,6 +774,8 @@ func _start(mode: String) -> void:
 		return
 	var regions: Array[Vector2i] = []
 	regions.assign(validation["regions"])
+	_last_job_metrics.clear()
+	_progress.value = 0.0
 	_pending_mode = mode
 	_pending_regions = regions
 	_source_job = SOURCE_JOB.new()
@@ -876,6 +878,9 @@ func _process(_delta: float) -> void:
 		_fail("Generation failed: " + String(result.get("error", "Unknown error")))
 		_discard_pending()
 		return
+	if int(result.get("instances", 0)) == 0:
+		_status.text = "0 foliage placements from %d candidates (%s); preparing owner updates…" % [
+			int(result.get("candidate_tests", 0)), _format_rejections(result)]
 	var batches: Array = _generator.take_batches()
 	batches.append_array(_pending_removals)
 	_commit(batches)
@@ -987,15 +992,19 @@ func _poll_commit() -> void:
 	if not visible:
 		_transaction_job.cancel_async()
 	var result: Dictionary = _transaction_job.poll_async(COMMIT_BUDGET)
+	_progress.value = 0.7 + 0.3 * clampf(_transaction_job.progress_fraction(), 0.0, 1.0)
 	if bool(result.get("running", false)):
-		_status.text = "Foliage %s: region %d/%d; I/O %d KiB" % [String(result.get("phase", "staging")),
-			int(result.get("regions_prepared", 0)), int(result.get("region_count", 0)),
-			int(_transaction_job.metrics.get("io_bytes", 0)) / 1024]
+		var metrics: Dictionary = result.get("metrics", _transaction_job.metrics)
+		_status.text = "Foliage %s: region %d/%d; staged %d pages (%d KiB); I/O %d KiB" % [
+			String(result.get("phase", "staging")), int(result.get("regions_prepared", 0)),
+			int(result.get("region_count", 0)), int(metrics.get("staged_pages", 0)),
+			int(metrics.get("staged_bytes", 0)) / 1024, int(metrics.get("io_bytes", 0)) / 1024]
 		return
 	_saving = false
 	_set_busy(false)
 	set_process(false)
 	_last_job_metrics["commit"] = result.get("metrics", {})
+	var finished_mode: String = _pending_mode
 	var transaction = _transaction_job
 	_transaction_job = null
 	_source_job = null
@@ -1021,10 +1030,42 @@ func _poll_commit() -> void:
 	manager.add_do_reference(transaction)
 	manager.commit_action(false)
 	_set_state(JobState.DONE)
-	_status.text = String(result.get("warning", "Saved %d regions with matching foliage ownership." % int(result.get("regions", 0))))
+	var metrics: Dictionary = result.get("metrics", {})
+	var saved_regions: int = int(result.get("regions", 0))
+	var generated: int = int(metrics.get("generated_instances", 0))
+	var logical: int = int(metrics.get("logical_instances", 0))
+	var stored_kib: int = int(metrics.get("persisted_bytes", 0)) / 1024
+	if finished_mode == "clear":
+		_status.text = "Cleared generated owners in %d regions; %d logical instances remain; stored %d KiB." % [
+			saved_regions, logical, stored_kib]
+	elif generated == 0:
+		_status.text = "Placed 0 instances from %d candidates (%s). Saved %d regions; %d logical instances remain; stored %d KiB." % [
+			int(_last_job_metrics.get("candidate_tests", 0)), _format_rejections(_last_job_metrics),
+			saved_regions, logical, stored_kib]
+	else:
+		_status.text = "Placed %d instances; %d logical across %d regions; %d pages staged; stored %d KiB." % [
+			generated, logical, saved_regions, int(metrics.get("staged_pages", 0)), stored_kib]
+	if result.has("warning"):
+		_status.text += "\n" + String(result["warning"])
 	if not _problems.is_empty():
 		_status.text += "\nSkipped invalid rules:\n" + "\n".join(_problems)
 	_progress.value = 1.0
+
+func _format_rejections(generation: Dictionary) -> String:
+	var rejections: Dictionary = generation.get("rejected", {})
+	var ranked: Array[Dictionary] = []
+	for reason: String in rejections:
+		var count: int = int(rejections[reason])
+		if count > 0 and reason != "cell_jitter" and reason != "outside_rule_scope":
+			ranked.append({"reason": reason, "count": count})
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["count"]) > int(b["count"]))
+	var summary: Array[String] = []
+	for index: int in range(mini(3, ranked.size())):
+		summary.append("%s: %d" % [String(ranked[index]["reason"]).replace("_", " "), int(ranked[index]["count"])])
+	if summary.is_empty():
+		return "no eligible in-scope candidates"
+	return ", ".join(summary)
 
 func _new_transaction():
 	return ASYNC_TRANSACTION.new()

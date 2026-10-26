@@ -19,6 +19,23 @@
 
 class Terrain3DVTGpu;
 
+struct t3dWorldShaderCapabilityKey_t
+{
+	const Terrain3DVTGpu *m_pFeedbackOwner = NULL;
+	uint32_t m_nFeedbackGeneration = 0u;
+	bool m_bFeedbackReady = false;
+	bool m_bEnvironmentReady = false;
+	bool m_bCompactRequested = false;
+
+	constexpr bool operator==( const t3dWorldShaderCapabilityKey_t &rOther ) const {
+		return m_pFeedbackOwner == rOther.m_pFeedbackOwner &&
+			m_nFeedbackGeneration == rOther.m_nFeedbackGeneration &&
+			m_bFeedbackReady == rOther.m_bFeedbackReady &&
+			m_bEnvironmentReady == rOther.m_bEnvironmentReady &&
+			m_bCompactRequested == rOther.m_bCompactRequested;
+	}
+};
+
 class Terrain3DWorldRaster
 {
 private:
@@ -52,6 +69,8 @@ private:
 	Terrain3DRdForwardLighting m_forwardLighting;
 	Terrain3DRdShader		   m_hShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	Terrain3DVTGpu			  *m_pFeedbackOwner = NULL; // Borrowed shared VT owner.
+	t3dWorldShaderCapabilityKey_t m_shaderCapabilities{};
+	bool m_bShaderCapabilitiesValid = false;
 	bool					   m_bMeshFeedback[T3D_RD_FORWARD_COLOR_VARIANT_COUNT]{};
 	bool m_bCompactShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX]{};
 	RID m_hCompactSet[T3D_PRIMITIVE_CLASS_COUNT]{};
@@ -102,6 +121,7 @@ private:
 												  t3dPrimitiveClass_t			   primitiveClass );
 	const t3dPipelineEntry_t *findPipeline( const t3dPipelineKey_t &rKey ) const;
 	void					  freeSetsCold( void );
+	void                      invalidateMaterialShadersCold( void );
 
 public:
 	explicit Terrain3DWorldRaster( Terrain3DRdContext &rContext );

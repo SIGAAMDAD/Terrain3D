@@ -4,16 +4,7 @@
 #include <string.h>
 
 int main() {
-    static const char *const expected[] = {
-        "cs_terrain_strip_color_native", "cs_terrain_strip_color_specular",
-        "cs_terrain_strip_color_motion", "cs_terrain_strip_color_specular_motion",
-        "cs_terrain_strip_color_native_radiance_array",
-        "cs_terrain_strip_color_specular_radiance_array",
-        "cs_terrain_strip_color_motion_radiance_array",
-        "cs_terrain_strip_color_specular_motion_radiance_array",
-        "cs_terrain_strip_depth_normal_roughness",
-        "cs_terrain_strip_depth_normal_roughness_voxel_gi"
-    };
+    // SHD-05 retires unreachable composed-color versions without shifting IDs.
     static_assert(T3D_RD_SHADER_WORLD_CS_END - T3D_RD_SHADER_WORLD_CS_BASE == 10, "CS18 catalog size");
     assert(!t3dRdShaderNeedsStartupPhysical(T3D_RD_SHADER_WORLD_CS_BASE));
     assert(!t3dRdShaderNeedsStartupPhysical(T3D_RD_SHADER_COUNT));
@@ -21,8 +12,7 @@ int main() {
         const auto id = static_cast<t3dRdShaderId_t>(T3D_RD_SHADER_WORLD_CS_BASE + i);
         const auto entry = t3dRdShaderCatalogGet(id);
         assert(entry.m_id == id);
-        assert(entry.m_path && !strcmp(entry.m_path, "res://addons/terrain_3d/rd/terrain_world_raster.glsl"));
-        assert(entry.m_version && !strcmp(entry.m_version, expected[i]));
+        assert(!entry.m_path && !entry.m_version);
     }
     // P25/P26 add IDs *after* the ten optional CS18 variants without moving
     // the existing shader IDs or changing the CS18 enabled-policy range.

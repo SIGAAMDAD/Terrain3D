@@ -64,17 +64,12 @@ public:
 	static bool					initializeSharedState( void );
 	static void					shutdownSharedState( void );
 	static bool					physicalCacheReady( void );
-	static bool					isComposedShaderExperimentEnabledCold( void );
 	// Production WORLD/preview cull routing and page hash reduction are now
 	// internal workload policies. Keep these cold query ABIs through SHD-05.
 	static bool					isGroupedCullEnabledCold( void );
 	// Project setting: terrain3d/rendering/compact_clusters (default false).
 	static bool isCompactClustersEnabledCold( void );
-	static bool isScreenSpacePilotEnabledCold( void );
 	static bool isEnvironmentFieldsEnabledCold( void );
-	// Cold, process-wide shader experiment choices. 0: original, 255: auto (terrain only).
-	static uint32_t getMaterialShaderTrialCold( void );
-	static uint32_t getVtSamplingTrialCold( void );
 	static bool isTerrainGpuTimestampEnabledCold( void );
 	static bool					isWorldSmallCullEnabledCold( void );
 	static bool isWorldScanEnabledCold( void );

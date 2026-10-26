@@ -1175,7 +1175,7 @@ Dictionary Terrain3DAutoShaderBaker::bakeRegions(
 		data->commitMapEdits( TYPE_CONTROL,
 							  changed_locations,
 							  AABB(),
-							  MAP_EDIT_SNAP );
+							  0u );
 	}
 	result["ok"] = true;
 	result["processed_regions"] = processed_region_count;
@@ -1304,7 +1304,7 @@ Dictionary Terrain3DAutoShaderBaker::clearBakedRegions(
 		pData->commitMapEdits( TYPE_CONTROL,
 							   changed_locations,
 							   AABB(),
-							   MAP_EDIT_SNAP );
+							   0u );
 	}
 	result["ok"] = true;
 	result["changed_regions"] = ( int ) ( changed_locations.size() );

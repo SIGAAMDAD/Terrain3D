@@ -7,6 +7,7 @@
 #include "core/utility/terrain_3d_sync.h"
 #include "streaming/io/terrain_3d_stream_read_scheduler.h"
 #include "streaming/io/terrain_3d_stream_range_key.h"
+#include "streaming/io/terrain_3d_cold_chunk_format.h"
 #include "streaming/io/terrain_3d_shared_stream_pack.h"
 #include "data/runtime/terrain_3d_runtime_page_format.h"
 #include <godot_cpp/classes/file_access.hpp>
@@ -104,20 +105,9 @@ class Terrain3DStreamReadCache
 		if ( decoded.size() != ( int64_t ) rKey.m_nDecodedBytes ) {
 			return false;
 		}
-		uint32_t			 read = 0u, write = 0u;
-		uint8_t *const		 pOut = decoded.ptrw();
-		const uint8_t *const pIn = rStored.ptr();
-		while ( read + 1u < rKey.m_nStoredBytes ) {
-			const uint32_t run = pIn[read++];
-			const uint8_t  value = pIn[read++];
-			if ( run == 0u || run > rKey.m_nDecodedBytes - write ) {
-				return false;
-			}
-			memset( pOut + write, value, run );
-			write += run;
-		}
-		return read == rKey.m_nStoredBytes && write == rKey.m_nDecodedBytes &&
-			   t3dRuntimePageChecksum( pOut, rKey.m_nDecodedBytes ) == rKey.m_nChecksum;
+		return t3dColdChunkDecodeRle( rStored.ptr(), rKey.m_nStoredBytes,
+			decoded.ptrw(), rKey.m_nDecodedBytes ) &&
+			t3dRuntimePageChecksum( decoded.ptr(), rKey.m_nDecodedBytes ) == rKey.m_nChecksum;
 	}
 
 public:

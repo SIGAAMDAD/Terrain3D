@@ -57,6 +57,7 @@ public:
 	bool prepare( const t3dRdForwardPassContext_t &pass );
 	godot::RID ensureRasterSet( const godot::RID &rShader );
 	void invalidate();
+	void clearRasterSetsCold();
 	void shutdown();
 	bool ready() const { return m_bReady; }
 	uint32_t listCount() const { return m_nListCount; }

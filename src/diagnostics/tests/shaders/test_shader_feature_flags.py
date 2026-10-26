@@ -39,12 +39,11 @@ assert '#define T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ( 0 )' in constants
 # subgroup flag that is tested *before* this point silently stays disabled.
 fragment_roots = ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
                   'terrain_clipmap_far.glsl', 'terrain_instances.glsl',
-                  'terrain_world_raster.glsl', 'terrain_clipmap_screen_space.glsl')
+                  'terrain_world_raster.glsl')
 for name in fragment_roots:
     stage = split_sections((RD / name).read_text())['fragment']
     define = stage.index('#VERSION_DEFINES')
-    subgroup = stage.index('#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING)')
-    assert define < subgroup, name
+    assert '#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING)' not in stage, name
 
 checks = 0
 
@@ -60,21 +59,14 @@ def expand(name, variant, extra=()):
 for terrain in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
                 'terrain_clipmap_far.glsl'):
     selected = variants(split_sections((RD / terrain).read_text()))
-    assert '#define T3D_MATERIAL_ACTIVE_KEY_LOOP 1' in selected['active_key_native']
-    assert '#define T3D_VT_FIXED_FILTER_TAPS 1' in selected['fixed_taps_native']
-    for trial in ('vt_ancestor_hints_native', 'vt_ancestor_hints_prepared_bias_native',
-                  'feedback_color_native_vt_hints',
-                  'feedback_color_native_vt_hints_prepared_bias'):
-        assert '#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1' in selected[trial]
-
+    assert 'color_native_vt_hints' in selected
+    assert 'feedback_color_native_vt_hints' in selected
+    assert '#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1' in selected['color_native_vt_hints']
     plain = expand(terrain, 'color_native')
-    hinted = expand(terrain, 'vt_ancestor_hints_native')
-    unrolled = expand(terrain, 'fixed_taps_native')
-    keyed = expand(terrain, 'active_key_native')
+    hinted = expand(terrain, 'color_native_vt_hints')
     disabled = expand(terrain, 'color_native', ('T3D_VT_RESIDENT_ANCESTOR_HINTS 0',))
     assert 'TerrainVTAncestorHints' not in plain and 'TerrainVTAncestorHints' not in disabled, terrain
     assert 'TerrainVTAncestorHints' in hinted, terrain
-    assert plain != unrolled and plain != keyed, terrain
 
 # The compact list variant must instantiate its optional set-4 ABI only when
 # the corresponding semantic variant is selected, including explicit zero.
@@ -89,36 +81,9 @@ for shader, plain_name, compact_name in (
     assert 'T3DBr21CompactHeaders' not in plain and 'T3DBr21CompactHeaders' not in zero
     assert 'T3DBr21CompactHeaders' in compact, shader
 
-# Stage-specific screen space flags must result in mutually exclusive vertex
-# and fragment interfaces and retain their five RGBA32F render-target ABI.
-screen = (RD / 'terrain_clipmap_screen_space.glsl').read_text()
-sections = split_sections(screen)
-selected = variants(sections)
-assert '#define T3D_SCREEN_SPACE_COVERAGE_PASS 1' in selected['coverage']
-assert '#define T3D_SCREEN_SPACE_SHADE_PASS 1' in selected['shade']
-coverage = expand('terrain_clipmap_screen_space.glsl', 'coverage')
-shade = expand('terrain_clipmap_screen_space.glsl', 'shade')
-assert 'out vec4 t3d_screen_space_world_dxz_dy' in coverage
-assert 'out vec4 t3d_screen_space_world_dxz_dy' not in shade
-assert 't3d_screen_space_shade_fragment()' in shade
-assert 't3d_br23_world_dxz_dy_input' in shade
-
-for version in ('coverage', 'shade'):
-    source = INCLUDE.sub(lambda m: (RD / m.group(1)).read_text(), sections['vertex'])
-    assert not INCLUDE.search(source), 'unexpected nested includes'
-    output = test_cpp(CPP, source.replace('#VERSION_DEFINES', selected[version]), ())
-    checks += 1
-    if version == 'shade':
-        assert 'gl_VertexIndex << 1' in output
-    else:
-        assert 'gl_VertexIndex << 1' not in output
-
-# Enabled subgroup path must differ from baseline, and zero must not enable it.
-for shader in ('terrain_clipmap_near.glsl', 'terrain_instances.glsl'):
-    baseline = expand(shader, 'color_native')
-    enabled = expand(shader, 'color_native', ('T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING 1',))
-    zero = expand(shader, 'color_native', ('T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING 0',))
-    assert 'subgroupAllEqual' not in baseline and 'subgroupAllEqual' not in zero
-    assert 'subgroupAllEqual' in enabled, shader
-
-print(f'PASS RDShaderFile flag contracts: {len(fragment_roots)} fragment roots, {checks} expanded stages')
+# No shader version or forward-lighting helper retains the retired subgroup experiment.
+for shader in ('terrain_clipmap_near.glsl', 'terrain_instances.glsl', 'terrain_world_raster.glsl'):
+    baseline = expand(shader, 'color_native' if shader != 'terrain_world_raster.glsl' else 'mesh_color_native')
+    assert 'subgroupAllEqual' not in baseline, shader
+assert 'subgroupAllEqual' not in (RD / 'terrain_forward_lighting_inc.glslinc').read_text()
+print(f'PASS active RDShaderFile flag contracts: {len(fragment_roots)} fragment roots, {checks} expanded stages')

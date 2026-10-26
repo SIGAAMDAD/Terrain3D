@@ -195,6 +195,10 @@ RID Terrain3DRdClusterCompact::ensureRasterSet( const RID &shader ) {
 	return set;
 }
 
+void Terrain3DRdClusterCompact::clearRasterSetsCold() {
+	m_rasterSets.clear();
+}
+
 void Terrain3DRdClusterCompact::invalidate() {
 	m_bReady = false;
 	m_nPreparedFrame = 0u;

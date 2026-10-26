@@ -24,8 +24,16 @@ var _running: bool = false
 var _memory_bytes: int = 0
 var _memory_limit: int = 67108864
 var _final_result: Dictionary = {}
+var _io_tasks_total: int = 0
+var _io_tasks_done: int = 0
+var _verify_tasks_total: int = 0
+var _verify_tasks_done: int = 0
+var _native_pages_decoded: int = 0
 var metrics: Dictionary = {"io_bytes": 0, "worker_usec": 0, "last_tick_usec": 0,
-	"max_tick_usec": 0, "publication_usec": 0, "source_copy_bytes": 0}
+	"max_tick_usec": 0, "publication_usec": 0, "source_copy_bytes": 0,
+	"generated_instances": 0, "staged_instances": 0, "logical_instances": 0,
+	"previous_logical_instances": 0, "staged_pages": 0, "staged_bytes": 0,
+	"persisted_files": 0, "persisted_bytes": 0, "published_instances": 0}
 
 func begin_async(terrain: Terrain3D, batches: Array, before: Terrain3DFoliageManifest,
 		after: Terrain3DFoliageManifest, sources: Dictionary, guard: Callable, scratch_mb: int = 64) -> Dictionary:
@@ -48,6 +56,7 @@ func begin_async(terrain: Terrain3D, batches: Array, before: Terrain3DFoliageMan
 		"ledger_after": directory.path_join("ledger_after.tres")}
 	_pin(directory)
 	for batch: Dictionary in batches:
+		metrics["generated_instances"] += (batch.get("transforms", []) as Array).size()
 		var region: Vector2i = batch["region"]
 		var local: Array = _by_region.get(region, [])
 		local.append(batch)
@@ -88,6 +97,7 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 		if _final_result.is_empty():
 			_final_result = {"ok": false, "cancelled": true, "error": "Foliage cancelled before publication."}
 		_final_result["running"] = false
+		_final_result["progress"] = progress_fraction()
 		_final_result["metrics"] = metrics.duplicate()
 		var completed: Dictionary = _final_result.duplicate()
 		if bool(completed.get("ok", false)):
@@ -96,7 +106,8 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 	if _waiting:
 		var result: Dictionary = _worker.poll()
 		if result.is_empty():
-			return {"running": true, "phase": _stage, "regions_prepared": _index, "region_count": _locations.size()}
+			return {"running": true, "phase": _stage, "regions_prepared": _index,
+				"region_count": _locations.size(), "progress": progress_fraction(), "metrics": metrics}
 		_waiting = false
 		metrics["io_bytes"] += int(result.get("io_bytes", 0))
 		metrics["worker_usec"] += int(result.get("worker_usec", 0))
@@ -106,6 +117,11 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 		if _stage == "journal":
 			_stage = "publish"
 		else:
+			if bool(result.get("done", true)):
+				if _stage == "io":
+					_io_tasks_done += 1
+				elif _stage == "verify":
+					_verify_tasks_done += 1
 			if not bool(result.get("done", true)):
 				_operation["payload"]["offset"] = int(result["offset"])
 				_operations.push_front(_operation)
@@ -116,7 +132,7 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 				if _operation.has("scope"):
 					_store_hash(_operation, String(result["digest"]))
 	if Time.get_ticks_usec() - begin >= int(budgets.get("usec", 2000)):
-		return {"running": true, "phase": _stage}
+		return {"running": true, "phase": _stage, "progress": progress_fraction(), "metrics": metrics}
 	match _stage:
 		"prepare":
 			_prepare_one()
@@ -133,6 +149,7 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 		"native":
 			var decoded: Dictionary = _native.step_restore(String(record["id"]),
 				int(budgets.get("pages", 1)), int(budgets.get("decode_bytes", 1048576)))
+			_native_pages_decoded = int(decoded.get("decoded_pages", _native_pages_decoded))
 			if not bool(decoded.get("ok", false)):
 				_fail_async(String(decoded.get("error", "Native foliage preparation failed")))
 			elif bool(decoded.get("ready", false)):
@@ -150,7 +167,28 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 			_publish_atomic()
 	metrics["last_tick_usec"] = Time.get_ticks_usec() - begin
 	metrics["max_tick_usec"] = maxi(int(metrics["max_tick_usec"]), int(metrics["last_tick_usec"]))
-	return {"running": true, "phase": _stage, "regions_prepared": _index, "region_count": _locations.size(), "metrics": metrics}
+	return {"running": true, "phase": _stage, "regions_prepared": _index,
+		"region_count": _locations.size(), "progress": progress_fraction(), "metrics": metrics}
+
+# Fraction of the commit itself. Each band advances only after its corresponding
+# cold authoring operation actually completes, including worker I/O and verification.
+func progress_fraction() -> float:
+	match _stage:
+		"prepare":
+			return 0.2 * float(_index) / float(maxi(1, _locations.size()))
+		"io":
+			return 0.2 + 0.55 * float(_io_tasks_done) / float(maxi(1, _io_tasks_total))
+		"native":
+			return 0.75 + 0.1 * float(_native_pages_decoded) / float(maxi(1, _locations.size() * 2))
+		"verify":
+			return 0.85 + 0.1 * float(_verify_tasks_done) / float(maxi(1, _verify_tasks_total))
+		"journal":
+			return 0.95
+		"publish":
+			return 0.98
+		"stopping":
+			return 1.0 if _committed else 0.98
+	return 0.0
 
 func _prepare_one() -> void:
 	if not _guard_valid():
@@ -163,6 +201,8 @@ func _prepare_one() -> void:
 		_queue("hash", {"source": record["ledger_before"]}, "root", -1, "ledger_before_hash")
 		_queue("save_resource", {"resource": _after_ledger, "destination": record["ledger_after"]})
 		_queue("hash", {"source": record["ledger_after"]}, "root", -1, "ledger_after_hash")
+		var ledger_file: String = _terrain.data_directory.path_join(MANIFEST.FILE_NAME)
+		_io_tasks_total = 5 + 10 * _locations.size() + (4 if FileAccess.file_exists(ledger_file) else 1)
 		_stage = "io"
 		return
 	var location: Vector2i = _locations[_index]
@@ -172,6 +212,11 @@ func _prepare_one() -> void:
 		return
 	var before: PackedByteArray = prepared["before_pages"][location]
 	var after: PackedByteArray = prepared["pages"][location]
+	metrics["staged_instances"] += int(prepared.get("instances", 0))
+	metrics["logical_instances"] += int(prepared.get("logical_instances", 0))
+	metrics["previous_logical_instances"] += int(prepared.get("previous_logical_instances", 0))
+	metrics["staged_pages"] += int(prepared.get("staged_pages", 0))
+	metrics["staged_bytes"] += int(prepared.get("staged_bytes", 0))
 	_memory_bytes += before.size() + after.size()
 	if before.size() > IO.MAX_FILE_BYTES or after.size() > IO.MAX_FILE_BYTES or _memory_bytes > _memory_limit:
 		_fail_async("Foliage commit snapshots exceed the staging budget; reduce the job scope.")
@@ -255,6 +300,7 @@ func _queue_verification() -> void:
 		_verify(item["after"], item["after_hash"])
 	_verify(record["ledger_before"], record["ledger_before_hash"])
 	_verify(record["ledger_after"], record["ledger_after_hash"])
+	_verify_tasks_total = _operations.size()
 	_stage = "verify"
 
 func _verify(path: String, digest: String) -> void:
@@ -312,7 +358,16 @@ func _publish_atomic() -> void:
 		success = _phase("COMMITTED")
 	if success:
 		_committed = true
-		_final_result = {"ok": true, "manifest": _after_ledger, "regions": _locations.size()}
+		metrics["published_instances"] = metrics["staged_instances"]
+		metrics["persisted_files"] = published.size()
+		for index: int in published:
+			var persisted: FileAccess = FileAccess.open(record["members"][index]["target"], FileAccess.READ)
+			if persisted != null:
+				metrics["persisted_bytes"] += persisted.get_length()
+				persisted.close()
+		_final_result = {"ok": true, "manifest": _after_ledger, "regions": _locations.size(),
+			"generated_instances": metrics["generated_instances"], "published_instances": metrics["published_instances"],
+			"logical_instances": metrics["logical_instances"]}
 		if not _clear_journal(_terrain):
 			_final_result["warning"] = "Foliage committed; recovery journal cleanup needs retry."
 	else:

@@ -893,15 +893,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardShaderVariant(
 		const bool compact = m_forwardLighting.compactRequested() &&
 			variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT &&
 			Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode() == 0u;
-		const uint32_t alpha_trial = Terrain3DRdShaderLibrary::getInstanceAlphaTrialCold();
-		const bool alpha_depth = ( alpha_trial == 1u || alpha_trial == 2u ) &&
-			variant == T3D_RD_FORWARD_SHADER_DEPTH;
-		const bool alpha_dnr = ( alpha_trial == 3u || alpha_trial == 4u ) &&
-			variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS;
-		const t3dRdShaderId_t id = alpha_depth || alpha_dnr
-			? t3dRdAlphaSamplingTrialId( false, alpha_trial )
-			: ( t3dRdShaderId_t ) ( ( compact ? T3D_RD_SHADER_INSTANCE_COMPACT_BASE
-				: T3D_RD_SHADER_INSTANCE_FORWARD_BASE ) + variant );
+		const t3dRdShaderId_t id = ( t3dRdShaderId_t ) (
+			( compact ? T3D_RD_SHADER_INSTANCE_COMPACT_BASE : T3D_RD_SHADER_INSTANCE_FORWARD_BASE ) + variant );
 		created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_INSTANCES, name, id );
 		m_bForwardCompact[variant] = created && compact;
 	}
@@ -1019,11 +1012,7 @@ bool Terrain3DRdInstanceRenderer::ensureInstanceCullShader(
 		return false;
 	}
 	if ( !m_visibility.m_hInstanceCullShader.isValid() ) {
-		const t3dRdShaderId_t shader_id = Terrain3DRdShaderLibrary::isInstanceCommandOwnerEnabledCold()
-            ? T3D_RD_SHADER_INSTANCE_CULL_COMMAND_OWNER
-            : ( Terrain3DRdShaderLibrary::isGroupedCullEnabledCold()
-                ? T3D_RD_SHADER_INSTANCE_CULL_GROUPED
-                : T3D_RD_SHADER_INSTANCE_CULL );
+        const t3dRdShaderId_t shader_id = T3D_RD_SHADER_INSTANCE_CULL_GROUPED;
 		if ( !m_visibility.m_hInstanceCullShader.createTracked( m_context,
 																T3D_RD_CONTEXT_OWNER_INSTANCES,
 																"T3D.InstanceCullShader",

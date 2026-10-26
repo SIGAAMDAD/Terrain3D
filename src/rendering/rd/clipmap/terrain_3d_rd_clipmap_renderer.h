@@ -86,6 +86,7 @@ private:
 	{
 		bool				   m_bOneSunLighting = false;
 		bool m_bFeedbackEnabled = false;
+        bool m_bCompactLighting = false;
 		t3dTerrainShaderPath_t m_shaderPath = T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
 		uint8_t				   m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
 		uint8_t				   m_nszLightingModelClass[3] = { T3D_TERRAIN_LIGHTING_MODEL_RUNTIME,
@@ -98,13 +99,14 @@ private:
 		uint8_t				   m_nMiddleSurfaceClass = T3D_TERRAIN_MIDDLE_SURFACE_RUNTIME;
 		uint8_t			   m_nEditorDiagnosticClass = T3D_TERRAIN_EDITOR_DIAGNOSTIC_RUNTIME;
 		uint8_t			   m_nNoiseSourceClass = T3D_TERRAIN_NOISE_SOURCE_RUNTIME;
-		uint8_t m_nszTrialShaderClass[3]{};
+		uint8_t m_nszVtHintLayout[3]{};
 
 		bool operator==(
 			const t3dRdForwardPipelineKey_s &rOther ) const {
 			return ( const t3dRdForwardPipelineBaseKey_t & ) ( *this ) ==
 					   ( const t3dRdForwardPipelineBaseKey_t & ) ( rOther ) &&
-				   m_bOneSunLighting == rOther.m_bOneSunLighting && m_bFeedbackEnabled == rOther.m_bFeedbackEnabled && m_shaderPath == rOther.m_shaderPath &&
+				   m_bOneSunLighting == rOther.m_bOneSunLighting && m_bFeedbackEnabled == rOther.m_bFeedbackEnabled &&
+                   m_bCompactLighting == rOther.m_bCompactLighting && m_shaderPath == rOther.m_shaderPath &&
 				   m_nShippingFeatureClass == rOther.m_nShippingFeatureClass &&
 				   m_nszLightingModelClass[0] == rOther.m_nszLightingModelClass[0] &&
 				   m_nszLightingModelClass[1] == rOther.m_nszLightingModelClass[1] &&
@@ -116,9 +118,9 @@ private:
 				   m_nMiddleSurfaceClass == rOther.m_nMiddleSurfaceClass &&
 				   m_nEditorDiagnosticClass == rOther.m_nEditorDiagnosticClass &&
 				   m_nNoiseSourceClass == rOther.m_nNoiseSourceClass &&
-				   m_nszTrialShaderClass[0] == rOther.m_nszTrialShaderClass[0] &&
-				   m_nszTrialShaderClass[1] == rOther.m_nszTrialShaderClass[1] &&
-				   m_nszTrialShaderClass[2] == rOther.m_nszTrialShaderClass[2];
+				   m_nszVtHintLayout[0] == rOther.m_nszVtHintLayout[0] &&
+				   m_nszVtHintLayout[1] == rOther.m_nszVtHintLayout[1] &&
+				   m_nszVtHintLayout[2] == rOther.m_nszVtHintLayout[2];
 		}
 	} t3dRdForwardPipelineKey_t;
 
@@ -141,10 +143,6 @@ private:
 	Terrain3DRdContext		  &m_context;
 	Terrain3DRdForwardLighting m_forwardLighting;
 	RID m_hszCompactSets[3]{};
-	bool m_bBr23PilotRequested = false;
-	uint32_t m_nBr23PilotRejectMask = 0u;
-	uint64_t m_nScreenSpacePilotColorBytes = 0u;
-
 	static_assert( T3D_CLIPMAP_INDIRECT_ARENA_BYTES <=
 					   t3d_rd_context_contract::fixedIndirectCapacity( T3D_RD_CONTEXT_FIXED_INDIRECT_CLIPMAP ),
 				   "Clipmap indirect commands exceed the shared fixed slice" );
@@ -157,20 +155,16 @@ private:
 	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
 	uint16_t			  m_szStripPartCounts[MESH_TYPE_COUNT]{};
 	Terrain3DRdShader	  m_hszShaders[3];
-	Terrain3DRdShader m_hszMaterialTrialShaders[3][T3D_RD_MATERIAL_SHADER_TRIAL_COUNT];
-	uint8_t m_nszActiveMaterialTrial[3]{};
-	// VT-sampling: prepared-bias trial keeps the descriptor layout; ancestor-hint trials use a separate set-0 layout.
-	Terrain3DRdShader m_hszVtSamplingTrialShaders[3][T3D_RD_VT_SAMPLING_TRIAL_COUNT];
-	// Feedback ownership is preserved; only the color-native feedback pass
-	// uses the separate set-0 resident-hint descriptor layout.
-	Terrain3DRdShader m_hszFeedbackHintShaders[3][T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT];
-	uint8_t m_nszActiveVtSamplingTrial[3]{};
-	uint64_t m_nVtSamplingTrialPrepareCount = 0u;
-	uint64_t m_nVtSamplingTrialFallbackCount = 0u;
-	uint64_t m_nMaterialTrialPrepareCount = 0u;
-	uint64_t m_nMaterialTrialFallbackCount = 0u;
+    // One combined resident-ancestor + prepared-mip-bias shader per terrain tier.
+    // The non-hint evaluator always retains the bounded VT fallback.
+    Terrain3DRdShader m_hszCanonicalHintColorShaders[3];
+    Terrain3DRdShader m_hszCanonicalHintFeedbackShaders[3];
+    bool m_bszCanonicalHintsActive[3]{};
+    uint64_t m_nVtHintPrepareCount = 0u;
+    Terrain3DRdShader m_hszFeedbackCompactShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	uint64_t m_nTerrainTimestampPairs = 0u;
 	Terrain3DRdShader	  m_hszForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	Terrain3DRdShader m_hszForwardCompactShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	Terrain3DRdShader m_hszForwardOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	Terrain3DRdShader m_hszFeedbackShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	Terrain3DRdShader m_hszFeedbackOneSunShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
@@ -234,6 +228,8 @@ private:
 
 	typedef struct t3dRdClipmapDescriptorKey_s
 	{
+        RID      m_hBoundAncestorHints;
+        RID      m_hszBoundHintShaders[3];
 		RID		 m_hBoundHeightTexture;
 		RID		 m_hBoundDerivedTexture;
 		RID		 m_hBoundControlTexture;
@@ -258,7 +254,11 @@ private:
 
 		bool operator==(
 			const t3dRdClipmapDescriptorKey_s &rOther ) const {
-			return m_hBoundHeightTexture == rOther.m_hBoundHeightTexture &&
+			return m_hBoundAncestorHints == rOther.m_hBoundAncestorHints &&
+                   m_hszBoundHintShaders[0] == rOther.m_hszBoundHintShaders[0] &&
+                   m_hszBoundHintShaders[1] == rOther.m_hszBoundHintShaders[1] &&
+                   m_hszBoundHintShaders[2] == rOther.m_hszBoundHintShaders[2] &&
+                   m_hBoundHeightTexture == rOther.m_hBoundHeightTexture &&
 				   m_hBoundDerivedTexture == rOther.m_hBoundDerivedTexture &&
 				   m_hBoundControlTexture == rOther.m_hBoundControlTexture &&
 				   m_hBoundColorTexture == rOther.m_hBoundColorTexture &&
@@ -294,7 +294,9 @@ private:
 		}
 	} t3dSetCacheKey_t;
 
-	Terrain3DRdDescriptorLeaseTable< t3dSetCacheKey_t, 4u > m_descriptorCache;
+	// Three ordinary sets plus three hint-ABI sets can coexist in a color pass.
+    // A four-lease table evicted live bindings before the draw list consumed them.
+    Terrain3DRdDescriptorLeaseTable< t3dSetCacheKey_t, 8u > m_descriptorCache;
 
 	t3dRdClipmapDescriptorKey_t m_boundDescriptorKey{};
 	bool						m_bBoundDescriptorKeyValid = false;
@@ -352,10 +354,8 @@ private:
 	bool ensureDevice( void );
 	bool ensureShaders( void );
 	bool ensureForwardShaders( t3dTerrainShaderPath_t path, t3dRdForwardShaderVariant_t variant, bool bOneSunLighting );
-	bool ensureVtSamplingTrialShaders( t3dTerrainShaderPath_t shaderPath, t3dRdForwardShaderVariant_t variant,
+	bool ensureCanonicalVtShaders( t3dTerrainShaderPath_t shaderPath, t3dRdForwardShaderVariant_t variant,
 		bool bOneSunLighting, const t3dSharedVTBindings_t *pSharedVTBindings );
-	bool ensureMaterialTrialShaders( const t3dRdMaterialConfig_t &rConfig, t3dTerrainShaderPath_t shaderPath,
-								  t3dRdForwardShaderVariant_t variant, bool bOneSunLighting );
 	void freeForwardPipelines( void );
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext,
 								 t3dRdForwardShaderVariant_t	  variant,

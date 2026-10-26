@@ -3616,9 +3616,12 @@ void Terrain3DData::commitMapEdit(
 		return;
 	}
 
-	uint32_t flags = MAP_EDIT_SNAP;
-	if ( bUpdateGeometryDependents && ( eMapType == TYPE_HEIGHT || eMapType == TYPE_CONTROL ) ) {
-		flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION;
+	uint32_t flags = 0u;
+	if ( bUpdateGeometryDependents ) {
+		flags = MAP_EDIT_SNAP;
+		if ( eMapType == TYPE_HEIGHT || eMapType == TYPE_CONTROL ) {
+			flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION;
+		}
 	}
 	commitMapEdits( eMapType, { rRegionLocation }, editedArea, flags );
 }

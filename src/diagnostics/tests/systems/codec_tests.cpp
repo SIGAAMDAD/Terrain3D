@@ -1,4 +1,5 @@
 #include "core/utility/terrain_3d_binary_io.h"
+#include "streaming/io/terrain_3d_cold_chunk_format.h"
 #include "core/utility/terrain_3d_util.h"
 #include "rendering/rd/vt/streaming/terrain_3d_vt_residency.h"
 #include <godot_cpp/variant/rid.hpp>
@@ -55,6 +56,43 @@ void free_test_vt_pack(
 
 void register_codec_tests(
 	TestRunner &runner ) {
+	runner.run( "codec", "io00_indexed_cold_chunk_roundtrip_and_generation", []( TestContext &test ) {
+		const uint8_t decoded[8] = { 17u, 17u, 17u, 17u, 21u, 21u, 21u, 21u };
+		const uint8_t encoded[4] = { 4u, 17u, 4u, 21u };
+		t3dColdChunkRecord_t record;
+		record.m_iRegionX = -7;
+		record.m_iRegionY = 8;
+		record.m_nKind = 1u;
+		record.m_nRegionGeneration = 12u;
+		record.m_nMaterialGeneration = 18u;
+		record.m_nCodec = T3D_COLD_CHUNK_CODEC_RLE;
+		record.m_nEncodedBytes = sizeof( encoded );
+		record.m_nDecodedBytes = sizeof( decoded );
+		record.m_nOffset = 4096u;
+		T3D_REQUIRE( test, t3dColdChunkSetHashes( record, encoded, decoded ) );
+		uint8_t packed[T3D_COLD_CHUNK_RECORD_BYTES] = {};
+		T3D_REQUIRE( test, t3dColdChunkWriteRecord( record, packed, sizeof( packed ) ) );
+		t3dColdIndexHeader_t header;
+		header.m_nRecordCount = 1u;
+		header.m_nIndexOffset = 4100u;
+		header.m_nIndexBytes = sizeof( packed );
+		header.m_nIndexHash = t3dHashStableBytes( packed, sizeof( packed ) );
+		header.m_nGeneration = 22u;
+		uint8_t prefix[T3D_COLD_INDEX_HEADER_BYTES] = {};
+		T3D_REQUIRE( test, t3dColdIndexWriteHeader( header, prefix, sizeof( prefix ) ) );
+		t3dColdIndexHeader_t loadedHeader;
+		T3D_REQUIRE( test, t3dColdIndexReadHeader( prefix, sizeof( prefix ), 4180u, loadedHeader ) );
+		t3dColdChunkRecord_t loaded;
+		T3D_REQUIRE( test, t3dColdIndexReadRecords( loadedHeader, packed, sizeof( packed ), &loaded, 1u ) );
+		T3D_CHECK( test, t3dColdIndexFind( &loaded, 1u, -7, 8, 1u, 0u ) == &loaded );
+		T3D_CHECK( test, !t3dColdChunkGenerationMatches( loaded, 11u, 18u ) );
+		T3D_CHECK( test, t3dColdChunkGenerationMatches( loaded, 12u, 18u ) );
+		uint8_t output[8] = {};
+		T3D_CHECK( test, t3dColdChunkDecode( loaded, encoded, sizeof( encoded ), output, sizeof( output ) ) );
+		T3D_CHECK( test, memcmp( output, decoded, sizeof( decoded ) ) == 0 );
+		const uint8_t truncated[3] = { 4u, 17u, 4u };
+		T3D_CHECK( test, !t3dColdChunkDecode( loaded, truncated, sizeof( truncated ), output, sizeof( output ) ) );
+	} );
 	runner.run( "codec", "control_word_bitcast_roundtrips_nan_and_sign_bit", []( TestContext &test ) {
 		const uint32_t values[] = { 0u, 0x3f800000u, 0x80000000u, 0x7f800000u, 0xff800000u,
 									0x7fc01234u, 0xffffffffu, 0x12345678u };

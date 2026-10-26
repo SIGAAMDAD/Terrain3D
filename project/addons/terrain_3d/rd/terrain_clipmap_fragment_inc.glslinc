@@ -2214,7 +2214,7 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
     // Bilinear-only draw profile, never selected for composed middle surfaces.
     return true;
 #else
-#if T3D_CONTROL_FILTER_CLASS == 0
+#if T3D_CONTROL_FILTER_CLASS == 0 || T3D_CONTROL_FILTER_CLASS == 3
     if (tier_config.sampling_mode == 2u) {
         return false;
     }
@@ -2222,8 +2222,8 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
         return true;
     }
 #endif
-    // Class 3 is the adaptive/footprint-only draw profile. It retains
-    // per-fragment derivatives and the mode-4 distance threshold.
+    // The shipping adaptive profile respects explicitly authored nearest/
+    // bilinear modes before evaluating the footprint and mode-4 distance.
     float footprint = max(length(terrain_sampling_context.ddx_position.xz), length(terrain_sampling_context.ddy_position.xz))
         / max(frame_data.mesh_params.x, 0.0001);
     bool adaptive = footprint < 16.0;

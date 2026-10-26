@@ -29,6 +29,7 @@ Dictionary t3dUploadBridgeGetStats( void );
 #include "core/utility/terrain_3d_sync.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
 #include "streaming/io/terrain_3d_stream_read_cache.h"
+#include "streaming/io/terrain_3d_cold_chunk_format.h"
 #include "core/runtime/terrain_3d_eastl_helpers.h"
 
 #include "core/config/terrain_3d_compiler.h"
@@ -300,28 +301,16 @@ static PackedByteArray t3dRuntimePageStoreDecodeRle(
 	const PackedByteArray &rSource,
 	const uint32_t		   nExpectedBytes ) {
 	PackedByteArray decoded;
-	if ( rSource.is_empty() || nExpectedBytes == 0u || nExpectedBytes > T3D_RUNTIME_PAGE_MAX_BYTES ) {
+	if ( rSource.is_empty() || rSource.size() > T3D_RUNTIME_PAGE_MAX_BYTES ||
+		 nExpectedBytes == 0u || nExpectedBytes > T3D_RUNTIME_PAGE_MAX_BYTES ) {
 		return decoded;
 	}
 	decoded.resize( nExpectedBytes );
 	if ( decoded.size() != ( int64_t ) nExpectedBytes ) {
 		return PackedByteArray();
 	}
-	const uint8_t *const pRead = rSource.ptr();
-	uint8_t *const		 pWrite = decoded.ptrw();
-	int64_t				 read = 0;
-	uint32_t			 write = 0u;
-	while ( read + 1 < rSource.size() ) {
-		const uint32_t run = pRead[read++];
-		const uint8_t  value = pRead[read++];
-		if ( run == 0u || run > nExpectedBytes - write ) {
-			decoded.clear();
-			return decoded;
-		}
-		memset( pWrite + write, value, run );
-		write += run;
-	}
-	if ( read != rSource.size() || write != nExpectedBytes ) {
+	if ( !t3dColdChunkDecodeRle( rSource.ptr(), ( uint32_t ) rSource.size(),
+		decoded.ptrw(), nExpectedBytes ) ) {
 		decoded.clear();
 	}
 	return decoded;
@@ -635,21 +624,7 @@ static bool t3dRuntimePageStoreDecodeRleInto(
 	const uint32_t		 nReadBytes,
 	uint8_t *const		 pWrite,
 	const uint32_t		 nWriteBytes ) {
-	if ( !pRead || !pWrite || nReadBytes == 0u || nWriteBytes == 0u ) {
-		return false;
-	}
-	uint32_t read = 0u;
-	uint32_t write = 0u;
-	while ( read + 1u < nReadBytes ) {
-		const uint32_t run = pRead[read++];
-		const uint8_t  value = pRead[read++];
-		if ( run == 0u || run > nWriteBytes - write ) {
-			return false;
-		}
-		memset( pWrite + write, value, run );
-		write += run;
-	}
-	return read == nReadBytes && write == nWriteBytes;
+	return t3dColdChunkDecodeRle( pRead, nReadBytes, pWrite, nWriteBytes );
 }
 
 static bool t3dRuntimePageStoreReadBlobFixed(

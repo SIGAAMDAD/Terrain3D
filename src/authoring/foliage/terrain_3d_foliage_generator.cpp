@@ -12,6 +12,7 @@
 #include <godot_cpp/classes/time.hpp>
 #include <math.h>
 #include <float.h>
+#include <string.h>
 
 uint64_t Terrain3DFoliageGenerator::hash64(uint64_t n) {
     n ^= n >> 30; n *= UINT64_C(0xbf58476d1ce4e5b9);
@@ -167,7 +168,8 @@ bool Terrain3DFoliageGenerator::prepareGroup() {
     const Dictionary group = m_groups[m_group];
     m_rule = group["prototype"];
     m_groupRules = group["rules"];
-    m_domain = group["regions"];
+    const TypedArray<Vector2i> regions = group["regions"];
+    m_domain = regions;
     m_gridSize = CLAMP(1.0 / sqrt((double)m_rule["density"] * (double)m_rule["weight"]), 0.05, 128.0);
     m_spacing = m_rule.get("spacing", 0.0);
     // A small world-coordinate rounding margin preserves spacing after float
@@ -221,24 +223,24 @@ bool Terrain3DFoliageGenerator::sampleCandidate() {
                                (uint64_t)(int64_t)gz * UINT64_C(0xc2b2ae3d27d4eb4f) ^ salt);
     const double x = (gx + randomUnit(key)) * m_gridSize;
     const double z = (gz + randomUnit(key ^ UINT64_C(0x632be59bd9b4e019))) * m_gridSize;
-    if ((int)floor(x / m_macroSize) != m_cell.x || (int)floor(z / m_macroSize) != m_cell.y) { return true; }
+    if ((int)floor(x / m_macroSize) != m_cell.x || (int)floor(z / m_macroSize) != m_cell.y) { ++m_rejections[T3D_FOLIAGE_REJECT_CELL]; return true; }
     const double density = (double)m_rule["density"] * (double)m_rule["weight"];
-    if (randomUnit(key ^ UINT64_C(0x7cd919a)) > MIN(1.0, density * m_gridSize * m_gridSize)) { return true; }
+    if (randomUnit(key ^ UINT64_C(0x7cd919a)) > MIN(1.0, density * m_gridSize * m_gridSize)) { ++m_rejections[T3D_FOLIAGE_REJECT_DENSITY]; return true; }
     const Vector3 location((real_t)x, 0.0f, (real_t)z);
     const Vector2i region((int)floor(x / 128.0), (int)floor(z / 128.0));
-    if (!m_pTerrain->dataObject()->hasRegion(region)) { return true; }
+    if (!m_pTerrain->dataObject()->hasRegion(region)) { ++m_rejections[T3D_FOLIAGE_REJECT_MISSING_REGION]; return true; }
     ++m_samples;
     const uint32_t control = m_pSampler->sampleControl(location);
     if (control == UINT32_MAX) { m_error = "Terrain source is unavailable in region " + String::num_int64(region.x) + "," + String::num_int64(region.y); return false; }
-    if (t3dIsHole(control)) { return true; }
+    if (t3dIsHole(control)) { ++m_rejections[T3D_FOLIAGE_REJECT_HOLE]; return true; }
     float height = NAN; Vector3 normal;
     ++m_samples;
-    if (!m_pSampler->sampleHeightAndNormal(location, height, normal)) { return true; }
-    if (!normal.is_finite() || normal.length_squared() < 0.1 || !isfinite(height)) { return true; }
+    if (!m_pSampler->sampleHeightAndNormal(location, height, normal)) { ++m_rejections[T3D_FOLIAGE_REJECT_HEIGHT_SAMPLE]; return true; }
+    if (!normal.is_finite() || normal.length_squared() < 0.1 || !isfinite(height)) { ++m_rejections[T3D_FOLIAGE_REJECT_NORMAL]; return true; }
     normal.normalize();
-    if (height < (double)m_rule.get("min_height", -100000.0) || height > (double)m_rule.get("max_height", 100000.0)) { return true; }
+    if (height < (double)m_rule.get("min_height", -100000.0) || height > (double)m_rule.get("max_height", 100000.0)) { ++m_rejections[T3D_FOLIAGE_REJECT_HEIGHT_RANGE]; return true; }
     const double slope = Math::rad_to_deg(Math::acos(CLAMP(normal.y, (real_t)-1.0, (real_t)1.0)));
-    if (slope < (double)m_rule.get("min_slope", 0.0) || slope > (double)m_rule.get("max_slope", 90.0)) { return true; }
+    if (slope < (double)m_rule.get("min_slope", 0.0) || slope > (double)m_rule.get("max_slope", 90.0)) { ++m_rejections[T3D_FOLIAGE_REJECT_SLOPE]; return true; }
     int base = t3dGetBase(control), overlay = t3dGetOverlay(control);
     double blend = (double)t3dGetBlend(control) / 255.0;
     if (m_auto && t3dIsAuto(control)) {
@@ -249,9 +251,9 @@ bool Terrain3DFoliageGenerator::sampleCandidate() {
     const double coverage = (base == material ? 1.0 - blend : 0.0) + (overlay == material ? blend : 0.0);
     const PackedInt32Array exclusions = m_rule.get("excluded_materials", PackedInt32Array());
     for (int i = 0; i < exclusions.size(); ++i) {
-        if ((base == exclusions[i] && 1.0 - blend > 0.01) || (overlay == exclusions[i] && blend > 0.01)) { return true; }
+        if ((base == exclusions[i] && 1.0 - blend > 0.01) || (overlay == exclusions[i] && blend > 0.01)) { ++m_rejections[T3D_FOLIAGE_REJECT_MATERIAL_EXCLUDED]; return true; }
     }
-    if (randomUnit(key ^ UINT64_C(0xaf17e22a)) >= coverage) { return true; }
+    if (randomUnit(key ^ UINT64_C(0xaf17e22a)) >= coverage) { ++m_rejections[T3D_FOLIAGE_REJECT_MATERIAL_COVERAGE]; return true; }
     const double cluster = CLAMP((double)m_rule.get("cluster", 0.0), 0.0, 1.0);
     if (cluster > 0.0) {
         const double scale = MAX(0.25, (double)m_rule.get("cluster_scale", 12.0));
@@ -265,7 +267,7 @@ bool Terrain3DFoliageGenerator::sampleCandidate() {
         };
         const double a = sample(0,0) * (1-sx) + sample(1,0) * sx;
         const double b = sample(0,1) * (1-sx) + sample(1,1) * sx;
-        if (randomUnit(key ^ UINT64_C(0x80e6d4)) > (1-cluster) + cluster * (a * (1-sz) + b * sz)) { return true; }
+        if (randomUnit(key ^ UINT64_C(0x80e6d4)) > (1-cluster) + cluster * (a * (1-sz) + b * sz)) { ++m_rejections[T3D_FOLIAGE_REJECT_CLUSTER]; return true; }
     }
     m_pendingPosition = Vector3((real_t)x, height, (real_t)z);
     m_pendingNormal = normal; m_pendingKey = key;
@@ -278,14 +280,17 @@ bool Terrain3DFoliageGenerator::checkSpacing(int &rBudget) {
         const Vector2i cell = m_cell + Vector2i(m_neighbor % 3 - 1, m_neighbor / 3 - 1);
         TypedArray<Vector3> positions;
         if (cell == m_cell) { positions = m_accepted; }
-        else if (cellColor(cell) < m_phase && m_cells.has(cell)) { positions = m_cells[cell]; }
+        else if (cellColor(cell) < m_phase && m_cells.has(cell)) {
+            const TypedArray<Vector3> neighbors = m_cells[cell];
+            positions = neighbors;
+        }
         if (m_neighborPoint >= positions.size()) {
             --rBudget; ++m_neighborTests; ++m_neighbor; m_neighborPoint = 0; continue;
         }
         const Vector3 other = positions[m_neighborPoint++];
         --rBudget; ++m_neighborTests;
         const double dx = (double)other.x - m_pendingPosition.x, dz = (double)other.z - m_pendingPosition.z;
-        if (dx * dx + dz * dz < m_spacing * m_spacing) { m_pending = false; return true; }
+        if (dx * dx + dz * dz < m_spacing * m_spacing) { ++m_rejections[T3D_FOLIAGE_REJECT_SPACING]; m_pending = false; return true; }
     }
     if (m_neighbor == 9) { return acceptCandidate(); }
     return true;
@@ -295,7 +300,7 @@ bool Terrain3DFoliageGenerator::acceptCandidate() {
     if (m_spacing > 0.0) { m_accepted.push_back(m_pendingPosition); m_scratchBytes += 24; }
     const Vector2i region((int)floor((double)m_pendingPosition.x / 128.0),
                          (int)floor((double)m_pendingPosition.z / 128.0));
-    if (!m_groupRules.has(region)) { return true; }
+    if (!m_groupRules.has(region)) { ++m_rejections[T3D_FOLIAGE_REJECT_OUTSIDE_SCOPE]; return true; }
     const Dictionary rule = m_groupRules[region];
     const double minScale = rule.get("min_scale", 1.0), maxScale = rule.get("max_scale", 1.0);
     const real_t scale = (real_t)(minScale + (maxScale - minScale) * randomUnit(m_pendingKey ^ UINT64_C(0x917eed)));
@@ -395,6 +400,7 @@ void Terrain3DFoliageGenerator::cancel() {
     m_group = 0; m_region = 0; m_added = 0; m_scratchBytes = 0;
     m_running = false; m_failed = false; m_groupReady = false; m_domainReady = false; m_cellReady = false; m_pending = false;
     m_candidatesTested = 0; m_neighborTests = 0; m_samples = 0; m_transitions = 0; m_lastUsec = 0; m_maxUsec = 0;
+    memset(m_rejections, 0, sizeof(m_rejections));
 }
 Array Terrain3DFoliageGenerator::takeBatches() {
     if (m_running || m_failed || !m_error.is_empty()) { return Array(); }
@@ -405,9 +411,37 @@ Dictionary Terrain3DFoliageGenerator::status() const {
     result["running"] = m_running;
     result["ready"] = !m_running && !m_failed && m_error.is_empty() && !m_batches.is_empty();
     result["error"] = m_error; result["instances"] = m_added;
+    result["placement_state"] = m_added == 0 ? "zero_instances" : "placed";
+    result["batch_count"] = m_batches.size();
+    if (!m_running) {
+        static const char *const s_rejectionNames[T3D_FOLIAGE_REJECT_COUNT] = {
+            "cell_jitter", "density", "missing_region", "terrain_hole", "height_sample",
+            "invalid_normal", "height_range", "slope_range", "excluded_material",
+            "material_coverage", "cluster", "spacing", "outside_rule_scope"
+        };
+        Dictionary rejections;
+        int64_t rejected = 0;
+        for (int i = 0; i < T3D_FOLIAGE_REJECT_COUNT; ++i) {
+            rejections[s_rejectionNames[i]] = m_rejections[i];
+            rejected += m_rejections[i];
+        }
+        result["rejected"] = rejections;
+        result["rejection_total"] = rejected;
+    }
     result["region_index"] = m_region; result["region_count"] = m_domain.size();
     result["rule_index"] = m_group; result["rule_uid"] = m_rule.get("uid", "");
-    result["progress"] = m_groups.is_empty() ? 0.0 : CLAMP((double)m_group / m_groups.size(), 0.0, 1.0);
+    double groupProgress = 0.0;
+    if (m_groupReady && !m_domain.is_empty()) {
+        const int phaseCount = m_spacing > 0.0 ? 4 : 1;
+        const double traversed = (double)m_region + (m_cellReady && m_candidateCount > 0
+            ? (double)m_candidate / m_candidateCount : 0.0);
+        groupProgress = 0.95 * ((double)m_phase + CLAMP(traversed / m_domain.size(), 0.0, 1.0)) / phaseCount;
+        if (m_phase == phaseCount - 1 && m_region >= m_domain.size()) {
+            groupProgress = 0.95 + 0.05 * (double)m_finish / m_domain.size();
+        }
+    }
+    result["progress"] = m_groups.is_empty() ? 0.0
+        : CLAMP(((double)m_group + groupProgress) / m_groups.size(), 0.0, 1.0);
     result["candidate_tests"] = m_candidatesTested; result["neighbor_checks"] = m_neighborTests;
     result["samples"] = m_samples; result["transitions"] = m_transitions;
     result["scratch_bytes"] = m_scratchBytes; result["source_copy_bytes"] = 0;

@@ -290,25 +290,9 @@ bool t3d_cluster_range(T3DClusterAddress address,
         return false;
     }
     type_offset = address.cluster_offset + address.cluster_type_size * type_index;
-    // BR18: an opt-in fragment-subgroup experiment. All active lanes with
-    // the same cluster-depth record share one read, including on divergent
-    // invocations of this function. The general path preserves each lane's
-    // own record. No request/feedback or writable resource is involved.
-    uint record_index = type_offset + address.max_words + address.cluster_z;
-    uint item_min_max;
-#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING) && T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING
-    if (subgroupAllEqual(record_index)) {
-        uint elected_value = 0u;
-        if (subgroupElect()) {
-            elected_value = t3d_cluster_buffer.data[record_index];
-        }
-        item_min_max = subgroupBroadcastFirst(elected_value);
-    } else {
-        item_min_max = t3d_cluster_buffer.data[record_index];
-    }
-#else
-    item_min_max = t3d_cluster_buffer.data[record_index];
-#endif
+    // Standard per-fragment cluster-depth record fetch.
+    const uint record_index = type_offset + address.max_words + address.cluster_z;
+    const uint item_min_max = t3d_cluster_buffer.data[record_index];
     item_min = item_min_max & 0xffffu;
     item_max = item_min_max >> 16u;
     item_from = min(item_min >> 5u, address.max_words);

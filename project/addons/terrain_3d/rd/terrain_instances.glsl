@@ -72,10 +72,6 @@ color_specular_motion_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHT
 
 
 // Consumer-only VT alpha sampling trials; normal shader selection unchanged.
-alpha_gather_depth = "#define T3D_FORWARD_DEPTH\n#define T3D_VT_ALPHA_GATHER 1";
-alpha_edge_depth = "#define T3D_FORWARD_DEPTH\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
-alpha_gather_dnr = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_VT_ALPHA_GATHER 1";
-alpha_edge_dnr = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
 
 #[vertex]
 #version 450
@@ -256,12 +252,6 @@ void main() {
 #version 450
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
-// Subgroup extension declarations follow RDShaderFile variant definitions.
-#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING) && T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING
-#extension GL_KHR_shader_subgroup_basic : require
-#extension GL_KHR_shader_subgroup_vote : require
-#extension GL_KHR_shader_subgroup_ballot : require
-#endif
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
 #extension GL_EXT_samplerless_texture_functions : enable
 #endif
@@ -395,6 +385,9 @@ layout(set = 1, binding = 10, std430) readonly buffer VtMipLayoutBuffer {
 #undef T3D_VT_CONSUMER_TAIL
 #undef T3D_VT_CONSUMER_MIP_LAYOUT
 #undef T3D_VT_CONSUMER_ALLOCATION
+#endif
+#ifndef T3D_INSTANCE_BRINGUP
+#include "terrain_alpha_coverage_inc.glslinc"
 #endif
 
 layout(push_constant, std430) uniform InstancePush {
@@ -832,7 +825,7 @@ void main() {
         if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
 #ifdef T3D_FORWARD_DEPTH
             // DNR and depth need alpha coverage, not decoded vertex RGB.
-            base_color.a *= mesh_color.a;
+            base_color.a = t3d_alpha_coverage_vertex(base_color.a, mesh_color.a);
 #else
             if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
                 mesh_color.rgb = srgb_to_linear(mesh_color.rgb);
@@ -869,11 +862,7 @@ void main() {
 #endif
         // P48: no cutoff unpack for opaque materials. The same >= comparison
         // remains in the scissored path, including at the threshold boundary.
-        base_survives = true;
-        if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u) {
-            float alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
-            base_survives = base_color.a >= alpha_cutoff;
-        }
+        base_survives = t3d_alpha_coverage_scissor(material.flags, material.packedScalars0, base_color.a);
     }
     vec4 final_color = base_survives ? base_color : vec4(0.0);
     if (draw_overlay_material_index != 0xffffu) {
@@ -881,7 +870,7 @@ void main() {
         overlay_color = instance_color;
         if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
 #ifdef T3D_FORWARD_DEPTH
-            overlay_color.a *= overlay_mesh_color.a;
+            overlay_color.a = t3d_alpha_coverage_vertex(overlay_color.a, overlay_mesh_color.a);
 #else
             if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
                 overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
@@ -923,11 +912,7 @@ void main() {
         overlay_color *= overlay.baseColor * t3d_vt_consumer_sample_albedo(overlay_albedo_address);
 #endif
 #endif
-        overlay_survives = true;
-        if ((overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u) {
-            float overlay_alpha_cutoff = t3d_inst_unpack_unorm8(overlay.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
-            overlay_survives = overlay_color.a >= overlay_alpha_cutoff;
-        }
+        overlay_survives = t3d_alpha_coverage_scissor(overlay.flags, overlay.packedScalars0, overlay_color.a);
         if (overlay_survives) {
 #ifndef T3D_FORWARD_DEPTH
             final_color.rgb = mix(final_color.rgb, overlay_color.rgb, clamp(overlay_color.a, 0.0, 1.0));
@@ -936,7 +921,8 @@ void main() {
         }
     }
     if (!base_survives && !overlay_survives) discard;
-    if ((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5) discard;
+    if (!t3d_alpha_coverage_depth_prepass((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u, final_color.a))
+        discard;
 #else
     vec4 final_color = vec4(0.5, 0.5, 0.5, 1.0);
 #endif

@@ -77,6 +77,9 @@ public:
 	bool is_storage_ready() const;
 	bool is_executable_ready() const;
 	bool is_readback_enabled() const;
+	// WORLD feedback variants use the coarse-grid set-3 ABI, not the old hash ABI.
+	bool is_fragment_feedback_shader_ready() const;
+	uint32_t get_fragment_feedback_shader_generation() const { return m_nFeedbackShaderGeneration; }
 	// Render-thread state: coverage mask is valid only for the current camera cell and pass.
 	void set_predicted_terrain_materials_hot(
 		uint32_t nMask ) {
@@ -90,10 +93,7 @@ public:
 	bool has_fragment_feedback_callback() const {
 		return m_feedbackCallback.is_valid();
 	}
-	void set_fragment_feedback_callback_cold(
-		const godot::Callable &rCallback ) {
-		m_feedbackCallback = rCallback;
-	}
+	void set_fragment_feedback_callback_cold( const godot::Callable &rCallback );
 	void	   consume_fragment_feedback_readback_hot( const godot::PackedByteArray &rBytes );
 	// P00-P04: cold-owned 4-slot coarse-feedback capture. The grid producer is
 	// opt-in until all raster shaders use the versioned word contract.
@@ -220,6 +220,7 @@ private:
 	bool                            m_feedbackSetGridMode[8u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT]{};
 	uint32_t						m_nPredictedTerrainMaterials = 0u;
 	uint32_t						m_nFeedbackEpoch = 1u;
+	uint32_t                        m_nFeedbackShaderGeneration = 1u;
 	uint32_t						m_nFeedbackFrame = UINT32_MAX;
 	uint32_t						m_nFeedbackDatabase = 0u;
 	t3dVTFeedbackEpochState_t	m_feedbackEpoch;

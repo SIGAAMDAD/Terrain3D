@@ -13,6 +13,23 @@ using namespace godot;
 class Terrain3D;
 class Terrain3DSampler;
 
+enum t3dFoliageReject_e : uint8_t {
+    T3D_FOLIAGE_REJECT_CELL = 0,
+    T3D_FOLIAGE_REJECT_DENSITY,
+    T3D_FOLIAGE_REJECT_MISSING_REGION,
+    T3D_FOLIAGE_REJECT_HOLE,
+    T3D_FOLIAGE_REJECT_HEIGHT_SAMPLE,
+    T3D_FOLIAGE_REJECT_NORMAL,
+    T3D_FOLIAGE_REJECT_HEIGHT_RANGE,
+    T3D_FOLIAGE_REJECT_SLOPE,
+    T3D_FOLIAGE_REJECT_MATERIAL_EXCLUDED,
+    T3D_FOLIAGE_REJECT_MATERIAL_COVERAGE,
+    T3D_FOLIAGE_REJECT_CLUSTER,
+    T3D_FOLIAGE_REJECT_SPACING,
+    T3D_FOLIAGE_REJECT_OUTSIDE_SCOPE,
+    T3D_FOLIAGE_REJECT_COUNT
+};
+
 class Terrain3DFoliageGenerator : public RefCounted {
     GDCLASS( Terrain3DFoliageGenerator, RefCounted );
     CLASS_NAME();
@@ -44,6 +61,7 @@ class Terrain3DFoliageGenerator : public RefCounted {
     Dictionary m_regionCounts;
     Array m_assetBindings;
     int64_t m_candidatesTested = 0, m_neighborTests = 0, m_samples = 0, m_transitions = 0;
+    int64_t m_rejections[T3D_FOLIAGE_REJECT_COUNT] = {};
     int64_t m_lastUsec = 0, m_maxUsec = 0;
     bool prepareGroup();
     void prepareDomain();
@@ -69,4 +87,5 @@ public:
     Dictionary status() const;
 };
 #endif
+
 

@@ -15,10 +15,8 @@ static const char *const s_otherGlobalPaths[] = {
 	"res://addons/terrain_3d/rd/terrain_world_hiz_reduce.glsl",
 	"res://addons/terrain_3d/rd/terrain_world_visibility.glsl",
 	"res://addons/terrain_3d/rd/terrain_cluster_compact.glsl",
-	"res://addons/terrain_3d/rd/terrain_vt_feedback_multi_writer.glsl",
 	"res://addons/terrain_3d/rd/terrain_world_raster.glsl",
 	"res://addons/terrain_3d/rd/terrain_ocean.glsl",
-	"res://addons/terrain_3d/rd/terrain_clipmap_screen_space.glsl",
 	"res://addons/terrain_3d/compute/terrain_displacement.glsl",
 	"res://addons/terrain_3d/compute/terrain_page_storage.glsl",
 	"res://addons/terrain_3d/compute/terrain_page_derived.glsl",
@@ -182,43 +180,29 @@ static const char *const s_instanceFeedbackVersions[T3D_RD_FORWARD_COLOR_VARIANT
 	"feedback_color_motion_radiance_array",
 	"feedback_color_specular_motion_radiance_array" };
 
-// Trial names must match the additive RDShaderFile versions.
-static const char *const s_materialTrialVersions[T3D_RD_MATERIAL_SHADER_TRIAL_COUNT] = {
-	"silhouette_native", "silhouette_only_native",
-	"control_nearest_native", "control_bilinear_native", "control_adaptive_native",
-	"authored_exact_native", "authored_hardware_native", "planar_native",
-	"two_key_native", "active_key_native", "fixed_taps_native",
-	"transform_reuse_native", "authored_corner_native", "megavt_early_native"
-};
-static const char *const s_alphaSamplingTrialVersions[T3D_RD_ALPHA_SAMPLING_TRIAL_COUNT] = {
-	"alpha_gather_depth", "alpha_edge_depth", "alpha_gather_dnr", "alpha_edge_dnr"
-};
-
-static const char *const s_vtSamplingTrialVersions[T3D_RD_VT_SAMPLING_TRIAL_COUNT] = {
-	"prepared_mip_bias_native", "vt_ancestor_hints_native", "vt_ancestor_hints_prepared_bias_native"
-};
-const char *t3dRdVtSamplingTrialName( const uint32_t trial ) {
-	return trial >= 1u && trial <= T3D_RD_VT_SAMPLING_TRIAL_COUNT ? s_vtSamplingTrialVersions[trial - 1u] : NULL;
-}
-
-const char *t3dRdMaterialTrialName( const uint32_t trial ) {
-	return trial >= 1u && trial <= T3D_RD_MATERIAL_SHADER_TRIAL_COUNT ? s_materialTrialVersions[trial - 1u] : NULL;
-}
-const char *t3dRdAlphaSamplingTrialName( const uint32_t trial ) {
-	return trial >= 1u && trial <= T3D_RD_ALPHA_SAMPLING_TRIAL_COUNT ? s_alphaSamplingTrialVersions[trial - 1u] : NULL;
-}
-
 t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 	const t3dRdShaderId_t id ) {
-	if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
-		const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE;
-		static const char *const versions[T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT] = {
-			"feedback_color_native_vt_hints", "feedback_color_native_vt_hints_prepared_bias"
-		};
-		return { id, s_terrainPaths[offset / T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT],
-			versions[offset % T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT],
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
-	}
+    // SHD-02: same material/VT evaluator as ordinary compact lighting,
+    // with legal set-3 fragment feedback for each output signature.
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_COUNT ) {
+        const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE;
+        static const char *const versions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
+            "feedback_color_native_compact", "feedback_color_specular_compact", "feedback_color_motion_compact", "feedback_color_specular_motion_compact", "feedback_color_native_radiance_array_compact", "feedback_color_specular_radiance_array_compact", "feedback_color_motion_radiance_array_compact", "feedback_color_specular_motion_radiance_array_compact"
+        };
+        return { id, s_terrainPaths[offset / T3D_RD_FORWARD_COLOR_VARIANT_COUNT],
+            versions[offset % T3D_RD_FORWARD_COLOR_VARIANT_COUNT],
+            T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+    }
+
+    if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
+        const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE;
+        if ( offset % T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT == 1u ) {
+            return { id, s_terrainPaths[offset / T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT],
+                "feedback_color_native_vt_hints", T3D_RD_SHADER_GLOBAL_DEVICE,
+                T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+        }
+        return { id, NULL, NULL, T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+    }
     if ( id == T3D_RD_SHADER_ENVIRONMENT_HEIGHT ) {
         return { id, "res://addons/terrain_3d/rd/terrain_environment_integrate.glsl", "height",
                  T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_COMPUTE, false };
@@ -289,35 +273,26 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
         return { id, "res://addons/terrain_3d/rd/terrain_world_raster.glsl", "env_mesh_shadow",
             T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_WORLD, false };
     }
-    if ( id >= T3D_RD_SHADER_OCEAN_ENV_COLOR && id <= T3D_RD_SHADER_OCEAN_ENV_SHADOW ) {
-        static const char *const versions[] = { "env_color_native", "env_color_prepared", "env_shadow" };
+    if ( id == T3D_RD_SHADER_OCEAN_ENV_COLOR || id == T3D_RD_SHADER_OCEAN_ENV_SHADOW ) {
         return { id, "res://addons/terrain_3d/rd/terrain_ocean.glsl",
-            versions[( uint32_t ) id - T3D_RD_SHADER_OCEAN_ENV_COLOR],
+            id == T3D_RD_SHADER_OCEAN_ENV_COLOR ? "env_color_native" : "env_shadow",
             T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_OCEAN, false };
     }
-	// Experimental versions are loaded only by an explicit cold library policy.
-	if ( id >= T3D_RD_SHADER_MATERIAL_TRIAL_BASE && id < T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE ) {
-		const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_MATERIAL_TRIAL_BASE;
-		return { id, s_terrainPaths[offset / T3D_RD_MATERIAL_SHADER_TRIAL_COUNT],
-			s_materialTrialVersions[offset % T3D_RD_MATERIAL_SHADER_TRIAL_COUNT],
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
-	}
-	if ( id >= T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE && id < T3D_RD_SHADER_WORLD_ALPHA_TRIAL_BASE ) {
-		return { id, "res://addons/terrain_3d/rd/terrain_instances.glsl",
-			s_alphaSamplingTrialVersions[( uint32_t ) id - T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE],
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_INSTANCE, false };
-	}
-	if ( id >= T3D_RD_SHADER_WORLD_ALPHA_TRIAL_BASE && id < T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE ) {
-		return { id, "res://addons/terrain_3d/rd/terrain_world_raster.glsl",
-			s_alphaSamplingTrialVersions[( uint32_t ) id - T3D_RD_SHADER_WORLD_ALPHA_TRIAL_BASE],
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_WORLD, false };
-	}
-	if ( id >= T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE && id < T3D_RD_SHADER_OCEAN_PREPARED_COLOR ) {
-		const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_VT_SAMPLING_TRIAL_BASE;
-		return { id, s_terrainPaths[offset / T3D_RD_VT_SAMPLING_TRIAL_COUNT],
-			s_vtSamplingTrialVersions[offset % T3D_RD_VT_SAMPLING_TRIAL_COUNT],
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
-	}
+    // Retired trial spans are tombstones; only the combined native hint
+    // shader remains in the old 3-slots-per-tier VT source range.
+    if ( id >= T3D_RD_SHADER_RETIRED_MATERIAL_BASE &&
+         id < T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) {
+        if ( id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE &&
+             id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR ) {
+            const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE;
+            if ( offset % T3D_RD_VT_COLOR_HINT_ID_STRIDE == 2u ) {
+                return { id, s_terrainPaths[offset / T3D_RD_VT_COLOR_HINT_ID_STRIDE],
+                    "color_native_vt_hints", T3D_RD_SHADER_GLOBAL_DEVICE,
+                    T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+            }
+        }
+        return { id, NULL, NULL, T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+    }
 	// compact forward lighting: cold-only compact-list consumers. Existing native variants remain unchanged.
 	if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE && id < T3D_RD_SHADER_INSTANCE_COMPACT_BASE ) {
 		const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_COMPACT_BASE;
@@ -348,7 +323,7 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 			versions[( uint32_t ) id - T3D_RD_SHADER_INSTANCE_COMPACT_BASE],
 			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_INSTANCE, false };
 	}
-	if ( id >= T3D_RD_SHADER_WORLD_STRIP_COMPACT_BASE && id < T3D_RD_SHADER_SCREEN_SPACE_COVERAGE ) {
+	if ( id >= T3D_RD_SHADER_WORLD_STRIP_COMPACT_BASE && id < T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE ) {
 		const bool strip = id < T3D_RD_SHADER_WORLD_MESH_COMPACT_BASE;
 		const uint32_t offset = ( uint32_t ) id - ( strip ? T3D_RD_SHADER_WORLD_STRIP_COMPACT_BASE : T3D_RD_SHADER_WORLD_MESH_COMPACT_BASE );
 		static const char *const stripVersions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
@@ -365,19 +340,9 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 		return { id, "res://addons/terrain_3d/rd/terrain_world_raster.glsl", strip ? stripVersions[offset] : meshVersions[offset],
 			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_WORLD, false };
 	}
-	if ( id == T3D_RD_SHADER_OCEAN_PREPARED_COLOR )
-		return { id, "res://addons/terrain_3d/rd/terrain_ocean.glsl", "color_prepared",
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_OCEAN, false };
-	if ( id == T3D_RD_SHADER_SCREEN_SPACE_COVERAGE || id == T3D_RD_SHADER_SCREEN_SPACE_SHADE )
-		return { id, "res://addons/terrain_3d/rd/terrain_clipmap_screen_space.glsl",
-			id == T3D_RD_SHADER_SCREEN_SPACE_COVERAGE ? "coverage" : "shade",
-			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
 	if ( id == T3D_RD_SHADER_CLUSTER_COMPACT )
 		return { id, "res://addons/terrain_3d/rd/terrain_cluster_compact.glsl", "compact",
 			T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_COMPUTE, false };
-	if ( id == T3D_RD_SHADER_VT_FEEDBACK_MULTI )
-		return { id, "res://addons/terrain_3d/rd/terrain_vt_feedback_multi_writer.glsl",
-			"reduce_multi", T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_COMPUTE, false };
 	if ( id == T3D_RD_SHADER_PAGE_DERIVED_GPU )
 		return { id,
 				 "res://addons/terrain_3d/compute/terrain_page_derived.glsl",
@@ -414,22 +379,6 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 	if ( id == T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL )
 		return { id, "res://addons/terrain_3d/compute/terrain_page_storage.glsl", "reduce_final",
 				 T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_COMPUTE, false };
-	// CS18 opt-in strip variants; the depth-only shader retains its original contract.
-	if ( value >= T3D_RD_SHADER_WORLD_CS_BASE && value < T3D_RD_SHADER_WORLD_CS_END ) {
-		static const char *const s_composedVersions[T3D_RD_FORWARD_SHADER_VARIANT_MAX - 1u] = {
-			"cs_terrain_strip_color_native", "cs_terrain_strip_color_specular",
-			"cs_terrain_strip_color_motion", "cs_terrain_strip_color_specular_motion",
-			"cs_terrain_strip_color_native_radiance_array",
-			"cs_terrain_strip_color_specular_radiance_array",
-			"cs_terrain_strip_color_motion_radiance_array",
-			"cs_terrain_strip_color_specular_motion_radiance_array",
-			"cs_terrain_strip_depth_normal_roughness",
-			"cs_terrain_strip_depth_normal_roughness_voxel_gi"
-		};
-		return { id, "res://addons/terrain_3d/rd/terrain_world_raster.glsl",
-				 s_composedVersions[value - T3D_RD_SHADER_WORLD_CS_BASE],
-				 T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_WORLD, false };
-	}
 	if ( value >= T3D_RD_SHADER_TERRAIN_FEEDBACK_BASE && value < T3D_RD_SHADER_WORLD_CS_BASE ) {
 		const bool one_sun = value >= T3D_RD_SHADER_TERRAIN_FEEDBACK_ONE_SUN_BASE;
 		const uint32_t offset = value - ( one_sun ? T3D_RD_SHADER_TERRAIN_FEEDBACK_ONE_SUN_BASE : T3D_RD_SHADER_TERRAIN_FEEDBACK_BASE );
@@ -541,11 +490,9 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 				 true };
 	case T3D_RD_SHADER_INSTANCE_CULL:
 	case T3D_RD_SHADER_INSTANCE_CULL_GROUPED:
-	case T3D_RD_SHADER_INSTANCE_CULL_COMMAND_OWNER:
 		return { id,
 				 "res://addons/terrain_3d/rd/terrain_instance_cull.glsl",
-				 id == T3D_RD_SHADER_INSTANCE_CULL_COMMAND_OWNER ? "command_owner" :
-				 ( id == T3D_RD_SHADER_INSTANCE_CULL_GROUPED ? "grouped" : "legacy" ),
+				 id == T3D_RD_SHADER_INSTANCE_CULL_GROUPED ? "grouped" : "legacy",
 				 T3D_RD_SHADER_GLOBAL_DEVICE,
 				 T3D_RD_SHADER_CATEGORY_INSTANCE,
 				 true };

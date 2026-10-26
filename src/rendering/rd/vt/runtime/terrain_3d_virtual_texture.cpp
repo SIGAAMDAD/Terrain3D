@@ -776,9 +776,8 @@ bool Terrain3DVirtualTexture::allocate_cpu_image_cold() {
 		return false;
 	}
 	const uint32_t nAllocationCapacity = t3d_vt_allocation_capacity( m_Limits.nMaxMaterials );
-	const char *const pFeedbackExperiment = getenv( "TERRAIN3D_GPU_VT_MULTI_FEEDBACK" );
-	m_bMultiFeedbackParityRequested = pFeedbackExperiment != NULL &&
-		pFeedbackExperiment[0] == '1' && pFeedbackExperiment[1] == '\0';
+	// Retired GPU multi-feedback pilot has no production shader or dispatch.
+	m_bMultiFeedbackParityRequested = false;
 	uint64_t	   nBytes = 0u;
 	nBytes =
 		t3dAlignUpOrZero< uint64_t >( nBytes, 64u ) + ( uint64_t ) nAllocationCapacity * sizeof( t3dVTAllocation_t );
