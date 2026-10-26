@@ -26,6 +26,7 @@
 #include "data/sampling/terrain_3d_sampler.h"
 #include "eastl_config.h"
 #include "instances/runtime/terrain_3d_instancer.h"
+#include "instances/storage/terrain_3d_instance_page_codec.h"
 #include "lighting/runtime/terrain_3d_region_lighting.h"
 #include "memory/arena/terrain_3d_linear_arena.h"
 #include "memory/core/terrain_3d_memory.h"
@@ -2656,7 +2657,7 @@ void Terrain3DData::saveDirectory(
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
 		invalidateBakedWorldManifest( rDir );
 	}
-	if ( saveResult.m_nFailed == 0 && rebuildSparseRasterSnapshotCold() ) {
+	if ( sourceChanged && saveResult.m_nFailed == 0 && rebuildSparseRasterSnapshotCold() ) {
 		const Error sparseError = Terrain3DRasterBundle::save( rDir, m_sparseRasterTiles );
 		if ( sparseError == OK ) {
 			const Error hierarchyError = Terrain3DRasterHierarchyBundle::save( rDir, m_sparseRasterHierarchy );
@@ -2714,7 +2715,7 @@ void Terrain3DData::saveRegion(
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
 		invalidateBakedWorldManifest( rDir );
 	}
-	if ( result.succeeded() ) {
+	if ( result.succeeded() && (result.m_bSourceChanged || result.m_bDeleted) ) {
 		// Saving one region cannot publish a coherent world snapshot when other
 		// regions have unsaved authoring edits. Invalidate the derived bundle;
 		// full directory save recreates it transactionally from saved sources.
@@ -2738,6 +2739,65 @@ void Terrain3DData::saveRegion(
 	}
 	// Region-only saves leave the previous baked world invalidated. A full
 	// save or explicit cook_gpu_region_pages is required to republish it.
+}
+
+Error Terrain3DData::stageRegionInstances(
+	const Vector2i &rRegionLoc, const String &rDir, const String &rStagePath,
+	const PackedByteArray &rPage, const int64_t nGeneration ) {
+	if ( !m_pTerrain || rDir.is_empty() || rStagePath.is_empty() || nGeneration < 0 || !hasRegion( rRegionLoc ) ) {
+		return ERR_INVALID_PARAMETER;
+	}
+	const String sourcePath = rDir.path_join( Terrain3DUtil::locationToFilename( rRegionLoc ) );
+	if ( sourcePath == rStagePath ) {
+		return ERR_INVALID_PARAMETER;
+	}
+	uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
+	uint32_t count = 0u;
+	uint16_t meshCount = 0u;
+	if ( !Terrain3DInstancePageCodec::inspect( rPage, counts, count, meshCount ) ) {
+		return ERR_INVALID_DATA;
+	}
+	// Require an existing authored raster baseline. Never publish unsaved height,
+	// control, color, lighting, or nodes as a side effect of a foliage operation.
+	const Ref< Terrain3DRegion > saved = ResourceLoader::get_singleton()->load(
+		sourcePath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	if ( saved.is_null() || saved->getHeightMap().is_null() || !saved->hasValidGeometryContractInternal() ) {
+		return ERR_FILE_NOT_FOUND;
+	}
+	saved->setInstancePage( rPage );
+	saved->m_cookedInstanceMetadata.clear();
+	saved->m_cookedMultimeshFastStart.clear();
+	if ( saved->getInstancePage() != rPage ) {
+		return ERR_INVALID_DATA;
+	}
+	saved->setInstanceGeneration( nGeneration );
+	return ResourceSaver::get_singleton()->save( saved, rStagePath, ResourceSaver::FLAG_COMPRESS );
+}
+
+bool Terrain3DData::validateInstancePage( const PackedByteArray &rPage ) const {
+	uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
+	uint32_t count = 0u;
+	uint16_t meshCount = 0u;
+	return Terrain3DInstancePageCodec::inspect( rPage, counts, count, meshCount );
+}
+
+Error Terrain3DData::saveRegionInstances( const Vector2i &rRegionLoc, const String &rDir ) {
+	const Ref< Terrain3DRegion > region = getRegion( rRegionLoc );
+	if ( region.is_null() || !ensureInstanceRegionResident( rRegionLoc ) ) {
+		return ERR_UNAVAILABLE;
+	}
+	const String target = rDir.path_join( Terrain3DUtil::locationToFilename( rRegionLoc ) );
+	const String staged = rDir.path_join( ".instance_save_" + target.get_file() );
+	const int64_t generation = region->getInstanceGeneration() + 1;
+	Error error = stageRegionInstances( rRegionLoc, rDir, staged, region->getInstancePage(), generation );
+	if ( error == OK ) {
+		error = DirAccess::rename_absolute( staged, target );
+	}
+	if ( error == OK ) {
+		region->setInstanceGeneration( generation );
+		region->acknowledgeInstanceSave();
+	}
+	return error;
 }
 
 bool Terrain3DData::collectGpuRegionPageSources(
@@ -4477,6 +4537,11 @@ void Terrain3DData::_bind_methods(
 						  DEFVAL( true ) );
 
 	ClassDB::bind_method( D_METHOD( "save_directory", "directory" ), &Terrain3DData::saveDirectory );
+	ClassDB::bind_method( D_METHOD( "stage_region_instances", "region_location", "directory", "stage_path", "page", "generation" ),
+		&Terrain3DData::stageRegionInstances );
+	ClassDB::bind_method( D_METHOD( "save_region_instances", "region_location", "directory" ),
+		&Terrain3DData::saveRegionInstances );
+	ClassDB::bind_method( D_METHOD( "validate_instance_page", "page" ), &Terrain3DData::validateInstancePage );
 	ClassDB::bind_method( D_METHOD( "save_region", "region_location", "directory", "save_16_bit" ),
 						  &Terrain3DData::saveRegion,
 						  DEFVAL( false ) );

@@ -334,6 +334,8 @@ Dictionary Terrain3DFoliageGenerator::status(
 	result["instances"] = m_nAdded;
 	result["region_index"] = m_nRegion;
 	result["region_count"] = m_regions.size();
+	result["rule_index"] = m_nRule;
+	result["rule_uid"] = m_rule.get( "uid", "" );
 	result["progress"] =
 		m_regions.is_empty()
 			? 0.0

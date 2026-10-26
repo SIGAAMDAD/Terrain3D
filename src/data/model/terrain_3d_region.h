@@ -50,6 +50,10 @@ class Terrain3DRegion : public Resource
 	CLASS_NAME();
 
 public: // Constants
+	enum DirtyDomain {
+		DIRTY_HEIGHT = 1, DIRTY_CONTROL = 2, DIRTY_COLOR = 4,
+		DIRTY_INSTANCES = 8, DIRTY_METADATA = 16, DIRTY_RASTER_INDEX = 32
+	};
 		// Runtime representation of the serialized streamed-node descriptor. The
 		// persisted Array<Dictionary> remains the editor/resource ABI, while the
 		// streamer consumes this typed cache so activation does not repeatedly hash
@@ -88,6 +92,9 @@ private:
 	// never infer world-wide channel presence from currently resident Image refs.
 	uint8_t m_nChannelFlags = 0u;
 	bool	m_bRuntimeMapsModified = false;
+	uint32_t m_nRasterDirtyDomains = 0u;
+	bool m_bInstancesDirty = false;
+	bool m_bMetadataDirty = false;
 	// Instancer. Expanded native stores are pageable; the compact binary page remains
 	// serialized with the region and is sufficient for dormant regions.
 	mutable Terrain3DInstanceStore m_instanceStore;
@@ -101,6 +108,7 @@ private:
 	mutable uint16_t			   m_nInstanceMeshCount = 0u;
 	uint64_t					   m_nCookedPageSourceSignature = 0u;
 	uint32_t					   m_nMegaVTSourceGeneration = 1u;
+	int64_t                        m_nInstanceGeneration = 0;
 	uint32_t					   m_nMegaVTDirtyMip0Mask = 0u;
 	uint16_t					   m_nCookedStreamedNodeCount = 0u;
 	Vector2i					   m_cookedStreamedNodeCoverageMin = s_v2iZero;
@@ -293,6 +301,23 @@ public:
 		void ) const {
 		return m_bInstanceStoreResident;
 	}
+	EA_FORCE_INLINE int64_t getInstanceGeneration( void ) const { return m_nInstanceGeneration; }
+	EA_FORCE_INLINE void setInstanceGeneration( int64_t nGeneration ) { m_nInstanceGeneration = MAX( (int64_t)0, nGeneration ); }
+	EA_FORCE_INLINE int getDirtyDomains( void ) const {
+		uint32_t domains = m_nRasterDirtyDomains;
+		if ( m_bInstancesDirty ) { domains |= DIRTY_INSTANCES; }
+		if ( m_bMetadataDirty ) { domains |= DIRTY_METADATA; }
+		return (int)domains;
+	}
+	EA_FORCE_INLINE void acknowledgeInstanceSave( void ) {
+		m_bInstanceStoreModified = false;
+		m_bInstancesDirty = false;
+		if ( !m_bRuntimeMapsModified && !m_bMetadataDirty ) { m_bModified = false; }
+	}
+	EA_FORCE_INLINE void restoreInstancePersistenceState( int nDirtyDomains, bool bModified ) {
+		m_bInstancesDirty = (nDirtyDomains & DIRTY_INSTANCES) != 0;
+		m_bModified = bModified;
+	}
 	EA_FORCE_INLINE size_t getInstanceResidentBytes(
 		void ) const {
 		return m_bInstanceStoreResident ? m_instanceStore.residentBytes() + ( size_t ) m_cookedInstanceMetadata.size() +
@@ -430,8 +455,12 @@ public:
 	void setModified(
 		const bool bModified ) {
 		m_bModified = bModified;
+		if ( bModified && !m_bRuntimeMapsModified && !m_bInstancesDirty ) { m_bMetadataDirty = true; }
 		if ( !bModified ) {
 			m_bRuntimeMapsModified = false;
+			m_nRasterDirtyDomains = 0u;
+			m_bInstancesDirty = false;
+			m_bMetadataDirty = false;
 		}
 	}
 	EA_FORCE_INLINE bool isModified(

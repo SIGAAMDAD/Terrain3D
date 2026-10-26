@@ -157,12 +157,16 @@ void Terrain3DRegion::clear(
 	m_bDerivedNormalSlopeValid = false;
 	m_nChannelFlags = 0u;
 	m_bRuntimeMapsModified = false;
+	m_nRasterDirtyDomains = 0u;
+	m_bInstancesDirty = false;
+	m_bMetadataDirty = false;
 	m_instanceStore.clear();
 	m_instancePage.clear();
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = false;
 	m_nCookedPageSourceSignature = 0u;
 	m_nMegaVTSourceGeneration = 1u;
+	m_nInstanceGeneration = 0;
 	m_nMegaVTDirtyMip0Mask = 0u;
 	clearInstanceMetadata();
 	m_streamedNodes.clear();
@@ -187,6 +191,7 @@ void Terrain3DRegion::setVersion(
 	}
 	// Mark modified if already initialized and we get a new value
 	if ( m_fVersion > 0.8f ) {
+		m_bMetadataDirty = true;
 		m_bModified = true;
 	}
 	m_fVersion = version;
@@ -337,6 +342,7 @@ void Terrain3DRegion::setHeightMap(
 	}
 	m_heightMap = pMap;
 	m_bDerivedNormalSlopeValid = false;
+	m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 	m_bRuntimeMapsModified = true;
 	m_bModified = true;
 	calcHeightRange();
@@ -354,6 +360,7 @@ void Terrain3DRegion::setControlMap(
 		return;
 	}
 	m_controlMap = pMap;
+	m_nRasterDirtyDomains |= DIRTY_CONTROL | DIRTY_RASTER_INDEX;
 	if ( m_controlMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_CONTROL;
 	} else {
@@ -375,6 +382,7 @@ void Terrain3DRegion::setColorMap(
 		return;
 	}
 	m_colorMap = pMap;
+	m_nRasterDirtyDomains |= DIRTY_COLOR | DIRTY_RASTER_INDEX;
 	if ( m_colorMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_COLOR;
 	} else {
@@ -418,6 +426,7 @@ void Terrain3DRegion::sanitizeMaps(
 	void ) {
 	Ref< Image > pMap = sanitizeMap( TYPE_HEIGHT, m_heightMap );
 	if ( m_heightMap != pMap ) {
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bRuntimeMapsModified = true;
 		m_bModified = true;
 	}
@@ -426,6 +435,7 @@ void Terrain3DRegion::sanitizeMaps(
 	if ( m_controlMap.is_valid() ) {
 		pMap = sanitizeMap( TYPE_CONTROL, m_controlMap );
 		if ( m_controlMap != pMap ) {
+			m_nRasterDirtyDomains |= DIRTY_CONTROL | DIRTY_RASTER_INDEX;
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
 		}
@@ -434,6 +444,7 @@ void Terrain3DRegion::sanitizeMaps(
 	if ( m_colorMap.is_valid() ) {
 		pMap = sanitizeMap( TYPE_COLOR, m_colorMap );
 		if ( m_colorMap != pMap ) {
+			m_nRasterDirtyDomains |= DIRTY_COLOR | DIRTY_RASTER_INDEX;
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
 		}
@@ -479,6 +490,7 @@ bool Terrain3DRegion::compactMapIfDefault(
 		m_nChannelFlags &= ( uint8_t ) ( ~REGION_CHANNEL_COLOR );
 	}
 	if ( bMarkModified ) {
+		m_nRasterDirtyDomains |= (1u << (uint32_t)mapType) | DIRTY_RASTER_INDEX;
 		m_bRuntimeMapsModified = true;
 		m_bModified = true;
 	}
@@ -498,6 +510,7 @@ void Terrain3DRegion::markMapEdited(
 		LOG( ERROR, "Invalid map type: ", mapType );
 		return;
 	}
+	m_nRasterDirtyDomains |= (1u << (uint32_t)mapType) | DIRTY_RASTER_INDEX;
 	m_bRuntimeMapsModified = true;
 	m_bModified = true;
 	m_bEdited = true;
@@ -630,6 +643,7 @@ void Terrain3DRegion::setMegaVTSourceGeneration(
 		return;
 	}
 	m_nMegaVTSourceGeneration = nSanitized;
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -640,6 +654,7 @@ void Terrain3DRegion::setMegaVTDirtyMip0Mask(
 		return;
 	}
 	m_nMegaVTDirtyMip0Mask = nSanitized;
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -653,6 +668,7 @@ void Terrain3DRegion::setMegaVTEditorStateInternal(
 	}
 	m_nMegaVTSourceGeneration = nSanitizedGeneration;
 	m_nMegaVTDirtyMip0Mask = nSanitizedMask;
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -661,6 +677,7 @@ void Terrain3DRegion::setHeightRange(
 	if ( t3dDiffers( m_heightRange, rRange ) ) {
 		// Mark modified if setting after initialization
 		if ( !m_heightRange.is_zero_approx() ) {
+			m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 			m_bModified = true;
 		}
 		m_heightRange = rRange;
@@ -674,9 +691,11 @@ void Terrain3DRegion::updateHeight(
 	const real_t fHeight ) {
 	if ( fHeight < m_heightRange.x ) {
 		m_heightRange.x = fHeight;
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bModified = true;
 	} else if ( fHeight > m_heightRange.y ) {
 		m_heightRange.y = fHeight;
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bModified = true;
 	}
 }
@@ -685,10 +704,12 @@ void Terrain3DRegion::updateHeights(
 	const Vector2 &rLowHigh ) {
 	if ( rLowHigh.x < m_heightRange.x ) {
 		m_heightRange.x = rLowHigh.x;
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bModified = true;
 	}
 	if ( rLowHigh.y > m_heightRange.y ) {
 		m_heightRange.y = rLowHigh.y;
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bModified = true;
 	}
 }
@@ -698,6 +719,7 @@ void Terrain3DRegion::calcHeightRange(
 	const Vector2 range = t3dRegionCodecGetHeightMinMax( m_heightMap );
 	if ( m_heightRange != range ) {
 		m_heightRange = range;
+		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bModified = true;
 		LOG( DEBUG,
 			 "Recalculated new height range: ",
@@ -751,6 +773,7 @@ void Terrain3DRegion::importRuntimeMapsUnmodified(
 	m_bDerivedNormalSlopeValid = pSource->m_bDerivedNormalSlopeValid;
 	m_nChannelFlags = pSource->m_nChannelFlags;
 	m_bRuntimeMapsModified = pSource->m_bRuntimeMapsModified;
+	m_nRasterDirtyDomains = pSource->m_nRasterDirtyDomains;
 	if ( m_bRuntimeMapsModified ) {
 		m_bModified = true;
 	}
@@ -768,6 +791,7 @@ void Terrain3DRegion::releaseRuntimeMapsUnmodified(
 void Terrain3DRegion::markRuntimeMapsClean(
 	void ) {
 	m_bRuntimeMapsModified = false;
+	m_nRasterDirtyDomains = 0u;
 }
 
 bool Terrain3DRegion::hasRuntimeMapPayload(
@@ -836,6 +860,7 @@ void Terrain3DRegion::setInstances(
 	}
 	importInstancesUnmodified( rInstances );
 	m_bInstanceStoreModified = true;
+	m_bInstancesDirty = true;
 	m_bModified = true;
 }
 
@@ -867,6 +892,9 @@ void Terrain3DRegion::setInstancePage(
 		return;
 	}
 	m_instancePage = rPage;
+	m_bInstancesDirty = true;
+	m_cookedInstanceMetadata.clear();
+	m_cookedMultimeshFastStart.clear();
 	m_instanceStore.clear();
 	m_bInstanceStoreResident = rPage.is_empty();
 	m_bInstanceStoreModified = false;
@@ -1221,6 +1249,7 @@ void Terrain3DRegion::setStreamedNodes(
 	refreshStreamedNodeId();
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -1253,6 +1282,7 @@ int64_t Terrain3DRegion::addStreamedNode(
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
+	m_bMetadataDirty = true;
 	m_bModified = true;
 	return id;
 }
@@ -1286,6 +1316,7 @@ int64_t Terrain3DRegion::addStreamedNodePath(
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
+	m_bMetadataDirty = true;
 	m_bModified = true;
 	return id;
 }
@@ -1298,6 +1329,7 @@ bool Terrain3DRegion::removeStreamedNode(
 			m_streamedNodes.remove_at( index );
 			rebuildStreamedNodeRuntime();
 			refreshStreamedNodeCoverage();
+			m_bMetadataDirty = true;
 			m_bModified = true;
 			return true;
 		}
@@ -1326,6 +1358,7 @@ bool Terrain3DRegion::updateStreamedNodeState(
 		entry["flags"] = nFlags;
 		m_streamedNodes[index] = entry;
 		rebuildStreamedNodeRuntime();
+		m_bMetadataDirty = true;
 		m_bModified = true;
 		return true;
 	}
@@ -1339,6 +1372,7 @@ void Terrain3DRegion::setLighting(
 	}
 	m_lighting = rLighting;
 	Terrain3DRegionLighting::markGlobalPublicationDirtyInternal();
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -1357,6 +1391,7 @@ void Terrain3DRegion::setLocation(
 	}
 	// Marked modified if setting after initialized
 	if ( m_location < s_v2iMax && m_location != rLocation ) {
+		m_bMetadataDirty = true;
 		m_bModified = true;
 	}
 	SET_IF_DIFF( m_location, rLocation );
@@ -1404,7 +1439,10 @@ Error Terrain3DRegion::save(
 	const Error err = ResourceSaver::get_singleton()->save( this, get_path(), ResourceSaver::FLAG_COMPRESS );
 	if ( err == OK ) {
 		m_bModified = false;
+		m_bInstancesDirty = false;
+		m_bMetadataDirty = false;
 		m_bRuntimeMapsModified = false;
+		m_nRasterDirtyDomains = 0u;
 		LOG( INFO, "File saved successfully" );
 	} else {
 		LOG( ERROR,
@@ -1454,6 +1492,9 @@ void Terrain3DRegion::setData(
 	if ( rData.has( "megavt_source_generation" ) ) {
 		setMegaVTSourceGeneration( ( int64_t ) ( rData["megavt_source_generation"] ) );
 	}
+	if ( rData.has( "instance_generation" ) ) {
+		setInstanceGeneration( ( int64_t ) ( rData["instance_generation"] ) );
+	}
 	if ( rData.has( "megavt_dirty_mip0_mask" ) ) {
 		setMegaVTDirtyMip0Mask( ( int64_t ) ( rData["megavt_dirty_mip0_mask"] ) );
 	}
@@ -1475,6 +1516,7 @@ void Terrain3DRegion::setData(
 	if ( rData.has( "edited" ) ) {
 		setEdited( ( bool ) ( rData["edited"] ) );
 	}
+	m_bMetadataDirty = true;
 	m_bModified = true;
 }
 
@@ -1492,6 +1534,7 @@ Dictionary Terrain3DRegion::getData(
 	dict["color_map"] = m_colorMap;
 	dict["channel_flags"] = ( int ) ( m_nChannelFlags );
 	dict["megavt_source_generation"] = ( int64_t ) ( m_nMegaVTSourceGeneration );
+	dict["instance_generation"] = m_nInstanceGeneration;
 	dict["megavt_dirty_mip0_mask"] = ( int64_t ) ( m_nMegaVTDirtyMip0Mask );
 	dict["instances"] = Dictionary();
 	dict["instance_page"] = getInstancePage();
@@ -1509,6 +1552,11 @@ Ref< Terrain3DRegion > Terrain3DRegion::duplicate(
 	pRegion->m_heightRange = m_heightRange;
 	pRegion->m_nChannelFlags = m_nChannelFlags;
 	pRegion->m_nMegaVTSourceGeneration = m_nMegaVTSourceGeneration;
+	pRegion->m_nInstanceGeneration = m_nInstanceGeneration;
+	pRegion->m_nRasterDirtyDomains = m_nRasterDirtyDomains;
+	pRegion->m_bInstancesDirty = m_bInstancesDirty;
+	pRegion->m_bMetadataDirty = m_bMetadataDirty;
+	pRegion->m_bRuntimeMapsModified = m_bRuntimeMapsModified;
 	pRegion->m_nMegaVTDirtyMip0Mask = m_nMegaVTDirtyMip0Mask;
 	pRegion->m_bModified = m_bModified;
 	pRegion->m_bDeleted = m_bDeleted;
@@ -1728,6 +1776,14 @@ void Terrain3DRegion::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "dump", "verbose" ), &Terrain3DRegion::dump, DEFVAL( false ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
+	ClassDB::bind_method( D_METHOD( "get_instance_generation" ), &Terrain3DRegion::getInstanceGeneration );
+	ClassDB::bind_method( D_METHOD( "get_dirty_domains" ), &Terrain3DRegion::getDirtyDomains );
+	ClassDB::bind_method( D_METHOD( "acknowledge_instance_save" ), &Terrain3DRegion::acknowledgeInstanceSave );
+	ClassDB::bind_method( D_METHOD( "restore_instance_persistence_state", "dirty_domains", "modified" ),
+		&Terrain3DRegion::restoreInstancePersistenceState );
+	ClassDB::bind_method( D_METHOD( "set_instance_generation", "generation" ), &Terrain3DRegion::setInstanceGeneration );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "instance_generation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+		"set_instance_generation", "get_instance_generation" );
 	ADD_GROUP( "Identity / Format", "" );
 	T3D_BIND_PROPERTY( Terrain3DRegion,
 					   setVersion,
@@ -1886,6 +1942,7 @@ bool Terrain3DRegion::tryGetInstanceStoreMut(
 	if ( !ensureInstanceStoreResident() ) {
 		return false;
 	}
+	m_bMetadataDirty = true;
 	m_bModified = true;
 	m_bInstanceStoreModified = true;
 	pStore = &m_instanceStore;
@@ -1913,6 +1970,7 @@ const Terrain3DInstanceStore &Terrain3DRegion::getInstanceStore(
 
 void Terrain3DRegion::markInstanceStoreModifiedInternal(
 	void ) {
+	m_bInstancesDirty = true;
 	m_bModified = true;
 	m_bInstanceStoreModified = true;
 }

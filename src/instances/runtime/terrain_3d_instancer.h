@@ -588,7 +588,12 @@ public:
 								   const bool						bUpdate = true,
 								   const bool						bBackup = true );
 	int		   removeOwnedInstances( const int64_t nOwnerId, const bool bUpdate = true, const bool bBackup = true );
+	// Empty-transform batches remove an owner without requiring a mesh slot (mesh_id = -1).
 	Dictionary replaceFoliageOwnedRegions( const Array &rBatches, bool bBackup = true );
+	Dictionary prepareFoliageOwnedRegions( const Array &rBatches );
+	Dictionary restoreFoliageInstancePages( const Dictionary &rPages, const Dictionary &rGenerations,
+											  const Dictionary &rPersistenceStates );
+	Dictionary replaceFoliageOwnedRegionsInternal( const Array &rBatches, bool bBackup, bool bPublish );
 	bool	   isOwnerIdUsed( int64_t nOwnerId );
 	void	   appendLocation( const Vector2i				   &rRegionLoc,
 							   const int						nMeshId,

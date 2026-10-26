@@ -15,12 +15,14 @@ texture assets and one registered mesh asset. Assign presets with distinct stabl
 UIDs, one enabled material-0 definition and one enabled mesh-0 rule; use density
 0.001, spacing 0, seed 43721 and instance limits of at least 1000. Give each terrain
 a distinct directory under `user://terrain3d_fg00/`. Ensure these directories exist
-and no pending foliage recovery journal exists. Use disposable resource copies.
+and save both authored terrains before running the fixture. No pending foliage
+recovery journal may exist. Use disposable resource copies.
 
 Run the integration EditorScript explicitly with File > Run. It restores original
 instance pages, presets, height sample and texture slots, intercepts successful
-publication to avoid registering undo actions, and injects staging/restore errors
-only in its subclass. It refuses to touch a pre-existing pending journal. The JSON
+publication to avoid registering undo actions, and injects transaction preparation
+and restoration failures through the transaction helper. It refuses to touch a
+pre-existing pending journal. The JSON
 report at `user://terrain3d_fg00_baseline.json` includes ledger/owner/page hashes,
 raster statistics, synchronous call time and journal bytes. Unavailable full-frame
 timings and total native I/O are null, not invented measurements. This is an editor
@@ -34,6 +36,14 @@ python tools/compile_foliage_fg00.py --godot /path/to/matching/custom/godot
 
 Without `--godot`, only the Python runner is compiled; GDScript is reported
 `NOT_RUN`. The initial unmeasured baseline is `qa/foliage_fg00/baseline.json`.
+
+FG02/FG04/FG05 use an immutable transaction directory under the terrain data's
+`.terrain3d_foliage_transactions/`. The `pending.json` descriptor and hashed region,
+page and ledger snapshots are retained on failed recovery. Undo actions retain
+their transaction resources and backing files; unreferenced archives are bounded
+after editor restart. A legacy global `.dat` journal is preserved and reported for
+manual migration because it lacks a recoverable owner-ledger snapshot. Source
+staging and publication remain synchronous until FG06.
 
 ## Executable editor acceptance fixture
 

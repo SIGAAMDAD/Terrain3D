@@ -8,6 +8,7 @@
 #include "instances/runtime/terrain_3d_instancer.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_record.h"
 #include "instances/contracts/terrain_3d_instance_traversal.h"
+#include "instances/storage/terrain_3d_instance_page_codec.h"
 
 #include <EASTL/numeric_limits.h>
 #include <EASTL/sort.h>
@@ -4220,6 +4221,86 @@ bool Terrain3DInstancer::isOwnerIdUsed(
 Dictionary Terrain3DInstancer::replaceFoliageOwnedRegions(
 	const Array &rBatches,
 	const bool	 bBackup ) {
+	return replaceFoliageOwnedRegionsInternal( rBatches, bBackup, true );
+}
+
+Dictionary Terrain3DInstancer::prepareFoliageOwnedRegions(
+	const Array &rBatches ) {
+	return replaceFoliageOwnedRegionsInternal( rBatches, false, false );
+}
+
+Dictionary Terrain3DInstancer::restoreFoliageInstancePages(
+	const Dictionary &rPages, const Dictionary &rGenerations, const Dictionary &rPersistenceStates ) {
+	Dictionary result;
+	result["ok"] = false;
+	result["error"] = "Cannot stage foliage page restoration";
+	if ( !m_pTerrain || !m_pTerrain->dataObject() || rPages.is_empty() ) {
+		return result;
+	}
+	Terrain3DData *const pData = m_pTerrain->dataObject();
+	eastl::vector< t3dPreparedRegionMutation_t, Terrain3DEastlAllocator > stages;
+	stages.set_allocator( m_placementPending.get_allocator() );
+	if ( !t3dContainerReserveCold( stages, (size_t)rPages.size() ) ) {
+		return result;
+	}
+	const Array locations = rPages.keys();
+	for ( int index = 0; index < locations.size(); ++index ) {
+		const Vector2i location = locations[index];
+		Terrain3DRegion *const region = pData->getRegionPtr( location );
+		if ( !region || region->isDeleted() || !rGenerations.has( location ) || (int64_t)rGenerations[location] < 0 ) {
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		t3dPreparedRegionMutation_t stage;
+		stage.m_pRegion = region;
+		stage.m_location = location;
+		if ( !t3dBeginInstancePageAccess( this, pData, location, stage.m_bTemporaryPage ) ) {
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
+		uint32_t count = 0u;
+		uint16_t meshCount = 0u;
+		const PackedByteArray page = rPages[location];
+		if ( !Terrain3DInstancePageCodec::decode( page, stage.m_store, counts, count, meshCount ) ||
+			 !stage.m_store.validateDeep() || !t3dVectorPushBackWithinCapacity( stages, eastl::move( stage ) ) ) {
+			t3dEndInstancePageAccess( pData, location, stage.m_bTemporaryPage );
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+	}
+	// Every page is decoded before publication. Reuse the normal authoritative
+	// count/cache/render publication path; script-side setters cannot own these.
+	for ( size_t index = 0; index < stages.size(); ++index ) {
+		t3dPreparedRegionMutation_t &stage = stages[index];
+		stage.m_pRegion->setInstancePage( rPages[stage.m_location] );
+		stage.m_pRegion->adoptPreparedInstanceStoreInternal( eastl::move( stage.m_store ) );
+		stage.m_pRegion->setInstanceGeneration( rGenerations[stage.m_location] );
+		stage.m_pRegion->acknowledgeInstanceSave();
+		if ( rPersistenceStates.has( stage.m_location ) ) {
+			const Dictionary state = rPersistenceStates[stage.m_location];
+			stage.m_pRegion->restoreInstancePersistenceState( state.get( "dirty_domains", 0 ), state.get( "modified", false ) );
+		}
+		t3dInstancerRefreshCommittedResidentBytes( pData, stage.m_location );
+	}
+	rebuildLogicalCountsFromStore();
+	for ( size_t index = 0; index < stages.size(); ++index ) {
+		t3dPreparedRegionMutation_t &stage = stages[index];
+		if ( stage.m_bTemporaryPage && stage.m_pRegion->hasInstances() ) {
+			(void)t3dRetainMutatedInstancePage( pData, stage.m_pRegion, stage.m_bTemporaryPage );
+		}
+		updateMmis( -1, stage.m_location );
+	}
+	t3dInstancerClosePreparedPages( pData, stages );
+	result["ok"] = true;
+	result["error"] = "";
+	return result;
+}
+
+Dictionary Terrain3DInstancer::replaceFoliageOwnedRegionsInternal(
+	const Array &rBatches,
+	const bool bBackup,
+	const bool bPublish ) {
 	Dictionary result;
 	result["ok"] = false;
 	result["error"] = "Invalid foliage replacement";
@@ -4240,7 +4321,9 @@ Dictionary Terrain3DInstancer::replaceFoliageOwnedRegions(
 		const int64_t					owner = batch.get( "owner", ( int64_t ) 0 );
 		const int						mesh = batch.get( "mesh_id", -1 );
 		const TypedArray< Transform3D > transforms = batch.get( "transforms", TypedArray< Transform3D >() );
-		if ( owner <= 0 || owner > INT32_MAX || mesh < 0 || mesh >= m_pTerrain->assetsResource()->getMeshCount() ||
+		const bool invalid_mesh = !transforms.is_empty() &&
+			( mesh < 0 || mesh >= m_pTerrain->assetsResource()->getMeshCount() );
+		if ( owner <= 0 || owner > INT32_MAX || invalid_mesh ||
 			 transforms.size() > 1048576 || !pData->hasRegion( region ) ) {
 			result["error"] = "Invalid owner, mesh, region or batch capacity";
 			t3dInstancerClosePreparedPages( pData, stages );
@@ -4401,6 +4484,32 @@ Dictionary Terrain3DInstancer::replaceFoliageOwnedRegions(
 			t3dInstancerClosePreparedPages( pData, stages );
 			return result;
 		}
+	}
+	if ( !bPublish ) {
+		Dictionary pages;
+		Dictionary beforePages;
+		for ( size_t j = 0; j < stages.size(); ++j ) {
+			PackedByteArray page;
+			PackedByteArray beforePage;
+			uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
+			uint32_t count = 0u;
+			uint16_t meshCount = 0u;
+			if ( !Terrain3DInstancePageCodec::encode( stages[j].m_store, page, counts, count, meshCount ) ||
+				 !Terrain3DInstancePageCodec::encode( *stages[j].m_pCommitStore, beforePage, counts, count, meshCount ) ) {
+				result["error"] = "Cannot encode staged foliage instance pages";
+				t3dInstancerClosePreparedPages( pData, stages );
+				return result;
+			}
+			pages[stages[j].m_location] = page;
+			beforePages[stages[j].m_location] = beforePage;
+		}
+		t3dInstancerClosePreparedPages( pData, stages );
+		result["ok"] = true;
+		result["error"] = "";
+		result["pages"] = pages;
+		result["before_pages"] = beforePages;
+		result["instances"] = added;
+		return result;
 	}
 	// No fallible allocations after this point; every affected store is ready to publish.
 	for ( size_t j = 0; j < stages.size(); ++j ) {
@@ -6449,6 +6558,10 @@ void Terrain3DInstancer::_bind_methods(
 		DEFVAL( true ),
 		DEFVAL( true ) );
 	ClassDB::bind_method( D_METHOD( "is_owner_id_used", "owner_id" ), &Terrain3DInstancer::isOwnerIdUsed );
+	ClassDB::bind_method( D_METHOD( "prepare_foliage_owned_regions", "batches" ),
+						  &Terrain3DInstancer::prepareFoliageOwnedRegions );
+	ClassDB::bind_method( D_METHOD( "restore_foliage_instance_pages", "pages", "generations", "persistence_states" ),
+		&Terrain3DInstancer::restoreFoliageInstancePages );
 	ClassDB::bind_method( D_METHOD( "replace_foliage_owned_regions", "batches", "backup" ),
 						  &Terrain3DInstancer::replaceFoliageOwnedRegions,
 						  DEFVAL( true ) );

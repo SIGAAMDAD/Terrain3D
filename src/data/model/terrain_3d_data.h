@@ -400,6 +400,12 @@ public:
 	// File I/O
 	void  saveDirectory( const String &rDir );
 	void  saveRegion( const Vector2i &rRegionLoc, const String &rDir, const bool b16Bit = false );
+	// Stage only instance changes over the saved raster resource. No live mutation,
+	// raster invalidation, height conversion, or implicit publication is performed.
+	Error stageRegionInstances( const Vector2i &rRegionLoc, const String &rDir, const String &rStagePath,
+								const PackedByteArray &rPage, int64_t nGeneration );
+	Error saveRegionInstances( const Vector2i &rRegionLoc, const String &rDir );
+	bool validateInstancePage( const PackedByteArray &rPage ) const;
 	Error loadDirectory( const String &rDir );
 	void  loadRegion( const Vector2i &rRegionLoc, const String &rDir, const bool bUpdate = true );
 
