@@ -282,6 +282,9 @@ struct t3dInstanceInitialPolicy_t
 class Terrain3DInstancer : public Object
 {
 	GDCLASS( Terrain3DInstancer, Object );
+#if defined(T3D_EDITOR_NATIVE)
+	friend class Terrain3DFoliageEditor;
+#endif
 	CLASS_NAME();
 
 private:
@@ -588,20 +591,6 @@ public:
 								   const bool						bUpdate = true,
 								   const bool						bBackup = true );
 	int		   removeOwnedInstances( const int64_t nOwnerId, const bool bUpdate = true, const bool bBackup = true );
-	// Empty-transform batches remove an owner without requiring a mesh slot (mesh_id = -1).
-	Dictionary replaceFoliageOwnedRegions( const Array &rBatches, bool bBackup = true );
-	Dictionary prepareFoliageOwnedRegions( const Array &rBatches );
-	struct FoliageRestoreState;
-	FoliageRestoreState *m_pFoliageRestore = nullptr;
-	Dictionary beginFoliageRestore( const String &rId, const Dictionary &rAfter, const Dictionary &rBefore,
-		const Dictionary &rAfterGenerations, const Dictionary &rBeforeGenerations,
-		const Dictionary &rBeforePersistence, const Dictionary &rExpectedRevisions );
-	Dictionary stepFoliageRestore( const String &rId, int nPages = 1, int64_t nBytes = 1048576 );
-	Dictionary publishFoliageRestore( const String &rId, bool bAfter );
-	void cancelFoliageRestore( const String &rId = String() );
-	Dictionary restoreFoliageInstancePages( const Dictionary &rPages, const Dictionary &rGenerations,
-											  const Dictionary &rPersistenceStates );
-	Dictionary replaceFoliageOwnedRegionsInternal( const Array &rBatches, bool bBackup, bool bPublish );
 	bool	   isOwnerIdUsed( int64_t nOwnerId );
 	void	   appendLocation( const Vector2i				   &rRegionLoc,
 							   const int						nMeshId,

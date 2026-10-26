@@ -108,6 +108,14 @@ class Terrain3DRenderPublicationBuilder
 	CLASS_NAME_STATIC( "Terrain3DRenderPublicationBuilder" );
 
 private:
+    t3dEnvironmentRegionClimate_t m_szEnvironmentRegionClimate[T3D_REGION_SLOTS]{};
+    uint64_t m_nEnvironmentRegionClimateEpoch = 1u;
+    uint64_t m_nEnvironmentRegionOverrideEpoch = 0u;
+    t3dEnvironmentForcing_t m_environmentForcing{};
+    t3dEnvironmentImpulse_t m_szEnvironmentPending[T3D_ENVIRONMENT_MAX_IMPULSES]{};
+    uint32_t m_nEnvironmentPendingCount = 0u;
+    uint64_t m_nEnvironmentImpulseEpoch = 0u;
+    uint64_t m_nEnvironmentImpulseDropped = 0u;
 	t3dRdFrameSnapshotSlot_t  m_snapshotSlots[T3D_RD_FRAME_SNAPSHOT_SLOT_COUNT]{};
 	t3dRdRegionMapBank_t	  m_regionMapBanks[T3D_RD_FRAME_SNAPSHOT_SLOT_COUNT]{};
 	t3dRdInstanceMeshBank_t	  m_instanceMeshBanks[T3D_RD_FRAME_SNAPSHOT_SLOT_COUNT]{};
@@ -262,6 +270,15 @@ public:
 	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	bool initializeFixedStorageCold( void );
 	void serviceColdCapacity( const t3dPublicationServices_t &rServices );
+    void setEnvironmentForcingOwner( const t3dEnvironmentForcing_t &rForcing );
+    void clearEnvironmentRegionClimateOwner();
+    bool setEnvironmentRegionClimateOwner( const Vector2i &rRegion, const Vector3 &rClimate );
+    Vector3 getEnvironmentRegionClimateOwner( const Vector2i &rRegion ) const;
+    PackedByteArray exportEnvironmentRegionClimateOwner() const;
+    bool importEnvironmentRegionClimateOwner( const PackedByteArray &rData );
+    uint64_t getEnvironmentRegionClimateEpochOwner() const { return m_nEnvironmentRegionClimateEpoch; }
+    uint32_t submitEnvironmentImpulsesOwner( const t3dEnvironmentImpulse_t *pEvents, uint32_t nCount );
+    uint64_t getEnvironmentDroppedCountOwner() const { return m_nEnvironmentImpulseDropped; }
 	void publish( const t3dPublicationServices_t &rServices );
 	const t3dRdFrameSnapshotSlot_t *acquireOnRenderThread( void );
 	void							initializeOcean( const t3dPublicationServices_t &rServices );

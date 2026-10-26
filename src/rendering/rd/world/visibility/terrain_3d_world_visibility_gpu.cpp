@@ -300,7 +300,8 @@ bool Terrain3DWorldVisibilityGpu::dispatchHot(
 	t3dVisibilityPush_t push{};
 	push.m_nCandidateCount = candidate_count;
 	push.m_nVisibilityMask = nVisibilityMask;
-	push.m_nFlags = bHiZValid ? 1u : 0u;
+	push.m_nFlags = ( bHiZValid ? 1u : 0u ) |
+                    ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() ? 2u : 0u );
 	push.m_nPassKind = nPassKind;
 	push.m_nHotIndex = rResources.hotIndex();
 	for ( uint32_t nBucket = 0u; nBucket < T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT; ++nBucket ) {

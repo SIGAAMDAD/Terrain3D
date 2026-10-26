@@ -119,11 +119,11 @@ func _capture(label: String, terrain: Terrain3D, elapsed_us: int = 0) -> void:
 func _owner_only_delete() -> void:
 	var terrain: Terrain3D = _terrains[0]
 	var transforms: Array[Transform3D] = [Transform3D(Basis.IDENTITY, Vector3(4, 0, 4))]
-	var insert: Dictionary = terrain.instancer.replace_foliage_owned_regions([
+	var insert: Dictionary = _foliage_editor(terrain).replace_owned_regions([
 		{"region": Vector2i.ZERO, "owner": 1900000000, "mesh_id": 0, "transforms": transforms}], false)
 	_check("fixture", "Native seed insertion succeeds", bool(insert.get("ok", false)))
 	var before: int = Time.get_ticks_usec()
-	var result: Dictionary = terrain.instancer.replace_foliage_owned_regions([
+	var result: Dictionary = _foliage_editor(terrain).replace_owned_regions([
 		{"region": Vector2i.ZERO, "owner": 1900000000, "mesh_id": -1, "transforms": []}], false)
 	_check("FOL-01", "Owner-only deletion accepts missing mesh slot", bool(result.get("ok", false)))
 	_capture("owner_only_delete", terrain, Time.get_ticks_usec() - before)
@@ -151,7 +151,7 @@ func _reconciliation() -> void:
 			"mesh_id": compiled["mesh_id"], "transforms": transforms})
 		panel._pending_manifest.mark_baked(String(compiled["key"]), "fg00-seed", panel._preset.random_seed)
 	if not seeds.is_empty():
-		var seeded: Dictionary = _terrains[0].instancer.replace_foliage_owned_regions(seeds, false)
+		var seeded: Dictionary = _foliage_editor(_terrains[0]).replace_owned_regions(seeds, false)
 		_check("fixture", "Retirement fixture seeds owned instances", bool(seeded.get("ok", false)))
 		panel._manifest = panel._pending_manifest
 	panel._discard_pending()
@@ -256,3 +256,8 @@ func _signatures_and_visibility() -> void:
 	_check("FOL-22", "Hiding popup cancels operation or keeps it visible", not panel._active or panel.visible)
 	panel._abort()
 	_capture("after_panel_cases", terrain)
+
+func _foliage_editor(terrain: Terrain3D) -> Terrain3DFoliageEditor:
+	var editor := Terrain3DFoliageEditor.new()
+	editor.set_terrain(terrain)
+	return editor

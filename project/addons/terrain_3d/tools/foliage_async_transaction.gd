@@ -32,6 +32,7 @@ func begin_async(terrain: Terrain3D, batches: Array, before: Terrain3DFoliageMan
 	if FileAccess.file_exists(journal_path(terrain)):
 		return _failure("Pending foliage recovery must complete first: " + journal_path(terrain))
 	_terrain = terrain
+	_native.set_terrain(terrain)
 	_before_ledger = before.duplicate(true) as Terrain3DFoliageManifest
 	_after_ledger = after.duplicate(true) as Terrain3DFoliageManifest
 	_guard = guard
@@ -73,7 +74,7 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 			return {"running": true, "phase": "cancelling" if _cancelled else "finishing"}
 		_worker.finish()
 		if is_instance_valid(_terrain):
-			_terrain.instancer.cancel_foliage_restore(String(record["id"]))
+			_native.cancel_restore(String(record["id"]))
 		if not _committed and not _publication_attempted and is_instance_valid(_terrain) and _owns_pending_journal():
 			if not _phase("ROLLED_BACK") or not _clear_journal(_terrain):
 				_final_result = _failure("Cancelled/failed before publication; recovery journal retained: " + journal_path(_terrain))
@@ -130,7 +131,7 @@ func poll_async(budgets: Dictionary = {}) -> Dictionary:
 			else:
 				_begin_native()
 		"native":
-			var decoded: Dictionary = _terrain.instancer.step_foliage_restore(String(record["id"]),
+			var decoded: Dictionary = _native.step_restore(String(record["id"]),
 				int(budgets.get("pages", 1)), int(budgets.get("decode_bytes", 1048576)))
 			if not bool(decoded.get("ok", false)):
 				_fail_async(String(decoded.get("error", "Native foliage preparation failed")))
@@ -165,7 +166,7 @@ func _prepare_one() -> void:
 		_stage = "io"
 		return
 	var location: Vector2i = _locations[_index]
-	var prepared: Dictionary = _terrain.instancer.prepare_foliage_owned_regions(_by_region[location])
+	var prepared: Dictionary = _native.prepare_owned_regions(_by_region[location])
 	if not bool(prepared.get("ok", false)):
 		_fail_async(String(prepared.get("error", "Cannot prepare foliage region")))
 		return
@@ -178,7 +179,7 @@ func _prepare_one() -> void:
 	_before_pages[location] = before
 	_after_pages[location] = after
 	var region: Terrain3DRegion = _terrain.data.get_region(location)
-	_expected[location] = region.get_foliage_instance_revision()
+	_expected[location] = Terrain3DFoliageEditor.instance_revision(region)
 	var directory: String = record["directory"]
 	record["regions"].append({"x": location.x, "y": location.y,
 		"before": directory.path_join("page_before_%d.bin" % _index), "after": directory.path_join("page_after_%d.bin" % _index),
@@ -234,7 +235,7 @@ func _begin_native() -> void:
 		before_generations[location] = item["generation_before"]
 		after_generations[location] = item["generation_after"]
 		persistence[location] = {"dirty_domains": item["dirty_domains_before"], "modified": item["modified_before"]}
-	var result: Dictionary = _terrain.instancer.begin_foliage_restore(String(record["id"]), _after_pages,
+	var result: Dictionary = _native.begin_restore(String(record["id"]), _after_pages,
 		_before_pages, after_generations, before_generations, persistence, _expected)
 	if not bool(result.get("ok", false)):
 		_fail_async(String(result.get("error", "Cannot prepare atomic foliage publication")))
@@ -302,7 +303,7 @@ func _publish_atomic() -> void:
 	if success:
 		success = _phase("LEDGER_APPLIED")
 	if success:
-		var native: Dictionary = _terrain.instancer.publish_foliage_restore(String(record["id"]), true)
+		var native: Dictionary = _native.publish_restore(String(record["id"]), true)
 		success = bool(native.get("ok", false))
 		native_applied = success
 		if not success:
@@ -330,7 +331,7 @@ func _publish_atomic() -> void:
 				restored = false
 				error = "Rollback could not restore " + String(member["target"])
 		if restored and native_applied:
-			restored = bool(_terrain.instancer.publish_foliage_restore(String(record["id"]), false).get("ok", false))
+			restored = bool(_native.publish_restore(String(record["id"]), false).get("ok", false))
 		var cleaned: bool = false
 		if restored and _phase("ROLLED_BACK"):
 			cleaned = _clear_journal(_terrain)
@@ -369,8 +370,9 @@ func shutdown_async() -> void:
 	if _worker != null:
 		_worker.shutdown()
 	if is_instance_valid(_terrain) and not record.is_empty():
-		_terrain.instancer.cancel_foliage_restore(String(record["id"]))
+		_native.cancel_restore(String(record["id"]))
 
 func _shutdown_worker() -> void:
+	_native.cancel_restore()
 	if _worker != null:
 		_worker.shutdown()

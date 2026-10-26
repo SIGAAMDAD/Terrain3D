@@ -98,10 +98,10 @@ func _run() -> void:
 	_check(valid_terrain, "Placements respect holes, sampled height, region bounds and unique positions")
 	var invalid: Array[Dictionary] = [{"region": neighbor_pair[0], "owner": 0,
 		"mesh_id": -1, "transforms": []}]
-	var rejected: Dictionary = terrain.instancer.replace_foliage_owned_regions(invalid, false)
+	var rejected: Dictionary = _foliage_editor(terrain).replace_owned_regions(invalid, false)
 	_check(not bool(rejected.get("ok", true)), "Invalid owner is rejected")
 	_check(_same_pages(terrain, originals), "Invalid commit leaves all pages intact")
-	var committed: Dictionary = terrain.instancer.replace_foliage_owned_regions(sample, false)
+	var committed: Dictionary = _foliage_editor(terrain).replace_owned_regions(sample, false)
 	_check(bool(committed.get("ok", false)), "Valid owned placement batch commits")
 	if bool(committed.get("ok", false)):
 		for region: Vector2i in neighbor_pair:
@@ -121,7 +121,7 @@ func _run() -> void:
 		for batch: Dictionary in sample:
 			removals.append({"region": batch["region"], "owner": batch["owner"],
 				"mesh_id": -1, "transforms": []})
-		var removal_result: Dictionary = terrain.instancer.replace_foliage_owned_regions(removals, false)
+		var removal_result: Dictionary = _foliage_editor(terrain).replace_owned_regions(removals, false)
 		_check(bool(removal_result.get("ok", false)), "Retired owner removal accepts missing mesh slot")
 	# Restore fixture regardless of pass/fail. Never change the production scene.
 	for region: Vector2i in neighbor_pair:
@@ -254,3 +254,8 @@ func _report() -> void:
 	print("Terrain3D F08: %d passed, %d failed" % [_passes, _failures.size()])
 	for failure: String in _failures:
 		print("  FAIL: " + failure)
+
+func _foliage_editor(terrain: Terrain3D) -> Terrain3DFoliageEditor:
+	var editor := Terrain3DFoliageEditor.new()
+	editor.set_terrain(terrain)
+	return editor

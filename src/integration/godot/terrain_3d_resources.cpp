@@ -333,6 +333,11 @@ void Terrain3D::setDataDirectory(
 		if ( bFollowLightmapDefault ) {
 			m_regionLightmapOutputDirectory = t3dDefaultRegionLightmapOutputDirectory( dir );
 		}
+		// A successful repository replacement starts a different climate world.
+		// Failed loads and save-target changes retain their existing climate data.
+		if ( m_pRenderCoordinator ) {
+			m_pRenderCoordinator->clearEnvironmentRegionClimateOwner();
+		}
 		LOG( INFO, "[data-transition] Repository mutation committed for ", dir );
 	} else {
 		LOG( ERROR,

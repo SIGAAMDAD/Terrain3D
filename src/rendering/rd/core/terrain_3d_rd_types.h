@@ -382,6 +382,16 @@ static_assert( offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u, "RD i
 
 typedef struct t3dRdFrameSnapshot_s
 {
+    // Packed RGBA8 region climate values, ordered as the existing 32x32 logical region grid.
+    // The owner-thread cache remains authoritative; render thread only reads this snapshot.
+    uint32_t m_szEnvironmentRegionClimate[T3D_REGION_SLOTS]{};
+    uint64_t m_nEnvironmentRegionClimateEpoch = 0u;
+    uint64_t m_nEnvironmentRegionOverrideEpoch = 0u;
+    t3dEnvironmentForcing_t m_environmentForcing{};
+    t3dEnvironmentImpulse_t m_szEnvironmentImpulses[T3D_ENVIRONMENT_MAX_IMPULSES]{};
+    uint64_t m_nEnvironmentImpulseEpoch = 0u;
+    uint32_t m_nEnvironmentImpulseCount = 0u;
+
 	uint64_t m_nPublicationGeneration = 0u;
 	uint64_t m_nGeneration = 0u;
 	uint64_t m_nMaterialGeneration = 0u;

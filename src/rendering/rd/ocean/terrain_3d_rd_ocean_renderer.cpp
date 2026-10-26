@@ -17,7 +17,8 @@ Terrain3DRdOceanRenderer::Terrain3DRdOceanRenderer(
 	void ) :
 	m_context( Terrain3DRdContext::getShared() ),
 	m_pipelines( m_context, T3D_RD_CONTEXT_OWNER_OCEAN ),
-	m_descriptors( m_context, T3D_RD_CONTEXT_OWNER_OCEAN ) {
+    m_descriptors( m_context, T3D_RD_CONTEXT_OWNER_OCEAN ),
+    m_environmentDescriptors( m_context, T3D_RD_CONTEXT_OWNER_OCEAN ) {
 }
 Terrain3DRdOceanRenderer::~Terrain3DRdOceanRenderer(
 	void ) {
@@ -51,7 +52,22 @@ bool Terrain3DRdOceanRenderer::ensureShaders(
 																	   T3D_RD_SHADER_OCEAN_SHADOW ) ) {
 		return false;
 	}
-	return true;
+    if ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() &&
+         !m_hEnvironmentColorShader.isValid() && !m_hEnvironmentShadowShader.isValid() ) {
+        m_context.beginRecoverableFailureScope();
+        const bool environmentColor = m_hEnvironmentColorShader.createTracked( m_context,
+            T3D_RD_CONTEXT_OWNER_OCEAN, "T3D.Ocean.Environment.Color",
+            m_bPreparedFragmentVariant ? T3D_RD_SHADER_OCEAN_ENV_PREPARED_COLOR : T3D_RD_SHADER_OCEAN_ENV_COLOR );
+        const bool environmentShadow = environmentColor && m_hEnvironmentShadowShader.createTracked( m_context,
+            T3D_RD_CONTEXT_OWNER_OCEAN, "T3D.Ocean.Environment.Shadow", T3D_RD_SHADER_OCEAN_ENV_SHADOW );
+        m_context.endRecoverableFailureScope();
+        m_bEnvironmentShadersAvailable = environmentColor && environmentShadow;
+        if ( !m_bEnvironmentShadersAvailable ) {
+            m_hEnvironmentColorShader.releaseTracked( m_context );
+            m_hEnvironmentShadowShader.releaseTracked( m_context );
+        }
+    }
+    return true;
 }
 
 bool Terrain3DRdOceanRenderer::ensureBuffers(
@@ -140,9 +156,65 @@ bool Terrain3DRdOceanRenderer::ensureUniformSets(
 	uniforms.push_back(
 		Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hStripPartBuffer ) );
 	const t3dRdOceanSetKey_t color{ m_hColorShader.rid(), m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
-	const t3dRdOceanSetKey_t shadow{ m_hShadowShader.rid(), m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
-	return m_descriptors.getOrCreate( color, "T3D.Ocean.Set.Color", uniforms, m_hColorShader.rid(), 0u ).is_valid() &&
-		   m_descriptors.getOrCreate( shadow, "T3D.Ocean.Set.Shadow", uniforms, m_hShadowShader.rid(), 0u ).is_valid();
+    const t3dRdOceanSetKey_t shadow{ m_hShadowShader.rid(), m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
+    if ( !m_descriptors.getOrCreate( color, "T3D.Ocean.Set.Color", uniforms, m_hColorShader.rid(), 0u ).is_valid() ||
+         !m_descriptors.getOrCreate( shadow, "T3D.Ocean.Set.Shadow", uniforms, m_hShadowShader.rid(), 0u ).is_valid() ) {
+        return false;
+    }
+    if ( m_bEnvironmentShadersAvailable ) {
+        const RID envColor = m_hEnvironmentColorShader.rid();
+        const RID envShadow = m_hEnvironmentShadowShader.rid();
+        m_context.beginRecoverableFailureScope();
+        const bool colorReady = m_descriptors.getOrCreate(
+            { envColor, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer },
+            "T3D.Ocean.Set.Environment.Color", uniforms, envColor, 0u ).is_valid();
+        const bool shadowReady = colorReady && m_descriptors.getOrCreate(
+            { envShadow, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer },
+            "T3D.Ocean.Set.Environment.Shadow", uniforms, envShadow, 0u ).is_valid();
+        m_context.endRecoverableFailureScope();
+        m_bEnvironmentShadersAvailable = colorReady && shadowReady;
+    }
+    return true;
+}
+
+bool Terrain3DRdOceanRenderer::ensureEnvironmentSetsCold(
+    const t3dRdEnvironmentBindings_t &rBindings, const bool bShadow ) {
+    if ( !m_bEnvironmentShadersAvailable || !rBindings.m_bAvailable ||
+         !rBindings.m_hParams.is_valid() || !rBindings.m_hSampler.is_valid() ) {
+        return false;
+    }
+    const uint32_t lane = bShadow ? 1u : 0u;
+    const RID shader = bShadow ? m_hEnvironmentShadowShader.rid() : m_hEnvironmentColorShader.rid();
+    if ( !shader.is_valid() ) {
+        return false;
+    }
+    for ( uint32_t ping = 0u; ping < 2u; ++ping ) {
+        if ( !rBindings.m_hStatePair[ping].is_valid() || !rBindings.m_hInteractionPair[ping].is_valid() ) {
+            return false;
+        }
+        RID &cached = m_hEnvironmentSet[lane][ping];
+        if ( m_environmentDescriptors.resolve( cached ).is_valid() ) {
+            continue;
+        }
+        const t3dRdOceanEnvironmentSetKey_t key{
+            shader, rBindings.m_hParams, rBindings.m_hStatePair[ping], rBindings.m_hInteractionPair[ping] };
+        TypedArray< Ref< RDUniform > > uniforms;
+        uniforms.push_back( Terrain3DRdBindingBuilder::single( 1,
+            RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, rBindings.m_hParams ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 2,
+            rBindings.m_hSampler, rBindings.m_hInteractionPair[ping] ) );
+        m_context.beginRecoverableFailureScope();
+        cached = m_environmentDescriptors.getOrCreate( key,
+            String( "T3D.Ocean.Environment." ) + String::num_uint64( lane ) + "." + String::num_uint64( ping ),
+            uniforms, shader, 5u );
+        m_context.endRecoverableFailureScope();
+        if ( !cached.is_valid() ) {
+            return false;
+        }
+    }
+    m_hCurrentEnvironmentSet = m_hEnvironmentSet[lane][rBindings.m_nPing & 1u];
+    m_nLastEnvironmentGeneration = rBindings.m_nGeneration;
+    return m_hCurrentEnvironmentSet.is_valid();
 }
 
 bool Terrain3DRdOceanRenderer::ensureStripParts(
@@ -343,7 +415,8 @@ bool Terrain3DRdOceanRenderer::ensurePipeline(
 	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, false, key, false ) ) {
 		return false;
 	}
-	if ( findPipeline( key ) ) {
+    key.m_bEnvironmentVariant = m_bCurrentEnvironmentShader;
+    if ( findPipeline( key ) ) {
 		return true;
 	}
 	t3dRdForwardPipelineStateOptions_t state_options;
@@ -361,7 +434,9 @@ bool Terrain3DRdOceanRenderer::ensurePipeline(
 	Ref< RDPipelineMultisampleState >	multisample = pipeline_states.m_multisample;
 	Ref< RDPipelineDepthStencilState >	depth = pipeline_states.m_depth;
 	Ref< RDPipelineColorBlendState >	blend = pipeline_states.m_blend;
-	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader.rid() : m_hColorShader.rid();
+    const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+        ? ( m_bCurrentEnvironmentShader ? m_hEnvironmentShadowShader.rid() : m_hShadowShader.rid() )
+        : ( m_bCurrentEnvironmentShader ? m_hEnvironmentColorShader.rid() : m_hColorShader.rid() );
 	const RID pipeline = m_pipelines.getOrCreateRaster( key,
 														"T3D.Ocean.ForwardPipeline",
 														shader,
@@ -397,15 +472,27 @@ bool Terrain3DRdOceanRenderer::initialize(
 
 void Terrain3DRdOceanRenderer::shutdown(
 	void ) {
-	freePipelines();
-	m_descriptors.clear();
+    freePipelines();
+    m_environmentDescriptors.clear();
+    m_descriptors.clear();
+    m_bEnvironmentShadersAvailable = false;
+    m_bCurrentEnvironmentShader = false;
+    m_hCurrentEnvironmentSet = RID();
+    for ( uint32_t lane = 0u; lane < 2u; ++lane ) {
+        for ( uint32_t ping = 0u; ping < 2u; ++ping ) {
+            m_hEnvironmentSet[lane][ping] = RID();
+        }
+    }
 	m_hFrameBuffer.releaseTracked( m_context );
 	m_hPatchBuffer.releaseTracked( m_context );
 	m_hStripPartBuffer.releaseTracked( m_context );
 	m_context.releaseFixedIndirect( T3D_RD_CONTEXT_FIXED_INDIRECT_OCEAN, m_pStripIndirectBuffer );
 	m_stripIndirectSlice = t3dRdGpuBufferSlice_t{};
 	m_hColorShader.releaseTracked( m_context );
-	m_hShadowShader.releaseTracked( m_context );
+    m_hShadowShader.releaseTracked( m_context );
+    m_hEnvironmentColorShader.releaseTracked( m_context );
+    m_hEnvironmentShadowShader.releaseTracked( m_context );
+    m_nLastEnvironmentGeneration = 0u;
 	m_nStripGeneration = m_nStateGeneration = 0u;
 	m_nPreparedScenePass = m_nPreparedViewportKey = 0u;
 	m_preparedPassKind = T3D_RD_FORWARD_PASS_INVALID;
@@ -421,13 +508,16 @@ bool Terrain3DRdOceanRenderer::prepareForwardPass(
 	const t3dRdForwardPassContext_t		  &rContext,
 	const t3dRdFrameSnapshot_t			  &rSnapshot,
 	const t3dRdOceanStripSnapshot_t *const pStrip,
-	const uint32_t						   nVisibilityMask ) {
+	const uint32_t						   nVisibilityMask,
+    const t3dRdEnvironmentBindings_t *pEnvironment ) {
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) {
 		return false;
 	}
 	const t3dRdOceanState_t &rState = rSnapshot.m_ocean;
-	m_bPreparedHasDraws = false;
-	m_nPreparedPatchCount = 0u;
+    m_bPreparedHasDraws = false;
+    m_nPreparedPatchCount = 0u;
+    m_bCurrentEnvironmentShader = false;
+    m_hCurrentEnvironmentSet = RID();
 	m_nPreparedScenePass = rContext.m_nScenePass;
 	m_nPreparedViewportKey = rContext.m_nViewportKey;
 	m_preparedPassKind = rContext.m_passKind;
@@ -440,10 +530,30 @@ bool Terrain3DRdOceanRenderer::prepareForwardPass(
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT && rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW ) {
 		return true;
 	}
-	if ( !m_context.validateDevice() || !ensureStripParts( pStrip ) || !updateFrame( rContext, rSnapshot ) ||
-		 !ensurePipeline( rContext ) ) {
-		return false;
-	}
+    if ( !m_context.validateDevice() || !ensureStripParts( pStrip ) || !updateFrame( rContext, rSnapshot ) ) {
+        return false;
+    }
+    if ( m_bEnvironmentShadersAvailable && pEnvironment && pEnvironment->m_bAvailable ) {
+        m_bCurrentEnvironmentShader = ensureEnvironmentSetsCold( *pEnvironment,
+            rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW );
+        if ( !m_bCurrentEnvironmentShader ) {
+            ++m_nStaleEnvironmentSetMisses;
+            m_hCurrentEnvironmentSet = RID();
+        }
+    }
+    if ( m_bCurrentEnvironmentShader ) {
+        m_context.beginRecoverableFailureScope();
+        const bool environmentPipelineReady = ensurePipeline( rContext );
+        m_context.endRecoverableFailureScope();
+        if ( !environmentPipelineReady ) {
+            // Optional wave response cannot break the existing ocean lane.
+            m_bCurrentEnvironmentShader = false;
+            m_hCurrentEnvironmentSet = RID();
+        }
+    }
+    if ( !m_bCurrentEnvironmentShader && !ensurePipeline( rContext ) ) {
+        return false;
+    }
 	m_nPreparedPatchCount = MIN( rState.m_nPatchCount, ( uint32_t ) ( T3D_MAX_CLIPMAP_LEVELS ) );
 	if ( !updateStripIndirect( m_nPreparedPatchCount ) ) {
 		return false;
@@ -471,17 +581,28 @@ bool Terrain3DRdOceanRenderer::renderForwardPass(
 	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, false, key, false ) ) {
 		return false;
 	}
-	const t3dRdOceanPipelineEntry_t *const entry = findPipeline( key );
+    key.m_bEnvironmentVariant = m_bCurrentEnvironmentShader;
+    const t3dRdOceanPipelineEntry_t *const entry = findPipeline( key );
 	if ( !entry ) {
 		return false;
 	}
-	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader.rid() : m_hColorShader.rid();
+    const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+        ? ( m_bCurrentEnvironmentShader ? m_hEnvironmentShadowShader.rid() : m_hShadowShader.rid() )
+        : ( m_bCurrentEnvironmentShader ? m_hEnvironmentColorShader.rid() : m_hColorShader.rid() );
 	const RID set = m_descriptors.find( { shader, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer } );
 	if ( !set.is_valid() ) {
 		return false;
 	}
 	rd->draw_list_bind_render_pipeline( rContext.m_nDrawList, entry->m_pipeline.rid() );
-	rd->draw_list_bind_uniform_set( rContext.m_nDrawList, set, 0u );
+    rd->draw_list_bind_uniform_set( rContext.m_nDrawList, set, 0u );
+    if ( m_bCurrentEnvironmentShader ) {
+        const RID environmental = m_environmentDescriptors.resolve( m_hCurrentEnvironmentSet );
+        if ( !environmental.is_valid() ) {
+            ++m_nStaleEnvironmentSetMisses;
+            return false;
+        }
+        rd->draw_list_bind_uniform_set( rContext.m_nDrawList, environmental, 5u );
+    }
 	uint32_t push[4] = { 0u, 0u, 0u, 0u };
 	memcpy( m_pushBytes.ptrw(), push, sizeof( push ) );
 	rd->draw_list_set_push_constant( rContext.m_nDrawList, m_pushBytes, sizeof( push ) );
@@ -515,7 +636,11 @@ bool Terrain3DRdOceanRenderer::renderForwardPass(
 Dictionary Terrain3DRdOceanRenderer::getDiagnostics(
 	void ) const {
 	Dictionary result;
-	result["ocean_rd_ready"] = m_hColorShader.isValid() && m_hShadowShader.isValid();
+    result["ocean_rd_ready"] = m_hColorShader.isValid() && m_hShadowShader.isValid();
+    result["ocean_environment_shaders_ready"] = m_bEnvironmentShadersAvailable;
+    result["ocean_environment_variant_active"] = m_bCurrentEnvironmentShader;
+    result["ocean_environment_generation"] = ( int64_t ) m_nLastEnvironmentGeneration;
+    result["ocean_environment_stale_set_misses"] = ( int64_t ) m_nStaleEnvironmentSetMisses;
 	result["ocean_prepared_fragment_variant"] = m_bPreparedFragmentVariant;
 	result["ocean_strip_generation"] = ( int64_t ) ( m_nStripGeneration );
 	result["ocean_strip_descriptor_uploads"] = ( int64_t ) ( m_nStripDescriptorUploads );

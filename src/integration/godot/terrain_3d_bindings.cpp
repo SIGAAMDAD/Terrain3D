@@ -148,6 +148,21 @@ void Terrain3D::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "get_native_build_id" ), &Terrain3D::getNativeBuildId );
 	ClassDB::bind_method( D_METHOD( "get_native_build_flavor" ), &Terrain3D::getNativeBuildFlavor );
 	ClassDB::bind_method( D_METHOD( "is_initialized" ), &Terrain3D::isInitialized );
+    ClassDB::bind_method( D_METHOD( "set_environment_forcing", "rain", "snow", "dry", "wind", "gust", "delta_time", "enabled" ),
+                          &Terrain3D::setEnvironmentForcing );
+    ClassDB::bind_method( D_METHOD( "submit_environment_impulses", "packed_impulses" ),
+                          &Terrain3D::submitEnvironmentImpulses );
+    ClassDB::bind_method( D_METHOD( "get_environment_dropped_impulses" ),
+                          &Terrain3D::getEnvironmentDroppedImpulses );
+    ClassDB::bind_method( D_METHOD( "set_environment_region_climate", "region", "climate" ),
+                          &Terrain3D::setEnvironmentRegionClimate );
+    ClassDB::bind_method( D_METHOD( "get_environment_region_climate", "region" ),
+                          &Terrain3D::getEnvironmentRegionClimate );
+    ClassDB::bind_method( D_METHOD( "export_environment_region_climate" ),
+                          &Terrain3D::exportEnvironmentRegionClimate );
+    ClassDB::bind_method( D_METHOD( "import_environment_region_climate", "data" ),
+                          &Terrain3D::importEnvironmentRegionClimate );
+
 
 	ClassDB::bind_method( D_METHOD( "set_editor_node_streaming_preview", "enabled" ),
 						  &Terrain3D::setEditorNodeStreamingPreview );

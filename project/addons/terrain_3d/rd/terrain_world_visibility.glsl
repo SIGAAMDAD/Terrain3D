@@ -310,6 +310,11 @@ bool classify_world_candidate(uint index, out T3DWorldVisibleItem item,
         }
         center = transform_point(tr, cl.sphere.xyz);
         radius = cl.sphere.w * transform_radius_scale(tr);
+        // ENV-P04: ground-cover vertex displacement is clamped to +/- 0.5m per axis.
+        // Include the full sqrt(2)*0.5m envelope in frustum and HiZ culling.
+        bool ground_cover = (push_data.control.z & 2u) != 0u &&
+            item.geometryKind != KIND_STATIC && ((inst.b.y >> 26u) & 3u) == 1u;
+        if (ground_cover) radius += 0.71;
         float distance_to_camera = length(frame.cameraAndMaxDistance.xyz - center);
         float lod_begin = inst.lod_range.x;
         float lod_end = inst.lod_range.y;
@@ -318,7 +323,7 @@ bool classify_world_candidate(uint index, out T3DWorldVisibleItem item,
             rejection = 0u;
             return false;
         }
-        if (!cone_visible(tr, cl, center)) {
+        if (!ground_cover && !cone_visible(tr, cl, center)) {
             rejection = 1u;
             return false;
         }
@@ -551,6 +556,11 @@ void main() {
         }
         center = transform_point(tr, cl.sphere.xyz);
         radius = cl.sphere.w * transform_radius_scale(tr);
+        // ENV-P04: ground-cover vertex displacement is clamped to +/- 0.5m per axis.
+        // Include the full sqrt(2)*0.5m envelope in frustum and HiZ culling.
+        bool ground_cover = (push_data.control.z & 2u) != 0u &&
+            item.geometryKind != KIND_STATIC && ((inst.b.y >> 26u) & 3u) == 1u;
+        if (ground_cover) radius += 0.71;
         float distance_to_camera = length(frame.cameraAndMaxDistance.xyz - center);
         float lod_begin = inst.lod_range.x;
         float lod_end = inst.lod_range.y;
@@ -559,7 +569,7 @@ void main() {
             atomicAdd(counter_storage[t3d_hot_records[T3D_HOT_INDEX].world_bases[16] + T3D_WORLD_VIS_COUNTER_LOD_REJECT], 1u);
             return;
         }
-        if (!cone_visible(tr, cl, center)) {
+        if (!ground_cover && !cone_visible(tr, cl, center)) {
             atomicAdd(counter_storage[t3d_hot_records[T3D_HOT_INDEX].world_bases[16] + T3D_WORLD_VIS_COUNTER_CONE_REJECT], 1u);
             return;
         }

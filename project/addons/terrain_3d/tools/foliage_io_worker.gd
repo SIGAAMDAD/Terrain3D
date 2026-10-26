@@ -83,7 +83,7 @@ func _perform(kind: String, payload: Dictionary) -> Dictionary:
 		"owners":
 			var region := Terrain3DRegion.new()
 			region.set_instance_page(payload["page"])
-			return region.get_foliage_owner_ids()
+			return Terrain3DFoliageEditor.get_owner_ids(region)
 		"stage_region":
 			var source: FileAccess = FileAccess.open(payload["source"], FileAccess.READ)
 			if source == null or source.get_length() > MAX_FILE_BYTES:

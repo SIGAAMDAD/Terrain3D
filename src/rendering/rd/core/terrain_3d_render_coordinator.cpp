@@ -808,6 +808,7 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread(
 	m_bOceanRendererInitialized.store( ocean_ready, T3D_MEMORY_ORDER_RELEASE );
 	m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
 	if ( !terrain_ready ) {
+		m_environmentField.resetAfterRendererTeardownCold();
 		m_worldRuntime.shutdownCold();
 		m_oceanRenderer.shutdown();
 		m_renderer.shutdown();
@@ -2577,6 +2578,7 @@ void Terrain3DRenderCoordinator::recoverRendererLifecycleOnRenderThread(
 	publishRenderLifecycleStatusOnRenderThread( status );
 
 	m_worldRuntime.shutdownCold();
+	m_environmentField.resetAfterRendererTeardownCold();
 	m_oceanRenderer.shutdown();
 	m_renderer.shutdown();
 	resetForwardLifecycle();
@@ -2607,6 +2609,7 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread(
 #endif
 	m_previewService.shutdownRendererOnRenderThread( previewServices() );
 	m_worldRuntime.shutdownCold();
+	m_environmentField.resetAfterRendererTeardownCold();
 	// Live VT replacement reuses the large CPU upload buffers. Full lifecycle
 	// shutdown still releases them through the default argument.
 	m_sharedVtRuntime.shutdown_cold( bPreserveTailStaging );
@@ -2765,6 +2768,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass(
 	t3dForwardPassServices_t	   services{ m_publicationBuilder,
 										 m_renderer,
 										 m_oceanRenderer,
+										 m_environmentField,
 										 m_worldRuntime,
 										 m_sharedVtRuntime.virtualTexture(),
 										 m_sharedVtRuntime,
@@ -2820,7 +2824,20 @@ bool Terrain3DRenderCoordinator::publishDiagnosticsOnRenderThread(
 	sample.nFeedbackAccepted = gpu.nAcceptedRequestCount;
 	sample.nPredictionIncompleteFallbacks = vt.getPredictionIncompleteFallbacksOnRenderThread();
 	sample.bPredictionCurrentCellComplete = vt.isPredictionCurrentCellCompleteOnRenderThread();
-	sample.nMaskParamUploadsSaved = vt.get_gpu().get_predicted_mask_uploads_saved();
+    sample.nMaskParamUploadsSaved = vt.get_gpu().get_predicted_mask_uploads_saved();
+    sample.bEnvironmentEnabled = Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold();
+    sample.bEnvironmentReady = m_environmentField.isReady();
+    sample.bEnvironmentFaulted = m_environmentField.isFaulted();
+    sample.nEnvironmentGeneration = m_environmentField.getGeneration();
+    sample.nEnvironmentFramesIntegrated = m_environmentField.getFramesIntegrated();
+    sample.nEnvironmentImpulsesAccepted = m_environmentField.getImpulsesAccepted();
+    sample.nEnvironmentIntegrationFailures = m_environmentField.getIntegrationFailures();
+    sample.nEnvironmentTeleportsReset = m_environmentField.getTeleportsReset();
+    sample.nEnvironmentTimestampPairs = m_environmentField.getTimestampPairs();
+    sample.nEnvironmentTextureBytes = m_environmentField.getTextureBytes();
+    sample.nEnvironmentClimateUploads = m_environmentField.getClimateUploads();
+    sample.nEnvironmentWorldSetMisses = m_worldRuntime.getRaster().getEnvironmentStaleSetMisses();
+    sample.nEnvironmentOceanSetMisses = m_oceanRenderer.getEnvironmentStaleSetMisses();
 	const t3dVTStreamingState_t &stream = vt.get_streaming();
 	sample.nActiveJobs = stream.Stats.nActiveJobCount;
 	const t3dVTResidencyState_t &residency = vt.get_residency();
@@ -2876,7 +2893,31 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics(
 	descriptor["active_submission_epoch"] = ( int64_t ) dd.m_nActiveSubmissionEpoch;
 	descriptor["completed_submission_epoch"] = ( int64_t ) dd.m_nCompletedSubmissionEpoch;
 	descriptor["fence_pending"] = dd.m_bFencePending;
-	result["descriptor_cache"] = descriptor;
+    result["descriptor_cache"] = descriptor;
+    Dictionary environment;
+    environment["enabled"] = sample.bEnvironmentEnabled;
+    environment["ready"] = sample.bEnvironmentReady;
+    environment["faulted"] = sample.bEnvironmentFaulted;
+    environment["generation"] = ( int64_t ) sample.nEnvironmentGeneration;
+    environment["frames_integrated"] = ( int64_t ) sample.nEnvironmentFramesIntegrated;
+    environment["impulses_accepted"] = ( int64_t ) sample.nEnvironmentImpulsesAccepted;
+    environment["impulses_dropped"] = ( int64_t ) m_publicationBuilder.getEnvironmentDroppedCountOwner();
+    environment["integration_failures"] = ( int64_t ) sample.nEnvironmentIntegrationFailures;
+    environment["teleport_resets"] = ( int64_t ) sample.nEnvironmentTeleportsReset;
+    environment["gpu_timestamp_pairs"] = ( int64_t ) sample.nEnvironmentTimestampPairs;
+    environment["texture_bytes"] = ( int64_t ) sample.nEnvironmentTextureBytes;
+    environment["height_contact_layers"] = 2;
+    environment["height_contact_bytes"] = ( int64_t ) ( 2u * 1024u * 1024u );
+    environment["region_climate_cells"] = ( int64_t ) T3D_REGION_SLOTS;
+    environment["region_climate_cpu_bytes"] = ( int64_t ) ( T3D_REGION_SLOTS * sizeof( t3dEnvironmentRegionClimate_t ) );
+    environment["region_climate_uploads"] = ( int64_t ) sample.nEnvironmentClimateUploads;
+    environment["stale_binding_misses"] = ( int64_t ) (
+        sample.nEnvironmentWorldSetMisses + sample.nEnvironmentOceanSetMisses );
+    environment["world_stale_binding_misses"] = ( int64_t ) sample.nEnvironmentWorldSetMisses;
+    environment["ocean_stale_binding_misses"] = ( int64_t ) sample.nEnvironmentOceanSetMisses;
+    environment["gpu_time_available"] = false;
+    environment["gpu_time_ms"] = -1.0; // There is no dedicated measured environment GPU timestamp yet.
+    result["environment"] = environment;
 	result["render_frame_sequence"] = ( int64_t ) sample.nRenderFrame;
 	result["sync_count_by_reason"] = Terrain3DRdContext::getForceSyncDiagnostics();
 	result["render_thread_queue_wait_usec"] = -1; // Not measured yet.

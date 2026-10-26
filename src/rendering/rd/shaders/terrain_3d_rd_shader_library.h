@@ -69,6 +69,7 @@ public:
 	static bool isCompactClustersEnabledCold( void );
 	static bool isScreenSpacePilotEnabledCold( void );
 	static bool isOceanPreparedFragmentEnabledCold( void );
+	static bool isEnvironmentFieldsEnabledCold( void );
 	// Cold, process-wide shader experiment choices. 0: original, 255: auto (terrain only).
 	static uint32_t getMaterialShaderTrialCold( void );
 	static uint32_t getVtSamplingTrialCold( void );

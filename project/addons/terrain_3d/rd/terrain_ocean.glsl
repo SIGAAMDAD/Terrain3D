@@ -2,6 +2,10 @@
 color_native = "";
 color_prepared = "#define T3D_OCEAN_PREPARED_FRAGMENT";
 shadow = "#define T3D_OCEAN_SHADOW";
+// ENV-P05: water receives the shared interaction field without replacing existing waves.
+env_color_native = "#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
+env_color_prepared = "#define T3D_OCEAN_PREPARED_FRAGMENT\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
+env_shadow = "#define T3D_OCEAN_SHADOW\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1\n#define T3D_ENVIRONMENT_OCEAN_RECEIVER 1";
 
 #[vertex]
 #version 450
@@ -9,6 +13,7 @@ shadow = "#define T3D_OCEAN_SHADOW";
 #VERSION_DEFINES
 
 #include "terrain_strip_topology_inc.glslinc"
+#include "terrain_environment_sampling_inc.glslinc"
 
 layout(set = 0, binding = 0, std140) uniform OceanFrame {
     mat4 view_projection[2];
@@ -164,6 +169,15 @@ void main() {
     vec2 world_xz = mix(start_xz, start_xz - morph.xy * patch_data.scale, morph.z);
     int vertex_iterations = clamp(int(frame_data.mode_params.x + 0.5), 0, 4);
     float y = frame_data.mesh_params.w + ocean_height(world_xz, vertex_iterations);
+#ifdef T3D_ENVIRONMENT_FIELD
+    vec4 interaction = t3d_environment_force_at(world_xz, false);
+    vec2 wind = t3d_environment_wind_at(world_xz, false);
+    // Small-scale gusts and local wave height are bounded to 0.35 meters;
+    // the original authored ocean waves remain authoritative.
+    float wind_wave = sin(dot(world_xz, vec2(0.17, 0.13)) -
+                          t3d_environment_params.previous_wind_time.w * 1.3) * length(wind) * 0.35;
+    y += clamp(interaction.z * 0.12 + wind_wave, -0.35, 0.35);
+#endif
     world_position = vec3(world_xz.x, y, world_xz.y);
     ocean_uv = world_xz;
     view_distance = length(world_position - frame_data.camera_time.xyz);
@@ -174,6 +188,7 @@ void main() {
 #version 450
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
+#include "terrain_environment_sampling_inc.glslinc"
 
 layout(set = 0, binding = 0, std140) uniform OceanFrame {
     mat4 view_projection[2];
@@ -239,6 +254,11 @@ void main() {
         color = mix(color, vec3(dot(color, vec3(0.333))), clamp(frame_data.depth_params.w * 2.0, 0.0, 0.3));
     int packed = int(frame_data.mode_params.w + 0.5);
     int foam_mode = packed & 3;
+#ifdef T3D_ENVIRONMENT_FIELD
+    float impact_foam = clamp(t3d_environment_force_at(ocean_uv, false).w * 0.22, 0.0, 0.55);
+#else
+    float impact_foam = 0.0;
+#endif
     int scatter_mode = (packed >> 2) & 3;
     int shading_mode = (packed >> 4) & 3;
     if (shading_mode > 0 && frame_data.surface_params.y > 0.0) {
@@ -258,6 +278,7 @@ void main() {
         // P53: no visible foam means no hash/noise evaluation. Both the
         // crest and the view fade are nonnegative by construction.
         float crest = clamp((1.0 - normal.y) * frame_data.surface_params.w - frame_data.surface_params.z * 0.1, 0.0, 1.0);
+        crest = clamp(crest + impact_foam, 0.0, 1.0);
         if (crest > 0.0) {
             // P61: do not calculate distance fade for completely flat water.
             float fade = 1.0 - smoothstep(0.0, max(frame_data.foam_params0.x, 1.0), view_distance);

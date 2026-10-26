@@ -10,6 +10,7 @@ const REJECTED_NATIVE_NODE_CLASSES: PackedStringArray = [
 	"Terrain3DAutoShaderBaker",
 	"Terrain3DLandformBaker",
 	"Terrain3DFoliageGenerator",
+	"Terrain3DFoliageEditor",
 	"Terrain3DHLODBuilder",
 ]
 const HLOD_MANIFEST_NAME: String = "terrain3d_hlod_manifest.tres"

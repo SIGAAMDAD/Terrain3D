@@ -8,6 +8,7 @@ const EDITOR_ONLY: Array[String] = [
     "Terrain3DAutoShaderBaker",
     "Terrain3DLandformBaker",
     "Terrain3DFoliageGenerator",
+    "Terrain3DFoliageEditor",
     "Terrain3DHLODBuilder",
     "Terrain3DWorldController",
 ]

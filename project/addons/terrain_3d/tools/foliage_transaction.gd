@@ -8,6 +8,7 @@ const ROOT_NAME: String = ".terrain3d_foliage_transactions"
 const SCHEMA: int = 1
 const MAX_UNREFERENCED_ARCHIVES: int = 32
 static var _live_directories: Dictionary = {}
+var _native := Terrain3DFoliageEditor.new()
 var record: Dictionary = {}
 var error: String = ""
 var failure_phase: String = "" # Test seam: PREPARED/REGIONS_APPLIED/LEDGER_APPLIED/COMMITTED.
@@ -24,7 +25,8 @@ static func journal_path(terrain: Terrain3D) -> String:
 
 func execute(terrain: Terrain3D, batches: Array, before: Terrain3DFoliageManifest,
 		after: Terrain3DFoliageManifest, sources: Dictionary) -> Dictionary:
-	var prepared: Dictionary = terrain.instancer.prepare_foliage_owned_regions(batches)
+	_native.set_terrain(terrain)
+	var prepared: Dictionary = _native.prepare_owned_regions(batches)
 	if not bool(prepared.get("ok", false)):
 		return _failure(String(prepared.get("error", "Cannot prepare native foliage pages")))
 	return execute_pages(terrain, prepared["before_pages"], prepared["pages"], before, after, sources)
@@ -32,6 +34,7 @@ func execute(terrain: Terrain3D, batches: Array, before: Terrain3DFoliageManifes
 func execute_pages(terrain: Terrain3D, before_pages: Dictionary, after_pages: Dictionary,
 		before: Terrain3DFoliageManifest, after: Terrain3DFoliageManifest, sources: Dictionary,
 		target_generations: Dictionary = {}) -> Dictionary:
+	_native.set_terrain(terrain)
 	if FileAccess.file_exists(journal_path(terrain)):
 		return _failure("Pending foliage recovery must complete before another operation: " + journal_path(terrain))
 	# Archive cleanup is performed by the asynchronous I/O worker.
@@ -61,7 +64,7 @@ func execute_pages(terrain: Terrain3D, before_pages: Dictionary, after_pages: Di
 		var target: String = terrain.data_directory.path_join(Terrain3DUtil.location_to_filename(location))
 		var staged: String = directory.path_join("after_%d.res" % index)
 		var generation: int = int(target_generations.get(location, region.get_instance_generation() + 1))
-		var stage_error: Error = terrain.data.stage_region_instances(location, terrain.data_directory,
+		var stage_error: Error = Terrain3DFoliageEditor.stage_region_instances(terrain, location, terrain.data_directory,
 			staged, after_pages[location], generation)
 		if stage_error != OK:
 			return _failure("Cannot stage instances for %s (%s). Save the authored terrain first." % [target, error_string(stage_error)])
@@ -171,7 +174,7 @@ func _validate(terrain: Terrain3D) -> bool:
 		for side: String in ["before", "after"]:
 			if not _verify_file(item.get(side, ""), item.get(side + "_hash", ""), directory):
 				return false
-			if not terrain.data.validate_instance_page(FileAccess.get_file_as_bytes(item[side])):
+			if not Terrain3DFoliageEditor.validate_instance_page(FileAccess.get_file_as_bytes(item[side])):
 				error = "Invalid native recovery instance page: " + String(item[side])
 				return false
 			# Loading staged region resources also verifies native instance encoding.
@@ -241,7 +244,8 @@ func _apply(terrain: Terrain3D, side: String) -> bool:
 		generations[location] = int(item["generation_" + side])
 		if side == "before":
 			persistence[location] = {"dirty_domains": int(item["dirty_domains_before"]), "modified": bool(item["modified_before"])}
-	var restored: Dictionary = terrain.instancer.restore_foliage_instance_pages(native_pages, generations, persistence)
+	_native.set_terrain(terrain)
+	var restored: Dictionary = _native.restore_instance_pages(native_pages, generations, persistence)
 	if not bool(restored.get("ok", false)):
 		error = String(restored.get("error", "Native instance restoration failed"))
 		return false

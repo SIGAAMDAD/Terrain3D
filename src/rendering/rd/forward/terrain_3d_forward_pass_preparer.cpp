@@ -667,6 +667,18 @@ bool Terrain3DForwardPassPreparer::prepare(
 			return false;
 		}
 	}
+	// Cold-only resource materialization happens before the hot-frame allocation scope.
+	// Failed optional initialization is latched until a renderer lifecycle reset.
+    const bool environment_relevant = world_authority.bUnifiedWorldPass || snapshot.m_ocean.m_nEnabled != 0u;
+    if ( environment_relevant && Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() ) {
+        {
+            Terrain3DColdPhaseScope environment_initialization_scope;
+            ( void ) rServices.m_environmentField.initializeCold();
+        }
+        // Run once per native frame before WORLD visibility/material and ocean consumers.
+        // This allows a shadow or transparent pass to be the first environment reader.
+        rServices.m_environmentField.advanceFrameHot( snapshot, rContext );
+    }
 	const bool has_terrain =
 		!transparent_pass && snapshot.m_nPatchCount > 0u && pRegionMap && !pRegionMap->m_bytes.is_empty() &&
 		( !shadow_pass || ( snapshot.m_bCastShadows && ( snapshot.m_nRenderLayers & visibility_mask ) != 0u ) );
@@ -856,11 +868,14 @@ bool Terrain3DForwardPassPreparer::prepare(
 	if ( ocean_requested ) {
 		m_nForwardPrepareRequestedLaneMask |= T3D_RD_FORWARD_LANE_OCEAN;
 	}
-	const bool ocean_ok =
-		!ocean_lane_ready || rServices.m_oceanRenderer.prepareForwardPass( rContext,
-																		   snapshot,
-																		   pOcean ? &pOcean->m_snapshot : NULL,
-																		   visibility_mask );
+    t3dRdEnvironmentBindings_t oceanBindings{};
+    const t3dRdEnvironmentBindings_t *pOceanEnvironment = NULL;
+    if ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() &&
+         rServices.m_environmentField.acquireBindingsHot( oceanBindings ) ) {
+        pOceanEnvironment = &oceanBindings;
+    }
+    const bool ocean_ok = !ocean_lane_ready || rServices.m_oceanRenderer.prepareForwardPass(
+        rContext, snapshot, pOcean ? &pOcean->m_snapshot : NULL, visibility_mask, pOceanEnvironment );
 	m_bForwardPreparedHasOcean = ocean_lane_ready && ocean_ok && ocean_requested;
 	if ( ocean_requested ) {
 		if ( m_bForwardPreparedHasOcean ) {
@@ -970,6 +985,13 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes(
 	}
 	uint32_t					nFailureStage = 0u;
 	const t3dRdFrameSnapshot_t &snapshot = rPreparation.m_pPublication->m_snapshot;
+	t3dRdEnvironmentBindings_t environmentBindings{};
+	const t3dRdEnvironmentBindings_t *pEnvironment = NULL;
+	if ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() ) {
+        if ( rServices.m_environmentField.acquireBindingsHot( environmentBindings ) ) {
+			pEnvironment = &environmentBindings;
+		}
+	}
 	bool						world_ok = false;
 	if ( !rPreparation.m_bSharedVtReady ) {
 		nFailureStage = 2u;
@@ -1005,7 +1027,7 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes(
 			if ( !nFailureStage && !rServices.m_worldRuntime.prepareRasterPass( rContext,
 														 world_bindings,
 														 *rPreparation.m_pSharedVtBindings,
-														 &rServices.m_virtualTexture.get_gpu(), pComposed ) ) {
+														 &rServices.m_virtualTexture.get_gpu(), pComposed, pEnvironment ) ) {
 				nFailureStage = 7u;
 			} else if ( !nFailureStage ) {
 				world_ok = true;

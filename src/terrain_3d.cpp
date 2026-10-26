@@ -1411,3 +1411,57 @@ uint32_t Terrain3D::getMegaVTTexelsPerMeterInternal(
 	void ) const {
 	return m_pRenderCoordinator ? m_pRenderCoordinator->getMegaVTTexelsPerMeterCold() : 2u;
 }
+
+void Terrain3D::setEnvironmentForcing(
+    float fRain, float fSnow, float fDry, const Vector2 &rWind,
+    float fGust, float fDeltaTime, bool bEnabled ) {
+    if ( !m_pRenderCoordinator ) {
+        return;
+    }
+    t3dEnvironmentForcing_t forcing{};
+    forcing.m_fRainRate = isfinite( fRain ) ? CLAMP( fRain, 0.0f, 1.0f ) : 0.0f;
+    forcing.m_fSnowRate = isfinite( fSnow ) ? CLAMP( fSnow, 0.0f, 1.0f ) : 0.0f;
+    forcing.m_fDryRate = isfinite( fDry ) ? CLAMP( fDry, 0.0f, 1.0f ) : 0.0f;
+    forcing.m_fWindX = isfinite( ( double ) rWind.x ) ? ( float ) rWind.x : 0.0f;
+    forcing.m_fWindZ = isfinite( ( double ) rWind.y ) ? ( float ) rWind.y : 0.0f;
+    forcing.m_fGustStrength = isfinite( fGust ) ? MAX( fGust, 0.0f ) : 0.0f;
+    forcing.m_fDeltaTime = isfinite( fDeltaTime ) ? CLAMP( fDeltaTime, 0.0f, 0.1f ) : 0.0f;
+    forcing.m_nFlags = bEnabled ? 1u : 0u;
+    m_pRenderCoordinator->setEnvironmentForcingOwner( forcing );
+}
+
+uint32_t Terrain3D::submitEnvironmentImpulses(
+    const PackedByteArray &rPackedImpulses ) {
+    if ( !m_pRenderCoordinator || rPackedImpulses.size() == 0u ||
+         ( rPackedImpulses.size() % sizeof( t3dEnvironmentImpulse_t ) ) != 0u ) {
+        return 0u;
+    }
+    const uint64_t nCount = ( uint64_t ) rPackedImpulses.size() / sizeof( t3dEnvironmentImpulse_t );
+    if ( nCount > UINT32_MAX ) {
+        return 0u;
+    }
+    return m_pRenderCoordinator->submitEnvironmentImpulsesOwner(
+        ( const t3dEnvironmentImpulse_t * ) rPackedImpulses.ptr(), ( uint32_t ) nCount );
+}
+
+uint64_t Terrain3D::getEnvironmentDroppedImpulses() const {
+    return m_pRenderCoordinator ? m_pRenderCoordinator->getEnvironmentDroppedCountOwner() : 0u;
+}
+
+// ENV-P07: runtime climate persistence belongs to the existing publication owner.
+// External weather/gameplay provides forcing; export/import are explicit save operations.
+bool Terrain3D::setEnvironmentRegionClimate( const Vector2i &rRegion, const Vector3 &rClimate ) {
+    return m_pRenderCoordinator && m_pRenderCoordinator->setEnvironmentRegionClimateOwner( rRegion, rClimate );
+}
+
+Vector3 Terrain3D::getEnvironmentRegionClimate( const Vector2i &rRegion ) const {
+    return m_pRenderCoordinator ? m_pRenderCoordinator->getEnvironmentRegionClimateOwner( rRegion ) : Vector3();
+}
+
+PackedByteArray Terrain3D::exportEnvironmentRegionClimate() const {
+    return m_pRenderCoordinator ? m_pRenderCoordinator->exportEnvironmentRegionClimateOwner() : PackedByteArray();
+}
+
+bool Terrain3D::importEnvironmentRegionClimate( const PackedByteArray &rData ) {
+    return m_pRenderCoordinator && m_pRenderCoordinator->importEnvironmentRegionClimateOwner( rData );
+}

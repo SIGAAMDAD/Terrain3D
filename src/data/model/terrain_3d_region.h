@@ -4,7 +4,7 @@
 #define TERRAIN3D_REGION_CLASS_H
 
 #include "Terrain3DTypes.h"
-#include "core/utility/terrain_3d_sync.h"
+#include "data/model/terrain_3d_editor_revisions.h"
 
 #include "Terrain3DConstants.h"
 #include "assets/catalog/terrain_3d_assets.h"
@@ -96,9 +96,9 @@ private:
 	uint32_t m_nRasterDirtyDomains = 0u;
 	bool m_bInstancesDirty = false;
 	bool m_bMetadataDirty = false;
-	uint64_t m_nFoliageSourceRevision = 1u;
-	static Terrain3DAtomic<uint64_t> s_nFoliageSourceStamp;
-	uint64_t m_nFoliageInstanceRevision = 1u;
+#if defined(T3D_EDITOR_NATIVE)
+	Terrain3DEditorRevisions m_editorRevisions;
+#endif
 	// Instancer. Expanded native stores are pageable; the compact binary page remains
 	// serialized with the region and is sufficient for dormant regions.
 	mutable Terrain3DInstanceStore m_instanceStore;
@@ -306,15 +306,20 @@ public:
 		return m_bInstanceStoreResident;
 	}
 	EA_FORCE_INLINE int64_t getInstanceGeneration( void ) const { return m_nInstanceGeneration; }
-	EA_FORCE_INLINE uint64_t getFoliageSourceRevision( void ) const { return m_nFoliageSourceRevision; }
-	EA_FORCE_INLINE static uint64_t getFoliageSourceStamp( void ) { return s_nFoliageSourceStamp.load(T3D_MEMORY_ORDER_ACQUIRE); }
-	EA_FORCE_INLINE uint64_t getFoliageInstanceRevision( void ) const { return m_nFoliageInstanceRevision; }
-	Dictionary getFoliageOwnerIds( void ) const;
-	EA_FORCE_INLINE void touchFoliageInstances( void ) { if (++m_nFoliageInstanceRevision == 0u) { m_nFoliageInstanceRevision = 1u; } }
-	EA_FORCE_INLINE void touchFoliageSource( void ) {
-		if ( ++m_nFoliageSourceRevision == 0u ) { m_nFoliageSourceRevision = 1u; }
-		if ( s_nFoliageSourceStamp.fetch_add(1u, T3D_MEMORY_ORDER_ACQ_REL) + 1u == 0u ) { s_nFoliageSourceStamp.store(1u, T3D_MEMORY_ORDER_RELEASE); }
-	}
+#if defined(T3D_EDITOR_NATIVE)
+    EA_FORCE_INLINE uint64_t getAuthoringSourceRevision() const { return m_editorRevisions.source; }
+    EA_FORCE_INLINE uint64_t getAuthoringInstanceRevision() const { return m_editorRevisions.instances; }
+#endif
+    EA_FORCE_INLINE void markAuthoringSourceChanged() {
+#if defined(T3D_EDITOR_NATIVE)
+        m_editorRevisions.touchSource();
+#endif
+    }
+    EA_FORCE_INLINE void markAuthoringInstancesChanged() {
+#if defined(T3D_EDITOR_NATIVE)
+        m_editorRevisions.touchInstances();
+#endif
+    }
 	EA_FORCE_INLINE void setInstanceGeneration( int64_t nGeneration ) { m_nInstanceGeneration = MAX( (int64_t)0, nGeneration ); }
 	EA_FORCE_INLINE int getDirtyDomains( void ) const {
 		uint32_t domains = m_nRasterDirtyDomains;
@@ -468,7 +473,7 @@ public:
 	void setModified(
 		const bool bModified ) {
 		m_bModified = bModified;
-		if ( bModified && !m_bRuntimeMapsModified && !m_bInstancesDirty ) { m_bMetadataDirty = true; touchFoliageSource(); }
+		if ( bModified && !m_bRuntimeMapsModified && !m_bInstancesDirty ) { m_bMetadataDirty = true; markAuthoringSourceChanged(); }
 		if ( !bModified ) {
 			m_bRuntimeMapsModified = false;
 			m_nRasterDirtyDomains = 0u;

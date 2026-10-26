@@ -1,5 +1,5 @@
 @tool
-extends PopupPanel
+extends Window
 
 const PRESET_SCRIPT = preload("res://addons/terrain_3d/src/foliage_preset.gd")
 const DEFINITION_SCRIPT = preload("res://addons/terrain_3d/src/foliage_definition.gd")
@@ -61,9 +61,20 @@ var _cancel: Button
 var _save_dialog: EditorFileDialog
 
 func _ready() -> void:
+	title = "Terrain3D Foliage Generation"
+	borderless = false
+	popup_window = false
+	unresizable = false
+	wrap_controls = false
+	transient = true
+	exclusive = false
+	hide()
 	_generator = Terrain3DFoliageGenerator.new()
 	_build_ui()
-	popup_hide.connect(_on_popup_hidden)
+	close_requested.connect(hide)
+	visibility_changed.connect(func() -> void:
+		if not visible:
+			_on_popup_hidden())
 	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	if manager.has_signal("version_changed"):
 		manager.connect("version_changed", _on_history_changed)
@@ -74,7 +85,10 @@ func open() -> void:
 	_sync_preset()
 	_populate_region_selector(true)
 	_recover_journal()
-	popup_centered(EditorUI.popup_size_for_screen(self, Vector2i(940, 700), Vector2i(650, 480)))
+	var minimum := Vector2i(int(EditorUI.scaled(650.0)), int(EditorUI.scaled(480.0)))
+	var preferred := Vector2i(int(EditorUI.scaled(940.0)), int(EditorUI.scaled(700.0)))
+	min_size = EditorUI.minimum_size_for_screen(self, minimum)
+	popup_centered(EditorUI.popup_size_for_screen(self, preferred, minimum))
 
 func set_terrain(p_terrain: Terrain3D) -> void:
 	if _terrain == p_terrain:
@@ -224,16 +238,29 @@ func _button(text: String, parent: Node, callback: Callable) -> Button:
 	return result
 
 func _build_ui() -> void:
+	var margin := MarginContainer.new()
+	add_child(margin)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for edge: String in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		margin.add_theme_constant_override(edge, int(EditorUI.scaled(12.0)))
 	var vertical := VBoxContainer.new()
-	vertical.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	vertical.add_theme_constant_override("separation", 8)
-	add_child(vertical)
+	margin.add_child(vertical)
+	# Only the form scrolls. Progress and action buttons always stay in the window.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vertical.add_child(scroll)
+	var body := VBoxContainer.new()
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 8)
+	scroll.add_child(body)
 	var heading := HBoxContainer.new()
-	vertical.add_child(heading)
+	body.add_child(heading)
 	_label("Foliage Generation", heading).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_button("Save Preset As…", heading, _save_as)
 	var config := HBoxContainer.new()
-	vertical.add_child(config)
+	body.add_child(config)
 	_label("Preset", config)
 	_preset_picker = EditorResourcePicker.new()
 	_preset_picker.base_type = "Terrain3DFoliagePreset"
@@ -242,18 +269,14 @@ func _build_ui() -> void:
 	config.add_child(_preset_picker)
 	_button("New", config, func() -> void: _set_preset(PRESET_SCRIPT.new()))
 	var section := HBoxContainer.new()
-	vertical.add_child(section)
+	body.add_child(section)
 	_label("Material associations and mesh banks", section).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_button("Add Material", section, _add_definition)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	vertical.add_child(scroll)
 	_rule_container = VBoxContainer.new()
 	_rule_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_rule_container)
-	var settings := HBoxContainer.new()
-	vertical.add_child(settings)
+	body.add_child(_rule_container)
+	var settings := HFlowContainer.new()
+	body.add_child(settings)
 	_label("Scope", settings)
 	_scope = OptionButton.new()
 	_scope.add_item("Selected Region", 0)
@@ -269,13 +292,13 @@ func _build_ui() -> void:
 		if _preset != null:
 			EditorInterface.edit_resource(_preset))
 	_button("Refresh Stale Status", settings, _refresh_editor)
-	_status = _label("Select a Terrain3D and foliage preset.", vertical)
+	_status = _label("Select a Terrain3D and foliage preset.", body)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_progress = ProgressBar.new()
 	_progress.max_value = 1.0
 	_progress.show_percentage = true
 	vertical.add_child(_progress)
-	var actions := HBoxContainer.new()
+	var actions := HFlowContainer.new()
 	vertical.add_child(actions)
 	_generate = _button("Generate", actions, func() -> void: _start("generate"))
 	_regenerate = _button("Regenerate", actions, func() -> void: _start("regenerate"))
@@ -571,7 +594,7 @@ func _source_signature(region: Vector2i, rules_signature: String = "") -> String
 	if _terrain == null:
 		return ""
 	var targets: Array[Vector2i] = [region]
-	var revisions: Dictionary = _terrain.data.capture_foliage_sources(targets, 4)
+	var revisions: Dictionary = Terrain3DFoliageEditor.capture_sources(_terrain, targets, 4)
 	var hasher := HashingContext.new()
 	hasher.start(HashingContext.HASH_SHA256)
 	hasher.update(var_to_bytes(revisions["regions"]))

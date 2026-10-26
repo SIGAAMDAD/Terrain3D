@@ -8,6 +8,7 @@
 #include "rendering/rd/core/terrain_3d_render_publication_builder.h"
 #include "rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
+#include "rendering/rd/environment/terrain_3d_rd_environment_field.h"
 #include "rendering/rd/ocean/terrain_3d_rd_ocean_renderer.h"
 #include "rendering/rd/world/runtime/terrain_3d_world_runtime.h"
 #include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"
@@ -36,6 +37,7 @@ typedef struct t3dForwardPassServices_s
 	Terrain3DRenderPublicationBuilder &m_publicationBuilder;
 	Terrain3DRdClipmapRenderer		  &m_renderer;
 	Terrain3DRdOceanRenderer		  &m_oceanRenderer;
+    Terrain3DRdEnvironmentField     &m_environmentField;
 	Terrain3DWorldRuntime			  &m_worldRuntime;
 	Terrain3DVirtualTexture			  &m_virtualTexture;
 	Terrain3DSharedVTRuntime &m_sharedVtRuntime;

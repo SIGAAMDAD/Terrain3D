@@ -378,8 +378,9 @@ bool Terrain3DWorldRuntime::prepareRasterPass(
 	const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 	const t3dSharedVTBindings_t				&rVT,
 	Terrain3DVTGpu							*pFeedbackOwner,
-	const t3dComposedSurfaceGpuBindings_t *pComposed ) {
-	return m_bReady && m_raster.prepareCold( rContext, m_resources, rTerrain, rVT, pFeedbackOwner, pComposed );
+	const t3dComposedSurfaceGpuBindings_t *pComposed,
+    const t3dRdEnvironmentBindings_t *pEnvironment ) {
+    return m_bReady && m_raster.prepareCold( rContext, m_resources, rTerrain, rVT, pFeedbackOwner, pComposed, pEnvironment );
 }
 
 bool Terrain3DWorldRuntime::submitRasterPass(

@@ -7,6 +7,7 @@
 #include "authoring/editor/terrain_3d_editor.h"
 #include "authoring/erosion/terrain_3d_erosion_job.h"
 #include "authoring/foliage/terrain_3d_foliage_generator.h"
+#include "authoring/foliage/terrain_3d_foliage_editor.h"
 #include "authoring/world/core/terrain_3d_world_controller.h"
 #include "hlod/build/terrain_3d_hlod_builder.h"
 
@@ -17,6 +18,7 @@ void t3dRegisterEditorTypes(
 	void ) {
 	ClassDB::register_class< Terrain3DAutoShaderBaker >();
 	ClassDB::register_class< Terrain3DFoliageGenerator >();
+	ClassDB::register_class< Terrain3DFoliageEditor >();
 	ClassDB::register_class< Terrain3DErosionJob >();
 	ClassDB::register_class< Terrain3DEditor >();
 	ClassDB::register_class< Terrain3DLandformBaker >();

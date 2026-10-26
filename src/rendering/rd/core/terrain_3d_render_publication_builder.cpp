@@ -1572,6 +1572,194 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 	return true;
 }
 
+namespace
+{
+    static int32_t t3dEnvironmentRegionSlot( const Vector2i &rRegion ) {
+        const int32_t x = rRegion.x + T3D_REGION_MAP_HALF;
+        const int32_t z = rRegion.y + T3D_REGION_MAP_HALF;
+        if ( x < 0 || z < 0 || x >= T3D_REGION_MAP_SIZE || z >= T3D_REGION_MAP_SIZE ) {
+            return -1;
+        }
+        return z * T3D_REGION_MAP_SIZE + x;
+    }
+
+    static uint16_t t3dEnvironmentQuantize( float fValue ) {
+        return ( uint16_t ) ( CLAMP( fValue, 0.0f, 1.0f ) * 65535.0f + 0.5f );
+    }
+
+    static uint32_t t3dEnvironmentChecksum( const uint8_t *pBytes, uint32_t nBytes ) {
+        uint32_t result = 2166136261u;
+        for ( uint32_t i = 0u; i < nBytes; ++i ) {
+            result = ( result ^ pBytes[i] ) * 16777619u;
+        }
+        return result;
+    }
+
+    static void t3dEnvironmentPutU32( uint8_t *pOut, uint32_t nValue ) {
+        for ( uint32_t i = 0u; i < 4u; ++i ) {
+            pOut[i] = ( uint8_t ) ( nValue >> ( 8u * i ) );
+        }
+    }
+
+    static uint32_t t3dEnvironmentGetU32( const uint8_t *pIn ) {
+        return ( uint32_t ) pIn[0] | ( ( uint32_t ) pIn[1] << 8u ) |
+               ( ( uint32_t ) pIn[2] << 16u ) | ( ( uint32_t ) pIn[3] << 24u );
+    }
+}
+
+void Terrain3DRenderPublicationBuilder::clearEnvironmentRegionClimateOwner() {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), VOID );
+#endif
+    memset( m_szEnvironmentRegionClimate, 0, sizeof( m_szEnvironmentRegionClimate ) );
+    m_nEnvironmentPendingCount = 0u;
+    ++m_nEnvironmentRegionClimateEpoch;
+    ++m_nEnvironmentRegionOverrideEpoch;
+}
+
+bool Terrain3DRenderPublicationBuilder::setEnvironmentRegionClimateOwner(
+    const Vector2i &rRegion, const Vector3 &rClimate ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), false );
+#endif
+    const int32_t slot = t3dEnvironmentRegionSlot( rRegion );
+    if ( slot < 0 || !isfinite( ( double ) rClimate.x ) || !isfinite( ( double ) rClimate.y ) ||
+         !isfinite( ( double ) rClimate.z ) ) {
+        return false;
+    }
+    t3dEnvironmentRegionClimate_t &cell = m_szEnvironmentRegionClimate[slot];
+    const t3dEnvironmentRegionClimate_t next{
+        t3dEnvironmentQuantize( ( float ) rClimate.x ),
+        t3dEnvironmentQuantize( ( float ) rClimate.y ),
+        t3dEnvironmentQuantize( ( float ) rClimate.z ), 1u };
+    if ( memcmp( &cell, &next, sizeof( next ) ) != 0 ) {
+        cell = next;
+        ++m_nEnvironmentRegionClimateEpoch;
+        ++m_nEnvironmentRegionOverrideEpoch;
+    }
+    return true;
+}
+
+Vector3 Terrain3DRenderPublicationBuilder::getEnvironmentRegionClimateOwner( const Vector2i &rRegion ) const {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), Vector3() );
+#endif
+    const int32_t slot = t3dEnvironmentRegionSlot( rRegion );
+    if ( slot < 0 || m_szEnvironmentRegionClimate[slot].m_nFlags == 0u ) {
+        return Vector3();
+    }
+    const t3dEnvironmentRegionClimate_t &cell = m_szEnvironmentRegionClimate[slot];
+    return Vector3( ( real_t ) cell.m_nWetness / 65535.0f,
+                    ( real_t ) cell.m_nSnow / 65535.0f,
+                    ( real_t ) cell.m_nGroundCover / 65535.0f );
+}
+
+PackedByteArray Terrain3DRenderPublicationBuilder::exportEnvironmentRegionClimateOwner() const {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), PackedByteArray() );
+#endif
+    const uint32_t header = 16u;
+    const uint32_t payload = T3D_REGION_SLOTS * 8u;
+    PackedByteArray bytes;
+    bytes.resize( header + payload );
+    uint8_t *const pOut = bytes.ptrw();
+    pOut[0] = 'T'; pOut[1] = '3'; pOut[2] = 'E'; pOut[3] = '7';
+    t3dEnvironmentPutU32( pOut + 4, 1u );
+    t3dEnvironmentPutU32( pOut + 8, T3D_REGION_SLOTS );
+    for ( uint32_t i = 0u; i < T3D_REGION_SLOTS; ++i ) {
+        const t3dEnvironmentRegionClimate_t &cell = m_szEnvironmentRegionClimate[i];
+        const uint16_t channels[4] = { cell.m_nWetness, cell.m_nSnow, cell.m_nGroundCover, cell.m_nFlags };
+        for ( uint32_t c = 0u; c < 4u; ++c ) {
+            const uint32_t offset = header + i * 8u + c * 2u;
+            pOut[offset] = ( uint8_t ) channels[c];
+            pOut[offset + 1u] = ( uint8_t ) ( channels[c] >> 8u );
+        }
+    }
+    t3dEnvironmentPutU32( pOut + 12, t3dEnvironmentChecksum( pOut + header, payload ) );
+    return bytes;
+}
+
+bool Terrain3DRenderPublicationBuilder::importEnvironmentRegionClimateOwner( const PackedByteArray &rData ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), false );
+#endif
+    const uint32_t header = 16u;
+    const uint32_t payload = T3D_REGION_SLOTS * 8u;
+    if ( rData.size() != header + payload ) {
+        return false;
+    }
+    const uint8_t *const pIn = rData.ptr();
+    if ( pIn[0] != 'T' || pIn[1] != '3' || pIn[2] != 'E' || pIn[3] != '7' ||
+         t3dEnvironmentGetU32( pIn + 4 ) != 1u ||
+         t3dEnvironmentGetU32( pIn + 8 ) != T3D_REGION_SLOTS ||
+         t3dEnvironmentGetU32( pIn + 12 ) != t3dEnvironmentChecksum( pIn + header, payload ) ) {
+        return false;
+    }
+    t3dEnvironmentRegionClimate_t restored[T3D_REGION_SLOTS]{};
+    for ( uint32_t i = 0u; i < T3D_REGION_SLOTS; ++i ) {
+        uint16_t channels[4]{};
+        for ( uint32_t c = 0u; c < 4u; ++c ) {
+            const uint32_t offset = header + i * 8u + c * 2u;
+            channels[c] = ( uint16_t ) ( pIn[offset] | ( ( uint16_t ) pIn[offset + 1u] << 8u ) );
+        }
+        if ( channels[3] > 1u ) {
+            return false;
+        }
+        restored[i] = { channels[0], channels[1], channels[2], channels[3] };
+    }
+    memcpy( m_szEnvironmentRegionClimate, restored, sizeof( restored ) );
+    ++m_nEnvironmentRegionClimateEpoch;
+    ++m_nEnvironmentRegionOverrideEpoch;
+    return true;
+}
+
+void Terrain3DRenderPublicationBuilder::setEnvironmentForcingOwner(
+    const t3dEnvironmentForcing_t &rForcing ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), VOID );
+#endif
+    m_environmentForcing = rForcing;
+    if ( ( rForcing.m_nFlags & 1u ) == 0u || rForcing.m_fDeltaTime <= 0.0f ) {
+        return;
+    }
+    const float dt = CLAMP( rForcing.m_fDeltaTime, 0.0f, 0.1f );
+    bool dirty = false;
+    for ( uint32_t i = 0u; i < T3D_REGION_SLOTS; ++i ) {
+        t3dEnvironmentRegionClimate_t &cell = m_szEnvironmentRegionClimate[i];
+        const t3dEnvironmentRegionClimate_t before = cell;
+        cell.m_nWetness = t3dEnvironmentQuantize(
+            ( float ) cell.m_nWetness / 65535.0f + dt * ( rForcing.m_fRainRate - rForcing.m_fDryRate ) );
+        cell.m_nSnow = t3dEnvironmentQuantize(
+            ( float ) cell.m_nSnow / 65535.0f + dt * ( rForcing.m_fSnowRate - rForcing.m_fDryRate * 0.3f ) );
+        cell.m_nGroundCover = t3dEnvironmentQuantize(
+            ( float ) cell.m_nGroundCover / 65535.0f - dt * 0.15f );
+        cell.m_nFlags = 1u;
+        dirty |= memcmp( &cell, &before, sizeof( cell ) ) != 0;
+    }
+    if ( dirty ) {
+        ++m_nEnvironmentRegionClimateEpoch;
+    }
+}
+
+uint32_t Terrain3DRenderPublicationBuilder::submitEnvironmentImpulsesOwner(
+    const t3dEnvironmentImpulse_t *pEvents, const uint32_t nCount ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnOwnerThread(), 0u );
+#endif
+    if ( !pEvents || nCount == 0u ) {
+        return 0u;
+    }
+    const uint32_t remaining = T3D_ENVIRONMENT_MAX_IMPULSES - m_nEnvironmentPendingCount;
+    const uint32_t accepted = MIN( nCount, remaining );
+    if ( accepted > 0u ) {
+        memcpy( &m_szEnvironmentPending[m_nEnvironmentPendingCount], pEvents,
+                accepted * sizeof( t3dEnvironmentImpulse_t ) );
+        m_nEnvironmentPendingCount += accepted;
+    }
+    m_nEnvironmentImpulseDropped += nCount - accepted;
+    return accepted;
+}
+
 void Terrain3DRenderPublicationBuilder::commitSnapshotPublication(
 	const t3dPublicationServices_t &rServices,
 	t3dRdFrameSnapshot_t		   &snapshot ) {
@@ -1655,7 +1843,31 @@ void Terrain3DRenderPublicationBuilder::publish(
 	snapshot.m_generations.m_nPatchGeneration = m_nPatchGeneration;
 	snapshot.m_generations.m_nMaterialGeneration = snapshot.m_nMaterialGeneration;
 	snapshot.m_generations.m_nRegionLightingSignature = m_nRegionLightingSignature;
+    // The cache is authoritative owner data. The render thread receives a
+    // complete packed snapshot; no GPU readback or cooked region mutation.
+    snapshot.m_nEnvironmentRegionClimateEpoch = m_nEnvironmentRegionClimateEpoch;
+    snapshot.m_nEnvironmentRegionOverrideEpoch = m_nEnvironmentRegionOverrideEpoch;
+    for ( uint32_t i = 0u; i < T3D_REGION_SLOTS; ++i ) {
+        const t3dEnvironmentRegionClimate_t &cell = m_szEnvironmentRegionClimate[i];
+        snapshot.m_szEnvironmentRegionClimate[i] =
+            ( uint32_t ) ( cell.m_nWetness >> 8u ) |
+            ( ( uint32_t ) ( cell.m_nSnow >> 8u ) << 8u ) |
+            ( ( uint32_t ) ( cell.m_nGroundCover >> 8u ) << 16u ) |
+            ( cell.m_nFlags != 0u ? 0xff000000u : 0u );
+    }
+    snapshot.m_environmentForcing = m_environmentForcing;
+    snapshot.m_nEnvironmentImpulseCount = m_nEnvironmentPendingCount;
+    if ( m_nEnvironmentPendingCount > 0u ) {
+        ++m_nEnvironmentImpulseEpoch;
+        if ( m_nEnvironmentImpulseEpoch == 0u ) {
+            ++m_nEnvironmentImpulseEpoch;
+        }
+        memcpy( snapshot.m_szEnvironmentImpulses, m_szEnvironmentPending,
+                m_nEnvironmentPendingCount * sizeof( t3dEnvironmentImpulse_t ) );
+    }
+    snapshot.m_nEnvironmentImpulseEpoch = m_nEnvironmentImpulseEpoch;
 	commitSnapshotPublication( rServices, snapshot );
+    m_nEnvironmentPendingCount = 0u;
 }
 
 const t3dRdFrameSnapshotSlot_t *Terrain3DRenderPublicationBuilder::acquireOnRenderThread(

@@ -12,6 +12,7 @@
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_descriptor_lease_table.h"
 #include "rendering/rd/infrastructure/resources/terrain_3d_rd_shader.h"
 #include "rendering/rd/world/resources/terrain_3d_world_resources.h"
+#include "rendering/rd/environment/terrain_3d_rd_environment_field.h"
 #include "rendering/rd/vt/gpu/terrain_3d_composed_surface_gpu.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -24,11 +25,12 @@ private:
 	typedef struct t3dPipelineKey_s : public t3dRdForwardPipelineBaseKey_t
 	{
 		uint32_t m_nPrimitiveClass = T3D_PRIMITIVE_TERRAIN_STRIP;
+        bool m_bEnvironmentVariant = false;
 		bool	 operator==(
 			const t3dPipelineKey_s &rOther ) const {
 			return ( const t3dRdForwardPipelineBaseKey_t & ) ( *this ) ==
 					   ( const t3dRdForwardPipelineBaseKey_t & ) ( rOther ) &&
-				   m_nPrimitiveClass == rOther.m_nPrimitiveClass;
+				   m_nPrimitiveClass == rOther.m_nPrimitiveClass && m_bEnvironmentVariant == rOther.m_bEnvironmentVariant;
 		}
 	} t3dPipelineKey_t;
 
@@ -53,6 +55,15 @@ private:
 	bool					   m_bMeshFeedback[T3D_RD_FORWARD_COLOR_VARIANT_COUNT]{};
 	bool m_bCompactShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX]{};
 	RID m_hCompactSet[T3D_PRIMITIVE_CLASS_COUNT]{};
+    static const uint32_t ENV_SHADOW_SLOT = T3D_RD_FORWARD_SHADER_VARIANT_MAX;
+    RID m_hEnvironmentSet[T3D_PRIMITIVE_CLASS_COUNT][ENV_SHADOW_SLOT + 1u][2]{};
+    RID m_hCurrentEnvironmentSet[T3D_PRIMITIVE_CLASS_COUNT]{};
+    bool m_bEnvironmentShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX]{};
+    bool m_bCurrentEnvironmentShader[T3D_PRIMITIVE_CLASS_COUNT]{};
+    bool m_bEnvironmentReady = false;
+    uint64_t m_nStaleEnvironmentSetMisses = 0u;
+    Terrain3DRdShader m_hEnvironmentMeshShadowShader;
+    Terrain3DRdDescriptorLeaseTable< t3dSetSignature_t, T3D_PRIMITIVE_CLASS_COUNT * ( ENV_SHADOW_SLOT + 1u ) * 2u > m_environmentSetCache;
 	godot::RID				   m_hCurrentFeedbackSet;
 	Terrain3DRdShader		   m_hShadowShader[T3D_PRIMITIVE_CLASS_COUNT];
 	godot::RID				   m_hSet0[T3D_PRIMITIVE_CLASS_COUNT][T3D_WORLD_DESCRIPTOR_LAYOUT_COUNT];
@@ -84,6 +95,8 @@ private:
 											  t3dPrimitiveClass_t					   primitiveClass,
 											  uint32_t								   nDescriptorSlot,
 	const t3dComposedSurfaceGpuBindings_t *pComposed );
+    bool ensureEnvironmentSetsCold( const RID &rShader, uint32_t nPrimitive, uint32_t nVariant,
+                                    const t3dRdEnvironmentBindings_t &rBindings );
 	bool					  ensurePipelineCold( const t3dRdForwardPassContext_t &rContext,
 												  t3dRdForwardShaderVariant_t	   variant,
 												  t3dPrimitiveClass_t			   primitiveClass );
@@ -101,12 +114,14 @@ public:
 						  const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 						  const t3dSharedVTBindings_t			  &rVT,
 						  Terrain3DVTGpu						  *pFeedbackOwner = NULL,
-	const t3dComposedSurfaceGpuBindings_t *pComposed = NULL );
+	const t3dComposedSurfaceGpuBindings_t *pComposed = NULL,
+    const t3dRdEnvironmentBindings_t *pEnvironment = NULL );
 	bool	 submitHot( const t3dRdForwardPassContext_t &rContext, Terrain3DWorldResources &rResources );
 	void	 shutdownCold( void );
 	bool	 isReady( void ) const;
 	uint64_t getSubmitCount( t3dRdForwardPassKind_t pass ) const;
-	uint64_t getPrepareCount( void ) const;
+    uint64_t getPrepareCount( void ) const;
+    uint64_t getEnvironmentStaleSetMisses() const { return m_nStaleEnvironmentSetMisses; }
 };
 
 #endif // TERRAIN3D_WORLD_RASTER_H

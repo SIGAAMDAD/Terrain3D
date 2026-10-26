@@ -1,4 +1,5 @@
-﻿#include "authoring/foliage/terrain_3d_foliage_generator.h"
+#include "authoring/foliage/terrain_3d_foliage_editor.h"
+#include "authoring/foliage/terrain_3d_foliage_generator.h"
 #include "terrain_3d.h"
 #include "data/model/terrain_3d_data.h"
 #include "data/sampling/terrain_3d_sampler.h"
@@ -118,8 +119,8 @@ bool Terrain3DFoliageGenerator::start(Terrain3D *pTerrain, const Dictionary &rCo
         m_autoBase = material->getShaderParam("auto_base_texture");
         m_autoOverlay = material->getShaderParam("auto_overlay_texture");
     }
-    m_frozenSources = pTerrain->dataObject()->captureFoliageSources(m_regions, 4);
-    m_sourceStamp = Terrain3DRegion::getFoliageSourceStamp();
+    m_frozenSources = Terrain3DFoliageEditor::captureSources(pTerrain, m_regions, 4);
+    m_sourceStamp = Terrain3DFoliageEditor::sourceStamp();
     m_pSampler = memnew(Terrain3DSampler(pTerrain->dataObject()->getSamplingSourceInternal()));
     m_running = true;
     return true;
@@ -146,13 +147,13 @@ bool Terrain3DFoliageGenerator::sourcesUnchanged() {
             m_error = "Foliage asset slots changed"; return false;
         }
     }
-    const uint64_t stamp = Terrain3DRegion::getFoliageSourceStamp();
+    const uint64_t stamp = Terrain3DFoliageEditor::sourceStamp();
     // Topology is inexpensive to compare; residency churn does not change this
     // authored source revision. No Image.get_data() or whole-map hashing here.
     const t3dSamplingSource_t source = m_pTerrain->dataObject()->getSamplingSourceInternal();
     if (stamp != m_sourceStamp ||
         (int64_t)source.m_pRepository->getTopologyGeneration() != (int64_t)m_frozenSources["topology"]) {
-        const Dictionary current = m_pTerrain->dataObject()->captureFoliageSources(m_regions, 4);
+        const Dictionary current = Terrain3DFoliageEditor::captureSources(m_pTerrain, m_regions, 4);
         if (current["regions"] != m_frozenSources["regions"]) {
             m_error = "Terrain source changed during foliage generation"; return false;
         }

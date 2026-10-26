@@ -78,7 +78,8 @@ public:
 								const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 								const t3dSharedVTBindings_t				&rVT,
 								Terrain3DVTGpu							*pFeedbackOwner = NULL,
-	const t3dComposedSurfaceGpuBindings_t *pComposed = NULL );
+	const t3dComposedSurfaceGpuBindings_t *pComposed = NULL,
+    const t3dRdEnvironmentBindings_t *pEnvironment = NULL );
 	bool	 submitRasterPass( const t3dRdForwardPassContext_t &rContext );
 	void	 shutdownCold( void );
 	void releaseArenaSpansFinal( void );

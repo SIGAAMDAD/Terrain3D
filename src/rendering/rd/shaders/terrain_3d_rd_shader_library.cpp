@@ -35,6 +35,7 @@ typedef struct t3dRdShaderSharedState_s
 	bool m_bCompactClusters = false;
 	bool m_bScreenSpacePilot = false;
 	bool m_bOceanPreparedFragment = false;
+	bool m_bEnvironmentFields = false;
 	uint32_t m_nMaterialShaderTrial = 0u;
 	uint32_t m_nVtSamplingTrial = 0u;
 	uint32_t m_nInstanceAlphaTrial = 0u;
@@ -120,6 +121,8 @@ bool Terrain3DRdShaderLibrary::initializeSharedState(
 			pOS->get_environment( "TERRAIN3D_SCREEN_SPACE_PILOT" ) == "1";
 		s_pRdShaderSharedState->m_bOceanPreparedFragment = t3dRdEnvironmentFlagOrDefault(
 			pOS, "TERRAIN3D_OCEAN_PREPARED_FRAGMENT", T3D_DEFAULT_OCEAN_PREPARED_FRAGMENT != 0u );
+		s_pRdShaderSharedState->m_bEnvironmentFields = pOS &&
+			pOS->get_environment( "TERRAIN3D_ENVIRONMENT_FIELDS" ) == "1";
 		if ( pOS ) {
 			const String materialTrial = pOS->get_environment( "TERRAIN3D_MATERIAL_SHADER_TRIAL" ).to_lower();
 			const String vtTrial = pOS->get_environment( "TERRAIN3D_VT_SAMPLING_TRIAL" ).to_lower();
@@ -201,6 +204,10 @@ bool Terrain3DRdShaderLibrary::isOceanPreparedFragmentEnabledCold( void ) {
 	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
 	return pState && pState->m_bOceanPreparedFragment;
 }
+bool Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold( void ) {
+	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
+	return pState && pState->m_bEnvironmentFields;
+}
 
 uint32_t Terrain3DRdShaderLibrary::getMaterialShaderTrialCold( void ) {
 	const auto *const pState = t3dRdShaderSharedStateGet();
@@ -281,7 +288,7 @@ static uint64_t t3dRdShaderTicksUsec(
 
 static bool t3dRdShaderCatalogEntryEnabled(
 	const t3dRdShaderId_t id ) {
-	if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_COUNT ) {
+	if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
 #if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
 		const uint32_t selected = Terrain3DRdShaderLibrary::getVtSamplingTrialCold();
 		const uint32_t variant = ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) %
@@ -291,6 +298,9 @@ static bool t3dRdShaderCatalogEntryEnabled(
 		return false;
 #endif
 	}
+    if ( id >= T3D_RD_SHADER_ENVIRONMENT_STATE && id < T3D_RD_SHADER_COUNT ) {
+        return Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold();
+    }
 	if ( id >= T3D_RD_SHADER_MATERIAL_TRIAL_BASE && id < T3D_RD_SHADER_INSTANCE_ALPHA_TRIAL_BASE ) {
 		const uint32_t selected = Terrain3DRdShaderLibrary::getMaterialShaderTrialCold();
 		const uint32_t trial = ( ( uint32_t ) id - T3D_RD_SHADER_MATERIAL_TRIAL_BASE ) % T3D_RD_MATERIAL_SHADER_TRIAL_COUNT + 1u;

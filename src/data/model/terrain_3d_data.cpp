@@ -2741,88 +2741,6 @@ void Terrain3DData::saveRegion(
 	// save or explicit cook_gpu_region_pages is required to republish it.
 }
 
-Error Terrain3DData::stageRegionInstances(
-	const Vector2i &rRegionLoc, const String &rDir, const String &rStagePath,
-	const PackedByteArray &rPage, const int64_t nGeneration ) {
-	if ( !m_pTerrain || rDir.is_empty() || rStagePath.is_empty() || nGeneration < 0 || !hasRegion( rRegionLoc ) ) {
-		return ERR_INVALID_PARAMETER;
-	}
-	const String sourcePath = rDir.path_join( Terrain3DUtil::locationToFilename( rRegionLoc ) );
-	if ( sourcePath == rStagePath ) {
-		return ERR_INVALID_PARAMETER;
-	}
-	uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
-	uint32_t count = 0u;
-	uint16_t meshCount = 0u;
-	if ( !Terrain3DInstancePageCodec::inspect( rPage, counts, count, meshCount ) ) {
-		return ERR_INVALID_DATA;
-	}
-	// Require an existing authored raster baseline. Never publish unsaved height,
-	// control, color, lighting, or nodes as a side effect of a foliage operation.
-	const Ref< Terrain3DRegion > saved = ResourceLoader::get_singleton()->load(
-		sourcePath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
-	if ( saved.is_null() || saved->getHeightMap().is_null() || !saved->hasValidGeometryContractInternal() ) {
-		return ERR_FILE_NOT_FOUND;
-	}
-	saved->setInstancePage( rPage );
-	saved->m_cookedInstanceMetadata.clear();
-	saved->m_cookedMultimeshFastStart.clear();
-	if ( saved->getInstancePage() != rPage ) {
-		return ERR_INVALID_DATA;
-	}
-	saved->setInstanceGeneration( nGeneration );
-	return ResourceSaver::get_singleton()->save( saved, rStagePath, ResourceSaver::FLAG_COMPRESS );
-}
-
-bool Terrain3DData::validateInstancePage( const PackedByteArray &rPage ) const {
-	uint32_t counts[T3D_MAX_MESH_ASSETS] = {};
-	uint32_t count = 0u;
-	uint16_t meshCount = 0u;
-	return Terrain3DInstancePageCodec::inspect( rPage, counts, count, meshCount );
-}
-
-Dictionary Terrain3DData::captureFoliageSources( const TypedArray< Vector2i > &rRegions, int nHalo ) const {
-	Dictionary result;
-	Dictionary revisions;
-	nHalo = CLAMP( nHalo, 0, 8 );
-	for ( int i = 0; i < rRegions.size(); ++i ) {
-		const Vector2i location = rRegions[i];
-		for ( int z = -nHalo; z <= nHalo; ++z ) {
-			for ( int x = -nHalo; x <= nHalo; ++x ) {
-				const Vector2i neighbor = location + Vector2i( x, z );
-				if ( revisions.has( neighbor ) ) { continue; }
-				const Terrain3DRegion *region = m_regionRepository.getRegionPtr( neighbor );
-				Array revision;
-				revision.push_back( region && !region->isDeleted() ? (int64_t)region->get_instance_id() : (int64_t)0 );
-				revision.push_back( region && !region->isDeleted() ? (int64_t)region->getFoliageSourceRevision() : (int64_t)0 );
-				revisions[neighbor] = revision;
-			}
-		}
-	}
-	result["topology"] = (int64_t)m_regionRepository.getTopologyGeneration();
-	result["regions"] = revisions;
-	return result;
-}
-
-Error Terrain3DData::saveRegionInstances( const Vector2i &rRegionLoc, const String &rDir ) {
-	const Ref< Terrain3DRegion > region = getRegion( rRegionLoc );
-	if ( region.is_null() || !ensureInstanceRegionResident( rRegionLoc ) ) {
-		return ERR_UNAVAILABLE;
-	}
-	const String target = rDir.path_join( Terrain3DUtil::locationToFilename( rRegionLoc ) );
-	const String staged = rDir.path_join( ".instance_save_" + target.get_file() );
-	const int64_t generation = region->getInstanceGeneration() + 1;
-	Error error = stageRegionInstances( rRegionLoc, rDir, staged, region->getInstancePage(), generation );
-	if ( error == OK ) {
-		error = DirAccess::rename_absolute( staged, target );
-	}
-	if ( error == OK ) {
-		region->setInstanceGeneration( generation );
-		region->acknowledgeInstanceSave();
-	}
-	return error;
-}
-
 bool Terrain3DData::collectGpuRegionPageSources(
 	String											   &rDataDirectory,
 	PackedStringArray								   &rSourceFiles,
@@ -4560,13 +4478,6 @@ void Terrain3DData::_bind_methods(
 						  DEFVAL( true ) );
 
 	ClassDB::bind_method( D_METHOD( "save_directory", "directory" ), &Terrain3DData::saveDirectory );
-	ClassDB::bind_method( D_METHOD( "stage_region_instances", "region_location", "directory", "stage_path", "page", "generation" ),
-		&Terrain3DData::stageRegionInstances );
-	ClassDB::bind_method( D_METHOD( "save_region_instances", "region_location", "directory" ),
-		&Terrain3DData::saveRegionInstances );
-	ClassDB::bind_method( D_METHOD( "validate_instance_page", "page" ), &Terrain3DData::validateInstancePage );
-	ClassDB::bind_method( D_METHOD( "capture_foliage_sources", "regions", "halo" ), &Terrain3DData::captureFoliageSources, DEFVAL(4) );
-	ClassDB::bind_method( D_METHOD( "get_foliage_source_stamp" ), &Terrain3DData::getFoliageSourceStamp );
 	ClassDB::bind_method( D_METHOD( "save_region", "region_location", "directory", "save_16_bit" ),
 						  &Terrain3DData::saveRegion,
 						  DEFVAL( false ) );

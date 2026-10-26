@@ -1,0 +1,96 @@
+// Optional RD set 5. State and force textures remain owned by Terrain3DRdEnvironmentField.
+#ifdef T3D_ENVIRONMENT_FIELD
+// The same wetness state is read by terrain and mesh materials; ocean uses force only.
+#if !defined(T3D_ENVIRONMENT_OCEAN_RECEIVER) && \
+    !(defined(T3D_WORLD_RASTER_MESH) && defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS))
+layout(set = 5, binding = 0) uniform sampler2D t3d_environment_state;
+#endif
+layout(set = 5, binding = 1, std140) uniform EnvironmentFieldParams {
+    vec4 state_origin_invspan;
+    vec4 force_origin_invspan;
+    vec4 enabled_wind; // enabled, wind XZ, gust
+    vec4 previous_state_force_origins; // previous state XZ, previous force XZ
+    vec4 previous_wind_time; // previous wind XZ, previous gust, current time
+    vec4 history_sea; // previous time, sea level, history valid, reserved
+} t3d_environment_params;
+
+#if !defined(T3D_ENVIRONMENT_OCEAN_RECEIVER) && \
+    !(defined(T3D_WORLD_RASTER_MESH) && defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS))
+vec4 t3d_environment_state_at(vec2 world_xz) {
+    if (t3d_environment_params.enabled_wind.x < 0.5) return vec4(0.0);
+    vec2 uv = (world_xz - t3d_environment_params.state_origin_invspan.xy) *
+              t3d_environment_params.state_origin_invspan.zw;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) return vec4(0.0);
+    return textureLod(t3d_environment_state, uv, 0.0);
+}
+#endif
+#ifdef T3D_ENVIRONMENT_VERTEX_RECEIVER
+layout(set = 5, binding = 2) uniform sampler2D t3d_environment_force;
+#ifndef T3D_ENVIRONMENT_OCEAN_RECEIVER
+layout(set = 5, binding = 4) uniform sampler2DArray t3d_environment_height_force;
+#endif
+#ifdef T3D_ENVIRONMENT_MOTION_RECEIVER
+layout(set = 5, binding = 3) uniform sampler2D t3d_environment_previous_force;
+#ifndef T3D_ENVIRONMENT_OCEAN_RECEIVER
+layout(set = 5, binding = 5) uniform sampler2DArray t3d_environment_previous_height_force;
+#endif
+#endif
+vec4 t3d_environment_force_at(vec2 world_xz, bool previous) {
+    if (t3d_environment_params.enabled_wind.x < 0.5) return vec4(0.0);
+    vec2 origin = previous ? t3d_environment_params.previous_state_force_origins.zw :
+                             t3d_environment_params.force_origin_invspan.xy;
+    vec2 uv = (world_xz - origin) * t3d_environment_params.force_origin_invspan.zw;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) return vec4(0.0);
+#ifdef T3D_ENVIRONMENT_MOTION_RECEIVER
+    if (previous) {
+        if (t3d_environment_params.history_sea.z < 0.5) return vec4(0.0);
+        return textureLod(t3d_environment_previous_force, uv, 0.0);
+    }
+#endif
+    return textureLod(t3d_environment_force, uv, 0.0);
+}
+#ifndef T3D_ENVIRONMENT_OCEAN_RECEIVER
+// Each texel stores two independent height bands (force X/Z, height Y, activity).
+// The pair prevents an impact on a bridge from bending foliage below it.
+vec2 t3d_environment_height_force_at(vec3 world, bool previous) {
+    if (t3d_environment_params.enabled_wind.x < 0.5) return vec2(0.0);
+    vec2 origin = previous ? t3d_environment_params.previous_state_force_origins.zw :
+                             t3d_environment_params.force_origin_invspan.xy;
+    vec2 uv = (world.xz - origin) * t3d_environment_params.force_origin_invspan.zw;
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThanEqual(uv, vec2(1.0)))) return vec2(0.0);
+    if (previous && t3d_environment_params.history_sea.z < 0.5) return vec2(0.0);
+    vec2 result = vec2(0.0);
+    for (int layer = 0; layer < 2; ++layer) {
+#ifdef T3D_ENVIRONMENT_MOTION_RECEIVER
+        vec4 sample_value = previous ? textureLod(t3d_environment_previous_height_force, vec3(uv, float(layer)), 0.0) :
+                                       textureLod(t3d_environment_height_force, vec3(uv, float(layer)), 0.0);
+#else
+        vec4 sample_value = textureLod(t3d_environment_height_force, vec3(uv, float(layer)), 0.0);
+#endif
+        float vertical_weight = clamp(1.0 - abs(world.y - sample_value.z) / 2.5, 0.0, 1.0);
+        result += sample_value.xy * vertical_weight * step(0.002, sample_value.w);
+    }
+    return clamp(result, vec2(-1.0), vec2(1.0));
+}
+#endif // !T3D_ENVIRONMENT_OCEAN_RECEIVER
+vec2 t3d_environment_wind_at(vec2 world_xz, bool previous) {
+    vec2 wind = previous ? t3d_environment_params.previous_wind_time.xy :
+                           t3d_environment_params.enabled_wind.yz;
+    float gust = previous ? t3d_environment_params.previous_wind_time.z :
+                            t3d_environment_params.enabled_wind.w;
+    float time = previous ? t3d_environment_params.history_sea.x :
+                            t3d_environment_params.previous_wind_time.w;
+    float noise = sin(world_xz.x * 0.091 + time * 1.7) *
+                  cos(world_xz.y * 0.117 - time * 1.2);
+    return clamp(wind, vec2(-1.0), vec2(1.0)) * (0.16 + 0.09 * noise * gust);
+}
+#ifndef T3D_ENVIRONMENT_OCEAN_RECEIVER
+vec2 t3d_environment_ground_cover_offset(vec3 local_position, vec3 world, bool previous) {
+    float weight = clamp(max(local_position.y, 0.0) * 0.65, 0.0, 1.0);
+    vec2 force = t3d_environment_height_force_at(world, previous);
+    vec2 combined = t3d_environment_wind_at(world.xz, previous) + force * 0.3;
+    return clamp(combined * weight, vec2(-0.5), vec2(0.5));
+}
+#endif // !T3D_ENVIRONMENT_OCEAN_RECEIVER
+#endif
+#endif

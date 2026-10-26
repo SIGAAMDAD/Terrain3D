@@ -56,6 +56,47 @@ typedef bool ( *t3dWorldResolveMaterialVTColdFn_t )( void	  *pUser,
 // Enumerated type contracts live in a dedicated header; all legacy type names and values remain unchanged.
 #include "Terrain3DEnums.h"
 
+// ENV-P01: fixed native owner-frame contract. No Godot types, heap storage or GPU ABI.
+#define T3D_ENVIRONMENT_MAX_IMPULSES 128u
+
+typedef struct t3dEnvironmentForcing_s
+{
+    float m_fRainRate = 0.0f;
+    float m_fSnowRate = 0.0f;
+    float m_fDryRate = 0.0f;
+    float m_fWindX = 0.0f;
+    float m_fWindZ = 0.0f;
+    float m_fGustStrength = 0.0f;
+    float m_fDeltaTime = 0.0f;
+    uint32_t m_nFlags = 0u;
+} t3dEnvironmentForcing_t;
+
+typedef struct t3dEnvironmentImpulse_s
+{
+    float m_fPositionX = 0.0f;
+    float m_fPositionY = 0.0f;
+    float m_fPositionZ = 0.0f;
+    float m_fRadius = 0.0f;
+    float m_fForceX = 0.0f;
+    float m_fForceZ = 0.0f;
+    float m_fMagnitude = 0.0f;
+    uint32_t m_nType = 0u;
+} t3dEnvironmentImpulse_t;
+
+static_assert( sizeof( t3dEnvironmentForcing_t ) == 32u, "Environment forcing ABI changed" );
+static_assert( sizeof( t3dEnvironmentImpulse_t ) == 32u, "Environment impulse ABI changed" );
+
+// ENV-P07 owner-thread region climate cache: one 128m cell per logical terrain region.
+// Stored as fixed-point Q0.16; serialized separately from cooked terrain/VT assets.
+typedef struct t3dEnvironmentRegionClimate_s
+{
+    uint16_t m_nWetness = 0u;
+    uint16_t m_nSnow = 0u;
+    uint16_t m_nGroundCover = 0u;
+    uint16_t m_nFlags = 0u;
+} t3dEnvironmentRegionClimate_t;
+static_assert( sizeof( t3dEnvironmentRegionClimate_t ) == 8u, "Region climate ABI changed" );
+
 // POD/data records.
 typedef struct t3dPerformanceProfileSetting_s
 {

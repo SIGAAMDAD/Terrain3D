@@ -31,6 +31,7 @@ Terrain3DWorldRaster::Terrain3DWorldRaster(
 	m_context( rContext ),
 	m_forwardLighting( rContext ),
 	m_pipelines( rContext, T3D_RD_CONTEXT_OWNER_WORLD ),
+    m_environmentSetCache( rContext, T3D_RD_CONTEXT_OWNER_WORLD ),
 	m_set0Cache( rContext, T3D_RD_CONTEXT_OWNER_WORLD ),
 	m_set1Cache( rContext, T3D_RD_CONTEXT_OWNER_WORLD ) {
 	memset( m_nSubmitCount, 0, sizeof( m_nSubmitCount ) );
@@ -81,6 +82,17 @@ bool Terrain3DWorldRaster::initializeCold(
 			return false;
 		}
 	}
+    if ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() ) {
+        m_context.beginRecoverableFailureScope();
+        const bool created = m_hEnvironmentMeshShadowShader.createTracked( m_context,
+            T3D_RD_CONTEXT_OWNER_WORLD, "T3D.World.Environment.Mesh.Shadow",
+            T3D_RD_SHADER_WORLD_MESH_ENV_SHADOW );
+        m_context.endRecoverableFailureScope();
+        if ( !created ) {
+            // Keep the existing WORLD shadow path when an optional variant is unavailable.
+            m_hEnvironmentMeshShadowShader.releaseTracked( m_context );
+        }
+    }
 	m_bInitialized = true;
 	return true;
 }
@@ -92,9 +104,9 @@ bool Terrain3DWorldRaster::ensureShaderCold(
 		return false;
 	}
 	Terrain3DRdShader &shader = m_hShader[primitive][variant];
-	if ( shader.isValid() ) {
-		return true;
-	}
+    if ( shader.isValid() ) {
+        return true;
+    }
 	bool feedback = primitive == T3D_PRIMITIVE_MESH && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT &&
 					m_pFeedbackOwner && m_pFeedbackOwner->is_readback_enabled();
 	const bool composed_variant = m_bExperimentalComposed &&
@@ -111,16 +123,40 @@ bool Terrain3DWorldRaster::ensureShaderCold(
 	if ( compact )
 		id = ( t3dRdShaderId_t ) ( ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP
 			? T3D_RD_SHADER_WORLD_STRIP_COMPACT_BASE : T3D_RD_SHADER_WORLD_MESH_COMPACT_BASE ) + variant );
-	if ( primitive == T3D_PRIMITIVE_MESH && !feedback ) {
+    const t3dRdShaderId_t original_id = id;
+    if ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP && m_bEnvironmentReady && !composed_variant &&
+         ( uint32_t ) variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
+        id = ( t3dRdShaderId_t ) ( ( compact ? T3D_RD_SHADER_WORLD_STRIP_ENV_COMPACT_BASE :
+                                    T3D_RD_SHADER_WORLD_STRIP_ENV_BASE ) + variant );
+        m_bEnvironmentShader[T3D_PRIMITIVE_TERRAIN_STRIP][variant] = true;
+    }
+    if ( primitive == T3D_PRIMITIVE_MESH && m_bEnvironmentReady ) {
+        if ( feedback ) {
+            id = ( t3dRdShaderId_t ) ( T3D_RD_SHADER_WORLD_MESH_ENV_FEEDBACK_BASE + variant );
+        } else if ( compact ) {
+            id = ( t3dRdShaderId_t ) ( T3D_RD_SHADER_WORLD_MESH_ENV_COMPACT_BASE + variant );
+        } else {
+            id = ( t3dRdShaderId_t ) ( T3D_RD_SHADER_WORLD_MESH_ENV_BASE + variant );
+        }
+        m_bEnvironmentShader[primitive][variant] = true;
+    }
+	if ( primitive == T3D_PRIMITIVE_MESH && !feedback && !m_bEnvironmentShader[primitive][variant] ) {
 		const uint32_t trial = Terrain3DRdShaderLibrary::getWorldAlphaTrialCold();
 		if ( ( ( trial == 1u || trial == 2u ) && variant == T3D_RD_FORWARD_SHADER_DEPTH ) ||
 			( ( trial == 3u || trial == 4u ) && variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS ) ) {
 			id = t3dRdAlphaSamplingTrialId( true, trial );
 		}
 	}
-	Ref< RDShaderSPIRV > spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
-	if ( feedback && spirv.is_null() ) {
+    Ref< RDShaderSPIRV > spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+    if ( m_bEnvironmentShader[primitive][variant] && spirv.is_null() ) {
+        // A missing optional variant cannot remove the baseline WORLD shader.
+        m_bEnvironmentShader[primitive][variant] = false;
+        id = original_id;
+        spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+    }
+    if ( feedback && spirv.is_null() ) {
 		feedback = false;
+        m_bEnvironmentShader[primitive][variant] = false;
 		id = fallback_id;
 		spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
 	}
@@ -134,30 +170,57 @@ bool Terrain3DWorldRaster::ensureShaderCold(
 	const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
 	const String name =
 		String( "T3D.World.Raster." ) + class_name + String( ".Shader." ) + String::num_uint64( variant );
-	if ( feedback ) {
-		m_context.beginRecoverableFailureScope();
-	}
-	const bool created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, id );
-	if ( feedback ) {
-		m_context.endRecoverableFailureScope();
-		m_bMeshFeedback[variant] = created;
-		if ( !created ) {
-			const Ref< RDShaderSPIRV > fallback_spirv = Terrain3DRdShaderLibrary::borrowSpirv( fallback_id );
-			if ( fallback_spirv.is_null() ) {
-				return false;
-			}
-			t3dWorldMarkDynamicBuffers( fallback_spirv, m_bPersistentFrameBuffer, m_bPersistentCpuBuffers, false );
-			return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, fallback_id );
-		}
-	}
-	if ( created ) m_bCompactShader[primitive][variant] = compact;
-	return created;
+    const bool environmentVariant = m_bEnvironmentShader[primitive][variant];
+    if ( feedback || environmentVariant ) {
+        m_context.beginRecoverableFailureScope();
+    }
+    const bool created = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, id );
+    if ( feedback || environmentVariant ) {
+        m_context.endRecoverableFailureScope();
+    }
+    if ( feedback ) {
+        m_bMeshFeedback[variant] = created;
+    }
+    if ( !created && ( feedback || environmentVariant ) ) {
+        // Fall back to the selected original shader for non-feedback variants.
+        // Feedback failures take the established no-feedback baseline path.
+        m_bEnvironmentShader[primitive][variant] = false;
+        m_bMeshFeedback[variant] = false;
+        const t3dRdShaderId_t fallback = feedback ? fallback_id : original_id;
+        const Ref< RDShaderSPIRV > baselineSpirv = Terrain3DRdShaderLibrary::borrowSpirv( fallback );
+        if ( baselineSpirv.is_null() ) {
+            return false;
+        }
+        t3dWorldMarkDynamicBuffers( baselineSpirv, m_bPersistentFrameBuffer, m_bPersistentCpuBuffers,
+                                    primitive == T3D_PRIMITIVE_TERRAIN_STRIP );
+        const bool fallbackCreated = shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, fallback );
+        if ( fallbackCreated ) {
+            m_bCompactShader[primitive][variant] = !feedback && compact;
+        }
+        return fallbackCreated;
+    }
+    if ( created ) {
+        m_bCompactShader[primitive][variant] = compact;
+    }
+    return created;
 }
 
 void Terrain3DWorldRaster::freeSetsCold(
 	void ) {
 	m_set0Cache.clear();
 	m_set1Cache.clear();
+    m_environmentSetCache.clear();
+    for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
+        m_hCurrentEnvironmentSet[primitive] = RID();
+        m_bCurrentEnvironmentShader[primitive] = false;
+        for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+            m_bEnvironmentShader[primitive][variant] = false;
+        }
+        for ( uint32_t variant = 0u; variant <= ENV_SHADOW_SLOT; ++variant ) {
+            m_hEnvironmentSet[primitive][variant][0] = RID();
+            m_hEnvironmentSet[primitive][variant][1] = RID();
+        }
+    }
 	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
 		for ( uint32_t slot = 0u; slot < T3D_WORLD_DESCRIPTOR_LAYOUT_COUNT; ++slot ) {
 			m_hSet0[primitive][slot] = RID();
@@ -372,6 +435,65 @@ const Terrain3DWorldRaster::t3dPipelineEntry_t *Terrain3DWorldRaster::findPipeli
 	return m_pipelines.find( rKey );
 }
 
+bool Terrain3DWorldRaster::ensureEnvironmentSetsCold(
+    const RID &rShader, const uint32_t nPrimitive, const uint32_t nVariant,
+    const t3dRdEnvironmentBindings_t &rBindings ) {
+    if ( nPrimitive >= T3D_PRIMITIVE_CLASS_COUNT || nVariant > ENV_SHADOW_SLOT ||
+         !rBindings.m_bAvailable || !rBindings.m_hParams.is_valid() || !rBindings.m_hSampler.is_valid() ) {
+        return false;
+    }
+    for ( uint32_t ping = 0u; ping < 2u; ++ping ) {
+        if ( !rBindings.m_hStatePair[ping].is_valid() || !rBindings.m_hInteractionPair[ping].is_valid() ) {
+            return false;
+        }
+        RID &cached = m_hEnvironmentSet[nPrimitive][nVariant][ping];
+        if ( m_environmentSetCache.resolve( cached ).is_valid() ) {
+            continue;
+        }
+        const uint64_t fieldId = ( uint64_t ) rBindings.m_hStatePair[ping].get_id() ^
+            ( nPrimitive == T3D_PRIMITIVE_MESH
+                  ? ( ( uint64_t ) rBindings.m_hInteractionPair[ping].get_id() << 1u ) : 0u );
+        const uint64_t previousId = nPrimitive == T3D_PRIMITIVE_TERRAIN_STRIP ? 0u :
+            ( uint64_t ) rBindings.m_hInteractionPair[ping ^ 1u].get_id() ^
+            ( ( uint64_t ) rBindings.m_hHeightPair[ping].get_id() << 3u ) ^
+            ( ( uint64_t ) rBindings.m_hHeightPair[ping ^ 1u].get_id() << 7u );
+        const t3dSetSignature_t key{ rShader, fieldId ^ ( previousId << 1u ),
+            ( uint64_t ) rBindings.m_hParams.get_id() };
+        TypedArray< Ref< RDUniform > > uniforms;
+        // Terrain and world meshes both consume wetness; world materials additionally
+        // sample the same state to preserve rock/shoreline surface continuity.
+        if ( nPrimitive == T3D_PRIMITIVE_TERRAIN_STRIP ||
+             ( nVariant != 8u && nVariant != ENV_SHADOW_SLOT ) ) {
+            uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 0,
+                rBindings.m_hSampler, rBindings.m_hStatePair[ping] ) );
+        }
+        uniforms.push_back( Terrain3DRdBindingBuilder::single( 1,
+            RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, rBindings.m_hParams ) );
+        if ( nPrimitive == T3D_PRIMITIVE_MESH ) {
+            uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 2,
+                rBindings.m_hSampler, rBindings.m_hInteractionPair[ping] ) );
+            uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 4,
+                rBindings.m_hHeightSampler, rBindings.m_hHeightPair[ping] ) );
+            if ( nVariant != ENV_SHADOW_SLOT && ( nVariant == 2u || nVariant == 3u ||
+                nVariant == 6u || nVariant == 7u ) ) {
+                uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 3,
+                    rBindings.m_hSampler, rBindings.m_hInteractionPair[ping ^ 1u] ) );
+                uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 5,
+                    rBindings.m_hHeightSampler, rBindings.m_hHeightPair[ping ^ 1u] ) );
+            }
+        }
+        cached = m_environmentSetCache.getOrCreate( key,
+            "T3D.World.Environment." + String::num_uint64( nPrimitive ) + "." +
+            String::num_uint64( nVariant ) + "." + String::num_uint64( ping ),
+            uniforms, rShader, 5u );
+        if ( !cached.is_valid() ) {
+            return false;
+        }
+    }
+    m_hCurrentEnvironmentSet[nPrimitive] = m_hEnvironmentSet[nPrimitive][nVariant][rBindings.m_nPing & 1u];
+    return m_hCurrentEnvironmentSet[nPrimitive].is_valid();
+}
+
 bool Terrain3DWorldRaster::ensurePipelineCold(
 	const t3dRdForwardPassContext_t &rContext,
 	t3dRdForwardShaderVariant_t		 variant,
@@ -385,6 +507,7 @@ bool Terrain3DWorldRaster::ensurePipelineCold(
 		return false;
 	}
 	key.m_nPrimitiveClass = ( uint32_t ) primitiveClass;
+    key.m_bEnvironmentVariant = m_bCurrentEnvironmentShader[( uint32_t ) primitiveClass];
 	if ( findPipeline( key ) ) {
 		m_currentKey[( uint32_t ) primitiveClass] = key;
 		return true;
@@ -408,8 +531,10 @@ bool Terrain3DWorldRaster::ensurePipelineCold(
 	Ref< RDPipelineDepthStencilState >	depth = pipeline_states.m_depth;
 	Ref< RDPipelineColorBlendState >	blend = pipeline_states.m_blend;
 	const uint32_t						primitive = ( uint32_t ) primitiveClass;
-	const RID shader = key.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader[primitive].rid()
-																	: m_hShader[primitive][( uint32_t ) variant].rid();
+	const RID shader = key.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+        ? ( primitiveClass == T3D_PRIMITIVE_MESH && key.m_bEnvironmentVariant
+            ? m_hEnvironmentMeshShadowShader.rid() : m_hShadowShader[primitive].rid() )
+        : m_hShader[primitive][( uint32_t ) variant].rid();
 	if ( !shader.is_valid() ) {
 		return false;
 	}
@@ -443,8 +568,14 @@ bool Terrain3DWorldRaster::prepareCold(
 	const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 	const t3dSharedVTBindings_t				&rVT,
 	Terrain3DVTGpu							*pFeedbackOwner,
-	const t3dComposedSurfaceGpuBindings_t *pComposed ) {
+	const t3dComposedSurfaceGpuBindings_t *pComposed,
+    const t3dRdEnvironmentBindings_t *pEnvironment ) {
 	m_pFeedbackOwner = pFeedbackOwner;
+    m_bEnvironmentReady = pEnvironment && pEnvironment->m_bAvailable;
+    for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
+        m_hCurrentEnvironmentSet[primitive] = RID();
+        m_bCurrentEnvironmentShader[primitive] = false;
+    }
 	if ( m_bExperimentalComposed && !pComposed ) return false;
 	m_hCurrentFeedbackSet = RID();
 	if ( !m_bInitialized || rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE || rContext.m_nViewCount == 0u ) {
@@ -483,17 +614,34 @@ bool Terrain3DWorldRaster::prepareCold(
 				return false;
 			}
 		}
-		const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
-							   ? m_hShadowShader[primitive].rid()
-							   : m_hShader[primitive][( uint32_t ) variant].rid();
+		if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW &&
+             primitive_class == T3D_PRIMITIVE_MESH && m_bEnvironmentReady &&
+             m_hEnvironmentMeshShadowShader.isValid() ) {
+            m_bCurrentEnvironmentShader[primitive] = true;
+        } else if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW &&
+                   m_bEnvironmentShader[primitive][variant] ) {
+            m_bCurrentEnvironmentShader[primitive] = true;
+        }
+        const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+            ? ( m_bCurrentEnvironmentShader[primitive] ? m_hEnvironmentMeshShadowShader.rid()
+                : m_hShadowShader[primitive].rid() )
+            : m_hShader[primitive][( uint32_t ) variant].rid();
 		const t3dComposedSurfaceGpuBindings_t *pActiveComposed =
 			m_bExperimentalComposed && primitive_class == T3D_PRIMITIVE_TERRAIN_STRIP &&
 			rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && ( uint32_t ) variant != 8u
 				? pComposed : NULL;
-		if ( !ensureSetsCold( rResources, rTerrain, rVT, shader, primitive_class, descriptor_slot, pActiveComposed ) ||
-			 !ensurePipelineCold( rContext, variant, primitive_class ) ) {
-			return false;
-		}
+        if ( !ensureSetsCold( rResources, rTerrain, rVT, shader, primitive_class, descriptor_slot, pActiveComposed ) ||
+             !ensurePipelineCold( rContext, variant, primitive_class ) ) {
+            return false;
+        }
+        if ( m_bCurrentEnvironmentShader[primitive] ) {
+            const uint32_t environmentVariant = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+                ? ENV_SHADOW_SLOT : ( uint32_t ) variant;
+            if ( !pEnvironment || !ensureEnvironmentSetsCold( shader, primitive, environmentVariant, *pEnvironment ) ) {
+                ++m_nStaleEnvironmentSetMisses;
+                return false;
+            }
+        }
 	}
 	if ( variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
 		if ( !m_forwardLighting.prepare( rContext, UINT32_MAX ) ) {
@@ -541,6 +689,11 @@ bool Terrain3DWorldRaster::submitHot(
 		rd->draw_list_set_push_constant( rContext.m_nDrawList, m_hotPushBytes, sizeof( selection ) );
 		rd->draw_list_bind_uniform_set( rContext.m_nDrawList, currentSet0, 0u );
 		rd->draw_list_bind_uniform_set( rContext.m_nDrawList, currentSet1, 1u );
+        if ( m_bCurrentEnvironmentShader[primitive] ) {
+            const RID environmentSet = m_environmentSetCache.resolve( m_hCurrentEnvironmentSet[primitive] );
+            if ( !environmentSet.is_valid() ) { ++m_nStaleEnvironmentSetMisses; return false; }
+            rd->draw_list_bind_uniform_set( rContext.m_nDrawList, environmentSet, 5u );
+        }
 		if ( m_hLightingSet[primitive].is_valid() ) {
 			const RID lightingSet = m_forwardLighting.resolveSet( m_hLightingSet[primitive] );
 			if ( !lightingSet.is_valid() ) {
@@ -600,7 +753,9 @@ void Terrain3DWorldRaster::shutdownCold(
 	memset( m_bMeshFeedback, 0, sizeof( m_bMeshFeedback ) );
 	memset( m_bCompactShader, 0, sizeof( m_bCompactShader ) );
 	m_hCurrentFeedbackSet = RID();
+    m_bEnvironmentReady = false;
 	m_pFeedbackOwner = NULL;
+    m_hEnvironmentMeshShadowShader.releaseTracked( m_context );
 	m_bInitialized = false;
 }
 

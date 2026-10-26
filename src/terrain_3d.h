@@ -784,6 +784,16 @@ public:
 		return m_pHlodStreamer;
 	}
 	// Native integration boundary for editor/runtime companion nodes. Not bound to scripting.
+    // Environment is an explicitly supplied owner-frame input; no autonomous weather controller.
+    void setEnvironmentForcing( float fRain, float fSnow, float fDry, const Vector2 &rWind,
+                                float fGust, float fDeltaTime, bool bEnabled );
+    uint32_t submitEnvironmentImpulses( const PackedByteArray &rPackedImpulses );
+    uint64_t getEnvironmentDroppedImpulses() const;
+    bool setEnvironmentRegionClimate( const Vector2i &rRegion, const Vector3 &rClimate );
+    Vector3 getEnvironmentRegionClimate( const Vector2i &rRegion ) const;
+    PackedByteArray exportEnvironmentRegionClimate() const;
+    bool importEnvironmentRegionClimate( const PackedByteArray &rData );
+
 	EA_FORCE_INLINE Terrain3DRenderCoordinator *getRenderCoordinatorInternal(
 		void ) const {
 		return m_pRenderCoordinator;

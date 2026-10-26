@@ -4171,10 +4171,32 @@ if (tier_config.texture_surface_mode == 1u) {
 material.albedo = apply_macro_variation(material.albedo, world_texel, terrain_normal);
 material.albedo *= mix(vec3(1.0), color_map.rgb, clamp(tier_config.authored_color_contribution, 0.0, 1.0));
 float wetness = max(authored_wetness_offset(color_map.a, tier_config), 0.0);
+#ifdef T3D_ENVIRONMENT_FIELD
+// Environmental wetness augments the authored alpha; it never replaces authoring state.
+// world_position is world meters, while world_texel can include terrain scale.
+vec4 t3d_environment = t3d_environment_state_at(world_position.xz);
+float dynamic_wetness = clamp(t3d_environment.r, 0.0, 1.0);
+// Shallow ocean contact adds wetness locally without changing authored alpha.
+// The fourth parameter component flags an actually enabled ocean.
+float shoreline = t3d_environment_params.history_sea.w > 0.5
+    ? 1.0 - smoothstep(-0.25, 0.95, world_position.y - t3d_environment_params.history_sea.y)
+    : 0.0;
+dynamic_wetness = max(dynamic_wetness, clamp(shoreline * 0.75, 0.0, 1.0));
+wetness = wetness + (1.0 - clamp(wetness, 0.0, 1.0)) * dynamic_wetness;
+#endif
 // Water in porous terrain darkens the diffuse substrate; roughness provides
 // the glossy response. Neutral paint alpha (0.5) remains an exact no-op.
 material.albedo *= 1.0 - 0.28 * wetness;
 material.roughness = apply_authored_roughness(material.roughness, color_map.a, tier_config);
+#ifdef T3D_ENVIRONMENT_FIELD
+// Thin films and shallow puddles have different responses. The field is an
+// influence map rather than a geometry-displacing fluid simulation.
+float puddle = clamp(t3d_environment.a, 0.0, 1.0) * smoothstep(0.65, 0.93, terrain_normal.y);
+material.roughness = mix(material.roughness, 0.12, clamp(dynamic_wetness * 0.55 + puddle * 0.35, 0.0, 1.0));
+float snow = clamp(t3d_environment.g, 0.0, 1.0) * smoothstep(0.45, 0.85, terrain_normal.y);
+material.albedo = mix(material.albedo, vec3(0.82, 0.86, 0.91), snow);
+material.roughness = mix(material.roughness, 0.78, snow);
+#endif
 
 vec3 final_normal = terrain_normal;
 if ((material_config.output_flags & T3D_OUTPUT_NORMAL) != 0u && tier_config.surface_response != 0u) {

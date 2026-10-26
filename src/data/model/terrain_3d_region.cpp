@@ -142,7 +142,6 @@ Terrain3DRegion::Terrain3DRegion(
 	m_streamedNodeRuntime( Terrain3DEastlAllocator::bootstrapAllocator() ) {
 }
 
-Terrain3DAtomic<uint64_t> Terrain3DRegion::s_nFoliageSourceStamp{1u};
 
 Terrain3DRegion::~Terrain3DRegion(
 	void ) {
@@ -193,7 +192,7 @@ void Terrain3DRegion::setVersion(
 	}
 	// Mark modified if already initialized and we get a new value
 	if ( m_fVersion > 0.8f ) {
-		m_bMetadataDirty = true; touchFoliageSource();
+		m_bMetadataDirty = true; markAuthoringSourceChanged();
 		m_bModified = true;
 	}
 	m_fVersion = version;
@@ -344,7 +343,7 @@ void Terrain3DRegion::setHeightMap(
 	}
 	m_heightMap = pMap;
 	m_bDerivedNormalSlopeValid = false;
-	touchFoliageSource();
+	markAuthoringSourceChanged();
 	m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 	m_bRuntimeMapsModified = true;
 	m_bModified = true;
@@ -364,7 +363,7 @@ void Terrain3DRegion::setControlMap(
 	}
 	m_controlMap = pMap;
 	m_nRasterDirtyDomains |= DIRTY_CONTROL | DIRTY_RASTER_INDEX;
-	touchFoliageSource();
+	markAuthoringSourceChanged();
 	if ( m_controlMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_CONTROL;
 	} else {
@@ -387,7 +386,7 @@ void Terrain3DRegion::setColorMap(
 	}
 	m_colorMap = pMap;
 	m_nRasterDirtyDomains |= DIRTY_COLOR | DIRTY_RASTER_INDEX;
-	touchFoliageSource();
+	markAuthoringSourceChanged();
 	if ( m_colorMap.is_valid() ) {
 		m_nChannelFlags |= REGION_CHANNEL_COLOR;
 	} else {
@@ -431,7 +430,7 @@ void Terrain3DRegion::sanitizeMaps(
 	void ) {
 	Ref< Image > pMap = sanitizeMap( TYPE_HEIGHT, m_heightMap );
 	if ( m_heightMap != pMap ) {
-		touchFoliageSource();
+		markAuthoringSourceChanged();
 		m_nRasterDirtyDomains |= DIRTY_HEIGHT | DIRTY_RASTER_INDEX;
 		m_bRuntimeMapsModified = true;
 		m_bModified = true;
@@ -441,7 +440,7 @@ void Terrain3DRegion::sanitizeMaps(
 	if ( m_controlMap.is_valid() ) {
 		pMap = sanitizeMap( TYPE_CONTROL, m_controlMap );
 		if ( m_controlMap != pMap ) {
-			touchFoliageSource();
+			markAuthoringSourceChanged();
 			m_nRasterDirtyDomains |= DIRTY_CONTROL | DIRTY_RASTER_INDEX;
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
@@ -451,7 +450,7 @@ void Terrain3DRegion::sanitizeMaps(
 	if ( m_colorMap.is_valid() ) {
 		pMap = sanitizeMap( TYPE_COLOR, m_colorMap );
 		if ( m_colorMap != pMap ) {
-			touchFoliageSource();
+			markAuthoringSourceChanged();
 			m_nRasterDirtyDomains |= DIRTY_COLOR | DIRTY_RASTER_INDEX;
 			m_bRuntimeMapsModified = true;
 			m_bModified = true;
@@ -520,7 +519,7 @@ void Terrain3DRegion::markMapEdited(
 	}
 	m_nRasterDirtyDomains |= (1u << (uint32_t)mapType) | DIRTY_RASTER_INDEX;
 	m_bRuntimeMapsModified = true;
-	touchFoliageSource();
+	markAuthoringSourceChanged();
 	m_bModified = true;
 	m_bEdited = true;
 	if ( mapType == TYPE_HEIGHT ) {
@@ -652,7 +651,7 @@ void Terrain3DRegion::setMegaVTSourceGeneration(
 		return;
 	}
 	m_nMegaVTSourceGeneration = nSanitized;
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -663,7 +662,7 @@ void Terrain3DRegion::setMegaVTDirtyMip0Mask(
 		return;
 	}
 	m_nMegaVTDirtyMip0Mask = nSanitized;
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -677,7 +676,7 @@ void Terrain3DRegion::setMegaVTEditorStateInternal(
 	}
 	m_nMegaVTSourceGeneration = nSanitizedGeneration;
 	m_nMegaVTDirtyMip0Mask = nSanitizedMask;
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -868,7 +867,7 @@ void Terrain3DRegion::setInstances(
 		return;
 	}
 	importInstancesUnmodified( rInstances );
-	touchFoliageInstances();
+	markAuthoringInstancesChanged();
 	m_bInstanceStoreModified = true;
 	m_bInstancesDirty = true;
 	m_bModified = true;
@@ -902,7 +901,7 @@ void Terrain3DRegion::setInstancePage(
 		return;
 	}
 	m_instancePage = rPage;
-	touchFoliageInstances();
+	markAuthoringInstancesChanged();
 	m_bInstancesDirty = true;
 	m_cookedInstanceMetadata.clear();
 	m_cookedMultimeshFastStart.clear();
@@ -1260,7 +1259,7 @@ void Terrain3DRegion::setStreamedNodes(
 	refreshStreamedNodeId();
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -1293,7 +1292,7 @@ int64_t Terrain3DRegion::addStreamedNode(
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 	return id;
 }
@@ -1327,7 +1326,7 @@ int64_t Terrain3DRegion::addStreamedNodePath(
 	m_streamedNodes.push_back( entry );
 	rebuildStreamedNodeRuntime();
 	refreshStreamedNodeCoverage();
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 	return id;
 }
@@ -1340,7 +1339,7 @@ bool Terrain3DRegion::removeStreamedNode(
 			m_streamedNodes.remove_at( index );
 			rebuildStreamedNodeRuntime();
 			refreshStreamedNodeCoverage();
-			m_bMetadataDirty = true; touchFoliageSource();
+			m_bMetadataDirty = true; markAuthoringSourceChanged();
 			m_bModified = true;
 			return true;
 		}
@@ -1369,7 +1368,7 @@ bool Terrain3DRegion::updateStreamedNodeState(
 		entry["flags"] = nFlags;
 		m_streamedNodes[index] = entry;
 		rebuildStreamedNodeRuntime();
-		m_bMetadataDirty = true; touchFoliageSource();
+		m_bMetadataDirty = true; markAuthoringSourceChanged();
 		m_bModified = true;
 		return true;
 	}
@@ -1383,7 +1382,7 @@ void Terrain3DRegion::setLighting(
 	}
 	m_lighting = rLighting;
 	Terrain3DRegionLighting::markGlobalPublicationDirtyInternal();
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -1402,7 +1401,7 @@ void Terrain3DRegion::setLocation(
 	}
 	// Marked modified if setting after initialized
 	if ( m_location < s_v2iMax && m_location != rLocation ) {
-		m_bMetadataDirty = true; touchFoliageSource();
+		m_bMetadataDirty = true; markAuthoringSourceChanged();
 		m_bModified = true;
 	}
 	SET_IF_DIFF( m_location, rLocation );
@@ -1527,7 +1526,7 @@ void Terrain3DRegion::setData(
 	if ( rData.has( "edited" ) ) {
 		setEdited( ( bool ) ( rData["edited"] ) );
 	}
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 }
 
@@ -1564,8 +1563,9 @@ Ref< Terrain3DRegion > Terrain3DRegion::duplicate(
 	pRegion->m_nChannelFlags = m_nChannelFlags;
 	pRegion->m_nMegaVTSourceGeneration = m_nMegaVTSourceGeneration;
 	pRegion->m_nInstanceGeneration = m_nInstanceGeneration;
-	pRegion->m_nFoliageSourceRevision = m_nFoliageSourceRevision;
-	pRegion->m_nFoliageInstanceRevision = m_nFoliageInstanceRevision;
+#if defined(T3D_EDITOR_NATIVE)
+	pRegion->m_editorRevisions = m_editorRevisions;
+#endif
 	pRegion->m_nRasterDirtyDomains = m_nRasterDirtyDomains;
 	pRegion->m_bInstancesDirty = m_bInstancesDirty;
 	pRegion->m_bMetadataDirty = m_bMetadataDirty;
@@ -1790,8 +1790,6 @@ void Terrain3DRegion::_bind_methods(
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ClassDB::bind_method( D_METHOD( "get_instance_generation" ), &Terrain3DRegion::getInstanceGeneration );
-	ClassDB::bind_method( D_METHOD( "get_foliage_instance_revision" ), &Terrain3DRegion::getFoliageInstanceRevision );
-	ClassDB::bind_method( D_METHOD( "get_foliage_owner_ids" ), &Terrain3DRegion::getFoliageOwnerIds );
 	ClassDB::bind_method( D_METHOD( "get_dirty_domains" ), &Terrain3DRegion::getDirtyDomains );
 	ClassDB::bind_method( D_METHOD( "acknowledge_instance_save" ), &Terrain3DRegion::acknowledgeInstanceSave );
 	ClassDB::bind_method( D_METHOD( "restore_instance_persistence_state", "dirty_domains", "modified" ),
@@ -1957,7 +1955,7 @@ bool Terrain3DRegion::tryGetInstanceStoreMut(
 	if ( !ensureInstanceStoreResident() ) {
 		return false;
 	}
-	m_bMetadataDirty = true; touchFoliageSource();
+	m_bMetadataDirty = true; markAuthoringSourceChanged();
 	m_bModified = true;
 	m_bInstanceStoreModified = true;
 	pStore = &m_instanceStore;
@@ -1985,26 +1983,9 @@ const Terrain3DInstanceStore &Terrain3DRegion::getInstanceStore(
 
 void Terrain3DRegion::markInstanceStoreModifiedInternal(
 	void ) {
-	touchFoliageInstances();
+	markAuthoringInstancesChanged();
 	m_bInstancesDirty = true;
 	m_bModified = true;
 	m_bInstanceStoreModified = true;
 }
 
-Dictionary Terrain3DRegion::getFoliageOwnerIds( void ) const {
-	Dictionary result;
-	const Terrain3DInstanceStore *store = nullptr;
-	if (!tryGetInstanceStore(store) || !store) { result["ok"] = false; return result; }
-	Dictionary owners;
-	for (size_t mi = 0; mi < store->meshes().size(); ++mi) {
-		const t3dInstanceMesh_t &mesh = store->meshes()[mi];
-		for (size_t ci = 0; ci < mesh.m_cells.size(); ++ci) {
-			const t3dInstanceCell_s &cell = mesh.m_cells[ci];
-			for (size_t i = 0; i < cell.m_owners.size(); ++i) {
-				if (cell.m_owners[i] != 0u) { owners[(int64_t)cell.m_owners[i]] = true; }
-			}
-		}
-	}
-	result["ok"] = true; result["owners"] = owners;
-	return result;
-}

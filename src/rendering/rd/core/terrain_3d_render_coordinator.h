@@ -24,6 +24,7 @@
 #include "rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/compositor/terrain_3d_rd_compositor_effect.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
+#include "rendering/rd/environment/terrain_3d_rd_environment_field.h"
 #include "rendering/rd/ocean/terrain_3d_rd_ocean_renderer.h"
 #include "rendering/rd/vt/runtime/terrain_3d_shared_vt_runtime.h"
 #include "rendering/rd/world/runtime/terrain_3d_world_runtime.h"
@@ -96,6 +97,33 @@ private:
 	void serviceAuthoringUpdateCold( void );
 #endif
 public:
+    void clearEnvironmentRegionClimateOwner() {
+        m_publicationBuilder.clearEnvironmentRegionClimateOwner();
+    }
+    bool setEnvironmentRegionClimateOwner( const Vector2i &rRegion, const Vector3 &rClimate ) {
+        return m_publicationBuilder.setEnvironmentRegionClimateOwner( rRegion, rClimate );
+    }
+    Vector3 getEnvironmentRegionClimateOwner( const Vector2i &rRegion ) const {
+        return m_publicationBuilder.getEnvironmentRegionClimateOwner( rRegion );
+    }
+    PackedByteArray exportEnvironmentRegionClimateOwner() const {
+        return m_publicationBuilder.exportEnvironmentRegionClimateOwner();
+    }
+    bool importEnvironmentRegionClimateOwner( const PackedByteArray &rData ) {
+        return m_publicationBuilder.importEnvironmentRegionClimateOwner( rData );
+    }
+    uint64_t getEnvironmentRegionClimateEpochOwner() const {
+        return m_publicationBuilder.getEnvironmentRegionClimateEpochOwner();
+    }
+    void setEnvironmentForcingOwner( const t3dEnvironmentForcing_t &rForcing ) {
+        m_publicationBuilder.setEnvironmentForcingOwner( rForcing );
+    }
+    uint32_t submitEnvironmentImpulsesOwner( const t3dEnvironmentImpulse_t *pEvents, uint32_t nCount ) {
+        return m_publicationBuilder.submitEnvironmentImpulsesOwner( pEvents, nCount );
+    }
+    uint64_t getEnvironmentDroppedCountOwner() const {
+        return m_publicationBuilder.getEnvironmentDroppedCountOwner();
+    }
 #if defined( T3D_EDITOR_NATIVE )
     // Explicit editor-owner cold call; no automatic per-frame cook.
     bool cookComposedSurfaceSidecarEditorCold( const t3dCs14EditorCookRequest_t &request,
@@ -112,6 +140,7 @@ private:
 	Terrain3DRdClipmapRenderer	m_renderer;
 	Terrain3DRdInstanceRenderer m_instanceRenderer;
 	Terrain3DRdOceanRenderer	m_oceanRenderer;
+    Terrain3DRdEnvironmentField m_environmentField;
 	uint32_t					m_nLastSharedVtLogStatus = UINT32_MAX;
 	uint32_t					m_nLastSharedVtLogGeneration = UINT32_MAX;
 	t3dVTSharedResourceClass_t	m_eLastSharedVtLogClass = T3D_VT_SHARED_RESOURCES_NONE;
@@ -298,7 +327,21 @@ private:
 		uint64_t			  nShaderPhysicalReady = 0u;
 		uint64_t			  nShaderPhysicalExpected = 0u;
 		uint64_t              nShaderPhysicalMisses = 0u;
-		t3dRdGlobalDescriptorDiagnostics_t descriptorCache{};
+        // Render-owned, bounded POD telemetry. No cross-thread RD access in getDiagnostics().
+        uint64_t nEnvironmentGeneration = 0u;
+        uint64_t nEnvironmentFramesIntegrated = 0u;
+        uint64_t nEnvironmentImpulsesAccepted = 0u;
+        uint64_t nEnvironmentIntegrationFailures = 0u;
+        uint64_t nEnvironmentTeleportsReset = 0u;
+        uint64_t nEnvironmentTimestampPairs = 0u;
+        uint64_t nEnvironmentTextureBytes = 0u;
+        uint64_t nEnvironmentClimateUploads = 0u;
+        uint64_t nEnvironmentWorldSetMisses = 0u;
+        uint64_t nEnvironmentOceanSetMisses = 0u;
+        bool bEnvironmentReady = false;
+        bool bEnvironmentFaulted = false;
+        bool bEnvironmentEnabled = false;
+        t3dRdGlobalDescriptorDiagnostics_t descriptorCache{};
 	};
 	mutable Terrain3DMutex	   m_publishedDiagnosticsMutex;
 	t3dPublishedDiagnostics_t  m_publishedDiagnostics{};

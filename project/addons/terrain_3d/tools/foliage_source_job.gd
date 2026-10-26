@@ -21,8 +21,8 @@ func begin(terrain: Terrain3D, targets: Array[Vector2i], owners_needed: bool) ->
 	_terrain = terrain
 	_targets = targets.duplicate()
 	_owners_needed = owners_needed
-	frozen_sources = terrain.data.capture_foliage_sources(_targets, 4)
-	_stamp = terrain.data.get_foliage_source_stamp()
+	frozen_sources = Terrain3DFoliageEditor.capture_sources(terrain, _targets, 4)
+	_stamp = Terrain3DFoliageEditor.source_stamp()
 	_regions = terrain.data.get_region_locations() if owners_needed else targets.duplicate()
 	_worker = IO.new()
 	return _worker.start()
@@ -54,7 +54,7 @@ func poll() -> Dictionary:
 	var region: Terrain3DRegion = _terrain.data.get_region(location)
 	if region == null:
 		return _fail("Foliage source region was unloaded: " + str(location))
-	instance_revisions[location] = [region.get_instance_id(), region.get_foliage_instance_revision()]
+	instance_revisions[location] = [region.get_instance_id(), Terrain3DFoliageEditor.instance_revision(region)]
 	if not _owners_needed or region.get_instance_count() == 0:
 		_index += 1
 	else:
@@ -67,11 +67,11 @@ func poll() -> Dictionary:
 func valid_sources() -> bool:
 	if not is_instance_valid(_terrain):
 		return false
-	var current_stamp: int = _terrain.data.get_foliage_source_stamp()
-	var topology: int = int(_terrain.data.capture_foliage_sources([], 0)["topology"])
+	var current_stamp: int = Terrain3DFoliageEditor.source_stamp()
+	var topology: int = int(Terrain3DFoliageEditor.capture_sources(_terrain, [], 0)["topology"])
 	if current_stamp == _stamp and topology == int(frozen_sources["topology"]):
 		return true
-	if _terrain.data.capture_foliage_sources(_targets, 4) != frozen_sources:
+	if Terrain3DFoliageEditor.capture_sources(_terrain, _targets, 4) != frozen_sources:
 		return false
 	_stamp = current_stamp
 	return true
@@ -82,7 +82,7 @@ func valid_instances() -> bool:
 	for location: Vector2i in instance_revisions:
 		var region: Terrain3DRegion = _terrain.data.get_region(location)
 		var revision: Array = instance_revisions[location]
-		if region == null or region.get_instance_id() != int(revision[0]) or region.get_foliage_instance_revision() != int(revision[1]):
+		if region == null or region.get_instance_id() != int(revision[0]) or Terrain3DFoliageEditor.instance_revision(region) != int(revision[1]):
 			return false
 	return true
 
