@@ -23,7 +23,6 @@ layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
 layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
 layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
 layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
-layout(set = 0, binding = 18) uniform sampler2D far_height_map;
 layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
 
 

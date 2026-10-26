@@ -503,10 +503,11 @@ static bool t3d_vt_reference_encode_tile(
 	const uint32_t nSourceStride = rRequest.m_nWidth * rRequest.m_nComponents;
 	uint8_t		  *pOut = rRequest.m_pDestination;
 
-	const bool	   bV3 = rRequest.m_nContractVersion == T3D_VT_FILE_VERSION_V3;
+	const bool	   bV1 = rRequest.m_nContractVersion == T3D_VT_FILE_VERSION_V1;
 	const uint32_t nHeightFormat =
-		bV3 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_R8_UNORM : ( uint32_t ) T3D_VT_FORMAT_HEIGHT_R8_UNORM;
-	if ( rRequest.m_nFormat == nHeightFormat ) {
+		bV1 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_R8_UNORM : ( uint32_t ) T3D_VT_FORMAT_HEIGHT_R8_UNORM;
+	if ( rRequest.m_nFormat == nHeightFormat ||
+         ( bV1 && rRequest.m_nFormat == T3D_VT_PHYSICAL_FORMAT_R16_UNORM ) ) {
 		memcpy( pOut, rRequest.m_pSourcePixels, rRequest.m_nSourceBytes );
 		rWrittenBytes = rRequest.m_nSourceBytes;
 		return true;
@@ -518,11 +519,11 @@ static bool t3d_vt_reference_encode_tile(
 				rRequest.m_pSourcePixels +
 				( ( uint64_t ) yBlock * 4u * rRequest.m_nWidth + xBlock * 4u ) * rRequest.m_nComponents;
 			const uint32_t nBc1Format =
-				bV3 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC1_UNORM : ( uint32_t ) T3D_VT_FORMAT_ALBEDO_BC1_SRGB;
+				bV1 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC1_UNORM : ( uint32_t ) T3D_VT_FORMAT_ALBEDO_BC1_SRGB;
 			const uint32_t nBc5Format =
-				bV3 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC5_UNORM : ( uint32_t ) T3D_VT_FORMAT_NORMAL_BC5_UNORM;
+				bV1 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC5_UNORM : ( uint32_t ) T3D_VT_FORMAT_NORMAL_BC5_UNORM;
 			const uint32_t nBc7Format =
-				bV3 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC7_UNORM : ( uint32_t ) T3D_VT_FORMAT_SURFACE_BC7_UNORM;
+				bV1 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_BC7_UNORM : ( uint32_t ) T3D_VT_FORMAT_SURFACE_BC7_UNORM;
 			if ( rRequest.m_nFormat == nBc1Format ) {
 				t3d_vt_reference_encode_bc1_block( pBlockPixels, nSourceStride, pOut );
 				pOut += 8u;

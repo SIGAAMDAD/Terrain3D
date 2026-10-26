@@ -156,8 +156,10 @@ env_mesh_shadow = "#define T3D_WORLD_SHADOW\n#define T3D_FORWARD_DEPTH\n#define 
 #define T3D_TIER 0
 #define T3D_RUNTIME_TIER
 #define T3D_WORLD_RASTER_EMBEDDED
+#include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
+#include "terrain_far_height_vertex_v1.glslinc"
 #include "terrain_clipmap_vertex_inc.glslinc"
 #include "terrain_environment_sampling_inc.glslinc"
 #include "terrain_world_contract.glslinc"
@@ -579,9 +581,9 @@ void t3d_world_mesh_fragment_evaluate() {
         bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
         vec4 surface = vec4(1.0);
         if (has_surface) {
-            T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v3(
+            T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
                 material.vtAllocation, 2u, footprint, base_address_plan, albedo_address);
-            surface = t3d_vt_consumer_sample_orm_v3(surface_address);
+            surface = t3d_vt_consumer_sample_orm_v1(surface_address);
         }
         if (!has_surface) {
             roughness = clamp(roughness, 0.02, 1.0);
@@ -612,9 +614,9 @@ void t3d_world_mesh_fragment_evaluate() {
         if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
             vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
             vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
-            T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling_v3(
+            T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling_v1(
                 material.vtAllocation, 1u, footprint, base_address_plan, albedo_address);
-            vec2 encoded = t3d_vt_consumer_sample_normal_v3(normal_address).rg * 2.0 - 1.0;
+            vec2 encoded = t3d_vt_consumer_sample_normal_v1(normal_address).rg * 2.0 - 1.0;
             encoded *= max(normal_scale, 0.0);
             final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
         }

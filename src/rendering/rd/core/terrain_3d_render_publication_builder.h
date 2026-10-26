@@ -70,6 +70,7 @@ struct t3dPublicationServices_t
 {
 	Terrain3DOwner					*m_pTerrain;
 	Terrain3DTerrainMegaVT			&m_terrainMegaVT;
+    Terrain3DVirtualTexture &m_virtualTexture;
 	Terrain3DMaterialStateBuilder	&m_materialStateBuilder;
 	Terrain3DStaticScenePublication &m_staticScene;
 	t3dMaterialStateSources_t		 m_materialSources;
@@ -149,10 +150,11 @@ private:
 	t3dAtomicU64_t			  m_nLastStaleSnapshotToken{ 0u };
 
 	uint64_t			   m_nRegionTopologyGeneration = 0u;
-	uint64_t			   m_nFarColorLayoutGeneration = 0u;
 	uint64_t			   m_nRegionLightingSignature = 0u;
 	uint64_t			   m_nRegionMapGeneration = 0u;
 	uint64_t			   m_nTerrainMegaVTPublicationGeneration = 0u;
+    uint64_t m_nFarVTPublicationGeneration = UINT64_MAX;
+    uint64_t m_nFarAvtSourcePublicationRevision = UINT64_MAX;
 	uint64_t			   m_nTerrainMegaVTPersistenceTopologyGeneration = UINT64_MAX;
 	uint64_t			   m_nPhysicalRegionMapGeneration = 0u;
 	uint64_t			   m_nLastRegionCacheSourceGeneration = 0u;

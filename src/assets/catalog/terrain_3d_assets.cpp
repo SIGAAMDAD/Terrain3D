@@ -1167,10 +1167,10 @@ void Terrain3DAssets::initialize(
 		connectAssetSignals( TYPE_MESH, m_meshList[i] );
 	}
 
-	const bool v3_runtime_only =
+	const bool v1_runtime_only =
 		usesPackedPbr() && m_pTerrain->isGpuRegionCookedPagesEnabled() && !m_pTerrain->isEditorAuthoringMode();
-	if ( v3_runtime_only ) {
-		// V3 owns terrain material residency in cooked runtime. Keep only scalar
+	if ( v1_runtime_only ) {
+		// V1 owns terrain material residency in cooked runtime. Keep only scalar
 		// material state here; do not duplicate the logical material set in arrays.
 		for ( size_t iTexture = 0u; iTexture < ( size_t ) ( m_textureList.size() ); ++iTexture ) {
 			const Ref< Terrain3DTextureAsset > pAsset = m_textureList[iTexture];

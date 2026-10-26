@@ -1,5 +1,5 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_pack_sampler.h"
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_pack_sampler.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.h"
 #include "authoring/vt/io/terrain_3d_vt_pack_writer.h"
 #include "data/formats/terrain_3d_vt_pack_format.h"
 
@@ -24,7 +24,7 @@ static void write_bits( uint8_t *block, uint32_t &position, uint32_t value, uint
 static void fill_bc7_mode6( uint8_t *data, uint32_t length )
 {
     assert( ( length % 16u ) == 0u );
-    // An actual V3 BC7 mode-6 constant block: RGBA=(129,65,97,255).
+    // An actual V1 BC7 mode-6 constant block: RGBA=(129,65,97,255).
     // This is decoded by the same scalar reference as the authoring adapter.
     const uint32_t endpoint[4] = { 64u, 32u, 48u, 127u };
     for ( uint32_t block = 0u; block < length / 16u; ++block ) {
@@ -48,7 +48,7 @@ static void test_decoder()
 {
     const uint32_t pixels = T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE;
     std::vector<uint8_t> output( pixels*4u, 0xccu );
-    std::vector<uint8_t> bc1( t3d_vt_pack_expected_physical_tile_bytes_v3(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM), 0u );
+    std::vector<uint8_t> bc1( t3d_vt_pack_expected_physical_tile_bytes_v1(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM), 0u );
     // Each block has endpoints red, black; every texel selects endpoint 0.
     for ( uint32_t b = 0; b < bc1.size(); b += 8u ) { bc1[b] = 0x00; bc1[b+1u] = 0xf8; }
     assert(t3d_cs15_decode_reference_tile(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM, bc1.data(), uint32_t(bc1.size()), output.data(), uint32_t(output.size())));
@@ -62,7 +62,7 @@ static void test_decoder()
     }
     assert(t3d_cs15_decode_reference_tile(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM, bc1.data(), uint32_t(bc1.size()), output.data(), uint32_t(output.size())));
     assert(output[3]==0u && output.back()==0u);
-    std::vector<uint8_t> bc5( t3d_vt_pack_expected_physical_tile_bytes_v3(T3D_VT_PHYSICAL_FORMAT_BC5_UNORM), 0u );
+    std::vector<uint8_t> bc5( t3d_vt_pack_expected_physical_tile_bytes_v1(T3D_VT_PHYSICAL_FORMAT_BC5_UNORM), 0u );
     for ( uint32_t b=0; b<bc5.size(); b+=16u ) {
         bc5[b]=80u; bc5[b+1u]=200u;  // six-step mode
         bc5[b+8u]=250u; bc5[b+9u]=10u; // eight-step mode
@@ -87,7 +87,7 @@ static void test_decoder()
 int main()
 {
     test_decoder();
-    t3dVTPackAllocationRecordV3_t allocation{};
+    t3dVTPackAllocationRecordV1_t allocation{};
     allocation.m_nGeneration=8u;
     allocation.m_nContentId=17u;
     allocation.m_nChannelMask = uint16_t(T3D_VT_LOGICAL_CHANNEL_BIT(T3D_VT_LOGICAL_CHANNEL_ALBEDO) |
@@ -96,14 +96,14 @@ int main()
     allocation.m_nAvailableProfileMask=1u;
     allocation.m_nHighestAvailableProfile=0u;
     allocation.m_nConsumer=T3D_VT_CONSUMER_CLIPMAP;
-    t3dVTPackAllocationKeyRecordV3_t key{};
+    t3dVTPackAllocationKeyRecordV1_t key{};
     key.m_nStableKey=t3d_vt_terrain_material_stable_key(0u);
     key.m_nAllocationId=0u;
     key.m_nContentId=allocation.m_nContentId;
     t3dVTChannelAllocation_t channels[T3D_VT_LOGICAL_CHANNEL_COUNT]{};
-    t3dVTPackTailRecordV3_t tails[3]{};
-    t3dVTPackPayloadRecordV3_t payloads[3]{};
-    t3dVTPackClusterRecordV3_t cluster{};
+    t3dVTPackTailRecordV1_t tails[3]{};
+    t3dVTPackPayloadRecordV1_t payloads[3]{};
+    t3dVTPackClusterRecordV1_t cluster{};
     const uint32_t formats[]={T3D_VT_PHYSICAL_FORMAT_BC1_UNORM,T3D_VT_PHYSICAL_FORMAT_BC7_UNORM,T3D_VT_PHYSICAL_FORMAT_R8_UNORM};
     std::vector<uint8_t> data;
     for(uint32_t c=0;c<T3D_VT_LOGICAL_CHANNEL_COUNT;++c) channels[c].m_nTailIndex=T3D_VT_INVALID_TAIL;
@@ -123,7 +123,7 @@ int main()
         tails[c].m_nAtlasInteriorHeight=64u;
         tails[c].m_nChannel=uint16_t(c);
         tails[c].m_nLayout=T3D_VT_PACK_TAIL_LAYOUT_HORIZONTAL_V1;
-        const uint32_t len=t3d_vt_pack_expected_physical_tile_bytes_v3(formats[c]);
+        const uint32_t len=t3d_vt_pack_expected_physical_tile_bytes_v1(formats[c]);
         payloads[c].m_nFormat=formats[c];
         payloads[c].m_nClusterId=0u;
         payloads[c].m_nClusterOffset=uint32_t(data.size());
@@ -145,16 +145,16 @@ int main()
     cluster.m_nCodec=T3D_VT_PACK_CODEC_NONE;
     cluster.m_nChecksum=t3d_vt_pack_checksum32(data.data(),data.size());
     cluster.m_nContentSignature=t3d_vt_pack_hash64(data.data(),data.size());
-    t3dVTPackQualityViewV3_t quality{};
+    t3dVTPackQualityViewV1_t quality{};
     quality.m_nAllocationId=0u;
     quality.m_nProfile=0u;
     quality.m_nChannelMask=uint8_t(allocation.m_nChannelMask);
     for(uint32_t c=0;c<T3D_VT_LOGICAL_CHANNEL_COUNT;++c) {
         quality.m_nBaseMip[c] = quality.m_nMaxMip[c] = c < 3u ? 0u : T3D_VT_PACK_INVALID_MIP;
     }
-    t3dVTPackFormatFamilyRecordV3_t families[T3D_VT_LOGICAL_CHANNEL_COUNT]{};
-    assert(t3d_vt_pack_init_format_family_records_v3(families,T3D_VT_LOGICAL_CHANNEL_COUNT));
-    t3dVTPackSourceV3_t source{};
+    t3dVTPackFormatFamilyRecordV1_t families[T3D_VT_LOGICAL_CHANNEL_COUNT]{};
+    assert(t3d_vt_pack_init_format_family_records_v1(families,T3D_VT_LOGICAL_CHANNEL_COUNT));
+    t3dVTPackSourceV1_t source{};
     source.m_pAllocations=&allocation;
     source.m_nAllocationCount=1u;
     source.m_pAllocationKeys=&key;
@@ -173,22 +173,22 @@ int main()
     source.m_pPayloadData=data.data();
     source.m_nPayloadDataBytes=data.size();
     source.m_nPackageGeneration=1u;
-    const uint64_t capacity=t3d_vt_pack_compute_bytes_v3(source);
+    const uint64_t capacity=t3d_vt_pack_compute_bytes_v1(source);
     assert(capacity > data.size());
     std::vector<uint8_t> package(capacity);
     uint64_t written=0u;
-    assert(t3d_vt_pack_write_v3(source,package.data(),package.size(),written) && written==capacity);
-    t3dVTPackViewV3_t view{};
-    assert(t3d_vt_pack_open_view_v3(package.data(),package.size(),view));
+    assert(t3d_vt_pack_write_v1(source,package.data(),package.size(),written) && written==capacity);
+    t3dVTPackViewV1_t view{};
+    assert(t3d_vt_pack_open_view_v1(package.data(),package.size(),view));
     std::vector<uint8_t> scratch(4u*T3D_CS12_DECODED_TILE_BYTES);
     t3dCs12PackSampler_t sampler{};
-    t3dVTPackViewV3_t opened{};
+    t3dVTPackViewV1_t opened{};
     assert(t3d_cs12_open_source_pack(package.data(),package.size(),opened,sampler,decode,nullptr,scratch.data(),4u));
     uint32_t id=UINT32_MAX;
     assert(t3d_cs12_find_material_allocation(opened,0u,id) && id==0u);
     const float uv[2]={0.5f,0.5f},grad[2]={0.0f,0.0f};
-    t3dComposedStaticV3Sample_t sample{};
-    assert(t3d_cs12_sample_static_v3(&sampler,id,uv,grad,grad,0.0f,3u,sample));
+    t3dComposedStaticV1Sample_t sample{};
+    assert(t3d_cs12_sample_static_v1(&sampler,id,uv,grad,grad,0.0f,3u,sample));
     assert(std::abs(sample.m_fAlbedo[0]-1.0f)<0.00001f && sample.m_fAlbedo[1]==0.0f);
     assert(std::abs(sample.m_fPbr[0]-129.0f/255.0f)<0.00001f);
     assert(std::abs(sample.m_fPbr[1]- 65.0f/255.0f)<0.00001f);
@@ -196,10 +196,10 @@ int main()
     assert(std::abs(sample.m_fPbr[3]-1.0f)<0.00001f);
     assert(std::abs(sample.m_fHeight - 102.0f/255.0f)<0.00001f);
     assert(sampler.m_nDecodeCalls==3u);
-    assert(t3d_cs12_sample_static_v3(&sampler,id,uv,grad,grad,0.0f,3u,sample) && sampler.m_nCacheHits>=3u);
+    assert(t3d_cs12_sample_static_v1(&sampler,id,uv,grad,grad,0.0f,3u,sample) && sampler.m_nCacheHits>=3u);
     package.back()^=1u;
-    assert(!t3d_vt_pack_open_view_v3(package.data(),package.size(),view));
+    assert(!t3d_vt_pack_open_view_v1(package.data(),package.size(),view));
     package.back()^=1u;
-    assert(t3d_vt_pack_open_view_v3(package.data(),package.size(),view));
-    std::puts("CS15 native V3 write/open/source-sample/reference-BC test PASS");
+    assert(t3d_vt_pack_open_view_v1(package.data(),package.size(),view));
+    std::puts("CS15 native V1 write/open/source-sample/reference-BC test PASS");
 }

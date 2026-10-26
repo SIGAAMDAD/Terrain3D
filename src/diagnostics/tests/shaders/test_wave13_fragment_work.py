@@ -34,7 +34,7 @@ def check_source_contracts():
     discard = CLIP.index('if (outside_region && material_config.background_mode == 0u')
     assert early < discard
     assert CLIP.count('debug_visualization(') == 4  # two declarations, two calls
-    for name in ('albedo', 'albedo_alpha', 'normal_v3', 'surface_v3', 'orm_v3'):
+    for name in ('albedo', 'albedo_alpha', 'normal_v1', 'surface_v1', 'orm_v1'):
         pattern = r'(?:vec4|float) t3d_vt_consumer_sample_' + name + r'\([^)]*\)\s*\{'
         m = re.search(pattern, CONSUMER)
         assert m is not None, name

@@ -5,8 +5,8 @@
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi.h"
 #include <stdint.h>
 
-// Diagnostics-only V3 capture inspection. This contract cannot
-// authorize a V3 page for streaming: production V2 remains authoritative.
+// Diagnostics-only V1 capture inspection. This contract cannot
+// authorize a V1 page for streaming: production V2 remains authoritative.
 struct t3dVTFeedbackMultiShadowStats_t
 {
     uint64_t m_nAccepted = 0u;

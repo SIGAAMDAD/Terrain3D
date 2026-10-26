@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
 #include "data/formats/terrain_3d_vt_pack_format.h"
 
@@ -71,7 +71,7 @@ static void t3d_cs15_bc4( const uint8_t *src, uint8_t *dst, uint32_t stride )
     }
 }
 
-// The shipping V3 reference BC7 encoder writes mode 6, with one RGBA
+// The shipping V1 reference BC7 encoder writes mode 6, with one RGBA
 // partition, per-endpoint p-bits and a three-bit anchor index at texel zero.
 // Parse LSB-first as written by t3d_vt_reference_encode_bc7_mode6_block().
 static uint32_t t3d_cs16_read_bits( const uint8_t *src, uint32_t &position, uint32_t count )
@@ -120,7 +120,7 @@ bool t3d_cs15_decode_reference_tile( uint32_t family, const uint8_t *src,
     const uint32_t width = T3D_VT_PHYSICAL_TILE;
     const uint32_t expected_output = width * width * 4u;
     if ( !src || !dst || capacity != expected_output ||
-         bytes != t3d_vt_pack_expected_physical_tile_bytes_v3( family ) ) return false;
+         bytes != t3d_vt_pack_expected_physical_tile_bytes_v1( family ) ) return false;
     if ( family == T3D_VT_PHYSICAL_FORMAT_R8_UNORM ) {
         for ( uint32_t i = 0u; i < width * width; ++i ) {
             dst[4u*i] = src[i];

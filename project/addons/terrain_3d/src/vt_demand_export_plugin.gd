@@ -18,7 +18,10 @@ func _export_begin(_features: PackedStringArray, _is_debug: bool, _path: String,
 				continue
 			pending.push_back(directory.path_join(subdir))
 		for filename: String in DirAccess.get_files_at(directory):
-			var include_artifact: bool = filename.ends_with(".t3sp") or filename.ends_with(".t3pm")
+			# The runtime uses getDataDirectory()/terrain3d_instances.t3dvt.
+			# Export only that V1 package, never the .vt_cache source fragments.
+			var include_artifact: bool = filename == "terrain3d_instances.t3dvt"
+			include_artifact = include_artifact or filename.ends_with(".t3sp") or filename.ends_with(".t3pm")
 			if filename.ends_with(".vt_demand.t3vd"):
 				var stem: String = filename.trim_suffix(".vt_demand.t3vd")
 				include_artifact = FileAccess.file_exists(directory.path_join(stem + ".tres")) or FileAccess.file_exists(directory.path_join(stem + ".res"))

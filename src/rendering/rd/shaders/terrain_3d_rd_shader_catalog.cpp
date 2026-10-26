@@ -184,7 +184,7 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 	const t3dRdShaderId_t id ) {
     // SHD-02: same material/VT evaluator as ordinary compact lighting,
     // with legal set-3 fragment feedback for each output signature.
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_COUNT ) {
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES ) {
         const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE;
         static const char *const versions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
             "feedback_color_native_compact", "feedback_color_specular_compact", "feedback_color_motion_compact", "feedback_color_specular_motion_compact", "feedback_color_native_radiance_array_compact", "feedback_color_specular_radiance_array_compact", "feedback_color_motion_radiance_array_compact", "feedback_color_specular_motion_radiance_array_compact"
@@ -565,6 +565,13 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 				 T3D_RD_SHADER_GLOBAL_DEVICE,
 				 T3D_RD_SHADER_CATEGORY_OCEAN,
 				 true };
+	case T3D_RD_SHADER_EDITOR_BRUSH_TILES:
+		return { id,
+				 "res://addons/terrain_3d/compute/terrain_brush_tiles.glsl",
+				 "",
+				 T3D_RD_SHADER_GLOBAL_DEVICE,
+				 T3D_RD_SHADER_CATEGORY_COMPUTE,
+				 false };
 	case T3D_RD_SHADER_BRUSH_COMPUTE:
 		return { id,
 				 "res://addons/terrain_3d/compute/terrain_brush.glsl",

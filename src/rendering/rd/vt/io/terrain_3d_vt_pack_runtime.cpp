@@ -54,8 +54,8 @@ bool t3d_vt_pack_runtime_transfer(
 	return true;
 }
 
-static bool t3d_vt_pack_runtime_raw_clusters_only_v3(
-	const t3dVTPackViewV3_t &rView ) {
+static bool t3d_vt_pack_runtime_raw_clusters_only_v1(
+	const t3dVTPackViewV1_t &rView ) {
 	if ( rView.m_pHeader == NULL || rView.m_pClusters == NULL ) {
 		return false;
 	}
@@ -81,7 +81,7 @@ static bool t3d_vt_pack_runtime_raw_clusters_only_v3(
 		nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) ( count ) * sizeof( type ), 64u );              \
 	} while ( 0 )
 
-static bool t3d_vt_pack_runtime_open_v3_cold(
+static bool t3d_vt_pack_runtime_open_v1_cold(
 	const void *const				   pPackage,
 	const uint64_t					   nPackageBytes,
 	const t3dVTPackRuntimeAllocator_t &rAllocator,
@@ -92,20 +92,20 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 		 rStorage.pOwnedBlock != NULL ) {
 		return false;
 	}
-	t3dVTPackViewV3_t SourceView;
+	t3dVTPackViewV1_t SourceView;
 	if ( !( bMetadataOnly
-				? t3d_vt_pack_open_metadata_view_v3( pPackage, nPackageBytes, pFileSource->nFileBytes, SourceView )
-				: t3d_vt_pack_open_view_v3( pPackage, nPackageBytes, SourceView ) ) ||
-		 !t3d_vt_pack_runtime_raw_clusters_only_v3( SourceView ) ) {
+				? t3d_vt_pack_open_metadata_view_v1( pPackage, nPackageBytes, pFileSource->nFileBytes, SourceView )
+				: t3d_vt_pack_open_view_v1( pPackage, nPackageBytes, SourceView ) ) ||
+		 !t3d_vt_pack_runtime_raw_clusters_only_v1( SourceView ) ) {
 		return false;
 	}
-	const t3dVTPackHeaderV3_t &Header = *SourceView.m_pHeader;
+	const t3dVTPackHeaderV1_t &Header = *SourceView.m_pHeader;
 	if ( Header.m_nAllocationCount == 0u || Header.m_nPayloadCount == 0u || Header.m_nQualityViewCount == 0u ||
 		 Header.m_nFormatFamilyCount != T3D_VT_LOGICAL_CHANNEL_COUNT ||
-		 Header.m_nAllocationCount > UINT32_MAX / T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION ) {
+		 Header.m_nAllocationCount > UINT32_MAX / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) {
 		return false;
 	}
-	const uint32_t nRuntimeAllocationCount = Header.m_nAllocationCount * T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
+	const uint32_t nRuntimeAllocationCount = Header.m_nAllocationCount * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
 
 	uint64_t nBytes = t3dAlignUpOrZero< uint64_t >( nPackageBytes, 64u );
 	T3D_VT_RUNTIME_ADD( 1u, t3dVTFileHeader_t );
@@ -141,12 +141,12 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 	memcpy( Candidate.pPackageBytes, pPackage, ( size_t ) nPackageBytes );
 	nOffset = t3dAlignUpOrZero< uint64_t >( nPackageBytes, 64u );
 	if ( !( bMetadataOnly
-				? t3d_vt_pack_open_metadata_view_v3( Candidate.pPackageBytes,
+				? t3d_vt_pack_open_metadata_view_v1( Candidate.pPackageBytes,
 													 nPackageBytes,
 													 Header.m_nPackageBytes,
-													 Candidate.PackViewV3 )
-				: t3d_vt_pack_open_view_v3( Candidate.pPackageBytes, nPackageBytes, Candidate.PackViewV3 ) ) ||
-		 !t3d_vt_pack_runtime_raw_clusters_only_v3( Candidate.PackViewV3 ) ) {
+													 Candidate.PackViewV1 )
+				: t3d_vt_pack_open_view_v1( Candidate.pPackageBytes, nPackageBytes, Candidate.PackViewV1 ) ) ||
+		 !t3d_vt_pack_runtime_raw_clusters_only_v1( Candidate.PackViewV1 ) ) {
 		rAllocator.pFree( rAllocator.pUser, pBlock );
 		return false;
 	}
@@ -163,7 +163,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 
 	t3dVTFileHeader_t &RuntimeHeader = *Candidate.pRuntimeHeader;
 	RuntimeHeader.nMagic = T3D_VT_FILE_MAGIC;
-	RuntimeHeader.nVersion = T3D_VT_FILE_VERSION_V3;
+	RuntimeHeader.nVersion = T3D_VT_FILE_VERSION_V1;
 	RuntimeHeader.nHeaderBytes = sizeof( t3dVTFileHeader_t );
 	RuntimeHeader.nAllocationCount = nRuntimeAllocationCount;
 	RuntimeHeader.nPageCount = Header.m_nPageCount;
@@ -177,17 +177,17 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 
 	uint32_t nFamilyTailSlots[T3D_VT_PHYSICAL_FORMAT_COUNT] = {};
 	for ( uint32_t iAllocation = 0u; iAllocation < Header.m_nAllocationCount; ++iAllocation ) {
-		const t3dVTPackAllocationRecordV3_t &SourceAllocation = Candidate.PackViewV3.m_pAllocations[iAllocation];
+		const t3dVTPackAllocationRecordV1_t &SourceAllocation = Candidate.PackViewV1.m_pAllocations[iAllocation];
 		const t3dVTConsumer_t				 Consumer = ( t3dVTConsumer_t ) SourceAllocation.m_nConsumer;
-		const uint32_t						 nRuntimeBase = t3d_vt_v3_runtime_allocation_base( iAllocation );
+		const uint32_t						 nRuntimeBase = t3d_vt_v1_runtime_allocation_base( iAllocation );
 		for ( uint32_t iChannel = 0u; iChannel < T3D_VT_LOGICAL_CHANNEL_COUNT; ++iChannel ) {
 			uint32_t nSlot = T3D_VT_INVALID_SLOT;
-			if ( !t3d_vt_v3_runtime_slot_for_channel( Consumer, ( t3dVTLogicalChannel_t ) iChannel, nSlot ) ) {
+			if ( !t3d_vt_v1_runtime_slot_for_channel( Consumer, ( t3dVTLogicalChannel_t ) iChannel, nSlot ) ) {
 				continue;
 			}
 			const uint32_t					nRuntimeId = nRuntimeBase + nSlot;
 			const t3dVTChannelAllocation_t &SourceChannel =
-				Candidate.PackViewV3.m_pChannelAllocations[iAllocation * T3D_VT_LOGICAL_CHANNEL_COUNT + iChannel];
+				Candidate.PackViewV1.m_pChannelAllocations[iAllocation * T3D_VT_LOGICAL_CHANNEL_COUNT + iChannel];
 			t3dVTAllocationRecordV1_t &Legacy = Candidate.pLegacyAllocations[nRuntimeId];
 			Legacy.nReserved0 = T3D_VT_RESIDENCY_TERRAIN;
 			if ( SourceChannel.m_nPageCount == 0u ) {
@@ -200,7 +200,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 				rAllocator.pFree( rAllocator.pUser, pBlock );
 				return false;
 			}
-			const t3dVTPackTailRecordV3_t &SourceTail = Candidate.PackViewV3.m_pTails[SourceChannel.m_nTailIndex];
+			const t3dVTPackTailRecordV1_t &SourceTail = Candidate.PackViewV1.m_pTails[SourceChannel.m_nTailIndex];
 			if ( SourceTail.m_nChannel != iChannel || SourceTail.m_nPayloadId >= Header.m_nPayloadCount ||
 				 SourceTail.m_nFirstMipWidth == 0u || SourceTail.m_nFirstMipHeight == 0u ||
 				 SourceTail.m_nFirstMipWidth > T3D_VT_PACK_TAIL_SLOT_HEIGHT ||
@@ -262,34 +262,34 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 	}
 
 	for ( uint32_t iPage = 0u; iPage < Header.m_nPageCount; ++iPage ) {
-		const t3dVTPackPageRecordV3_t &SourcePage = Candidate.PackViewV3.m_pPages[iPage];
+		const t3dVTPackPageRecordV1_t &SourcePage = Candidate.PackViewV1.m_pPages[iPage];
 		if ( SourcePage.m_nAllocationId >= Header.m_nAllocationCount ||
 			 SourcePage.m_nChannel >= T3D_VT_LOGICAL_CHANNEL_COUNT ) {
 			rAllocator.pFree( rAllocator.pUser, pBlock );
 			return false;
 		}
 		const t3dVTConsumer_t Consumer =
-			( t3dVTConsumer_t ) Candidate.PackViewV3.m_pAllocations[SourcePage.m_nAllocationId].m_nConsumer;
+			( t3dVTConsumer_t ) Candidate.PackViewV1.m_pAllocations[SourcePage.m_nAllocationId].m_nConsumer;
 		uint32_t nSlot = T3D_VT_INVALID_SLOT;
-		if ( !t3d_vt_v3_runtime_slot_for_channel( Consumer, ( t3dVTLogicalChannel_t ) SourcePage.m_nChannel, nSlot ) ) {
+		if ( !t3d_vt_v1_runtime_slot_for_channel( Consumer, ( t3dVTLogicalChannel_t ) SourcePage.m_nChannel, nSlot ) ) {
 			rAllocator.pFree( rAllocator.pUser, pBlock );
 			return false;
 		}
 		t3dVTPageFileRecord_t &RuntimePage = Candidate.pLegacyPages[iPage];
 		RuntimePage.nVirtualPage = SourcePage.m_nVirtualPage;
 		RuntimePage.nParentPage = SourcePage.m_nParentPage;
-		RuntimePage.nAllocationId = t3d_vt_v3_runtime_allocation_base( SourcePage.m_nAllocationId ) + nSlot;
+		RuntimePage.nAllocationId = t3d_vt_v1_runtime_allocation_base( SourcePage.m_nAllocationId ) + nSlot;
 		RuntimePage.nPayloadId = SourcePage.m_nPayloadId;
 		RuntimePage.nMip = SourcePage.m_nMip;
-		RuntimePage.nChannel = ( uint16_t ) Candidate.PackViewV3.m_pPayloads[SourcePage.m_nPayloadId].m_nFormat;
+		RuntimePage.nChannel = ( uint16_t ) Candidate.PackViewV1.m_pPayloads[SourcePage.m_nPayloadId].m_nFormat;
 		RuntimePage.nFlags = SourcePage.m_nFlags;
 		RuntimePage.nGeneration = SourcePage.m_nGeneration;
 		RuntimePage.nReserved1 = SourcePage.m_nContentId;
 	}
 
 	for ( uint32_t iPayload = 0u; iPayload < Header.m_nPayloadCount; ++iPayload ) {
-		const t3dVTPackPayloadRecordV3_t &Payload = Candidate.PackViewV3.m_pPayloads[iPayload];
-		const t3dVTPackClusterRecordV3_t &Cluster = Candidate.PackViewV3.m_pClusters[Payload.m_nClusterId];
+		const t3dVTPackPayloadRecordV1_t &Payload = Candidate.PackViewV1.m_pPayloads[iPayload];
+		const t3dVTPackClusterRecordV1_t &Cluster = Candidate.PackViewV1.m_pClusters[Payload.m_nClusterId];
 		if ( Cluster.m_nCodec != T3D_VT_PACK_CODEC_NONE || Payload.m_nClusterOffset > Cluster.m_nDecodedBytes ||
 			 Payload.m_nDecodedBytes > Cluster.m_nDecodedBytes - Payload.m_nClusterOffset ) {
 			rAllocator.pFree( rAllocator.pUser, pBlock );
@@ -315,7 +315,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 	Candidate.Database.pAllocations = Candidate.pLegacyAllocations;
 	Candidate.Database.pPages = Candidate.pLegacyPages;
 	Candidate.Database.pPayloads = Candidate.pLegacyPayloads;
-	Candidate.Database.pPayloadData = Candidate.PackViewV3.m_pPayloadData;
+	Candidate.Database.pPayloadData = Candidate.PackViewV1.m_pPayloadData;
 	Candidate.Database.pFileSource = pFileSource;
 	Candidate.Database.nFileBytes = Candidate.nPackageBytes;
 	Candidate.Database.pRuntimeAllocations = Candidate.pRuntimeAllocations;
@@ -324,35 +324,35 @@ static bool t3d_vt_pack_runtime_open_v3_cold(
 	Candidate.Database.nRuntimeTailCount = nRuntimeAllocationCount;
 	Candidate.Database.pRuntimePayloads = Candidate.pRuntimePayloads;
 	Candidate.Database.nRuntimePayloadCount = Header.m_nPayloadCount;
-	Candidate.Database.pV3Allocations = Candidate.PackViewV3.m_pAllocations;
-	Candidate.Database.pV3ChannelAllocations = Candidate.PackViewV3.m_pChannelAllocations;
-	Candidate.Database.pV3Pages = Candidate.PackViewV3.m_pPages;
-	Candidate.Database.pV3Tails = Candidate.PackViewV3.m_pTails;
-	Candidate.Database.pV3QualityViews = Candidate.PackViewV3.m_pQualityViews;
-	Candidate.Database.pV3FormatFamilies = Candidate.PackViewV3.m_pFormatFamilies;
-	Candidate.Database.nV3ChannelAllocationCount = Header.m_nChannelAllocationCount;
-	Candidate.Database.nV3PageCount = Header.m_nPageCount;
-	Candidate.Database.nV3TailCount = Header.m_nTailCount;
-	Candidate.Database.nV3QualityViewCount = Header.m_nQualityViewCount;
-	Candidate.Database.nV3FormatFamilyCount = Header.m_nFormatFamilyCount;
-	Candidate.Database.nV3FullySupportedProfileMask = Header.m_nFullySupportedProfileMask;
+	Candidate.Database.pV1Allocations = Candidate.PackViewV1.m_pAllocations;
+	Candidate.Database.pV1ChannelAllocations = Candidate.PackViewV1.m_pChannelAllocations;
+	Candidate.Database.pV1Pages = Candidate.PackViewV1.m_pPages;
+	Candidate.Database.pV1Tails = Candidate.PackViewV1.m_pTails;
+	Candidate.Database.pV1QualityViews = Candidate.PackViewV1.m_pQualityViews;
+	Candidate.Database.pV1FormatFamilies = Candidate.PackViewV1.m_pFormatFamilies;
+	Candidate.Database.nV1ChannelAllocationCount = Header.m_nChannelAllocationCount;
+	Candidate.Database.nV1PageCount = Header.m_nPageCount;
+	Candidate.Database.nV1TailCount = Header.m_nTailCount;
+	Candidate.Database.nV1QualityViewCount = Header.m_nQualityViewCount;
+	Candidate.Database.nV1FormatFamilyCount = Header.m_nFormatFamilyCount;
+	Candidate.Database.nV1FullySupportedProfileMask = Header.m_nFullySupportedProfileMask;
 	Candidate.Database.nPackageGeneration = Header.m_nPackageGeneration;
 	Candidate.Database.nPackageContentSignature = Header.m_nContentSignature;
-	Candidate.Database.nRuntimeKind = T3D_VT_RUNTIME_DATABASE_PACK_V3;
+	Candidate.Database.nRuntimeKind = T3D_VT_RUNTIME_DATABASE_PACK_V1;
 
 	return t3d_vt_pack_runtime_transfer( rStorage, Candidate );
 }
 
-static bool t3d_vt_pack_runtime_find_quality_view_v3(
+static bool t3d_vt_pack_runtime_find_quality_view_v1(
 	const t3dVTDatabaseView_t &rDatabase,
 	const uint32_t			   nAllocationId,
 	const uint32_t			   nProfile,
-	t3dVTPackQualityViewV3_t  &rResult ) {
+	t3dVTPackQualityViewV1_t  &rResult ) {
 	uint32_t nLow = 0u;
-	uint32_t nHigh = rDatabase.nV3QualityViewCount;
+	uint32_t nHigh = rDatabase.nV1QualityViewCount;
 	while ( nLow < nHigh ) {
 		const uint32_t					nMid = nLow + ( nHigh - nLow ) / 2u;
-		const t3dVTPackQualityViewV3_t &View = rDatabase.pV3QualityViews[nMid];
+		const t3dVTPackQualityViewV1_t &View = rDatabase.pV1QualityViews[nMid];
 		const uint64_t					nKey = ( ( uint64_t ) View.m_nAllocationId << 8u ) | View.m_nProfile;
 		const uint64_t					nWanted = ( ( uint64_t ) nAllocationId << 8u ) | nProfile;
 		if ( nKey < nWanted )
@@ -360,15 +360,15 @@ static bool t3d_vt_pack_runtime_find_quality_view_v3(
 		else
 			nHigh = nMid;
 	}
-	if ( nLow >= rDatabase.nV3QualityViewCount ) {
+	if ( nLow >= rDatabase.nV1QualityViewCount ) {
 		return false;
 	}
-	const t3dVTPackQualityViewV3_t &View = rDatabase.pV3QualityViews[nLow];
+	const t3dVTPackQualityViewV1_t &View = rDatabase.pV1QualityViews[nLow];
 	rResult = View;
 	return View.m_nAllocationId == nAllocationId && View.m_nProfile == nProfile;
 }
 
-bool t3d_vt_pack_runtime_apply_quality_profile_v3(
+bool t3d_vt_pack_runtime_apply_quality_profile_v1(
 	const t3dVTDatabaseView_t  &rDatabase,
 	t3dVTAllocation_t *const	pRuntimeAllocations,
 	const uint32_t				nRuntimeAllocationCount,
@@ -376,19 +376,19 @@ bool t3d_vt_pack_runtime_apply_quality_profile_v3(
 	t3dVTQualityRuntimeStats_t &rStats ) {
 	memset( &rStats, 0, sizeof( rStats ) );
 	rStats.nRequestedProfile = nRequestedProfile;
-	rStats.nPackageFullySupportedProfileMask = rDatabase.nV3FullySupportedProfileMask;
-	if ( rDatabase.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V3 || rDatabase.pHeader == NULL ||
-		 rDatabase.pV3Allocations == NULL || rDatabase.pV3QualityViews == NULL || pRuntimeAllocations == NULL ||
+	rStats.nPackageFullySupportedProfileMask = rDatabase.nV1FullySupportedProfileMask;
+	if ( rDatabase.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 || rDatabase.pHeader == NULL ||
+		 rDatabase.pV1Allocations == NULL || rDatabase.pV1QualityViews == NULL || pRuntimeAllocations == NULL ||
 		 nRequestedProfile >= T3D_VT_QUALITY_PROFILE_COUNT )
 		return false;
 	const uint32_t nLogicalAllocationCount =
-		rDatabase.pHeader->nAllocationCount / T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
+		rDatabase.pHeader->nAllocationCount / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
 	if ( nLogicalAllocationCount == 0u ||
-		 nRuntimeAllocationCount != nLogicalAllocationCount * T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION ) {
+		 nRuntimeAllocationCount != nLogicalAllocationCount * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) {
 		return false;
 	}
 	for ( uint32_t iAllocation = 0u; iAllocation < nLogicalAllocationCount; ++iAllocation ) {
-		const t3dVTPackAllocationRecordV3_t &Source = rDatabase.pV3Allocations[iAllocation];
+		const t3dVTPackAllocationRecordV1_t &Source = rDatabase.pV1Allocations[iAllocation];
 		if ( Source.m_nHighestAvailableProfile >= T3D_VT_QUALITY_PROFILE_COUNT ) {
 			return false;
 		}
@@ -398,8 +398,8 @@ bool t3d_vt_pack_runtime_apply_quality_profile_v3(
 		if ( ( Source.m_nAvailableProfileMask & ( 1u << nResolvedProfile ) ) == 0u ) {
 			return false;
 		}
-		t3dVTPackQualityViewV3_t View{};
-		if ( !t3d_vt_pack_runtime_find_quality_view_v3( rDatabase, iAllocation, nResolvedProfile, View ) ) {
+		t3dVTPackQualityViewV1_t View{};
+		if ( !t3d_vt_pack_runtime_find_quality_view_v1( rDatabase, iAllocation, nResolvedProfile, View ) ) {
 			return false;
 		}
 		++rStats.nAllocationsByHighestProfile[Source.m_nHighestAvailableProfile];
@@ -407,12 +407,12 @@ bool t3d_vt_pack_runtime_apply_quality_profile_v3(
 		if ( nResolvedProfile != nRequestedProfile )
 			++rStats.nFallbackAllocationCount;
 		const t3dVTConsumer_t Consumer = ( t3dVTConsumer_t ) Source.m_nConsumer;
-		for ( uint32_t nSlot = 0u; nSlot < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION; ++nSlot ) {
+		for ( uint32_t nSlot = 0u; nSlot < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION; ++nSlot ) {
 			t3dVTLogicalChannel_t Channel = T3D_VT_LOGICAL_CHANNEL_ALBEDO;
-			if ( !t3d_vt_v3_logical_channel_for_runtime_slot( Consumer, nSlot, Channel ) ) {
+			if ( !t3d_vt_v1_logical_channel_for_runtime_slot( Consumer, nSlot, Channel ) ) {
 				return false;
 			}
-			t3dVTAllocation_t &Runtime = pRuntimeAllocations[t3d_vt_v3_runtime_allocation_base( iAllocation ) + nSlot];
+			t3dVTAllocation_t &Runtime = pRuntimeAllocations[t3d_vt_v1_runtime_allocation_base( iAllocation ) + nSlot];
 			Runtime.m_nFlags &= ( uint16_t ) ~T3D_VT_ALLOCATION_RUNTIME_QUALITY_MASK;
 			if ( ( View.m_nChannelMask & T3D_VT_LOGICAL_CHANNEL_BIT( Channel ) ) == 0u ) {
 				Runtime.m_nFlags |= T3D_VT_ALLOCATION_QUALITY_DISABLED;
@@ -443,10 +443,10 @@ bool t3d_vt_pack_runtime_open_cold(
 	if ( nPrefix[0] != T3D_VT_FILE_MAGIC ) {
 		return false;
 	}
-	if ( nPrefix[1] != T3D_VT_FILE_VERSION_V3 ) {
+	if ( nPrefix[1] != T3D_VT_FILE_VERSION_V1 ) {
 		return false;
 	}
-	return t3d_vt_pack_runtime_open_v3_cold( pPackage, nPackageBytes, rAllocator, rStorage, false, NULL );
+	return t3d_vt_pack_runtime_open_v1_cold( pPackage, nPackageBytes, rAllocator, rStorage, false, NULL );
 }
 
 bool t3d_vt_pack_runtime_open_file_cold(
@@ -462,7 +462,7 @@ bool t3d_vt_pack_runtime_open_file_cold(
 	}
 	godot::PackedByteArray metadata;
 	if ( !t3d_vt_file_source_open_cold( rPath, *pSource, metadata, false ) ||
-		 !t3d_vt_pack_runtime_open_v3_cold( metadata.ptr(),
+		 !t3d_vt_pack_runtime_open_v1_cold( metadata.ptr(),
 											( uint64_t ) metadata.size(),
 											rAllocator,
 											rStorage,
@@ -496,10 +496,10 @@ bool t3d_vt_pack_runtime_find_allocation_by_stable_key(
 	if ( nStableKey == 0u ) {
 		return false;
 	}
-	const auto	  &pKeys = rStorage.PackViewV3.m_pAllocationKeys;
+	const auto	  &pKeys = rStorage.PackViewV1.m_pAllocationKeys;
 	const uint32_t nAllocationCount =
-		rStorage.PackViewV3.m_pHeader != NULL ? rStorage.PackViewV3.m_pHeader->m_nAllocationCount : 0u;
-	if ( rStorage.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V3 || pKeys == NULL ||
+		rStorage.PackViewV1.m_pHeader != NULL ? rStorage.PackViewV1.m_pHeader->m_nAllocationCount : 0u;
+	if ( rStorage.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 || pKeys == NULL ||
 		 nAllocationCount == 0u ) {
 		return false;
 	}
@@ -529,7 +529,7 @@ bool t3d_vt_pack_runtime_copy_tail_mip_chain(
 	const uint64_t			   nDestinationBytes,
 	const uint32_t			   nDestinationWidth,
 	const uint32_t			   nDestinationHeight ) {
-	if ( rDatabase.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V3 || rDatabase.pHeader == NULL ||
+	if ( rDatabase.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 || rDatabase.pHeader == NULL ||
 		 rDatabase.pRuntimeTailMetadata == NULL || rDatabase.pRuntimeTailSources == NULL ||
 		 rDatabase.pRuntimePayloads == NULL || ( rDatabase.pPayloadData == NULL && rDatabase.pFileSource == NULL ) ||
 		 nRuntimeTailIndex >= rDatabase.nRuntimeTailCount || nChannel >= T3D_VT_CHANNEL_COUNT || pDestination == NULL ||

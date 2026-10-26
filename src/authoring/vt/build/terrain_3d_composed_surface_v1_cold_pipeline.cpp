@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_cold_pipeline.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.h"
 #include "authoring/vt/io/terrain_3d_composed_surface_sidecar_writer.h"
 
 #include <cstring>
@@ -42,7 +42,7 @@ uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &r )
 {
     if ( !r.m_pSourcePackage || r.m_nSourcePackageBytes == 0u ||
          !r.m_pAuthoredLayers || !r.m_nLayerCount ||
-         r.m_nLayerCount > T3D_CS_STATIC_V3_MAX_LAYERS ||
+         r.m_nLayerCount > T3D_CS_STATIC_V1_MAX_LAYERS ||
          !r.m_nMaterialRevision || !r.m_nTerrainRevision || !r.m_nTopologyGeneration ) return 0u;
     uint64_t h = 14695981039346656037ull;
     h = t3d_cs13_hash_integer( h, T3D_CS_COMPOSITION_ABI );
@@ -50,7 +50,7 @@ uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &r )
     h = t3d_cs13_hash_bytes( h, r.m_pSourcePackage, r.m_nSourcePackageBytes );
     if ( r.m_bReferenceOnly && r.m_bPageLocalCompositionIdentity ) {
         // A brush stroke changes only its page records, not the immutable
-        // V3/material identity. Invalidation still checks current revisions.
+        // V1/material identity. Invalidation still checks current revisions.
         h = t3d_cs13_hash_integer( h, 0x43534c4f43414c31ull );
     } else {
         h = t3d_cs13_hash_integer( h, r.m_nTerrainRevision );
@@ -61,7 +61,7 @@ uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &r )
     h = t3d_cs13_hash_integer( h, r.m_nLayerCount );
     for ( uint32_t i = 0u; i < r.m_nLayerCount; ++i ) {
         // Logical indices are stable. Physical slot/allocation IDs are omitted
-        // because they are assigned anew by a valid source V3 pack.
+        // because they are assigned anew by a valid source V1 pack.
         h = t3d_cs13_hash_integer( h, i );
         const auto &layer = r.m_pAuthoredLayers[i];
         for ( float v : layer.m_fColor ) h = t3d_cs13_hash_float( h, v );
@@ -143,7 +143,7 @@ bool t3d_cs13_cook_source_pack_cold( const t3dCs13ColdCookRequest_t &r,
 
     // The pack view is owned by this stack frame. The sampler points to it,
     // and the bridge points to the sampler, so all stay alive during cooking.
-    t3dVTPackViewV3_t view{};
+    t3dVTPackViewV1_t view{};
     t3dCs12PackSampler_t sampler{};
     if ( !t3d_cs12_open_source_pack( r.m_pSourcePackage, r.m_nSourcePackageBytes,
                                      view, sampler, r.m_pDecode, r.m_pDecoderUser,
@@ -160,7 +160,7 @@ bool t3d_cs13_cook_source_pack_cold( const t3dCs13ColdCookRequest_t &r,
         r.m_pResolvedLayers[i] = r.m_pAuthoredLayers[i];
         r.m_pResolvedLayers[i].m_nAllocation = allocation;
     }
-    t3dComposedStaticV3CookAdapter_t adapter{};
+    t3dComposedStaticV1CookAdapter_t adapter{};
     adapter.m_source = r.m_source;
     adapter.m_source.m_bReferenceOnly = r.m_bReferenceOnly;
     adapter.m_source.m_pLayers = r.m_pResolvedLayers;
@@ -173,7 +173,7 @@ bool t3d_cs13_cook_source_pack_cold( const t3dCs13ColdCookRequest_t &r,
         return false;
     }
     t3dComposedSurfaceCookSource_t cook{};
-    if ( !t3d_cs_static_v3_make_cook_source( adapter, fingerprint, cook ) ) {
+    if ( !t3d_cs_static_v1_make_cook_source( adapter, fingerprint, cook ) ) {
         result.m_status = T3D_CS13_INVALID_INPUT;
         return false;
     }

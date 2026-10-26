@@ -73,6 +73,10 @@ static bool t3dMegaVTCaptureColors(
 static uint64_t t3dMegaVTSourceFingerprint(
 	const t3dMegaVTColorCapture_t &rCapture ) {
 	uint64_t hash = 1469598103934665603ULL;
+	// Cooker recipe revisions are cache dependencies, not source pixels.
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_ABI_VERSION );
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_FILTER_ABI_VERSION );
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_COMPRESSOR_ABI_VERSION );
 	hash = t3dHashFnv1a64LittleU32( hash, rCapture.m_nExtent );
 	for ( uint32_t i = 0u; i < 9u; ++i ) {
 		const t3dMegaVTColorSource_t &source = rCapture.m_neighbors[i];
@@ -172,7 +176,7 @@ static bool t3dMegaVTBuildPixels(
 		 rPixels.m_pbr.resize( ( int64_t ) ( nExtent / 2u ) * ( nExtent / 2u ) * 4u ) != OK ) {
 		return false;
 	}
-	// Albedo stores linear painted color via the V3 sRGB family. PBR's blue
+	// Albedo stores linear painted color via the V1 sRGB family. PBR's blue
 	// channel stores painted wetness alpha; normal/AO remain semantic neutral.
 	for ( uint32_t channel = 0u; channel < 2u; ++channel ) {
 		const uint32_t nSide = channel == 0u ? nExtent : nExtent / 2u;
@@ -211,7 +215,7 @@ static bool t3dMegaVTCookPixels(
 	const t3dMegaVTRegionPixels_t &rPixels,
 	PackedByteArray				  &rFragment,
 	const uint64_t				   nByteLimit ) {
-	t3dVTCookSparseSourceV3_t source{};
+	t3dVTCookSparseSourceV1_t source{};
 	source.m_nStableKey = t3d_vt_terrain_region_stable_key( rCapture.m_nRegionIndex );
 	source.m_nGenerationSeed = rCapture.m_nGeneration;
 	source.m_nConsumer = T3D_VT_CONSUMER_CLIPMAP;
@@ -231,7 +235,7 @@ static bool t3dMegaVTCookPixels(
 		t3dHashPublicationBytes( rPixels.m_albedo.ptr(), rPixels.m_albedo.size() );
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_PBR] =
 		t3dHashPublicationBytes( rPixels.m_pbr.ptr(), rPixels.m_pbr.size() );
-	return t3d_vt_godot_cook_source_fragment_v3( source, rFragment, nByteLimit );
+	return t3d_vt_godot_cook_source_fragment_v1( source, rFragment, nByteLimit );
 }
 
 Terrain3DIncrementalMegaVTCooker::~Terrain3DIncrementalMegaVTCooker(
@@ -446,6 +450,126 @@ static String t3dMegaVTCacheDirectory(
 	return directory;
 }
 
+// Explicit-bake accounting; counters describe the most recent synchronous
+// V1 region export (not physical VT residency or GPU memory).
+typedef struct t3dMegaVTExportCacheCounters_s
+{
+	uint32_t m_nReused = 0u;
+	uint32_t m_nCooked = 0u;
+	uint32_t m_nCacheWrites = 0u;
+	uint32_t m_nCacheWriteFailures = 0u;
+	uint64_t m_nReusedBytes = 0u;
+	uint64_t m_nCookedBytes = 0u;
+	uint64_t m_nMergedBytes = 0u;
+	uint32_t m_nNoOpPublications = 0u;
+	uint32_t m_nLastGeneration = 0u;
+} t3dMegaVTExportCacheCounters_t;
+
+static t3dMegaVTExportCacheCounters_t s_exportCacheCounters;
+
+static bool t3dMegaVTFileEqualsBytesCold( const String &rPath, const PackedByteArray &rBytes )
+{
+	if ( rPath.is_empty() || rBytes.is_empty() ) return false;
+	const Ref< FileAccess > file = FileAccess::open( rPath, FileAccess::READ );
+	if ( file.is_null() || file->get_length() != ( uint64_t ) rBytes.size() ) return false;
+	uint8_t scratch[65536u];
+	const uint8_t *const expected = rBytes.ptr();
+	uint64_t offset = 0u;
+	while ( offset < ( uint64_t ) rBytes.size() ) {
+		const uint64_t count = MIN( ( uint64_t ) sizeof( scratch ), ( uint64_t ) rBytes.size() - offset );
+		if ( file->get_buffer( scratch, count ) != count ||
+			 memcmp( scratch, expected + offset, ( size_t ) count ) != 0 ) return false;
+		offset += count;
+	}
+	return true;
+}
+
+bool Terrain3DIncrementalMegaVTCooker::publishedArtifactsMatchCold(
+	const String &rPackagePath, const PackedByteArray &rPackage,
+	const String &rDemandPath, const PackedByteArray &rDemand,
+	const String &rV1Path, const PackedByteArray &rV1 )
+{
+	if ( !t3dMegaVTFileEqualsBytesCold( rPackagePath, rPackage ) ) return false;
+	if ( rDemandPath.is_empty() != rDemand.is_empty() || rV1Path.is_empty() != rV1.is_empty() ) return false;
+	if ( !rV1Path.is_empty() && rDemandPath.is_empty() ) return false;
+	const bool identical =
+		( rDemandPath.is_empty() || t3dMegaVTFileEqualsBytesCold( rDemandPath, rDemand ) ) &&
+		( rV1Path.is_empty() || t3dMegaVTFileEqualsBytesCold( rV1Path, rV1 ) );
+	if ( identical ) ++s_exportCacheCounters.m_nNoOpPublications;
+	return identical;
+}
+
+Dictionary Terrain3DIncrementalMegaVTCooker::getExportCacheDiagnosticsCold( void )
+{
+	Dictionary result;
+	result["export_fragment_reused_count"] = ( int64_t ) s_exportCacheCounters.m_nReused;
+	result["export_fragment_cooked_count"] = ( int64_t ) s_exportCacheCounters.m_nCooked;
+	result["export_fragment_cache_writes"] = ( int64_t ) s_exportCacheCounters.m_nCacheWrites;
+	result["export_fragment_cache_write_failures"] = ( int64_t ) s_exportCacheCounters.m_nCacheWriteFailures;
+	result["export_fragment_reused_bytes"] = ( int64_t ) s_exportCacheCounters.m_nReusedBytes;
+	result["export_fragment_cooked_bytes"] = ( int64_t ) s_exportCacheCounters.m_nCookedBytes;
+	result["export_megavt_merged_bytes"] = ( int64_t ) s_exportCacheCounters.m_nMergedBytes;
+	result["export_package_noop_publications"] = ( int64_t ) s_exportCacheCounters.m_nNoOpPublications;
+	result["export_megavt_generation"] = ( int64_t ) s_exportCacheCounters.m_nLastGeneration;
+	return result;
+}
+
+// Validate both the source signature and the fragment's V1 allocation ABI.
+// A partial cache publication, stale neighbors or different texel density
+// always falls back to the established source cook.
+static bool t3dMegaVTLoadExportFragmentCold(
+	const String &rPath, const uint64_t nFingerprint,
+	const uint32_t nRegionIndex, const uint32_t nExtent,
+	const uint64_t nByteLimit, PackedByteArray &rFragment )
+{
+	const Ref< FileAccess > signature = FileAccess::open( rPath + String( ".source" ), FileAccess::READ );
+	if ( signature.is_null() || signature->get_length() != 16u ||
+		 !t3dMegaVTSourceSignatureMatches( signature->get_buffer( 16u ), nFingerprint ) ) return false;
+	const Ref< FileAccess > file = FileAccess::open( rPath, FileAccess::READ );
+	if ( file.is_null() ) return false;
+	const uint64_t bytes = file->get_length();
+	if ( bytes < T3D_VT_PACK_V1_HEADER_BYTES || bytes > nByteLimit ) return false;
+	PackedByteArray candidate = file->get_buffer( bytes );
+	t3dVTPackViewV1_t view{};
+	if ( ( uint64_t ) candidate.size() != bytes ||
+		 !t3d_vt_pack_open_view_v1( candidate.ptr(), bytes, view ) ) return false;
+	if ( view.m_pHeader->m_nAllocationCount != 1u ||
+		 view.m_pAllocationKeys[0].m_nStableKey != t3d_vt_terrain_region_stable_key( nRegionIndex ) ) return false;
+	if ( view.m_pAllocations[0].m_nGeneration != 1u ||
+		 view.m_pAllocations[0].m_nConsumer != T3D_VT_CONSUMER_CLIPMAP ) return false;
+	const uint32_t flags = T3D_VT_ALLOCATION_MEGATEXTURE | T3D_VT_ALLOCATION_CLAMP;
+	if ( ( view.m_pAllocations[0].m_nFlags & flags ) != flags ) return false;
+	const uint32_t pages = nExtent / T3D_VT_PAGE_INTERIOR;
+	const t3dVTChannelAllocation_t &albedo = view.m_pChannelAllocations[T3D_VT_LOGICAL_CHANNEL_ALBEDO];
+	const t3dVTChannelAllocation_t &pbr = view.m_pChannelAllocations[T3D_VT_LOGICAL_CHANNEL_PBR];
+	if ( albedo.m_nMip0WidthPages != pages || albedo.m_nMip0HeightPages != pages ||
+		 pbr.m_nMip0WidthPages != pages / 2u || pbr.m_nMip0HeightPages != pages / 2u ) return false;
+	rFragment = candidate;
+	return true;
+}
+
+// Keep the source marker and fragment in the existing rollback-capable pair.
+static bool t3dMegaVTPublishCachePairCold(
+	const String &rPath, const PackedByteArray &rFragment,
+	const uint64_t nSourceFingerprint, String &rError )
+{
+	const PackedByteArray signature = t3dMegaVTSourceSignatureBytes( nSourceFingerprint );
+	if ( signature.size() != 16u ) { rError = "MegaVT source fingerprint staging failed"; return false; }
+	const String sourcePath = rPath + String( ".source" );
+	Terrain3DFilePublication source( sourcePath, sourcePath + String( ".staged" ), sourcePath + String( ".previous" ) );
+	Terrain3DFilePublication fragment( rPath, rPath + String( ".staged" ), rPath + String( ".previous" ) );
+	if ( source.stagePacked( signature ) != OK || fragment.stagePacked( rFragment ) != OK ||
+		 source.publish() != OK || fragment.publish() != OK ) {
+		rError = !fragment.getError().is_empty() ? fragment.getError() : source.getError();
+		( void ) fragment.rollback();
+		( void ) source.rollback();
+		return false;
+	}
+	( void ) fragment.commit();
+	( void ) source.commit();
+	return true;
+}
+
 bool Terrain3DIncrementalMegaVTCooker::publishFragmentFileCold(
 	const t3dMegaVTAuthoringInputs_t   &rInputs,
 	const t3dTerrainMegaVTCookTicket_t &rTicket,
@@ -461,42 +585,8 @@ bool Terrain3DIncrementalMegaVTCooker::publishFragmentFileCold(
 		m_lastError = "MegaVT cache directory creation failed";
 		return false;
 	}
-	const String		  path = directory.path_join( String::num_int64( rTicket.m_nRegionMapIndex ) + ".t3dvt" );
-	const PackedByteArray signature = t3dMegaVTSourceSignatureBytes( nSourceFingerprint );
-	if ( signature.size() != 16 ) {
-		m_lastError = "MegaVT source fingerprint staging failed";
-		return false;
-	}
-	const String			 signaturePath = path + String( ".source" );
-	Terrain3DFilePublication sourcePublication( signaturePath,
-												signaturePath + String( ".staged" ),
-												signaturePath + String( ".previous" ) );
-	Terrain3DFilePublication fragmentPublication( path, path + String( ".staged" ), path + String( ".previous" ) );
-	bool					 success = sourcePublication.stagePacked( signature ) == OK;
-	if ( !success ) {
-		m_lastError = sourcePublication.getError();
-	}
-	if ( success && fragmentPublication.stagePacked( rFragment ) != OK ) {
-		m_lastError = fragmentPublication.getError();
-		success = false;
-	}
-	if ( success && sourcePublication.publish() != OK ) {
-		m_lastError = sourcePublication.getError();
-		success = false;
-	}
-	if ( success && fragmentPublication.publish() != OK ) {
-		m_lastError = fragmentPublication.getError();
-		success = false;
-	}
-	if ( !success ) {
-		( void ) fragmentPublication.rollback();
-		( void ) sourcePublication.rollback();
-		return false;
-	}
-	// The two artifacts are now visible. Retain valid files if backup cleanup fails.
-	( void ) fragmentPublication.commit();
-	( void ) sourcePublication.commit();
-	return true;
+	const String path = directory.path_join( String::num_int64( rTicket.m_nRegionMapIndex ) + ".t3dvt" );
+	return t3dMegaVTPublishCachePairCold( path, rFragment, nSourceFingerprint, m_lastError );
 }
 
 bool Terrain3DIncrementalMegaVTCooker::restoreCachedRegionCold(
@@ -538,7 +628,7 @@ bool Terrain3DIncrementalMegaVTCooker::restoreCachedRegionCold(
 	}
 	const Ref< FileAccess > file = FileAccess::open( path, FileAccess::READ );
 	const uint64_t			nBytes = file.is_valid() ? file->get_length() : 0u;
-	if ( nBytes < T3D_VT_PACK_V3_HEADER_BYTES || nBytes > m_nWorkerByteLimit || rRetainedBytes > m_nCpuByteLimit ||
+	if ( nBytes < T3D_VT_PACK_V1_HEADER_BYTES || nBytes > m_nWorkerByteLimit || rRetainedBytes > m_nCpuByteLimit ||
 		 nBytes + 64u > m_nCpuByteLimit - rRetainedBytes ) {
 		++m_nCacheRejected;
 		return false;
@@ -549,8 +639,8 @@ bool Terrain3DIncrementalMegaVTCooker::restoreCachedRegionCold(
 		return false;
 	}
 	const PackedByteArray bytes = file->get_buffer( nBytes );
-	t3dVTPackViewV3_t	  view{};
-	if ( ( uint64_t ) bytes.size() != nBytes || !t3d_vt_pack_open_view_v3( bytes.ptr(), nBytes, view ) ||
+	t3dVTPackViewV1_t	  view{};
+	if ( ( uint64_t ) bytes.size() != nBytes || !t3d_vt_pack_open_view_v1( bytes.ptr(), nBytes, view ) ||
 		 view.m_pHeader->m_nAllocationCount != 1u ||
 		 view.m_pAllocationKeys[0].m_nStableKey != t3d_vt_terrain_region_stable_key( nRegionIndex ) ||
 		 view.m_pAllocations[0].m_nGeneration != nSourceGeneration ||
@@ -1087,10 +1177,11 @@ bool Terrain3DIncrementalMegaVTCooker::composePackageCold(
 	PackedByteArray						   &rPackage,
 	uint32_t							   &rGeneration,
 	uint64_t							   &rFingerprint,
-	Terrain3DSharedMemoryReservation *const pPackageMemory ) {
+	Terrain3DSharedMemoryReservation *const pPackageMemory,
+    const PackedByteArray *const pApprovedComposedFragment ) {
 	Terrain3DMemoryAccountScope								  authoring_scope( m_authoringMemoryAccount.get() );
 	eastl::vector< PackedByteArray, Terrain3DEastlAllocator > packages;
-	if ( !t3dContainerReserveCold( packages, T3D_REGION_SLOTS + 1u ) ) {
+	if ( !t3dContainerReserveCold( packages, T3D_REGION_SLOTS + 2u ) ) {
 		m_lastError = "MegaVT package list allocation failed";
 		return false;
 	}
@@ -1116,13 +1207,22 @@ bool Terrain3DIncrementalMegaVTCooker::composePackageCold(
 		packages.push_back( selectedFragment );
 		nSignature ^= t3dHashPublicationBytes( selectedFragment.ptr(), selectedFragment.size() );
 	}
+    // A canonically approved composed fragment has no private page allocator.
+    // Append it to the same V1 package merge so stable-key conflicts, physical
+    // format families, tail pages and the global budget are validated once.
+    if ( pApprovedComposedFragment != NULL && !pApprovedComposedFragment->is_empty() ) {
+        packages.push_back( *pApprovedComposedFragment );
+        nSignature ^= t3dHashPublicationBytes( pApprovedComposedFragment->ptr(),
+                                                pApprovedComposedFragment->size() );
+    }
 	if ( packages.size() <= ( rPackage.is_empty() ? 0u : 1u ) ) {
 		return true;
 	}
 	const uint32_t	nGeneration = t3dNextGeneration( ( uint32_t ) ( nSignature ^ ( nSignature >> 32u ) ) );
 	PackedByteArray merged;
 	Terrain3DSharedMemoryReservation mergedMemory;
-	const uint64_t					 nRetained = getRetainedCpuBytesCold() + ( uint64_t ) rPackage.size();
+	const uint64_t                   nRetained = getRetainedCpuBytesCold() + ( uint64_t ) rPackage.size() +
+        ( pApprovedComposedFragment != NULL ? ( uint64_t ) pApprovedComposedFragment->size() : 0u );
 	m_nCompositionWorkingBytes = 0u;
 	m_nCompositionWorkingLimit = nRetained < m_nCpuByteLimit ? m_nCpuByteLimit - nRetained : 0u;
 	Terrain3DMemoryAccount *const pAccount = g_t3dMemoryAccount;
@@ -1140,7 +1240,7 @@ bool Terrain3DIncrementalMegaVTCooker::composePackageCold(
 	}
 	t3dVTMergeStatistics_t statistics;
 	const uint64_t		   nStart = t3dSteadyClockUsec();
-	const bool			   bMerged = t3d_vt_godot_merge_packages_v3( packages.data(),
+	const bool			   bMerged = t3d_vt_godot_merge_packages_v1( packages.data(),
 														 ( uint32_t ) packages.size(),
 														 nGeneration,
 														 merged,
@@ -1291,6 +1391,7 @@ bool Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
 	uint32_t						 &rGeneration,
 	String							 &rError ) {
 	// Synchronous export is independent of the runtime residency account.
+	s_exportCacheCounters = t3dMegaVTExportCacheCounters_t{};
 	Terrain3DMemoryAccountOwner export_account( rInputs.m_nCpuByteLimit );
 	if ( export_account.get() == NULL ) {
 		rError = "MegaVT export authoring account allocation failed";
@@ -1361,10 +1462,39 @@ bool Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
 			return false;
 		}
 		const uint64_t nAvailableBytes = rInputs.m_nCpuByteLimit - nRetainedBytes - nCaptureBytes - nPixelBytes;
-		if ( !t3dMegaVTBuildPixels( capture, pixels, cancel ) ||
-			 !t3dMegaVTCookPixels( capture, pixels, fragment, nAvailableBytes ) ) {
-			rError = "Terrain MegaVT region export failed";
-			return false;
+		const uint64_t sourceFingerprint = t3dMegaVTSourceFingerprint( capture );
+		// Export fragments use the same V1 source/signature codec, but must not
+		// replace live incremental fragments carrying a runtime source generation.
+		const String cacheRoot = t3dMegaVTCacheDirectory( rInputs );
+		const String cacheDirectory = cacheRoot.is_empty() ? String() : cacheRoot.path_join( "export_v1" );
+		const String fragmentPath = cacheDirectory.path_join(
+			String::num_int64( capture.m_nRegionIndex ) + ".t3dvt" );
+		const bool reused = !cacheDirectory.is_empty() &&
+			t3dMegaVTLoadExportFragmentCold( fragmentPath, sourceFingerprint,
+				capture.m_nRegionIndex, capture.m_nExtent, nAvailableBytes, fragment );
+		if ( reused ) {
+			++s_exportCacheCounters.m_nReused;
+			s_exportCacheCounters.m_nReusedBytes += ( uint64_t ) fragment.size();
+		} else {
+			if ( !t3dMegaVTBuildPixels( capture, pixels, cancel ) ||
+				 !t3dMegaVTCookPixels( capture, pixels, fragment, nAvailableBytes ) ) {
+				rError = "Terrain MegaVT region export failed";
+				return false;
+			}
+			++s_exportCacheCounters.m_nCooked;
+			s_exportCacheCounters.m_nCookedBytes += ( uint64_t ) fragment.size();
+			// The cache is derived and optional; a write failure must not
+			// invalidate successfully cooked V1 shipping bytes.
+			if ( !cacheDirectory.is_empty() &&
+				 DirAccess::make_dir_recursive_absolute( cacheDirectory ) == OK ) {
+				String cacheError;
+				if ( t3dMegaVTPublishCachePairCold( fragmentPath, fragment, sourceFingerprint, cacheError ) )
+					++s_exportCacheCounters.m_nCacheWrites;
+				else
+					++s_exportCacheCounters.m_nCacheWriteFailures;
+			} else {
+				++s_exportCacheCounters.m_nCacheWriteFailures;
+			}
 		}
 		nSignature ^= t3dHashPublicationBytes( fragment.ptr(), fragment.size() );
 		packages.push_back( fragment );
@@ -1387,7 +1517,7 @@ bool Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
 	const uint32_t	nGeneration = t3dNextGeneration( ( uint32_t ) ( nSignature ^ ( nSignature >> 32u ) ) );
 	PackedByteArray merged;
 	if ( nRetainedBytes >= rInputs.m_nCpuByteLimit ||
-		 !t3d_vt_godot_merge_packages_v3( packages.data(),
+		 !t3d_vt_godot_merge_packages_v1( packages.data(),
 										  ( uint32_t ) packages.size(),
 										  nGeneration,
 										  merged,
@@ -1397,6 +1527,8 @@ bool Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
 	}
 	rPackage = merged;
 	rGeneration = nGeneration;
+	s_exportCacheCounters.m_nMergedBytes = ( uint64_t ) merged.size();
+	s_exportCacheCounters.m_nLastGeneration = nGeneration;
 	return true;
 }
 
@@ -1409,7 +1541,7 @@ bool Terrain3DIncrementalMegaVTCooker::finishForceRecookAllRegionsCold(
 	const PackedByteArray *const	  pShippingBytes,
 	const String *const				  pDemandPath,
 	const PackedByteArray *const     pDemandBytes,
-    const String *const pV3Path, const PackedByteArray *const pV3Bytes ) {
+    const String *const pV1Path, const PackedByteArray *const pV1Bytes ) {
 	Terrain3DMemoryAccountScope authoring_scope( m_authoringMemoryAccount.get() );
 	bool						success = bCommit && isForceRecookReadyCold();
 	for ( uint32_t i = 0u; i < T3D_REGION_SLOTS && success; ++i ) {
@@ -1430,6 +1562,7 @@ bool Terrain3DIncrementalMegaVTCooker::finishForceRecookAllRegionsCold(
 		success = false;
 	}
 	auto stage = [&]( const String &path, const PackedByteArray &bytes ) -> bool {
+		if ( t3dMegaVTFileEqualsBytesCold( path, bytes ) ) return true;
 		publications.emplace_back( path, path + String( ".force_staged" ), path + String( ".force_previous" ) );
 		Terrain3DFilePublication &publication = publications.back();
 		if ( publication.stagePacked( bytes ) == OK ) {
@@ -1445,12 +1578,12 @@ bool Terrain3DIncrementalMegaVTCooker::finishForceRecookAllRegionsCold(
 		 !pDemandBytes->is_empty() ) {
 		success = stage( *pDemandPath, *pDemandBytes );
 	}
-    if ( success && pV3Path && pV3Bytes && !pV3Path->is_empty() && !pV3Bytes->is_empty() ) {
+    if ( success && pV1Path && pV1Bytes && !pV1Path->is_empty() && !pV1Bytes->is_empty() ) {
         if ( !pDemandPath || !pDemandBytes || pDemandPath->is_empty() || pDemandBytes->is_empty() ||
-             *pV3Path == *pDemandPath || *pV3Path == *pShippingPath ) {
-            m_lastError = "Invalid T3VD v3 sidecar transaction arguments";
+             *pV1Path == *pDemandPath || *pV1Path == *pShippingPath ) {
+            m_lastError = "Invalid T3VD v1 sidecar transaction arguments";
             success = false;
-        } else success = stage( *pV3Path, *pV3Bytes );
+        } else success = stage( *pV1Path, *pV1Bytes );
     }
 	const String directory = t3dMegaVTCacheDirectory( rInputs );
 	if ( success && DirAccess::make_dir_recursive_absolute( directory ) != OK ) {

@@ -136,7 +136,7 @@ bool Terrain3DWorldGodotConverter::compileStandardMaterialCold(
 		return false;
 	}
 	if ( Bindings.m_nVtAllocation != T3D_VT_INVALID_ALLOCATION ) {
-		rRecord.m_nFlags |= T3D_VT_MATERIAL_V3_LAYOUT;
+		rRecord.m_nFlags |= T3D_VT_MATERIAL_V1_LAYOUT;
 	}
 	return true;
 }
@@ -185,7 +185,7 @@ bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold(
 			return false;
 		}
 		if ( Bindings.m_nVtAllocation != T3D_VT_INVALID_ALLOCATION ) {
-			Record.m_nFlags |= T3D_VT_MATERIAL_V3_LAYOUT;
+			Record.m_nFlags |= T3D_VT_MATERIAL_V1_LAYOUT;
 		}
 		if ( pTier == T3D_WORLD_TIER_FOLIAGE ) {
 			Record.m_nFlags |= T3D_VT_MATERIAL_FOLIAGE;

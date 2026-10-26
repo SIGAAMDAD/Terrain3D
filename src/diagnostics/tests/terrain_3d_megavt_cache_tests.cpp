@@ -65,7 +65,7 @@ bool makeFragment(
 	pbr.resize( 128 * 128 * 4 );
 	albedo.fill( 170 );
 	pbr.fill( 128 );
-	t3dVTCookSparseSourceV3_t source{};
+	t3dVTCookSparseSourceV1_t source{};
 	source.m_nStableKey = t3d_vt_terrain_region_stable_key( index );
 	source.m_nGenerationSeed = 7;
 	source.m_nConsumer = T3D_VT_CONSUMER_CLIPMAP;
@@ -78,7 +78,7 @@ bool makeFragment(
 	source.m_Channels[T3D_VT_LOGICAL_CHANNEL_PBR] = { pbr.ptr(), 128, 128, 4, 512 };
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_ALBEDO] = t3dHashPublicationBytes( albedo.ptr(), albedo.size() );
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_PBR] = t3dHashPublicationBytes( pbr.ptr(), pbr.size() );
-	return t3d_vt_godot_cook_source_fragment_v3( source, fragment, 32ull * 1024 * 1024 );
+	return t3d_vt_godot_cook_source_fragment_v1( source, fragment, 32ull * 1024 * 1024 );
 }
 
 int64_t restored(
@@ -153,9 +153,9 @@ bool t3dRunMegaVTCacheTests() {
 			uint32_t						 generation = 0;
 			uint64_t						 fingerprint = 0;
 			Terrain3DSharedMemoryReservation packageMemory;
-			t3dVTPackViewV3_t				 view{};
+			t3dVTPackViewV1_t				 view{};
 			expect( admitted.composePackageCold( package, generation, fingerprint, &packageMemory ) &&
-						t3d_vt_pack_open_view_v3( package.ptr(), package.size(), view ) &&
+						t3d_vt_pack_open_view_v1( package.ptr(), package.size(), view ) &&
 						view.m_pHeader->m_nAllocationCount == 2,
 					"composition succeeds from shared headroom with a fully occupied cache allowance" );
 			expect( owner.get()->stats().peak <= stats.limit, "composition never exceeds the total owner limit" );
@@ -179,9 +179,9 @@ bool t3dRunMegaVTCacheTests() {
 		PackedByteArray	  package;
 		uint32_t		  generation = 0;
 		uint64_t		  fingerprint = 0;
-		t3dVTPackViewV3_t view{};
+		t3dVTPackViewV1_t view{};
 		expect( cooker.composePackageCold( package, generation, fingerprint ) && !package.is_empty() &&
-					t3d_vt_pack_open_view_v3( package.ptr(), package.size(), view ) &&
+					t3d_vt_pack_open_view_v1( package.ptr(), package.size(), view ) &&
 					view.m_pHeader->m_nAllocationCount == 2,
 				"one initial package includes both restored regions" );
 		cooker.restoreCachedRegionsCold( inputs, 2 );

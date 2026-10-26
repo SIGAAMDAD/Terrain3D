@@ -333,7 +333,7 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["virtual_texture_initialized"] = rInputs.m_virtualTexture.is_initialized();
 	result["virtual_texture_initialize_count"] = ( int64_t ) ( rInputs.m_virtualTexture.get_stats().nInitializeCount );
 	result["virtual_texture_database_kind"] =
-		rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? String( "shipping-v3" )
+		rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? String( "shipping-v3" )
 																					  : String( "neutral" );
 	result["virtual_texture_database_generation"] = ( int64_t ) ( rInputs.m_virtualTexture.getDatabaseGeneration() );
 	result["virtual_texture_package_generation"] = ( int64_t ) ( rInputs.m_virtualTexture.getPackageGeneration() );
@@ -346,8 +346,8 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["virtual_texture_package_content_signature"] =
 		String::num_uint64( rInputs.m_virtualTexture.getPackageContentSignature(), 16 );
 	result["vt_pack_version"] =
-		( int64_t ) ( rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V3
-						  ? T3D_VT_FILE_VERSION_V3
+		( int64_t ) ( rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1
+						  ? T3D_VT_FILE_VERSION_V1
 						  : 0u );
 	result["vt_requested_profile"] = ( int64_t ) rInputs.m_virtualTexture.get_requested_quality_profile();
 	result["vt_package_fully_supported_profile_mask"] =
@@ -504,19 +504,19 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["vt_feedback_grid_stale"] = ( int64_t ) feedback_gpu.get_feedback_grid_stale();
 	const t3dVTFeedbackMultiShadowStats_t &multi_shadow =
 		rInputs.m_virtualTexture.get_multi_feedback_shadow_stats_hot();
-	result["vt_feedback_v3_shadow_accepted"] = ( int64_t ) multi_shadow.m_nAccepted;
-	result["vt_feedback_v3_shadow_rejected"] = ( int64_t ) multi_shadow.m_nRejected;
-	result["vt_feedback_v3_shadow_stale"] = ( int64_t ) multi_shadow.m_nStale;
-	result["vt_feedback_v3_shadow_samples"] = ( int64_t ) multi_shadow.m_nSamples;
-	result["vt_feedback_v3_shadow_valid_samples"] = ( int64_t ) multi_shadow.m_nValidSamples;
-	result["vt_feedback_v3_shadow_unique_pages"] = ( int64_t ) multi_shadow.m_nUniquePages;
-	result["vt_feedback_v3_shadow_candidates"] = ( int64_t ) multi_shadow.m_nCandidates;
-	result["vt_feedback_v3_parity_paired_captures"] = ( int64_t ) multi_shadow.m_nPairedCaptures;
-	result["vt_feedback_v3_parity_unpaired_captures"] = ( int64_t ) multi_shadow.m_nUnpairedCaptures;
-	result["vt_feedback_v3_parity_v2_observed"] = ( int64_t ) multi_shadow.m_nV2ObservedSamples;
-	result["vt_feedback_v3_parity_v2_covered"] = ( int64_t ) multi_shadow.m_nV2CoveredSamples;
-	result["vt_feedback_v3_parity_v2_missing"] = ( int64_t ) multi_shadow.m_nV2MissingSamples;
-	result["vt_feedback_v3_parity_v2_direct_recall"] =
+	result["vt_feedback_v1_shadow_accepted"] = ( int64_t ) multi_shadow.m_nAccepted;
+	result["vt_feedback_v1_shadow_rejected"] = ( int64_t ) multi_shadow.m_nRejected;
+	result["vt_feedback_v1_shadow_stale"] = ( int64_t ) multi_shadow.m_nStale;
+	result["vt_feedback_v1_shadow_samples"] = ( int64_t ) multi_shadow.m_nSamples;
+	result["vt_feedback_v1_shadow_valid_samples"] = ( int64_t ) multi_shadow.m_nValidSamples;
+	result["vt_feedback_v1_shadow_unique_pages"] = ( int64_t ) multi_shadow.m_nUniquePages;
+	result["vt_feedback_v1_shadow_candidates"] = ( int64_t ) multi_shadow.m_nCandidates;
+	result["vt_feedback_v1_parity_paired_captures"] = ( int64_t ) multi_shadow.m_nPairedCaptures;
+	result["vt_feedback_v1_parity_unpaired_captures"] = ( int64_t ) multi_shadow.m_nUnpairedCaptures;
+	result["vt_feedback_v1_parity_v2_observed"] = ( int64_t ) multi_shadow.m_nV2ObservedSamples;
+	result["vt_feedback_v1_parity_v2_covered"] = ( int64_t ) multi_shadow.m_nV2CoveredSamples;
+	result["vt_feedback_v1_parity_v2_missing"] = ( int64_t ) multi_shadow.m_nV2MissingSamples;
+	result["vt_feedback_v1_parity_v2_direct_recall"] =
 		multi_shadow.m_nV2ObservedSamples != 0u
 			? ( double ) multi_shadow.m_nV2CoveredSamples / ( double ) multi_shadow.m_nV2ObservedSamples
 			: 0.0;
@@ -648,7 +648,7 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["virtual_texture_readback_stale_generation"] = ( int64_t ) ( VtGpuStats.nReadbackStaleGenerationCount );
 	result["virtual_texture_readback_invalid_payload"] = ( int64_t ) ( VtGpuStats.nReadbackInvalidPayloadCount );
 	result["virtual_texture_readback_ring_busy"] = ( int64_t ) ( VtGpuStats.nReadbackRingBusyCount );
-	result["terrain_micro_vt_sparse_v3"] = rInputs.m_virtualTexture.supportsSparseV3();
+	result["terrain_micro_vt_sparse_v1"] = rInputs.m_virtualTexture.supportsSparseV1();
 	result["terrain_micro_vt_material_allocation_zero"] =
 		( int64_t ) ( rInputs.m_virtualTexture.getMaterialVTAllocationId( 0u ) );
 	result["terrain_micro_vt_shared_resource_generation"] =

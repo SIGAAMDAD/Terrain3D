@@ -3,7 +3,6 @@
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_global_descriptor_cache.h"
 #include "core/utility/terrain_3d_generation.h"
 #include <godot_cpp/variant/utility_functions.hpp>
-#include "rendering/rd/vt/core/terrain_3d_composed_surface_completion.h"
 #include <string.h>
 using namespace godot;
 
@@ -12,119 +11,13 @@ Terrain3DSharedVTRuntime::~Terrain3DSharedVTRuntime() {
 	shutdown_cold();
 }
 
-bool Terrain3DSharedVTRuntime::prepareComposedSurfaceCold(
-    Terrain3DRdContext &rContext, const t3dComposedSurfaceSidecarView_t &rView,
-    const uint64_t nExpectedSourceFingerprint, t3dComposedSurfaceSlot_t *pSlots, const uint32_t nPageSlots,
-    t3dComposedSurfaceRequest_t *pRequests, const uint32_t nRequestCapacity,
-    t3dComposedSurfaceGpuEntry_t *pTable, const uint32_t nTableCapacity,
-    t3dComposedSurfaceGpuPending_t *pPending, const uint32_t nDeviceGeneration,
-    const t3dComposedSurfaceCutoverProof_t &rSourceProof )
+bool Terrain3DSharedVTRuntime::findComposedRegionAllocationCold(
+    const uint32_t nRegionMapIndex, uint32_t &rAllocation ) const
 {
-    if ( !Terrain3DRdContext::isOnRenderThread() || !rContext.validateDevice() ||
-         !m_bSharedResourcesInitialized || m_bResourceReplacementInProgress ||
-         m_bComposedSurfaceReady || !nDeviceGeneration || !nExpectedSourceFingerprint ||
-         uint64_t( nDeviceGeneration ) != rContext.getDeviceGeneration() ) return false;
-    if ( !t3d_cs_cutover_proof_current( rSourceProof, rSourceProof,
-                                         nExpectedSourceFingerprint, nDeviceGeneration ) ) return false;
-    // Recheck the sidecar's actual bytes and required source signature before
-    // retaining its borrowed lifetime in the fixed residency cache.
-    t3dComposedSurfaceSidecarView_t checked{};
-    if ( !t3d_cs_open_sidecar_cold( rView.m_pFile, size_t( rView.m_nFileBytes ),
-                                    nExpectedSourceFingerprint, checked ) ||
-         checked.m_header.m_nFileBytes != rView.m_header.m_nFileBytes ||
-         !m_ComposedCache.initializeCold( checked, pSlots, nPageSlots, pRequests,
-                                          nRequestCapacity, nDeviceGeneration ) ) return false;
-    if ( !m_ComposedGpu.initializeCold( rContext, nPageSlots, nTableCapacity,
-                                       pTable, pPending, nDeviceGeneration ) ) {
-        m_ComposedCache.resetDeviceCold( 0u );
-        return false;
-    }
-    m_composedCutoverProof = rSourceProof;
-    // Startup never asserts the current authored state. The render owner must
-    // independently present current revision/parity evidence before cutover.
-    m_bComposedCutoverProofCurrent = false;
-    m_bComposedSurfaceReady = true;
-    return true;
-}
-
-void Terrain3DSharedVTRuntime::shutdownComposedSurfaceCold( Terrain3DRdContext &rContext )
-{
-    if ( !Terrain3DRdContext::isOnRenderThread() ) return;
-    if ( m_ComposedGpu.isInitialized() ) {
-        t3dComposedSurfaceGpuBindings_t bindings{};
-        if ( m_ComposedGpu.acquireBindingsHot( bindings ) ) {
-            Terrain3DRdGlobalDescriptorCache *const cache = rContext.tryGetGlobalDescriptorCacheHot();
-            if ( cache && cache->isInitialized() ) {
-                for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i )
-                    cache->invalidateDependencyCold( bindings.m_hChannels[i], bindings.m_nDeviceGeneration );
-                cache->invalidateDependencyCold( bindings.m_hPageTable, bindings.m_nDeviceGeneration );
-            }
-        }
-        m_ComposedGpu.shutdownCold( rContext );
-    }
-    m_ComposedCache.resetDeviceCold( 0u );
-    m_bComposedSurfaceReady = false;
-    m_bComposedCutoverProofCurrent = false;
-    m_composedCutoverProof = {};
-}
-
-bool Terrain3DSharedVTRuntime::validateComposedSourceHot(
-    const t3dComposedSurfaceCutoverProof_t &rCurrent )
-{
-    if ( !Terrain3DRdContext::isOnRenderThread() || !m_bComposedSurfaceReady ) return false;
-    m_bComposedCutoverProofCurrent = t3d_cs_cutover_proof_current( m_composedCutoverProof, rCurrent,
-            m_composedCutoverProof.m_nSourceFingerprint, m_composedCutoverProof.m_nDeviceGeneration );
-    return m_bComposedCutoverProofCurrent;
-}
-
-bool Terrain3DSharedVTRuntime::acquireComposedSurfaceBindingsHot(
-    t3dComposedSurfaceGpuBindings_t &rBindings ) const
-{
-    rBindings = {};
-    return m_bComposedSurfaceReady && m_bComposedCutoverProofCurrent && !m_bResourceReplacementInProgress &&
-           m_bSharedResourcesInitialized && m_ComposedGpu.acquireBindingsHot( rBindings ) &&
-           uint64_t( rBindings.m_nDeviceGeneration ) == Terrain3DRdContext::getShared().getDeviceGeneration();
-}
-
-bool Terrain3DSharedVTRuntime::submitComposedPageSetHot(
-    Terrain3DRdContext &rContext, const t3dComposedSurfaceJob_t &rJob,
-    const uint8_t *pPageBytes, const uint32_t nPageBytes,
-    const int32_t nWorldPageX, const int32_t nWorldPageY,
-    const uint32_t nMip, const uint64_t nRevision,
-    const uint64_t nRegionKey, const bool bSharedTransferAdmitted )
-{
-    if ( !bSharedTransferAdmitted || !m_bComposedSurfaceReady || !m_bComposedCutoverProofCurrent ||
-         m_bResourceReplacementInProgress ||
-         !Terrain3DRdContext::isOnRenderThread() ) return false;
-    Terrain3DRdGlobalDescriptorCache *const cache = rContext.tryGetGlobalDescriptorCacheHot();
-    if ( !cache || !cache->isInitialized() ) return false;
-    const uint64_t epoch = cache->currentSubmissionEpochHot();
-    return t3d_cs_gpu_submission_epoch_valid( epoch, cache->diagnostics().m_nCompletedSubmissionEpoch ) &&
-           m_ComposedGpu.submitPageSetHot( rContext, m_ComposedCache, rJob,
-        pPageBytes, nPageBytes, nWorldPageX, nWorldPageY, nMip, nRevision,
-        nRegionKey, epoch );
-}
-
-uint32_t Terrain3DSharedVTRuntime::serviceComposedGpuCompletionsHot( Terrain3DRdContext &rContext )
-{
-    if ( !m_bComposedSurfaceReady || m_bResourceReplacementInProgress ||
-         !Terrain3DRdContext::isOnRenderThread() ) return 0u;
-    Terrain3DRdGlobalDescriptorCache *const cache = rContext.tryGetGlobalDescriptorCacheHot();
-    if ( !cache || !cache->isInitialized() ) return 0u;
-    return m_ComposedGpu.serviceCompletedUploadsHot( rContext, m_ComposedCache,
-        cache->diagnostics().m_nCompletedSubmissionEpoch );
-}
-
-bool Terrain3DSharedVTRuntime::retireComposedPageHot(
-    Terrain3DRdContext &rContext, const t3dComposedSurfaceJob_t &rJob,
-    const uint64_t nLastRasterSubmissionEpoch )
-{
-    if ( !m_bComposedSurfaceReady || m_bResourceReplacementInProgress ||
-         !Terrain3DRdContext::isOnRenderThread() ) return false;
-    Terrain3DRdGlobalDescriptorCache *const cache = rContext.tryGetGlobalDescriptorCacheHot();
-    if ( !cache || !cache->isInitialized() ) return false;
-    return m_ComposedGpu.retireHot( rContext, m_ComposedCache, rJob,
-        nLastRasterSubmissionEpoch, cache->diagnostics().m_nCompletedSubmissionEpoch );
+    rAllocation = T3D_VT_INVALID_ALLOCATION;
+    return nRegionMapIndex < T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY &&
+           m_VirtualTexture.findMaterialAllocationCold(
+               t3d_vt_composed_region_stable_key( nRegionMapIndex ), rAllocation );
 }
 
 bool Terrain3DSharedVTRuntime::bindRuntimeAllocator(
@@ -492,7 +385,6 @@ bool Terrain3DSharedVTRuntime::beginVtResourceReplacementCold(
 		return false;
 	}
 	m_bResourceReplacementInProgress = true;
-	shutdownComposedSurfaceCold( rContext );
 	// No future PREPARE can acquire this publication. All dependent descriptor
 	// leases become stale before underlying buffers and textures are released.
 	invalidateBoundDescriptorsCold( rContext );
@@ -521,9 +413,6 @@ void Terrain3DSharedVTRuntime::shutdown_cold(
 	const bool bReplacementAlreadyActive = m_bResourceReplacementInProgress;
 	if ( Terrain3DRdContext::isOnRenderThread() && !bReplacementAlreadyActive ) {
 		beginVtResourceReplacementCold( Terrain3DRdContext::getShared() );
-	}
-	if ( Terrain3DRdContext::isOnRenderThread() ) {
-		shutdownComposedSurfaceCold( Terrain3DRdContext::getShared() );
 	}
 	m_VirtualTexture.shutdown_cold( bPreserveTailStaging );
 	m_Resources.unseal_hot_runtime_cold();

@@ -6,8 +6,6 @@
 #include "rendering/rd/vt/gpu/terrain_3d_vt_resources.h"
 #include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"
 #include "rendering/rd/vt/gpu/terrain_3d_vt_shared_bindings.h"
-#include "rendering/rd/vt/gpu/terrain_3d_composed_surface_gpu.h"
-#include "rendering/rd/vt/core/terrain_3d_composed_surface_cutover.h"
 #include "rendering/rd/world/core/terrain_3d_world_contract.h"
 
 #include <godot_cpp/variant/callable.hpp>
@@ -20,37 +18,10 @@ public:
 	Terrain3DSharedVTRuntime();
 	~Terrain3DSharedVTRuntime();
 	bool					 bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
-    // Optional composed-result owner: caller retains all fixed CPU arrays and
-    // the validated sidecar mapping until shutdown. Cold opt-in only; no
-    // automatic shader specialization or changes to source VT V3.
-    bool prepareComposedSurfaceCold( Terrain3DRdContext &rContext,
-                                     const t3dComposedSurfaceSidecarView_t &rView,
-                                     uint64_t nExpectedSourceFingerprint,
-                                     t3dComposedSurfaceSlot_t *pSlots, uint32_t nPageSlots,
-                                     t3dComposedSurfaceRequest_t *pRequests, uint32_t nRequestCapacity,
-                                     t3dComposedSurfaceGpuEntry_t *pTable, uint32_t nTableCapacity,
-                                     t3dComposedSurfaceGpuPending_t *pPending,
-                                     uint32_t nDeviceGeneration,
-                                     const t3dComposedSurfaceCutoverProof_t &rSourceProof );
-    void shutdownComposedSurfaceCold( Terrain3DRdContext &rContext );
-    bool isComposedSurfaceReady() const { return m_bComposedSurfaceReady &&
-        m_bComposedCutoverProofCurrent && m_ComposedGpu.areMappingsCoherent(); }
-    // Render owner supplies the CURRENT authoritative state on every material
-    // publication. A stale edit/material/filter/topology token revokes visibility.
-    bool validateComposedSourceHot( const t3dComposedSurfaceCutoverProof_t &rCurrent );
-    bool acquireComposedSurfaceBindingsHot( t3dComposedSurfaceGpuBindings_t &rBindings ) const;
-    Terrain3DComposedSurfaceCache &composedSurfaceCacheHot() { return m_ComposedCache; }
-    // Shared per-frame VT transfer admission is required before submission.
-    bool submitComposedPageSetHot( Terrain3DRdContext &rContext,
-                                   const t3dComposedSurfaceJob_t &rJob,
-                                   const uint8_t *pPageBytes, uint32_t nPageBytes,
-                                   int32_t nWorldPageX, int32_t nWorldPageY,
-                                   uint32_t nMip, uint64_t nRevision,
-                                   uint64_t nRegionKey, bool bSharedTransferAdmitted );
-    uint32_t serviceComposedGpuCompletionsHot( Terrain3DRdContext &rContext );
-    bool retireComposedPageHot( Terrain3DRdContext &rContext,
-                                const t3dComposedSurfaceJob_t &rJob,
-                                uint64_t nLastRasterSubmissionEpoch );
+    // A composed region, when present in the V1 package, uses the same
+    // residency, typed BC banks, page table, transfer budget and eviction.
+    // Only cold/startup callers may query a package stable key.
+    bool findComposedRegionAllocationCold( uint32_t nRegionMapIndex, uint32_t &rAllocation ) const;
 	Terrain3DVirtualTexture &virtualTexture() {
 		return m_VirtualTexture;
 	}
@@ -101,8 +72,6 @@ private:
 	bool					   refresh_shared_vt_bindings_hot();
 	void					   invalidateBoundDescriptorsCold( Terrain3DRdContext &rContext );
 	Terrain3DVTResourceImage   m_Resources;
-    Terrain3DComposedSurfaceGpu m_ComposedGpu;
-    Terrain3DComposedSurfaceCache m_ComposedCache;
 	t3dSharedVTBindings_t	   m_SharedVTBindings = {};
 	uint64_t				   m_nPublishedDeviceGeneration = 0u;
 	t3dWorldLimits_t		   m_Limits = {};
@@ -113,9 +82,6 @@ private:
 	t3dVTSharedResourceClass_t m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 	bool					   m_bSharedResourcesInitialized = false;
 	bool					   m_bResourceReplacementInProgress = false;
-    t3dComposedSurfaceCutoverProof_t m_composedCutoverProof{};
-    bool m_bComposedCutoverProofCurrent = false;
-    bool m_bComposedSurfaceReady = false;
 };
 
 #endif // TERRAIN3D_SHARED_VT_RUNTIME_H

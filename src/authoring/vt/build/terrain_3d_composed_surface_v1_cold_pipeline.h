@@ -1,9 +1,9 @@
 // CS13: cold, bounded source-pack-to-composed-sidecar pipeline.
 // This is an editor/cook entrypoint, never called from a render-thread frame.
-#ifndef TERRAIN3D_COMPOSED_SURFACE_V3_COLD_PIPELINE_H
-#define TERRAIN3D_COMPOSED_SURFACE_V3_COLD_PIPELINE_H
+#ifndef TERRAIN3D_COMPOSED_SURFACE_V1_COLD_PIPELINE_H
+#define TERRAIN3D_COMPOSED_SURFACE_V1_COLD_PIPELINE_H
 
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_pack_sampler.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_pack_sampler.h"
 
 // Called before opening source bytes, after composition, and before commit.
 // The editor owner must serialize final publication with edits; this predicate
@@ -24,18 +24,18 @@ enum t3dCs13Status_t
 
 struct t3dCs13ColdCookRequest_t
 {
-    // The complete, mapped .t3sp file must outlive this call. No V3 ABI edits.
+    // The complete, mapped .t3sp file must outlive this call. No V1 ABI edits.
     const void *m_pSourcePackage;
     uint64_t m_nSourcePackageBytes;
     const t3dComposedSurfaceCookPage_t *m_pPages;
     uint32_t m_nPageCount;
     // Authored layers are indexed by logical terrain material ID (0..count-1).
-    // Allocation IDs in these records are ignored and resolved from V3 keys.
-    const t3dComposedStaticV3Layer_t *m_pAuthoredLayers;
+    // Allocation IDs in these records are ignored and resolved from V1 keys.
+    const t3dComposedStaticV1Layer_t *m_pAuthoredLayers;
     uint32_t m_nLayerCount;
-    t3dComposedStaticV3Layer_t *m_pResolvedLayers;
+    t3dComposedStaticV1Layer_t *m_pResolvedLayers;
     uint32_t m_nResolvedLayerCapacity;
-    t3dComposedStaticV3Source_t m_source;
+    t3dComposedStaticV1Source_t m_source;
     t3dComposedSurfaceEncodeFn m_pEncode;
     void *m_pEncoderUser;
     t3dCs12DecodeFn m_pDecode;

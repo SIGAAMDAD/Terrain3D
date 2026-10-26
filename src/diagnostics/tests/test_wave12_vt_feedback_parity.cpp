@@ -122,9 +122,9 @@ int main() {
 		currentV2.m_nFrame = 5000u + iteration;
 		currentV2.m_nWordCount = count;
 		assert( ring.capture( currentV2, ( const uint8_t * ) wordSet ) );
-		t3dVTFeedbackGridHeader_t currentV3 = v3Header;
-		currentV3.m_nFrame = currentV2.m_nFrame;
-		assert( ring.compare( currentV3, 32u, reducer, result ) );
+		t3dVTFeedbackGridHeader_t currentV1 = v3Header;
+		currentV1.m_nFrame = currentV2.m_nFrame;
+		assert( ring.compare( currentV1, 32u, reducer, result ) );
 		assert( result.m_nObserved == expectedObserved && result.m_nCovered == expectedCovered );
 		assert( result.m_nMissing == expectedObserved - expectedCovered );
 	}

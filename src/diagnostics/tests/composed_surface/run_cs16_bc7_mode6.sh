@@ -7,7 +7,7 @@ trap 'rm -f "$output"' EXIT HUP INT TERM
 clang++ -std=c++17 -O1 -g -Wall -Wextra -Werror -fno-omit-frame-pointer \
   -fsanitize=address,undefined -I "$tests/cs15_stubs" -I "$root/src" \
   "$tests/test_cs16_bc7_mode6.cpp" \
-  "$root/src/authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.cpp" \
+  "$root/src/authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.cpp" \
   -o "$output"
 "$output"
 python3 "$tests/test_cs15_activation_contract.py"

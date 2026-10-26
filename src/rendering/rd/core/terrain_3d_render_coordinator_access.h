@@ -15,6 +15,15 @@ public:
 	virtual void consumeFragmentFeedbackOnRenderThread(
 		const godot::PackedByteArray & ) {
 	}
+#if defined( T3D_EDITOR_NATIVE )
+	virtual void initializeEditorBrushOnRenderThread( uint64_t ) {}
+	virtual void sealEditorBrushOnRenderThread( uint64_t ) {}
+    virtual void uploadEditorBrushTileOnRenderThread( uint64_t, uint32_t, const godot::PackedByteArray & ) {}
+    virtual void executeEditorBrushCommandOnRenderThread( uint64_t, uint32_t ) {}
+	virtual void discardEditorBrushOnRenderThread( uint64_t ) {}
+	virtual void consumeEditorBrushReadbackOnRenderThread( const godot::PackedByteArray &,
+                                                             uint64_t, uint32_t, uint64_t ) {}
+#endif
 	virtual void render( godot::RenderData *pRenderData ) = 0;
 	virtual void shutdownRendererOnRenderThread( void ) = 0;
 	virtual void shutdownRendererLifecycleOnRenderThread( uint32_t nGeneration ) = 0;

@@ -22,12 +22,12 @@ static_assert( sizeof( t3dVTRuntimeRequest_t ) == 8, "t3dVTRuntimeRequest_t ABI 
 
 #include <stdint.h>
 
-// Sparse V3 residency uses the runtime-normalized allocation/page tables;
+// Sparse V1 residency uses the runtime-normalized allocation/page tables;
 // physical storage remains format-family based and shared across logical channels.
 // T3TV
 
 // Runtime source metadata for the authored compact mip chain stored in a sparse
-// V3 tail payload. The chain remains in its cooked horizontal layout.
+// V1 tail payload. The chain remains in its cooked horizontal layout.
 
 void	 t3d_vt_default_residency_policy( t3dVTResidencyPolicy_t &rPolicy );
 bool	 t3d_vt_validate_residency_policy( const t3dVTResidencyPolicy_t &pPolicy );

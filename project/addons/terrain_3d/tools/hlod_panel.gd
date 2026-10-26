@@ -3,9 +3,14 @@
 class_name Terrain3DHLODPanel
 extends Window
 
+const AuthoringDependencies = preload("res://addons/terrain_3d/tools/authoring_dependencies.gd")
+
 var plugin: Terrain3DEditorPluginBase
 var baker: Terrain3DHLODBaker
 var terrain: Terrain3D
+var _connected_data: Terrain3DData
+var _dirty_regions: Dictionary[Vector2i, bool] = {}
+var _topology_dirty: bool = false
 
 var _summary: Label
 var _runtime_status: Label
@@ -240,10 +245,13 @@ func _bake(dirty_only: bool) -> void:
 		_summary.text = "HLOD bake failed: %s" % String(result.get("error", "unknown error"))
 		_append_messages(result)
 		return
-	_summary.text = "HLOD bake complete: %d sources, %d clusters, %d built, %d reused.\nManifest: %s" % [
+	_summary.text = "HLOD unchanged: no packages or manifest republished." if bool(result.get("unchanged", false)) else \
+		"HLOD bake complete: %d sources, %d clusters, %d built, %d reused.\nManifest: %s" % [
 		int(result.get("sources", 0)), int(result.get("clusters", 0)), int(result.get("built", 0)),
 		int(result.get("reused", 0)), String(result.get("manifest_path", ""))]
 	_append_messages(result)
+	_dirty_regions.clear()
+	_topology_dirty = false
 	_refresh_runtime()
 
 
@@ -282,6 +290,12 @@ func _refresh_runtime() -> void:
 		int(stats.get("entries", 0)), int(stats.get("active", 0)), int(stats.get("desired", 0)),
 		int(stats.get("retiring", 0)), int(stats.get("failed", 0)), int(stats.get("managed_regions", 0)),
 		int(stats.get("detail_required_regions", 0)), mib, int(stats.get("memory_budget_mb", 0))]
+	if not _dirty_regions.is_empty() or _topology_dirty:
+		var locations: Array[Vector2i] = []
+		locations.assign(_dirty_regions.keys())
+		var clusters: Dictionary[String, bool] = AuthoringDependencies.hlod_keys(locations, terrain.hlod_max_level)
+		_runtime_status.text += "\nAuthoring candidates: %d regions, %d HLOD ancestor clusters%s; Bake Dirty checks actual signatures." % [
+			locations.size(), clusters.size(), " + topology" if _topology_dirty else ""]
 	var entries: Array = terrain.get_hlod_debug_entries()
 	for value: Variant in entries:
 		if not value is Dictionary:
@@ -341,6 +355,43 @@ func _sync_controls_from_terrain() -> void:
 func _sync_active_terrain() -> void:
 	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
 		terrain = plugin.terrain
+	var data: Terrain3DData = terrain.data if is_instance_valid(terrain) else null
+	if data == _connected_data:
+		return
+	_disconnect_authoring_events()
+	_dirty_regions.clear()
+	_topology_dirty = false
+	_connected_data = data
+	if is_instance_valid(_connected_data):
+		_connected_data.maps_edit_committed.connect(_on_map_edit_committed)
+		_connected_data.region_map_changed.connect(_on_region_map_changed)
+
+
+func _disconnect_authoring_events() -> void:
+	if not is_instance_valid(_connected_data):
+		return
+	if _connected_data.maps_edit_committed.is_connected(_on_map_edit_committed):
+		_connected_data.maps_edit_committed.disconnect(_on_map_edit_committed)
+	if _connected_data.region_map_changed.is_connected(_on_region_map_changed):
+		_connected_data.region_map_changed.disconnect(_on_region_map_changed)
+	_connected_data = null
+
+
+func _on_map_edit_committed(map_type: int, changed_regions: Array[Vector2i], area: AABB) -> void:
+	var products: int = AuthoringDependencies.products_for_sources(AuthoringDependencies.source_for_map_type(map_type))
+	if (products & AuthoringDependencies.HLOD) == 0:
+		return
+	for location: Vector2i in AuthoringDependencies.regions_for_committed_edit(terrain, changed_regions, area):
+		_dirty_regions[location] = true
+
+
+func _on_region_map_changed() -> void:
+	_topology_dirty = true
+	AuthoringDependencies.reconcile_regions(terrain, _dirty_regions)
+
+
+func _exit_tree() -> void:
+	_disconnect_authoring_events()
 
 
 func _ready_for_authoring() -> bool:

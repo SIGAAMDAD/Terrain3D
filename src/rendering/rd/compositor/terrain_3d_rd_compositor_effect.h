@@ -26,6 +26,15 @@ public:
 	void setCoordinator( Terrain3DRenderCoordinatorAccess *pCoordinator );
 	void shutdownRendererOnRenderThread( void );
 	void shutdownRendererLifecycleOnRenderThread( int64_t nShutdownGeneration );
+#if defined( T3D_EDITOR_NATIVE )
+	void initializeEditorBrushOnRenderThread( int64_t nStrokeId );
+	void sealEditorBrushOnRenderThread( int64_t nStrokeId );
+    void uploadEditorBrushTileOnRenderThread( int64_t nStrokeId, int64_t nTile, const godot::PackedByteArray &rSource );
+    void executeEditorBrushCommandOnRenderThread( int64_t nStrokeId, int64_t nCommand );
+	void discardEditorBrushOnRenderThread( int64_t nStrokeId );
+	void consumeEditorBrushReadbackOnRenderThread( const godot::PackedByteArray &rBytes,
+													int64_t nStrokeId, int64_t nOwnerGeneration, int64_t nDeviceGeneration );
+#endif
 	void renderPreviewOnRenderThread( void );
 	void renderPreviewAsyncOnRenderThread( void );
 	void servicePreviewVtRepublishOnRenderThread( void );

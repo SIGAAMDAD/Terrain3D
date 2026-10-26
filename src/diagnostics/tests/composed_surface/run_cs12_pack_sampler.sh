@@ -6,6 +6,6 @@ stubs="$test_dir/cs12_stubs"
 clang++ -std=c++17 -Wall -Wextra -Werror -O1 -g -fno-omit-frame-pointer \
   -fsanitize=address,undefined -I "$stubs" -I "$root/src" \
   "$test_dir/test_cs12_pack_sampler.cpp" \
-  "$root/src/authoring/vt/build/terrain_3d_composed_surface_v3_pack_sampler.cpp" \
+  "$root/src/authoring/vt/build/terrain_3d_composed_surface_v1_pack_sampler.cpp" \
   -o /tmp/t3d_cs12_pack_sampler_test
 /tmp/t3d_cs12_pack_sampler_test

@@ -94,7 +94,7 @@ func _refresh() -> void:
 		streaming.int_value("unloaded"), streaming.int_value("predicted_promotions"),
 		str(streaming.vector2i_value("center")), str(streaming.vector2i_value("predicted_center")),
 	])
-	lines.append("GPU %d/%d | missing %d | uploaded %d tick / %d since reset (%s) | prepared %d + pending %d%s" % [
+	lines.append("GPU region pages %d/%d | missing %d | uploaded %d tick / %d since reset (%s) | prepared %d + pending %d%s" % [
 		gpu.int_value("resident"), gpu.int_value("capacity"), gpu.int_value("missing_required_last_tick"),
 		gpu.int_value("uploads_last_tick"), gpu.int_value("uploads_since_reset"),
 		_format_bytes(gpu.float_value("upload_bytes_last_tick")),

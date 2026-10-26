@@ -23,59 +23,59 @@ static bool t3d_vt_pack_add_bytes(
 	return true;
 }
 
-uint64_t t3d_vt_pack_compute_metadata_bytes_v3(
-	const t3dVTPackSourceV3_t &rSource ) {
-	uint64_t nOffset = T3D_VT_PACK_V3_HEADER_BYTES;
+uint64_t t3d_vt_pack_compute_metadata_bytes_v1(
+	const t3dVTPackSourceV1_t &rSource ) {
+	uint64_t nOffset = T3D_VT_PACK_V1_HEADER_BYTES;
 	if ( !t3d_vt_pack_add_bytes( nOffset,
-								 ( uint64_t ) rSource.m_nAllocationCount * sizeof( t3dVTPackAllocationRecordV3_t ) ) ||
+								 ( uint64_t ) rSource.m_nAllocationCount * sizeof( t3dVTPackAllocationRecordV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
 								 ( uint64_t ) rSource.m_nAllocationCount *
-									 sizeof( t3dVTPackAllocationKeyRecordV3_t ) ) ||
+									 sizeof( t3dVTPackAllocationKeyRecordV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
 								 ( uint64_t ) rSource.m_nChannelAllocationCount *
 									 sizeof( t3dVTChannelAllocation_t ) ) ||
-		 !t3d_vt_pack_add_bytes( nOffset, ( uint64_t ) rSource.m_nPageCount * sizeof( t3dVTPackPageRecordV3_t ) ) ||
+		 !t3d_vt_pack_add_bytes( nOffset, ( uint64_t ) rSource.m_nPageCount * sizeof( t3dVTPackPageRecordV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
-								 ( uint64_t ) rSource.m_nPayloadCount * sizeof( t3dVTPackPayloadRecordV3_t ) ) ||
+								 ( uint64_t ) rSource.m_nPayloadCount * sizeof( t3dVTPackPayloadRecordV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
-								 ( uint64_t ) rSource.m_nClusterCount * sizeof( t3dVTPackClusterRecordV3_t ) ) ||
-		 !t3d_vt_pack_add_bytes( nOffset, ( uint64_t ) rSource.m_nTailCount * sizeof( t3dVTPackTailRecordV3_t ) ) ||
+								 ( uint64_t ) rSource.m_nClusterCount * sizeof( t3dVTPackClusterRecordV1_t ) ) ||
+		 !t3d_vt_pack_add_bytes( nOffset, ( uint64_t ) rSource.m_nTailCount * sizeof( t3dVTPackTailRecordV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
-								 ( uint64_t ) rSource.m_nQualityViewCount * sizeof( t3dVTPackQualityViewV3_t ) ) ||
+								 ( uint64_t ) rSource.m_nQualityViewCount * sizeof( t3dVTPackQualityViewV1_t ) ) ||
 		 !t3d_vt_pack_add_bytes( nOffset,
 								 ( uint64_t ) rSource.m_nFormatFamilyCount *
-									 sizeof( t3dVTPackFormatFamilyRecordV3_t ) ) ) {
+									 sizeof( t3dVTPackFormatFamilyRecordV1_t ) ) ) {
 		return 0u;
 	}
 	return nOffset;
 }
 
-uint64_t t3d_vt_pack_compute_bytes_v3(
-	const t3dVTPackSourceV3_t &rSource ) {
-	if ( !t3d_vt_pack_validate_source_v3( rSource ) ) {
+uint64_t t3d_vt_pack_compute_bytes_v1(
+	const t3dVTPackSourceV1_t &rSource ) {
+	if ( !t3d_vt_pack_validate_source_v1( rSource ) ) {
 		return 0u;
 	}
-	const uint64_t nOffset = t3d_vt_pack_compute_metadata_bytes_v3( rSource );
+	const uint64_t nOffset = t3d_vt_pack_compute_metadata_bytes_v1( rSource );
 	if ( nOffset == 0u || nOffset > UINT64_MAX - rSource.m_nPayloadDataBytes ) {
 		return 0u;
 	}
 	return nOffset + rSource.m_nPayloadDataBytes;
 }
 
-#define T3D_VT_WRITE_V3_DIRECTORY( header_field, source_ptr, count, type )                                             \
+#define T3D_VT_WRITE_V1_DIRECTORY( header_field, source_ptr, count, type )                                             \
 	pHeader->header_field = nOffset;                                                                                   \
 	if ( ( count ) != 0u ) {                                                                                           \
 		memcpy( pOut + nOffset, ( source_ptr ), ( size_t ) ( count ) * sizeof( type ) );                               \
 	}                                                                                                                  \
 	nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) ( count ) * sizeof( type ), T3D_VT_PACK_ALIGNMENT )
 
-bool t3d_vt_pack_write_v3(
-	const t3dVTPackSourceV3_t &rSource,
+bool t3d_vt_pack_write_v1(
+	const t3dVTPackSourceV1_t &rSource,
 	void					  *pDestination,
 	const uint64_t			   nDestinationBytes,
 	uint64_t				  &rWrittenBytes ) {
 	rWrittenBytes = 0u;
-	const uint64_t nPackageBytes = t3d_vt_pack_compute_bytes_v3( rSource );
+	const uint64_t nPackageBytes = t3d_vt_pack_compute_bytes_v1( rSource );
 	if ( nPackageBytes == 0u || pDestination == NULL || nDestinationBytes < nPackageBytes ) {
 		return false;
 	}
@@ -83,11 +83,11 @@ bool t3d_vt_pack_write_v3(
 	// Payload bytes may already occupy their final destination. Initialize all
 	// directory padding, then copy external payloads or retain that exact alias.
 	memset( pOut, 0, ( size_t ) ( nPackageBytes - rSource.m_nPayloadDataBytes ) );
-	t3dVTPackHeaderV3_t		   Header{};
-	t3dVTPackHeaderV3_t *const pHeader = &Header;
+	t3dVTPackHeaderV1_t		   Header{};
+	t3dVTPackHeaderV1_t *const pHeader = &Header;
 	pHeader->m_nMagic = T3D_VT_FILE_MAGIC;
-	pHeader->m_nVersion = T3D_VT_FILE_VERSION_V3;
-	pHeader->m_nHeaderBytes = T3D_VT_PACK_V3_HEADER_BYTES;
+	pHeader->m_nVersion = T3D_VT_FILE_VERSION_V1;
+	pHeader->m_nHeaderBytes = T3D_VT_PACK_V1_HEADER_BYTES;
 	pHeader->m_nFlags = T3D_VT_PACK_FLAG_CLUSTERED_PAYLOADS | T3D_VT_PACK_FLAG_TAILS_PRESENT |
 						T3D_VT_PACK_FLAG_GPU_READY | T3D_VT_PACK_FLAG_QUALITY_VIEWS |
 						T3D_VT_PACK_FLAG_FORMAT_FAMILY_MAP;
@@ -104,7 +104,7 @@ bool t3d_vt_pack_write_v3(
 	pHeader->m_nPackageGeneration = rSource.m_nPackageGeneration;
 	pHeader->m_nQualityViewCount = rSource.m_nQualityViewCount;
 	pHeader->m_nFormatFamilyCount = rSource.m_nFormatFamilyCount;
-	pHeader->m_nFullySupportedProfileMask = t3d_vt_pack_fully_supported_profile_mask_v3( rSource );
+	pHeader->m_nFullySupportedProfileMask = t3d_vt_pack_fully_supported_profile_mask_v1( rSource );
 	pHeader->m_nPackageBytes = nPackageBytes;
 	for ( uint32_t iPage = 0u; iPage < rSource.m_nPageCount; ++iPage ) {
 		++pHeader->m_nChannelPageCount[rSource.m_pPages[iPage].m_nChannel];
@@ -119,45 +119,45 @@ bool t3d_vt_pack_write_v3(
 		}
 	}
 
-	uint64_t nOffset = T3D_VT_PACK_V3_HEADER_BYTES;
-	T3D_VT_WRITE_V3_DIRECTORY( m_nAllocationOffset,
+	uint64_t nOffset = T3D_VT_PACK_V1_HEADER_BYTES;
+	T3D_VT_WRITE_V1_DIRECTORY( m_nAllocationOffset,
 							   rSource.m_pAllocations,
 							   rSource.m_nAllocationCount,
-							   t3dVTPackAllocationRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nAllocationKeyOffset,
+							   t3dVTPackAllocationRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nAllocationKeyOffset,
 							   rSource.m_pAllocationKeys,
 							   rSource.m_nAllocationCount,
-							   t3dVTPackAllocationKeyRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nChannelAllocationOffset,
+							   t3dVTPackAllocationKeyRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nChannelAllocationOffset,
 							   rSource.m_pChannelAllocations,
 							   rSource.m_nChannelAllocationCount,
 							   t3dVTChannelAllocation_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nPageOffset, rSource.m_pPages, rSource.m_nPageCount, t3dVTPackPageRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nPayloadDirectoryOffset,
+	T3D_VT_WRITE_V1_DIRECTORY( m_nPageOffset, rSource.m_pPages, rSource.m_nPageCount, t3dVTPackPageRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nPayloadDirectoryOffset,
 							   rSource.m_pPayloads,
 							   rSource.m_nPayloadCount,
-							   t3dVTPackPayloadRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nClusterDirectoryOffset,
+							   t3dVTPackPayloadRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nClusterDirectoryOffset,
 							   rSource.m_pClusters,
 							   rSource.m_nClusterCount,
-							   t3dVTPackClusterRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nTailMetadataOffset, rSource.m_pTails, rSource.m_nTailCount, t3dVTPackTailRecordV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nQualityViewOffset,
+							   t3dVTPackClusterRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nTailMetadataOffset, rSource.m_pTails, rSource.m_nTailCount, t3dVTPackTailRecordV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nQualityViewOffset,
 							   rSource.m_pQualityViews,
 							   rSource.m_nQualityViewCount,
-							   t3dVTPackQualityViewV3_t );
-	T3D_VT_WRITE_V3_DIRECTORY( m_nFormatFamilyOffset,
+							   t3dVTPackQualityViewV1_t );
+	T3D_VT_WRITE_V1_DIRECTORY( m_nFormatFamilyOffset,
 							   rSource.m_pFormatFamilies,
 							   rSource.m_nFormatFamilyCount,
-							   t3dVTPackFormatFamilyRecordV3_t );
-#undef T3D_VT_WRITE_V3_DIRECTORY
+							   t3dVTPackFormatFamilyRecordV1_t );
+#undef T3D_VT_WRITE_V1_DIRECTORY
 	pHeader->m_nPayloadDataOffset = nOffset;
 	pHeader->m_nPayloadDataBytes = rSource.m_nPayloadDataBytes;
 	if ( rSource.m_pPayloadData != pOut + nOffset ) {
 		memcpy( pOut + nOffset, rSource.m_pPayloadData, ( size_t ) rSource.m_nPayloadDataBytes );
 	}
 	pHeader->m_nContentSignature =
-		t3d_vt_pack_hash64( pOut + T3D_VT_PACK_V3_HEADER_BYTES, nPackageBytes - T3D_VT_PACK_V3_HEADER_BYTES );
+		t3d_vt_pack_hash64( pOut + T3D_VT_PACK_V1_HEADER_BYTES, nPackageBytes - T3D_VT_PACK_V1_HEADER_BYTES );
 	pHeader->m_nHeaderChecksum = 0u;
 	pHeader->m_nHeaderChecksum = t3d_vt_pack_checksum32( pHeader, sizeof( *pHeader ) );
 	memcpy( pOut, pHeader, sizeof( Header ) );

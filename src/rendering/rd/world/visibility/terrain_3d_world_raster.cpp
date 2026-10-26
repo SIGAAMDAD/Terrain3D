@@ -260,7 +260,7 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 	RID					   &hSet0 = m_hSet0[primitive][nDescriptorSlot];
 	RID					   &hSet1 = m_hSet1[primitive][nDescriptorSlot];
 	const t3dSetSignature_t set0_key{ rShader, world_generation, rTerrain.m_nGeneration };
-	// Layout identity includes composed pool replacement even when source V3 is unchanged.
+	// Layout identity includes composed pool replacement even when source V1 is unchanged.
 	const uint64_t composed_dependency = pComposed ?
 		( uint64_t ) pComposed->m_hPageTable.get_id() ^
 		( ( uint64_t ) pComposed->m_hChannels[0].get_id() << 1u ) ^
@@ -333,10 +333,6 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 		set0.push_back( Terrain3DRdBindingBuilder::samplerTexture( 17,
 																   rTerrain.m_hTerrainSampler,
 																   rTerrain.m_hMiddleHeightRegionMapTexture ) );
-		set0.push_back(
-			Terrain3DRdBindingBuilder::samplerTexture( 18, rTerrain.m_hTerrainSampler, rTerrain.m_hFarHeightTexture ) );
-		set0.push_back(
-			Terrain3DRdBindingBuilder::samplerTexture( 19, rTerrain.m_hTerrainSampler, rTerrain.m_hFarColorTexture ) );
 		set0.push_back( Terrain3DRdBindingBuilder::samplerTexture( 20,
 																   rTerrain.m_hMaterialSampler,
 																   rTerrain.m_hFarAlbedoTexture ) );
@@ -384,7 +380,9 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 		return false;
 	}
 
-	if ( rVT.nBankCount[0] != 1u || rVT.nBankCount[1] != 1u || rVT.nBankCount[2] != 1u || rVT.nBankCount[3] != 1u ) {
+	if ( rVT.nBankCount[0] != 1u || rVT.nBankCount[1] != 1u || rVT.nBankCount[2] != 1u ||
+         rVT.nBankCount[3] != 1u || rVT.nBankCount[T3D_VT_CHANNEL_HEIGHT16] != 1u ||
+         !rVT.hPhysical[T3D_VT_CHANNEL_HEIGHT16][0].is_valid() || !rVT.hTail[T3D_VT_CHANNEL_HEIGHT16].is_valid() ) {
 		return false;
 	}
 	TypedArray< Ref< RDUniform > > set1;
@@ -402,6 +400,9 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 																   rTerrain.m_hMaterialSampler,
 																   rVT.hPhysical[channel][0] ) );
 	}
+	set1.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+		T3D_RD_WORLD_VT_HEIGHT16_BINDING, rTerrain.m_hMaterialSampler,
+		rVT.hPhysical[T3D_VT_CHANNEL_HEIGHT16][0] ) );
 	set1.push_back(
 		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_TAIL_METADATA_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hTailMetadata ) );
 	for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
@@ -409,6 +410,9 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 																   rTerrain.m_hMapSampler,
 																   rVT.hTail[channel] ) );
 	}
+	set1.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+		T3D_RD_WORLD_VT_HEIGHT16_TAIL_BINDING, rTerrain.m_hMapSampler,
+		rVT.hTail[T3D_VT_CHANNEL_HEIGHT16] ) );
 	set1.push_back(
 		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_MIP_LAYOUT_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hMipLayoutTable ) );
 // BR20: this consumer keeps its original descriptor ABI until a hint-specific shader version is selected.

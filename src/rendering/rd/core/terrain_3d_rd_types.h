@@ -103,8 +103,6 @@ typedef struct t3dRdTerrainBindings_s
 	RID m_hTerrainShadowMaskTextureRd;
 	RID m_hMiddleHeightTextureRd;
 	RID m_hMiddleHeightRegionMapTextureRd;
-	RID m_hFarHeightTextureRd;
-	RID m_hFarColorTextureRd;
 	RID m_hAlbedoTextureRd;
 	RID m_hFarAlbedoTextureRd;
 	RID m_hNormalTextureRd;

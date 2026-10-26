@@ -36,12 +36,12 @@ int main()
 {
     Fixture f{};
     f.setup();
-    t3dComposedStaticV3Layer_t layer{};
+    t3dComposedStaticV1Layer_t layer{};
     layer.m_nAllocation = UINT32_MAX;
     layer.m_fColor[0] = layer.m_fColor[1] = layer.m_fColor[2] = 1.0f;
     layer.m_fPbr0[0] = layer.m_fPbr0[1] = 1.0f;
     layer.m_fPbr1[0] = layer.m_fPbr1[1] = 1.0f;
-    t3dComposedStaticV3Layer_t resolved{};
+    t3dComposedStaticV1Layer_t resolved{};
     t3dComposedSurfaceCookPage_t page_spec{ 77u, 991u, 0u, 0u, 0u, 1u };
     uint64_t bytes = 0u;
     assert( t3d_cs_cook_total_bytes( 1u, bytes ) );
@@ -66,7 +66,7 @@ int main()
     cook.m_source.m_pUser = &f;
     cook.m_source.m_pResolvePage = page;
     cook.m_source.m_pReadControl = control;
-    cook.m_source.m_nSamplingMode = T3D_CS_STATIC_V3_SAMPLE_NEAREST;
+    cook.m_source.m_nSamplingMode = T3D_CS_STATIC_V1_SAMPLE_NEAREST;
     cook.m_source.m_nVtFiltering = 3u;
     cook.m_source.m_fBlendSharpness = 0.5f;
     cook.m_source.m_bCanonicalMaterialParityAccepted = true; // test fixture only

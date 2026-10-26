@@ -6,7 +6,7 @@
 namespace {
 struct Candidate
 {
-    t3dVTDemandV3Record_t record;
+    t3dVTDemandV1Record_t record;
     uint64_t score = 0u;
 };
 static int32_t group4( const int32_t x ) {
@@ -29,11 +29,11 @@ static uint32_t saturate32( const uint64_t x ) {
 bool Terrain3DVTVisibilityAggregator::reduce(
     const t3dVTVisibilityProbeResult_t *const probes, const uint32_t probeCount,
     const uint64_t *const keys, const uint32_t materialCount, const uint32_t perCellLimit,
-    const bool forcePartial, std::vector< t3dVTDemandV3Cell_t > &outCells,
-    std::vector< t3dVTDemandV3Record_t > &outRecords,
+    const bool forcePartial, std::vector< t3dVTDemandV1Cell_t > &outCells,
+    std::vector< t3dVTDemandV1Record_t > &outRecords,
     t3dVTVisibilityAggregateStats_t &outStats ) {
     t3dVTVisibilityAggregateStats_t stats{};
-    if ( !probes || !keys || !probeCount || probeCount > T3D_VT_DEMAND_V3_MAX_CELLS * 5u ||
+    if ( !probes || !keys || !probeCount || probeCount > T3D_VT_DEMAND_V1_MAX_CELLS * 5u ||
          !materialCount || materialCount > T3D_VT_VISIBILITY_MAX_MATERIALS ||
          !perCellLimit || perCellLimit > 1024u ) return false;
     for ( uint32_t k = 0u; k < materialCount; ++k )
@@ -50,8 +50,8 @@ bool Terrain3DVTVisibilityAggregator::reduce(
     std::sort( order.begin(), order.end(), [&]( const uint32_t a, const uint32_t b ) {
         return cellBefore( probes[a], probes[b] );
     } );
-    std::vector< t3dVTDemandV3Cell_t > cells;
-    std::vector< t3dVTDemandV3Record_t > records;
+    std::vector< t3dVTDemandV1Cell_t > cells;
+    std::vector< t3dVTDemandV1Record_t > records;
     std::vector< uint32_t > maximum( countPerProbe, 0u );
     std::vector< Candidate > candidates;
     candidates.reserve( ( size_t ) materialCount * 8u );
@@ -60,7 +60,7 @@ bool Terrain3DVTVisibilityAggregator::reduce(
         const auto &first = probes[order[begin]];
         while ( end < order.size() && probes[order[end]].m_nCellX == first.m_nCellX &&
                 probes[order[end]].m_nCellZ == first.m_nCellZ ) ++end;
-        if ( cells.size() >= T3D_VT_DEMAND_V3_MAX_CELLS ) return false;
+        if ( cells.size() >= T3D_VT_DEMAND_V1_MAX_CELLS ) return false;
         std::fill( maximum.begin(), maximum.end(), 0u );
         bool partial = forcePartial;
         for ( size_t i = begin; i < end; ++i ) {
@@ -123,7 +123,7 @@ bool Terrain3DVTVisibilityAggregator::reduce(
                 stats.m_nDroppedRecords += ( uint32_t ) candidates.size() - keep;
                 partial = true;
             }
-            t3dVTDemandV3Cell_t cell;
+            t3dVTDemandV1Cell_t cell;
             cell.m_nX = first.m_nCellX;
             cell.m_nZ = first.m_nCellZ;
             cell.m_nFirstRecord = ( uint32_t ) records.size();
@@ -131,7 +131,7 @@ bool Terrain3DVTVisibilityAggregator::reduce(
             cell.m_nFlags = partial ? 1u : 0u;
             if ( partial ) ++stats.m_nPartialCells;
             for ( uint32_t k = 0u; k < keep; ++k ) {
-                t3dVTDemandV3Record_t r = candidates[k].record;
+                t3dVTDemandV1Record_t r = candidates[k].record;
                 if ( partial ) r.m_nFlags |= T3D_VT_VISIBILITY_PARTIAL;
                 for ( uint32_t mip = 0u; mip < 16u; ++mip )
                     stats.m_szMipSamples[mip] += maximum[( ( size_t ) (
@@ -141,7 +141,7 @@ bool Terrain3DVTVisibilityAggregator::reduce(
                 records.push_back( r );
             }
             std::sort( records.begin() + cell.m_nFirstRecord, records.end(),
-                []( const t3dVTDemandV3Record_t &a, const t3dVTDemandV3Record_t &b ) {
+                []( const t3dVTDemandV1Record_t &a, const t3dVTDemandV1Record_t &b ) {
                     if ( a.m_nStableMaterialKey != b.m_nStableMaterialKey )
                         return a.m_nStableMaterialKey < b.m_nStableMaterialKey;
                     return a.m_nViewBin < b.m_nViewBin;
@@ -151,7 +151,7 @@ bool Terrain3DVTVisibilityAggregator::reduce(
         stats.m_nProbes += ( uint32_t ) ( end - begin );
         begin = end;
     }
-    if ( records.empty() || records.size() > T3D_VT_DEMAND_V3_MAX_RECORDS ) return false;
+    if ( records.empty() || records.size() > T3D_VT_DEMAND_V1_MAX_RECORDS ) return false;
     stats.m_nCells = ( uint32_t ) cells.size();
     stats.m_nRecords = ( uint32_t ) records.size();
     outCells.swap( cells );

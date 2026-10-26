@@ -86,6 +86,13 @@ func _init() -> void:
 		_use_meta = true
 
 
+# Poll on the editor owner thread; RD completion callbacks never touch scene
+# objects or map Images. The native method is a cheap no-op without GPU work.
+func _process(_delta: float) -> void:
+	if _native_editor_initialized and is_instance_valid(editor):
+		editor.poll_editor_brush_commit()
+
+
 func _enter_tree() -> void:
 	if debug:
 		print("Terrain3DEditorPlugin: _enter_tree")
@@ -654,7 +661,7 @@ func _make_visible(p_visible: bool) -> void:
 		return
 	if not p_visible:
 		if is_instance_valid(editor) and editor.is_operating():
-			editor.stop_operation()
+			editor.cancel_operation()
 		ui.cancel_landform_stroke()
 		ui.clear_picking()
 	if p_visible and (is_selected() or is_terrain_valid()):
@@ -683,7 +690,7 @@ func _detach_current_terrain() -> void:
 		ui.clear_picking()
 	if is_instance_valid(editor):
 		if editor.is_operating():
-			editor.stop_operation()
+			editor.cancel_operation()
 		editor.set_tool(int(Terrain3DEditor.TOOL_MAX))
 		editor.set_operation(int(Terrain3DEditor.OP_MAX))
 		editor.set_terrain(null)

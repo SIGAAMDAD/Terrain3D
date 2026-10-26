@@ -236,6 +236,20 @@ func bake(terrain: Terrain3D, dirty_only: bool = true) -> Dictionary:
 		})
 	manifest.entries = entries
 	_populate_source_policy(manifest, sources)
+	# Source signatures include changed instancer transforms and material inputs.
+	# If no branch changed, preserve the exact published manifest bytes/time.
+	# Compare policy as well: region creation, deletion and source removal can
+	# invalidate its detail-suppression table without rebuilding a package.
+	if dirty_only and built == 0 and _same_published_manifest(existing, manifest):
+		if terrain.hlod_manifest_path != manifest_path:
+			terrain.hlod_manifest_path = manifest_path
+			terrain.reload_hlod_manifest()
+		return {
+			"ok": true, "unchanged": true, "manifest_path": manifest_path,
+			"sources": sources.size(), "clusters": all_clusters.size(),
+			"built": 0, "reused": reused,
+			"warnings": _warnings.duplicate(), "errors": _errors.duplicate(),
+		}
 	if not manifest.compile_runtime_blob():
 		return _failure("Unable to compile packed HLOD runtime hierarchy")
 	if not manifest.validate_runtime_blob():
@@ -633,6 +647,18 @@ func _append_part(tools: Dictionary[String, SurfaceTool], materials: Dictionary[
 		tool.append_from(mesh, surface, transform)
 	return true
 
+
+
+func _same_published_manifest(previous: Terrain3DHLODManifest, planned: Terrain3DHLODManifest) -> bool:
+	if not is_instance_valid(previous) or not previous.validate_runtime_blob():
+		return false
+	if previous.format != planned.format or previous.max_level != planned.max_level or \
+			previous.build_signature != planned.build_signature or previous.entries != planned.entries:
+		return false
+	return previous.instancer_min_levels == planned.instancer_min_levels and \
+		previous.node_region_indices == planned.node_region_indices and \
+		previous.node_spawn_ids == planned.node_spawn_ids and \
+		previous.node_min_levels == planned.node_min_levels
 
 
 func _populate_source_policy(manifest: Terrain3DHLODManifest, sources: Array[Source]) -> void:

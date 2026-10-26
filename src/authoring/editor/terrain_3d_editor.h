@@ -3,6 +3,9 @@
 #ifndef TERRAIN3D_EDITOR_CLASS_H
 #define TERRAIN3D_EDITOR_CLASS_H
 
+#if defined( T3D_EDITOR_NATIVE )
+#include "rendering/rd/core/terrain_3d_editor_brush_transaction.h"
+#endif
 #include "Terrain3DTypes.h"
 #include "data/model/terrain_3d_data.h"
 
@@ -32,7 +35,34 @@ typedef struct t3dRegionMapCache_s
 	bool				   m_bMapWasImplicit = false;
 	bool				   m_bDirectAccess = false;
 	bool				   m_bModified = false;
+	int32_t				   m_nUndoRegionIndex = -1;
 } t3dRegionMapCache_t;
+
+// Each ordinary brush stroke retains only its first-write source tiles. A tile
+// is 16x16 pixels; 128x128 authored maps therefore need one 64-bit tile mask.
+#define T3D_BRUSH_UNDO_TILE_SIZE ( 16u )
+#define T3D_BRUSH_UNDO_TILES_PER_AXIS ( T3D_REGION_SIZE / T3D_BRUSH_UNDO_TILE_SIZE )
+static_assert( T3D_REGION_SIZE % T3D_BRUSH_UNDO_TILE_SIZE == 0 &&
+				   T3D_BRUSH_UNDO_TILES_PER_AXIS * T3D_BRUSH_UNDO_TILES_PER_AXIS <= 64u,
+			   "Brush undo tile mask exceeds 64 bits" );
+
+typedef struct t3dBrushUndoTile_s
+{
+	uint8_t				 m_nTileIndex = 0u;
+	PackedByteArray		 m_before;
+} t3dBrushUndoTile_t;
+
+typedef struct t3dBrushUndoRegion_s
+{
+	Vector2i				m_location = s_v2iZero;
+	t3dMapType_t		 m_mapType = REGION_TYPE_MAX;
+	Image::Format		 m_format = Image::FORMAT_MAX;
+	Vector2				m_heightRange = s_v2Zero;
+	bool					m_bWasImplicit = false;
+	bool					m_bMipmaps = false;
+	uint64_t				m_nTouchedMask = 0u;
+	eastl::vector< t3dBrushUndoTile_t > m_tiles;
+} t3dBrushUndoRegion_t;
 
 // One undo application accumulates edits by map channel.
 typedef struct t3dEditorMapUpdates_s
@@ -66,6 +96,36 @@ private:
 	AABB						  m_modifiedArea;
 	Dictionary					  m_undoData; // See _get_undo_data for definition
 	uint64_t					  m_nLastPenTick = 0;
+	uint64_t m_nBrushToolSelections = 0u;
+	uint64_t m_nBrushDabs = 0u;
+	uint64_t m_nBrushGetDataCalls = 0u;
+	uint64_t m_nBrushSetDataCalls = 0u;
+	uint64_t m_nBrushBytesRead = 0u;
+	uint64_t m_nBrushBytesPublished = 0u;
+	uint64_t m_nBrushPrepareUsec = 0u;
+	uint64_t m_nBrushCpuSampleUsec = 0u;
+	uint64_t m_nBrushCpuComputeUsec = 0u;
+	uint64_t m_nBrushCommitUsec = 0u;
+#if defined( T3D_EDITOR_NATIVE )
+    typedef struct t3dEditorBrushSourceRegion_s
+    {
+        Vector2i m_location;
+        PackedByteArray m_source;
+        uint64_t m_nRevision = 0u;
+    } t3dEditorBrushSourceRegion_t;
+    eastl::vector< t3dEditorBrushSourceRegion_t > m_editorBrushGpuRegions;
+    eastl::vector< t3dEditorBrushTile_t > m_editorBrushGpuTiles;
+    uint64_t m_nEditorBrushNextStrokeId = 0u;
+    uint32_t m_nEditorBrushGpuSequence = 0u;
+    bool m_bEditorBrushGpuRejected = false;
+    int32_t m_nEditorBrushGpuMapType = -1;
+    Vector2i m_editorBrushGpuMaskSize;
+    Image *m_pEditorBrushGpuMaskImage = NULL;
+    float m_fEditorBrushGpuMaskGamma = 1.f;
+#endif
+	uint32_t m_nEditorBrushOwnerGeneration = 1u;
+	uint64_t m_nPendingEditorBrushStrokeId = 0u;
+	bool m_bPendingEditorBrushSealed = false;
 
 	// Large brushes revisit the same source brush pixels millions of times. Cache gamma-adjusted
 	// alpha values and invalidate the cache whenever brush settings are replaced.
@@ -83,8 +143,14 @@ private:
 	eastl::vector< t3dBrushElement_t >	 m_computeElementScratch;
 	eastl::vector< t3dComputeWrite_t >	 m_computeWriteScratch;
 	eastl::vector< Vector2i >			 m_modifiedRegionScratch;
+	eastl::vector< t3dBrushUndoRegion_t > m_brushUndoRegions;
 
 	void			trimBrushScratch( void );
+	void recordBrushUndoTile( t3dRegionMapCache_t &rEntry, const Vector2i &rPixel, t3dMapType_t mapType );
+	void finishBrushUndoTiles( void );
+	static PackedByteArray captureUndoTile( Image *pMap, const PackedByteArray *pCachedBytes,
+											 uint32_t nTileIndex, Image::Format format );
+
 	void			updateBrushAlphaCache( Image *pBrushImage, const Vector2i &rImageSize, const real_t fGamma );
 	static bool		isBrushSlopeAllowed( Terrain3DSampler &rSampler,
 										 bool			   bUnrestricted,
@@ -105,7 +171,8 @@ private:
 	Dictionary		captureEditSnapshot( const Ref< Terrain3DRegion > &rRegion,
 										 const Dictionary			  &rTemplate = Dictionary(),
 										 bool						   bMapWasImplicit = false ) const;
-	void applyEditSnapshot( const Dictionary &rSnapshot, t3dEditorMapUpdates_t &rMapUpdates, bool &bInstancesChanged );
+	void applyEditSnapshot( const Dictionary &rSnapshot, t3dEditorMapUpdates_t &rMapUpdates, bool &bInstancesChanged, bool &bHoleChanged );
+	static bool controlHoleBytesDiffer( const PackedByteArray &rOld, const PackedByteArray &rNew );
 
 	class t3dMapOperationState_t
 	{
@@ -144,9 +211,9 @@ private:
 		bool			   m_bUseAlphaCache = false;
 		bool			   m_bUnrestrictedSlope = false;
 		Vector2			   m_clampedSlopeRange = s_v2Zero;
-		Terrain3DCompute  *m_pComputeBackend = NULL;
-		bool			   m_bUseCompute = false;
+		bool			   m_bUseBufferedBrush = false;
 		bool			   m_bUseDirectMapAccess = false;
+		bool			   m_bHoleChanged = false;
 		real_t			   m_fRotationCos = 1.f;
 		real_t			   m_fRotationSin = 0.f;
 		int32_t			   m_nMinRegionX = 0;
@@ -158,6 +225,9 @@ private:
 		uint32_t		   m_nComputeUvRotation = 0u;
 		uint32_t		   m_nComputeUvScale = 0u;
 	};
+#if defined( T3D_EDITOR_NATIVE )
+    bool operateGpuTilesCold( const t3dMapOperationState_t &rState );
+#endif
 	bool prepareMapOperationSamples( t3dMapOperationState_t &rState );
 	typedef struct t3dBrushSample_s
 	{
@@ -209,6 +279,7 @@ public:
 	Object *getTerrain( void ) const;
 
 	void					   setBrushData( const Dictionary &rData );
+	Dictionary getBrushPerformanceStats( void ) const;
 	EA_FORCE_INLINE Dictionary getBrushData(
 		void ) const override {
 		return m_brushData;
@@ -233,6 +304,14 @@ public:
 	void backupRegion( const Ref< Terrain3DRegion > &rRegion, bool bMapWasImplicit = false ) override;
 	void backupRegionFull( const Ref< Terrain3DRegion > &rRegion );
 	void stopOperation( void );
+#if defined( T3D_EDITOR_NATIVE )
+	// Native owner-thread integration points for the future shared-RD producer.
+	uint32_t getEditorBrushOwnerGenerationCold( void ) const { return m_nEditorBrushOwnerGeneration; }
+	bool publishEditorBrushReadbackCold( uint64_t nStrokeId );
+	bool acceptEditorBrushStrokeCold( uint64_t nStrokeId );
+	void pollEditorBrushCommitCold( void );
+#endif
+	void cancelOperation( void );
 	void releaseRuntimeAllocatorStorage( void ) override;
 	void onTerrainOwnerDetached( void ) override;
 

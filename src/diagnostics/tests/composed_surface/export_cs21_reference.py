@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export three RGBA32F page-channel arrays to the CS21 float capture contract.
 
-The arrays are produced by t3d_cs_static_v3_evaluate_linear_f32. The normal
+The arrays are produced by t3d_cs_static_v1_evaluate_linear_f32. The normal
 array contains normalized XYZ, and the ORM array is AO/R/M/AO influence.
 The raw capture is diagnostic-only; calling this tool never approves a .t3sc.
 """

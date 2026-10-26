@@ -32,7 +32,7 @@ class Terrain3DComposedSurfaceGpu
 {
 public:
     // Caller supplies fixed CPU table and transaction lanes. Table capacity
-    // must be power-of-two and >=4 * pageSlots. Source VT V3 is unaffected.
+    // must be power-of-two and >=4 * pageSlots. Source VT V1 is unaffected.
     bool initializeCold( Terrain3DRdContext &rContext,
                          uint32_t nPageSlots, uint32_t nTableCapacity,
                          t3dComposedSurfaceGpuEntry_t *pTableStorage,

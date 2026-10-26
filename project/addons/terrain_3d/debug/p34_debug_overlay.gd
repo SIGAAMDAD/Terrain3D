@@ -118,7 +118,7 @@ func _rows(runtime: Dictionary, rd: Dictionary) -> Array[Array]:
 			]
 		ViewMode.VT_LEVEL_SELECTION:
 			return [
-				["micro VT sparse v3", _value(rd, "terrain_micro_vt_sparse_v3")], ["micro VT generation", _value(rd, "terrain_micro_vt_shared_resource_generation")],
+				["micro VT sparse v1", _value(rd, "terrain_micro_vt_sparse_v1")], ["micro VT generation", _value(rd, "terrain_micro_vt_shared_resource_generation")],
 				["MegaVT ready", _value(rd, "terrain_megavt_ready")], ["MegaVT generation", _value(rd, "terrain_megavt_publication_generation")],
 				["MegaVT dirty regions", _value(rd, "terrain_megavt_editor_dirty_regions")], ["MegaVT texels/m", _value(rd, "terrain_megavt_texels_per_meter")],
 			]

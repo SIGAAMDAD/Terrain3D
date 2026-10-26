@@ -5,10 +5,10 @@ extends RefCounted
 const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
 
-var format: int = 6
+var format: int = 7
 var source_scene: String = ""
 var source_data_directory: String = ""
-var source_far_atlas_md5: String = ""
+var source_vt_package_md5: String = ""
 # Primary region is retained as the focus/compatibility coordinate for tools such
 # as regional lightmap baking. `regions` is the authoritative checkout set.
 var region_location: Vector2i = Vector2i.ZERO
@@ -47,7 +47,7 @@ static func from_value(p_value: Variant) -> Terrain3DRegionWorkbenchManifest:
 	manifest.format = values.int_value("format", 2)
 	manifest.source_scene = values.string_value("source_scene")
 	manifest.source_data_directory = values.string_value("source_data_directory")
-	manifest.source_far_atlas_md5 = values.string_value("source_far_atlas_md5")
+	manifest.source_vt_package_md5 = values.string_value("source_vt_package_md5")
 	manifest.source_region_path = values.string_value("source_region_path")
 	manifest.source_region_md5 = values.string_value("source_region_md5")
 	manifest.source_page_md5 = values.string_value("source_page_md5")
@@ -187,10 +187,10 @@ func to_dictionary() -> Dictionary[String, Variant]:
 	for output: Terrain3DRegionWorkbenchLightingOutput in lighting_outputs:
 		lighting_output_values.push_back(output.to_dictionary())
 	var result: Dictionary[String, Variant] = {
-		"format": 6,
+		"format": 7,
 		"source_scene": source_scene,
 		"source_data_directory": source_data_directory,
-		"source_far_atlas_md5": source_far_atlas_md5,
+		"source_vt_package_md5": source_vt_package_md5,
 		"source_region_path": source_region_path,
 		"source_region_md5": source_region_md5,
 		"source_page_md5": source_page_md5,

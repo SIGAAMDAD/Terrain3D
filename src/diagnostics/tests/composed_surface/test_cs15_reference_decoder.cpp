@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.h"
 #include "data/formats/terrain_3d_vt_pack_format.h"
 #include <vector>
 #include <cassert>
@@ -7,7 +7,7 @@ static void test_decoder()
 {
     const uint32_t pixels = T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE;
     std::vector<uint8_t> output( pixels*4u, 0xccu );
-    std::vector<uint8_t> bc1( t3d_vt_pack_expected_physical_tile_bytes_v3(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM), 0u );
+    std::vector<uint8_t> bc1( t3d_vt_pack_expected_physical_tile_bytes_v1(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM), 0u );
     // Each block has endpoints red, black; every texel selects endpoint 0.
     for ( uint32_t b = 0; b < bc1.size(); b += 8u ) { bc1[b] = 0x00; bc1[b+1u] = 0xf8; }
     assert(t3d_cs15_decode_reference_tile(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM, bc1.data(), uint32_t(bc1.size()), output.data(), uint32_t(output.size())));
@@ -21,7 +21,7 @@ static void test_decoder()
     }
     assert(t3d_cs15_decode_reference_tile(T3D_VT_PHYSICAL_FORMAT_BC1_UNORM, bc1.data(), uint32_t(bc1.size()), output.data(), uint32_t(output.size())));
     assert(output[3]==0u && output.back()==0u);
-    std::vector<uint8_t> bc5( t3d_vt_pack_expected_physical_tile_bytes_v3(T3D_VT_PHYSICAL_FORMAT_BC5_UNORM), 0u );
+    std::vector<uint8_t> bc5( t3d_vt_pack_expected_physical_tile_bytes_v1(T3D_VT_PHYSICAL_FORMAT_BC5_UNORM), 0u );
     for ( uint32_t b=0; b<bc5.size(); b+=16u ) {
         bc5[b]=80u; bc5[b+1u]=200u;  // six-step mode
         bc5[b+8u]=250u; bc5[b+9u]=10u; // eight-step mode

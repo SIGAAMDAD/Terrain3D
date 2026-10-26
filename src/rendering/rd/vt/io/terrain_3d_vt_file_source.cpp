@@ -34,17 +34,17 @@ bool t3d_vt_file_source_open_cold(
 		return false;
 	}
 	const uint64_t nLength = file->get_length();
-	if ( nLength < T3D_VT_PACK_V3_HEADER_BYTES ) {
+	if ( nLength < T3D_VT_PACK_V1_HEADER_BYTES ) {
 		return false;
 	}
-	const godot::PackedByteArray headerBytes = file->get_buffer( T3D_VT_PACK_V3_HEADER_BYTES );
-	if ( headerBytes.size() != T3D_VT_PACK_V3_HEADER_BYTES ) {
+	const godot::PackedByteArray headerBytes = file->get_buffer( T3D_VT_PACK_V1_HEADER_BYTES );
+	if ( headerBytes.size() != T3D_VT_PACK_V1_HEADER_BYTES ) {
 		return false;
 	}
-	t3dVTPackHeaderV3_t Header{};
+	t3dVTPackHeaderV1_t Header{};
 	memcpy( &Header, headerBytes.ptr(), sizeof( Header ) );
-	if ( Header.m_nMagic != T3D_VT_FILE_MAGIC || Header.m_nVersion != T3D_VT_FILE_VERSION_V3 ||
-		 Header.m_nPackageBytes != nLength || Header.m_nPayloadDataOffset < T3D_VT_PACK_V3_HEADER_BYTES ||
+	if ( Header.m_nMagic != T3D_VT_FILE_MAGIC || Header.m_nVersion != T3D_VT_FILE_VERSION_V1 ||
+		 Header.m_nPackageBytes != nLength || Header.m_nPayloadDataOffset < T3D_VT_PACK_V1_HEADER_BYTES ||
 		 Header.m_nPayloadDataOffset > nLength || Header.m_nPayloadDataOffset > 256u * 1024u * 1024u ||
 		 Header.m_nPayloadDataBytes != nLength - Header.m_nPayloadDataOffset ) {
 		return false;
@@ -58,9 +58,9 @@ bool t3d_vt_file_source_open_cold(
 	if ( bStrictHash ) {
 		// Cold verification uses the exact persisted FNV-1a signature but never
 		// materializes the file. This strict scan can be disabled for trusted cooks.
-		file->seek( T3D_VT_PACK_V3_HEADER_BYTES );
+		file->seek( T3D_VT_PACK_V1_HEADER_BYTES );
 		uint64_t nHash = 1469598103934665603ull;
-		uint64_t nRemaining = nLength - T3D_VT_PACK_V3_HEADER_BYTES;
+		uint64_t nRemaining = nLength - T3D_VT_PACK_V1_HEADER_BYTES;
 		while ( nRemaining != 0u ) {
 			const uint64_t				 nChunk = nRemaining < 65536u ? nRemaining : 65536u;
 			const godot::PackedByteArray chunk = file->get_buffer( nChunk );
@@ -91,7 +91,7 @@ bool t3d_vt_file_source_open_cold(
 		if ( rSource.pNativeFile != NULL ) {
 			// A loose project file can coexist with an exported PCK. Do not mix
 			// a PCK metadata directory with bytes from an unrelated loose file.
-			t3dVTPackHeaderV3_t nativeHeader{};
+			t3dVTPackHeaderV1_t nativeHeader{};
 			bool				same =
 				fread( &nativeHeader, 1u, sizeof( nativeHeader ), rSource.pNativeFile ) == sizeof( nativeHeader ) &&
 				nativeHeader.m_nPackageBytes == nLength && nativeHeader.m_nHeaderChecksum == Header.m_nHeaderChecksum &&

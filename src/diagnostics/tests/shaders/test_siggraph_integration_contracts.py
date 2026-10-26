@@ -120,7 +120,7 @@ def test_light_and_editor_contracts() -> None:
     assert 'apply_fog(apply_editor_decals(diagnostic))' in terrain
     assert 'T3DVTAllocation allocation,' in feedback
     assert 't3d_vt_fragment_logical_page_at_mip(allocation, uv' in feedback
-    assert 't3d_vt_consumer_resolve_material_sibling_v3' in consumers
+    assert 't3d_vt_consumer_resolve_material_sibling_v1' in consumers
 
 
 def main() -> None:

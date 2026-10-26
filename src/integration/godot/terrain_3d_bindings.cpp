@@ -264,9 +264,8 @@ void Terrain3D::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_mapped_capacity" ), &Terrain3D::getGpuRegionMappedCapacity );
 	ClassDB::bind_method( D_METHOD( "is_gpu_region_detail_range_valid" ), &Terrain3D::isGpuRegionDetailRangeValid );
 
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_atlas_side" ), &Terrain3D::getGpuFarAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_height_atlas_side" ), &Terrain3D::getGpuFarHeightAtlasSide );
-	ClassDB::bind_method( D_METHOD( "get_gpu_far_surface_atlas_side" ), &Terrain3D::getGpuFarSurfaceAtlasSide );
+	ClassDB::bind_method( D_METHOD( "get_far_vt_height_source_side" ), &Terrain3D::getFarVtHeightSourceSide );
+	ClassDB::bind_method( D_METHOD( "get_far_vt_surface_source_side" ), &Terrain3D::getFarVtSurfaceSourceSide );
 
 	ClassDB::bind_method( D_METHOD( "get_gpu_region_cache_stats" ), &Terrain3D::getGpuRegionCacheStats );
 
@@ -1125,26 +1124,19 @@ void Terrain3D::_bind_methods(
 		"set_far_control_resolution",
 		"get_far_control_resolution" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT,
-								"gpu_far_atlas_side",
+								"far_vt_height_source_side",
 								PROPERTY_HINT_NONE,
 								"",
 								PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 				  "",
-				  "get_gpu_far_atlas_side" );
+				  "get_far_vt_height_source_side" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT,
-								"gpu_far_height_atlas_side",
+								"far_vt_surface_source_side",
 								PROPERTY_HINT_NONE,
 								"",
 								PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 				  "",
-				  "get_gpu_far_height_atlas_side" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-								"gpu_far_surface_atlas_side",
-								PROPERTY_HINT_NONE,
-								"",
-								PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-				  "",
-				  "get_gpu_far_surface_atlas_side" );
+				  "get_far_vt_surface_source_side" );
 	ADD_SUBGROUP( "Cooked Terrain Pages", "" );
 	T3D_BIND_PROPERTY( Terrain3D,
 					   setGpuRegionCookedPagesEnabled,

@@ -7,7 +7,7 @@
 namespace terrain3d_tests
 {
 // Tiny normalized residency database: four neutral roots and two demand pages.
-// No RenderingDevice or filesystem is required. Sparse V3 packages are tested
+// No RenderingDevice or filesystem is required. Sparse V1 packages are tested
 // separately with the real cooker and pack reader.
 struct ResidencyFixture
 {

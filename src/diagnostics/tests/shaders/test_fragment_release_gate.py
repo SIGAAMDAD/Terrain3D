@@ -38,7 +38,7 @@ def write_times(path, n):
         writer.writeheader()
         for _ in range(5):
             fields = {'case':'looking_down', 'resolution':'full',
-                      'warm_state':'warm_steady_state', 'shader_path':'canonical_vt_v3'}
+                      'warm_state':'warm_steady_state', 'shader_path':'canonical_vt_v1'}
             fields.update({name:n for name in METRICS})
             writer.writerow(fields)
 
@@ -47,20 +47,20 @@ with tempfile.TemporaryDirectory(prefix='t3d_p08_') as tmp:
     root = Path(tmp)
     a, b = create_capture(root / 'a'), create_capture(root / 'b')
     row = {'case':'looking_down', 'resolution':'full',
-           'warm_state':'warm_steady_state', 'shader_path':'canonical_vt_v3',
+           'warm_state':'warm_steady_state', 'shader_path':'canonical_vt_v1',
            'reference':'a/capture.json', 'candidate':'b/capture.json'}
     index = root / 'index.json'
     index.write_text(json.dumps({'pairs':[row]}))
     limits = {name:{'max_abs':0, 'mae':0} for name in ('hdr_color','dnr','depth')}
     key = tuple(row[name] for name in COHORT)
     assert compare_image_index(index, limits, {key})['accepted']
-    assert not compare_image_index(index, limits, {key, ('looking_down','half','warm_steady_state','canonical_vt_v3')})['accepted']
+    assert not compare_image_index(index, limits, {key, ('looking_down','half','warm_steady_state','canonical_vt_v1')})['accepted']
     t0, t1 = root/'before.csv', root/'after.csv'
     write_times(t0, 100.)
     write_times(t1, 90.)
     assert compare_timing_captures(t0, t1, 0.0, 5.0, {key})['accepted']
     assert not compare_timing_captures(t0, t1, 0.0, 15.0, {key})['accepted']
-    assert not compare_timing_captures(t0, t1, 0.0, 5.0, {key, ('looking_down','half','warm_steady_state','canonical_vt_v3')})['accepted']
+    assert not compare_timing_captures(t0, t1, 0.0, 5.0, {key, ('looking_down','half','warm_steady_state','canonical_vt_v1')})['accepted']
     checks = {name:{'passed':True, 'log':'evidence.log'} for name in (
         'godot_cpp_build', 'vulkan_validation', 'runtime_scene',
         'editor_inspector_and_toolbar', 'editor_brush_undo_redo',

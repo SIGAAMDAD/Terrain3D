@@ -109,8 +109,6 @@ public:
 	uint64_t						 m_nShaderParameterDefaultQueryCount = 0u;
 	mutable uint64_t				 m_nShaderInspectorRuntimeReadCount = 0u;
 	Terrain3DGeneratedTexture		 m_generatedDummy;
-	Terrain3DGeneratedTexture		 m_generatedFarHeightDummy;
-	Terrain3DGeneratedTexture		 m_generatedFarColorDummy;
 	Terrain3DGeneratedTexture		 m_generatedSurfaceDummy;
 	Terrain3DGeneratedTexture		 m_generatedDisplacementDummy;
 #ifdef DEBUG_ENABLED
@@ -253,7 +251,6 @@ public:
 			   m_vtBinding.m_generatedLogicalRegionMap.getRid().is_valid() && m_vtBinding.m_nRegionMapTextureSize > 0 &&
 			   m_vtBinding.m_nLogicalRegionMapTextureSize == m_vtBinding.m_nRegionMapTextureSize;
 	}
-	void updateFarAtlasTextures( void );
 	// Material settings
 	void				   setDisplacementScale( const real_t fDisplacementScale );
 	EA_FORCE_INLINE real_t getDisplacementScale(

@@ -154,7 +154,10 @@ def verify_source_contract(root):
     assert 'reduce ? 1u : ( partial ? ( width + 15u ) / 16u : ( width + 7u ) / 8u )' in page
     assert '&& !reduce && !partial' in page
     assert 'T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE' in cat
-    assert 'TERRAIN3D_GPU_PAGE_REDUCE' in lib
+    assert 'isPageReductionEnabledCold( void )' in lib
+    assert 'T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE' in lib
+    assert 'T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL' in lib
+    assert 'return t3dRdShaderSharedStateGet() != NULL;' in lib
 
 
 def main():

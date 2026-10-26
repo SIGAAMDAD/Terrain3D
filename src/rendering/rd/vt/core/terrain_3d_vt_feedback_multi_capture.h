@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// P31d: CPU replay input for testing the experimental V3 GPU reduction chain.
+// P31d: CPU replay input for testing the experimental V1 GPU reduction chain.
 // Page IDs are layer-major: pages[layer * (width * height) + pixel]. Counts are
 // pixel-major. Unused slots MUST contain UINT32_MAX, including empty pixels.
 // An engine raster producer must supply a complete depth-resolved capture;

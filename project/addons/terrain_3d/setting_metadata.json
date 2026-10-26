@@ -605,31 +605,17 @@
       "visibility": "basic",
       "inspector_section": "Editor Diagnostics & Display / Viewport Controls"
     },
-    "Terrain3D.gpu_far_atlas_side": {
+    "Terrain3D.far_vt_height_source_side": {
       "class_name": "Terrain3D",
-      "display_name": "GPU Far Atlas Side",
+      "display_name": "Far VT Height Source Side",
       "group_path": "Streaming & Residency / GPU Terrain Pages",
-      "key": "Terrain3D.gpu_far_atlas_side",
+      "key": "Terrain3D.far_vt_height_source_side",
       "profile_ownership": "none",
-      "property_name": "gpu_far_atlas_side",
+      "property_name": "far_vt_height_source_side",
       "state": "generated_read_only",
       "subsystem": "performance_profile",
       "tier": "far",
-      "tooltip": "Current Far-terrain surface-atlas side length, in texels (read-only).",
-      "visibility": "basic",
-      "inspector_section": "Streaming & Residency / GPU Page Fidelity"
-    },
-    "Terrain3D.gpu_far_height_atlas_side": {
-      "class_name": "Terrain3D",
-      "display_name": "GPU Far Height Atlas Side",
-      "group_path": "Streaming & Residency / GPU Terrain Pages",
-      "key": "Terrain3D.gpu_far_height_atlas_side",
-      "profile_ownership": "none",
-      "property_name": "gpu_far_height_atlas_side",
-      "state": "generated_read_only",
-      "subsystem": "performance_profile",
-      "tier": "far",
-      "tooltip": "Current Far-terrain height-atlas side length, in texels (read-only).",
+      "tooltip": "Cold-cook height-source grid side; V1 manages physical GPU pages independently.",
       "visibility": "basic",
       "inspector_section": "Streaming & Residency / GPU Page Fidelity"
     },
@@ -647,17 +633,17 @@
       "visibility": "basic",
       "inspector_section": "Streaming & Residency / GPU Page Fidelity"
     },
-    "Terrain3D.gpu_far_surface_atlas_side": {
+    "Terrain3D.far_vt_surface_source_side": {
       "class_name": "Terrain3D",
-      "display_name": "GPU Far Surface Atlas Side",
+      "display_name": "Far VT Surface Source Side",
       "group_path": "Streaming & Residency / GPU Terrain Pages",
-      "key": "Terrain3D.gpu_far_surface_atlas_side",
+      "key": "Terrain3D.far_vt_surface_source_side",
       "profile_ownership": "none",
-      "property_name": "gpu_far_surface_atlas_side",
+      "property_name": "far_vt_surface_source_side",
       "state": "generated_read_only",
       "subsystem": "performance_profile",
       "tier": "far",
-      "tooltip": "Current Far-terrain surface-atlas side length, in texels (read-only).",
+      "tooltip": "Cold-cook far-surface source grid side; V1 GPU residency uses shared physical pages.",
       "visibility": "basic",
       "inspector_section": "Streaming & Residency / GPU Page Fidelity"
     },

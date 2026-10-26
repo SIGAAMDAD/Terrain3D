@@ -6,8 +6,8 @@
 // Low-level constants required by the EASTL allocator dependency chain.
 // POD type-layout constants required while Terrain3DTypes.h is bootstrapped.
 #define T3D_CLIPMAP_STRIP_PART_CAPACITY				   ( 24u )
-#define T3D_VT_CHANNEL_COUNT						   ( 4u )
-#define T3D_VT_LOGICAL_CHANNEL_COUNT				   ( 5u )
+#define T3D_VT_CHANNEL_COUNT						   ( 5u )
+#define T3D_VT_LOGICAL_CHANNEL_COUNT				   ( 6u )
 #define T3D_VT_QUALITY_PROFILE_COUNT				   ( 6u )
 #define T3D_VT_INVALID_ALLOCATION					   ( 0xffffffffu )
 #define T3D_VT_MAX_MIPS								   ( 16u )
@@ -381,9 +381,6 @@ static const int32_t g_t3dConstStorage_s_szErosionOppositeDirection[T3D_EROSION_
 #define T3D_FEATURE_TEXTURE_VALUE				   ( 1u << 2u )
 #define T3D_GPU_HEIGHT_CACHE_MAX_LAYERS			   ( 512 )
 #define T3D_GPU_HEIGHT_CACHE_MIN_SPARE_LAYERS	   ( 8 )
-#define T3D_GPU_FAR_ATLAS_HEADER_BYTES			   ( 52u )
-#define T3D_GPU_FAR_ATLAS_MAGIC					   ( 0x5444334641523031ull )
-#define T3D_GPU_FAR_ATLAS_VERSION				   ( 9u )
 #define T3D_GPU_REGION_CACHE_MAX_BUDGET_MB		   ( 512 )
 #define T3D_GPU_REGION_CACHE_MIN_BUDGET_MB		   ( 1 )
 #define T3D_GPU_REGION_UPLOAD_MAX_BUDGET_MB		   ( 64 )
@@ -469,11 +466,6 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define T3D_ACTIVE_WORLD_TEXELS			   ( T3D_WORLD_TEXELS )
 #define T3D_BAKE_UV_CACHELINE_ELEMENTS	   ( T3D_BAKE_CACHELINE_BYTES / sizeof( Vector2 ) )
 #define T3D_BAKE_VERTEX_CACHELINE_ELEMENTS ( T3D_BAKE_CACHELINE_BYTES / ( sizeof( Vector3 ) / 3u ) )
-#define T3D_GPU_CACHE_FAR_COLOR_BYTES                                                                                  \
-	( ( size_t ) ( T3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * ( size_t ) ( T3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * 4u )
-#define T3D_GPU_CACHE_FAR_HEIGHT_BYTES                                                                                 \
-	( ( size_t ) ( T3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * ( size_t ) ( T3D_GPU_CACHE_FAR_HEIGHT_SIDE ) * 2u )
-#define T3D_GPU_FAR_HEIGHT_SIZE ( T3D_GPU_CACHE_FAR_HEIGHT_SIDE )
 #define T3D_LIGHTING_CLASS_LAYER_MASK                                                                                  \
 	( T3D_LIGHTING_LAYER_FOLIAGE | T3D_LIGHTING_LAYER_MEDIUM | T3D_LIGHTING_LAYER_LARGE | T3D_LIGHTING_LAYER_REGIONAL )
 #define T3D_MAX_BATCH_INSTANCES					  ( T3D_MAX_CLIPMAP_LEVELS )
@@ -616,8 +608,8 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define T3D_GPU_CACHE_DEFAULT_PREFETCH_ROWS					   ( 1 )
 #define T3D_GPU_CACHE_DEFAULT_RETIRE_FRAMES					   ( 4 )
 #define T3D_GPU_CACHE_DEFAULT_SPARE_LAYERS					   ( 12 )
-#define T3D_GPU_CACHE_FAR_HEIGHT_SIDE						   ( 512 )
-#define T3D_GPU_CACHE_FAR_SURFACE_MAX_SIDE					   ( 4096 )
+#define T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE						   ( 512 )
+#define T3D_FAR_VT_MAX_SOURCE_SURFACE_SIDE					   ( 4096 )
 #define T3D_GPU_CACHE_RUNTIME_MAX_LAYERS					   ( 256 )
 #define T3D_GPU_CACHE_EDITOR_MAX_LAYERS						   ( 256 )
 #define T3D_GPU_CACHE_MAX_LAYERS							   ( T3D_GPU_CACHE_EDITOR_MAX_LAYERS )
@@ -684,7 +676,7 @@ static const Image::Format s_szRegionMapFormats[T3D_TYPE_MAX_VALUE + 1u] = {
 
 #define V2( x )	  Vector2( x, x )
 #define V2I( x )  Vector2i( x, x )
-#define V3( x )	  Vector3( x, x, x )
+#define V1( x )	  Vector3( x, x, x )
 #define s_v2Zero  ( Vector2( 0.f, 0.f ) )
 #define s_v2Max	  ( Vector2( FLT_MAX, FLT_MAX ) )
 #define s_v2iZero ( Vector2i( 0, 0 ) )
@@ -696,7 +688,7 @@ static const Image::Format s_szRegionMapFormats[T3D_TYPE_MAX_VALUE + 1u] = {
 #define s_v3Max	 ( Vector3( FLT_MAX, FLT_MAX, FLT_MAX ) )
 #define s_v3Nan	 ( Vector3( NAN, NAN, NAN ) )
 #define s_v3Up	 ( Vector3( 0.f, 1.f, 0.f ) )
-// static const Vector3 V3_DOWN{ 0.f, -1.f, 0.f };
+// static const Vector3 V1_DOWN{ 0.f, -1.f, 0.f };
 
 // Set class name for logger.h
 

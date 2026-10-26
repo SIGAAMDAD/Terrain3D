@@ -21,6 +21,14 @@ public:
 	uint32_t						 m_nForceShippingGeneration = 0u;
     // Explicit VT bake follow-up: candidate-only static composed material cook.
     // No RD allocations; it cannot change the active raster material source.
+    // Only a successful CS14 canonical parity transaction may populate this
+    // fragment. It is composited into V1 with the regular source/region packs.
+    PackedByteArray m_approvedComposedV1Fragment;
+    uint64_t m_nApprovedComposedFingerprint = 0u;
+    uint64_t m_nApprovedComposedSourceGeneration = 0u;
+    uint64_t m_nApprovedComposedTopologyGeneration = 0u;
+    uint64_t m_nApprovedComposedEditStamp = 0u;
+    String m_approvedComposedStatus = "none";
     PackedByteArray m_composedCandidateSourcePack;
     t3dCsEditorCandidateResult_t m_composedCandidate;
     bool m_bComposedCandidatePending = false;

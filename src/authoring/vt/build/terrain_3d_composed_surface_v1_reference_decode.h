@@ -1,10 +1,10 @@
-#ifndef TERRAIN3D_COMPOSED_SURFACE_V3_REFERENCE_DECODE_H
-#define TERRAIN3D_COMPOSED_SURFACE_V3_REFERENCE_DECODE_H
+#ifndef TERRAIN3D_COMPOSED_SURFACE_V1_REFERENCE_DECODE_H
+#define TERRAIN3D_COMPOSED_SURFACE_V1_REFERENCE_DECODE_H
 
 #include <stdint.h>
 
 // Cold-only deterministic scalar block decoder for BC1, BC5, R8, and BC7
-// mode 6 (the mode emitted by the V3 reference encoder). Other BC7 modes are
+// mode 6 (the mode emitted by the V1 reference encoder). Other BC7 modes are
 // rejected; use the Godot image decoder for those. Invalid BC7 modes and
 // invalid spans do not modify the destination buffer.
 bool t3d_cs15_decode_reference_tile( uint32_t nFamily, const uint8_t *pEncoded,

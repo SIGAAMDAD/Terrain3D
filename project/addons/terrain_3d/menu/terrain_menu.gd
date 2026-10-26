@@ -367,7 +367,7 @@ func _cook_runtime_dataset() -> void:
 		"Pack verified: %s" % ("YES" if bool(result.get("package_ready", false)) else "NO"),
 		"Stream pack: %s" % str(result.get("package_path", "")),
 		"Stream metadata: %s" % str(result.get("package_metadata_path", "")),
-		"Far atlas: %s" % ("OK" if bool(result.get("far_atlas_cooked", false)) else "FAILED"),
+		"Far V1 regions: %s" % ("OK" if bool(result.get("far_vt_regions_cooked", false)) else "FAILED"),
 		"World manifest: %s" % ("OK" if bool(result.get("world_manifest_cooked", false)) else "FAILED"),
 	])
 	var errors: PackedStringArray = result.get("errors", PackedStringArray())

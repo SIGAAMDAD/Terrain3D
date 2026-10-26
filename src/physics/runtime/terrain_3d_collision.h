@@ -103,6 +103,7 @@ private:
 	Vector2i										 m_lastSnappedPos = s_v2iMax;
 	bool											 m_bDynamicUpdatePending = false;
 	eastl::bitset< T3D_MAX_COLLISION_SHAPE_RECORDS > m_emptyGridCells;
+	eastl::bitset< T3D_MAX_COLLISION_SHAPE_RECORDS > m_dirtyEditedShapes;
 	t3dRegionCoord_t								 m_szFullRegionSlots[T3D_REGION_SLOTS];
 	int												 m_nFullRegionSlotCount = 0;
 	uint64_t										 m_nStreamingGenerationLast = 0u;
@@ -141,6 +142,8 @@ private:
 	void reloadPhysicsMaterial( void );
 	void processRegionMapUpdate( void );
 	void updateFullShape( const int nShapeId, const Vector2i &rRegionLoc );
+	bool editedSamplesTouchShape( const Vector2i &rShapeGridPosition, int nShapeSize, const Vector2i &rSampleMin, const Vector2i &rSampleMax ) const;
+	void serviceEditedDynamicShapes( const Vector2i &rTarget, uint64_t nStartedUsec );
 	bool isAuthoringFullResidencyMode( void ) const;
 	bool usesEditorBackend( void ) const;
 	bool usesDynamicShapePool( void ) const;
@@ -166,6 +169,7 @@ public:
 	void				 build( void );
 	void				 requestColdRebuild( void );
 	void				 onRegionMapChanged( void );
+	void				 requestEditedHeightfieldArea( const AABB &rArea );
 	EA_FORCE_INLINE void resetTargetPosition(
 		void ) {
 		m_lastSnappedPos = s_v2iMax;

@@ -178,8 +178,12 @@ def contracts(root: Path):
     assert "T3D_PAGE_PARTIAL_CAPACITY" in page
     assert "compute_list_add_barrier( list );\n\tif ( partial )" in page
     assert "m_finalLease" in page
-    assert "TERRAIN3D_GPU_PAGE_REDUCE" in lib
-    assert "TERRAIN3D_GPU_INSTANCE_EXCLUSIVE" in lib
+    assert "isPageReductionEnabledCold( void )" in lib
+    assert "T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE" in lib
+    assert "T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL" in lib
+    assert "isInstanceExclusiveEnabledCold( void )" in lib
+    assert "isInstanceCommandOwnerEnabledCold( void )" in lib
+    assert "return false;" in lib
     assert "ownership[index]++ != 0u" in inst
     assert "m_bMainCommandOwnershipExclusive" in inst
     assert "isInstanceExclusiveEnabledCold" in inst

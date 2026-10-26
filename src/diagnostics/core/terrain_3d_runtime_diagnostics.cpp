@@ -56,7 +56,7 @@ Dictionary Terrain3D::getHeightSourceDiagnostics(
 								( real_t ) ( ( uint64_t ) ( 1 ) << ( uint64_t ) ( CLAMP( mesh_lod, 0, 30 ) ) ) /
 								tessellation_scale;
 	const real_t far_source_spacing = s_fRegionVertexSpacing * ( real_t ) ( T3D_ACTIVE_WORLD_TEXELS ) /
-									  ( real_t ) ( MAX( 1, getGpuFarHeightAtlasSide() ) );
+									  ( real_t ) ( MAX( 1, getFarVtHeightSourceSide() ) );
 
 	String height_source = "none";
 	real_t source_spacing = 0.0f;
@@ -84,8 +84,8 @@ Dictionary Terrain3D::getHeightSourceDiagnostics(
 											tessellation_scale;
 	diagnostics["height_source"] = height_source;
 	diagnostics["height_source_spacing"] = source_spacing;
-	diagnostics["far_height_atlas_side"] = getGpuFarHeightAtlasSide();
-	diagnostics["far_surface_atlas_side"] = getGpuFarSurfaceAtlasSide();
+	diagnostics["far_vt_height_source_side"] = getFarVtHeightSourceSide();
+	diagnostics["far_vt_regional_sample_side"] = getFarVtSurfaceSourceSide();
 	diagnostics["surface_gpu_resident"] = m_pData && m_pData->isGpuSurfaceRegionResident( region );
 	diagnostics["middle_height_resident"] = m_pData && m_pData->isMiddleHeightRegionResident( region );
 	diagnostics["geometry_source_invariant_valid"] =
@@ -201,15 +201,14 @@ Array Terrain3D::getCacheInventory(
 		const Dictionary render_diagnostics = m_pRenderCoordinator->getDiagnostics();
 		shader = render_diagnostics.get( "shader", Dictionary() );
 	}
-	const uint64_t current_bytes[6] = {
+	const uint64_t current_bytes[5] = {
 		m_pData ? ( uint64_t ) ( m_pData->getGpuRegionCacheReservedBytes() ) : 0u,
 		m_pData ? ( uint64_t ) ( m_pData->getCpuRegionCacheReservedBytes() ) : 0u,
 		m_pData ? ( uint64_t ) ( m_pData->getInstanceRegionCacheReservedBytes() ) : 0u,
 		m_pLightmapStreamer ? ( uint64_t ) ( m_pLightmapStreamer->getResidentEstimatedBytes() ) : 0u,
 		0u,
-		getGpuFarAtlasBytes(),
 	};
-	for ( int index = 0; index < 6; ++index ) {
+	for ( int index = 0; index < 5; ++index ) {
 		m_szDiagnosticCachePeakBytes[( size_t ) ( index )] =
 			MAX( m_szDiagnosticCachePeakBytes[( size_t ) ( index )], current_bytes[index] );
 	}
@@ -286,30 +285,6 @@ Array Terrain3D::getCacheInventory(
 		row["raw"] = raw[index];
 		caches.push_back( row );
 	}
-	Dictionary far;
-	far["diagnostics_version"] = T3D_DIAGNOSTICS_VERSION;
-	far["cache_name"] = "far_atlas";
-	far["resident"] = m_pData ? 2 : 0;
-	far["effective_capacity"] = 2;
-	far["requested_budget_bytes"] = ( int64_t ) ( current_bytes[5] );
-	far["effective_budget_bytes"] = ( int64_t ) ( current_bytes[5] );
-	far["hard_maximum_bytes"] = ( int64_t ) ( current_bytes[5] );
-	far["limiting_constraint"] = "fixed_unavoidable";
-	far["current_bytes"] = ( int64_t ) ( current_bytes[5] );
-	far["peak_bytes"] = ( int64_t ) ( m_szDiagnosticCachePeakBytes[5] );
-	far["hits"] = -1;
-	far["misses"] = -1;
-	far["hit_rate"] = -1.0;
-	far["evictions"] = 0;
-	far["queued"] = ( int64_t ) ( gpu.get( "far_height_dirty_regions", 0 ) ) +
-					( int64_t ) ( gpu.get( "far_color_dirty_regions", 0 ) );
-	far["preparing"] = 0;
-	far["uploading"] = ( int64_t ) ( gpu.get( "far_height_updates_last_tick", 0 ) ) +
-					   ( int64_t ) ( gpu.get( "far_color_updates_last_tick", 0 ) );
-	far["load_upload_bytes_last"] = ( int64_t ) ( gpu.get( "far_height_uploaded_bytes_last", ( int64_t ) ( 0 ) ) ) +
-									( int64_t ) ( gpu.get( "far_color_uploaded_bytes_last", ( int64_t ) ( 0 ) ) );
-	far["raw"] = gpu;
-	caches.push_back( far );
 	return caches;
 }
 
@@ -331,14 +306,6 @@ Dictionary Terrain3D::getCpuProfileStats(
 	cpu["far_color_rebuild_cpu_usec"] = gpu.get( "far_color_processing_usec_last", ( int64_t ) ( 0 ) );
 	cpu["far_height_publication_cpu_usec"] = gpu.get( "far_height_publication_usec_last", ( int64_t ) ( 0 ) );
 	cpu["far_color_publication_cpu_usec"] = gpu.get( "far_color_publication_usec_last", ( int64_t ) ( 0 ) );
-	cpu["far_atlas_publication_cpu_usec"] =
-		( int64_t ) ( gpu.get( "far_height_publication_usec_last", ( int64_t ) ( 0 ) ) ) +
-		( int64_t ) ( gpu.get( "far_color_publication_usec_last", ( int64_t ) ( 0 ) ) );
-	cpu["far_atlas_rebuild_publication_cpu_usec"] =
-		( int64_t ) ( gpu.get( "far_height_processing_usec_last", ( int64_t ) ( 0 ) ) ) +
-		( int64_t ) ( gpu.get( "far_color_processing_usec_last", ( int64_t ) ( 0 ) ) ) +
-		( int64_t ) ( gpu.get( "far_height_publication_usec_last", ( int64_t ) ( 0 ) ) ) +
-		( int64_t ) ( gpu.get( "far_color_publication_usec_last", ( int64_t ) ( 0 ) ) );
 	cpu["profiler_collection_cpu_usec_last"] = ( int64_t ) ( m_nDiagnosticsCollectionUsecLast );
 	cpu["profiler_collection_cpu_usec_average"] =
 		( int64_t ) ( m_nDiagnosticsCollectionCount > 0u
@@ -405,7 +372,7 @@ Dictionary Terrain3D::getRuntimeParitySnapshot(
 
 	const bool legacy_material_arrays_active = m_assets.is_valid() && m_assets->getAlbedoArrayRid().is_valid();
 	snapshot["legacy_material_arrays_active"] = legacy_material_arrays_active;
-	snapshot["vt_v3_material_residency_authoritative"] = m_assets.is_valid() && m_assets->usesPackedPbr() &&
+	snapshot["vt_v1_material_residency_authoritative"] = m_assets.is_valid() && m_assets->usesPackedPbr() &&
 														 m_bGpuRegionCookedPagesEnabled &&
 														 !isEditorAuthoringModeInternal();
 	return snapshot;

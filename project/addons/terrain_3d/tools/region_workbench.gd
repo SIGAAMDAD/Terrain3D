@@ -278,9 +278,9 @@ func create_workbench_regions(source_terrain: Terrain3D,
 	var manifest := Terrain3DRegionWorkbenchManifest.new()
 	manifest.source_scene = source_scene_path
 	manifest.source_data_directory = source_directory
-	var source_far_atlas_path: String = source_directory.path_join("terrain3d_far_atlas.t3dfar")
-	manifest.source_far_atlas_md5 = FileAccess.get_md5(source_far_atlas_path) \
-		if FileAccess.file_exists(source_far_atlas_path) else ""
+	var source_vt_package_path: String = source_directory.path_join("terrain3d_instances.t3dvt")
+	manifest.source_vt_package_md5 = FileAccess.get_md5(source_vt_package_path) \
+		if FileAccess.file_exists(source_vt_package_path) else ""
 	manifest.region_location = checkout_locations[0]
 	manifest.region_size = source_terrain.region_size
 	manifest.vertex_spacing = source_terrain.vertex_spacing
@@ -410,8 +410,8 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path)
 	if manifest == null or manifest.regions.is_empty():
 		return _failure("Workbench manifest is invalid or contains no regions")
-	if manifest.format < 6:
-		return _failure("This workbench predates isolated cook-context storage. Reopen a fresh Region Workbench before committing.")
+	if manifest.format < 7:
+		return _failure("This workbench predates V1 shared VT transactions. Reopen a fresh Region Workbench before committing.")
 	if workbench_terrain.region_size != manifest.region_size:
 		return _failure("Workbench region size no longer matches the source terrain")
 	if not is_equal_approx(workbench_terrain.vertex_spacing, manifest.vertex_spacing):
@@ -420,11 +420,11 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	var source_directory: String = manifest.source_data_directory
 	if source_directory.is_empty():
 		source_directory = manifest.regions[0].source_region_path.get_base_dir()
-	var source_far_atlas_path: String = source_directory.path_join("terrain3d_far_atlas.t3dfar")
-	var current_far_atlas_md5: String = FileAccess.get_md5(source_far_atlas_path) \
-		if FileAccess.file_exists(source_far_atlas_path) else ""
-	if current_far_atlas_md5 != manifest.source_far_atlas_md5:
-		return _commit_preflight_failure("The source far atlas changed after checkout. Reopen a fresh workbench before committing.")
+	var source_vt_package_path: String = source_directory.path_join("terrain3d_instances.t3dvt")
+	var current_vt_package_md5: String = FileAccess.get_md5(source_vt_package_path) \
+		if FileAccess.file_exists(source_vt_package_path) else ""
+	if current_vt_package_md5 != manifest.source_vt_package_md5:
+		return _commit_preflight_failure("The source V1 package changed after checkout. Reopen a fresh workbench before committing.")
 
 	# Lightmaps are part of the same source transaction as regions/pages. A staged
 	# Workbench bake may only replace the exact source lighting state captured at
@@ -563,12 +563,18 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 				if lighting_archive_error != OK:
 					_cleanup_generated_files(generated_paths)
 					return _failure("Unable to archive source lighting %s: %s" % [source_path, error_string(lighting_archive_error)])
-	if FileAccess.file_exists(source_far_atlas_path):
-		var far_archive_error: Error = _copy_file(source_far_atlas_path,
-			archive_directory.path_join(source_far_atlas_path.get_file()))
-		if far_archive_error != OK:
+	if FileAccess.file_exists(source_vt_package_path):
+		var vt_archive_error: Error = _copy_file(source_vt_package_path,
+			archive_directory.path_join(source_vt_package_path.get_file()))
+		if vt_archive_error != OK:
 			_cleanup_generated_files(generated_paths)
-			return _failure("Unable to archive the source far atlas: %s" % error_string(far_archive_error))
+			return _failure("Unable to archive the source V1 package: %s" % error_string(vt_archive_error))
+
+	var avt_archive_error: Error = _archive_far_vt_regions(source_directory, archive_directory)
+	if avt_archive_error != OK:
+		_cleanup_generated_files(generated_paths)
+		_remove_directory_recursive(archive_directory)
+		return _failure("Unable to archive regional FAR VT pages: %s" % error_string(avt_archive_error))
 
 	# Stage runtime pages and lighting before the first source replacement. Region
 	# resources are staged immediately after lighting publication so their external
@@ -689,18 +695,24 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 			_cleanup_generated_files(generated_paths)
 			return _failure("Unable to replace cooked page for %s; the checkout was restored: %s" % [entry.location, error_string(replace_error)])
 
-	# A local workbench cannot authoritatively rebuild the whole-world far atlas.
-	# Invalidate the source copy after the region/page transaction so the next full
-	# source cook regenerates it from every authored region instead of reusing stale
-	# macro data from before this checkout.
-	var far_remove_error: Error = _remove_file_if_present(source_far_atlas_path)
-	if far_remove_error != OK:
+	# Published virtual pages contain region-coordinate and source fingerprints.
+	# A local workbench commit invalidates both the shared package and its
+	# regional inputs; the next explicit bake republishes one coherent V1 package.
+	var vt_remove_error: Error = _remove_file_if_present(source_vt_package_path)
+	if vt_remove_error != OK:
 		_restore_checkout_from_archive(manifest, archive_directory)
 		_cleanup_staged_paths(staged_region_paths, staged_page_paths)
 		_cleanup_staged_lighting_paths(staged_light_data_paths, staged_light_package_paths)
 		_cleanup_generated_files(generated_paths)
-		return _failure("Unable to invalidate the source far atlas; the checkout was restored: %s" % error_string(far_remove_error))
-	warnings.push_back("Source far atlas invalidated after commit. Run Cook Runtime Dataset in the full source terrain before shipping.")
+		return _failure("Unable to invalidate the source V1 package; the checkout was restored: %s" % error_string(vt_remove_error))
+	var regional_remove_error: Error = _remove_directory_recursive(source_directory.path_join("terrain3d_far_vt"))
+	if regional_remove_error != OK:
+		_restore_checkout_from_archive(manifest, archive_directory)
+		_cleanup_staged_paths(staged_region_paths, staged_page_paths)
+		_cleanup_staged_lighting_paths(staged_light_data_paths, staged_light_package_paths)
+		_cleanup_generated_files(generated_paths)
+		return _failure("Unable to invalidate regional FAR VT pages; the checkout was restored: %s" % error_string(regional_remove_error))
+	warnings.push_back("Shared V1 package and regional FAR pages invalidated. Cook Runtime Dataset before shipping.")
 
 	var committed_unix: int = int(Time.get_unix_time_from_system())
 	for entry: Terrain3DRegionWorkbenchRegion in manifest.regions:
@@ -717,7 +729,7 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 	manifest.last_region_node_directory = node_results[manifest.region_location].node_directory if node_results.has(manifest.region_location) else ""
 	manifest.streamed_node_count = total_nodes
 	manifest.committed_unix = committed_unix
-	manifest.source_far_atlas_md5 = ""
+	manifest.source_vt_package_md5 = ""
 	for output: Terrain3DRegionWorkbenchLightingOutput in manifest.lighting_outputs:
 		if output.is_staged():
 			output.source_light_data_md5 = FileAccess.get_md5(output.source_light_data_path) if FileAccess.file_exists(output.source_light_data_path) else ""
@@ -870,7 +882,7 @@ func _ensure_operations_panel() -> void:
 
 	var cook_button := Button.new()
 	cook_button.text = "Cook Local Runtime Preview"
-	cook_button.tooltip_text = "Preflight the checkout by cooking v4 pages for editable regions plus cook-only neighboring snapshots. Context snapshots remain isolated at rest and are staged only transiently while the native cooker resolves dependency edges. Commit publishes authoritative region/dependency pages; the full-world source far atlas is intentionally invalidated for a later source cook."
+	cook_button.tooltip_text = "Preflight the checkout by cooking v4 pages for editable regions plus cook-only neighboring snapshots. Context snapshots remain isolated at rest and are staged only transiently while the native cooker resolves dependency edges. Commit publishes authoritative region/dependency pages; the full-world source V1 package is intentionally invalidated for a later source cook."
 	cook_button.pressed.connect(_on_cook_runtime_pressed)
 	_operations_panel.add_child(cook_button)
 
@@ -982,7 +994,7 @@ func cook_active_runtime_data() -> Dictionary:
 func _on_cook_runtime_pressed() -> void:
 	var result: Dictionary = cook_active_runtime_data()
 	if bool(result.get("complete", false)):
-		_operations_status.text = "Local preview cook complete: %d cooked, %d unchanged, %d usable regions. The local far atlas is preview-only; commit will invalidate the full source far atlas." % [
+		_operations_status.text = "Local preview cook complete: %d cooked, %d unchanged, %d usable regions. The local far atlas is preview-only; commit will invalidate the full source V1 package." % [
 			int(result.get("cooked", 0)), int(result.get("unchanged", 0)), int(result.get("usable", 0))]
 	else:
 		_operations_status.text = "Runtime cook failed: %s" % String(result.get("error", result.get("errors", "unknown error")))
@@ -1408,12 +1420,14 @@ func _restore_checkout_from_archive(manifest: Terrain3DRegionWorkbenchManifest,
 	if source_directory.is_empty() and not manifest.regions.is_empty():
 		source_directory = manifest.regions[0].source_region_path.get_base_dir()
 	if not source_directory.is_empty():
-		var source_far_atlas_path: String = source_directory.path_join("terrain3d_far_atlas.t3dfar")
-		var archived_far_atlas_path: String = archive_directory.path_join(source_far_atlas_path.get_file())
-		if FileAccess.file_exists(archived_far_atlas_path):
-			_copy_file(archived_far_atlas_path, source_far_atlas_path)
+		var source_vt_package_path: String = source_directory.path_join("terrain3d_instances.t3dvt")
+		var archived_vt_package_path: String = archive_directory.path_join(source_vt_package_path.get_file())
+		if FileAccess.file_exists(archived_vt_package_path):
+			_copy_file(archived_vt_package_path, source_vt_package_path)
 		else:
-			_remove_file_if_present(source_far_atlas_path)
+			_remove_file_if_present(source_vt_package_path)
+ 
+		_restore_far_vt_regions(source_directory, archive_directory)
 
 
 func _get_default_region_location(source_terrain: Terrain3D) -> Vector2i:
@@ -2026,6 +2040,37 @@ func _finish_abandon_workbench(session_directory: String, source_scene: String) 
 		push_warning("Terrain3D: Workbench closed, but its session directory could not be fully removed: %s" % error_string(remove_error))
 	if not source_scene.is_empty():
 		EditorInterface.open_scene_from_path(source_scene)
+
+
+func _archive_far_vt_regions(source_directory: String, archive_directory: String) -> Error:
+	var source_path: String = source_directory.path_join("terrain3d_far_vt")
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(source_path)):
+		return OK
+	var folder := DirAccess.open(source_path)
+	if folder == null:
+		return DirAccess.get_open_error()
+	for file_name: String in folder.get_files():
+		if not file_name.ends_with(".t3avt"):
+			continue
+		var copy_error: Error = _copy_file(source_path.path_join(file_name),
+			archive_directory.path_join("terrain3d_far_vt").path_join(file_name))
+		if copy_error != OK:
+			return copy_error
+	return OK
+
+
+func _restore_far_vt_regions(source_directory: String, archive_directory: String) -> void:
+	var source_path: String = source_directory.path_join("terrain3d_far_vt")
+	var archive_path: String = archive_directory.path_join("terrain3d_far_vt")
+	if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(archive_path)):
+		return
+	_remove_directory_recursive(source_path)
+	var folder := DirAccess.open(archive_path)
+	if folder == null:
+		return
+	for file_name: String in folder.get_files():
+		if file_name.ends_with(".t3avt"):
+			_copy_file(archive_path.path_join(file_name), source_path.path_join(file_name))
 
 
 func _remove_directory_recursive(path: String) -> Error:

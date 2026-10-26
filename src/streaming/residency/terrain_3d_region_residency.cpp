@@ -7,7 +7,7 @@
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency.h"
 
-#include "rendering/surface/terrain_3d_far_surface_atlas_cache.h"
+#include "rendering/surface/terrain_3d_far_regional_cooker.h"
 #include "streaming/residency/terrain_3d_active_height_residency.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
 #include "streaming/cache/terrain_3d_gpu_region_cache.h"
@@ -25,7 +25,7 @@ Terrain3DRegionResidency::Terrain3DRegionResidency(
 	Terrain3DInstanceRegionCache *const		pInstanceRegionCache,
 	Terrain3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
 	Terrain3DGpuRegionCache *const			pGpuRegionCache,
-	Terrain3DFarSurfaceAtlasCache *const	pFarSurfaceAtlasCache ) :
+	Terrain3DFarRegionalCooker *const	pFarRegionalCooker ) :
 	m_pRepository( pRepository ),
 	m_pSamplingStorage( pSamplingStorage ),
 	m_pRuntimePageStore( pRuntimePageStore ),
@@ -34,7 +34,7 @@ Terrain3DRegionResidency::Terrain3DRegionResidency(
 	m_pInstanceRegionCache( pInstanceRegionCache ),
 	m_pMiddleHeightRegionCache( pMiddleHeightRegionCache ),
 	m_pGpuRegionCache( pGpuRegionCache ),
-	m_pFarSurfaceAtlasCache( pFarSurfaceAtlasCache ) {
+	m_pFarRegionalCooker( pFarRegionalCooker ) {
 }
 
 void Terrain3DRegionResidency::reset(
@@ -108,13 +108,6 @@ void Terrain3DRegionResidency::update(
 		m_pMiddleHeightRegionCache->reset();
 	}
 
-	if ( m_pFarSurfaceAtlasCache ) {
-		m_pFarSurfaceAtlasCache->resetFrameStats();
-		m_pFarSurfaceAtlasCache->setFrameDemand( rFrame );
-	}
-	if ( rContext.m_prepareGpuFarSurface ) {
-		rContext.m_prepareGpuFarSurface( rContext.m_pOwnerContext );
-	}
 	const t3dGpuRegionCacheUpdateResult_t gpuResult =
 		m_pGpuRegionCache->update( rFrame,
 								   bForce,
@@ -164,8 +157,8 @@ void Terrain3DRegionResidency::appendRuntimeProfileSample(
 	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};
 	const t3dInstanceRegionCacheStats_t instance =
 		m_pInstanceRegionCache ? m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
-	const t3dFarSurfaceAtlasStats_t far =
-		m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getStats() : t3dFarSurfaceAtlasStats_t{};
+	const t3dFarRegionalCookStats_t far =
+		m_pFarRegionalCooker ? m_pFarRegionalCooker->getStats() : t3dFarRegionalCookStats_t{};
 
 	rSample.m_nStallFlags |= gpu.m_nStallFlagsLastTick | cpu.m_nStallFlagsLastTick | instance.m_nStallFlagsLastTick;
 	rSample.m_nGpuResident = gpu.m_nResident;
@@ -189,7 +182,7 @@ void Terrain3DRegionResidency::appendRuntimeProfileSample(
 	rSample.m_nGpuCookedHits = gpu.m_nCookedHitsLastTick;
 	rSample.m_nGpuCookedMisses = gpu.m_nCookedMissesLastTick;
 	rSample.m_nGpuRuntimePrepares = gpu.m_nRuntimePreparesLastTick;
-	rSample.m_nGpuFarDirtyRegions = m_pFarSurfaceAtlasCache ? m_pFarSurfaceAtlasCache->getDirtyRegionCount() : 0;
+	rSample.m_nGpuFarDirtyRegions = m_pFarRegionalCooker ? m_pFarRegionalCooker->getDirtyRegionCount() : 0;
 	rSample.m_nGpuFarRegionsProcessed = far.m_nHeightRegionsLastTick + far.m_nColorRegionsLastTick;
 	rSample.m_nGpuPrepareLatencyUsec = runtimePageStats.m_nPrepareLatencyUsecLast;
 	rSample.m_nGpuPrepareQueueWaitUsec = runtimePageStats.m_nPrepareQueueWaitUsecLast;

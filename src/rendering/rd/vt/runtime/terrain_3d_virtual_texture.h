@@ -133,9 +133,11 @@ public:
 	uint32_t getPackageGeneration() const;
 	uint64_t getPackageContentSignature() const;
 	uint32_t getDatabaseKind() const;
-	bool	 supportsSparseV3() const;
+	bool	 supportsSparseV1() const;
 	uint32_t getTerrainMegaVTAllocationBase() const;
 	uint32_t getTerrainMegaVTAllocationId( uint32_t nRegionMapIndex ) const;
+    bool getFarSurfaceAllocationCold( uint32_t nRegionMapIndex, uint32_t &rAllocation, uint32_t &rGeneration ) const;
+    bool getComposedRegionAllocationCold( uint32_t nRegionMapIndex, uint32_t &rAllocation, uint32_t &rGeneration ) const;
 	bool	 getTerrainMegaVTCookedGenerationCold( uint32_t nRegionMapIndex, uint32_t &rGeneration ) const;
 	const t3dVTDatabaseView_t	   *get_database() const;
 	const Terrain3DVTResourceImage *get_resource_image() const;
@@ -146,8 +148,8 @@ public:
 	uint32_t						get_quality_generation() const;
 	uint32_t						get_allocations_by_highest_profile( uint32_t nProfile ) const;
 	uint32_t						get_allocations_by_resolved_profile( uint32_t nProfile ) const;
-	uint32_t						getPhysicalFormatFamilyCountV3() const;
-	bool getPhysicalFormatFamilyBindingV3( uint32_t nFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
+	uint32_t						getPhysicalFormatFamilyCountV1() const;
+	bool getPhysicalFormatFamilyBindingV1( uint32_t nFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
 	t3dVTResidencyState_t		   &get_residency();
 	const t3dVTResidencyState_t	   &get_residency() const;
 	t3dVTStreamingState_t		   &get_streaming();
@@ -173,8 +175,8 @@ public:
 																  bool					*pFullyStaged = NULL );
 	// Cold-only source staging; empty bytes disable prediction for missing/unsaved sidecars.
 	bool stageDemandIndexCold( const uint8_t *pBytes, uint64_t nBytes, const godot::String &rSourceIdentity );
-	// T04: v3 is an optional sibling of the canonical v2 presence sidecar.
-	bool stageDemandV3Cold( const godot::String &rPath, const godot::String &rSourceIdentity );
+	// T04: v1 is an optional sibling of the canonical v2 presence sidecar.
+	bool stageDemandV1Cold( const godot::String &rPath, const godot::String &rSourceIdentity );
 	bool stagedDemandMatchesLoadedPackageCold() const;
 	bool load_spatial_demand_index_cold( const uint8_t *pBytes, uint64_t nBytes );
 	uint32_t
@@ -184,7 +186,7 @@ public:
 	bool shouldScanTerrainAllocationHot( float fCameraX, float fCameraZ, uint32_t nAllocation, uint32_t nFrameId );
 	bool configure_feedback_policy_cold( const t3dVTFeedbackPolicy_t &rPolicy, uint32_t nPhysicalCapDivisor );
 	bool service_feedback_grid_hot( uint32_t nFrameId, uint64_t nViewportKey, uint32_t nDeviceGeneration );
-	// P31e: consume V3 readbacks for diagnostics only, after V2 staging.
+	// P31e: consume V1 readbacks for diagnostics only, after V2 staging.
 	void service_multi_feedback_shadow_hot( uint32_t nFrameId, uint64_t nViewportKey, uint32_t nDeviceGeneration );
 	void update_feedback_view_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ, uint32_t nFrameId );
 	uint64_t get_feedback_resident_rescues() const { return m_nFeedbackResidentRescues; }
@@ -204,7 +206,10 @@ public:
 	bool	 service_retired_slots_hot( uint32_t pFrameId );
 
 private:
-	uint32_t stage_v3_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
+	void rebuildFarRegionAllocationTableCold();
+	uint32_t stage_far_region_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
+		uint32_t nFrameId, float fFovDegrees, uint32_t nViewportHeight );
+	uint32_t stage_v1_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
                                      uint32_t nFrameId, float fFovDegrees, uint32_t nViewportHeight );
 	bool stage_feedback_page_hot( uint32_t nPage, uint16_t nMip, uint16_t nPriority, uint32_t nFrameId );
 	void	 streamWorkerMain( void );
@@ -226,20 +231,29 @@ private:
 	bool	 publish_runtime_package_warm();
 	void	 release_runtime_pack_cold();
 	uint32_t count_physical_banks() const;
-	bool	 apply_quality_profile_state_v3( t3dVTAllocation_t *pAllocations, uint32_t nAllocationCount );
+	bool	 apply_quality_profile_state_v1( t3dVTAllocation_t *pAllocations, uint32_t nAllocationCount );
 
 	Terrain3DVTResourceImage   *m_pResources;
 	Terrain3DMemoryZone		   *m_pRuntimeAllocatorZone;
 	Terrain3DVTGpu				m_Gpu;
 	Terrain3DVTSpatialDemand	m_spatialDemand;
-    Terrain3DVTDemandBundleStore m_v3Demand;
-    godot::String m_v3DemandPath;
-    uint64_t m_nV3AssetIdentityHash = 0u;
-    std::vector< uint64_t > m_v3MaterialKeys;
-    std::vector< uint32_t > m_v3MaterialAllocations;
-    uint32_t m_nV3LastStageFrame = UINT32_MAX;
-    uint64_t m_nV3HistogramRecords = 0u;
-    uint64_t m_nV3PrefetchRequests = 0u;
+    Terrain3DVTDemandBundleStore m_v1Demand;
+    godot::String m_v1DemandPath;
+    uint64_t m_nV1AssetIdentityHash = 0u;
+    std::vector< uint64_t > m_v1MaterialKeys;
+    std::vector< uint32_t > m_v1MaterialAllocations;
+    uint32_t m_nV1LastStageFrame = UINT32_MAX;
+    uint64_t m_nV1HistogramRecords = 0u;
+    uint64_t m_nV1PrefetchRequests = 0u;
+	// Rebuilt only on cold package publication. Fixed-size hot registry; no
+	// package mutex, stable-key lookups, or allocations during frame demand.
+	uint32_t m_szFarRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
+    uint32_t m_szFarSurfaceAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
+    uint32_t m_szComposedRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
+	uint8_t m_szFarLastMip[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
+	uint32_t m_szFarLastMipFrame[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
+	uint32_t m_nFarRegionLastStageFrame = UINT32_MAX;
+	uint64_t m_nFarRegionRequests = 0u;
 
 	godot::String				m_demandIndexSourceIdentity;
 	uint32_t					m_nSpatialDemandLastStageFrame = UINT32_MAX;

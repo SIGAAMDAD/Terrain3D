@@ -18,7 +18,7 @@ class AcceptanceTests(unittest.TestCase):
             with path.open('w', newline='', encoding='utf-8') as file:
                 writer = csv.DictWriter(file, fieldnames=headings)
                 writer.writeheader()
-                for mode, cost in [('canonical_vt_v3', 100), ('composed_surface', 60)]:
+                for mode, cost in [('canonical_vt_v1', 100), ('composed_surface', 60)]:
                     for _ in range(31):
                         writer.writerow(dict(case='stationary_horizon', resolution='full',
                                              warm_state='warm', shader_path=mode,
@@ -38,7 +38,7 @@ class AcceptanceTests(unittest.TestCase):
                 read_frames(path)
 
     def test_unmatched_and_missing_timing(self):
-        groups = {(('horizon', 'full', 'warm'), 'canonical_vt_v3'):
+        groups = {(('horizon', 'full', 'warm'), 'canonical_vt_v1'):
                   [{'frame_gpu_usec': 10.0}]}
         self.assertEqual(compare(groups)[0]['decision'], 'NO_MATCHED_CAPTURE')
         groups[(('horizon', 'full', 'warm'), 'composed_surface')] = [{'frame_gpu_usec': 5.0}]

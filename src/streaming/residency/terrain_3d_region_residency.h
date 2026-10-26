@@ -13,7 +13,7 @@
 #include "data/persistence/terrain_3d_region_repository.h"
 #include "data/sampling/terrain_3d_sampling_storage.h"
 #include "rendering/compute/terrain_3d_compute.h"
-#include "rendering/surface/terrain_3d_far_surface_atlas_cache.h"
+#include "rendering/surface/terrain_3d_far_regional_cooker.h"
 #include "streaming/residency/terrain_3d_active_height_residency.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
 #include "streaming/cache/terrain_3d_gpu_region_cache.h"
@@ -30,7 +30,6 @@ typedef struct t3dRegionResidencyUpdateContext_s
 	Terrain3DCompute				  *m_pCompute = NULL;
 	t3dMiddleHeightRegionCacheConfig_t m_middleHeightConfig{};
 	void							  *m_pOwnerContext = NULL;
-	PrepareGpuFarSurfaceFn			   m_prepareGpuFarSurface = NULL;
 	ApplyInstanceChangesFn			   m_applyInstanceChanges = NULL;
 	GpuPageTableChangedFn			   m_gpuPageTableChanged = NULL;
     // Optional F03 owner-thread demand producer. Only F04 attaches its GPU
@@ -55,7 +54,7 @@ public:
 							  Terrain3DInstanceRegionCache	   *pInstanceRegionCache,
 							  Terrain3DMiddleHeightRegionCache *pMiddleHeightRegionCache,
 							  Terrain3DGpuRegionCache		   *pGpuRegionCache,
-							  Terrain3DFarSurfaceAtlasCache	   *pFarSurfaceAtlasCache );
+							  Terrain3DFarRegionalCooker	   *pFarRegionalCooker );
 
 	void reset( void );
 	// The GPU-authoritative migration stays off until P03-P13 consumers exist.
@@ -90,7 +89,7 @@ private:
 	Terrain3DInstanceRegionCache	 *m_pInstanceRegionCache = NULL;
 	Terrain3DMiddleHeightRegionCache *m_pMiddleHeightRegionCache = NULL;
 	Terrain3DGpuRegionCache			 *m_pGpuRegionCache = NULL;
-	Terrain3DFarSurfaceAtlasCache	 *m_pFarSurfaceAtlasCache = NULL;
+	Terrain3DFarRegionalCooker	 *m_pFarRegionalCooker = NULL;
 	Terrain3DResidencyPlan			  m_gpuPagePlan;
 	mutable uint64_t				  m_szBaselineChannelPeakBytes[T3D_GPU_PAGE_CHANNEL_COUNT]{};
 	mutable uint64_t				  m_nBaselineGpuPeakBytes = 0u;

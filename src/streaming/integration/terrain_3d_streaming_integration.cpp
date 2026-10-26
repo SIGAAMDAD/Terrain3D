@@ -643,7 +643,7 @@ void Terrain3D::setEditorExecutionMode(
 	serviceMemoryBudgetPolicy( true );
 	applyStreamingPolicy( true );
 	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) ) {
-		// Editor/legacy arrays remain a compatibility surface. V3 runtime residency
+		// Editor/legacy arrays remain a compatibility surface. V1 runtime residency
 		// is independent and does not use logical-to-physical material remapping.
 		m_assets->updateTextureList();
 	}
@@ -972,54 +972,35 @@ void Terrain3D::setFarControlResolution(
 	refreshPerformanceProfileConformity();
 }
 
-// Both far atlases tile the *live* region map, not the maximum addressable one.
-// Terrain3DFarSurfaceAtlasCache::patchHeightRegion derives
-// samples_per_region = atlas_side / getRegionMapSize(), so sizing either atlas off
-// T3D_REGION_MAP_SIZE silently scales the real sample density by
-// T3D_REGION_MAP_SIZE / getRegionMapSize() and quadruples the allocation.
-int Terrain3D::getFarAtlasRegionMapSide(
+// V1 regional source densities are derived from the live region map.
+// The division is cold cooking work; no world-size texture is allocated.
+int Terrain3D::getFarRegionMapSide(
 	void ) const {
 	const int live = m_pData ? m_pData->getRegionMapSizeInternal() : 0;
 	return live > 0 ? live : T3D_REGION_MAP_SIZE;
 }
 
-int Terrain3D::getGpuFarHeightAtlasSide(
+int Terrain3D::getFarVtHeightSourceSide(
 	void ) const {
 	// Geometry quality follows the first Far mesh lattice. Surface-quality settings
 	// are intentionally excluded so they can never erase representable terrain shape.
 	const int first_far_lod = CLAMP( m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods, 0, 30 );
 	const int source_spacing = 1 << first_far_lod;
 	const int required_side = MAX( 1, T3D_ACTIVE_WORLD_TEXELS / source_spacing );
-	return CLAMP( required_side, getFarAtlasRegionMapSide(), T3D_GPU_CACHE_FAR_HEIGHT_SIDE );
+	return CLAMP( required_side, getFarRegionMapSide(), T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE );
 }
 
-int Terrain3D::getGpuFarSurfaceAtlasSide(
+int Terrain3D::getFarVtSurfaceSourceSide(
 	void ) const {
-	const int map_side = getFarAtlasRegionMapSide();
+	const int map_side = getFarRegionMapSide();
 	const int requested = m_nFarControlResolution * map_side;
-	// Hard VRAM ceiling. far_control_resolution is samples-per-region, so a growing
-	// region map must not be allowed to multiply into a multi-hundred-megabyte atlas.
-	if ( requested <= T3D_GPU_CACHE_FAR_SURFACE_MAX_SIDE ) {
+	// Cold source sampling density remains bounded independently of GPU residency.
+	if ( requested <= T3D_FAR_VT_MAX_SOURCE_SURFACE_SIDE ) {
 		return requested;
 	}
 	// Stay on a multiple of the region map so samples_per_region remains exact.
-	const int clamped_samples = MAX( 1, T3D_GPU_CACHE_FAR_SURFACE_MAX_SIDE / map_side );
+	const int clamped_samples = MAX( 1, T3D_FAR_VT_MAX_SOURCE_SURFACE_SIDE / map_side );
 	return clamped_samples * map_side;
-}
-
-uint64_t Terrain3D::getGpuFarAtlasBytes(
-	void ) const {
-	const uint64_t height_side = ( uint64_t ) ( getGpuFarHeightAtlasSide() );
-	const uint64_t samples = ( uint64_t ) ( getGpuFarSurfaceAtlasSide() ) / T3D_REGION_MAP_SIZE;
-	const int	   pages = CLAMP( getGpuRegionCachePageLimit() / 2, 16, 64 );
-	uint64_t	   columns = 1u;
-	while ( columns * columns < ( uint64_t ) pages ) {
-		++columns;
-	}
-	const uint64_t rows = ( ( uint64_t ) pages + columns - 1u ) / columns;
-	const uint64_t width = MAX( columns * samples, ( uint64_t ) 512u );
-	const uint64_t height = rows * samples + 512u;
-	return height_side * height_side * 2u + width * height * 4u;
 }
 
 void Terrain3D::setGpuRegionCookedPagesEnabled(

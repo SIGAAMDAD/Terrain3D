@@ -69,6 +69,8 @@ uint32_t t3d_vt_page_builder_channel_components(
 		return 2u;
 	case T3D_VT_CHANNEL_HEIGHT:
 		return 1u;
+	case T3D_VT_CHANNEL_HEIGHT16:
+		return 2u;
 	default:
 		return 0u;
 	}
@@ -409,6 +411,8 @@ static bool t3d_vt_page_builder_validate_logical_source(
 		return rSource.m_nComponents >= 4u;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return true;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		return rSource.m_nComponents == 2u;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return rSource.m_nComponents >= 2u;
 	case T3D_VT_LOGICAL_CHANNEL_ORM:
@@ -435,6 +439,8 @@ uint32_t t3d_vt_page_builder_logical_channel_components(
 		return 2u;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return 1u;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		return 2u;
 	default:
 		return 0u;
 	}
@@ -464,6 +470,9 @@ bool t3d_vt_page_builder_fill_logical_neutral(
 		break;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		Sample[0] = T3D_VT_NEUTRAL_HEIGHT8;
+		break;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		Sample[0] = 0u; Sample[1] = 0x80u;
 		break;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		Sample[0] = T3D_VT_NEUTRAL_NORMAL_X8;
@@ -568,6 +577,9 @@ bool t3d_vt_page_builder_normalize_logical_channel_u8(
 				break;
 			case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 				pOut[0] = pSource[0];
+				break;
+			case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+				pOut[0] = pSource[0]; pOut[1] = pSource[1];
 				break;
 			case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 				pOut[0] = pSource[0];
@@ -799,6 +811,18 @@ bool t3d_vt_page_builder_resample_logical_channel_u8(
 		 nDestinationBytes < nRequired ||
 		 !t3d_vt_page_builder_validate_logical_source( Channel, nOrmSourceLayout, rSource ) ) {
 		return false;
+	}
+	if ( Channel == T3D_VT_LOGICAL_CHANNEL_HEIGHT || Channel == T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) {
+		for ( uint32_t y = 0u; y < nTargetHeight; ++y ) {
+			const uint32_t sy = ( uint64_t( y ) * rSource.m_nHeight ) / nTargetHeight;
+			for ( uint32_t x = 0u; x < nTargetWidth; ++x ) {
+				const uint32_t sx = ( uint64_t( x ) * rSource.m_nWidth ) / nTargetWidth;
+				const uint8_t *src = rSource.m_pPixels + uint64_t( sy ) * rSource.m_nRowBytes + sx * rSource.m_nComponents;
+				uint8_t *dst = pDestination + ( uint64_t( y ) * nTargetWidth + x ) * nTargetComponents;
+				memcpy( dst, src, nTargetComponents );
+			}
+		}
+		return true;
 	}
 	if ( rSource.m_nWidth == nTargetWidth && rSource.m_nHeight == nTargetHeight ) {
 		return t3d_vt_page_builder_normalize_logical_channel_u8( Channel,

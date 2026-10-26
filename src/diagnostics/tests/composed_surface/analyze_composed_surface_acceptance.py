@@ -77,7 +77,7 @@ def summarize(group: list[dict], key: str):
             'max': max(values)}
 
 
-def compare(groups, baseline='canonical_vt_v3', candidate='composed_surface', min_frames=30):
+def compare(groups, baseline='canonical_vt_v1', candidate='composed_surface', min_frames=30):
     results = []
     cohorts = sorted({cohort for cohort, _ in groups})
     for cohort in cohorts:
@@ -126,7 +126,7 @@ def compare(groups, baseline='canonical_vt_v3', candidate='composed_surface', mi
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('capture_csv', type=Path)
-    parser.add_argument('--baseline', default='canonical_vt_v3')
+    parser.add_argument('--baseline', default='canonical_vt_v1')
     parser.add_argument('--candidate', default='composed_surface')
     parser.add_argument('--min-frames', type=int, default=30)
     parser.add_argument('--output', type=Path)

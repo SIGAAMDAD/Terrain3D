@@ -246,7 +246,7 @@ void Terrain3D::sampleRuntimeProfile(
 		sample.m_nEventFlags |= TERRAIN3D_PROFILE_EVENT_NODE_LOAD_FAILURE;
 	}
 	if ( sample.m_nGpuFarRegionsProcessed > 0 || sample.m_nGpuFarDirtyRegions > 0 ) {
-		sample.m_nEventFlags |= TERRAIN3D_PROFILE_EVENT_FAR_ATLAS_WORK;
+		sample.m_nEventFlags |= TERRAIN3D_PROFILE_EVENT_FAR_VT_WORK;
 	}
 	if ( sample.m_nCpuLoads > 0 && sample.m_nCpuSelectionPending != 0 ) {
 		sample.m_nEventFlags |= TERRAIN3D_PROFILE_EVENT_CPU_DEMAND_LOAD;
@@ -418,8 +418,8 @@ Array Terrain3D::getRuntimeProfileEventNames(
 	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_NODE_LOAD_FAILURE ) != 0u ) {
 		names.push_back( "node_load_failure" );
 	}
-	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_FAR_ATLAS_WORK ) != 0u ) {
-		names.push_back( "far_atlas_work" );
+	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_FAR_VT_WORK ) != 0u ) {
+		names.push_back( "far_vt_work" );
 	}
 	if ( ( nFlags & TERRAIN3D_PROFILE_EVENT_CPU_DEMAND_LOAD ) != 0u ) {
 		names.push_back( "cpu_demand_load" );
@@ -640,8 +640,8 @@ Array Terrain3D::getRuntimeProfileProblems(
 	if ( sample.m_nGpuFarDirtyRegions > 0 ) {
 		t3dAppendRuntimeProblem( problems,
 								 "info",
-								 "far_atlas_backlog",
-								 "far_atlas",
+								 "far_vt_backlog",
+								 "far_vt",
 								 "Far-atlas region patches remain dirty.",
 								 sample.m_nGpuFarDirtyRegions );
 	}

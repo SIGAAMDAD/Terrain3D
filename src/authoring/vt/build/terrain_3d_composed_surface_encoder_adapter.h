@@ -24,7 +24,7 @@ inline bool t3d_cs_reference_encode( void *pUser, const uint32_t nChannel,
     request.m_nHeight = T3D_CS_PHYSICAL_TILE;
     request.m_nComponents = 4u;
     request.m_nQuality = 1u;
-    request.m_nContractVersion = T3D_VT_FILE_VERSION_V3; // Codec selector only; .t3sc ABI remains independent.
+    request.m_nContractVersion = T3D_VT_FILE_VERSION_V1; // Codec selector only; .t3sc ABI remains independent.
     request.m_pDestination = pCompressed;
     request.m_nDestinationCapacity = nCapacity;
     rWritten = 0u;

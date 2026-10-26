@@ -10,10 +10,10 @@ class Terrain3DData;
 // T03 authoring-only entry. Builds conservative PARTIAL sampled terrain from
 // authored height/control; HLOD meshes and exact UV occupancy arrive in T05/6.
 // GPU unavailability is a benign cold failure; the v2 index stays authoritative.
-bool t3d_vt_visibility_cook_v3_cold(
+bool t3d_vt_visibility_cook_v1_cold(
     const Terrain3DData &rData, const uint64_t *pStableKeys, uint32_t nKeys,
     uint64_t nPackageSignature, uint64_t nAssetHash,
-    godot::PackedByteArray &rV3, t3dVTVisibilityAggregateStats_t &rStats,
+    godot::PackedByteArray &rV1, t3dVTVisibilityAggregateStats_t &rStats,
     godot::String &rError );
 
 #endif

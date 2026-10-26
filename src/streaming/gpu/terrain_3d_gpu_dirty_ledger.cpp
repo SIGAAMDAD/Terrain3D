@@ -4,9 +4,9 @@
 uint8_t Terrain3DGpuDirtyLedger::maskFor(
 	uint8_t channel ) {
 	if ( channel == T3D_GPU_PAGE_HEIGHT )
-		return DERIVED | COMPOSITE | SHADOW | MIDDLE_HEIGHT | FAR_ATLAS | CPU_COLLISION;
+		return DERIVED | COMPOSITE | SHADOW | MIDDLE_HEIGHT | FAR_VT | CPU_COLLISION;
 	if ( channel == T3D_GPU_PAGE_COLOR || channel == T3D_GPU_PAGE_CONTROL )
-		return COMPOSITE | FAR_ATLAS | MATERIAL_VT;
+		return COMPOSITE | FAR_VT | MATERIAL_VT;
 	if ( channel == T3D_GPU_PAGE_DERIVED )
 		return COMPOSITE;
 	return 0u;

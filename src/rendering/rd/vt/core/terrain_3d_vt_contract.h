@@ -8,18 +8,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Terrain3D Sparse VT V3 is the frozen shipping package ABI.
+// Terrain3D Sparse VT V1 is the frozen shipping package ABI.
 // Filter/compressor ABI revisions are explicit cache-invalidating contracts.
-#define T3D_VT_FILE_MAGIC				 0x56543354u
-#define T3D_VT_FILE_VERSION_V3			 3u
-#define T3D_VT_FILE_VERSION				 T3D_VT_FILE_VERSION_V3
-#define T3D_VT_V3_ABI_VERSION			 3u
-#define T3D_VT_V3_FILTER_ABI_VERSION	 2u
-#define T3D_VT_V3_COMPRESSOR_ABI_VERSION 3u
-static_assert( T3D_VT_FILE_VERSION_V3 == 3u, "Sparse VT V3 file ABI version is frozen" );
-static_assert( T3D_VT_V3_ABI_VERSION == 3u, "Sparse VT V3 ABI version is frozen" );
-static_assert( T3D_VT_V3_FILTER_ABI_VERSION == 2u, "Sparse VT V3 filter ABI version is frozen" );
-static_assert( T3D_VT_V3_COMPRESSOR_ABI_VERSION == 3u, "Sparse VT V3 RGBA compressor recipe revision" );
+#define T3D_VT_FILE_MAGIC				 0x56543154u
+#define T3D_VT_FILE_VERSION_V1			 1u
+#define T3D_VT_FILE_VERSION				 T3D_VT_FILE_VERSION_V1
+#define T3D_VT_V1_ABI_VERSION			 2u
+#define T3D_VT_V1_FILTER_ABI_VERSION	 1u
+#define T3D_VT_V1_COMPRESSOR_ABI_VERSION 1u
+static_assert( T3D_VT_FILE_VERSION_V1 == 1u, "Sparse VT V1 file ABI version is frozen" );
+static_assert( T3D_VT_V1_ABI_VERSION == 2u, "Sparse VT V1 ABI version is frozen" );
+static_assert( T3D_VT_V1_FILTER_ABI_VERSION == 1u, "Sparse VT V1 filter ABI version is frozen" );
+static_assert( T3D_VT_V1_COMPRESSOR_ABI_VERSION == 1u, "Sparse VT V1 RGBA compressor recipe revision" );
 #define T3D_VT_PAGE_INTERIOR			128u
 #define T3D_VT_PAGE_GUTTER				4u
 #define T3D_VT_PHYSICAL_TILE			136u
@@ -33,12 +33,12 @@ static_assert( T3D_VT_V3_COMPRESSOR_ABI_VERSION == 3u, "Sparse VT V3 RGBA compre
 #define T3D_VT_TAIL_TILE				16u
 #define T3D_VT_TAIL_ATLAS_WIDTH			2048u
 #define T3D_VT_TAIL_TILES_PER_ROW		( T3D_VT_TAIL_ATLAS_WIDTH / T3D_VT_TAIL_TILE )
-// Sparse V3 cooks the compact tail mip chain horizontally inside the 128 texel
+// Sparse V1 cooks the compact tail mip chain horizontally inside the 128 texel
 // page interior. Runtime preserves that layout verbatim so BC-compressed tail
 // payloads never need to be decoded/re-encoded merely to expose lower mips.
 #define T3D_VT_PACK_TAIL_SLOT_WIDTH	 128u
 #define T3D_VT_PACK_TAIL_SLOT_HEIGHT 64u
-// Runtime V3 tails use a wider atlas; serialized payload layout is unchanged.
+// Runtime V1 tails use a wider atlas; serialized payload layout is unchanged.
 #define T3D_VT_PACK_TAIL_ATLAS_WIDTH		   8192u
 #define T3D_VT_PACK_TAILS_PER_ROW			   ( T3D_VT_PACK_TAIL_ATLAS_WIDTH / T3D_VT_PACK_TAIL_SLOT_WIDTH )
 #define T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY 1024u
@@ -50,8 +50,8 @@ inline uint64_t t3d_vt_terrain_region_stable_key(
 }
 inline uint32_t t3d_vt_allocation_capacity(
 	const uint32_t nMaxMaterials ) {
-	return nMaxMaterials <= UINT32_MAX / 4u - T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY
-			   ? ( nMaxMaterials + T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) * 4u
+	return nMaxMaterials <= UINT32_MAX / 4u - T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u
+               ? ( nMaxMaterials + T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u ) * 4u
 			   : 0u;
 }
 
@@ -80,6 +80,22 @@ static inline bool t3d_vt_decode_terrain_material_stable_key(
 	return true;
 }
 
+// Disjoint V1 stable-key namespace for offline-composed pages. The key is
+// stored in the existing allocation table, never a second composed page table.
+inline uint64_t t3d_vt_composed_region_stable_key( const uint32_t nRegionMapIndex ) {
+    return 0x5443535245470000ull | ( uint64_t ) nRegionMapIndex;
+}
+inline bool t3d_vt_is_composed_region_stable_key( const uint64_t nStableKey ) {
+    return ( nStableKey & 0xffffffffffff0000ull ) == 0x5443535245470000ull;
+}
+
+// Far-surface allocations use V1's own allocation table and physical-page scheduler.
+inline uint64_t t3d_vt_far_region_stable_key( const uint32_t nRegionMapIndex ) {
+    return 0x5446415252450000ull | uint64_t( nRegionMapIndex );
+}
+inline bool t3d_vt_is_far_region_stable_key( const uint64_t nStableKey ) {
+    return ( nStableKey & 0xffffffffffff0000ull ) == 0x5446415252450000ull;
+}
 inline bool t3d_vt_is_terrain_region_stable_key(
 	const uint64_t nStableKey ) {
 	return ( nStableKey & 0xffffffffffff0000ull ) == 0x5445525245470000ull;
@@ -137,37 +153,37 @@ inline bool t3d_vt_is_terrain_region_stable_key(
 #define T3D_VT_NEUTRAL_SURFACE_ALPHA8	  255u
 #define T3D_VT_NEUTRAL_HEIGHT8			  128u
 
-// V3 logical channels are semantic/format pools. Terrain clipmaps consume
+// V1 logical channels are semantic/format pools. Terrain clipmaps consume
 // ALBEDO/PBR/(HEIGHT); instances consume ALBEDO/(NORMAL)/(ORM).
 
-// V3 physical residency is format-family based. Logical ALBEDO and ORM both
+// V1 physical residency is format-family based. Logical ALBEDO and ORM both
 // normally occupy the BC1 UNORM family; the shader applies semantic decode from the
 // logical channel rather than from the physical bank.
 
-// V3 runtime page-table address. The top two bits select one of the four
-// global physical format-family arrays and the low 30 bits select its layer.
-#define T3D_VT_V3_PHYSICAL_FAMILY_SHIFT 30u
-#define T3D_VT_V3_PHYSICAL_FAMILY_MASK	0xc0000000u
-#define T3D_VT_V3_PHYSICAL_SLOT_MASK	0x3fffffffu
+// V1 internal page-table addresses reserve three high bits for five format families.
+// The remaining 29 bits address physical layers; all resident pages use one allocator.
+#define T3D_VT_V1_PHYSICAL_FAMILY_SHIFT 29u
+#define T3D_VT_V1_PHYSICAL_FAMILY_MASK	0xe0000000u
+#define T3D_VT_V1_PHYSICAL_SLOT_MASK	0x1fffffffu
 
-static inline uint32_t t3d_vt_pack_physical_address_v3(
+static inline uint32_t t3d_vt_pack_physical_address_v1(
 	const t3dVTPhysicalFormatFamily_t Family,
 	const uint32_t					  nSlot ) {
-	if ( ( uint32_t ) Family >= T3D_VT_PHYSICAL_FORMAT_COUNT || nSlot > T3D_VT_V3_PHYSICAL_SLOT_MASK ) {
+	if ( ( uint32_t ) Family >= T3D_VT_PHYSICAL_FORMAT_COUNT || nSlot > T3D_VT_V1_PHYSICAL_SLOT_MASK ) {
 		return T3D_VT_INVALID_SLOT;
 	}
-	return ( ( uint32_t ) Family << T3D_VT_V3_PHYSICAL_FAMILY_SHIFT ) | nSlot;
+	return ( ( uint32_t ) Family << T3D_VT_V1_PHYSICAL_FAMILY_SHIFT ) | nSlot;
 }
 
-static inline t3dVTPhysicalFormatFamily_t t3d_vt_physical_address_family_v3(
+static inline t3dVTPhysicalFormatFamily_t t3d_vt_physical_address_family_v1(
 	const uint32_t nAddress ) {
-	return ( t3dVTPhysicalFormatFamily_t ) ( ( nAddress & T3D_VT_V3_PHYSICAL_FAMILY_MASK ) >>
-											 T3D_VT_V3_PHYSICAL_FAMILY_SHIFT );
+	return ( t3dVTPhysicalFormatFamily_t ) ( ( nAddress & T3D_VT_V1_PHYSICAL_FAMILY_MASK ) >>
+											 T3D_VT_V1_PHYSICAL_FAMILY_SHIFT );
 }
 
-static inline uint32_t t3d_vt_physical_address_slot_v3(
+static inline uint32_t t3d_vt_physical_address_slot_v1(
 	const uint32_t nAddress ) {
-	return nAddress & T3D_VT_V3_PHYSICAL_SLOT_MASK;
+	return nAddress & T3D_VT_V1_PHYSICAL_SLOT_MASK;
 }
 
 // The current World owns four physical arrays already. P04 reinterprets
@@ -184,6 +200,8 @@ static inline uint32_t t3d_vt_physical_family_legacy_resource_channel(
 		return T3D_VT_CHANNEL_NORMAL;
 	case T3D_VT_PHYSICAL_FORMAT_R8_UNORM:
 		return T3D_VT_CHANNEL_HEIGHT;
+	case T3D_VT_PHYSICAL_FORMAT_R16_UNORM:
+		return T3D_VT_CHANNEL_HEIGHT16;
 	default:
 		return T3D_VT_INVALID_SLOT;
 	}
@@ -205,6 +223,8 @@ static inline t3dVTPhysicalFormatFamily_t t3d_vt_logical_channel_physical_family
 		return T3D_VT_PHYSICAL_FORMAT_BC7_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_PHYSICAL_FORMAT_BC5_UNORM;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		return T3D_VT_PHYSICAL_FORMAT_R16_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 	default:
 		return T3D_VT_PHYSICAL_FORMAT_R8_UNORM;
@@ -220,6 +240,8 @@ static inline t3dVTChannelSemantic_t t3d_vt_logical_channel_semantic(
 		return T3D_VT_CHANNEL_SEMANTIC_TERRAIN_PBR;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return T3D_VT_CHANNEL_SEMANTIC_LINEAR_HEIGHT;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		return T3D_VT_CHANNEL_SEMANTIC_FAR_HEIGHT_R16;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_CHANNEL_SEMANTIC_NORMAL_XY;
 	case T3D_VT_LOGICAL_CHANNEL_ORM:
@@ -228,12 +250,12 @@ static inline t3dVTChannelSemantic_t t3d_vt_logical_channel_semantic(
 	}
 }
 
-// VT-P06 runtime adapter: one logical V3 material allocation is flattened to
+// VT-P06 runtime adapter: one logical V1 material allocation is flattened to
 // three independent residency allocations. The meaning of slots 1/2 depends
 // on the consumer; slot 0 is ALBEDO for both.
-#define T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION 3u
+#define T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION 3u
 
-static inline bool t3d_vt_v3_runtime_slot_for_channel(
+static inline bool t3d_vt_v1_runtime_slot_for_channel(
 	const t3dVTConsumer_t		Consumer,
 	const t3dVTLogicalChannel_t Channel,
 	uint32_t				   &rSlot ) {
@@ -250,6 +272,12 @@ static inline bool t3d_vt_v3_runtime_slot_for_channel(
 			rSlot = 2u;
 			return true;
 		}
+    } else if ( Consumer == T3D_VT_CONSUMER_FAR ) {
+        if ( Channel == T3D_VT_LOGICAL_CHANNEL_HEIGHT ) { rSlot = 1u; return true; }
+        if ( Channel == T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) { rSlot = 2u; return true; }
+    } else if ( Consumer == T3D_VT_CONSUMER_COMPOSED ) {
+        if ( Channel == T3D_VT_LOGICAL_CHANNEL_NORMAL ) { rSlot = 1u; return true; }
+        if ( Channel == T3D_VT_LOGICAL_CHANNEL_PBR ) { rSlot = 2u; return true; }
 	} else if ( Consumer == T3D_VT_CONSUMER_INSTANCE ) {
 		if ( Channel == T3D_VT_LOGICAL_CHANNEL_NORMAL ) {
 			rSlot = 1u;
@@ -264,12 +292,12 @@ static inline bool t3d_vt_v3_runtime_slot_for_channel(
 	return false;
 }
 
-static inline uint32_t t3d_vt_v3_runtime_allocation_base(
+static inline uint32_t t3d_vt_v1_runtime_allocation_base(
 	const uint32_t nAllocationId ) {
-	return nAllocationId * T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
+	return nAllocationId * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
 }
 
-static inline bool t3d_vt_v3_logical_channel_for_runtime_slot(
+static inline bool t3d_vt_v1_logical_channel_for_runtime_slot(
 	const t3dVTConsumer_t  Consumer,
 	const uint32_t		   nSlot,
 	t3dVTLogicalChannel_t &rChannel ) {
@@ -286,6 +314,12 @@ static inline bool t3d_vt_v3_logical_channel_for_runtime_slot(
 			rChannel = T3D_VT_LOGICAL_CHANNEL_HEIGHT;
 			return true;
 		}
+    } else if ( Consumer == T3D_VT_CONSUMER_FAR ) {
+        if ( nSlot == 1u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_HEIGHT; return true; }
+        if ( nSlot == 2u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT; return true; }
+    } else if ( Consumer == T3D_VT_CONSUMER_COMPOSED ) {
+        if ( nSlot == 1u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_NORMAL; return true; }
+        if ( nSlot == 2u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_PBR; return true; }
 	} else if ( Consumer == T3D_VT_CONSUMER_INSTANCE ) {
 		if ( nSlot == 1u ) {
 			rChannel = T3D_VT_LOGICAL_CHANNEL_NORMAL;
@@ -304,10 +338,45 @@ static inline bool t3d_vt_v3_logical_channel_for_runtime_slot(
 	( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) |                                                    \
 	  T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_PBR ) |                                                       \
 	  T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_HEIGHT ) )
+// Composed pages are BC1 albedo, BC5 normal and BC7 packed surface.
+// The three slots share the existing V1 allocator and physical BC banks.
+#define T3D_VT_COMPOSED_ALLOWED_CHANNEL_MASK \
+    ( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | \
+      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | \
+      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_PBR ) )
+#define T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK T3D_VT_COMPOSED_ALLOWED_CHANNEL_MASK
+#define T3D_VT_FAR_ALLOWED_CHANNEL_MASK \
+    ( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | \
+      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_HEIGHT ) | \
+      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) )
+#define T3D_VT_FAR_REQUIRED_CHANNEL_MASK T3D_VT_FAR_ALLOWED_CHANNEL_MASK
+
 #define T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK                                                                           \
 	( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) |                                                    \
 	  T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_NORMAL ) |                                                    \
 	  T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ORM ) )
+
+static inline uint32_t t3d_vt_consumer_allowed_mask( const t3dVTConsumer_t consumer ) {
+    switch ( consumer ) {
+    case T3D_VT_CONSUMER_CLIPMAP: return T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
+    case T3D_VT_CONSUMER_INSTANCE: return T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
+    case T3D_VT_CONSUMER_COMPOSED: return T3D_VT_COMPOSED_ALLOWED_CHANNEL_MASK;
+    case T3D_VT_CONSUMER_FAR: return T3D_VT_FAR_ALLOWED_CHANNEL_MASK;
+    default: return 0u;
+    }
+}
+static inline uint32_t t3d_vt_consumer_required_mask( const t3dVTConsumer_t consumer ) {
+    switch ( consumer ) {
+    case T3D_VT_CONSUMER_CLIPMAP:
+        return T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) |
+               T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_PBR );
+    case T3D_VT_CONSUMER_INSTANCE:
+        return T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO );
+    case T3D_VT_CONSUMER_COMPOSED: return T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK;
+    case T3D_VT_CONSUMER_FAR: return T3D_VT_FAR_REQUIRED_CHANNEL_MASK;
+    default: return 0u;
+    }
+}
 
 static inline t3dVTLogicalChannelFormat_t t3d_vt_logical_channel_format(
 	const t3dVTLogicalChannel_t Channel ) {
@@ -318,6 +387,8 @@ static inline t3dVTLogicalChannelFormat_t t3d_vt_logical_channel_format(
 		return T3D_VT_LOGICAL_FORMAT_PBR_BC7_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return T3D_VT_LOGICAL_FORMAT_HEIGHT_R8_UNORM;
+	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
+		return T3D_VT_LOGICAL_FORMAT_FAR_HEIGHT_R16_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_LOGICAL_FORMAT_NORMAL_BC5_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_ORM:
@@ -343,12 +414,12 @@ static inline bool t3d_vt_allocation_quality_enabled(
 // CPU fields at offsets 8/10 and 12/14 are consumed by GLSL as two packed
 // uints: packedMip0Extent and packedMipCountFlags respectively.
 
-// V3 uses one record per allocation/logical-channel pair. Index is
+// V1 uses one record per allocation/logical-channel pair. Index is
 // allocation_id * T3D_VT_LOGICAL_CHANNEL_COUNT + logical_channel.
 
 #define T3D_VT_PACK_INVALID_MIP 0xffu
 
-// Native V3 serialized records shared by the pack parser and runtime. The
+// Native V1 serialized records shared by the pack parser and runtime. The
 // channel-allocation directory remains a fixed allocation x logical-channel
 // matrix; absent channels carry a zero record and allocate no pages/tail.
 
@@ -374,12 +445,12 @@ static inline bool t3d_vt_allocation_quality_enabled(
 // virtual-texture allocation IDs; source Texture2D/RID identity is cook input.
 
 static_assert( sizeof( t3dVTAllocation_t ) == 32u, "t3dVTAllocation_t ABI changed" );
-static_assert( sizeof( t3dVTChannelAllocation_t ) == 20u, "t3dVTChannelAllocation_t v3 ABI changed" );
-static_assert( sizeof( t3dVTPackAllocationRecordV3_t ) == 16u, "t3dVTPackAllocationRecordV3_t ABI changed" );
-static_assert( sizeof( t3dVTPackPageRecordV3_t ) == 36u, "t3dVTPackPageRecordV3_t ABI changed" );
-static_assert( sizeof( t3dVTPackTailRecordV3_t ) == 40u, "t3dVTPackTailRecordV3_t ABI changed" );
-static_assert( sizeof( t3dVTPackQualityViewV3_t ) == 16u, "t3dVTPackQualityViewV3_t ABI changed" );
-static_assert( sizeof( t3dVTPackFormatFamilyRecordV3_t ) == 8u, "t3dVTPackFormatFamilyRecordV3_t ABI changed" );
+static_assert( sizeof( t3dVTChannelAllocation_t ) == 20u, "t3dVTChannelAllocation_t v1 ABI changed" );
+static_assert( sizeof( t3dVTPackAllocationRecordV1_t ) == 16u, "t3dVTPackAllocationRecordV1_t ABI changed" );
+static_assert( sizeof( t3dVTPackPageRecordV1_t ) == 36u, "t3dVTPackPageRecordV1_t ABI changed" );
+static_assert( sizeof( t3dVTPackTailRecordV1_t ) == 40u, "t3dVTPackTailRecordV1_t ABI changed" );
+static_assert( sizeof( t3dVTPackQualityViewV1_t ) == 20u, "t3dVTPackQualityViewV1_t ABI changed" );
+static_assert( sizeof( t3dVTPackFormatFamilyRecordV1_t ) == 8u, "t3dVTPackFormatFamilyRecordV1_t ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nBaseVirtualPage ) == 0u, "VT allocation base-page ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nMip0WidthPages ) == 8u, "VT allocation extent ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nMipCount ) == 12u, "VT allocation mip ABI changed" );

@@ -16,7 +16,7 @@
 using namespace godot;
 
 static bool t3dDemandHasKey(
-	const t3dVTPackViewV3_t &rPack,
+	const t3dVTPackViewV1_t &rPack,
 	const uint64_t			 nKey ) {
 	uint32_t low = 0u, high = rPack.m_pHeader->m_nAllocationCount;
 	while ( low < high ) {
@@ -34,9 +34,9 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
     const Terrain3DData &rData, const Ref< Terrain3DAssets > &rAssets,
     const PackedByteArray &rFinalPackage, PackedByteArray &rSidecar,
     String &rPath, String &rError,
-    PackedByteArray *const pV3Sidecar, String *const pV3Path ) {
-    if ( pV3Sidecar ) pV3Sidecar->clear();
-    if ( pV3Path ) *pV3Path = String();
+    PackedByteArray *const pV1Sidecar, String *const pV1Path ) {
+    if ( pV1Sidecar ) pV1Sidecar->clear();
+    if ( pV1Path ) *pV1Path = String();
 	rSidecar.clear();
 	rPath = String();
 	rError = String();
@@ -47,8 +47,8 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 		rError = "Cannot bake demand without final VT package";
 		return false;
 	}
-	t3dVTPackViewV3_t pack{};
-	if ( !t3d_vt_pack_open_view_v3( rFinalPackage.ptr(), ( uint64_t ) rFinalPackage.size(), pack ) ||
+	t3dVTPackViewV1_t pack{};
+	if ( !t3d_vt_pack_open_view_v1( rFinalPackage.ptr(), ( uint64_t ) rFinalPackage.size(), pack ) ||
 		 pack.m_pHeader == nullptr || pack.m_pHeader->m_nContentSignature == 0u ) {
 		rError = "Final VT package is invalid";
 		return false;
@@ -183,11 +183,11 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 	memcpy( rSidecar.ptrw(), output.data(), output.size() );
     // Opt-in authoring-only GPU cook; v2 always remains the canonical fallback.
     // Failure (including no Vulkan device) cannot destroy an otherwise sound
-    // v2/VT package publication and cannot leak a partially encoded v3 file.
+    // v2/VT package publication and cannot leak a partially encoded v1 file.
     ProjectSettings *const settings = ProjectSettings::get_singleton();
     const bool tryGpu = settings && ( bool ) settings->get_setting(
         "terrain3d/vt_gpu_visibility_cook_enabled", false );
-    if ( tryGpu && pV3Sidecar && pV3Path ) {
+    if ( tryGpu && pV1Sidecar && pV1Path ) {
         std::vector< uint64_t > keys;
         keys.reserve( pack.m_pHeader->m_nAllocationCount );
         for ( uint32_t i = 0u; i < pack.m_pHeader->m_nAllocationCount; ++i )
@@ -195,35 +195,35 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
         PackedByteArray candidate;
         t3dVTVisibilityAggregateStats_t stats{};
         String gpuError;
-        if ( t3d_vt_visibility_cook_v3_cold( rData, keys.data(), ( uint32_t ) keys.size(),
+        if ( t3d_vt_visibility_cook_v1_cold( rData, keys.data(), ( uint32_t ) keys.size(),
                 pack.m_pHeader->m_nContentSignature, nAssetHash, candidate, stats, gpuError ) &&
              !candidate.is_empty() ) {
             // Never replace the v2 sidecar during the T03/T04 transition.
-            *pV3Path = rPath + String( ".v3" );
-            *pV3Sidecar = candidate;
-            UtilityFunctions::print( "T3VD v3 GPU histogram: ", ( int64_t ) stats.m_nCells,
+            *pV1Path = rPath + String( ".v1" );
+            *pV1Sidecar = candidate;
+            UtilityFunctions::print( "T3VD v1 GPU histogram: ", ( int64_t ) stats.m_nCells,
                 " cells, ", ( int64_t ) stats.m_nProbes, " probes, ",
                 ( int64_t ) stats.m_nRecords, " records, ",
                 ( int64_t ) stats.m_nPartialCells, " partial cells" );
         } else {
-            UtilityFunctions::push_warning( "T3VD v3 GPU cook fell back to v2: ", gpuError );
+            UtilityFunctions::push_warning( "T3VD v1 GPU cook fell back to v2: ", gpuError );
         }
     }
-    // A previous successful v3 bake may belong to different authored heights
+    // A previous successful v1 bake may belong to different authored heights
     // or controls even when the VT package signature is unchanged. If the GPU
     // baker is disabled/unavailable, invalidate that older histogram in the
-    // same package+v2 transaction. Eight bytes intentionally fail the v3
+    // same package+v2 transaction. Eight bytes intentionally fail the v1
     // header check, leaving v2 and reactive feedback authoritative.
-    if ( pV3Sidecar && pV3Path && pV3Sidecar->is_empty() ) {
-        const String previousV3 = rPath + String( ".v3" );
-        if ( FileAccess::file_exists( previousV3 ) ) {
-            static const uint8_t invalidatedV3[8] = { 'T', '3', 'V', 'D', 'O', 'F', 'F', 0u };
-            if ( pV3Sidecar->resize( 8 ) != OK ) {
-                rError = "Failed to invalidate stale T3VD v3 during VT recook";
+    if ( pV1Sidecar && pV1Path && pV1Sidecar->is_empty() ) {
+        const String previousV1 = rPath + String( ".v1" );
+        if ( FileAccess::file_exists( previousV1 ) ) {
+            static const uint8_t invalidatedV1[8] = { 'T', '3', 'V', 'D', 'O', 'F', 'F', 0u };
+            if ( pV1Sidecar->resize( 8 ) != OK ) {
+                rError = "Failed to invalidate stale T3VD v1 during VT recook";
                 return false;
             }
-            memcpy( pV3Sidecar->ptrw(), invalidatedV3, sizeof( invalidatedV3 ) );
-            *pV3Path = previousV3;
+            memcpy( pV1Sidecar->ptrw(), invalidatedV1, sizeof( invalidatedV1 ) );
+            *pV1Path = previousV1;
         }
     }
 	return true;
@@ -232,7 +232,7 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 bool t3d_vt_demand_publish_triplet_cold(
     const String &packagePath, const PackedByteArray &package,
     const String &demandPath, const PackedByteArray &demand,
-    const String &v3Path, const PackedByteArray &v3,
+    const String &v1Path, const PackedByteArray &v1,
     String &error ) {
     // Publication objects retain their previous bytes until every staged
     // artifact is published. Any failure rolls back in reverse order.
@@ -241,48 +241,48 @@ bool t3d_vt_demand_publish_triplet_cold(
         return false;
     }
     if ( demandPath.is_empty() || demand.is_empty() ) {
-        if ( !v3Path.is_empty() || !v3.is_empty() ) {
-            error = "T3VD v3 publication requires a v2 fallback";
+        if ( !v1Path.is_empty() || !v1.is_empty() ) {
+            error = "T3VD v1 publication requires a v2 fallback";
             return false;
         }
         return t3dPublishPackedFile( packagePath, package, &error ) == OK;
     }
-    const bool hasV3 = !v3Path.is_empty() && !v3.is_empty();
-    if ( ( v3Path.is_empty() != v3.is_empty() ) || packagePath == demandPath ||
-         ( hasV3 && ( v3Path == demandPath || v3Path == packagePath ) ) ) {
+    const bool hasV1 = !v1Path.is_empty() && !v1.is_empty();
+    if ( ( v1Path.is_empty() != v1.is_empty() ) || packagePath == demandPath ||
+         ( hasV1 && ( v1Path == demandPath || v1Path == packagePath ) ) ) {
         error = "VT sidecar publication paths/bytes mismatch";
         return false;
     }
     Terrain3DFilePublication pack( packagePath, packagePath + String( ".staged" ), packagePath + String( ".previous" ) );
     Terrain3DFilePublication fallback( demandPath, demandPath + String( ".staged" ), demandPath + String( ".previous" ) );
-    Terrain3DFilePublication hist( v3Path, v3Path + String( ".staged" ), v3Path + String( ".previous" ) );
+    Terrain3DFilePublication hist( v1Path, v1Path + String( ".staged" ), v1Path + String( ".previous" ) );
     if ( pack.stagePacked( package ) != OK ) { error = pack.getError(); return false; }
     if ( fallback.stagePacked( demand ) != OK ) {
         error = fallback.getError();
         ( void ) pack.rollback();
         return false;
     }
-    if ( hasV3 && hist.stagePacked( v3 ) != OK ) {
+    if ( hasV1 && hist.stagePacked( v1 ) != OK ) {
         error = hist.getError();
         ( void ) fallback.rollback();
         ( void ) pack.rollback();
         return false;
     }
     if ( pack.publish() != OK || fallback.publish() != OK ||
-         ( hasV3 && hist.publish() != OK ) ) {
-        error = hasV3 && !hist.getError().is_empty() ? hist.getError() :
+         ( hasV1 && hist.publish() != OK ) ) {
+        error = hasV1 && !hist.getError().is_empty() ? hist.getError() :
             ( !fallback.getError().is_empty() ? fallback.getError() : pack.getError() );
-        if ( hasV3 ) ( void ) hist.rollback();
+        if ( hasV1 ) ( void ) hist.rollback();
         ( void ) fallback.rollback();
         ( void ) pack.rollback();
         return false;
     }
     // All three new files are visible before backups are cleaned.
-    const Error eV3 = hasV3 ? hist.commit() : OK;
+    const Error eV1 = hasV1 ? hist.commit() : OK;
     const Error eV2 = fallback.commit();
     const Error ePack = pack.commit();
-    if ( eV3 != OK || eV2 != OK || ePack != OK ) {
-        error = eV3 != OK ? hist.getError() : ( eV2 != OK ? fallback.getError() : pack.getError() );
+    if ( eV1 != OK || eV2 != OK || ePack != OK ) {
+        error = eV1 != OK ? hist.getError() : ( eV2 != OK ? fallback.getError() : pack.getError() );
         return false;
     }
     return true;

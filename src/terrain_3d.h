@@ -84,9 +84,9 @@ private:
 	String					   m_dataDirectory;
 	bool					   m_bIsInsideWorld = false;
 	bool					   m_bInitialized = false;
-	// Opt-in viewport-level VRS experiment. Never changes the default viewport.
-	uint64_t                   m_nVrsTrialViewportId = 0u;
-	Ref< ImageTexture >        m_hVrsTrialTexture;
+	// Opt-in viewport VRS profile; absent project setting means disabled.
+	uint64_t                   m_nVrsViewportId = 0u;
+	Ref< ImageTexture >        m_hVrsProfileTexture;
 	Ref< Texture2D >           m_hVrsPreviousTexture;
 	int32_t                    m_nPreviousVrsUpdateMode = 0;
 	t3dRuntimeLifecycleState_t m_runtimeLifecycleState = TERRAIN3D_RUNTIME_COLD;
@@ -426,7 +426,6 @@ private:
 	void					  prepareStartupAssetsStageCold( void );
 	void					  prepareStartupMemoryPolicyStageCold( void );
 	void					  prepareStartupResidencyStageCold( void );
-	void					  prepareStartupFarAtlasesStageCold( void );
 	void					  prepareStartupMaterialStageCold( void );
 	void					  prepareStartupCollisionStageCold( void );
 	void					  prepareStartupInstancerStageCold( void );
@@ -443,8 +442,8 @@ private:
 	bool					  beginRuntimeMemoryDrain( void );
 	bool					  releaseRuntimeMemory( void );
 	bool					  shutdownRuntimeMemoryImage( void );
-	void                      applyViewportVrsTrial( void );
-	void                      releaseViewportVrsTrial( void );
+	void                      applyViewportVrsProfile( void );
+	void                      releaseViewportVrsProfile( void );
 	void					  deactivateRuntime( bool bStartupFailure = false );
 	bool					  isEditorAuthoringModeInternal( void ) const;
 	bool					  effectiveGpuRegionCacheEnabled( void ) const;
@@ -1445,16 +1444,10 @@ public:
 		void ) const {
 		return m_nFarControlResolution;
 	}
-	// Live region-map side used to tile both far atlases. Falls back to the maximum
-	// addressable map only before Terrain3DData exists.
-	int					getFarAtlasRegionMapSide( void ) const;
-	int					getGpuFarHeightAtlasSide( void ) const;
-	int					getGpuFarSurfaceAtlasSide( void ) const;
-	EA_FORCE_INLINE int getGpuFarAtlasSide(
-		void ) const {
-		return getGpuFarHeightAtlasSide();
-	}
-	uint64_t			 getGpuFarAtlasBytes( void ) const;
+	// Derive per-region V1 source density from the live region map.
+	int					getFarRegionMapSide( void ) const;
+	int					getFarVtHeightSourceSide( void ) const;
+	int					getFarVtSurfaceSourceSide( void ) const;
 	void				 setGpuRegionCookedPagesEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool isGpuRegionCookedPagesEnabled(
 		void ) const {

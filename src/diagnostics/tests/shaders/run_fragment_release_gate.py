@@ -23,7 +23,7 @@ CS = TESTS.parent / 'composed_surface'
 PYTHON_TESTS = [
     TESTS / 'test_fragment_shader_contracts.py',
     TESTS / 'test_fragment_release_gate.py',
-    CS / 'test_cs11_static_v3_shader.py',
+    CS / 'test_cs11_static_v1_shader.py',
     CS / 'test_cs14_parity.py',
     CS / 'test_cs19_optin_policy.py',
     CS / 'test_cs20_editor_regression_gate.py',
@@ -182,8 +182,8 @@ def main():
         [sys.executable, str(shader_cases), '--require-compiler'], args.root, args.out, env)
     native = [
         ('vt_upload_preflight', [args.root / 'src/diagnostics/tests/test_vt_upload_preflight.cpp']),
-        ('cs11_static_v3', [args.root / 'src/diagnostics/tests/composed_surface/test_cs11_static_v3.cpp',
-                            args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_static_v3.cpp',
+        ('cs11_static_v1', [args.root / 'src/diagnostics/tests/composed_surface/test_cs11_static_v1.cpp',
+                            args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_static_v1.cpp',
                             args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_cooker.cpp']),
     ]
     for name, sources in native:

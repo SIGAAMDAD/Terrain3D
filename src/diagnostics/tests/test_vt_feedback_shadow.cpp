@@ -61,7 +61,7 @@ int main() {
     const uint32_t legacy[2] = { 2u, 2u };
     assert( reducer.reduce( ( const uint8_t * ) legacy, 2u, 16u, lookup, pages, policy, reductions ) );
     assert( reducer.getSelectedCount() == 1u );
-    // The runtime consumes/stages V2 results before doing diagnostics-only V3.
+    // The runtime consumes/stages V2 results before doing diagnostics-only V1.
     const uint32_t productionStagedPage = reducer.getSelected( 0u ).m_nPage;
     uint32_t productionStagedCount = 1u;
     assert( t3d_vt_feedback_multi_reduce_capture( ( const uint8_t * ) words.data(),

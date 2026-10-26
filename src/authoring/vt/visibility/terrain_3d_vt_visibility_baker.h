@@ -6,7 +6,7 @@
 #include <vector>
 
 // T02: a cold-only local RenderingDevice raster bake. This output is per-probe
-// *raw* visibility; T03 owns aggregation and publication into T3VD v3.
+// *raw* visibility; T03 owns aggregation and publication into T3VD v1.
 #define T3D_VT_VISIBILITY_MAX_MATERIALS 1024u
 #define T3D_VT_VISIBILITY_MAX_PROBES 256u
 #define T3D_VT_VISIBILITY_MAX_TRIANGLES_PER_PROBE 65536u
@@ -53,7 +53,7 @@ public:
     // false without publishing partial results on any GPU/resource failure.
     // Caller supplies immutable scene buffers with lifetimes covering the call.
     bool bake( const t3dVTVisibilityStaticSceneView_t &rScene,
-               const t3dVTDemandV3CookConfig_t &rConfig,
+               const t3dVTDemandV1CookConfig_t &rConfig,
                std::vector< t3dVTVisibilityProbeResult_t > &rResults,
                t3dVTVisibilityBakeStats_t &rStats ) const;
 };

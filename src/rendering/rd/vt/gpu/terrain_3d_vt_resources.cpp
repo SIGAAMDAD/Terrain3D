@@ -19,6 +19,7 @@ static uint32_t t3d_vt_channel_page_count(
 	case T3D_VT_RESOURCE_SURFACE:
 		return pLimits.nMaxVtPhysicalPageSets;
 	case T3D_VT_RESOURCE_HEIGHT:
+	case T3D_VT_RESOURCE_HEIGHT16:
 		return pLimits.nMaxVtPhysicalPageSets;
 	default:
 		return 0u;
@@ -29,7 +30,7 @@ static RenderingDevice::DataFormat t3d_vt_channel_format(
 	t3dVTResourceChannel_t pChannel ) {
 	switch ( pChannel ) {
 	case T3D_VT_RESOURCE_ALBEDO:
-		// VT V3 physical family 0 is shared by ALBEDO (sRGB semantic) and ORM (linear semantic).
+		// VT V1 physical family 0 is shared by ALBEDO (sRGB semantic) and ORM (linear semantic).
 		// Keep the cache itself linear and perform ALBEDO sRGB decode explicitly in the shader.
 		return RenderingDevice::DATA_FORMAT_BC1_RGBA_UNORM_BLOCK;
 	case T3D_VT_RESOURCE_NORMAL:
@@ -38,6 +39,8 @@ static RenderingDevice::DataFormat t3d_vt_channel_format(
 		return RenderingDevice::DATA_FORMAT_BC7_UNORM_BLOCK;
 	case T3D_VT_RESOURCE_HEIGHT:
 		return RenderingDevice::DATA_FORMAT_R8_UNORM;
+	case T3D_VT_RESOURCE_HEIGHT16:
+		return RenderingDevice::DATA_FORMAT_R16_UNORM;
 	default:
 		return RenderingDevice::DATA_FORMAT_MAX;
 	}

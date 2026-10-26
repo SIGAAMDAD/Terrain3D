@@ -142,7 +142,7 @@ void register_cooking_tests(
 	TestRunner &runner ) {
 	const String asset_fixture = OS::get_singleton()->get_environment( "TERRAIN3D_VT_ASSET_FIXTURE" );
 	if ( !asset_fixture.is_empty() ) {
-		runner.run( "cooking", "captured_assets_shipping_v3_merge_and_validate", [asset_fixture]( TestContext &test ) {
+		runner.run( "cooking", "captured_assets_shipping_v1_merge_and_validate", [asset_fixture]( TestContext &test ) {
 			const Ref< Terrain3DAssets > assets = ResourceLoader::get_singleton()->load( asset_fixture );
 			T3D_REQUIRE( test, assets.is_valid() );
 			Terrain3DMemoryAccountOwner owner( 256ull * 1024 * 1024 );
@@ -169,8 +169,8 @@ void register_cooking_tests(
 									 " error=",
 									 error );
 			T3D_REQUIRE( test, success );
-			t3dVTPackViewV3_t view{};
-			T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( package.ptr(), package.size(), view ) );
+			t3dVTPackViewV1_t view{};
+			T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( package.ptr(), package.size(), view ) );
 			T3D_CHECK( test, generation != 0u && materials == view.m_pHeader->m_nAllocationCount );
 			T3D_CHECK( test,
 					   owner.get()->stats().peak <= owner.get()->stats().limit && owner.get()->stats().denied == 0 );
@@ -182,7 +182,7 @@ void register_cooking_tests(
 			}
 		} );
 	}
-	runner.run( "cooking", "shipping_v3_mixed_instance_channels_merge_and_validate", []( TestContext &test ) {
+	runner.run( "cooking", "shipping_v1_mixed_instance_channels_merge_and_validate", []( TestContext &test ) {
 		Ref< Terrain3DAssets > assets;
 		assets.instantiate();
 		for ( int i = 0; i < 6; ++i ) {
@@ -215,7 +215,7 @@ void register_cooking_tests(
 		uint32_t					generation = 0, materials = 0;
 		String						error;
 		const bool success = t3d_vt_godot_cook_runtime_assets_package( assets, package, generation, materials, &error );
-		UtilityFunctions::print( "SHIPPING_V3_FIXTURE success=",
+		UtilityFunctions::print( "SHIPPING_V1_FIXTURE success=",
 								 success,
 								 " materials=",
 								 materials,
@@ -224,8 +224,8 @@ void register_cooking_tests(
 								 " error=",
 								 error );
 		T3D_REQUIRE( test, success );
-		t3dVTPackViewV3_t view{};
-		T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( package.ptr(), package.size(), view ) );
+		t3dVTPackViewV1_t view{};
+		T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( package.ptr(), package.size(), view ) );
 		T3D_CHECK( test, materials == 6u && generation != 0u && view.m_pHeader->m_nAllocationCount == 6u );
 		for ( uint32_t i = 0; i < materials; ++i ) {
 			T3D_CHECK( test, ( view.m_pAllocations[i].m_nFlags & T3D_VT_ALLOCATION_SHIPPING_IMMUTABLE ) != 0u );
@@ -290,13 +290,13 @@ void register_cooking_tests(
 				String						error;
 				T3D_REQUIRE( test, t3d_vt_godot_collect_asset_materials( assets, materials, &error ) );
 				T3D_REQUIRE( test, !materials.m_stableKeys.empty() );
-				t3dVTEditorCookCacheV3_t		 cache;
+				t3dVTEditorCookCacheV1_t		 cache;
 				PackedByteArray					 merged;
 				Terrain3DSharedMemoryReservation memory;
 				uint64_t						 fingerprint = 0;
 				uint32_t						 generation = 0;
-				t3dVTEditorCookTelemetryV3_t	 telemetry{};
-				const bool						 success = t3d_vt_godot_cook_editor_package_incremental_v3( assets,
+				t3dVTEditorCookTelemetryV1_t	 telemetry{};
+				const bool						 success = t3d_vt_godot_cook_editor_package_incremental_v1( assets,
 																						materials.m_stableKeys.data(),
 																						materials.m_records.data(),
 																						materials.m_stableKeys.size(),
@@ -316,8 +316,8 @@ void register_cooking_tests(
 										 " error=",
 										 error );
 				T3D_REQUIRE( test, success );
-				t3dVTPackViewV3_t view{};
-				T3D_CHECK( test, t3d_vt_pack_open_view_v3( merged.ptr(), merged.size(), view ) );
+				t3dVTPackViewV1_t view{};
+				T3D_CHECK( test, t3d_vt_pack_open_view_v1( merged.ptr(), merged.size(), view ) );
 				T3D_CHECK( test, view.m_pHeader->m_nAllocationCount == uint32_t( materials.m_stableKeys.size() ) );
 				T3D_CHECK( test,
 						   owner.get()->stats().peak <= owner.get()->stats().limit &&
@@ -506,7 +506,7 @@ void register_cooking_tests(
 			t3d_vt_reference_encoder_make_interface( encoder );
 			const uint32_t	components = t3d_vt_page_builder_logical_channel_components( channel );
 			const auto		family = t3d_vt_logical_channel_physical_family( channel );
-			const uint32_t	expected = t3d_vt_pack_expected_physical_tile_bytes_v3( family );
+			const uint32_t	expected = t3d_vt_pack_expected_physical_tile_bytes_v1( family );
 			PackedByteArray source, output;
 			source.resize( T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE * components );
 			source.fill( 128 );
@@ -520,15 +520,15 @@ void register_cooking_tests(
 			request.m_nComponents = components;
 			request.m_nSourceBytes = source.size();
 			request.m_pSourcePixels = source.ptr();
-			request.m_nContractVersion = T3D_VT_FILE_VERSION_V3;
+			request.m_nContractVersion = T3D_VT_FILE_VERSION_V1;
 			request.m_pDestination = output.ptrw();
 			request.m_nDestinationCapacity = expected;
 			uint32_t written = 999;
 			T3D_CHECK( test,
-					   t3d_vt_cooker_encode_tile_v3( encoder, request, written ) && written == expected &&
+					   t3d_vt_cooker_encode_tile_v1( encoder, request, written ) && written == expected &&
 						   output[expected] == 0xa5 );
 			request.m_nDestinationCapacity = expected - 1;
-			T3D_CHECK( test, !t3d_vt_cooker_encode_tile_v3( encoder, request, written ) && written == 0 );
+			T3D_CHECK( test, !t3d_vt_cooker_encode_tile_v1( encoder, request, written ) && written == 0 );
 		} );
 	}
 	runner.run( "cooking", "sparse_cook_builds_inspectable_allocations_pages_and_tails", []( TestContext &test ) {
@@ -539,19 +539,19 @@ void register_cooking_tests(
 				   cooked.package.m_nAllocationCount == 1 && cooked.package.m_nPageCount > 0 &&
 					   cooked.package.m_nTailCount > 0 );
 		T3D_CHECK( test, cooked.package.m_pAllocationKeys[0].m_nStableKey == source.source.m_nStableKey );
-		t3dVTPackSourceV3_t pack_source{};
+		t3dVTPackSourceV1_t pack_source{};
 		T3D_CHECK( test,
-				   t3d_vt_cooker_build_pack_source_v3( cooked.package, pack_source ) &&
-					   t3d_vt_pack_validate_source_v3( pack_source ) );
+				   t3d_vt_cooker_build_pack_source_v1( cooked.package, pack_source ) &&
+					   t3d_vt_pack_validate_source_v1( pack_source ) );
 	} );
 	runner.run( "cooking", "sparse_cook_releases_all_owned_blocks", []( TestContext &test ) {
 		CookingSource source;
 		CookedPackage cooked;
 		T3D_REQUIRE( test, cooked.cook( source ) );
 		T3D_CHECK( test, cooked.allocator.live_blocks > 0 );
-		t3d_vt_cooker_release_sparse_package_v3( cooked.package );
+		t3d_vt_cooker_release_sparse_package_v1( cooked.package );
 		T3D_CHECK( test, cooked.allocator.live_blocks == 0 && cooked.package.m_pPayloadData == nullptr );
-		t3d_vt_cooker_release_sparse_package_v3( cooked.package );
+		t3d_vt_cooker_release_sparse_package_v1( cooked.package );
 		T3D_CHECK( test, cooked.allocator.live_blocks == 0 );
 	} );
 	runner.run( "cooking", "identical_tiles_share_payload_storage", []( TestContext &test ) {
@@ -567,7 +567,7 @@ void register_cooking_tests(
 			CookedPackage cooked;
 			cooked.allocator.fail_after = failure;
 			T3D_CHECK( test, !cooked.cook( source ) );
-			t3d_vt_cooker_release_sparse_package_v3( cooked.package );
+			t3d_vt_cooker_release_sparse_package_v1( cooked.package );
 			T3D_CHECK( test, cooked.allocator.live_blocks == 0 );
 		}
 	} );
@@ -575,14 +575,14 @@ void register_cooking_tests(
 		CookingSource source;
 		CookedPackage cooked;
 		T3D_CHECK( test, !cooked.cook( source, reject_encoding ) );
-		t3d_vt_cooker_release_sparse_package_v3( cooked.package );
+		t3d_vt_cooker_release_sparse_package_v1( cooked.package );
 		T3D_CHECK( test, cooked.allocator.live_blocks == 0 && cooked.package.m_nAllocationCount == 0 );
 	} );
 	runner.run( "cooking", "encoder_byte_count_must_match_the_format_contract", []( TestContext &test ) {
 		CookingSource source;
 		CookedPackage cooked;
 		T3D_CHECK( test, !cooked.cook( source, report_short_encoding ) );
-		t3d_vt_cooker_release_sparse_package_v3( cooked.package );
+		t3d_vt_cooker_release_sparse_package_v1( cooked.package );
 		T3D_CHECK( test, cooked.allocator.live_blocks == 0 );
 	} );
 	runner.run( "cooking", "identical_sources_produce_identical_fragment_bytes", []( TestContext &test ) {
@@ -601,9 +601,9 @@ void register_cooking_tests(
 		CookingSource	first( 101 ), second( 202, 90 );
 		PackedByteArray inputs[2], merged;
 		T3D_REQUIRE( test, first.fragment( inputs[0] ) && second.fragment( inputs[1] ) );
-		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v3( inputs, 2, 11, merged ) );
-		t3dVTPackViewV3_t view{};
-		T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( merged.ptr(), merged.size(), view ) );
+		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v1( inputs, 2, 11, merged ) );
+		t3dVTPackViewV1_t view{};
+		T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( merged.ptr(), merged.size(), view ) );
 		T3D_CHECK( test, view.m_pHeader->m_nAllocationCount == 2 );
 		T3D_CHECK( test,
 				   view.m_pAllocationKeys[0].m_nStableKey == 101 && view.m_pAllocationKeys[1].m_nStableKey == 202 );
@@ -612,10 +612,10 @@ void register_cooking_tests(
 		CookingSource	source;
 		PackedByteArray valid, merged, invalid;
 		T3D_REQUIRE( test, source.fragment( valid ) );
-		T3D_CHECK( test, !t3d_vt_godot_merge_packages_v3( &valid, 1, 1, merged, 1 ) );
+		T3D_CHECK( test, !t3d_vt_godot_merge_packages_v1( &valid, 1, 1, merged, 1 ) );
 		invalid.resize( 16 );
 		invalid.fill( 0 );
-		T3D_CHECK( test, !t3d_vt_godot_merge_packages_v3( &invalid, 1, 1, merged ) );
+		T3D_CHECK( test, !t3d_vt_godot_merge_packages_v1( &invalid, 1, 1, merged ) );
 		T3D_CHECK( test, merged.is_empty() );
 	} );
 	runner.run(
@@ -633,9 +633,9 @@ void register_cooking_tests(
 			t3dVTMergeStatistics_t			 statistics{};
 			T3D_REQUIRE(
 				test,
-				t3d_vt_godot_merge_packages_v3( inputs, 8, 11, merged, 1024 * 1024, &statistics, &output_memory ) );
-			t3dVTPackViewV3_t view{};
-			T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( merged.ptr(), merged.size(), view ) );
+				t3d_vt_godot_merge_packages_v1( inputs, 8, 11, merged, 1024 * 1024, &statistics, &output_memory ) );
+			t3dVTPackViewV1_t view{};
+			T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( merged.ptr(), merged.size(), view ) );
 			T3D_CHECK( test, view.m_pHeader->m_nAllocationCount == 8 );
 			const auto stats = owner.get()->stats();
 			uint64_t   input_bytes = 0;
@@ -666,13 +666,13 @@ void register_cooking_tests(
 			t3dVTMergeStatistics_t			 baseline{};
 			T3D_REQUIRE(
 				test,
-				t3d_vt_godot_merge_packages_v3( &input, 1, 11, output, 1024 * 1024, &baseline, &output_memory ) );
+				t3d_vt_godot_merge_packages_v1( &input, 1, 11, output, 1024 * 1024, &baseline, &output_memory ) );
 			auto				   published = output;
 			auto				   published_memory = output_memory;
 			const uint64_t		   committed = owner.get()->stats().committed;
 			t3dVTMergeStatistics_t denied{};
 			T3D_CHECK( test,
-					   !t3d_vt_godot_merge_packages_v3( &input,
+					   !t3d_vt_godot_merge_packages_v1( &input,
 														1,
 														12,
 														output,
@@ -682,7 +682,7 @@ void register_cooking_tests(
 			T3D_CHECK( test, denied.m_bWorkingLimitExceeded && denied.m_nWorkingBytes > baseline.m_nWorkingBytes - 1 );
 			T3D_CHECK( test, output == published && owner.get()->stats().committed == committed );
 			T3D_REQUIRE( test,
-						 t3d_vt_godot_merge_packages_v3( &input,
+						 t3d_vt_godot_merge_packages_v1( &input,
 														 1,
 														 11,
 														 output,
@@ -698,11 +698,11 @@ void register_cooking_tests(
 		CookingSource	source;
 		PackedByteArray input, expected;
 		T3D_REQUIRE( test, source.fragment( input ) );
-		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v3( &input, 1, 11, expected, 1024 * 1024 ) );
-		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v3( &input, 1, 11, input, 1024 * 1024 ) );
+		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v1( &input, 1, 11, expected, 1024 * 1024 ) );
+		T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v1( &input, 1, 11, input, 1024 * 1024 ) );
 		T3D_CHECK( test, input == expected );
-		t3dVTPackViewV3_t view{};
-		T3D_CHECK( test, t3d_vt_pack_open_view_v3( input.ptr(), input.size(), view ) );
+		t3dVTPackViewV1_t view{};
+		T3D_CHECK( test, t3d_vt_pack_open_view_v1( input.ptr(), input.size(), view ) );
 	} );
 	runner.run( "cooking",
 				"package_merge_fits_output_and_metadata_without_a_second_payload_buffer",
@@ -710,16 +710,16 @@ void register_cooking_tests(
 					CookingSource	source;
 					PackedByteArray input, expected, merged;
 					T3D_REQUIRE( test, source.fragment( input ) );
-					T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v3( &input, 1, 11, expected ) );
-					t3dVTPackViewV3_t view{};
-					T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( expected.ptr(), expected.size(), view ) );
+					T3D_REQUIRE( test, t3d_vt_godot_merge_packages_v1( &input, 1, 11, expected ) );
+					t3dVTPackViewV1_t view{};
+					T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( expected.ptr(), expected.size(), view ) );
 					T3D_REQUIRE( test, view.m_pHeader->m_nPayloadDataBytes > 16 * 1024 );
 					const uint64_t					 budget = uint64_t( expected.size() ) + 64 + 16 * 1024;
 					Terrain3DMemoryAccountOwner		 owner( budget );
 					Terrain3DMemoryAccountScope		 scope( owner.get() );
 					Terrain3DSharedMemoryReservation memory;
 					T3D_REQUIRE( test,
-								 t3d_vt_godot_merge_packages_v3( &input, 1, 11, merged, budget, nullptr, &memory ) );
+								 t3d_vt_godot_merge_packages_v1( &input, 1, 11, merged, budget, nullptr, &memory ) );
 					T3D_CHECK( test, merged == expected );
 					T3D_CHECK( test, owner.get()->stats().denied == 0 && owner.get()->stats().peak <= budget );
 				} );
@@ -727,21 +727,21 @@ void register_cooking_tests(
 		CookingSource source;
 		CookedPackage cooked;
 		T3D_REQUIRE( test, cooked.cook( source ) );
-		t3dVTPackSourceV3_t pack{};
-		T3D_REQUIRE( test, t3d_vt_cooker_build_pack_source_v3( cooked.package, pack ) );
-		const uint64_t	bytes = t3d_vt_pack_compute_bytes_v3( pack );
+		t3dVTPackSourceV1_t pack{};
+		T3D_REQUIRE( test, t3d_vt_cooker_build_pack_source_v1( cooked.package, pack ) );
+		const uint64_t	bytes = t3d_vt_pack_compute_bytes_v1( pack );
 		PackedByteArray external, in_place;
 		T3D_REQUIRE( test, bytes > 0 && external.resize( bytes ) == OK && in_place.resize( bytes ) == OK );
 		uint64_t written = 0;
-		T3D_REQUIRE( test, t3d_vt_pack_write_v3( pack, external.ptrw(), bytes, written ) && written == bytes );
-		const uint64_t metadata = t3d_vt_pack_compute_metadata_bytes_v3( pack );
+		T3D_REQUIRE( test, t3d_vt_pack_write_v1( pack, external.ptrw(), bytes, written ) && written == bytes );
+		const uint64_t metadata = t3d_vt_pack_compute_metadata_bytes_v1( pack );
 		T3D_CHECK( test, metadata + pack.m_nPayloadDataBytes == bytes );
 		memcpy( in_place.ptrw() + metadata, pack.m_pPayloadData, pack.m_nPayloadDataBytes );
 		pack.m_pPayloadData = in_place.ptr() + metadata;
-		T3D_REQUIRE( test, t3d_vt_pack_write_v3( pack, in_place.ptrw(), bytes, written ) && written == bytes );
+		T3D_REQUIRE( test, t3d_vt_pack_write_v1( pack, in_place.ptrw(), bytes, written ) && written == bytes );
 		T3D_CHECK( test, external == in_place );
-		t3dVTPackViewV3_t view{};
-		T3D_CHECK( test, t3d_vt_pack_open_view_v3( in_place.ptr(), in_place.size(), view ) );
+		t3dVTPackViewV1_t view{};
+		T3D_CHECK( test, t3d_vt_pack_open_view_v1( in_place.ptr(), in_place.size(), view ) );
 	} );
 	runner.run(
 		"cooking",
@@ -759,8 +759,8 @@ void register_cooking_tests(
 			T3D_REQUIRE(
 				test,
 				Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold( inputs, package, generation, error ) );
-			t3dVTPackViewV3_t view{};
-			T3D_REQUIRE( test, t3d_vt_pack_open_view_v3( package.ptr(), package.size(), view ) );
+			t3dVTPackViewV1_t view{};
+			T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( package.ptr(), package.size(), view ) );
 			T3D_CHECK( test, generation != 0u && view.m_pHeader->m_nAllocationCount == 1u );
 			T3D_CHECK( test, owner.get()->stats().denied == 0 && owner.get()->stats().committed == pressure.bytes() );
 		} );
@@ -819,7 +819,7 @@ void register_cooking_tests(
 		T3D_REQUIRE( test, pressure.resize( 1024 * 1024 - 2048 ) );
 		Terrain3DSharedMemoryReservation output_memory;
 		T3D_CHECK( test,
-				   !t3d_vt_godot_merge_packages_v3( &input,
+				   !t3d_vt_godot_merge_packages_v1( &input,
 													1,
 													11,
 													merged,
@@ -830,7 +830,7 @@ void register_cooking_tests(
 		T3D_CHECK( test, owner.get()->stats().committed == pressure.bytes() );
 		pressure.reset();
 		T3D_REQUIRE( test,
-					 t3d_vt_godot_merge_packages_v3( &input,
+					 t3d_vt_godot_merge_packages_v1( &input,
 													 1,
 													 11,
 													 merged,
@@ -970,15 +970,15 @@ void register_cooking_tests(
 			assets->setMeshAsset( 0, mesh );
 			Terrain3DMemoryAccountOwner		 owner( 32ull * 1024 * 1024 );
 			Terrain3DMemoryAccountScope		 scope( owner.get() );
-			t3dVTEditorCookCacheV3_t		 cache;
+			t3dVTEditorCookCacheV1_t		 cache;
 			PackedByteArray					 package;
 			Terrain3DSharedMemoryReservation package_memory;
 			uint64_t						 key = 101, fingerprint = 0;
 			uint32_t						 generation = 0;
-			t3dVTEditorCookTelemetryV3_t	 telemetry{};
+			t3dVTEditorCookTelemetryV1_t	 telemetry{};
 			String							 error;
 			T3D_REQUIRE( test,
-						 t3d_vt_godot_cook_editor_package_incremental_v3( assets,
+						 t3d_vt_godot_cook_editor_package_incremental_v1( assets,
 																		  &key,
 																		  nullptr,
 																		  1,
@@ -992,7 +992,7 @@ void register_cooking_tests(
 			T3D_CHECK( test, cache.m_ChannelEntries.empty() && cache.m_AllocationEntries.size() == 1 );
 			const auto							expected = package;
 			auto								expected_memory = package_memory;
-			t3dVTEditorAllocationCacheEntryV3_t removed{};
+			t3dVTEditorAllocationCacheEntryV1_t removed{};
 			removed.m_nStableKey = 999;
 			removed.m_nKey = 999;
 			T3D_REQUIRE( test, removed.m_memory.reserve( 4096 ) );
@@ -1003,7 +1003,7 @@ void register_cooking_tests(
 			removed.m_memory.reset();
 			// Reproduce a live cache left over from earlier material edits. Without
 			// eviction, 2 KiB of headroom cannot admit source extraction or merging.
-			t3dVTEditorChannelCacheEntryV3_t stale{};
+			t3dVTEditorChannelCacheEntryV1_t stale{};
 			T3D_REQUIRE( test, stale.m_memory.reserve( 16ull * 1024 * 1024 ) );
 			stale.m_Bytes.resize( 16ull * 1024 * 1024 );
 			T3D_REQUIRE( test, t3dContainerReserveCold( cache.m_ChannelEntries, 1 ) );
@@ -1013,7 +1013,7 @@ void register_cooking_tests(
 			Terrain3DMemoryReservation pressure;
 			T3D_REQUIRE( test, pressure.resize( owner.get()->stats().limit - owner.get()->stats().committed - 2048 ) );
 			T3D_REQUIRE( test,
-						 t3d_vt_godot_cook_editor_package_incremental_v3( assets,
+						 t3d_vt_godot_cook_editor_package_incremental_v1( assets,
 																		  &key,
 																		  nullptr,
 																		  1,
@@ -1034,15 +1034,15 @@ void register_cooking_tests(
 	runner.run( "cooking", "editor_rejects_duplicate_allocation_keys_before_cooking", []( TestContext &test ) {
 		Ref< Terrain3DAssets > assets;
 		assets.instantiate();
-		t3dVTEditorCookCacheV3_t	 cache;
+		t3dVTEditorCookCacheV1_t	 cache;
 		PackedByteArray				 package;
 		const uint64_t				 keys[2] = { 101, 101 };
 		uint64_t					 fingerprint = 0;
 		uint32_t					 generation = 0;
-		t3dVTEditorCookTelemetryV3_t telemetry{};
+		t3dVTEditorCookTelemetryV1_t telemetry{};
 		String						 error;
 		T3D_CHECK( test,
-				   !t3d_vt_godot_cook_editor_package_incremental_v3( assets,
+				   !t3d_vt_godot_cook_editor_package_incremental_v1( assets,
 																	 keys,
 																	 nullptr,
 																	 2,

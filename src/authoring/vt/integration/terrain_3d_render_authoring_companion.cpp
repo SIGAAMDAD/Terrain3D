@@ -103,12 +103,16 @@ Dictionary Terrain3DRenderCoordinator::getForceRebakeVirtualTexturesStatusCold(
 	result["completion_serial"] = m_pAuthoring->m_nForceRebakeCompletionSerial;
 	result["forced_megavt_regions"] = m_pAuthoring->m_nForceRegionCount;
 	result["dirty_regions"] = m_terrainMegaVT.getDirtyRegionCount();
-    result["composed_cache_enabled"] = false;
-    result["composed_parity_supported"] = false;
-    result["composed_residency"] = "not_initialized";
+    const bool approvedComposed = !m_pAuthoring->m_approvedComposedV1Fragment.is_empty();
+    result["composed_v1_shared_package_ready"] = approvedComposed;
+    result["composed_v1_shared_package_bytes"] = ( int64_t ) m_pAuthoring->m_approvedComposedV1Fragment.size();
+    result["composed_v1_import_status"] = m_pAuthoring->m_approvedComposedStatus;
+    result["composed_cache_enabled"] = approvedComposed;
+    result["composed_parity_supported"] = approvedComposed;
+    result["composed_residency"] = approvedComposed ? "v1_shared_package_queued" : "not_initialized";
     result["composed_gpu_resident_pages"] = 0;
     result["composed_live_fallback_reason"] = "canonical_color_dnr_alpha_parity_unverified";
-    result["composed_backend"] = "live_until_parity_accepted";
+    result["composed_backend"] = approvedComposed ? "v1_shared_residency" : "live_until_parity_accepted";
     result["composed_bake"] = m_pAuthoring->m_composedCandidateState;
     result["composed_bake_reference_only"] = true;
     result["composed_bake_reference_ready"] = m_pAuthoring->m_composedCandidate.m_bSaved;
@@ -259,8 +263,8 @@ void Terrain3DRenderCoordinator::serviceForceRebakeCold(
 			} else {
 				PackedByteArray				 demandBytes;
 				String						 demandPath;
-                PackedByteArray v3Bytes;
-                String v3Path;
+                PackedByteArray v1Bytes;
+                String v1Path;
 				const Ref< Terrain3DAssets > assets = m_pTerrain->assetsResource();
 				if ( assets.is_valid() && !assets->get_path().is_empty() &&
 					 !t3d_vt_demand_cook_asset_sidecar_cold( *data,
@@ -268,7 +272,7 @@ void Terrain3DRenderCoordinator::serviceForceRebakeCold(
 															 shippingPackage,
 															 demandBytes,
 															 demandPath,
-															 m_pAuthoring->m_forceRebakeError, &v3Bytes, &v3Path ) ) {
+															 m_pAuthoring->m_forceRebakeError, &v1Bytes, &v1Path ) ) {
 					failed = true;
 				} else if ( !m_pAuthoring->m_cooker.finishForceRecookAllRegionsCold( inputs,
 																					 m_terrainMegaVT,
@@ -278,11 +282,11 @@ void Terrain3DRenderCoordinator::serviceForceRebakeCold(
 																					 &shippingPackage,
 																					 &demandPath,
 																					 &demandBytes,
-                                                                                     &v3Path, &v3Bytes ) ) {
+                                                                                     &v1Path, &v1Bytes ) ) {
 					m_pAuthoring->m_forceRebakeError = m_pAuthoring->m_cooker.getLastErrorCold();
 					failed = true;
 				} else {
-                    // Preserve the exact, published V3 source bytes for the
+                    // Preserve the exact, published V1 source bytes for the
                     // optional cold candidate cook on a subsequent owner tick.
                     m_pAuthoring->m_composedCandidateSourcePack = shippingPackage;
                     m_pAuthoring->m_bComposedCandidatePending = !shippingPackage.is_empty();
@@ -339,8 +343,16 @@ bool Terrain3DRenderCoordinator::composePreviewTerrainPackageCold(
 	uint32_t						 &rGeneration,
 	uint64_t						 &rFingerprint,
 	Terrain3DSharedMemoryReservation &rPackageMemory ) {
-	return m_pAuthoring != NULL &&
-		   m_pAuthoring->m_cooker.composePackageCold( rPackage, rGeneration, rFingerprint, &rPackageMemory );
+    if ( m_pAuthoring == NULL ) return false;
+    const auto &stats = m_composedSurfaceEdits.statsCold();
+    const uint64_t editStamp = stats.m_nEditEvents + stats.m_nSourceInvalidations + stats.m_nRemovedRegions;
+    const bool approved = !m_pAuthoring->m_approvedComposedV1Fragment.is_empty() &&
+        m_pAuthoring->m_nApprovedComposedFingerprint != 0u &&
+        m_pAuthoring->m_nApprovedComposedSourceGeneration == m_nComposedSourceGeneration &&
+        m_pAuthoring->m_nApprovedComposedTopologyGeneration == m_terrainMegaVT.getTopologyGeneration() &&
+        m_pAuthoring->m_nApprovedComposedEditStamp == editStamp;
+    return m_pAuthoring->m_cooker.composePackageCold( rPackage, rGeneration, rFingerprint,
+        &rPackageMemory, approved ? &m_pAuthoring->m_approvedComposedV1Fragment : NULL );
 }
 String Terrain3DRenderCoordinator::previewTerrainCompositionErrorCold() const {
 	return m_pAuthoring ? m_pAuthoring->m_cooker.getLastErrorCold() : String( "VT authoring companion is unavailable" );
@@ -353,6 +365,17 @@ void Terrain3DRenderCoordinator::serviceAuthoringUpdateCold(
 	}
     const auto &csStats = m_composedSurfaceEdits.statsCold();
     const uint64_t editStamp = csStats.m_nEditEvents + csStats.m_nSourceInvalidations + csStats.m_nRemovedRegions;
+    // Any authored edits or source topology/material revisions invalidate the
+    // previously approved fragment, before another V1 package is composed.
+    if ( !m_pAuthoring->m_approvedComposedV1Fragment.is_empty() &&
+         ( editStamp != m_pAuthoring->m_nApprovedComposedEditStamp ||
+           m_pAuthoring->m_nApprovedComposedSourceGeneration != m_nComposedSourceGeneration ||
+           m_pAuthoring->m_nApprovedComposedTopologyGeneration != m_terrainMegaVT.getTopologyGeneration() ) ) {
+        m_pAuthoring->m_approvedComposedV1Fragment.clear();
+        m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
+        m_pAuthoring->m_approvedComposedStatus = "invalidated_by_source_edit";
+        requestMegaVTPackageRecomposeCold();
+    }
     if ( m_pAuthoring->m_composedCandidate.m_bSaved &&
          editStamp != m_pAuthoring->m_nComposedCandidateEditStamp ) {
         m_pAuthoring->m_composedCandidate.m_bSaved = false;

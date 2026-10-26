@@ -1,4 +1,4 @@
-// File-backed V3 VT payload source. One worker owns the mutable read cursor.
+// File-backed V1 VT payload source. One worker owns the mutable read cursor.
 #ifndef TERRAIN3D_VT_FILE_SOURCE_H
 #define TERRAIN3D_VT_FILE_SOURCE_H
 

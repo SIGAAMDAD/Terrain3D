@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_static_v3.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_static_v1.h"
 #include "data/runtime/terrain_3d_composed_surface_sidecar.h"
 #include <assert.h>
 #include <cmath>
@@ -16,7 +16,7 @@ struct Fixture
     bool m_bBoundary = false;
 };
 
-static bool locate( void *ctx, const t3dComposedSurfaceCookPage_t &p, t3dComposedStaticV3Footprint_t &r )
+static bool locate( void *ctx, const t3dComposedSurfaceCookPage_t &p, t3dComposedStaticV1Footprint_t &r )
 {
     Fixture &f = *static_cast< Fixture * >( ctx );
     ++f.m_nPages;
@@ -45,7 +45,7 @@ static bool control( void *ctx, int32_t x, int32_t y, uint32_t &r )
     return true;
 }
 static bool sample( void *ctx, uint32_t allocation, const float *uv, const float *dx, const float *dy,
-                    float lod, uint32_t filtering, t3dComposedStaticV3Sample_t &r )
+                    float lod, uint32_t filtering, t3dComposedStaticV1Sample_t &r )
 {
     Fixture &f = *static_cast< Fixture * >( ctx );
     ++f.m_nSamples;
@@ -77,7 +77,7 @@ static bool encode( void *, uint32_t channel, const uint8_t *src, uint32_t size,
 int main()
 {
     Fixture fixture{};
-    t3dComposedStaticV3Layer_t layers[2]{};
+    t3dComposedStaticV1Layer_t layers[2]{};
     layers[0].m_nAllocation = 11u;
     layers[1].m_nAllocation = 22u;
     for ( auto &l : layers ) {
@@ -86,39 +86,39 @@ int main()
         l.m_fPbr0[3] = 0.7f;
         l.m_fPbr1[0] = 1.0f; l.m_fPbr1[1] = 0.4f;
     }
-    t3dComposedStaticV3CookAdapter_t adapter{};
+    t3dComposedStaticV1CookAdapter_t adapter{};
     adapter.m_source.m_pUser = &fixture;
     adapter.m_source.m_pResolvePage = locate;
     adapter.m_source.m_pReadControl = control;
     adapter.m_source.m_pSampleSource = sample;
     adapter.m_source.m_pLayers = layers;
     adapter.m_source.m_nLayerCount = 2u;
-    adapter.m_source.m_nSamplingMode = T3D_CS_STATIC_V3_SAMPLE_NEAREST;
+    adapter.m_source.m_nSamplingMode = T3D_CS_STATIC_V1_SAMPLE_NEAREST;
     adapter.m_source.m_nVtFiltering = 7u;
     adapter.m_source.m_fStaticMipBias = 0.25f;
     adapter.m_source.m_fBlendSharpness = 0.5f;
     adapter.m_pEncoder = encode;
     t3dComposedSurfaceCookSource_t cook{};
-    assert( t3d_cs_static_v3_eligible( adapter.m_source ) );
-    assert( !t3d_cs_static_v3_make_cook_source( adapter, 77u, cook ) );
+    assert( t3d_cs_static_v1_eligible( adapter.m_source ) );
+    assert( !t3d_cs_static_v1_make_cook_source( adapter, 77u, cook ) );
     const t3dComposedSurfaceCookPage_t p = { 21u, 66u, 0u, 0u, 0u, 1u };
     // P09: a diagnostic uncompressed evaluation is allowed before the source
     // parity gate, but publishing encoded composed pages is still forbidden.
     std::vector<float> linear( T3D_CS_RGBA_SCRATCH_BYTES, -1.0f );
     std::vector<uint8_t> rgba( T3D_CS_RGBA_SCRATCH_BYTES, 0u );
-    assert( t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
+    assert( t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
                                                   linear.data(), uint32_t(linear.size()) ) );
-    assert( !t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
+    assert( !t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
                                        rgba.data(), uint32_t(rgba.size()) ) );
-    assert( !t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
+    assert( !t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
                                                    linear.data(), uint32_t(linear.size()) - 1u ) );
-    assert( !t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_COUNT,
+    assert( !t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_COUNT,
                                                    linear.data(), uint32_t(linear.size()) ) );
-    assert( !t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
+    assert( !t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_ALBEDO,
                                                    NULL, uint32_t(linear.size()) ) );
     adapter.m_source.m_bCanonicalMaterialParityAccepted = true;
-    assert( t3d_cs_static_v3_make_cook_source( adapter, 77u, cook ) );
-    assert( t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO, rgba.data(), uint32_t(rgba.size()) ) );
+    assert( t3d_cs_static_v1_make_cook_source( adapter, 77u, cook ) );
+    assert( t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO, rgba.data(), uint32_t(rgba.size()) ) );
     // Overlay has larger height: almost all result uses overlay color.
     size_t center = 4u * ( 68u * 136u + 68u );
     assert( rgba[center] > 100u && rgba[center] < 155u );
@@ -136,18 +136,18 @@ int main()
         assert( std::isfinite(linear[center + channel]) );
         assert( rgba[center + channel] == encode_albedo( linear[center + channel] ) );
     }
-    assert( t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_NORMAL,
+    assert( t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_NORMAL,
                                                   linear.data(), uint32_t(linear.size()) ) );
-    assert( t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_NORMAL, rgba.data(), uint32_t(rgba.size()) ) );
+    assert( t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_NORMAL, rgba.data(), uint32_t(rgba.size()) ) );
     float normal_length = sqrtf( linear[center]*linear[center] + linear[center+1u]*linear[center+1u] +
                                   linear[center+2u]*linear[center+2u] );
     assert( fabsf(normal_length - 1.0f) < 0.00001f );
     assert( rgba[center] == uint8_t( floorf( fminf( 1.0f, fmaxf( 0.0f, linear[center] * 0.5f + 0.5f ) ) * 255.0f + 0.5f ) ) );
     assert( rgba[center + 1u] == uint8_t( floorf( fminf( 1.0f, fmaxf( 0.0f, linear[center + 2u] * 0.5f + 0.5f ) ) * 255.0f + 0.5f ) ) );
     assert( rgba[center] >= 127u && rgba[center] <= 128u && rgba[center + 1u] >= 127u && rgba[center + 1u] <= 128u );
-    assert( t3d_cs_static_v3_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_SURFACE,
+    assert( t3d_cs_static_v1_evaluate_linear_f32( &adapter, p, T3D_CS_CHANNEL_SURFACE,
                                                   linear.data(), uint32_t(linear.size()) ) );
-    assert( t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
+    assert( t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
     for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
         assert( std::isfinite(linear[center + channel]) );
         const float clamped = fminf( 1.0f, fmaxf( 0.0f, linear[center + channel] ) );
@@ -160,13 +160,13 @@ int main()
     for ( uint32_t sampling : { 1u, 5u } ) {
         fixture.m_bBoundary = true;
         adapter.m_source.m_nSamplingMode = sampling;
-        assert( t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO, rgba.data(), uint32_t(rgba.size()) ) );
+        assert( t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_ALBEDO, rgba.data(), uint32_t(rgba.size()) ) );
     }
     fixture.m_bCorrupt = true;
-    assert( !t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
+    assert( !t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
     fixture.m_bCorrupt = false;
     fixture.m_bMissing = true;
-    assert( !t3d_cs_static_v3_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
+    assert( !t3d_cs_static_v1_evaluate( &adapter, p, T3D_CS_CHANNEL_SURFACE, rgba.data(), uint32_t(rgba.size()) ) );
     fixture.m_bMissing = false;
     for ( uint32_t reason = 0u; reason < 7u; ++reason ) {
         bool *flags[7] = { &adapter.m_source.m_bAutoShader, &adapter.m_source.m_bDualScale,
@@ -174,14 +174,14 @@ int main()
                            &adapter.m_source.m_bAdaptiveSampling, &adapter.m_source.m_bImplicitControls,
                            &adapter.m_source.m_bViewDependentMipBias };
         *flags[reason] = true;
-        assert( !t3d_cs_static_v3_eligible( adapter.m_source ) );
-        assert( !t3d_cs_static_v3_make_cook_source( adapter, 77u, cook ) );
+        assert( !t3d_cs_static_v1_eligible( adapter.m_source ) );
+        assert( !t3d_cs_static_v1_make_cook_source( adapter, 77u, cook ) );
         *flags[reason] = false;
     }
-    assert( !t3d_cs_static_v3_make_cook_source( adapter, 0u, cook ) );
-    adapter.m_source.m_nSamplingMode = T3D_CS_STATIC_V3_SAMPLE_BILINEAR;
+    assert( !t3d_cs_static_v1_make_cook_source( adapter, 0u, cook ) );
+    adapter.m_source.m_nSamplingMode = T3D_CS_STATIC_V1_SAMPLE_BILINEAR;
     fixture.m_bBoundary = false;
-    assert( t3d_cs_static_v3_make_cook_source( adapter, 77u, cook ) );
+    assert( t3d_cs_static_v1_make_cook_source( adapter, 77u, cook ) );
     uint64_t size = 0u;
     assert( t3d_cs_cook_total_bytes( 1u, size ) );
     std::vector<uint8_t> scratch( T3D_CS_COOK_SCRATCH_BYTES );
@@ -190,6 +190,6 @@ int main()
     assert( t3d_cs_cook_pages_cold( &p, 1u, cook, scratch.data(), uint32_t( scratch.size() ),
                                    output.data(), output.size(), written ) );
     assert( written == size && t3d_cs_validate_sidecar_bytes( output.data(), output.size(), true ) );
-    printf( "CS11 static V3 producer: PASS (%u source samples, %u control loads, %u page locations)\n",
+    printf( "CS11 static V1 producer: PASS (%u source samples, %u control loads, %u page locations)\n",
             fixture.m_nSamples, fixture.m_nControls, fixture.m_nPages );
 }

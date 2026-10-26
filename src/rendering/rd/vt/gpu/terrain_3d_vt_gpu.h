@@ -116,7 +116,7 @@ public:
 	uint64_t get_feedback_grid_skipped() const { return m_nFeedbackGridSkipped; }
 	uint64_t get_feedback_grid_stale() const { return m_nFeedbackGridStale; }
 	bool is_feedback_grid_enabled() const { return m_bFeedbackGridEnabled; }
-	// P31c: externally produced, complete and depth-tested V3 sources only.
+	// P31c: externally produced, complete and depth-tested V1 sources only.
 	// The active V2 feedback producer remains authoritative.
 	bool prepare_multi_feedback_cold( const godot::RID &rPages, const godot::RID &rCounts,
 		uint32_t nViewportWidth, uint32_t nViewportHeight, uint32_t nSourceLayers, uint32_t nPageCount );
@@ -157,8 +157,8 @@ public:
 	uint64_t get_predicted_mask_uploads_saved() const {
 		return m_nPredictedMaskUploadsSaved;
 	}
-	bool	 get_physical_family_binding_v3( uint32_t pFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
-	bool	 validate_physical_format_families_v3_cold() const;
+	bool	 get_physical_family_binding_v1( uint32_t pFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
+	bool	 validate_physical_format_families_v1_cold() const;
 	uint64_t get_reserved_gpu_bytes() const;
 	const t3dVTGpuStats_t		 &get_stats() const;
 	const t3dVTGpuResourcePlan_t &get_cpu_resource_plan() const {

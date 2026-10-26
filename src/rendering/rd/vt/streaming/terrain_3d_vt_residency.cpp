@@ -248,7 +248,7 @@ static bool t3d_vt_build_runtime_tables_cold(
 		return false;
 	}
 
-	if ( pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ) {
+	if ( pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
 		if ( pDatabase.pRuntimeAllocations == NULL || pDatabase.pRuntimeTailMetadata == NULL ||
 			 pDatabase.nRuntimeTailCount == 0u || pBuffers.nTailMetadataCapacity < pDatabase.nRuntimeTailCount ) {
 			return false;
@@ -391,7 +391,7 @@ bool t3d_vt_initialize_residency_cold(
 		Entry.nPhysicalSlot = T3D_VT_INVALID_SLOT;
 		Entry.nParentPage = Page.nParentPage;
 		Entry.nGeneration =
-			pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? Page.nGeneration : Allocation.m_nGeneration;
+			pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? Page.nGeneration : Allocation.m_nGeneration;
 		Entry.nResolvedMip = Page.nMip;
 		Entry.nFlags = T3D_VT_PAGE_VALID;
 		if ( Page.nParentPage == T3D_VT_INVALID_PAGE ) {
@@ -513,7 +513,7 @@ bool t3d_vt_finalize_neutral_publication_warm(
 bool t3d_vt_finalize_package_publication_warm(
 	t3dVTResidencyState_t &rState ) {
 	if ( !rState.bInitialized || rState.pDatabase == NULL ||
-		 rState.pDatabase->nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V3 ||
+		 rState.pDatabase->nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ||
 		 rState.pDatabase->pRuntimePayloads == NULL || rState.nAllocationCount == 0u || rState.nTailCount == 0u ) {
 		return false;
 	}
@@ -898,7 +898,7 @@ bool t3d_vt_commit_upload_hot(
 		return false;
 	}
 	const t3dVTPageFileRecord_t &Page = rState.pDatabase->pPages[pReservation.nVirtualPage];
-	const uint32_t				 nExpectedMask = rState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3
+	const uint32_t				 nExpectedMask = rState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1
 													 ? ( 1u << Page.nChannel )
 													 : T3D_VT_PAGE_SET_CHANNEL_MASK;
 	if ( pUploadedChannelMask != nExpectedMask ) {
@@ -1068,7 +1068,7 @@ bool t3d_vt_validate_residency_reference_debug(
 	}
 	for ( uint32_t iAllocation = 0u; iAllocation < pState.nAllocationCount; ++iAllocation ) {
 		const t3dVTAllocation_t &Allocation = pState.Buffers.pAllocations[iAllocation];
-		if ( pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 && Allocation.m_nPageCount == 0u ) {
+		if ( pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 && Allocation.m_nPageCount == 0u ) {
 			continue;
 		}
 		if ( Allocation.m_nPageCount == 0u || Allocation.m_nMipCount == 0u ||
@@ -1080,7 +1080,7 @@ bool t3d_vt_validate_residency_reference_debug(
 			return false;
 		}
 		const t3dVTTailMetadata_t &Tail = pState.Buffers.pTailMetadata[Allocation.m_nTailIndex];
-		const uint32_t			   nTailAtlasWidth = pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3
+		const uint32_t			   nTailAtlasWidth = pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1
 														 ? T3D_VT_PACK_TAIL_ATLAS_WIDTH
 														 : T3D_VT_TAIL_ATLAS_WIDTH;
 		if ( Tail.m_nGeneration != Allocation.m_nGeneration || Tail.m_nWidthTexels == 0u ||

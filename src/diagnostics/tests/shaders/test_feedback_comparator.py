@@ -3,7 +3,7 @@
 import struct
 import tempfile
 from pathlib import Path
-from compare_feedback_v2_v3 import compare, read_capture
+from compare_feedback_v2_v1 import compare, read_capture
 
 HEADER = struct.Struct('<8IQ')
 RECORD = struct.Struct('<9I')

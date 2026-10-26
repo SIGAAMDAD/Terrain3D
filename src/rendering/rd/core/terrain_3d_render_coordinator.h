@@ -10,6 +10,14 @@
 #endif
 
 #include "Terrain3DConstants.h"
+#if defined( T3D_EDITOR_NATIVE )
+#include "rendering/rd/core/terrain_3d_editor_brush_transaction.h"
+#include "rendering/rd/core/terrain_3d_editor_brush_gpu.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_shader.h"
+#include "rendering/rd/infrastructure/pipeline/terrain_3d_rd_pipeline.h"
+#include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_descriptor_lease_table.h"
+#include "rendering/rd/infrastructure/buffers/terrain_3d_rd_gpu_buffer.h"
+#endif
 #include "rendering/rd/world/runtime/terrain_3d_static_scene_publication.h"
 #include "core/utility/terrain_3d_owner.h"
 #include "rendering/rd/core/terrain_3d_render_coordinator_access.h"
@@ -84,6 +92,46 @@ private:
 	Terrain3DSharedVTRuntime		   m_sharedVtRuntime;
 	Terrain3DTerrainMegaVT			   m_terrainMegaVT;
 #if defined( T3D_EDITOR_NATIVE )
+    // A render-owned transient stroke. Only metadata and immutable byte payloads
+    // cross the editor/render-thread boundary under m_editorBrushMutex.
+    // The editor never obtains or frees m_editorBrushWorking RID.
+    mutable Terrain3DMutex m_editorBrushMutex;
+    Terrain3DEditorBrushTransaction m_editorBrushTransaction;
+    Terrain3DRdGpuBuffer m_editorBrushWorking;
+    Terrain3DRdGpuBuffer m_editorBrushTileTable;
+    Terrain3DRdGpuBuffer m_editorBrushMask;
+    Terrain3DRdShader m_editorBrushShader;
+    Terrain3DRdPipeline m_editorBrushPipeline;
+    struct EditorBrushSetKey {
+        RID shader, working, tiles, mask;
+        bool operator==( const EditorBrushSetKey &r ) const {
+            return shader == r.shader && working == r.working && tiles == r.tiles && mask == r.mask;
+        }
+    };
+    Terrain3DRdDescriptorLeaseTable< EditorBrushSetKey, 1u > m_editorBrushSets{
+        Terrain3DRdContext::getShared(), T3D_RD_CONTEXT_OWNER_TERRAIN };
+    RID m_hEditorBrushComputeSet;
+    PackedByteArray m_editorBrushMaskUpload;
+    uint32_t m_nEditorBrushMaskWidth = 0u, m_nEditorBrushMaskHeight = 0u;
+    PackedByteArray m_editorBrushPushBytes;
+    PackedByteArray m_editorBrushInitial;
+    PackedByteArray m_editorBrushCompleted;
+    bool m_bEditorBrushGpuPending = false;
+    // Set only by successful shared-RD brush dispatch, never by source upload.
+    // Readback must not masquerade as a completed brush without GPU output.
+    bool m_bEditorBrushOutputProduced = false;
+    bool m_bEditorBrushReadbackInFlight = false;
+    uint64_t m_nEditorBrushRejectedCompletions = 0u;
+    uint64_t m_nLastEditorBrushStrokeId = 0u;
+    void initializeEditorBrushOnRenderThread( uint64_t nStrokeId ) override;
+    void sealEditorBrushOnRenderThread( uint64_t nStrokeId ) override;
+    void uploadEditorBrushTileOnRenderThread( uint64_t nStrokeId, uint32_t nTile, const PackedByteArray &rSource ) override;
+    void executeEditorBrushCommandOnRenderThread( uint64_t nStrokeId, uint32_t nCommand ) override;
+    bool prepareEditorBrushComputeOnRenderThread();
+    void discardEditorBrushOnRenderThread( uint64_t nStrokeId ) override;
+    void releaseEditorBrushOnRenderThread( void );
+#endif
+#if defined( T3D_EDITOR_NATIVE )
     Terrain3DComposedSurfaceEditJournal m_composedSurfaceEdits;
     uint64_t m_nComposedSourceGeneration = 1u;
     uint64_t m_nComposedTopologyGeneration = 0u;
@@ -129,6 +177,26 @@ public:
     bool cookComposedSurfaceSidecarEditorCold( const t3dCs14EditorCookRequest_t &request,
                                                t3dCs14EditorCookResult_t &result );
 #endif
+#if defined( T3D_EDITOR_NATIVE )
+    // BRP-04/06: backend readiness and explicit seal/readback. The GPU brush
+    // producer and clipmap overlay are integrated in subsequent operations;
+    // these entry points do not mutate Terrain3DRegion data.
+    bool beginEditorBrushStrokeCold( const Terrain3DEditorBrushTransaction &rTransaction,
+                                     const PackedByteArray &rSource, const PackedByteArray &rMaskBits,
+                                     uint32_t nMaskWidth, uint32_t nMaskHeight );
+    bool appendEditorBrushTileCold( uint64_t nStrokeId, const t3dEditorBrushTile_t &rTile,
+                                    const PackedByteArray &rSource );
+    bool enqueueEditorBrushCommandCold( uint64_t nStrokeId, const t3dEditorBrushCommand_t &rCommand );
+    bool sealEditorBrushStrokeCold( uint64_t nStrokeId );
+    t3dEditorBrushStrokeState_t getEditorBrushStrokeStateCold( uint64_t nStrokeId ) const;
+    void cancelEditorBrushStrokeCold( uint64_t nStrokeId );
+    bool takeEditorBrushReadbackCold( uint64_t nStrokeId,
+                                      Terrain3DEditorBrushTransaction &rTransaction,
+                                      PackedByteArray &rBytes );
+    bool acknowledgeEditorBrushCommitCold( uint64_t nStrokeId );
+    void consumeEditorBrushReadbackOnRenderThread( const PackedByteArray &rBytes,
+                                                    uint64_t nStrokeId, uint32_t nOwnerGeneration, uint64_t nDeviceGeneration ) override;
+#endif
 	uint32_t getMegaVTTexelsPerMeterCold() const {
 		return m_terrainMegaVT.getTexelsPerMeter();
 	}
@@ -172,6 +240,7 @@ private:
 		// The services mutate only through the owner-thread publication entry points.
 		return { m_pTerrain,
 				 m_terrainMegaVT,
+                 m_sharedVtRuntime.virtualTexture(),
 				 m_materialStateBuilder,
 				 m_staticScene,
 				 { m_pTerrain, m_sharedVtRuntime.virtualTexture(), m_terrainMegaVT },

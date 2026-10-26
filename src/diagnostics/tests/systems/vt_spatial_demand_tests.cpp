@@ -170,17 +170,17 @@ void register_vt_spatial_demand_tests(
 		T3D_CHECK( test, !index.loadCold( bytes.data(), bytes.size() ) );
 	} );
     runner.run( "vt_spatial_demand", "v3_async_bundles_and_reopen", []( TestContext &test ) {
-        t3dVTDemandV3CookConfig_t cfg{};
+        t3dVTDemandV1CookConfig_t cfg{};
         cfg.m_nPackageSignature = 7721u;
         cfg.m_nAssetIdentityHash = 7722u;
         cfg.m_nSourceSignature = 7723u;
         cfg.m_nBakeConfigSignature = 7724u;
-        t3dVTDemandV3Cell_t cells[2]{};
+        t3dVTDemandV1Cell_t cells[2]{};
         cells[0].m_nX = -5; cells[0].m_nZ = -1;
         cells[0].m_nFirstRecord = 0u; cells[0].m_nRecordCount = 1u;
         cells[1].m_nX = 5; cells[1].m_nZ = 2;
         cells[1].m_nFirstRecord = 1u; cells[1].m_nRecordCount = 1u;
-        t3dVTDemandV3Record_t records[2]{};
+        t3dVTDemandV1Record_t records[2]{};
         for ( uint32_t i = 0u; i < 2u; ++i ) {
             records[i].m_nStableMaterialKey = 100u + i;
             records[i].m_nSourceRevision = 1u;
@@ -191,7 +191,7 @@ void register_vt_spatial_demand_tests(
             records[i].m_szMipWeight[5] = 20u;
         }
         std::vector< uint8_t > bytes;
-        T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells, 2u, records, 2u, cfg, bytes ) );
+        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 2u, records, 2u, cfg, bytes ) );
         const String path = "user://t3d_w04_async_vt_test.t3vd";
         {
             Ref<godot::FileAccess> file = godot::FileAccess::open( path, godot::FileAccess::WRITE );
@@ -223,12 +223,12 @@ void register_vt_spatial_demand_tests(
         ( void ) godot::DirAccess::remove_absolute( path );
     } );
 	runner.run( "vt_spatial_demand", "v3_histogram_index_roundtrip_and_v2_isolation", []( TestContext &test ) {
-		t3dVTDemandV3CookConfig_t config;
+		t3dVTDemandV1CookConfig_t config;
 		config.m_nPackageSignature = 1001u;
 		config.m_nAssetIdentityHash = 1002u;
 		config.m_nSourceSignature = 1003u;
 		config.m_nBakeConfigSignature = 1004u;
-		t3dVTDemandV3Cell_t cells[3]{};
+		t3dVTDemandV1Cell_t cells[3]{};
 		cells[0].m_nX = -5; cells[0].m_nZ = -1;
 		cells[1].m_nX = -4; cells[1].m_nZ = -1;
 		cells[2].m_nX = 1; cells[2].m_nZ = 2;
@@ -237,7 +237,7 @@ void register_vt_spatial_demand_tests(
 			cells[i].m_nRecordCount = 1u;
 		}
 		cells[1].m_nFlags = 1u; // explicitly incomplete static coverage
-		t3dVTDemandV3Record_t records[3]{};
+		t3dVTDemandV1Record_t records[3]{};
 		for ( uint32_t i = 0u; i < 3u; ++i ) {
 			records[i].m_nStableMaterialKey = i + 11u;
 			records[i].m_nSourceRevision = 1u;
@@ -254,13 +254,13 @@ void register_vt_spatial_demand_tests(
 		records[2].m_nStableMaterialKey = 13u;
 		records[2].m_nViewBin = 2u;
 		std::vector< uint8_t > bytes, again;
-		T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells, 3u, records, 3u, config, bytes ) );
-		T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells, 3u, records, 3u, config, again ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, bytes ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, again ) );
 		T3D_CHECK( test, bytes == again );
-		std::vector< t3dVTDemandV3Cell_t > decodedCells;
-		std::vector< t3dVTDemandV3Record_t > decodedRecords;
-		t3dVTDemandV3CookConfig_t decodedConfig;
-		T3D_REQUIRE( test, t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 1001u, 1003u,
+		std::vector< t3dVTDemandV1Cell_t > decodedCells;
+		std::vector< t3dVTDemandV1Record_t > decodedRecords;
+		t3dVTDemandV1CookConfig_t decodedConfig;
+		T3D_REQUIRE( test, t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1001u, 1003u,
 			decodedCells, decodedRecords, &decodedConfig ) );
 		T3D_REQUIRE( test, decodedCells.size() == 3u && decodedRecords.size() == 3u );
 		T3D_CHECK( test, decodedCells[0].m_nX == -5 && decodedCells[1].m_nX == -4 );
@@ -269,23 +269,23 @@ void register_vt_spatial_demand_tests(
 		T3D_CHECK( test, decodedRecords[1].m_nFlags == ( T3D_VT_VISIBILITY_NO_VISIBLE | T3D_VT_VISIBILITY_PARTIAL ) );
 		Terrain3DVTSpatialDemand production;
 		T3D_CHECK( test, !production.loadCold( bytes.data(), bytes.size() ) ); // v3 not enabled in T01
-		T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 1002u, 1003u,
+		T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1002u, 1003u,
 			decodedCells, decodedRecords ) );
-		T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 1001u, 1004u,
+		T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1001u, 1004u,
 			decodedCells, decodedRecords ) );
 		T3D_CHECK( test, decodedCells.size() == 3u && decodedRecords.size() == 3u ); // failure is atomic
 		for ( uint64_t limit : { ( uint64_t ) 0u, ( uint64_t ) 16u, ( uint64_t ) 135u, ( uint64_t ) bytes.size() - 1u } ) {
-			T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), limit, 1001u, 1003u,
+			T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), limit, 1001u, 1003u,
 				decodedCells, decodedRecords ) );
 		}
 		for ( size_t offset : { ( size_t ) 8u, ( size_t ) 96u, ( size_t ) 144u, bytes.size() - 1u } ) {
 			std::vector< uint8_t > corrupt = bytes;
 			corrupt[offset] ^= 0x10u;
-			T3D_CHECK( test, !t3d_vt_demand_read_v3( corrupt.data(), corrupt.size(), 1001u, 1003u,
+			T3D_CHECK( test, !t3d_vt_demand_read_v1( corrupt.data(), corrupt.size(), 1001u, 1003u,
 				decodedCells, decodedRecords ) );
 		}
 		cells[1].m_nX = -5; cells[1].m_nZ = -1;
-		T3D_CHECK( test, !t3d_vt_demand_write_v3( cells, 3u, records, 3u, config, again ) );
+		T3D_CHECK( test, !t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, again ) );
 	} );
 
 }

@@ -32,6 +32,47 @@ void Terrain3DRdCompositorEffect::shutdownRendererLifecycleOnRenderThread(
 	}
 }
 
+#if defined( T3D_EDITOR_NATIVE )
+void Terrain3DRdCompositorEffect::initializeEditorBrushOnRenderThread(
+	const int64_t nStrokeId ) {
+	if ( m_pCoordinator && nStrokeId > 0 ) {
+		m_pCoordinator->initializeEditorBrushOnRenderThread( ( uint64_t ) nStrokeId );
+	}
+}
+void Terrain3DRdCompositorEffect::uploadEditorBrushTileOnRenderThread(
+    const int64_t nStrokeId, const int64_t nTile, const godot::PackedByteArray &rSource ) {
+    if ( m_pCoordinator && nStrokeId > 0 && nTile >= 0 )
+        m_pCoordinator->uploadEditorBrushTileOnRenderThread( ( uint64_t ) nStrokeId,
+            ( uint32_t ) nTile, rSource );
+}
+void Terrain3DRdCompositorEffect::executeEditorBrushCommandOnRenderThread(
+    const int64_t nStrokeId, const int64_t nCommand ) {
+    if ( m_pCoordinator && nStrokeId > 0 && nCommand >= 0 )
+        m_pCoordinator->executeEditorBrushCommandOnRenderThread( ( uint64_t ) nStrokeId, ( uint32_t ) nCommand );
+}
+void Terrain3DRdCompositorEffect::sealEditorBrushOnRenderThread(
+	const int64_t nStrokeId ) {
+	if ( m_pCoordinator && nStrokeId > 0 ) {
+		m_pCoordinator->sealEditorBrushOnRenderThread( ( uint64_t ) nStrokeId );
+	}
+}
+void Terrain3DRdCompositorEffect::discardEditorBrushOnRenderThread(
+	const int64_t nStrokeId ) {
+	if ( m_pCoordinator && nStrokeId > 0 ) {
+		m_pCoordinator->discardEditorBrushOnRenderThread( ( uint64_t ) nStrokeId );
+	}
+}
+void Terrain3DRdCompositorEffect::consumeEditorBrushReadbackOnRenderThread(
+	const godot::PackedByteArray &rBytes, const int64_t nStrokeId,
+	const int64_t nOwnerGeneration, const int64_t nDeviceGeneration ) {
+	if ( m_pCoordinator && nStrokeId > 0 && nOwnerGeneration > 0 &&
+         nOwnerGeneration <= UINT32_MAX && nDeviceGeneration > 0 ) {
+		m_pCoordinator->consumeEditorBrushReadbackOnRenderThread( rBytes,
+			( uint64_t ) nStrokeId, ( uint32_t ) nOwnerGeneration, ( uint64_t ) nDeviceGeneration );
+	}
+}
+#endif
+
 void Terrain3DRdCompositorEffect::renderPreviewOnRenderThread(
 	void ) {
 	if ( m_pCoordinator ) {

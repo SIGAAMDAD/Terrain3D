@@ -1,4 +1,4 @@
-// CS05 independent, versioned composed-page GPU lookup. No Sparse VT V3 ABI changes.
+// CS05 independent, versioned composed-page GPU lookup. No Sparse VT V1 ABI changes.
 #ifndef TERRAIN3D_COMPOSED_SURFACE_GPU_TABLE_H
 #define TERRAIN3D_COMPOSED_SURFACE_GPU_TABLE_H
 

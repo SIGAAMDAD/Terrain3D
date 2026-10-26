@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_pack_sampler.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_pack_sampler.h"
 
 #include <cmath>
 #include <cstring>
@@ -10,7 +10,7 @@ static uint32_t t3d_cs12_wrap( int64_t n, uint32_t extent )
     return uint32_t( ( n % m + m ) % m );
 }
 
-bool t3d_cs12_find_material_allocation( const t3dVTPackViewV3_t &pack,
+bool t3d_cs12_find_material_allocation( const t3dVTPackViewV1_t &pack,
                                          uint32_t material_id, uint32_t &out )
 {
     out = UINT32_MAX;
@@ -33,13 +33,13 @@ bool t3d_cs12_find_material_allocation( const t3dVTPackViewV3_t &pack,
 }
 
 bool t3d_cs12_open_source_pack( const void *pPackage, uint64_t nPackageBytes,
-                                t3dVTPackViewV3_t &view, t3dCs12PackSampler_t &sampler,
+                                t3dVTPackViewV1_t &view, t3dCs12PackSampler_t &sampler,
                                 t3dCs12DecodeFn decode, void *decoder_user,
                                 uint8_t *scratch, uint32_t slots )
 {
     view = {};
     sampler = {};
-    if ( !t3d_vt_pack_open_view_v3(pPackage,nPackageBytes,view) ||
+    if ( !t3d_vt_pack_open_view_v1(pPackage,nPackageBytes,view) ||
          !t3d_cs12_pack_sampler_init(sampler,view,decode,decoder_user,scratch,slots) ) {
         view = {};
         sampler = {};
@@ -49,7 +49,7 @@ bool t3d_cs12_open_source_pack( const void *pPackage, uint64_t nPackageBytes,
 }
 
 bool t3d_cs12_pack_sampler_init( t3dCs12PackSampler_t &r,
-                                 const t3dVTPackViewV3_t &pack, t3dCs12DecodeFn decode,
+                                 const t3dVTPackViewV1_t &pack, t3dCs12DecodeFn decode,
                                  void *user, uint8_t *scratch, uint32_t slots )
 {
     r = {};
@@ -68,7 +68,7 @@ bool t3d_cs12_pack_sampler_init( t3dCs12PackSampler_t &r,
 }
 
 static bool t3d_cs12_bridge_page( void *user, const t3dComposedSurfaceCookPage_t &page,
-                                   t3dComposedStaticV3Footprint_t &foot )
+                                   t3dComposedStaticV1Footprint_t &foot )
 {
     auto &bridge = *static_cast<t3dCs12ProducerBridge_t*>(user);
     return bridge.m_pOriginalPage(bridge.m_pOriginalUser, page, foot);
@@ -82,15 +82,15 @@ static bool t3d_cs12_bridge_control( void *user, int32_t x, int32_t y, uint32_t 
 
 static bool t3d_cs12_bridge_sample( void *user, uint32_t allocation,
                                     const float *uv, const float *dx, const float *dy,
-                                    float bias, uint32_t filter, t3dComposedStaticV3Sample_t &sample )
+                                    float bias, uint32_t filter, t3dComposedStaticV1Sample_t &sample )
 {
     auto &bridge = *static_cast<t3dCs12ProducerBridge_t*>(user);
-    return t3d_cs12_sample_static_v3(bridge.m_pSampler, allocation, uv, dx, dy, bias, filter, sample);
+    return t3d_cs12_sample_static_v1(bridge.m_pSampler, allocation, uv, dx, dy, bias, filter, sample);
 }
 
 bool t3d_cs12_bind_static_source( t3dCs12PackSampler_t &sampler,
                                   t3dCs12ProducerBridge_t &bridge,
-                                  t3dComposedStaticV3Source_t &source )
+                                  t3dComposedStaticV1Source_t &source )
 {
     if (!sampler.m_pPack || !sampler.m_pDecode || !sampler.m_pCacheBytes ||
         !source.m_pReadControl || !source.m_pResolvePage ||
@@ -107,7 +107,7 @@ bool t3d_cs12_bind_static_source( t3dCs12PackSampler_t &sampler,
     return true;
 }
 
-// Payload offsets refer to a cluster's decoded stream. V3's current page
+// Payload offsets refer to a cluster's decoded stream. V1's current page
 // payloads are codec NONE; reject outer-compressed clusters until a verified
 // cluster decoder is provided rather than interpreting compressed bytes.
 static bool t3d_cs12_tile( t3dCs12PackSampler_t &r, uint32_t payload_id, const uint8_t *&result )
@@ -125,7 +125,7 @@ static bool t3d_cs12_tile( t3dCs12PackSampler_t &r, uint32_t payload_id, const u
     const auto p = pack.m_pPayloads[payload_id];
     if ( p.m_nClusterId >= pack.m_nClusterCount || p.m_nCodec != T3D_VT_PACK_CODEC_NONE ||
          p.m_nStoredBytes == 0u || p.m_nStoredBytes != p.m_nDecodedBytes ||
-         p.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes_v3( p.m_nFormat ) ) return false;
+         p.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes_v1( p.m_nFormat ) ) return false;
     const auto c = pack.m_pClusters[p.m_nClusterId];
     if ( c.m_nCodec != T3D_VT_PACK_CODEC_NONE || c.m_nStoredBytes != c.m_nDecodedBytes ||
          c.m_nPayloadDataOffset > pack.m_nPayloadDataBytes ||
@@ -157,7 +157,7 @@ static bool t3d_cs12_tile( t3dCs12PackSampler_t &r, uint32_t payload_id, const u
 
 // Resolve the authored mip0 dimensions from the frozen tail chain, not merely
 // ceil(mip0/128) page counts (which overestimate 64x64 source textures).
-static bool t3d_cs12_dimensions( const t3dVTPackViewV3_t &pack, uint32_t allocation,
+static bool t3d_cs12_dimensions( const t3dVTPackViewV1_t &pack, uint32_t allocation,
                                  uint32_t channel, uint32_t &width, uint32_t &height )
 {
     width=height=0u;
@@ -298,9 +298,9 @@ static float t3d_cs12_srgb( float c )
     return c <= 0.04045f ? c*(1.0f/12.92f) : powf((c+0.055f)*(1.0f/1.055f),2.4f);
 }
 
-bool t3d_cs12_sample_static_v3( void *user, uint32_t allocation,
+bool t3d_cs12_sample_static_v1( void *user, uint32_t allocation,
                                 const float *uv, const float *dx, const float *dy,
-                                float bias, uint32_t filtering, t3dComposedStaticV3Sample_t &result )
+                                float bias, uint32_t filtering, t3dComposedStaticV1Sample_t &result )
 {
     if (!user || !uv || !dx || !dy || !std::isfinite(bias) ||
         (filtering != 1u && filtering != 3u)) return false;

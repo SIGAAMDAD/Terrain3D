@@ -1,5 +1,5 @@
-#ifndef TERRAIN3D_COMPOSED_SURFACE_V3_GODOT_DECODE_H
-#define TERRAIN3D_COMPOSED_SURFACE_V3_GODOT_DECODE_H
+#ifndef TERRAIN3D_COMPOSED_SURFACE_V1_GODOT_DECODE_H
+#define TERRAIN3D_COMPOSED_SURFACE_V1_GODOT_DECODE_H
 #include <stdint.h>
 // Editor-only cold decoder; intended as t3dCs12DecodeFn.
 bool t3d_cs12_decode_godot_image( void *pUser, uint32_t nPhysicalFamily,

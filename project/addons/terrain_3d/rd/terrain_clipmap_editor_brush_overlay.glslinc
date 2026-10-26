@@ -1,0 +1,40 @@
+// Editor-only transient working-tile sampling. Unchanged shipping path ABI.
+#if T3D_TERRAIN_SHADER_PATH == 2
+struct T3DEditorGpuTile {
+    ivec2 region;
+    uint byte_offset;
+    uint encoding;
+    uvec4 rect;
+};
+layout(set = 5, binding = 0, std430) readonly buffer EditorBrushWork {
+    uint t3d_edit_words[];
+};
+layout(set = 5, binding = 1, std430) readonly buffer EditorBrushTiles {
+    T3DEditorGpuTile t3d_edit_tiles[256];
+    uint t3d_edit_tile_lookup[65536];
+};
+bool t3d_editor_brush_lookup(ivec2 texel, uint map_type, out uint packed) {
+    int region_x = texel.x >= 0 ? texel.x / 128 : (texel.x - 127) / 128;
+    int region_y = texel.y >= 0 ? texel.y / 128 : (texel.y - 127) / 128;
+    int tile_x = texel.x - region_x * 128;
+    int tile_y = texel.y - region_y * 128;
+    // Terrain3D region slots are [-16,15] on each axis.
+    if (region_x < -16 || region_x > 15 || region_y < -16 || region_y > 15) return false;
+    int lookup_x = (region_x + 16) * 8 + tile_x / 16;
+    int lookup_y = (region_y + 16) * 8 + tile_y / 16;
+    uint tile_plus_one = t3d_edit_tile_lookup[lookup_y * 256 + lookup_x];
+    if (tile_plus_one == 0u || tile_plus_one > 256u) return false;
+    T3DEditorGpuTile tile = t3d_edit_tiles[tile_plus_one - 1u];
+    if (tile.encoding != map_type || any(notEqual(tile.region, ivec2(region_x, region_y)))) return false;
+    ivec2 local = ivec2(tile_x, tile_y) - ivec2(tile.rect.xy);
+    if (any(lessThan(local, ivec2(0))) || any(greaterThanEqual(local, ivec2(tile.rect.zw)))) return false;
+    uint pixel = uint(local.y) * tile.rect.z + uint(local.x);
+    if (map_type == 0u) {
+        uint combined = t3d_edit_words[tile.byte_offset / 4u + pixel / 2u];
+        packed = (combined >> (16u * (pixel & 1u))) & 65535u;
+    } else {
+        packed = t3d_edit_words[tile.byte_offset / 4u + pixel];
+    }
+    return true;
+}
+#endif

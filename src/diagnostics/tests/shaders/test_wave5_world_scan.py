@@ -117,7 +117,11 @@ def test_scan_contract():
     assert 'T3D_WORLD_SCAN_CANDIDATE_LIMIT 65536u' in shader
     assert 'T3D_WORLD_SCAN_GROUP_LIMIT 1024u' in shader
     assert 'scan_scratch.words[T3D_WORLD_SCAN_PREFIX_BASE' in shader
-    assert 'TERRAIN3D_GPU_WORLD_SCAN' in lib
+    assert 'isWorldScanEnabledCold( void )' in lib
+    assert 'T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_CLASSIFY' in lib
+    assert 'T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_FINALIZE' in lib
+    assert 'return t3dRdShaderSharedStateGet() != NULL;' in lib
+    assert 'const bool use_scan = !use_small && m_bScanAvailable &&' in cpp
     assert 'candidate_count <= SCAN_MAX_CANDIDATES' in cpp
     assert 'm_scanScratch.releaseTracked( m_context )' in cpp
     assert 'SCAN_WORDS = SCAN_MAX_CANDIDATES * 4u + SCAN_MAX_GROUPS * 22u' in header

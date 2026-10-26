@@ -115,8 +115,8 @@ protected:
 
 // Convert Vector3 to Vector2i, ignoring Y
 EA_FORCE_INLINE Vector2i t3dVector3ToVector2i(
-	const Vector3 &rV3 ) {
-	return Vector2i( rV3.x, rV3.z );
+	const Vector3 &rV1 ) {
+	return Vector2i( rV1.x, rV1.z );
 }
 
 // Convert Vector2i to Vector3, ignoring Y
@@ -127,8 +127,8 @@ EA_FORCE_INLINE Vector3 t3dVector2iToVector3(
 
 // Convert Vector3 to Vector2, ignoring Y
 EA_FORCE_INLINE Vector2 t3dVector3ToVector2(
-	const Vector3 &rV3 ) {
-	return Vector2( rV3.x, rV3.z );
+	const Vector3 &rV1 ) {
+	return Vector2( rV1.x, rV1.z );
 }
 
 // Convert Vector2 to Vector3, ignoring Y

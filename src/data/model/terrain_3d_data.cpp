@@ -300,21 +300,14 @@ void Terrain3DData::syncCacheDefaultMaps(
 												 m_defaultDerivedMap,
 												 m_bControlMapsImplicit,
 												 m_bColorMapsImplicit );
-	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
+	m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
 }
 
-t3dFarSurfaceAtlasConfig_t Terrain3DData::getFarSurfaceAtlasConfig(
+t3dFarRegionalCookConfig_t Terrain3DData::getFarRegionalCookConfig(
 	void ) const {
-	t3dFarSurfaceAtlasConfig_t config;
-	config.m_bRequired = isFarAtlasRequired();
-	config.m_bStrictCooked =
-		m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() && !m_pTerrain->isEditorAuthoringMode();
-	config.m_nHeightAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarHeightAtlasSide() : T3D_GPU_CACHE_FAR_HEIGHT_SIDE;
-	config.m_nSurfaceAtlasSide = m_pTerrain ? m_pTerrain->getGpuFarSurfaceAtlasSide() : T3D_GPU_CACHE_FAR_HEIGHT_SIDE;
-	// A fixed grant is computed from configured GPU capacity, never from live
-	// occupancy or brush edits; avoids the historic reallocation feedback loop.
-	config.m_nFinePageLimit = m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit() / 2, 16, 64 ) : 64;
-	config.m_nFineUploadBudget = m_pTerrain ? CLAMP( m_pTerrain->getGpuRegionCachePageLimit() / 16, 1, 8 ) : 4;
+	t3dFarRegionalCookConfig_t config;
+		config.m_nHeightSourceSide = m_pTerrain ? m_pTerrain->getFarVtHeightSourceSide() : T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE;
+	config.m_nSurfaceSourceSide = m_pTerrain ? m_pTerrain->getFarVtSurfaceSourceSide() : T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE;
 	config.m_dataDirectory = m_pTerrain ? m_pTerrain->getDataDirectory() : String();
 	config.m_pData = this;
 	config.m_defaultHeightMap = m_defaultHeightMap;
@@ -346,14 +339,6 @@ void Terrain3DData::applyInstanceRegionCacheChanges(
 	}
 	for ( int index = 0; index < rChanges.m_nLoaded; ++index ) {
 		m_pTerrain->instancerObject()->updateMmis( -1, t3dUnpackRegionCoord( rChanges.m_szLoaded[index] ), false );
-	}
-}
-
-void Terrain3DData::residencyPrepareGpuFarSurface(
-	void *const pContext ) {
-	Terrain3DData *const pData = ( Terrain3DData * ) ( pContext );
-	if ( pData && pData->isFarAtlasRequired() ) {
-		pData->ensureFarAtlases();
 	}
 }
 
@@ -765,39 +750,52 @@ void Terrain3DData::resetGpuRegionCache(
 	m_residency.resetGpu( bClearTextures );
 }
 
-bool Terrain3DData::isFarAtlasRequired(
-	void ) const {
-	return m_residency.gpuRegionCache().isEnabled() || ( m_pTerrain && m_pTerrain->isRuntimeShaderTieringActive() );
+uint64_t Terrain3DData::getGpuFarAvtPublicationRevision() const
+{
+    return m_residency.farRegionalCooker().getRegionalAvtPublicationRevision();
 }
 
-bool Terrain3DData::writeCookedGpuFarAtlases(
+uint32_t Terrain3DData::getGpuFarAvtCookedPackageGeneration(
+    const Vector2i &vLocation ) const
+{
+    return m_residency.farRegionalCooker().getRegionalAvtCookedPackageGeneration( vLocation );
+}
+
+bool Terrain3DData::isGpuFarAvtRegionCookDirty( const Vector2i &vLocation ) const
+{
+    return m_residency.farRegionalCooker().isRegionalAvtCookDirty( vLocation );
+}
+
+bool Terrain3DData::writeCookedFarVtRegions(
 	const String &rDirectory ) {
-	const t3dFarSurfaceAtlasConfig_t config = getFarSurfaceAtlasConfig();
-	m_residency.farSurfaceAtlasCache().setConfig( config );
+	const t3dFarRegionalCookConfig_t config = getFarRegionalCookConfig();
+	m_residency.farRegionalCooker().setConfig( config );
 	const int mapSize = T3D_REGION_MAP_SIZE;
 	LOG( INFO,
 		 "Cooking far atlases: height ",
-		 config.m_nHeightAtlasSide,
+		 config.m_nHeightSourceSide,
 		 " (",
-		 mapSize > 0 ? config.m_nHeightAtlasSide / mapSize : 0,
+		 mapSize > 0 ? config.m_nHeightSourceSide / mapSize : 0,
 		 " samples/region), surface ",
-		 config.m_nSurfaceAtlasSide,
+		 config.m_nSurfaceSourceSide,
 		 " (",
-		 mapSize > 0 ? config.m_nSurfaceAtlasSide / mapSize : 0,
+		 mapSize > 0 ? config.m_nSurfaceSourceSide / mapSize : 0,
 		 " samples/region), region map ",
 		 mapSize );
-	return m_residency.farSurfaceAtlasCache().writeCooked( rDirectory );
+	// AVT-08 publishes only indexed regional pages. No 4096x4096 image or
+	// independent far-atlas GPU resource exists after this call.
+	return m_residency.farRegionalCooker().writeRegionalAvtCooked( rDirectory );
 }
 
 void Terrain3DData::markAllGpuFarRegionsDirty(
 	const t3dMapType_t eMapType ) {
-	m_residency.farSurfaceAtlasCache().markAllDirty( eMapType );
+	m_residency.farRegionalCooker().markAllDirty( eMapType );
 }
 
 void Terrain3DData::markGpuFarRegionDirty(
 	const Vector2i	  &vLocation,
 	const t3dMapType_t eMapType ) {
-	m_residency.farSurfaceAtlasCache().markRegionDirty( vLocation, eMapType );
+	m_residency.farRegionalCooker().markRegionDirty( vLocation, eMapType );
 }
 
 void Terrain3DData::armPendingGpuRegionRetirements(
@@ -1058,7 +1056,6 @@ void Terrain3DData::updateRegionResidency(
 	context.m_pCompute = getComputeBackendIfCreated();
 	context.m_middleHeightConfig = getMiddleHeightCacheConfig();
 	context.m_pOwnerContext = this;
-	context.m_prepareGpuFarSurface = &Terrain3DData::residencyPrepareGpuFarSurface;
 	context.m_applyInstanceChanges = &Terrain3DData::residencyApplyInstanceChanges;
 	context.m_gpuPageTableChanged = &Terrain3DData::residencyGpuPageTableChanged;
 	const t3dResidencyFrameState_s frame = makeResidencyFrameState( rWorldPosition );
@@ -1298,7 +1295,7 @@ void Terrain3DData::configureGpuRegionCache(
 																		 nUploadBudgetMb,
 																		 nSparePages,
 																		 nRetireFrames );
-	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
+	m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
 	if ( bStorageChanged && m_pTerrain && T3D_REGION_SIZE > 0 ) {
 		updateMaps( REGION_TYPE_MAX, true, false );
 	}
@@ -1307,12 +1304,7 @@ void Terrain3DData::configureGpuRegionCache(
 void Terrain3DData::updateGpuRegionResidencyInternal(
 	const t3dResidencyFrameState_s &rFrame,
 	const bool						bForce ) {
-	m_residency.farSurfaceAtlasCache().resetFrameStats();
 	m_sparseTileResidency.setFrameDemand( rFrame );
-	m_residency.farSurfaceAtlasCache().setFrameDemand( rFrame );
-	if ( isFarAtlasRequired() ) {
-		ensureFarAtlases();
-	}
 	const t3dGpuRegionCacheUpdateResult_t result =
 		m_residency.gpuRegionCache().update( rFrame,
 											 bForce,
@@ -1323,39 +1315,14 @@ void Terrain3DData::updateGpuRegionResidencyInternal(
 	}
 }
 
-void Terrain3DData::invalidateGpuFarSurface(
-	void ) {
-	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
-	m_residency.farSurfaceAtlasCache().invalidateSurface();
-	if ( isFarAtlasRequired() && !m_residency.gpuRegionCache().isEnabled() ) {
-		ensureFarAtlases();
-	}
+void Terrain3DData::invalidateGpuFarSurface( void ) {
+    m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
+    m_residency.farRegionalCooker().invalidateSurface();
 }
 
-void Terrain3DData::invalidateGpuFarAtlasLayout(
-	void ) {
-	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
-	m_residency.farSurfaceAtlasCache().invalidateLayout();
-	if ( isFarAtlasRequired() && m_samplingStorage.isActiveOwner() && T3D_REGION_SIZE > 0 && T3D_REGION_MAP_SIZE > 0 ) {
-		ensureFarAtlases();
-	}
-}
-
-bool Terrain3DData::ensureFarAtlases(
-	void ) {
-	if ( !isFarAtlasRequired() || !m_samplingStorage.isActiveOwner() || T3D_REGION_SIZE <= 0 ||
-		 T3D_REGION_MAP_SIZE <= 0 ) {
-		return false;
-	}
-	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
-	const bool bReady = m_residency.farSurfaceAtlasCache().ensure();
-	if ( bReady && m_pTerrain ) {
-		const Ref< Terrain3DMaterial > pMaterial = m_pTerrain->materialResource();
-		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
-			pMaterial->updateFarAtlasTextures();
-		}
-	}
-	return bReady;
+void Terrain3DData::invalidateFarVtSourceLayout( void ) {
+    m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
+    m_residency.farRegionalCooker().invalidateLayout();
 }
 
 Dictionary Terrain3DData::getRuntimeResidencyGrid(
@@ -1408,8 +1375,8 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid(
 			cell["prepared"] = m_runtimeArtifacts.isPrepared( location );
 			cell["prepare_pending"] = isGpuRuntimePagePreparePending( location );
 			cell["gpu_slot_state"] = m_residency.gpuRegionCache().getSlotStateForLocation( location );
-			cell["far_height_dirty"] = m_residency.farSurfaceAtlasCache().isRegionHeightDirty( location );
-			cell["far_color_dirty"] = m_residency.farSurfaceAtlasCache().isRegionColorDirty( location );
+			cell["far_height_dirty"] = m_residency.farRegionalCooker().isRegionHeightDirty( location );
+			cell["far_color_dirty"] = m_residency.farRegionalCooker().isRegionColorDirty( location );
 			cells[write_index++] = cell;
 		}
 	}
@@ -1428,7 +1395,7 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid(
 Dictionary Terrain3DData::getGpuRegionCacheStatsFast(
 	void ) const {
 	Dictionary		 stats = m_residency.gpuRegionCache().getStatsDictionary( false );
-	const Dictionary farStats = m_residency.farSurfaceAtlasCache().getStatsDictionary();
+	const Dictionary farStats = m_residency.farRegionalCooker().getStatsDictionary();
 	const Array		 keys = farStats.keys();
 	for ( int index = 0; index < keys.size(); ++index ) {
 		stats[keys[index]] = farStats[keys[index]];
@@ -1476,14 +1443,12 @@ Dictionary Terrain3DData::getStartupLoadStats(
 Dictionary Terrain3DData::getGpuRegionCacheStats(
 	void ) const {
 	Dictionary		 stats = m_residency.gpuRegionCache().getStatsDictionary( true );
-	const Dictionary farStats = m_residency.farSurfaceAtlasCache().getStatsDictionary();
+	const Dictionary farStats = m_residency.farRegionalCooker().getStatsDictionary();
 	const Array		 keys = farStats.keys();
 	for ( int index = 0; index < keys.size(); ++index ) {
 		stats[keys[index]] = farStats[keys[index]];
 	}
 	if ( m_pTerrain ) {
-		stats["far_height_atlas_side"] = m_pTerrain->getGpuFarHeightAtlasSide();
-		stats["far_surface_atlas_side"] = m_pTerrain->getGpuFarSurfaceAtlasSide();
 		stats["far_quality_divisor"] = m_pTerrain->getGpuFarQualityDivisor();
 		stats["cooked_pages_enabled"] = m_pTerrain->isGpuRegionCookedPagesEnabled();
 		stats["cook_on_save"] = m_pTerrain->isGpuRegionCookOnSave();
@@ -1534,11 +1499,6 @@ size_t Terrain3DData::getMemoryRuntimePagePreparedBytes(
 
 size_t Terrain3DData::getMemoryNonPageTransientStagingBytes(
 	void ) const {
-	// Far-atlas CPU images are retained whole-world residency, not transient
-	// staging. Terrain3D::calculateFixedMemoryBytes() already reserves their
-	// canonical height/surface footprint through getGpuFarAtlasBytes(). Charging
-	// the same retained images against the transient reserve a second time can
-	// drive the runtime-page prepared-byte grant to zero after ensureFarAtlases().
 	return m_mapEditService.getTransientScratchBytes();
 }
 
@@ -2651,7 +2611,11 @@ void Terrain3DData::saveDirectory(
 	bool sourceChanged = false;
 	for ( size_t iRegion = 0u; iRegion < ( size_t ) ( ( saveResult.m_regions ).size() ); iRegion++ ) {
 		const t3dRegionSaveResult_t &regionResult = ( saveResult.m_regions )[iRegion];
-		sourceChanged |= regionResult.m_bSourceChanged || regionResult.m_bDeleted;
+		if ( regionResult.succeeded() && regionResult.m_bSourceChanged ) {
+			m_residency.farRegionalCooker().noteRegionSaved(
+				regionResult.m_location, regionResult.m_path, regionResult.m_bDeleted );
+			sourceChanged = true;
+		}
 	}
 	if ( sourceChanged ) {
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
@@ -2711,6 +2675,9 @@ void Terrain3DData::saveRegion(
 										b16Bit,
 										&Terrain3DData::ensurePersistenceRegionResident,
 										this );
+	if ( result.succeeded() && result.m_bSourceChanged ) {
+		m_residency.farRegionalCooker().noteRegionSaved( result.m_location, result.m_path, result.m_bDeleted );
+	}
 	if ( result.m_bSourceChanged || result.m_bDeleted ) {
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
 		invalidateBakedWorldManifest( rDir );
@@ -3099,9 +3066,7 @@ void Terrain3DData::updateMaps(
 	const bool		   bAllRegions,
 	const bool		   bGenerateMipmaps ) {
 	( void ) bGenerateMipmaps; // GPU publication builds transient mip chains; CPU maps stay base-level only.
-	if ( isFarAtlasRequired() ) {
-		markAllGpuFarRegionsDirty( eMapType );
-	}
+	markAllGpuFarRegionsDirty( eMapType );
 	if ( m_residency.gpuRegionCache().isEnabled() ) {
 		updateMapsBounded( eMapType, bAllRegions );
 		return;
@@ -3334,9 +3299,6 @@ void Terrain3DData::updateMaps(
 		}
 	}
 
-	if ( !m_residency.gpuRegionCache().isEnabled() && isFarAtlasRequired() ) {
-		ensureFarAtlases();
-	}
 
 	if ( bAnyChanged && !m_bStartupBulkLoad ) {
 		LOG( DEBUG, "Emitting maps_changed" );
@@ -3396,9 +3358,8 @@ void Terrain3DData::updateMapRegions(
 	bool bPhysicalMappingChanged = false;
 	for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( render_locations ).size() ); iLocation++ ) {
 		const Vector2i region_loc = ( render_locations )[iLocation];
-		if ( isFarAtlasRequired() ) {
-			markGpuFarRegionDirty( region_loc, eMapType );
-		}
+		// Control-map halo neighbors are renderer update dependencies, not
+		// independently changed authored far-surface sources.
 		Terrain3DRegion *const pRegion = getRegionPtr( region_loc );
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
@@ -3477,9 +3438,6 @@ void Terrain3DData::updateMapRegions(
 	if ( bColorChanged ) {
 		emit_signal( "color_maps_changed" );
 	}
-	if ( !m_residency.gpuRegionCache().isEnabled() && isFarAtlasRequired() ) {
-		ensureFarAtlases();
-	}
 }
 
 void Terrain3DData::publishDerivedMapUpdates(
@@ -3525,6 +3483,19 @@ void Terrain3DData::regenerateDerivedMaps(
 	publishDerivedMapUpdates( updates );
 }
 
+Dictionary Terrain3DData::getMapEditPerformanceStats(
+	void ) const {
+	Dictionary stats;
+	stats["commit_calls"] = ( int64_t ) m_nMapEditCommitCalls;
+	stats["derived_usec_last"] = ( int64_t ) m_nMapEditDerivedUsecLast;
+	stats["map_publication_usec_last"] = ( int64_t ) m_nMapEditPublicationUsecLast;
+	stats["collision_queue_usec_last"] = ( int64_t ) m_nMapEditCollisionQueueUsecLast;
+	stats["interactive_last"] = m_bMapEditInteractiveLast;
+	stats["compute_backend_requested_last"] = m_bMapEditComputeBackendRequestedLast;
+	stats["collision_requested_last"] = m_bMapEditCollisionRequestedLast;
+	return stats;
+}
+
 void Terrain3DData::commitMapEdits(
 	const t3dMapType_t										  eMapType,
 	const eastl::vector< Vector2i, Terrain3DEastlAllocator > &rRegionLocations,
@@ -3534,9 +3505,21 @@ void Terrain3DData::commitMapEdits(
 		return;
 	}
 
-	const bool				bKeepEdited = ( nFlags & MAP_EDIT_KEEP_EDITED ) != 0u;
-	Terrain3DCompute *const pCompute = eMapType == TYPE_HEIGHT ? getComputeBackend() : NULL;
+	++m_nMapEditCommitCalls;
+	m_nMapEditDerivedUsecLast = 0u;
+	m_nMapEditPublicationUsecLast = 0u;
+	m_nMapEditCollisionQueueUsecLast = 0u;
+	m_bMapEditInteractiveLast = ( nFlags & MAP_EDIT_INTERACTIVE ) != 0u;
+	m_bMapEditCollisionRequestedLast = ( nFlags & MAP_EDIT_UPDATE_COLLISION ) != 0u;
+	const bool bKeepEdited = ( nFlags & MAP_EDIT_KEEP_EDITED ) != 0u;
+	// Interactive editor edits use the bounded CPU derived-map path. Never create
+	// or synchronize a local RenderingDevice on a height dab or its undo.
+	Terrain3DCompute *const pCompute = eMapType == TYPE_HEIGHT && ( nFlags & MAP_EDIT_INTERACTIVE ) == 0u
+		? getComputeBackend() : NULL;
+	m_bMapEditComputeBackendRequestedLast = pCompute != NULL;
+	const uint64_t derived_started = Time::get_singleton()->get_ticks_usec();
 	t3dMapMutation_t mutation = m_mapEditService.commitMapEdits( eMapType, rRegionLocations, rEditedArea, pCompute );
+	m_nMapEditDerivedUsecLast = Time::get_singleton()->get_ticks_usec() - derived_started;
 	if ( !mutation.valid() ) {
 		return;
 	}
@@ -3545,13 +3528,12 @@ void Terrain3DData::commitMapEdits(
 	const eastl::vector< Vector2i, Terrain3DEastlAllocator > &derivedLocations = mutation.m_derivedLocations;
 	publishDerivedMapUpdates( mutation.m_derivedUpdates );
 
-	if ( m_residency.gpuRegionCache().isEnabled() ) {
-		for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( activeLocations ).size() ); iLocation++ ) {
-			const Vector2i &location = ( activeLocations )[iLocation];
-			markGpuFarRegionDirty( location, eMapType );
-		}
+	// Authoring dirtiness belongs to the changed source regions, independent
+	// of whether the GPU region cache or far-render tier is currently enabled.
+	for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( activeLocations ).size() ); iLocation++ ) {
+		markGpuFarRegionDirty( activeLocations[iLocation], eMapType );
 	}
-	if ( eMapType == TYPE_HEIGHT && isFarAtlasRequired() && m_pTerrain ) {
+	if ( eMapType == TYPE_HEIGHT && m_pTerrain ) {
 		const Ref< Terrain3DMaterial > pMaterial = m_pTerrain->materialResource();
 		if ( pMaterial.is_valid() && pMaterial->getAutoShaderEnabled() ) {
 			for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( derivedLocations ).size() ); iLocation++ ) {
@@ -3561,7 +3543,9 @@ void Terrain3DData::commitMapEdits(
 		}
 	}
 
+	const uint64_t publication_started = Time::get_singleton()->get_ticks_usec();
 	updateMapRegions( eMapType, activeLocations );
+	m_nMapEditPublicationUsecLast = Time::get_singleton()->get_ticks_usec() - publication_started;
 	m_mapEditService.finalizeMapEdits( mutation, bKeepEdited );
 	for ( size_t i = 0; i < activeLocations.size(); ++i ) {
 		publishSparseRasterEdit(
@@ -3576,24 +3560,37 @@ void Terrain3DData::commitMapEdits(
 		}
 		LOG( DEBUG, "Emitting maps_edited" );
 		emit_signal( "maps_edited", mutation.m_editedArea );
+		if ( has_connections( "maps_edit_committed" ) ) {
+			TypedArray< Vector2i > changed_region_locations;
+			for ( size_t i = 0u; i < activeLocations.size(); ++i ) {
+				changed_region_locations.append( activeLocations[i] );
+			}
+			emit_signal( "maps_edit_committed", ( int ) ( eMapType ), changed_region_locations, mutation.m_editedArea );
+		}
 	}
 
 	if ( m_pTerrain && ( nFlags & MAP_EDIT_UPDATE_INSTANCES ) != 0u && m_pTerrain->instancerObject() ) {
 		m_pTerrain->instancerObject()->updateTransforms( mutation.m_editedArea );
 	}
+	const uint64_t collision_queue_started = Time::get_singleton()->get_ticks_usec();
 	if ( m_pTerrain && ( nFlags & MAP_EDIT_UPDATE_COLLISION ) != 0u ) {
 		Terrain3DCollision *const pCollision = m_pTerrain->collisionObject();
 		if ( pCollision && pCollision->isEnabled() ) {
-			if ( pCollision->isDynamicMode() ) {
-				pCollision->update( s_v2iMax, true );
+			if ( mutation.m_editedArea.size.x > 0.0f && mutation.m_editedArea.size.z > 0.0f ) {
+				pCollision->requestEditedHeightfieldArea( mutation.m_editedArea );
 			} else {
-				for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( activeLocations ).size() ); iLocation++ ) {
-					const Vector2i &location = ( activeLocations )[iLocation];
-					pCollision->update( location, true );
+				// Older external callers can commit without a precise world AABB.
+				// Use region-local fallback instead of an all-shape rebuild.
+				const real_t side = T3D_REGION_SIZE * s_fRegionVertexSpacing;
+				for ( size_t i = 0u; i < activeLocations.size(); ++i ) {
+					const Vector2i &location = activeLocations[i];
+					pCollision->requestEditedHeightfieldArea( AABB( Vector3( location.x * side, 0.f, location.y * side ),
+						Vector3( side, 0.f, side ) ) );
 				}
 			}
 		}
 	}
+	m_nMapEditCollisionQueueUsecLast = Time::get_singleton()->get_ticks_usec() - collision_queue_started;
 	if ( m_pTerrain && ( nFlags & MAP_EDIT_SNAP ) != 0u ) {
 		m_pTerrain->snap();
 	}
@@ -4604,6 +4601,10 @@ void Terrain3DData::_bind_methods(
 	ADD_SIGNAL( MethodInfo( "control_maps_changed" ) );
 	ADD_SIGNAL( MethodInfo( "color_maps_changed" ) );
 	ADD_SIGNAL( MethodInfo( "maps_edited", PropertyInfo( Variant::AABB, "edited_area" ) ) );
+	ADD_SIGNAL( MethodInfo( "maps_edit_committed",
+							PropertyInfo( Variant::INT, "map_type" ),
+							PropertyInfo( Variant::ARRAY, "changed_region_locations", PROPERTY_HINT_ARRAY_TYPE, "Vector2i" ),
+							PropertyInfo( Variant::AABB, "edited_area" ) ) );
 }
 
 // M39 extracted non-template header implementations.

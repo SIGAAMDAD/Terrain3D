@@ -26,8 +26,8 @@ void register_vt_visibility_aggregation_tests( TestRunner &runner ) {
             r.m_bHasVisibleSamples = true;
         }
         probes[1].m_counts[1u] = 90u;
-        std::vector< t3dVTDemandV3Cell_t > cells;
-        std::vector< t3dVTDemandV3Record_t > records;
+        std::vector< t3dVTDemandV1Cell_t > cells;
+        std::vector< t3dVTDemandV1Record_t > records;
         t3dVTVisibilityAggregateStats_t stats;
         T3D_REQUIRE( test, Terrain3DVTVisibilityAggregator::reduce(
             probes, 3u, keys, 3u, 2u, false, cells, records, stats ) );
@@ -35,56 +35,56 @@ void register_vt_visibility_aggregation_tests( TestRunner &runner ) {
             stats.m_nDroppedRecords == 2u && stats.m_nPartialCells == 2u );
         T3D_CHECK( test, cells[0].m_nX == -1 && cells[0].m_nZ == -5 &&
             records[0].m_nSourceRevision == 3u && records[0].m_nProbeCount == 2u );
-        t3dVTDemandV3CookConfig_t config;
+        t3dVTDemandV1CookConfig_t config;
         config.m_nPackageSignature = 911u;
         config.m_nAssetIdentityHash = 912u;
         config.m_nSourceSignature = 913u;
         config.m_nBakeConfigSignature = 914u;
         std::vector< uint8_t > bytes, repeated;
-        T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells.data(), ( uint32_t ) cells.size(),
+        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells.data(), ( uint32_t ) cells.size(),
             records.data(), ( uint32_t ) records.size(), config, bytes ) );
-        T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells.data(), ( uint32_t ) cells.size(),
+        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells.data(), ( uint32_t ) cells.size(),
             records.data(), ( uint32_t ) records.size(), config, repeated ) );
         T3D_CHECK( test, bytes == repeated );
-        std::vector< t3dVTDemandV3Cell_t > outputCells;
-        std::vector< t3dVTDemandV3Record_t > outputRecords;
-        T3D_CHECK( test, t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 911u, 913u,
+        std::vector< t3dVTDemandV1Cell_t > outputCells;
+        std::vector< t3dVTDemandV1Record_t > outputRecords;
+        T3D_CHECK( test, t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 913u,
             outputCells, outputRecords ) && outputRecords.size() == 4u );
-        T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 912u, 913u,
+        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 912u, 913u,
             outputCells, outputRecords ) );
-        T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 911u, 914u,
+        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 914u,
             outputCells, outputRecords ) );
         const size_t originalCount = outputRecords.size();
         bytes.back() ^= 0x40u;
-        T3D_CHECK( test, !t3d_vt_demand_read_v3( bytes.data(), bytes.size(), 911u, 913u,
+        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 913u,
             outputCells, outputRecords ) && outputRecords.size() == originalCount );
     } );
-    runner.run( "vt_visibility_aggregate", "t03_package_v2_v3_transaction_rollback", []( TestContext &test ) {
+    runner.run( "vt_visibility_aggregate", "t03_package_v2_v1_transaction_rollback", []( TestContext &test ) {
         const String dir = "user://terrain3d_t03_publish";
         T3D_REQUIRE( test, DirAccess::make_dir_recursive_absolute( dir ) == OK );
         const String pack = dir.path_join( "pack.t3dvt" );
         const String v2 = dir.path_join( "presence.t3vd" );
-        const String v3 = dir.path_join( "presence.t3vd.v3" );
+        const String v1 = dir.path_join( "presence.t3vd.v1" );
         PackedByteArray old, newer;
         old.resize( 32 ); newer.resize( 32 );
         for ( int i = 0; i < 32; ++i ) { old.set( i, ( uint8_t ) i ); newer.set( i, ( uint8_t ) ( i + 17 ) ); }
         String error;
         T3D_REQUIRE( test, t3d_vt_demand_publish_triplet_cold( pack, old, v2, old,
-            v3, old, error ) );
+            v1, old, error ) );
         T3D_CHECK( test, FileAccess::get_file_as_bytes( pack ) == old &&
-            FileAccess::get_file_as_bytes( v2 ) == old && FileAccess::get_file_as_bytes( v3 ) == old );
-        const String badV3 = dir.path_join( "missing_dir/failed.t3vd" );
+            FileAccess::get_file_as_bytes( v2 ) == old && FileAccess::get_file_as_bytes( v1 ) == old );
+        const String badV1 = dir.path_join( "missing_dir/failed.t3vd" );
         T3D_CHECK( test, !t3d_vt_demand_publish_triplet_cold( pack, newer, v2, newer,
-            badV3, newer, error ) );
+            badV1, newer, error ) );
         T3D_CHECK( test, FileAccess::get_file_as_bytes( pack ) == old &&
             FileAccess::get_file_as_bytes( v2 ) == old );
         T3D_REQUIRE( test, t3d_vt_demand_publish_triplet_cold( pack, newer, v2, newer,
-            v3, newer, error ) );
+            v1, newer, error ) );
         T3D_CHECK( test, FileAccess::get_file_as_bytes( pack ) == newer &&
-            FileAccess::get_file_as_bytes( v2 ) == newer && FileAccess::get_file_as_bytes( v3 ) == newer );
+            FileAccess::get_file_as_bytes( v2 ) == newer && FileAccess::get_file_as_bytes( v1 ) == newer );
         ( void ) DirAccess::remove_absolute( pack );
         ( void ) DirAccess::remove_absolute( v2 );
-        ( void ) DirAccess::remove_absolute( v3 );
+        ( void ) DirAccess::remove_absolute( v1 );
         ( void ) DirAccess::remove_absolute( dir );
     } );
 }

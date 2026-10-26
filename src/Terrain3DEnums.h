@@ -299,14 +299,14 @@ typedef enum t3dVTOuterCompression_e : uint32_t
 	T3D_VT_OUTER_COMPRESSION_ZSTD = 1u,
 } t3dVTOuterCompression_t;
 
-typedef enum t3dVTGodotSourceFlagsV3_e : uint32_t
+typedef enum t3dVTGodotSourceFlagsV1_e : uint32_t
 {
-	T3D_VT_GODOT_SOURCE_V3_DIRECT_ORM = 1u << 0u,
-	T3D_VT_GODOT_SOURCE_V3_HAS_ALPHA = 1u << 1u,
-	T3D_VT_GODOT_SOURCE_V3_ALBEDO_RGBA = 1u << 2u,
-} t3dVTGodotSourceFlagsV3_t;
+	T3D_VT_GODOT_SOURCE_V1_DIRECT_ORM = 1u << 0u,
+	T3D_VT_GODOT_SOURCE_V1_HAS_ALPHA = 1u << 1u,
+	T3D_VT_GODOT_SOURCE_V1_ALBEDO_RGBA = 1u << 2u,
+} t3dVTGodotSourceFlagsV1_t;
 
-typedef enum t3dVTEditorCookStageV3_e : uint32_t
+typedef enum t3dVTEditorCookStageV1_e : uint32_t
 {
 	T3D_VT_EDITOR_COOK_STAGE_IDLE = 0u,
 	T3D_VT_EDITOR_COOK_STAGE_EXTRACT = 1u,
@@ -315,7 +315,7 @@ typedef enum t3dVTEditorCookStageV3_e : uint32_t
 	T3D_VT_EDITOR_COOK_STAGE_ENCODE = 4u,
 	T3D_VT_EDITOR_COOK_STAGE_PACK = 5u,
 	T3D_VT_EDITOR_COOK_STAGE_COMPLETE = 6u,
-} t3dVTEditorCookStageV3_t;
+} t3dVTEditorCookStageV1_t;
 
 typedef enum t3dVTCookWrapMode_e : uint32_t
 {
@@ -428,6 +428,7 @@ typedef enum t3dMapEditCommitFlag_e : uint32_t
 	MAP_EDIT_UPDATE_COLLISION = 1u << 1,
 	MAP_EDIT_SNAP = 1u << 2,
 	MAP_EDIT_KEEP_EDITED = 1u << 3,
+	MAP_EDIT_INTERACTIVE = 1u << 4,
 } t3dMapEditCommitFlag_t;
 
 typedef enum t3dInstanceFollowBehavior_e
@@ -986,7 +987,7 @@ typedef enum t3dRdMaterialFeatureBits_e
 	T3D_RD_MATERIAL_FEATURE_DERIVED_MAPS = 1u << 7u,
 	T3D_RD_MATERIAL_FEATURE_MIDDLE_COMPOSITE = 1u << 8u,
 	T3D_RD_MATERIAL_FEATURE_MIDDLE_HEIGHT = 1u << 9u,
-	T3D_RD_MATERIAL_FEATURE_FAR_ATLAS = 1u << 10u,
+	T3D_RD_MATERIAL_FEATURE_FAR_VT = 1u << 10u,
 	T3D_RD_MATERIAL_FEATURE_FAR_ALBEDO = 1u << 11u,
 	T3D_RD_MATERIAL_FEATURE_WORLD_NOISE_CACHE = 1u << 12u,
 	T3D_RD_MATERIAL_FEATURE_MACRO_NOISE = 1u << 13u,
@@ -1035,7 +1036,7 @@ typedef enum t3dRdMaterialLayerBits_e
 	T3D_RD_MATERIAL_LAYER_PACKED_SURFACE = 1u << 0u,
 	T3D_RD_MATERIAL_LAYER_RESIDENT = 1u << 1u,
 	T3D_RD_MATERIAL_LAYER_MICRO_VT = 1u << 2u,
-	T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V3 = 1u << 3u,
+	T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V1 = 1u << 3u,
 } t3dRdMaterialLayerBits_t;
 
 typedef enum t3dRdInstanceFlags_e : uint32_t
@@ -1179,6 +1180,7 @@ typedef enum t3dVTChannel_e : uint32_t
 	T3D_VT_CHANNEL_NORMAL = 1u,
 	T3D_VT_CHANNEL_SURFACE = 2u,
 	T3D_VT_CHANNEL_HEIGHT = 3u,
+	T3D_VT_CHANNEL_HEIGHT16 = 4u,
 } t3dVTChannel_t;
 
 typedef enum t3dVTChannelFormat_e : uint32_t
@@ -1196,6 +1198,7 @@ typedef enum t3dVTLogicalChannel_e : uint32_t
 	T3D_VT_LOGICAL_CHANNEL_HEIGHT = 2u,
 	T3D_VT_LOGICAL_CHANNEL_NORMAL = 3u,
 	T3D_VT_LOGICAL_CHANNEL_ORM = 4u,
+	T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT = 5u,
 } t3dVTLogicalChannel_t;
 
 typedef enum t3dVTLogicalChannelFormat_e : uint32_t
@@ -1205,6 +1208,7 @@ typedef enum t3dVTLogicalChannelFormat_e : uint32_t
 	T3D_VT_LOGICAL_FORMAT_HEIGHT_R8_UNORM = 2u,
 	T3D_VT_LOGICAL_FORMAT_NORMAL_BC5_UNORM = 3u,
 	T3D_VT_LOGICAL_FORMAT_ORM_BC1_UNORM = 4u,
+	T3D_VT_LOGICAL_FORMAT_FAR_HEIGHT_R16_UNORM = 5u,
 } t3dVTLogicalChannelFormat_t;
 
 typedef enum t3dVTPhysicalFormatFamily_e : uint32_t
@@ -1213,7 +1217,8 @@ typedef enum t3dVTPhysicalFormatFamily_e : uint32_t
 	T3D_VT_PHYSICAL_FORMAT_BC7_UNORM = 1u,
 	T3D_VT_PHYSICAL_FORMAT_BC5_UNORM = 2u,
 	T3D_VT_PHYSICAL_FORMAT_R8_UNORM = 3u,
-	T3D_VT_PHYSICAL_FORMAT_COUNT = 4u,
+	T3D_VT_PHYSICAL_FORMAT_R16_UNORM = 4u,
+	T3D_VT_PHYSICAL_FORMAT_COUNT = 5u,
 } t3dVTPhysicalFormatFamily_t;
 
 typedef enum t3dVTChannelSemantic_e : uint32_t
@@ -1223,12 +1228,15 @@ typedef enum t3dVTChannelSemantic_e : uint32_t
 	T3D_VT_CHANNEL_SEMANTIC_LINEAR_HEIGHT = 2u,
 	T3D_VT_CHANNEL_SEMANTIC_NORMAL_XY = 3u,
 	T3D_VT_CHANNEL_SEMANTIC_LINEAR_ORM = 4u,
+	T3D_VT_CHANNEL_SEMANTIC_FAR_HEIGHT_R16 = 5u,
 } t3dVTChannelSemantic_t;
 
 typedef enum t3dVTConsumer_e : uint32_t
 {
 	T3D_VT_CONSUMER_CLIPMAP = 0u,
 	T3D_VT_CONSUMER_INSTANCE = 1u,
+	T3D_VT_CONSUMER_COMPOSED = 2u,
+	T3D_VT_CONSUMER_FAR = 3u,
 } t3dVTConsumer_t;
 
 typedef enum t3dVTSamplerClass_e : uint32_t
@@ -1314,8 +1322,8 @@ typedef enum t3dRenderingMaterialFlags_e : uint32_t
 	T3D_VT_MATERIAL_ALBEDO_SATURATION = 1u << 13u,
 	// Known shared ShaderMaterial profile uses the authored stylized sun loop.
 	T3D_VT_MATERIAL_STYLIZED_SUN = 1u << 14u,
-	// VT-P06: material allocation is the base of a sparse V3 runtime channel triplet.
-	T3D_VT_MATERIAL_V3_LAYOUT = 1u << 15u,
+	// VT-P06: material allocation is the base of a sparse V1 runtime channel triplet.
+	T3D_VT_MATERIAL_V1_LAYOUT = 1u << 15u,
 	T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE = 1u << 16u,
 	// Old cooked records lack provenance and must retain surface sampling.
 	T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN = 1u << 17u,
@@ -1352,7 +1360,7 @@ typedef enum t3dVTResidencyTemperature_e : uint16_t
 typedef enum t3dVTRuntimeDatabaseKind_e : uint32_t
 {
 	T3D_VT_RUNTIME_DATABASE_LEGACY_NEUTRAL = 0u,
-	T3D_VT_RUNTIME_DATABASE_PACK_V3 = 2u,
+	T3D_VT_RUNTIME_DATABASE_PACK_V1 = 2u,
 } t3dVTRuntimeDatabaseKind_t;
 
 typedef enum t3dVTGpuBufferId_e : uint32_t
@@ -1375,6 +1383,7 @@ typedef t3dVTChannel_t t3dVTResourceChannel_t;
 #define T3D_VT_RESOURCE_NORMAL	( T3D_VT_CHANNEL_NORMAL )
 #define T3D_VT_RESOURCE_SURFACE ( T3D_VT_CHANNEL_SURFACE )
 #define T3D_VT_RESOURCE_HEIGHT	( T3D_VT_CHANNEL_HEIGHT )
+#define T3D_VT_RESOURCE_HEIGHT16 ( T3D_VT_CHANNEL_HEIGHT16 )
 
 typedef enum t3dVTPriorityBucket_e : uint16_t
 {
@@ -1790,7 +1799,7 @@ typedef enum t3dTerrainShaderPassClass_e
 
 typedef enum t3dTerrainMaterialBackend_e
 {
-	T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3 = 0u,
+	T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 = 0u,
 	T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED = 1u,
 	T3D_TERRAIN_MATERIAL_BACKEND_COUNT = 2u,
 } t3dTerrainMaterialBackend_t;
@@ -1892,7 +1901,8 @@ typedef enum t3dRdShaderId_e : uint32_t
     T3D_RD_SHADER_ENVIRONMENT_HEIGHT,
     // SHD-02: append feedback+compact ABI versions; original IDs stay stable.
     T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE,
-    T3D_RD_SHADER_COUNT = T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE + 3u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT,
+    T3D_RD_SHADER_EDITOR_BRUSH_TILES = T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE + 3u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT,
+	T3D_RD_SHADER_COUNT = T3D_RD_SHADER_EDITOR_BRUSH_TILES + 1u,
 
 } t3dRdShaderId_t;
 
@@ -2037,7 +2047,7 @@ typedef enum t3dRuntimeProfileEvent_e : uint32_t
 	TERRAIN3D_PROFILE_EVENT_RUNTIME_PAGE_PREPARE = 1u << 5u,
 	TERRAIN3D_PROFILE_EVENT_CLIPMAP_TELEPORT = 1u << 6u,
 	TERRAIN3D_PROFILE_EVENT_NODE_LOAD_FAILURE = 1u << 7u,
-	TERRAIN3D_PROFILE_EVENT_FAR_ATLAS_WORK = 1u << 8u,
+	TERRAIN3D_PROFILE_EVENT_FAR_VT_WORK = 1u << 8u,
 	TERRAIN3D_PROFILE_EVENT_CPU_DEMAND_LOAD = 1u << 9u,
 	TERRAIN3D_PROFILE_EVENT_INSTANCE_BACKLOG = 1u << 10u,
 } t3dRuntimeProfileEvent_t;

@@ -431,7 +431,7 @@ bool t3d_vt_fragment_request_allocation(
         virtual_page, wanted_mip, priority, T3D_VT_REQUEST_PRODUCER_FRAGMENT, vt_fragment_feedback.limits.x, vt_fragment_feedback.limits.z);
 }
 
-// Request one runtime channel allocation. V3 consumers request their sampled
+// Request one runtime channel allocation. V1 consumers request their sampled
 // siblings explicitly because each channel has independent page residency.
 bool t3d_vt_fragment_request_material_page_set(uint page_set_allocation,
     vec2 uv,

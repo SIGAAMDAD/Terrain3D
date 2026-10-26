@@ -171,7 +171,7 @@ bool Terrain3DRdPreviewService::preparePreviewAuthoringPackageCold(
 	Terrain3DSharedMemoryReservation package_memory;
 	uint64_t						 nFingerprint = 0u;
 	uint32_t						 nPackageGeneration = 0u;
-	t3dVTEditorCookTelemetryV3_t	 cookTelemetry{};
+	t3dVTEditorCookTelemetryV1_t	 cookTelemetry{};
 	bool							 bStageNeutral = nMaterialCount == 0u;
 	if ( !bStageNeutral ) {
 		if ( m_previewVtEditorCache.m_CacheDirectory.is_empty() ) {
@@ -183,10 +183,10 @@ bool Terrain3DRdPreviewService::preparePreviewAuthoringPackageCold(
 			if ( cacheDirectory.is_empty() && rServices.m_pTerrain != NULL ) {
 				cacheDirectory = rServices.m_pTerrain->getDataDirectory().path_join( ".vt_cache" );
 			}
-			t3d_vt_godot_editor_cache_set_directory_v3( m_previewVtEditorCache, cacheDirectory );
+			t3d_vt_godot_editor_cache_set_directory_v1( m_previewVtEditorCache, cacheDirectory );
 		}
 		String cookError;
-		if ( !t3d_vt_godot_cook_editor_package_incremental_v3( rAssets,
+		if ( !t3d_vt_godot_cook_editor_package_incremental_v1( rAssets,
 															   materials.m_stableKeys.data(),
 															   materials.m_records.data(),
 															   nMaterialCount,

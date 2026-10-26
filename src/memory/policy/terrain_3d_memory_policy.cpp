@@ -374,8 +374,6 @@ uint64_t Terrain3D::calculateFixedMemoryBytes(
 	bytes = t3dSaturatingAddUnsigned( bytes, MAX( render_reserve, render_owned ) );
 	if ( m_pData ) {
 		bytes = t3dSaturatingAddUnsigned( bytes, ( uint64_t ) ( m_pData->getMemoryFixedRepositoryBytes() ) );
-		const uint64_t fixed_far_atlas_bytes = getGpuFarAtlasBytes();
-		bytes = t3dSaturatingAddUnsigned( bytes, fixed_far_atlas_bytes );
 	}
 	if ( m_assets.is_valid() ) {
 		bytes = t3dSaturatingAddUnsigned( bytes, ( uint64_t ) ( m_assets->getGeneratedTexturePayloadBytes() ) );
@@ -1105,7 +1103,6 @@ Dictionary Terrain3D::getTrackedCurrentResidency(
 	fixed["accuracy"] = "estimated";
 	fixed["material_texture_arrays_bytes"] =
 		( int64_t ) ( m_assets.is_valid() ? m_assets->getGeneratedTexturePayloadBytes() : 0u );
-	fixed["far_atlas_bytes"] = ( int64_t ) ( getGpuFarAtlasBytes() );
 	fixed["clipmap_geometry_bytes"] =
 		( int64_t ) ( m_pTerrainMesher ? m_pTerrainMesher->getVisibleGeometryPayloadBytes() : 0u );
 	fixed["shadow_geometry_bytes"] =

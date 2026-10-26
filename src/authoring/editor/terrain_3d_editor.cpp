@@ -14,6 +14,9 @@
 #include "data/sampling/terrain_3d_sampler.h"
 #include "eastl_config.h"
 #include "rendering/compute/terrain_3d_compute.h"
+#if defined( T3D_EDITOR_NATIVE )
+#include "rendering/rd/core/terrain_3d_render_coordinator.h"
+#endif
 #include "terrain_3d.h"
 
 #include <math.h>
@@ -221,10 +224,172 @@ Dictionary Terrain3DEditor::captureEditSnapshot(
 	return snapshot;
 }
 
+PackedByteArray Terrain3DEditor::captureUndoTile(
+	Image *const pMap,
+	const PackedByteArray *const pCachedBytes,
+	const uint32_t nTileIndex,
+	const Image::Format format ) {
+	PackedByteArray tile;
+	if ( !pMap || pMap->get_width() != T3D_REGION_SIZE || pMap->get_height() != T3D_REGION_SIZE ) {
+		return tile;
+	}
+	const size_t pixel_bytes = format == Image::FORMAT_R16 ? 2u : 4u;
+	const uint32_t tiles_per_axis = T3D_BRUSH_UNDO_TILES_PER_AXIS;
+	if ( nTileIndex >= tiles_per_axis * tiles_per_axis ) {
+		return tile;
+	}
+	const PackedByteArray source = pCachedBytes ? *pCachedBytes : pMap->get_data();
+	const size_t minimum_bytes = ( size_t ) T3D_REGION_SIZE * T3D_REGION_SIZE * pixel_bytes;
+	if ( ( size_t ) source.size() < minimum_bytes ) {
+		return tile;
+	}
+	const size_t row_bytes = T3D_BRUSH_UNDO_TILE_SIZE * pixel_bytes;
+	const size_t first_x = ( nTileIndex % tiles_per_axis ) * T3D_BRUSH_UNDO_TILE_SIZE;
+	const size_t first_y = ( nTileIndex / tiles_per_axis ) * T3D_BRUSH_UNDO_TILE_SIZE;
+	tile.resize( ( int64_t ) ( row_bytes * T3D_BRUSH_UNDO_TILE_SIZE ) );
+	uint8_t *const destination = tile.ptrw();
+	const uint8_t *const bytes = source.ptr();
+	for ( size_t row = 0u; row < T3D_BRUSH_UNDO_TILE_SIZE; ++row ) {
+		const size_t offset = ( ( first_y + row ) * T3D_REGION_SIZE + first_x ) * pixel_bytes;
+		memcpy( destination + row * row_bytes, bytes + offset, row_bytes );
+	}
+	return tile;
+}
+
+void Terrain3DEditor::recordBrushUndoTile(
+	t3dRegionMapCache_t &rEntry,
+	const Vector2i &rPixel,
+	const t3dMapType_t mapType ) {
+	if ( !m_bIsOperating || rEntry.m_region.is_null() || !rEntry.m_pMap ||
+		 m_addedRemovedLocations.find( rEntry.m_location ) >= 0 ) {
+		return;
+	}
+	const Image::Format expected_format = mapType == TYPE_HEIGHT ? Image::FORMAT_R16 :
+										  mapType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	if ( rEntry.m_pMap->get_format() != expected_format ) {
+		return;
+	}
+	const uint32_t tile_index = ( ( uint32_t ) rPixel.y / T3D_BRUSH_UNDO_TILE_SIZE ) *
+									T3D_BRUSH_UNDO_TILES_PER_AXIS +
+								( uint32_t ) rPixel.x / T3D_BRUSH_UNDO_TILE_SIZE;
+	const uint64_t tile_bit = 1ULL << tile_index;
+	if ( rEntry.m_nUndoRegionIndex < 0 ) {
+		for ( size_t i = 0u; i < m_brushUndoRegions.size(); ++i ) {
+			if ( m_brushUndoRegions[i].m_location == rEntry.m_location &&
+				 m_brushUndoRegions[i].m_mapType == mapType ) {
+				rEntry.m_nUndoRegionIndex = ( int32_t ) i;
+				break;
+			}
+		}
+	}
+	if ( rEntry.m_nUndoRegionIndex < 0 ) {
+		rEntry.m_nUndoRegionIndex = ( int32_t ) m_brushUndoRegions.size();
+		m_brushUndoRegions.push_back( t3dBrushUndoRegion_t() );
+		t3dBrushUndoRegion_t *const pUndoRegion = &m_brushUndoRegions.back();
+		pUndoRegion->m_location = rEntry.m_location;
+		pUndoRegion->m_mapType = mapType;
+		pUndoRegion->m_format = expected_format;
+		pUndoRegion->m_bMipmaps = rEntry.m_pMap->has_mipmaps();
+		pUndoRegion->m_bWasImplicit = rEntry.m_bMapWasImplicit;
+		pUndoRegion->m_heightRange = rEntry.m_region->getHeightRange();
+	}
+	t3dBrushUndoRegion_t *const pUndoRegion = &m_brushUndoRegions[( size_t ) rEntry.m_nUndoRegionIndex];
+	if ( pUndoRegion->m_nTouchedMask & tile_bit ) {
+		return;
+	}
+	const PackedByteArray *const pCache = rEntry.m_bDirectAccess ? &rEntry.m_mapData : NULL;
+	PackedByteArray before = captureUndoTile( rEntry.m_pMap, pCache, tile_index, expected_format );
+	if ( before.is_empty() ) {
+		return;
+	}
+	t3dBrushUndoTile_t tile;
+	tile.m_nTileIndex = ( uint8_t ) tile_index;
+	tile.m_before = before;
+	pUndoRegion->m_tiles.push_back( tile );
+	pUndoRegion->m_nTouchedMask |= tile_bit;
+}
+
+void Terrain3DEditor::finishBrushUndoTiles(
+	void ) {
+	Terrain3DData *const pData = m_pTerrain->dataObject();
+	for ( size_t i = 0u; i < m_brushUndoRegions.size(); ++i ) {
+		const t3dBrushUndoRegion_t &entry = m_brushUndoRegions[i];
+		const Ref< Terrain3DRegion > region = pData->getRegion( entry.m_location );
+		if ( region.is_null() || region->isDeleted() || entry.m_tiles.empty() ) {
+			continue;
+		}
+		Ref< Image > current = region->getMap( entry.m_mapType );
+		if ( current.is_null() || current->get_format() != entry.m_format ) {
+			continue;
+		}
+		Dictionary undo;
+		Dictionary redo;
+		undo["kind"] = EDIT_SNAPSHOT_MAP;
+		redo["kind"] = EDIT_SNAPSHOT_MAP;
+		undo["location"] = entry.m_location;
+		redo["location"] = entry.m_location;
+		undo["map_type"] = ( int ) entry.m_mapType;
+		redo["map_type"] = ( int ) entry.m_mapType;
+		undo["map_width"] = T3D_REGION_SIZE;
+		redo["map_width"] = T3D_REGION_SIZE;
+		undo["map_height"] = T3D_REGION_SIZE;
+		redo["map_height"] = T3D_REGION_SIZE;
+		undo["map_format"] = ( int ) entry.m_format;
+		redo["map_format"] = ( int ) entry.m_format;
+		undo["map_mipmaps"] = entry.m_bMipmaps;
+		redo["map_mipmaps"] = entry.m_bMipmaps;
+		if ( entry.m_mapType == TYPE_HEIGHT ) {
+			undo["height_range"] = entry.m_heightRange;
+			redo["height_range"] = region->getHeightRange();
+		}
+		if ( entry.m_bWasImplicit ) {
+			undo["map_absent"] = true;
+		} else {
+			Array before_tiles;
+			for ( size_t j = 0u; j < entry.m_tiles.size(); ++j ) {
+				Dictionary tile;
+				tile["index"] = ( int ) entry.m_tiles[j].m_nTileIndex;
+				tile["bytes"] = entry.m_tiles[j].m_before;
+				before_tiles.push_back( tile );
+			}
+			undo["map_tiles"] = before_tiles;
+		}
+		const PackedByteArray current_bytes = current->get_data();
+		Array after_tiles;
+		for ( size_t j = 0u; j < entry.m_tiles.size(); ++j ) {
+			Dictionary tile;
+			const uint32_t tile_index = entry.m_tiles[j].m_nTileIndex;
+			tile["index"] = ( int ) tile_index;
+			tile["bytes"] = captureUndoTile( current.ptr(), &current_bytes, tile_index, entry.m_format );
+			after_tiles.push_back( tile );
+		}
+		redo["map_tiles"] = after_tiles;
+		m_originalEditSnapshots.push_back( undo );
+		m_editedEditSnapshots.push_back( redo );
+		region->setEdited( false );
+	}
+	m_brushUndoRegions.clear();
+}
+
+bool Terrain3DEditor::controlHoleBytesDiffer(
+	const PackedByteArray &rOld,
+	const PackedByteArray &rNew ) {
+	const size_t count = ( size_t ) T3D_REGION_SIZE * T3D_REGION_SIZE;
+	const uint8_t *const old_bytes = rOld.size() >= ( int64_t ) ( count * 4u ) ? rOld.ptr() : NULL;
+	const uint8_t *const new_bytes = rNew.size() >= ( int64_t ) ( count * 4u ) ? rNew.ptr() : NULL;
+	for ( size_t i = 0u; i < count; ++i ) {
+		if ( t3dIsHole( readU32( old_bytes, i ) ) != t3dIsHole( readU32( new_bytes, i ) ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void Terrain3DEditor::applyEditSnapshot(
 	const Dictionary	  &rSnapshot,
 	t3dEditorMapUpdates_t &rMapUpdates,
-	bool				  &bInstancesChanged ) {
+	bool				  &bInstancesChanged,
+	bool				  &bHoleChanged ) {
 	if ( !rSnapshot.has( "kind" ) || !rSnapshot.has( "location" ) ) {
 		return;
 	}
@@ -255,11 +420,87 @@ void Terrain3DEditor::applyEditSnapshot(
 		return;
 	}
 	if ( ( bool ) ( rSnapshot.get( "map_absent", false ) ) ) {
+		if ( map_type == TYPE_CONTROL && pRegion->getMap( TYPE_CONTROL ).is_valid() ) {
+			bHoleChanged |= controlHoleBytesDiffer( pRegion->getMap( TYPE_CONTROL )->get_data(), PackedByteArray() );
+		}
 		if ( map_type == TYPE_CONTROL || map_type == TYPE_COLOR ) {
 			pRegion->setMap( map_type, Ref< Image >() );
 			pRegion->setModified( true );
 			rMapUpdates.m_locations[( size_t ) ( map_type )].push_back( location );
 		}
+		return;
+	}
+	if ( rSnapshot.has( "map_tiles" ) ) {
+		const Image::Format format = map_type == TYPE_HEIGHT ? Image::FORMAT_R16 :
+									 map_type == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+		Ref< Image > map = pRegion->getMap( map_type );
+		if ( map.is_null() ) {
+			pRegion->getMapPtrForWrite( map_type );
+			map = pRegion->getMap( map_type );
+		}
+		if ( map.is_null() || map->get_format() != format ||
+			 map->get_width() != T3D_REGION_SIZE || map->get_height() != T3D_REGION_SIZE ) {
+			return;
+		}
+		PackedByteArray bytes = map->get_data();
+		const size_t pixel_bytes = format == Image::FORMAT_R16 ? 2u : 4u;
+		if ( ( size_t ) bytes.size() < ( size_t ) T3D_REGION_SIZE * T3D_REGION_SIZE * pixel_bytes ) {
+			return;
+		}
+		const Array tiles = rSnapshot["map_tiles"];
+		// Validate every record before mutating any bytes; corrupted history
+		// must never leave a half-restored source map.
+		for ( int i = 0; i < tiles.size(); ++i ) {
+			const Dictionary tile = tiles[i];
+			const int index = tile.get( "index", -1 );
+			const PackedByteArray data = tile.get( "bytes", PackedByteArray() );
+			if ( index < 0 || index >= T3D_BRUSH_UNDO_TILES_PER_AXIS * T3D_BRUSH_UNDO_TILES_PER_AXIS ||
+				 ( size_t ) data.size() != T3D_BRUSH_UNDO_TILE_SIZE * T3D_BRUSH_UNDO_TILE_SIZE * pixel_bytes ) {
+				LOG( ERROR, "Rejected invalid Terrain3D brush tile undo for region ", location );
+				return;
+			}
+		}
+		if ( map_type == TYPE_CONTROL ) {
+			const uint8_t *const source = bytes.ptr();
+			for ( int i = 0; i < tiles.size() && !bHoleChanged; ++i ) {
+				const Dictionary tile = tiles[i];
+				const int index = tile["index"];
+				const PackedByteArray data = tile["bytes"];
+				const size_t first_x = ( ( size_t ) index % T3D_BRUSH_UNDO_TILES_PER_AXIS ) * T3D_BRUSH_UNDO_TILE_SIZE;
+				const size_t first_y = ( ( size_t ) index / T3D_BRUSH_UNDO_TILES_PER_AXIS ) * T3D_BRUSH_UNDO_TILE_SIZE;
+				for ( size_t y = 0u; y < T3D_BRUSH_UNDO_TILE_SIZE && !bHoleChanged; ++y ) {
+					for ( size_t x = 0u; x < T3D_BRUSH_UNDO_TILE_SIZE; ++x ) {
+						const size_t old_i = ( ( first_y + y ) * T3D_REGION_SIZE + first_x + x );
+						const size_t new_i = y * T3D_BRUSH_UNDO_TILE_SIZE + x;
+						uint32_t next = 0u;
+						memcpy( &next, data.ptr() + new_i * 4u, 4u );
+						if ( t3dIsHole( readU32( source, old_i ) ) != t3dIsHole( next ) ) {
+							bHoleChanged = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+		uint8_t *const destination = bytes.ptrw();
+		for ( int i = 0; i < tiles.size(); ++i ) {
+			const Dictionary tile = tiles[i];
+			const int index = tile["index"];
+			const PackedByteArray data = tile["bytes"];
+			const size_t first_x = ( ( size_t ) index % T3D_BRUSH_UNDO_TILES_PER_AXIS ) * T3D_BRUSH_UNDO_TILE_SIZE;
+			const size_t first_y = ( ( size_t ) index / T3D_BRUSH_UNDO_TILES_PER_AXIS ) * T3D_BRUSH_UNDO_TILE_SIZE;
+			const size_t row_bytes = T3D_BRUSH_UNDO_TILE_SIZE * pixel_bytes;
+			for ( size_t row = 0u; row < T3D_BRUSH_UNDO_TILE_SIZE; ++row ) {
+				const size_t offset = ( ( first_y + row ) * T3D_REGION_SIZE + first_x ) * pixel_bytes;
+				memcpy( destination + offset, data.ptr() + row * row_bytes, row_bytes );
+			}
+		}
+		map->set_data( T3D_REGION_SIZE, T3D_REGION_SIZE, map->has_mipmaps(), format, bytes );
+		if ( map_type == TYPE_HEIGHT && rSnapshot.has( "height_range" ) ) {
+			pRegion->setHeightRange( rSnapshot["height_range"] );
+		}
+		pRegion->setModified( true );
+		rMapUpdates.m_locations[( size_t ) map_type].push_back( location );
 		return;
 	}
 	Ref< Image > pRestoredMap;
@@ -293,11 +534,19 @@ void Terrain3DEditor::applyEditSnapshot(
 			LOG( ERROR, "Rejected invalid Terrain3D edit snapshot for region ", location );
 			return;
 		}
+		if ( map_type == TYPE_CONTROL ) {
+			const Ref< Image > old_map = pRegion->getMap( TYPE_CONTROL );
+			bHoleChanged |= controlHoleBytesDiffer( old_map.is_valid() ? old_map->get_data() : PackedByteArray(), bytes );
+		}
 		pRestoredMap = Image::create_from_data( width, height, mipmaps, expected_format, bytes );
 	} else if ( rSnapshot.has( "map" ) ) {
 		// Backward compatibility for actions created before byte-plane snapshots.
 		const Ref< Image > pSnapshotMap = rSnapshot["map"];
 		if ( pSnapshotMap.is_valid() ) {
+			if ( map_type == TYPE_CONTROL ) {
+				const Ref< Image > old_map = pRegion->getMap( TYPE_CONTROL );
+				bHoleChanged |= controlHoleBytesDiffer( old_map.is_valid() ? old_map->get_data() : PackedByteArray(), pSnapshotMap->get_data() );
+			}
 			pRestoredMap = pSnapshotMap->duplicate();
 		}
 	}
@@ -430,11 +679,14 @@ bool Terrain3DEditor::prepareMapOperationSamples(
 			( m_nOperation == ADD || m_nOperation == SUBTRACT || m_nOperation == REPLACE ) ) ||
 		  ( rState.m_mapType == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
 			( m_nOperation == ADD || m_nOperation == SUBTRACT ) ) );
-	rState.m_pComputeBackend = rState.m_pData->getComputeBackend();
-	rState.m_bUseCompute = compute_supported && rState.m_nTotalSamples >= 4096 && rState.m_pComputeBackend &&
-						   rState.m_pComputeBackend->isAvailable();
+	// The legacy brush compute path submits, synchronizes and reads the entire
+	// batch for every dab. Keep the established buffered brush arithmetic and
+	// immediate clipmap preview, but execute it on the CPU until the transient
+	// renderer-owned GPU tile/preview path is available. This also avoids
+	// constructing a local RenderingDevice on brush selection.
+	rState.m_bUseBufferedBrush = compute_supported && rState.m_nTotalSamples >= 4096;
 	rState.m_bUseDirectMapAccess =
-		m_nOperation != AVERAGE && ( rState.m_bUseCompute || rState.m_nTotalSamples >= 1024 );
+		m_nOperation != AVERAGE && ( rState.m_bUseBufferedBrush || rState.m_nTotalSamples >= 1024 );
 
 	m_xAxisScratch.resize( ( size_t ) ( rState.m_nSampleCount ) );
 	m_zAxisScratch.resize( ( size_t ) ( rState.m_nSampleCount ) );
@@ -499,6 +751,8 @@ bool Terrain3DEditor::prepareMapOperationSamples(
 				continue;
 			}
 			entry.m_mapData = entry.m_pMap->get_data();
+			++m_nBrushGetDataCalls;
+			m_nBrushBytesRead += ( uint64_t ) entry.m_mapData.size();
 			if ( ( size_t ) ( entry.m_mapData.size() ) < expected_bytes ) {
 				entry.m_mapData.clear();
 				continue;
@@ -514,6 +768,8 @@ bool Terrain3DEditor::prepareMapOperationSamples(
 						entry.m_pControlMap->get_width() == rState.m_nRegionSize &&
 						entry.m_pControlMap->get_height() == rState.m_nRegionSize ) {
 				entry.m_controlData = entry.m_pControlMap->get_data();
+				++m_nBrushGetDataCalls;
+				m_nBrushBytesRead += ( uint64_t ) entry.m_controlData.size();
 				if ( ( size_t ) ( entry.m_controlData.size() ) >=
 					 ( size_t ) ( rState.m_nRegionSize ) * ( size_t ) ( rState.m_nRegionSize ) * sizeof( uint32_t ) ) {
 					entry.m_pControlBytes = entry.m_controlData.ptr();
@@ -523,7 +779,7 @@ bool Terrain3DEditor::prepareMapOperationSamples(
 	}
 	m_computeElementScratch.clear();
 	m_computeWriteScratch.clear();
-	if ( rState.m_bUseCompute ) {
+	if ( rState.m_bUseBufferedBrush ) {
 		m_computeElementScratch.reserve( ( size_t ) ( rState.m_nTotalSamples ) );
 		m_computeWriteScratch.reserve( ( size_t ) ( rState.m_nTotalSamples ) );
 	}
@@ -628,8 +884,6 @@ bool Terrain3DEditor::applyHeightSample(
 		break;
 	}
 	dest = Color( fDestf, 0.f, 0.f, 1.f );
-	region->updateHeight( fDestf );
-	pData->updateMasterHeight( fDestf );
 	edited_position.y = fDestf;
 	edited_area = edited_area.expand( edited_position );
 
@@ -945,7 +1199,7 @@ bool Terrain3DEditor::processMapOperationSamples(
 	Terrain3DSampler					  brushSampler( pData->getSamplingSourceInternal() );
 	const Vector2						 &clamped_slope_range = rState.m_clampedSlopeRange;
 	const bool							  bUnrestrictedSlope = rState.m_bUnrestrictedSlope;
-	const bool							  bUseCompute = rState.m_bUseCompute;
+	const bool							  bUseBufferedBrush = rState.m_bUseBufferedBrush;
 	const real_t						  fRotCos = rState.m_fRotationCos;
 	const real_t						  fRotSin = rState.m_fRotationSin;
 	const int32_t						  min_region_x = rState.m_nMinRegionX;
@@ -1018,7 +1272,7 @@ bool Terrain3DEditor::processMapOperationSamples(
 				( size_t ) ( mapPixelPosition.y ) * ( size_t ) ( region_size ) + ( size_t ) ( mapPixelPosition.x );
 			const Color src = readMapPixel( region_entry, map_index, mapPixelPosition, map_type );
 			Color		dest = src;
-			if ( bUseCompute ) {
+			if ( bUseBufferedBrush ) {
 				bool	 bEligible = true;
 				uint32_t source_value = 0u;
 				uint32_t target_value = 0u;
@@ -1114,7 +1368,15 @@ bool Terrain3DEditor::processMapOperationSamples(
 				continue;
 			}
 			backupRegion( region, region_entry.m_bMapWasImplicit );
+			recordBrushUndoTile( region_entry, mapPixelPosition, map_type );
+			if ( map_type == TYPE_CONTROL && t3dIsHole( src.r ) != t3dIsHole( dest.r ) ) {
+				rState.m_bHoleChanged = true;
+			}
 			writeMapPixel( region_entry, map_index, mapPixelPosition, dest, map_type );
+			if ( map_type == TYPE_HEIGHT ) {
+				region->updateHeight( dest.r );
+				pData->updateMasterHeight( dest.r );
+			}
 			region_entry.m_bModified = true;
 		}
 	}
@@ -1137,15 +1399,15 @@ void Terrain3DEditor::applyComputedMapOperationSamples(
 	const bool							  bEnableAngle = rState.m_bEnableAngle;
 	const bool							  bEnableScale = rState.m_bEnableScale;
 	const uint32_t						  asset_id_bits = rState.m_nAssetIdBits;
-	const bool							  bUseCompute = rState.m_bUseCompute;
-	Terrain3DCompute *const				  pComputeBackend = rState.m_pComputeBackend;
+	const bool							  bUseBufferedBrush = rState.m_bUseBufferedBrush;
+
 	const uint32_t						  compute_uv_rotation = rState.m_nComputeUvRotation;
 	const uint32_t						  compute_uv_scale = rState.m_nComputeUvScale;
 	AABB								 &edited_area = rState.m_editedArea;
 	eastl::vector< t3dBrushElement_t >	 &compute_elements = m_computeElementScratch;
 	eastl::vector< t3dComputeWrite_t >	 &compute_writes = m_computeWriteScratch;
 	eastl::vector< t3dRegionMapCache_t > &region_cache = m_regionCacheScratch;
-	if ( bUseCompute && !compute_elements.empty() ) {
+	if ( bUseBufferedBrush && !compute_elements.empty() ) {
 		t3dBrushParams_t params;
 		params.m_nMapType = ( uint32_t ) ( map_type );
 		params.m_nTool = ( uint32_t ) ( m_tool );
@@ -1161,12 +1423,10 @@ void Terrain3DEditor::applyComputedMapOperationSamples(
 		params.m_nFeatureFlags = ( bModifierAlt ? 1u : 0u ) | ( isfinite( rGlobalPosition.y ) ? 2u : 0u ) |
 								 ( bEnableTexture ? 4u : 0u ) | ( bEnableAngle ? 8u : 0u ) |
 								 ( bEnableScale ? 16u : 0u );
-		if ( !pComputeBackend->processBrush( compute_elements, params ) ) {
-			LOG( WARN,
-				 "Compute brush failed; using buffer-equivalent CPU fallback: ",
-				 pComputeBackend->getLastError() );
-			Terrain3DCompute::processBrushCpu( compute_elements, params );
-		}
+		// Reused CPU brush-element scratch preserves immediate clipmap updates.
+		// This is the explicit fallback until a renderer-owned GPU preview and
+		// tile completion path is available; no local GPU device is submitted here.
+		Terrain3DCompute::processBrushCpu( compute_elements, params );
 		for ( size_t i = 0; i < compute_elements.size(); ++i ) {
 			const t3dBrushElement_t &element = compute_elements[i];
 			const t3dComputeWrite_t &write = compute_writes[i];
@@ -1178,6 +1438,7 @@ void Terrain3DEditor::applyComputedMapOperationSamples(
 				continue;
 			}
 			backupRegion( entry.m_region, entry.m_bMapWasImplicit );
+			recordBrushUndoTile( entry, write.m_mapPixel, map_type );
 			const size_t map_index =
 				( size_t ) ( write.m_mapPixel.y ) * ( size_t ) ( region_size ) + ( size_t ) ( write.m_mapPixel.x );
 			if ( map_type == TYPE_HEIGHT ) {
@@ -1189,6 +1450,9 @@ void Terrain3DEditor::applyComputedMapOperationSamples(
 				result_position.y = fResult;
 				edited_area = edited_area.expand( result_position );
 			} else if ( map_type == TYPE_CONTROL ) {
+				if ( t3dIsHole( write.m_nSourceValue ) != t3dIsHole( element.m_nValue ) ) {
+					rState.m_bHoleChanged = true;
+				}
 				writeMapPixel( entry,
 							   map_index,
 							   write.m_mapPixel,
@@ -1215,6 +1479,8 @@ void Terrain3DEditor::commitMapOperationSamples(
 	for ( size_t iRegion = 0u; iRegion < ( size_t ) ( ( region_cache ).size() ); iRegion++ ) {
 		t3dRegionMapCache_t &entry = ( region_cache )[iRegion];
 		if ( entry.m_bModified && entry.m_bDirectAccess && entry.m_pMap && !entry.m_mapData.is_empty() ) {
+			++m_nBrushSetDataCalls;
+			m_nBrushBytesPublished += ( uint64_t ) entry.m_mapData.size();
 			entry.m_pMap->set_data( region_size,
 									region_size,
 									entry.m_bMapHasMipmaps,
@@ -1240,11 +1506,11 @@ void Terrain3DEditor::commitMapOperationSamples(
 		modified_region_locations.push_back( entry.m_location );
 	}
 
-	uint32_t commit_flags = MAP_EDIT_KEEP_EDITED;
+	uint32_t commit_flags = MAP_EDIT_KEEP_EDITED | MAP_EDIT_INTERACTIVE;
 	if ( m_tool == HOLES || m_tool == HEIGHT || m_tool == SCULPT ) {
 		commit_flags |= MAP_EDIT_UPDATE_INSTANCES;
 	}
-	if ( m_pTerrain->getCollisionMode() == DYNAMIC_EDITOR && ( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) ) {
+	if ( map_type == TYPE_HEIGHT || ( map_type == TYPE_CONTROL && rState.m_bHoleChanged ) ) {
 		commit_flags |= MAP_EDIT_UPDATE_COLLISION;
 	}
 	if ( m_tool == HEIGHT || m_tool == SCULPT || m_tool == TEXTURE || m_tool == AUTOSHADER ) {
@@ -1254,6 +1520,518 @@ void Terrain3DEditor::commitMapOperationSamples(
 	// uploads, instance/collision invalidation and coalesced notifications.
 	pData->commitMapEdits( map_type, modified_region_locations, edited_area, commit_flags );
 }
+
+#if defined( T3D_EDITOR_NATIVE )
+// BRP-07: prevalidated source-owned packed tile publication. The GPU
+// producer must keep the stroke open until the async readback is ready;
+// ordinary CPU painting continues through commitMapOperationSamples().
+typedef struct t3dEditorBrushCommitStage_s
+{
+	Vector2i m_location = s_v2iZero;
+	Ref< Terrain3DRegion > m_region;
+	Ref< Image > m_image;
+	PackedByteArray m_before;
+	PackedByteArray m_after;
+	bool m_bWasImplicit = false;
+	bool m_bChanged = false;
+	bool m_bHoleChanged = false;
+} t3dEditorBrushCommitStage_t;
+
+static bool t3dStageEditorBrushTilesCold(
+	Terrain3DData *const pData,
+	const Terrain3DEditorBrushTransaction &rTransaction,
+	const PackedByteArray &rPayload,
+	const t3dMapType_t mapType,
+	eastl::vector< t3dEditorBrushCommitStage_t > &rStages )
+{
+	const uint32_t nTileCount = rTransaction.tileCount();
+	const Image::Format format = mapType == TYPE_HEIGHT ? Image::FORMAT_R16 :
+		mapType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	const size_t nPixelSize = Terrain3DEditorBrushTransaction::bytesPerTexel( ( uint8_t ) mapType );
+	const size_t nMapBytes = ( size_t ) T3D_REGION_SIZE * T3D_REGION_SIZE * nPixelSize;
+	const uint8_t *const pPayload = rPayload.ptr();
+	// Validate every tile and stage complete region byte planes before touching
+	// authoritative Images or allocating an implicit writable map.
+	for ( uint32_t i = 0u; i < nTileCount; ++i )
+	{
+		const t3dEditorBrushTile_t &tile = rTransaction.tile( i );
+		if ( tile.m_nEncoding != ( uint8_t ) mapType || !tile.m_nWidth || !tile.m_nHeight ||
+			 tile.m_nMinX + tile.m_nWidth > T3D_REGION_SIZE ||
+			 tile.m_nMinY + tile.m_nHeight > T3D_REGION_SIZE ||
+			 tile.m_nRowStrideBytes != tile.m_nWidth * nPixelSize ||
+			 tile.m_nByteOffset > ( uint32_t ) rPayload.size() ||
+			 ( size_t ) tile.m_nRowStrideBytes * tile.m_nHeight >
+			 ( size_t ) rPayload.size() - tile.m_nByteOffset ) return false;
+		const Vector2i location( tile.m_nRegionX, tile.m_nRegionY );
+		int32_t nStage = -1;
+		for ( size_t j = 0u; j < rStages.size(); ++j )
+		{
+			if ( rStages[j].m_location == location ) { nStage = ( int32_t ) j; break; }
+		}
+		if ( nStage < 0 )
+		{
+			const Ref< Terrain3DRegion > region = pData->getRegion( location );
+			if ( region.is_null() || region->isDeleted() || pData->getRegionId( location ) < 0 ||
+				 region->getAuthoringSourceRevision() != tile.m_nSourceRevision ) return false;
+			t3dEditorBrushCommitStage_t stage;
+			stage.m_location = location;
+			stage.m_region = region;
+			stage.m_image = region->getMap( mapType );
+			stage.m_bWasImplicit = stage.m_image.is_null();
+			if ( stage.m_bWasImplicit )
+			{
+				if ( mapType == TYPE_HEIGHT ) return false;
+				stage.m_image = Terrain3DUtil::getFilledImage( V2I( T3D_REGION_SIZE ),
+					 mapType == TYPE_CONTROL ? COLOR_CONTROL : COLOR_ROUGHNESS,
+					 false, format );
+			}
+			if ( stage.m_image.is_null() || stage.m_image->get_width() != T3D_REGION_SIZE ||
+				 stage.m_image->get_height() != T3D_REGION_SIZE || stage.m_image->get_format() != format ||
+				 stage.m_image->has_mipmaps() ) return false;
+			stage.m_before = stage.m_image->get_data();
+			if ( ( size_t ) stage.m_before.size() != nMapBytes ) return false;
+			stage.m_after = stage.m_before;
+			rStages.push_back( stage );
+			nStage = ( int32_t ) rStages.size() - 1;
+		}
+		else if ( rStages[( size_t ) nStage].m_region->getAuthoringSourceRevision() != tile.m_nSourceRevision ) return false;
+		t3dEditorBrushCommitStage_t &stage = rStages[( size_t ) nStage];
+		if ( !Terrain3DEditorBrushTransaction::stageTileBytes( tile, pPayload,
+			( uint32_t ) rPayload.size(), stage.m_before.ptr(), stage.m_after.ptrw(),
+			( uint32_t ) nMapBytes, stage.m_bChanged, stage.m_bHoleChanged ) ) return false;
+	}
+
+	return true;
+}
+
+static bool t3dMaterializeEditorBrushTilesCold(
+	eastl::vector< t3dEditorBrushCommitStage_t > &rStages,
+	const t3dMapType_t mapType )
+{
+	const Image::Format format = mapType == TYPE_HEIGHT ? Image::FORMAT_R16 :
+		mapType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	// The writable maps are materialized only after the complete payload and
+	// every source revision have passed validation.
+	for ( size_t i = 0u; i < rStages.size(); ++i )
+	{
+		t3dEditorBrushCommitStage_t &stage = rStages[i];
+		if ( !stage.m_bChanged ) continue;
+		Image *const pWritable = stage.m_region->getMapPtrForWrite( mapType );
+		if ( !pWritable || pWritable->get_format() != format ||
+			 pWritable->get_width() != T3D_REGION_SIZE || pWritable->get_height() != T3D_REGION_SIZE )
+		{
+			// This failure occurs before any source byte plane is published.
+			for ( size_t j = 0u; j < rStages.size(); ++j )
+			{
+				if ( rStages[j].m_bWasImplicit ) rStages[j].m_region->compactMapIfDefault( mapType, false );
+			}
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Terrain3DEditor::publishEditorBrushReadbackCold( const uint64_t nStrokeId )
+{
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) return false;
+	Terrain3D *const pTerrain = static_cast< Terrain3D * >( m_pTerrain );
+	Terrain3DRenderCoordinator *const pRenderer = pTerrain ? pTerrain->getRenderCoordinatorInternal() : NULL;
+	if ( !pRenderer ) return false;
+	Terrain3DEditorBrushTransaction transaction;
+	PackedByteArray payload;
+	if ( !pRenderer->takeEditorBrushReadbackCold( nStrokeId, transaction, payload ) ) return false;
+	if ( !m_bIsOperating || transaction.ownerGeneration() != m_nEditorBrushOwnerGeneration ||
+		 transaction.state() != T3D_EDITOR_BRUSH_CPU_COMMITTING ||
+		 payload.size() != ( int64_t ) transaction.payloadBytes() )
+	{
+		pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+		return false;
+	}
+
+	Terrain3DData *const pData = m_pTerrain->dataObject();
+	const uint32_t nTileCount = transaction.tileCount();
+	if ( nTileCount == 0u )
+	{
+		pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+		return false;
+	}
+	const t3dMapType_t mapType = ( t3dMapType_t ) transaction.tile( 0u ).m_nEncoding;
+	if ( mapType < TYPE_HEIGHT || mapType >= REGION_TYPE_MAX || mapType != getMapType() )
+	{
+		pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+		return false;
+	}
+	const Image::Format format = mapType == TYPE_HEIGHT ? Image::FORMAT_R16 :
+		 mapType == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+	eastl::vector< t3dEditorBrushCommitStage_t > stages;
+	stages.reserve( nTileCount );
+
+	if ( !t3dStageEditorBrushTilesCold( pData, transaction, payload, mapType, stages ) ||
+		 !t3dMaterializeEditorBrushTilesCold( stages, mapType ) )
+	{
+		pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+		return false;
+	}
+
+	AABB editedArea;
+	bool bHasArea = false;
+	bool bHoleChanged = false;
+	eastl::vector< Vector2i > changedLocations;
+	const real_t spacing = m_pTerrain->getVertexSpacing();
+	const real_t side = spacing * T3D_REGION_SIZE;
+	for ( size_t i = 0u; i < stages.size(); ++i )
+	{
+		t3dEditorBrushCommitStage_t &stage = stages[i];
+		if ( !stage.m_bChanged ) continue;
+		t3dRegionMapCache_t undoEntry;
+		undoEntry.m_region = stage.m_region;
+		undoEntry.m_pMap = stage.m_region->getMapPtrForWrite( mapType );
+		undoEntry.m_bMapWasImplicit = stage.m_bWasImplicit;
+		undoEntry.m_location = stage.m_location;
+		for ( uint32_t t = 0u; t < nTileCount; ++t )
+		{
+			const t3dEditorBrushTile_t &tile = transaction.tile( t );
+			if ( tile.m_nRegionX != stage.m_location.x || tile.m_nRegionY != stage.m_location.y ) continue;
+			for ( uint32_t y = ( tile.m_nMinY / T3D_BRUSH_UNDO_TILE_SIZE ) * T3D_BRUSH_UNDO_TILE_SIZE;
+				 y < tile.m_nMinY + tile.m_nHeight; y += T3D_BRUSH_UNDO_TILE_SIZE )
+			{
+				for ( uint32_t x = ( tile.m_nMinX / T3D_BRUSH_UNDO_TILE_SIZE ) * T3D_BRUSH_UNDO_TILE_SIZE;
+					 x < tile.m_nMinX + tile.m_nWidth; x += T3D_BRUSH_UNDO_TILE_SIZE )
+				{
+					recordBrushUndoTile( undoEntry, Vector2i( x, y ), mapType );
+				}
+			}
+			const Vector3 minPoint( stage.m_location.x * side + tile.m_nMinX * spacing,
+				 -1.f, stage.m_location.y * side + tile.m_nMinY * spacing );
+			const Vector3 maxPoint( minPoint.x + tile.m_nWidth * spacing, 1.f,
+				 minPoint.z + tile.m_nHeight * spacing );
+			if ( !bHasArea ) { editedArea = AABB( minPoint, maxPoint - minPoint ); bHasArea = true; }
+			else { editedArea = editedArea.expand( minPoint ).expand( maxPoint ); }
+		}
+		++m_nBrushSetDataCalls;
+		m_nBrushBytesPublished += ( uint64_t ) stage.m_after.size();
+		undoEntry.m_pMap->set_data( T3D_REGION_SIZE, T3D_REGION_SIZE, false, format, stage.m_after );
+		changedLocations.push_back( stage.m_location );
+		bHoleChanged |= stage.m_bHoleChanged;
+	}
+	if ( !changedLocations.empty() )
+	{
+		uint32_t flags = MAP_EDIT_KEEP_EDITED | MAP_EDIT_INTERACTIVE;
+		if ( mapType == TYPE_HEIGHT || bHoleChanged ) flags |= MAP_EDIT_UPDATE_COLLISION;
+		if ( mapType == TYPE_HEIGHT || bHoleChanged ) flags |= MAP_EDIT_UPDATE_INSTANCES;
+		if ( m_tool == HEIGHT || m_tool == SCULPT || m_tool == TEXTURE || m_tool == AUTOSHADER )
+			flags |= MAP_EDIT_SNAP;
+		// Control/color may be compacted to an implicit map during commit.
+		// Capture their redo tiles while the authored Image still exists.
+		if ( mapType != TYPE_HEIGHT ) finishBrushUndoTiles();
+		pData->addEditedArea( editedArea );
+		pData->commitMapEdits( mapType, changedLocations, editedArea, flags );
+		if ( mapType != TYPE_HEIGHT )
+		{
+			for ( int32_t nSnapshot = 0; nSnapshot < m_editedEditSnapshots.size(); ++nSnapshot )
+			{
+				Dictionary redo = m_editedEditSnapshots[nSnapshot];
+				if ( !redo.has( "location" ) || ( int ) redo.get( "map_type", -1 ) != ( int ) mapType ) continue;
+				const Vector2i location = redo["location"];
+				const Ref< Terrain3DRegion > region = pData->getRegion( location );
+				if ( region.is_valid() && region->getMap( mapType ).is_null() )
+				{
+					redo.erase( "map_tiles" );
+					redo["map_absent"] = true;
+					m_editedEditSnapshots[nSnapshot] = redo;
+				}
+			}
+		}
+	}
+	// Always finalize the undo history after map publication, even if the
+	// renderer was lost between publication and its lifecycle acknowledgment.
+	const bool bAcknowledged = pRenderer->acknowledgeEditorBrushCommitCold( nStrokeId );
+	if ( !bAcknowledged ) {
+		// Source maps were already published. A device teardown may invalidate
+		// only the renderer acknowledgement; CPU authority and undo still win.
+		LOG( ERROR, "Editor brush source commit outlived renderer acknowledgment" );
+	}
+	stopOperation();
+	return true;
+}
+// BRP-06: associate an initialized renderer-owned transaction with this
+// editor stroke. A second stroke cannot overtake a pending authoritative map
+// publication. The producer calls this only after beginEditorBrushStrokeCold.
+bool Terrain3DEditor::acceptEditorBrushStrokeCold( const uint64_t nStrokeId )
+{
+    if ( !nStrokeId || !m_bIsOperating || m_nPendingEditorBrushStrokeId || !m_pTerrain ) return false;
+    Terrain3DRenderCoordinator *const pRenderer = static_cast< Terrain3D * >( m_pTerrain )->getRenderCoordinatorInternal();
+    if ( !pRenderer || pRenderer->getEditorBrushStrokeStateCold( nStrokeId ) != T3D_EDITOR_BRUSH_ACTIVE ) return false;
+    m_nPendingEditorBrushStrokeId = nStrokeId;
+    m_bPendingEditorBrushSealed = false;
+    return true;
+}
+
+void Terrain3DEditor::pollEditorBrushCommitCold( void )
+{
+    const uint64_t nStrokeId = m_nPendingEditorBrushStrokeId;
+    if ( !nStrokeId || !m_bPendingEditorBrushSealed || !m_pTerrain ) return;
+    Terrain3DRenderCoordinator *const pRenderer = static_cast< Terrain3D * >( m_pTerrain )->getRenderCoordinatorInternal();
+    if ( !pRenderer )
+    {
+        m_nPendingEditorBrushStrokeId = 0u;
+        m_bPendingEditorBrushSealed = false;
+        cancelOperation();
+        return;
+    }
+    switch ( pRenderer->getEditorBrushStrokeStateCold( nStrokeId ) )
+    {
+        case T3D_EDITOR_BRUSH_READBACK_READY:
+        {
+            // Clear the pending token before the owner-side publication calls
+            // stopOperation(). The claim-once transition prevents duplicate commits.
+            m_nPendingEditorBrushStrokeId = 0u;
+            m_bPendingEditorBrushSealed = false;
+            if ( !publishEditorBrushReadbackCold( nStrokeId ) ) cancelOperation();
+            return;
+        }
+        case T3D_EDITOR_BRUSH_FAILED:
+        case T3D_EDITOR_BRUSH_CANCELED:
+        case T3D_EDITOR_BRUSH_IDLE:
+        {
+            pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+            m_nPendingEditorBrushStrokeId = 0u;
+            m_bPendingEditorBrushSealed = false;
+            cancelOperation();
+            return;
+        }
+        default: return; // Submit/dispatch/readback remains asynchronous.
+    }
+}
+#endif
+
+#if defined( T3D_EDITOR_NATIVE )
+// BRP-05: control occupancy edits use a bounded transient GPU byte plane.
+// All source tiles are snapshotted once and the canonical Image is left untouched
+// until seal/readback on the editor owner thread. Other tools use the CPU path.
+bool Terrain3DEditor::operateGpuTilesCold( const t3dMapOperationState_t &rState )
+{
+    const bool control = rState.m_mapType == TYPE_CONTROL &&
+        ( m_tool == HOLES || m_tool == NAVIGATION || m_tool == AUTOSHADER );
+    const bool height = rState.m_mapType == TYPE_HEIGHT && ( m_tool == SCULPT || m_tool == HEIGHT );
+    const bool texture = rState.m_mapType == TYPE_CONTROL && m_tool == TEXTURE &&
+        rState.m_slopeRange.y - rState.m_slopeRange.x > 89.99f && !rState.m_bDynamicAngle;
+    const bool color = rState.m_mapType == TYPE_COLOR && ( m_tool == COLOR || m_tool == ROUGHNESS ) &&
+        !rState.m_bTextureFilter && rState.m_slopeRange.y - rState.m_slopeRange.x > 89.99f;
+    bool gradientValid = false;
+    if ( height && m_nOperation == GRADIENT && rState.m_gradientPoints.size() == 2 ) {
+        const Vector3 direction = rState.m_gradientPoints[1] - rState.m_gradientPoints[0];
+        gradientValid = direction.x * direction.x + direction.z * direction.z >= .01f;
+    }
+    if ( ( !control && !height && !color && !texture ) ||
+         ( m_nOperation != ADD && m_nOperation != SUBTRACT &&
+           !( texture && m_nOperation == REPLACE ) && !gradientValid ) ||
+         m_bEditorBrushGpuRejected || rState.m_bModifierAlt ||
+         ( m_nBrushDabs && !m_nPendingEditorBrushStrokeId ) ) return false;
+    if ( m_nPendingEditorBrushStrokeId &&
+         ( m_nEditorBrushGpuMapType != ( int32_t ) rState.m_mapType ||
+           m_editorBrushGpuMaskSize != rState.m_imageSize ||
+           m_pEditorBrushGpuMaskImage != rState.m_pBrushImage ||
+           !Math::is_equal_approx( m_fEditorBrushGpuMaskGamma, ( float ) rState.m_fGamma ) ) ) return false;
+    if ( rState.m_fBrushSize < rState.m_fVertexSpacing * 16.f ) return false;
+    Terrain3D *const pTerrain = static_cast< Terrain3D * >( m_pTerrain );
+    Terrain3DRenderCoordinator *const pRenderer = pTerrain->getRenderCoordinatorInternal();
+    if ( !pRenderer || !Terrain3DRdContext::getShared().isReady() ||
+         rState.m_imageSize.x <= 0 || rState.m_imageSize.y <= 0 ||
+         uint64_t( rState.m_imageSize.x ) * rState.m_imageSize.y > 1024u * 1024u ) return false;
+    const uint32_t pixelSize = height ? 2u : 4u;
+    const float spacing = ( float ) rState.m_fVertexSpacing;
+    const float half = ( float ) rState.m_fBrushSize * .5f;
+    const int32_t minX = ( int32_t ) Math::floor( ( rState.m_globalPosition.x - half ) / spacing ) - 1;
+    const int32_t maxX = ( int32_t ) Math::ceil( ( rState.m_globalPosition.x + half ) / spacing ) + 1;
+    const int32_t minY = ( int32_t ) Math::floor( ( rState.m_globalPosition.z - half ) / spacing ) - 1;
+    const int32_t maxY = ( int32_t ) Math::ceil( ( rState.m_globalPosition.z + half ) / spacing ) + 1;
+    const int32_t firstRegionX = ( int32_t ) Math::floor( ( float ) minX / T3D_REGION_SIZE );
+    const int32_t lastRegionX = ( int32_t ) Math::floor( ( float ) maxX / T3D_REGION_SIZE );
+    const int32_t firstRegionY = ( int32_t ) Math::floor( ( float ) minY / T3D_REGION_SIZE );
+    const int32_t lastRegionY = ( int32_t ) Math::floor( ( float ) maxY / T3D_REGION_SIZE );
+    if ( lastRegionX - firstRegionX > 2 || lastRegionY - firstRegionY > 2 ) return false;
+
+    eastl::vector< t3dEditorBrushTile_t > fresh;
+    eastl::vector< PackedByteArray > freshBytes;
+    uint32_t nOffset = 0u;
+    for ( uint32_t i = 0u; i < m_editorBrushGpuTiles.size(); ++i )
+        nOffset += m_editorBrushGpuTiles[i].m_nRowStrideBytes * m_editorBrushGpuTiles[i].m_nHeight;
+    Terrain3DData *const pData = pTerrain->dataObject();
+    for ( int32_t regionY = firstRegionY; regionY <= lastRegionY; ++regionY )
+    for ( int32_t regionX = firstRegionX; regionX <= lastRegionX; ++regionX )
+    {
+        const Vector2i location( regionX, regionY );
+        const Ref< Terrain3DRegion > region = pData->getRegion( location );
+        if ( region.is_null() || region->isDeleted() || !pData->ensureCpuRegionResident( location ) )
+        {
+            if ( m_nPendingEditorBrushStrokeId ) { cancelOperation(); return true; }
+            return false; // Existing CPU path handles automatic regions.
+        }
+        int32_t sourceIndex = -1;
+        for ( uint32_t i = 0u; i < m_editorBrushGpuRegions.size(); ++i )
+            if ( m_editorBrushGpuRegions[i].m_location == location ) { sourceIndex = ( int32_t ) i; break; }
+        if ( sourceIndex < 0 )
+        {
+            t3dEditorBrushSourceRegion_t entry;
+            entry.m_location = location;
+            entry.m_nRevision = region->getAuthoringSourceRevision();
+            Ref< Image > map = region->getMap( rState.m_mapType );
+            if ( map.is_null() && !height ) {
+                map = Terrain3DUtil::getFilledImage( V2I( T3D_REGION_SIZE ),
+                     control ? COLOR_CONTROL : COLOR_ROUGHNESS, false,
+                     control ? Image::FORMAT_RF : Image::FORMAT_RGBA8 );
+            }
+            if ( map.is_null() ) return false;
+            entry.m_source = map->get_data();
+            if ( entry.m_source.size() != ( int64_t ) ( T3D_REGION_SIZE * T3D_REGION_SIZE * pixelSize ) ) return false;
+            m_editorBrushGpuRegions.push_back( entry );
+            sourceIndex = ( int32_t ) m_editorBrushGpuRegions.size() - 1;
+            ++m_nBrushGetDataCalls;
+            m_nBrushBytesRead += entry.m_source.size();
+        }
+        const t3dEditorBrushSourceRegion_t &source = m_editorBrushGpuRegions[( size_t ) sourceIndex];
+        const int32_t localMinX = MAX( minX - regionX * T3D_REGION_SIZE, 0 );
+        const int32_t localMaxX = MIN( maxX - regionX * T3D_REGION_SIZE, T3D_REGION_SIZE - 1 );
+        const int32_t localMinY = MAX( minY - regionY * T3D_REGION_SIZE, 0 );
+        const int32_t localMaxY = MIN( maxY - regionY * T3D_REGION_SIZE, T3D_REGION_SIZE - 1 );
+        if ( localMaxX < localMinX || localMaxY < localMinY ) continue;
+        for ( int32_t ty = localMinY / 16; ty <= localMaxY / 16; ++ty )
+        for ( int32_t tx = localMinX / 16; tx <= localMaxX / 16; ++tx )
+        {
+            const uint16_t tileX = ( uint16_t ) ( tx * 16 );
+            const uint16_t tileY = ( uint16_t ) ( ty * 16 );
+            bool exists = false;
+            for ( const t3dEditorBrushTile_t &tile : m_editorBrushGpuTiles )
+                if ( tile.m_nRegionX == regionX && tile.m_nRegionY == regionY &&
+                     tile.m_nMinX == tileX && tile.m_nMinY == tileY ) { exists = true; break; }
+            if ( exists ) continue;
+            if ( m_editorBrushGpuTiles.size() + fresh.size() >= T3D_EDITOR_BRUSH_MAX_TILES ||
+                 nOffset + 16u * 16u * pixelSize > T3D_EDITOR_BRUSH_MAX_TRANSFER_BYTES )
+            {
+                if ( m_nPendingEditorBrushStrokeId ) { cancelOperation(); return true; }
+                m_bEditorBrushGpuRejected = true;
+                return false;
+            }
+            t3dEditorBrushTile_t tile;
+            tile.m_nRegionX = regionX;
+            tile.m_nRegionY = regionY;
+            tile.m_nSourceRevision = source.m_nRevision;
+            tile.m_nEncoding = ( uint8_t ) rState.m_mapType;
+            tile.m_nByteOffset = nOffset;
+            tile.m_nMinX = tileX;
+            tile.m_nMinY = tileY;
+            tile.m_nWidth = 16u;
+            tile.m_nHeight = 16u;
+            tile.m_nRowStrideBytes = ( uint16_t ) ( 16u * pixelSize );
+            PackedByteArray bytes;
+            const uint32_t length = 16u * tile.m_nRowStrideBytes;
+            bytes.resize( length );
+            for ( uint32_t y = 0u; y < 16u; ++y )
+                memcpy( bytes.ptrw() + y * tile.m_nRowStrideBytes,
+                        source.m_source.ptr() + ( ( tileY + y ) * T3D_REGION_SIZE + tileX ) * pixelSize,
+                        tile.m_nRowStrideBytes );
+            fresh.push_back( tile );
+            freshBytes.push_back( bytes );
+            nOffset += length;
+        }
+    }
+    if ( fresh.empty() && !m_nPendingEditorBrushStrokeId ) return false;
+
+    const uint64_t nStrokeId = m_nPendingEditorBrushStrokeId ? m_nPendingEditorBrushStrokeId :
+        ( m_nEditorBrushNextStrokeId = MAX( m_nEditorBrushNextStrokeId + 1u,
+             Time::get_singleton()->get_ticks_usec() ) );
+    if ( !m_nPendingEditorBrushStrokeId )
+    {
+        // Stroke-invariant mask: same gamma-adjusted source texels as the CPU sampler.
+        updateBrushAlphaCache( rState.m_pBrushImage, rState.m_imageSize, rState.m_fGamma );
+        PackedByteArray mask;
+        mask.resize( ( int64_t ) m_fBrushAlphaCache.size() * sizeof( float ) );
+        memcpy( mask.ptrw(), m_fBrushAlphaCache.data(), ( size_t ) mask.size() );
+        Terrain3DEditorBrushTransaction transaction;
+        if ( !transaction.begin( nStrokeId, m_nEditorBrushOwnerGeneration,
+                                Terrain3DRdContext::getShared().getDeviceGeneration() ) ) return false;
+        PackedByteArray source;
+        source.resize( nOffset );
+        for ( uint32_t i = 0u; i < fresh.size(); ++i )
+        {
+            if ( !transaction.appendTile( fresh[i] ) ) return false;
+            memcpy( source.ptrw() + fresh[i].m_nByteOffset, freshBytes[i].ptr(),
+                    ( size_t ) freshBytes[i].size() );
+        }
+        m_nEditorBrushGpuMapType = ( int32_t ) rState.m_mapType;
+        m_editorBrushGpuMaskSize = rState.m_imageSize;
+        m_pEditorBrushGpuMaskImage = rState.m_pBrushImage;
+        m_fEditorBrushGpuMaskGamma = rState.m_fGamma;
+        if ( !pRenderer->beginEditorBrushStrokeCold( transaction, source, mask,
+             ( uint32_t ) rState.m_imageSize.x, ( uint32_t ) rState.m_imageSize.y ) ||
+             !acceptEditorBrushStrokeCold( nStrokeId ) )
+        {
+            pRenderer->cancelEditorBrushStrokeCold( nStrokeId );
+            m_bEditorBrushGpuRejected = true;
+            return false;
+        }
+    }
+    else
+    {
+        for ( uint32_t i = 0u; i < fresh.size(); ++i )
+            if ( !pRenderer->appendEditorBrushTileCold( nStrokeId, fresh[i], freshBytes[i] ) )
+            {
+                cancelOperation();
+                return true;
+            }
+    }
+    for ( const t3dEditorBrushTile_t &tile : fresh ) m_editorBrushGpuTiles.push_back( tile );
+    t3dEditorBrushCommand_t cmd;
+    cmd.m_nStrokeId = nStrokeId;
+    cmd.m_nOwnerGeneration = m_nEditorBrushOwnerGeneration;
+    cmd.m_nDeviceGeneration = Terrain3DRdContext::getShared().getDeviceGeneration();
+    cmd.m_nSequence = ++m_nEditorBrushGpuSequence;
+    cmd.m_nRegionX = m_editorBrushGpuTiles.front().m_nRegionX;
+    cmd.m_nRegionY = m_editorBrushGpuTiles.front().m_nRegionY;
+    cmd.m_nMapType = ( uint32_t ) rState.m_mapType;
+    cmd.m_fSelectedHeight = rState.m_fHeight;
+    cmd.m_nPackedColor = packColorRgba8( rState.m_color );
+    cmd.m_fRoughness = rState.m_fRoughness;
+    cmd.m_fCenterHeight = rState.m_globalPosition.y;
+    if ( gradientValid ) {
+        const Vector3 first = rState.m_gradientPoints[0];
+        const Vector3 second = rState.m_gradientPoints[1];
+        cmd.m_fGradientX1 = first.x;
+        cmd.m_fGradientY1 = first.y;
+        cmd.m_fGradientZ1 = first.z;
+        cmd.m_fGradientX2 = second.x;
+        cmd.m_fGradientY2 = second.y;
+        cmd.m_fGradientZ2 = second.z;
+        cmd.m_fMotionX = m_operationMovement.x;
+        cmd.m_fMotionZ = m_operationMovement.z;
+    }
+    cmd.m_nTileCountAtEnqueue = ( uint32_t ) m_editorBrushGpuTiles.size();
+    cmd.m_nTool = ( uint32_t ) m_tool;
+    cmd.m_nOperation = ( uint32_t ) m_nOperation;
+    cmd.m_nFlags = ( rState.m_bEnableTexture ? 4u : 0u ) |
+        ( rState.m_bEnableAngle ? 8u : 0u ) | ( rState.m_bEnableScale ? 16u : 0u );
+    cmd.m_nAssetId = rState.m_nAssetIdBits;
+    cmd.m_nUvRotation = ( uint32_t ) CLAMP( Math::round( rState.m_fAngle / 22.5f ), 0.f, 15.f );
+    const uint32_t scaleAlign[8] = {5u, 6u, 7u, 0u, 1u, 2u, 3u, 4u};
+    cmd.m_nUvScale = scaleAlign[( uint8_t ) CLAMP( Math::round( ( rState.m_fScale + 60.f ) / 20.f ), 0.f, 7.f )];
+    cmd.m_fCenterX = rState.m_globalPosition.x;
+    cmd.m_fCenterZ = rState.m_globalPosition.z;
+    cmd.m_fRotation = rState.m_fRotation;
+    cmd.m_fRadius = rState.m_fBrushSize * .5f;
+    cmd.m_fStrength = rState.m_fStrength;
+    cmd.m_fVertexSpacing = rState.m_fVertexSpacing;
+    cmd.m_nMaskWidth = rState.m_imageSize.x;
+    cmd.m_nMaskHeight = rState.m_imageSize.y;
+    if ( !pRenderer->enqueueEditorBrushCommandCold( nStrokeId, cmd ) )
+    {
+        cancelOperation();
+        return true;
+    }
+    ++m_nBrushDabs;
+    return true;
+}
+#endif
 
 void Terrain3DEditor::operateMap(
 	const Vector3 &rGlobalPosition,
@@ -1390,14 +2168,29 @@ void Terrain3DEditor::operateMap(
 	state.m_fRotation = fRot;
 	state.m_editedArea = edited_area;
 	state.m_fVertexSpacing = m_pTerrain->getVertexSpacing();
-	if ( !prepareMapOperationSamples( state ) ) {
+#if defined( T3D_EDITOR_NATIVE )
+    if ( operateGpuTilesCold( state ) ) return;
+    if ( m_nPendingEditorBrushStrokeId ) { cancelOperation(); return; }
+#endif
+	++m_nBrushDabs;
+	uint64_t started = Time::get_singleton()->get_ticks_usec();
+	const bool prepared = prepareMapOperationSamples( state );
+	m_nBrushPrepareUsec += Time::get_singleton()->get_ticks_usec() - started;
+	if ( !prepared ) {
 		return;
 	}
-	if ( !processMapOperationSamples( state ) ) {
+	started = Time::get_singleton()->get_ticks_usec();
+	const bool processed = processMapOperationSamples( state );
+	m_nBrushCpuSampleUsec += Time::get_singleton()->get_ticks_usec() - started;
+	if ( !processed ) {
 		return;
 	}
+	started = Time::get_singleton()->get_ticks_usec();
 	applyComputedMapOperationSamples( state );
+	m_nBrushCpuComputeUsec += Time::get_singleton()->get_ticks_usec() - started;
+	started = Time::get_singleton()->get_ticks_usec();
 	commitMapOperationSamples( state );
+	m_nBrushCommitUsec += Time::get_singleton()->get_ticks_usec() - started;
 }
 
 void Terrain3DEditor::storeUndo(
@@ -1506,12 +2299,13 @@ void Terrain3DEditor::applyUndo(
 	eastl::vector< Vector2i > restored_region_locations;
 	t3dEditorMapUpdates_t	  restored_map_locations;
 	bool					  bInstancesChanged = false;
+	bool					  bHoleChanged = false;
 
 	if ( rData.has( "edit_snapshots" ) ) {
 		const Array snapshots = rData["edit_snapshots"];
 		for ( int i = 0; i < snapshots.size(); ++i ) {
 			const Dictionary snapshot = snapshots[i];
-			applyEditSnapshot( snapshot, restored_map_locations, bInstancesChanged );
+			applyEditSnapshot( snapshot, restored_map_locations, bInstancesChanged, bHoleChanged );
 		}
 	}
 
@@ -1605,9 +2399,13 @@ void Terrain3DEditor::applyUndo(
 		if ( commit_locations.empty() ) {
 			continue;
 		}
-		uint32_t commit_flags = 0u;
+		uint32_t commit_flags = MAP_EDIT_INTERACTIVE;
 		if ( map_type == TYPE_HEIGHT || map_type == TYPE_CONTROL ) {
-			commit_flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_UPDATE_COLLISION | MAP_EDIT_SNAP;
+			commit_flags |= MAP_EDIT_UPDATE_INSTANCES | MAP_EDIT_SNAP;
+		}
+		if ( map_type == TYPE_HEIGHT || ( map_type == TYPE_CONTROL &&
+			( bHoleChanged || rData.has( "edited_regions" ) ) ) ) {
+			commit_flags |= MAP_EDIT_UPDATE_COLLISION;
 		}
 		pData->commitMapEdits( ( t3dMapType_t ) ( map_type ), commit_locations, restored_area, commit_flags );
 	}
@@ -1822,8 +2620,17 @@ void Terrain3DEditor::setTool(
 	if ( new_tool == m_tool ) {
 		return;
 	}
+	// Tool changes end the existing transaction before map type switches.
+	if ( m_bIsOperating ) {
+#if defined( T3D_EDITOR_NATIVE )
+		if ( m_nPendingEditorBrushStrokeId ) cancelOperation();
+		else
+#endif
+		stopOperation();
+	}
 	const t3dTool_t old_tool = m_tool;
 	m_tool = new_tool;
+	++m_nBrushToolSelections;
 	if ( m_pTerrain && ( m_tool == t3dTool_t::NAVIGATION || old_tool == t3dTool_t::NAVIGATION ||
 						 m_tool == t3dTool_t::REGION || old_tool == t3dTool_t::REGION ) ) {
 		m_pTerrain->materialResource()->updateEditorOverlay();
@@ -1832,6 +2639,13 @@ void Terrain3DEditor::setTool(
 
 void Terrain3DEditor::setOperation(
 	const t3dOperation_t operation ) {
+	if ( m_bIsOperating && m_nOperation != operation ) {
+#if defined( T3D_EDITOR_NATIVE )
+		if ( m_nPendingEditorBrushStrokeId ) cancelOperation();
+		else
+#endif
+		stopOperation();
+	}
 	SET_IF_DIFF( m_nOperation, CLAMP( operation, ( t3dOperation_t ) ( 0 ), OP_MAX ) );
 }
 
@@ -1843,14 +2657,39 @@ void Terrain3DEditor::startOperation(
 		LOG( ERROR, "Terrain isn't initialized" );
 		return;
 	}
+	// The pending GPU result must publish (or be canceled) before a new stroke
+	// may mutate the same region/channel; never overtake its source revision.
+#if defined( T3D_EDITOR_NATIVE )
+	if ( m_nPendingEditorBrushStrokeId ) return;
+#endif
+	if ( m_bIsOperating ) stopOperation();
 	LOG( INFO, "Setting up undo snapshot" );
 	m_undoData.clear();
 	m_bIsOperating = true;
+	if ( ++m_nEditorBrushOwnerGeneration == 0u ) m_nEditorBrushOwnerGeneration = 1u;
 	m_originalRegions = TypedArray< Terrain3DRegion >(); // New pointers instead of clear
 	m_editedRegions = TypedArray< Terrain3DRegion >();
 	m_originalEditSnapshots = Array();
 	m_editedEditSnapshots = Array();
 	m_addedRemovedLocations = TypedArray< Vector2i >();
+	m_brushUndoRegions.clear();
+#if defined( T3D_EDITOR_NATIVE )
+    m_editorBrushGpuRegions.clear();
+    m_editorBrushGpuTiles.clear();
+    m_nEditorBrushGpuSequence = 0u;
+    m_bEditorBrushGpuRejected = false;
+    m_nEditorBrushGpuMapType = -1;
+    m_pEditorBrushGpuMaskImage = NULL;
+#endif
+	m_nBrushDabs = 0u;
+	m_nBrushGetDataCalls = 0u;
+	m_nBrushSetDataCalls = 0u;
+	m_nBrushBytesRead = 0u;
+	m_nBrushBytesPublished = 0u;
+	m_nBrushPrepareUsec = 0u;
+	m_nBrushCpuSampleUsec = 0u;
+	m_nBrushCpuComputeUsec = 0u;
+	m_nBrushCommitUsec = 0u;
 	// Reset counter at start to ensure first click places an instance
 	m_pTerrain->instancerObject()->resetDensityCounter();
 	m_pTerrain->dataObject()->clearEditedArea();
@@ -1871,6 +2710,9 @@ void Terrain3DEditor::operate(
 		LOG( ERROR, "Run start_operation() before operating" );
 		return;
 	}
+#if defined( T3D_EDITOR_NATIVE )
+	if ( m_bPendingEditorBrushSealed ) return;
+#endif
 	m_operationMovement = rGlobalPosition - m_operationPosition;
 	m_operationPosition = rGlobalPosition;
 
@@ -1906,11 +2748,22 @@ void Terrain3DEditor::backupRegion(
 				const Ref< Terrain3DRegion > pOrigRegion = rRegion->duplicate( true );
 				m_originalRegions.push_back( pOrigRegion );
 				m_editedRegions.push_back( rRegion );
-			} else {
+			} else if ( m_tool == INSTANCER ) {
 				const Dictionary snapshot = captureEditSnapshot( rRegion, Dictionary(), bMapWasImplicit );
 				if ( !snapshot.is_empty() ) {
 					m_originalEditSnapshots.push_back( snapshot );
 				}
+			} else {
+				const Ref< Image > map = rRegion->getMap( getMapType() );
+				const Image::Format format = getMapType() == TYPE_HEIGHT ? Image::FORMAT_R16 :
+											 getMapType() == TYPE_CONTROL ? Image::FORMAT_RF : Image::FORMAT_RGBA8;
+				if ( map.is_null() || map->get_format() != format ) {
+					const Dictionary snapshot = captureEditSnapshot( rRegion, Dictionary(), bMapWasImplicit );
+					if ( !snapshot.is_empty() ) {
+						m_originalEditSnapshots.push_back( snapshot );
+					}
+				}
+				// Native-format map pixels use 16x16 first-write deltas.
 			}
 		}
 		rRegion->setEdited( true );
@@ -1950,6 +2803,7 @@ void Terrain3DEditor::releaseRuntimeAllocatorStorage(
 	t3dVectorRelease( m_computeElementScratch );
 	t3dVectorRelease( m_computeWriteScratch );
 	t3dVectorRelease( m_modifiedRegionScratch );
+	t3dVectorRelease( m_brushUndoRegions );
 	m_pCachedBrushImage = NULL;
 	m_cachedBrushImageSize = s_v2iZero;
 	m_fCachedBrushGamma = -1.f;
@@ -1990,6 +2844,20 @@ void Terrain3DEditor::stopOperation(
 		LOG( ERROR, "Terrain isn't initialized" );
 		return;
 	}
+#if defined( T3D_EDITOR_NATIVE )
+	if ( m_nPendingEditorBrushStrokeId ) {
+		if ( m_bPendingEditorBrushSealed ) return;
+		Terrain3DRenderCoordinator *const pRenderer = static_cast< Terrain3D * >( m_pTerrain )->getRenderCoordinatorInternal();
+		if ( pRenderer && pRenderer->sealEditorBrushStrokeCold( m_nPendingEditorBrushStrokeId ) ) {
+			m_bPendingEditorBrushSealed = true;
+			return; // Deferred CPU publication and undo after async readback.
+		}
+		cancelOperation();
+		return;
+	}
+#endif
+	// Assemble immutable before/after touched-tile records exactly once.
+	finishBrushUndoTiles();
 	// If undo was created and terrain actually modified, store it
 	LOG( DEBUG,
 		 "Backed up regions: ",
@@ -2023,6 +2891,13 @@ void Terrain3DEditor::stopOperation(
 			const Vector2i		   location = original_snapshot["location"];
 			Ref< Terrain3DRegion > pRegion = m_pTerrain->dataObject()->getRegion( location );
 			if ( pRegion.is_valid() ) {
+				// Tile deltas already carry the corresponding immutable redo
+				// bytes. Recapturing here would turn the delta back into a
+				// full-region map snapshot.
+				if ( original_snapshot.has( "map_tiles" ) || original_snapshot.has( "map_absent" ) ) {
+					pRegion->setEdited( false );
+					continue;
+				}
 				const Dictionary redo_snapshot = captureEditSnapshot( pRegion, original_snapshot );
 				if ( !redo_snapshot.is_empty() ) {
 					m_editedEditSnapshots.push_back( redo_snapshot );
@@ -2038,6 +2913,55 @@ void Terrain3DEditor::stopOperation(
 	m_originalEditSnapshots = Array();
 	m_editedEditSnapshots = Array();
 	m_addedRemovedLocations = TypedArray< Vector2i >();
+	m_pTerrain->dataObject()->clearEditedArea();
+	m_bIsOperating = false;
+	trimBrushScratch();
+}
+
+// Discard an interrupted stroke without publishing an UndoRedo action. The
+// existing source-map transaction owns all restoration and invalidation.
+void Terrain3DEditor::cancelOperation(
+	void ) {
+	Terrain3DMemoryAccountScope memory_scope( m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr );
+#if defined( T3D_EDITOR_NATIVE )
+	if ( m_nPendingEditorBrushStrokeId ) {
+		if ( m_pTerrain ) {
+			Terrain3DRenderCoordinator *const pRenderer = static_cast< Terrain3D * >( m_pTerrain )->getRenderCoordinatorInternal();
+			if ( pRenderer ) pRenderer->cancelEditorBrushStrokeCold( m_nPendingEditorBrushStrokeId );
+		}
+		m_nPendingEditorBrushStrokeId = 0u;
+		m_bPendingEditorBrushSealed = false;
+        m_editorBrushGpuRegions.clear();
+        m_editorBrushGpuTiles.clear();
+        m_nEditorBrushGpuSequence = 0u;
+		if ( ++m_nEditorBrushOwnerGeneration == 0u ) m_nEditorBrushOwnerGeneration = 1u;
+	}
+#endif
+	if ( !m_bIsOperating || !m_pTerrain || !m_pTerrain->dataObject() ) return;
+	finishBrushUndoTiles();
+	Dictionary rollback = m_undoData.duplicate();
+	if ( !m_originalRegions.is_empty() ) {
+		rollback["edited_regions"] = m_originalRegions;
+	}
+	if ( !m_originalEditSnapshots.is_empty() ) {
+		rollback["edit_snapshots"] = m_originalEditSnapshots.duplicate();
+	}
+	if ( !m_addedRemovedLocations.is_empty() ) {
+		if ( m_tool == REGION && m_nOperation == SUBTRACT ) {
+			rollback["removed_regions"] = m_addedRemovedLocations;
+		} else {
+			rollback["added_regions"] = m_addedRemovedLocations;
+		}
+	}
+	rollback["edited_area"] = m_pTerrain->dataObject()->getEditedArea();
+	applyUndo( rollback );
+	m_undoData.clear();
+	m_originalRegions = TypedArray< Terrain3DRegion >();
+	m_editedRegions = TypedArray< Terrain3DRegion >();
+	m_originalEditSnapshots = Array();
+	m_editedEditSnapshots = Array();
+	m_addedRemovedLocations = TypedArray< Vector2i >();
+	m_brushUndoRegions.clear();
 	m_pTerrain->dataObject()->clearEditedArea();
 	m_bIsOperating = false;
 	trimBrushScratch();
@@ -2093,6 +3017,10 @@ void Terrain3DEditor::setTerrain(
 	if ( m_pTerrain == pConcrete ) {
 		return;
 	}
+	// Restore an interrupted transaction while the old terrain owner still exists.
+	if ( m_bIsOperating && m_pTerrain ) {
+		cancelOperation();
+	}
 #if defined( T3D_EDITOR_NATIVE )
 	if ( m_pTerrain ) {
 		Terrain3D *const pPrevious = static_cast< Terrain3D * >( m_pTerrain );
@@ -2114,6 +3042,10 @@ void Terrain3DEditor::onTerrainOwnerDetached(
 	void ) {
 	// The owner has invalidated this non-owning attachment. Never invoke
 	// its methods during editor teardown or after scene deletion.
+	m_brushUndoRegions.clear();
+	m_nPendingEditorBrushStrokeId = 0u;
+	m_bPendingEditorBrushSealed = false;
+	if ( ++m_nEditorBrushOwnerGeneration == 0u ) m_nEditorBrushOwnerGeneration = 1u;
 	m_pTerrain = NULL;
 	m_bIsOperating = false;
 }
@@ -2121,6 +3053,31 @@ void Terrain3DEditor::onTerrainOwnerDetached(
 Object *Terrain3DEditor::getTerrain(
 	void ) const {
 	return m_pTerrain ? &m_pTerrain->sceneNode() : NULL;
+}
+
+Dictionary Terrain3DEditor::getBrushPerformanceStats(
+	void ) const {
+	Dictionary stats;
+	stats["tool_selection_changes"] = ( int64_t ) m_nBrushToolSelections;
+	stats["stroke_active"] = m_bIsOperating;
+	stats["gpu_stroke_pending"] = m_nPendingEditorBrushStrokeId != 0u;
+	stats["gpu_stroke_sealed"] = m_bPendingEditorBrushSealed;
+	stats["dabs_this_stroke"] = ( int64_t ) m_nBrushDabs;
+	stats["map_get_data_calls"] = ( int64_t ) m_nBrushGetDataCalls;
+	stats["map_set_data_calls"] = ( int64_t ) m_nBrushSetDataCalls;
+	stats["map_bytes_read"] = ( int64_t ) m_nBrushBytesRead;
+	stats["map_bytes_published"] = ( int64_t ) m_nBrushBytesPublished;
+	stats["prepare_usec"] = ( int64_t ) m_nBrushPrepareUsec;
+	stats["cpu_sample_usec"] = ( int64_t ) m_nBrushCpuSampleUsec;
+	stats["cpu_compute_usec"] = ( int64_t ) m_nBrushCpuComputeUsec;
+	stats["commit_usec"] = ( int64_t ) m_nBrushCommitUsec;
+	if ( m_pTerrain && m_pTerrain->dataObject() ) {
+		stats["data_commit"] = m_pTerrain->dataObject()->getMapEditPerformanceStats();
+	}
+	if ( m_pTerrain && m_pTerrain->collisionObject() ) {
+		stats["collision"] = m_pTerrain->collisionObject()->getStats();
+	}
+	return stats;
 }
 
 void Terrain3DEditor::_bind_methods(
@@ -2153,6 +3110,7 @@ void Terrain3DEditor::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "set_brush_data", "data" ), &Terrain3DEditor::setBrushData );
 	ClassDB::bind_method( D_METHOD( "set_tool", "tool" ), &Terrain3DEditor::setTool );
 	ClassDB::bind_method( D_METHOD( "get_tool" ), &Terrain3DEditor::getTool );
+	ClassDB::bind_method( D_METHOD( "get_brush_performance_stats" ), &Terrain3DEditor::getBrushPerformanceStats );
 	ClassDB::bind_method( D_METHOD( "set_operation", "operation" ), &Terrain3DEditor::setOperation );
 	ClassDB::bind_method( D_METHOD( "get_operation" ), &Terrain3DEditor::getOperation );
 	ClassDB::bind_method( D_METHOD( "start_operation", "position" ), &Terrain3DEditor::startOperation );
@@ -2163,6 +3121,10 @@ void Terrain3DEditor::_bind_methods(
 						  DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "backup_region_full", "region" ), &Terrain3DEditor::backupRegionFull );
 	ClassDB::bind_method( D_METHOD( "stop_operation" ), &Terrain3DEditor::stopOperation );
+#if defined( T3D_EDITOR_NATIVE )
+	ClassDB::bind_method( D_METHOD( "poll_editor_brush_commit" ), &Terrain3DEditor::pollEditorBrushCommitCold );
+#endif
+	ClassDB::bind_method( D_METHOD( "cancel_operation" ), &Terrain3DEditor::cancelOperation );
 
 	ClassDB::bind_method( D_METHOD( "apply_undo", "data" ), &Terrain3DEditor::applyUndo );
 }

@@ -412,7 +412,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags(
 	if ( m_macroNoiseTexture.getRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MACRO_NOISE;
 	}
-	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ) {
+	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MICRO_VT;
 		if ( rSources.m_terrainMegaVT.isReady() ) {
 			config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MEGAVT;
@@ -444,8 +444,9 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags(
 	if ( pData && pData->getMiddleHeightMapsRid().is_valid() && pData->getMiddleHeightRegionMapRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MIDDLE_HEIGHT;
 	}
-	if ( pData && pData->getFarHeightMapRid().is_valid() && pData->getFarColorMapRid().is_valid() ) {
-		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_FAR_ATLAS;
+	// FAR tint/index/height are V1 page allocations, not standalone atlas RIDs.
+	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_FAR_VT;
 	}
 	if ( rAssets.is_valid() && rAssets->getFarAlbedoArrayRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_FAR_ALBEDO;
@@ -682,8 +683,8 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	const uint32_t			 count =
 		( uint32_t ) ( CLAMP( rAssets->getTextureCount(), 1, ( int ) ( T3D_RD_MATERIAL_LAYER_COUNT ) ) );
 	rSnapshot.m_nMaterialLayerCount = count;
-	bool canonical_vt_v3 = ( rSnapshot.m_materialConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MICRO_VT ) != 0u &&
-						   rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3;
+	bool canonical_vt_v1 = ( rSnapshot.m_materialConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MICRO_VT ) != 0u &&
+						   rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1;
 	for ( uint32_t i = 0u; i < T3D_RD_MATERIAL_LAYER_COUNT; ++i ) {
 		t3dRdMaterialLayer_t &layer = rSnapshot.m_szMaterials[i];
 		const Color			  color =
@@ -711,7 +712,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		layer.m_nMicroVTAllocation =
 			i < rVtSnapshot.nMaterialCount ? rVtSnapshot.nMaterialAllocation[i] : T3D_VT_INVALID_ALLOCATION;
 		layer.m_nMicroVTGeneration = ( uint32_t ) ( rAssets->getTexturePublicationGeneration() & 0xffffffffu );
-		layer.m_nMicroVTFlags = rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? 1u : 0u;
+		layer.m_nMicroVTFlags = rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? 1u : 0u;
 		layer.m_nMicroVTReserved = 0u;
 		layer.m_nFlags = 0u;
 		if ( rAssets->usesPackedPbr() ) {
@@ -723,16 +724,16 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		if ( layer.m_nMicroVTAllocation != T3D_VT_INVALID_ALLOCATION ) {
 			layer.m_nFlags |= T3D_RD_MATERIAL_LAYER_MICRO_VT;
 		}
-		const bool layer_canonical_v3 = i < count && layer.m_nMicroVTAllocation != T3D_VT_INVALID_ALLOCATION &&
+		const bool layer_canonical_v1 = i < count && layer.m_nMicroVTAllocation != T3D_VT_INVALID_ALLOCATION &&
 										( layer.m_nMicroVTFlags & 1u ) != 0u;
-		if ( layer_canonical_v3 ) {
-			layer.m_nFlags |= T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V3;
+		if ( layer_canonical_v1 ) {
+			layer.m_nFlags |= T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V1;
 		}
 		if ( i < count ) {
-			canonical_vt_v3 = canonical_vt_v3 && layer_canonical_v3;
+			canonical_vt_v1 = canonical_vt_v1 && layer_canonical_v1;
 		}
 	}
-	rSnapshot.m_nTerrainMaterialBackend = canonical_vt_v3 ? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
+	rSnapshot.m_nTerrainMaterialBackend = canonical_vt_v1 ? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
 														  : T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
 }
 
@@ -749,11 +750,8 @@ void Terrain3DMaterialStateBuilder::buildMaterialState(
 		Terrain3DData *const pData = rSources.m_pTerrain ? rSources.m_pTerrain->dataObject() : NULL;
 		buildMaterialFlags( rSources, rVtSnapshot, rSnapshot, pMaterial, pData, assets );
 		buildMaterialParameters( rSnapshot.m_materialConfig, pMaterial, assets );
-		// Pack side is dynamic, but logical region sample density is unchanged.
-		rSnapshot.m_materialConfig.m_fReserved2 =
-			rSources.m_pTerrain
-				? ( float ) rSources.m_pTerrain->getGpuFarSurfaceAtlasSide() / ( float ) T3D_REGION_MAP_SIZE
-				: 0.0f;
+		// No separate far-color slot dimension is published by V1.
+		rSnapshot.m_materialConfig.m_fReserved2 = 0.0f;
 		buildMaterialTierConfig( rSnapshot.m_materialConfig, pMaterial );
 	}
 	buildMaterialLayers( rSources, rVtSnapshot, rSnapshot, assets );
@@ -782,8 +780,6 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 	const RID					 middle_composite_maps = data ? data->getMiddleCompositeMapsRid() : RID();
 	const RID					 middle_height_maps = data ? data->getMiddleHeightMapsRid() : RID();
 	const RID					 middle_height_region_map = data ? data->getMiddleHeightRegionMapRid() : RID();
-	const RID					 far_height_map = data ? data->getFarHeightMapRid() : RID();
-	const RID					 far_color_map = data ? data->getFarColorMapRid() : RID();
 	const RID					 far_albedo_map = rd_assets.is_valid() ? rd_assets->getFarAlbedoArrayRid() : RID();
 	const RID					 displacement_map = rSources.m_pTerrain->getComputeDisplacementTextureRid();
 	const RID					 world_noise_map = m_worldNoiseCache.getRid();
@@ -804,8 +800,6 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 		( uint64_t ) ( middle_composite_maps.get_id() ),
 		( uint64_t ) ( middle_height_maps.get_id() ),
 		( uint64_t ) ( middle_height_region_map.get_id() ),
-		( uint64_t ) ( far_height_map.get_id() ),
-		( uint64_t ) ( far_color_map.get_id() ),
 		( uint64_t ) ( far_albedo_map.get_id() ),
 		( uint64_t ) ( displacement_map.get_id() ),
 		( uint64_t ) ( world_noise_map.get_id() ),
@@ -816,7 +810,7 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getSurfaceArraySize() ) : 0u,
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getDisplacementArraySize() ) : 0u,
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getFarAlbedoArraySize() ) : 0u,
-		vtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? 1u : 0u,
+		vtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? 1u : 0u,
 		( uint64_t ) vtSnapshot.nDatabaseGeneration,
 		vtSnapshot.nPackageContentSignature,
 		vtSnapshot.nPackagePublicationGeneration };

@@ -5,7 +5,7 @@
 
 #include "authoring/vt/build/terrain_3d_vt_cooker.h"
 
-// Cook implementation revision, independent of the frozen V3 format/binding ABI.
+// Cook implementation revision, independent of the frozen V1 format/binding ABI.
 #define T3D_VT_REFERENCE_BC1_CODEC_REVISION	   2u
 #define T3D_VT_REFERENCE_ALBEDO_CODEC_REVISION 3u
 

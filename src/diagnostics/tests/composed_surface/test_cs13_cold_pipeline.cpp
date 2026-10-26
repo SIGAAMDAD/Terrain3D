@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_cold_pipeline.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.h"
 #include "data/runtime/terrain_3d_composed_surface_sidecar.h"
 
 #include <cassert>
@@ -9,26 +9,26 @@
 #include <iterator>
 #include <vector>
 
-// The pack validator is replaced ONLY in this fixture because the native V3
+// The pack validator is replaced ONLY in this fixture because the native V1
 // reader depends on the rest of Terrain3D. This does not test real pack-open.
-bool t3d_vt_pack_open_view_v3( const void *bytes, uint64_t length, t3dVTPackViewV3_t &view )
+bool t3d_vt_pack_open_view_v1( const void *bytes, uint64_t length, t3dVTPackViewV1_t &view )
 {
     if ( !bytes || length != sizeof( view ) ) return false;
-    view = *static_cast< const t3dVTPackViewV3_t * >( bytes );
+    view = *static_cast< const t3dVTPackViewV1_t * >( bytes );
     return view.m_pHeader.m_bValid;
 }
 
 struct Fixture
 {
-    t3dVTPackAllocationRecordV3_t allocation{};
-    t3dVTPackAllocationKeyRecordV3_t key{};
+    t3dVTPackAllocationRecordV1_t allocation{};
+    t3dVTPackAllocationKeyRecordV1_t key{};
     t3dVTChannelAllocation_t channels[T3D_VT_LOGICAL_CHANNEL_COUNT]{};
-    t3dVTPackPageRecordV3_t pages[3]{};
-    t3dVTPackTailRecordV3_t tails[3]{};
-    t3dVTPackPayloadRecordV3_t payloads[6]{};
-    t3dVTPackClusterRecordV3_t cluster{};
+    t3dVTPackPageRecordV1_t pages[3]{};
+    t3dVTPackTailRecordV1_t tails[3]{};
+    t3dVTPackPayloadRecordV1_t payloads[6]{};
+    t3dVTPackClusterRecordV1_t cluster{};
     std::vector< uint8_t > encoded;
-    t3dVTPackViewV3_t view{};
+    t3dVTPackViewV1_t view{};
     uint32_t controls = 0u;
     uint32_t evaluates = 0u;
     uint32_t encodes = 0u;
@@ -63,7 +63,7 @@ struct Fixture
             tails[c].m_nPayloadId = c + 3u;
             for ( uint32_t mip = 0u; mip < 2u; ++mip ) {
                 const uint32_t index = c + 3u * mip;
-                const uint32_t bytes = t3d_vt_pack_expected_physical_tile_bytes_v3( format );
+                const uint32_t bytes = t3d_vt_pack_expected_physical_tile_bytes_v1( format );
                 payloads[index].m_nFormat = format;
                 payloads[index].m_nClusterOffset = uint32_t( encoded.size() );
                 payloads[index].m_nDecodedBytes = bytes;
@@ -104,7 +104,7 @@ static bool decoder( void *, uint32_t, const uint8_t *data, uint32_t bytes,
     }
     return true;
 }
-static bool page( void *, const t3dComposedSurfaceCookPage_t &p, t3dComposedStaticV3Footprint_t &foot )
+static bool page( void *, const t3dComposedSurfaceCookPage_t &p, t3dComposedStaticV1Footprint_t &foot )
 {
     foot = {};
     foot.m_fWorldOrigin[0] = float( p.m_nPageX * 128u );
@@ -142,12 +142,12 @@ int main()
 {
     Fixture fixture{};
     fixture.setup();
-    t3dComposedStaticV3Layer_t layer{};
+    t3dComposedStaticV1Layer_t layer{};
     layer.m_nAllocation = UINT32_MAX; // Ignored: stable allocation resolved by CS13.
     layer.m_fColor[0] = layer.m_fColor[1] = layer.m_fColor[2] = 1.0f;
     layer.m_fPbr0[0] = layer.m_fPbr0[1] = 1.0f;
     layer.m_fPbr1[0] = layer.m_fPbr1[1] = 1.0f;
-    t3dComposedStaticV3Layer_t resolved{};
+    t3dComposedStaticV1Layer_t resolved{};
     t3dComposedSurfaceCookPage_t page_spec{ 77u, 991u, 0u, 0u, 0u, 1u };
     uint64_t file_bytes = 0u;
     assert( t3d_cs_cook_total_bytes( 1u, file_bytes ) );
@@ -166,7 +166,7 @@ int main()
     req.m_source.m_pUser = &fixture;
     req.m_source.m_pResolvePage = page;
     req.m_source.m_pReadControl = control;
-    req.m_source.m_nSamplingMode = T3D_CS_STATIC_V3_SAMPLE_NEAREST;
+    req.m_source.m_nSamplingMode = T3D_CS_STATIC_V1_SAMPLE_NEAREST;
     req.m_source.m_nVtFiltering = 3u;
     req.m_source.m_fBlendSharpness = 0.5f;
     req.m_pEncode = encoder;

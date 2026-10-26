@@ -67,7 +67,14 @@ private:
 	bool							  m_bSparseHierarchyStale = false;
 	bool							  m_bSparseBundleLoaded = false;
 	Terrain3DDataResidencyAdapter	  m_residency;
-	bool							  m_bRuntimeActive = false;
+	bool m_bRuntimeActive = false;
+	uint64_t m_nMapEditCommitCalls = 0u;
+	uint64_t m_nMapEditDerivedUsecLast = 0u;
+	uint64_t m_nMapEditPublicationUsecLast = 0u;
+	uint64_t m_nMapEditCollisionQueueUsecLast = 0u;
+	bool m_bMapEditInteractiveLast = false;
+	bool m_bMapEditComputeBackendRequestedLast = false;
+	bool m_bMapEditCollisionRequestedLast = false;
 
 	TypedArray< Image > m_heightMaps;
 	TypedArray< Image > m_controlMaps;
@@ -203,10 +210,9 @@ private:
 	int								   getRegionSlotReserve( void ) const;
 	bool							   canUpdateRegionSlotsIncrementally( void ) const;
 	void							   syncCacheDefaultMaps( void );
-	t3dFarSurfaceAtlasConfig_t		   getFarSurfaceAtlasConfig( void ) const;
+	t3dFarRegionalCookConfig_t		   getFarRegionalCookConfig( void ) const;
 	t3dMiddleHeightRegionCacheConfig_t getMiddleHeightCacheConfig( void ) const;
 	void		applyInstanceRegionCacheChanges( const t3dInstanceRegionCacheChanges_s &rChanges );
-	static void residencyPrepareGpuFarSurface( void *pContext );
 	static void residencyApplyInstanceChanges( void *pContext, const t3dInstanceRegionCacheChanges_s &rChanges );
 	static void residencyGpuPageTableChanged( void *pContext );
 	void		resetGpuRegionCache( bool bClearTextures );
@@ -214,8 +220,7 @@ private:
 	void		invalidateGpuRegionLocation( const Vector2i &vLocation );
 	bool		republishGpuRegionLocation( const Vector2i &vLocation );
 	void		queueGpuRegionRepublish( const Vector2i &vLocation );
-	bool		isFarAtlasRequired( void ) const;
-	bool		writeCookedGpuFarAtlases( const String &rDirectory = String() );
+	bool		writeCookedFarVtRegions( const String &rDirectory = String() );
 	void		markAllGpuFarRegionsDirty( t3dMapType_t mapType );
 	void		markGpuFarRegionDirty( const Vector2i &vLocation, t3dMapType_t mapType );
 	void		resetMiddleHeightCache( void );
@@ -413,6 +418,7 @@ public:
 									const bool		   bGenerateMipmaps = false );
 	void				updateMapRegions( const t3dMapType_t										mapType,
 										  const eastl::vector< Vector2i, Terrain3DEastlAllocator > &rRegionLocations );
+	Dictionary getMapEditPerformanceStats( void ) const;
 	void				commitMapEdits( const t3dMapType_t										  mapType,
 										const eastl::vector< Vector2i, Terrain3DEastlAllocator > &rRegionLocations,
 										const AABB												 &rEditedArea,
@@ -557,8 +563,7 @@ public:
 	Dictionary getComputeLocalGpuTelemetry( void ) const;
 	Dictionary getRuntimeResidencyGrid( int nRadius = 6 ) const;
 	void	   invalidateGpuFarSurface( void );
-	void	   invalidateGpuFarAtlasLayout( void );
-	bool	   ensureFarAtlases( void );
+	void	   invalidateFarVtSourceLayout( void );
 	Dictionary inspectGpuRegionPages( void );
 #if defined( T3D_EDITOR_NATIVE )
 	Dictionary cookGpuRegionPages( void );
@@ -658,22 +663,9 @@ public:
 	Dictionary			getMiddleHeightCacheStats( void ) const;
 	size_t				getMiddleHeightCacheReservedBytes( void ) const;
 	int					fillGpuMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
-	EA_FORCE_INLINE RID getFarHeightMapRid(
-		void ) const {
-		return m_residency.farSurfaceAtlasCache().getHeightMapRid();
-	}
-	EA_FORCE_INLINE RID getFarColorMapRid(
-		void ) const {
-		return m_residency.farSurfaceAtlasCache().getColorMapRid();
-	}
-	EA_FORCE_INLINE uint16_t getFarPackedColorSlot(
-		const Vector2i &rLocation ) const {
-		return m_residency.farSurfaceAtlasCache().getPackedColorSlot( rLocation );
-	}
-	EA_FORCE_INLINE uint64_t getFarPackedColorLayoutGeneration(
-		void ) const {
-		return m_residency.farSurfaceAtlasCache().getPackedColorLayoutGeneration();
-	}
+	uint64_t getGpuFarAvtPublicationRevision() const;
+	bool isGpuFarAvtRegionCookDirty( const Vector2i &vLocation ) const;
+	uint32_t getGpuFarAvtCookedPackageGeneration( const Vector2i &vLocation ) const;
 	EA_FORCE_INLINE bool areControlMapsImplicit(
 		void ) const {
 		return m_bControlMapsImplicit;

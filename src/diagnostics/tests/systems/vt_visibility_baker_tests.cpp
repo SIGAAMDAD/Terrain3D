@@ -87,7 +87,7 @@ void register_vt_visibility_baker_tests( TestRunner &runner ) {
         scene.m_pProbes = &probe;
         scene.m_nProbeCount = 1u;
         scene.m_nSourceSignature = 1u;
-        t3dVTDemandV3CookConfig_t config;
+        t3dVTDemandV1CookConfig_t config;
         config.m_nSourceSignature = 1u;
         config.m_nPackageSignature = 2u;
         config.m_nNominalTextureSize = 1024u;
@@ -134,7 +134,7 @@ void register_vt_visibility_baker_tests( TestRunner &runner ) {
         scene.m_pProbes = &probe;
         scene.m_nProbeCount = 1u;
         scene.m_nSourceSignature = 123u;
-        t3dVTDemandV3CookConfig_t config;
+        t3dVTDemandV1CookConfig_t config;
         config.m_nSourceSignature = scene.m_nSourceSignature;
         config.m_nPackageSignature = 987u;
         config.m_nNominalTextureSize = 1024u;

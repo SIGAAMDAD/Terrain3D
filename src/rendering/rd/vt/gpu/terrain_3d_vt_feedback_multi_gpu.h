@@ -12,9 +12,9 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/callable.hpp>
 
-// Experimental V3 GPU service. Source RIDs are borrowed, not produced here.
+// Experimental V1 GPU service. Source RIDs are borrowed, not produced here.
 // Creation/binding and destruction require a quiescent COLD device boundary.
-// No V3 capture is admitted to production residency by this service.
+// No V1 capture is admitted to production residency by this service.
 class Terrain3DVTFeedbackMultiGpu
 {
 public:

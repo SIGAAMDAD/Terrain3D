@@ -303,7 +303,7 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 	bool bChanged =
 		!m_bPublicationUploadCached[WORLD_BUFFER_MATERIALS] || getUsedBytes( WORLD_BUFFER_MATERIALS ) != nBytes;
 	uint8_t *const				 pBytes = scratch.ptrw();
-	const bool					 bV3 = rVirtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V3;
+	const bool					 bV1 = rVirtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1;
 	const uint32_t				 nAllocationCount = rVirtualTexture.getActiveAllocationCount();
 	const uint32_t				 nPageCount = rVirtualTexture.getActiveVirtualPageCount();
 	const t3dVTResidencyState_t &residency = rVirtualTexture.get_residency();
@@ -311,7 +311,7 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 		t3dRenderingMaterialGpu_t material = rPublication.m_materials[i];
 		if ( i < nInstanceMaterialCount ) {
 			uint32_t nAllocation = T3D_VT_INVALID_ALLOCATION;
-			if ( !bV3 ||
+			if ( !bV1 ||
 				 !rVirtualTexture.findMaterialAllocationCold( rPublication.m_instanceMaterialStableKeys[i],
 															  nAllocation ) ||
 				 nAllocation >= nAllocationCount || !residency.bInitialized || residency.Buffers.pAllocations == NULL ||
@@ -328,9 +328,9 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 			material.m_nVtAllocation = nAllocation;
 			material.m_nOverlayVtAllocation = T3D_VT_INVALID_ALLOCATION;
 			if ( nAllocation != T3D_VT_INVALID_ALLOCATION ) {
-				material.m_nFlags |= T3D_VT_MATERIAL_V3_LAYOUT;
+				material.m_nFlags |= T3D_VT_MATERIAL_V1_LAYOUT;
 			} else {
-				material.m_nFlags &= ~T3D_VT_MATERIAL_V3_LAYOUT;
+				material.m_nFlags &= ~T3D_VT_MATERIAL_V1_LAYOUT;
 			}
 		}
 		uint8_t *const pRecord = pBytes + i * sizeof( material );

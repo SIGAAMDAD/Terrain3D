@@ -8,15 +8,15 @@
 class Terrain3DData;
 class Terrain3DAssets;
 
-// Owner-thread offline cook. The final (post-MegaVT merge) V3 package is the
+// Owner-thread offline cook. The final (post-MegaVT merge) V1 package is the
 // source of stable keys and its content signature. No runtime scene traversal.
 bool t3d_vt_demand_cook_asset_sidecar_cold( const Terrain3DData &rData,
     const godot::Ref< Terrain3DAssets > &rAssets,
     const godot::PackedByteArray &rFinalPackage,
     godot::PackedByteArray &rSidecar, godot::String &rPath,
     godot::String &rError,
-    godot::PackedByteArray *pV3Sidecar = nullptr,
-    godot::String *pV3Path = nullptr );
+    godot::PackedByteArray *pV1Sidecar = nullptr,
+    godot::String *pV1Path = nullptr );
 
 // Publish two independently validated files as one rollback-capable cook action.
 // The package may stay in terrain's data directory; the demand sidecar follows the asset.
@@ -30,6 +30,6 @@ bool t3d_vt_demand_publish_pair_cold( const godot::String		   &rPackagePath,
 bool t3d_vt_demand_publish_triplet_cold( const godot::String &rPackagePath,
     const godot::PackedByteArray &rPackage,
     const godot::String &rDemandPath, const godot::PackedByteArray &rDemand,
-    const godot::String &rV3Path, const godot::PackedByteArray &rV3,
+    const godot::String &rV1Path, const godot::PackedByteArray &rV1,
     godot::String &rError );
 #endif

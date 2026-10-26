@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.h"
 #include "data/formats/terrain_3d_vt_pack_format.h"
 
 #include <cassert>

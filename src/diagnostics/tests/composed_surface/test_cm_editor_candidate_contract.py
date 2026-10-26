@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 READ = lambda path: (ROOT / path).read_text(encoding='utf-8')
 source = READ('src/authoring/vt/integration/terrain_3d_composed_surface_editor_source.cpp')
-pipeline = READ('src/authoring/vt/build/terrain_3d_composed_surface_v3_cold_pipeline.cpp')
+pipeline = READ('src/authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.cpp')
 owner = READ('src/authoring/vt/integration/terrain_3d_render_authoring_companion.cpp')
 ui = READ('project/addons/terrain_3d/menu/terrain_menu.gd')
 

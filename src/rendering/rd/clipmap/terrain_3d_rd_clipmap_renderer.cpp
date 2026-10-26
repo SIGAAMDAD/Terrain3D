@@ -52,6 +52,49 @@ Terrain3DRdClipmapRenderer::~Terrain3DRdClipmapRenderer(
 	shutdown();
 }
 
+#if defined( T3D_EDITOR_NATIVE )
+void Terrain3DRdClipmapRenderer::setEditorBrushOverlayOnRenderThread(
+    const RID &rWorking, const RID &rTable ) {
+    if ( m_hEditorBrushWork == rWorking && m_hEditorBrushTable == rTable ) return;
+    m_editorBrushOverlaySets.clear();
+    m_hEditorBrushWork = rWorking;
+    m_hEditorBrushTable = rTable;
+}
+#endif
+
+bool Terrain3DRdClipmapRenderer::ensureEditorBrushOverlayDefaultsOnRenderThread() {
+    if ( m_editorBrushEmptyWork.isValid() && m_editorBrushEmptyTable.isValid() ) return true;
+    t3dRdGpuBufferSpec_t spec{};
+    spec.m_owner = T3D_RD_CONTEXT_OWNER_TERRAIN;
+    spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
+    spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
+    spec.m_growth = T3D_GPU_EXACT;
+    spec.m_pName = "T3D.Editor.Empty.Work";
+    if ( !m_editorBrushEmptyWork.isConfigured() && !m_editorBrushEmptyWork.configure( spec ) ) return false;
+    spec.m_pName = "T3D.Editor.Empty.Table";
+    if ( !m_editorBrushEmptyTable.isConfigured() && !m_editorBrushEmptyTable.configure( spec ) ) return false;
+    PackedByteArray zeroWork;
+    zeroWork.resize( 4 );
+    memset( zeroWork.ptrw(), 0, 4 );
+    PackedByteArray zeroTable;
+    zeroTable.resize( 8192u + 65536u * 4u );
+    memset( zeroTable.ptrw(), 0, ( size_t ) zeroTable.size() );
+    return m_editorBrushEmptyWork.createTracked( m_context, 4u, zeroWork ) &&
+        m_editorBrushEmptyTable.createTracked( m_context, ( uint32_t ) zeroTable.size(), zeroTable );
+}
+
+RID Terrain3DRdClipmapRenderer::getEditorBrushOverlaySetOnRenderThread( const RID &rShader ) {
+    if ( !ensureEditorBrushOverlayDefaultsOnRenderThread() ) return RID();
+    const RID work = m_hEditorBrushWork.is_valid() ? m_hEditorBrushWork : m_editorBrushEmptyWork.rid();
+    const RID table = m_hEditorBrushTable.is_valid() ? m_hEditorBrushTable : m_editorBrushEmptyTable.rid();
+    TypedArray< Ref< RDUniform > > uniforms;
+    uniforms.push_back( Terrain3DRdBindingBuilder::storage( 0, work ) );
+    uniforms.push_back( Terrain3DRdBindingBuilder::storage( 1, table ) );
+    const RID handle = m_editorBrushOverlaySets.getOrCreate( {rShader, work, table},
+         "T3D.Editor.Brush.OverlaySet", uniforms, rShader, 5u );
+    return m_editorBrushOverlaySets.resolve( handle );
+}
+
 void Terrain3DRdClipmapRenderer::setError(
 	const String &rError ) {
 	bool bReport = true;
@@ -343,13 +386,16 @@ static void t3dRdApplyShadowCasterPolicy(
 t3dTerrainShaderPath_t Terrain3DRdClipmapRenderer::selectTerrainShaderPath(
 	const t3dRdFrameSnapshot_t &rSnapshot ) const {
 	bool editor_debug = rSnapshot.m_materialConfig.m_nDebugFlags != 0u;
+#if defined( T3D_EDITOR_NATIVE )
+    editor_debug |= m_hEditorBrushWork.is_valid() && m_hEditorBrushTable.is_valid();
+#endif
 	for ( uint32_t i = 0u; !editor_debug && i < T3D_ARRAY_COUNT( rSnapshot.m_editorOverlayConfig.m_szDecals ); ++i ) {
 		editor_debug = rSnapshot.m_editorOverlayConfig.m_szDecals[i].m_nVisible != 0u;
 	}
 	if ( editor_debug ) {
 		return T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED;
 	}
-	return rSnapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
+	return rSnapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
 			   ? T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
 			   : T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
 }
@@ -680,7 +726,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 		shader_key.m_nTier = ( uint8_t ) ( tier );
 		shader_key.m_nShaderPath = ( uint8_t ) ( key.m_shaderPath );
 		shader_key.m_nMaterialBackend = key.m_shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
-											? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
+											? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
 											: T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
 		shader_key.m_nShippingFeatureClass = key.m_nShippingFeatureClass;
 		shader_key.m_nEditorDiagnosticClass = key.m_nEditorDiagnosticClass;
@@ -1048,8 +1094,6 @@ Terrain3DRdClipmapRenderer::t3dRdClipmapDescriptorKey_t Terrain3DRdClipmapRender
 	key.m_hBoundTerrainShadowMaskTexture = rBindings.m_hTerrainShadowMaskTextureRd;
 	key.m_hBoundMiddleHeightTexture = rBindings.m_hMiddleHeightTextureRd;
 	key.m_hBoundMiddleHeightRegionMapTexture = rBindings.m_hMiddleHeightRegionMapTextureRd;
-	key.m_hBoundFarHeightTexture = rBindings.m_hFarHeightTextureRd;
-	key.m_hBoundFarColorTexture = rBindings.m_hFarColorTextureRd;
 	key.m_hBoundAlbedoTexture = rBindings.m_hAlbedoTextureRd;
 	key.m_hBoundFarAlbedoTexture = rBindings.m_hFarAlbedoTextureRd;
 	key.m_hBoundNormalTexture = rBindings.m_hNormalTextureRd;
@@ -1083,8 +1127,6 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 	const RID						 &rTerrainShadowMask = rBindings.m_hTerrainShadowMaskTextureRd;
 	const RID						 &rMiddleHeight = rBindings.m_hMiddleHeightTextureRd;
 	const RID						 &rMiddleHeightRegionMap = rBindings.m_hMiddleHeightRegionMapTextureRd;
-	const RID						 &rFarHeight = rBindings.m_hFarHeightTextureRd;
-	const RID						 &rFarColor = rBindings.m_hFarColorTextureRd;
 	const RID						 &rAlbedo = rBindings.m_hAlbedoTextureRd;
 	const RID						 &rFarAlbedo = rBindings.m_hFarAlbedoTextureRd;
 	const RID						 &rNormal = rBindings.m_hNormalTextureRd;
@@ -1148,8 +1190,6 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 16, m_hTerrainSampler.rid(), rMiddleHeight ) );
 		uniforms.push_back(
 			Terrain3DRdBindingBuilder::samplerTexture( 17, m_hTerrainSampler.rid(), rMiddleHeightRegionMap ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 18, m_hTerrainSampler.rid(), rFarHeight ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 19, m_hTerrainSampler.rid(), rFarColor ) );
 		uniforms.push_back(
 			Terrain3DRdBindingBuilder::samplerTexture( 20, m_hszMaterialSamplers[nFiltering].rid(), rFarAlbedo ) );
 		uniforms.push_back(
@@ -1171,7 +1211,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_TERRAIN_VT_PAGE_TABLE_BINDING,
 															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 															   hVTPageTable ) );
-		for ( uint32_t channel = 0u; channel < T3D_SHARED_VT_CHANNEL_COUNT; ++channel ) {
+		for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
 			RID hPhysical = m_hFallbackArrayTexture.rid();
 			if ( pSharedVTBindings ) {
 				if ( pSharedVTBindings->nBankCount[channel] == 0u ) {
@@ -1193,6 +1233,13 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 																		   m_hszVtSamplers[nFiltering].rid(),
 																		   hPhysical ) );
 		}
+		// R16 uses an appended binding; the four original material VT bindings are ABI-stable.
+		if ( pSharedVTBindings && ( pSharedVTBindings->nBankCount[T3D_VT_CHANNEL_HEIGHT16] != 1u ||
+			 !pSharedVTBindings->hPhysical[T3D_VT_CHANNEL_HEIGHT16][0].is_valid() ) ) return false;
+		const RID hHeight16 = pSharedVTBindings
+			? pSharedVTBindings->hPhysical[T3D_VT_CHANNEL_HEIGHT16][0] : m_hFallbackArrayTexture.rid();
+		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+			T3D_RD_TERRAIN_VT_HEIGHT16_BINDING, m_hszVtSamplers[nFiltering].rid(), hHeight16 ) );
 		const RID hVTTailMetadata = pSharedVTBindings && pSharedVTBindings->hTailMetadata.is_valid()
 										? pSharedVTBindings->hTailMetadata
 										: sectionRid( MATERIALS );
@@ -1202,7 +1249,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_TERRAIN_VT_TAIL_METADATA_BINDING,
 															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 															   hVTTailMetadata ) );
-		for ( uint32_t channel = 0u; channel < T3D_SHARED_VT_CHANNEL_COUNT; ++channel ) {
+		for ( uint32_t channel = 0u; channel < 4u; ++channel ) {
 			const RID hTail = pSharedVTBindings && pSharedVTBindings->hTail[channel].is_valid()
 								  ? pSharedVTBindings->hTail[channel]
 								  : m_hFallbackDisplacementTexture.rid();
@@ -1211,6 +1258,10 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 				m_hszVtSamplers[nFiltering].rid(),
 				hTail ) );
 		}
+		const RID hHeight16Tail = pSharedVTBindings && pSharedVTBindings->hTail[T3D_VT_CHANNEL_HEIGHT16].is_valid()
+			? pSharedVTBindings->hTail[T3D_VT_CHANNEL_HEIGHT16] : m_hFallbackDisplacementTexture.rid();
+		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+			T3D_RD_TERRAIN_VT_HEIGHT16_TAIL_BINDING, m_hszVtSamplers[nFiltering].rid(), hHeight16Tail ) );
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_TERRAIN_VT_MIP_LAYOUT_BINDING,
 															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 															   hVTMipLayout ) );
@@ -1414,6 +1465,12 @@ void Terrain3DRdClipmapRenderer::shutdown(
 	m_forwardLighting.shutdown();
 	freeForwardPipelines();
 	freeUniformSets();
+    m_editorBrushOverlaySets.clear();
+    m_hEditorBrushWork = RID();
+    m_hEditorBrushTable = RID();
+    m_editorBrushEmptyWork.releaseTracked( m_context );
+    m_editorBrushEmptyTable.releaseTracked( m_context );
+
 	m_context.releaseFixedIndirect( T3D_RD_CONTEXT_FIXED_INDIRECT_CLIPMAP, m_pIndirectBuffer );
 	if ( !m_context.arena( Terrain3DRdContext::COLD ).ownsSlice( m_coldSpan ) ) {
 		m_coldSpan = {};
@@ -1924,10 +1981,6 @@ t3dRdTerrainBindings_t Terrain3DRdClipmapRenderer::resolveTerrainBindings(
 		resolved.m_hMiddleHeightTextureRd = m_hFallbackArrayTexture.rid();
 	if ( !resolved.m_hMiddleHeightRegionMapTextureRd.is_valid() )
 		resolved.m_hMiddleHeightRegionMapTextureRd = m_hFallbackDisplacementTexture.rid();
-	if ( !resolved.m_hFarHeightTextureRd.is_valid() )
-		resolved.m_hFarHeightTextureRd = m_hFallbackDisplacementTexture.rid();
-	if ( !resolved.m_hFarColorTextureRd.is_valid() )
-		resolved.m_hFarColorTextureRd = m_hFallbackDisplacementTexture.rid();
 	if ( !resolved.m_hFarAlbedoTextureRd.is_valid() ) {
 		resolved.m_hFarAlbedoTextureRd =
 			resolved.m_hAlbedoTextureRd.is_valid() ? resolved.m_hAlbedoTextureRd : m_hFallbackArrayTexture.rid();
@@ -2372,6 +2425,13 @@ bool Terrain3DRdClipmapRenderer::drawForwardView(
 			return false;
 		}
 		rd->draw_list_bind_uniform_set( draw_list, rasterSet, 0u );
+        if ( m_lastForwardPipelineKey.m_shaderPath == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ) {
+            const RID shader = getForwardShader( tier, variant,
+                m_lastForwardPipelineKey.m_bOneSunLighting, m_lastForwardPipelineKey.m_shaderPath );
+            const RID overlaySet = getEditorBrushOverlaySetOnRenderThread( shader );
+            if ( !overlaySet.is_valid() ) return false;
+            rd->draw_list_bind_uniform_set( draw_list, overlaySet, 5u );
+        }
 		if ( m_lastForwardPipelineKey.m_bFeedbackEnabled ) {
 			const RID feedbackSet = m_pFeedbackOwner ? m_pFeedbackOwner->resolve_fragment_feedback_set_hot( m_hszFeedbackSets[tier][variant] ) : RID();
 			if ( !feedbackSet.is_valid() ) {
@@ -2492,8 +2552,6 @@ bool Terrain3DRdClipmapRenderer::snapshotWorldRasterBindingsHot(
 	rBindings.m_hMiddleCompositeTexture = m_boundDescriptorKey.m_hBoundMiddleCompositeTexture;
 	rBindings.m_hMiddleHeightTexture = m_boundDescriptorKey.m_hBoundMiddleHeightTexture;
 	rBindings.m_hMiddleHeightRegionMapTexture = m_boundDescriptorKey.m_hBoundMiddleHeightRegionMapTexture;
-	rBindings.m_hFarHeightTexture = m_boundDescriptorKey.m_hBoundFarHeightTexture;
-	rBindings.m_hFarColorTexture = m_boundDescriptorKey.m_hBoundFarColorTexture;
 	rBindings.m_hFarAlbedoTexture = m_boundDescriptorKey.m_hBoundFarAlbedoTexture;
 	rBindings.m_hWorldNoiseTexture = m_boundDescriptorKey.m_hBoundWorldNoiseTexture;
 	rBindings.m_hMacroNoiseTexture = m_boundDescriptorKey.m_hBoundMacroNoiseTexture;
@@ -2522,8 +2580,6 @@ bool Terrain3DRdClipmapRenderer::snapshotWorldRasterBindingsHot(
 								 rBindings.m_hMiddleCompositeTexture,
 								 rBindings.m_hMiddleHeightTexture,
 								 rBindings.m_hMiddleHeightRegionMapTexture,
-								 rBindings.m_hFarHeightTexture,
-								 rBindings.m_hFarColorTexture,
 								 rBindings.m_hFarAlbedoTexture,
 								 rBindings.m_hWorldNoiseTexture,
 								 rBindings.m_hMacroNoiseTexture,

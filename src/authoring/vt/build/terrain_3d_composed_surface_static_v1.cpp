@@ -1,4 +1,4 @@
-#include "authoring/vt/build/terrain_3d_composed_surface_static_v3.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_static_v1.h"
 
 #include <cmath>
 #include <string.h>
@@ -14,13 +14,13 @@ static bool t3d_cs_finite( const float x )
     return std::isfinite( x );
 }
 
-bool t3d_cs_static_v3_eligible( const t3dComposedStaticV3Source_t &s )
+bool t3d_cs_static_v1_eligible( const t3dComposedStaticV1Source_t &s )
 {
     if ( !s.m_pResolvePage || !s.m_pReadControl || !s.m_pSampleSource || !s.m_pLayers ||
-         s.m_nLayerCount == 0u || s.m_nLayerCount > T3D_CS_STATIC_V3_MAX_LAYERS ||
-         ( s.m_nSamplingMode != T3D_CS_STATIC_V3_SAMPLE_NEAREST &&
-           s.m_nSamplingMode != T3D_CS_STATIC_V3_SAMPLE_BILINEAR &&
-           s.m_nSamplingMode != T3D_CS_STATIC_V3_SAMPLE_TOP_TWO ) ||
+         s.m_nLayerCount == 0u || s.m_nLayerCount > T3D_CS_STATIC_V1_MAX_LAYERS ||
+         ( s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_NEAREST &&
+           s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_BILINEAR &&
+           s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_TOP_TWO ) ||
          s.m_bAutoShader || s.m_bDualScale || s.m_bSideProjection ||
          s.m_bDetiling || s.m_bAdaptiveSampling || s.m_bImplicitControls ||
          s.m_bViewDependentMipBias ||
@@ -67,7 +67,7 @@ static void t3d_cs_normalize( float *v )
     }
 }
 
-static bool t3d_cs_material( const t3dComposedStaticV3Source_t &s, const uint32_t id,
+static bool t3d_cs_material( const t3dComposedStaticV1Source_t &s, const uint32_t id,
                              const float *world, const float *grad_x, const float *grad_y,
                              float scale, uint32_t rotation, t3dCsMaterial_t &dst )
 {
@@ -82,7 +82,7 @@ static bool t3d_cs_material( const t3dComposedStaticV3Source_t &s, const uint32_
                     ( sn * grad_x[0] + cs * grad_x[1] ) * k };
     float dy[2] = { ( cs * grad_y[0] - sn * grad_y[1] ) * k,
                     ( sn * grad_y[0] + cs * grad_y[1] ) * k };
-    t3dComposedStaticV3Sample_t sample{};
+    t3dComposedStaticV1Sample_t sample{};
     if ( !s.m_pSampleSource( s.m_pUser, layer.m_nAllocation, uv, dx, dy,
                             s.m_fStaticMipBias, s.m_nVtFiltering, sample ) ) return false;
     for ( float x : sample.m_fAlbedo ) if ( !t3d_cs_finite( x ) ) return false;
@@ -94,7 +94,7 @@ static bool t3d_cs_material( const t3dComposedStaticV3Source_t &s, const uint32_
     float nz = sample.m_fPbr[1] * 2.0f - 1.0f;
     float len2 = nx * nx + nz * nz;
     if ( len2 > 1.0f ) { float inv = 1.0f / sqrtf( len2 ); nx *= inv; nz *= inv; len2 = 1.0f; }
-    // Same canonical V3 XZ normal transform as sample_material_canonical_v3.
+    // Same canonical V1 XZ normal transform as sample_material_canonical_v1.
     dst.normal[0] = ( cs * nx - sn * nz ) * layer.m_fPbr0[1];
     dst.normal[1] = sqrtf( fmaxf( 1.0f - len2, 0.0f ) );
     dst.normal[2] = ( sn * nx + cs * nz ) * layer.m_fPbr0[1];
@@ -107,7 +107,7 @@ static bool t3d_cs_material( const t3dComposedStaticV3Source_t &s, const uint32_
     return true;
 }
 
-static bool t3d_cs_control_pair( const t3dComposedStaticV3Source_t &s, const uint32_t control,
+static bool t3d_cs_control_pair( const t3dComposedStaticV1Source_t &s, const uint32_t control,
                                  const float *world, const float *dx, const float *dy,
                                  t3dCsMaterial_t &dst )
 {
@@ -132,7 +132,7 @@ static bool t3d_cs_control_pair( const t3dComposedStaticV3Source_t &s, const uin
     return true;
 }
 
-static bool t3d_cs_pixel( const t3dComposedStaticV3Source_t &s, const t3dComposedStaticV3Footprint_t &foot,
+static bool t3d_cs_pixel( const t3dComposedStaticV1Source_t &s, const t3dComposedStaticV1Footprint_t &foot,
                           const uint32_t x, const uint32_t y, t3dCsMaterial_t &rResult )
 {
     const float fx = float( int32_t( x ) - int32_t( T3D_CS_PAGE_GUTTER ) ) + 0.5f;
@@ -148,7 +148,7 @@ static bool t3d_cs_pixel( const t3dComposedStaticV3Source_t &s, const t3dCompose
     int32_t cell_x = int32_t( floorf( ct[0] ) ), cell_y = int32_t( floorf( ct[1] ) );
     uint32_t controls[4]{};
     if ( !s.m_pReadControl( s.m_pUser, cell_x, cell_y, controls[0] ) ) return false;
-    if ( s.m_nSamplingMode == T3D_CS_STATIC_V3_SAMPLE_NEAREST ) {
+    if ( s.m_nSamplingMode == T3D_CS_STATIC_V1_SAMPLE_NEAREST ) {
         return t3d_cs_control_pair( s, controls[0], world, foot.m_fWorldStepX, foot.m_fWorldStepY, rResult );
     }
     if ( !s.m_pReadControl( s.m_pUser, cell_x + 1, cell_y, controls[1] ) ||
@@ -159,7 +159,7 @@ static bool t3d_cs_pixel( const t3dComposedStaticV3Source_t &s, const t3dCompose
     }
     float tx = ct[0] - floorf( ct[0] ), ty = ct[1] - floorf( ct[1] );
     float w[4] = { ( 1.0f - tx ) * ( 1.0f - ty ), tx * ( 1.0f - ty ), ( 1.0f - tx ) * ty, tx * ty };
-    if ( s.m_nSamplingMode == T3D_CS_STATIC_V3_SAMPLE_TOP_TWO ) {
+    if ( s.m_nSamplingMode == T3D_CS_STATIC_V1_SAMPLE_TOP_TWO ) {
         uint32_t first = 0u, second = 1u;
         if ( w[1] > w[0] ) { first = 1u; second = 0u; }
         for ( uint32_t j = 2u; j < 4u; ++j ) {
@@ -229,11 +229,11 @@ static void t3d_cs_pack_channel_bytes( t3dCsMaterial_t &material, const uint32_t
     }
 }
 
-// P09: evaluate the exact same bounded static-V3 material function for both
+// P09: evaluate the exact same bounded static-V1 material function for both
 // legacy byte/BC sidecar cooking and a pre-encoding float reference. The float
 // path does not set or require the authoritative visual-parity approval bit.
 // It is an R&D capture endpoint, never a runtime surface publication path.
-static bool t3d_cs_static_v3_evaluate_shared( void *pUser,
+static bool t3d_cs_static_v1_evaluate_shared( void *pUser,
                                              const t3dComposedSurfaceCookPage_t &page,
                                              const uint32_t nChannel,
                                              uint8_t *pRgba,
@@ -242,11 +242,11 @@ static bool t3d_cs_static_v3_evaluate_shared( void *pUser,
 {
     if ( !pUser || ( pRgba == NULL ) == ( pLinear == NULL ) ||
          nOutputElements != T3D_CS_RGBA_SCRATCH_BYTES || nChannel >= T3D_CS_CHANNEL_COUNT ) return false;
-    auto &adapter = *static_cast< t3dComposedStaticV3CookAdapter_t * >( pUser );
+    auto &adapter = *static_cast< t3dComposedStaticV1CookAdapter_t * >( pUser );
     const auto &s = adapter.m_source;
-    if ( !t3d_cs_static_v3_eligible( s ) ) return false;
+    if ( !t3d_cs_static_v1_eligible( s ) ) return false;
     if ( pRgba && !( s.m_bCanonicalMaterialParityAccepted || s.m_bReferenceOnly ) ) return false;
-    t3dComposedStaticV3Footprint_t foot{};
+    t3dComposedStaticV1Footprint_t foot{};
     if ( !s.m_pResolvePage( s.m_pUser, page, foot ) ) return false;
     const float *components = &foot.m_fWorldOrigin[0];
     for ( uint32_t i = 0u; i < sizeof( foot ) / sizeof( float ); ++i ) {
@@ -287,15 +287,15 @@ static bool t3d_cs_static_v3_evaluate_shared( void *pUser,
     return true;
 }
 
-bool t3d_cs_static_v3_evaluate_all( void *pUser, const t3dComposedSurfaceCookPage_t &page,
+bool t3d_cs_static_v1_evaluate_all( void *pUser, const t3dComposedSurfaceCookPage_t &page,
                                     uint8_t *pRgbaAll, const uint32_t nRgbaBytes )
 {
     if ( !pUser || !pRgbaAll || nRgbaBytes != T3D_CS_RGBA_SCRATCH_BYTES ) return false;
-    auto &adapter = *static_cast< t3dComposedStaticV3CookAdapter_t * >( pUser );
+    auto &adapter = *static_cast< t3dComposedStaticV1CookAdapter_t * >( pUser );
     const auto &s = adapter.m_source;
-    if ( !t3d_cs_static_v3_eligible( s ) ||
+    if ( !t3d_cs_static_v1_eligible( s ) ||
          !( s.m_bCanonicalMaterialParityAccepted || s.m_bReferenceOnly ) ) return false;
-    t3dComposedStaticV3Footprint_t foot{};
+    t3dComposedStaticV1Footprint_t foot{};
     if ( !s.m_pResolvePage( s.m_pUser, page, foot ) ) return false;
     const float *components = &foot.m_fWorldOrigin[0];
     for ( uint32_t i = 0u; i < sizeof( foot ) / sizeof( float ); ++i )
@@ -313,38 +313,38 @@ bool t3d_cs_static_v3_evaluate_all( void *pUser, const t3dComposedSurfaceCookPag
     return true;
 }
 
-bool t3d_cs_static_v3_evaluate( void *pUser, const t3dComposedSurfaceCookPage_t &page,
+bool t3d_cs_static_v1_evaluate( void *pUser, const t3dComposedSurfaceCookPage_t &page,
                                 const uint32_t nChannel, uint8_t *pRgba, const uint32_t nBytes )
 {
-    return t3d_cs_static_v3_evaluate_shared( pUser, page, nChannel, pRgba, NULL, nBytes );
+    return t3d_cs_static_v1_evaluate_shared( pUser, page, nChannel, pRgba, NULL, nBytes );
 }
 
-bool t3d_cs_static_v3_evaluate_linear_f32( void *pUser, const t3dComposedSurfaceCookPage_t &page,
+bool t3d_cs_static_v1_evaluate_linear_f32( void *pUser, const t3dComposedSurfaceCookPage_t &page,
                                            const uint32_t nChannel, float *pLinear, const uint32_t nFloatCount )
 {
-    return t3d_cs_static_v3_evaluate_shared( pUser, page, nChannel, NULL, pLinear, nFloatCount );
+    return t3d_cs_static_v1_evaluate_shared( pUser, page, nChannel, NULL, pLinear, nFloatCount );
 }
 
-bool t3d_cs_static_v3_encode( void *pUser, const uint32_t nChannel,
+bool t3d_cs_static_v1_encode( void *pUser, const uint32_t nChannel,
                               const uint8_t *pRgba, const uint32_t nRgbaBytes,
                               uint8_t *pCompressed, const uint32_t nCapacity, uint32_t &rWritten )
 {
     if ( !pUser ) return false;
-    auto &adapter = *static_cast< t3dComposedStaticV3CookAdapter_t * >( pUser );
+    auto &adapter = *static_cast< t3dComposedStaticV1CookAdapter_t * >( pUser );
     return adapter.m_pEncoder && adapter.m_pEncoder( adapter.m_pEncoderUser, nChannel,
                                                       pRgba, nRgbaBytes, pCompressed, nCapacity, rWritten );
 }
 
-bool t3d_cs_static_v3_make_cook_source( t3dComposedStaticV3CookAdapter_t &adapter,
+bool t3d_cs_static_v1_make_cook_source( t3dComposedStaticV1CookAdapter_t &adapter,
                                         const uint64_t nFingerprint, t3dComposedSurfaceCookSource_t &rCook )
 {
     rCook = {};
-    if ( !nFingerprint || !adapter.m_pEncoder || !t3d_cs_static_v3_eligible( adapter.m_source ) ||
+    if ( !nFingerprint || !adapter.m_pEncoder || !t3d_cs_static_v1_eligible( adapter.m_source ) ||
          !( adapter.m_source.m_bCanonicalMaterialParityAccepted || adapter.m_source.m_bReferenceOnly ) ) return false;
     rCook.m_pUser = &adapter;
-    rCook.m_pEvaluate = t3d_cs_static_v3_evaluate;
-    rCook.m_pEvaluateAll = t3d_cs_static_v3_evaluate_all;
-    rCook.m_pEncode = t3d_cs_static_v3_encode;
+    rCook.m_pEvaluate = t3d_cs_static_v1_evaluate;
+    rCook.m_pEvaluateAll = t3d_cs_static_v1_evaluate_all;
+    rCook.m_pEncode = t3d_cs_static_v1_encode;
     rCook.m_nSourceFingerprint = nFingerprint;
     rCook.m_bCanonicalMaterialParityAccepted = adapter.m_source.m_bCanonicalMaterialParityAccepted;
     rCook.m_bReferenceOnly = adapter.m_source.m_bReferenceOnly;

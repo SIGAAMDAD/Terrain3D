@@ -2,7 +2,7 @@
 """P09 fail-closed three-stage composed material fidelity gate.
 
 Compare same-footprint captures from (1) live raster composition, (2) the
-uncompressed float V3 CPU/reference baker, and (3) compressed-then-decoded
+uncompressed float V1 CPU/reference baker, and (3) compressed-then-decoded
 BC output. Stage one measures source-semantic errors; stage two isolates BC
 encoding and reconstruction errors. The byte encoder remains off-by-default.
 

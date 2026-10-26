@@ -26,6 +26,7 @@ const CONTROL_GROUP_PREFIXES = [
 const HistoryGraph = preload("res://addons/terrain_3d/src/runtime_profiler_history_graph.gd")
 const ResidencyGrid = preload("res://addons/terrain_3d/src/runtime_profiler_residency_grid.gd")
 const RuntimeOverlay = preload("res://addons/terrain_3d/src/runtime_profiler_overlay.gd")
+const RuntimeStatusSnapshot = preload("res://addons/terrain_3d/diagnostics/runtime_status_snapshot.gd")
 
 const DEFAULT_HISTORY_SAMPLES: int = 6000
 const MAX_HISTORY_SAMPLES: int = 60000
@@ -53,6 +54,9 @@ var _efficiency_tree: Tree
 var _diagnostics_memory_tree: Tree
 var _diagnostics_pipeline_tree: Tree
 var _diagnostics_cache_tree: Tree
+var _diagnostics_authoring_tree: Tree
+var _diagnostics_capability_tree: Tree
+var _diagnostics_artifacts_tree: Tree
 var _diagnostics_cpu_tree: Tree
 var _diagnostics_gpu_tree: Tree
 var _diagnostics_rd_tree: Tree
@@ -281,6 +285,9 @@ func _build_diagnostics_tab() -> void:
 	_diagnostics_cache_tree = _create_diagnostics_tree(root, "Cache Inventory", PackedStringArray([
 		"Cache", "Resident / cap", "Current / peak", "Hits / misses", "Hit rate", "Evictions", "Queued", "Preparing", "Uploading", "Requested", "Effective", "Limit"
 	]), 220.0)
+	_diagnostics_authoring_tree = _create_diagnostics_tree(root, "TOOL-01 | Authoring & World / VT Feedback (read-only)", PackedStringArray(["Published metric", "Value", "Owner key", "Availability / snapshot age"]), 260.0)
+	_diagnostics_capability_tree = _create_diagnostics_tree(root, "TOOL-02 | Shader & VRS Capability (read-only)", PackedStringArray(["Capability", "Compiled", "Available", "Selected", "Active", "Fallback", "Failure", "Source"]), 240.0)
+	_diagnostics_artifacts_tree = _create_diagnostics_tree(root, "TOOL-03 | Cold & Runtime Cache / Codec (read-only)", PackedStringArray(["Published metric", "Value", "Owner key", "Availability / snapshot age"]), 290.0)
 	_diagnostics_cpu_tree = _create_diagnostics_tree(root, "CPU Profiling", PackedStringArray(["Subsystem", "Last", "Meaning"]), 210.0)
 	_diagnostics_gpu_tree = _create_diagnostics_tree(root, "GPU Information", PackedStringArray(["Class", "Terrain3D value", "Scope / meaning"]), 150.0)
 	_diagnostics_rd_tree = _create_diagnostics_tree(root, "RenderingDevice Experiment", PackedStringArray(["Metric", "Value", "Meaning"]), 240.0)
@@ -307,9 +314,34 @@ func _update_diagnostics_products(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	_update_memory_budget_product(p_snapshot.map_value("memory"))
 	_update_render_pipeline_product(p_snapshot.map_array("active_render_pipeline"))
 	_update_cache_inventory_product(p_snapshot.map_array("cache_inventory"))
+	_update_status_products(p_snapshot)
 	_update_cpu_profile_product(p_snapshot.map_value("cpu_profile"))
 	_update_gpu_information_product(p_snapshot.map_value("gpu_information"))
 	_update_rd_renderer_product()
+
+
+func _update_status_products(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+	_update_owner_status_tree(_diagnostics_authoring_tree, RuntimeStatusSnapshot.authoring_rows(p_snapshot))
+	_update_owner_status_tree(_diagnostics_artifacts_tree, RuntimeStatusSnapshot.cache_rows(p_snapshot))
+	_diagnostics_capability_tree.clear()
+	var root: TreeItem = _diagnostics_capability_tree.create_item()
+	for row: Dictionary in RuntimeStatusSnapshot.capability_rows(p_snapshot):
+		var item: TreeItem = _diagnostics_capability_tree.create_item(root)
+		for index: int in range(8):
+			item.set_text(index, str(row.get(["name", "compiled", "available", "selected", "active", "fallback", "failure", "source"][index], "unavailable")))
+		item.set_tooltip_text(7, str(row.get("source", "unavailable")))
+
+
+func _update_owner_status_tree(p_tree: Tree, p_rows: Array[Dictionary]) -> void:
+	p_tree.clear()
+	var root: TreeItem = p_tree.create_item()
+	for row: Dictionary in p_rows:
+		var item: TreeItem = p_tree.create_item(root)
+		item.set_text(0, str(row.get("name", "")))
+		item.set_text(1, str(row.get("value", "unavailable")))
+		item.set_text(2, str(row.get("source", "unavailable")))
+		item.set_text(3, str(row.get("status", "unavailable")))
+		item.set_tooltip_text(2, str(row.get("source", "unavailable")))
 
 
 func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
@@ -368,9 +400,13 @@ func _update_cache_inventory_product(p_caches: Array[Terrain3DRuntimeValueMap]) 
 	var root: TreeItem = _diagnostics_cache_tree.create_item()
 	for cache: Terrain3DRuntimeValueMap in p_caches:
 		var item: TreeItem = _diagnostics_cache_tree.create_item(root)
-		item.set_text(0, _humanize_name(cache.string_value("cache_name")))
+		var cache_name: String = cache.string_value("cache_name")
+		item.set_text(0, "GPU region pages (not V1 VT)" if cache_name == "gpu_terrain_pages" else _humanize_name(cache_name))
 		item.set_text(1, "%d / %d" % [cache.int_value("resident"), cache.int_value("effective_capacity")])
-		item.set_text(2, "%s / %s" % [Terrain3DRuntimeValueMap.format_bytes(cache.float_value("current_bytes")), Terrain3DRuntimeValueMap.format_bytes(cache.float_value("peak_bytes"))])
+		# Shader bytes are an unimplemented placeholder in the native cache
+		# inventory. Other owner bytes are reservations, not V1 VT residency.
+		var bytes_available: bool = cache_name != "shader_cache" and cache.has("current_bytes") and cache.has("peak_bytes")
+		item.set_text(2, "%s / %s" % [Terrain3DRuntimeValueMap.format_bytes(cache.float_value("current_bytes")), Terrain3DRuntimeValueMap.format_bytes(cache.float_value("peak_bytes"))] if bytes_available else "unavailable")
 		item.set_text(3, "unavailable" if cache.int_value("hits", -1) < 0 else "%d / %d" % [cache.int_value("hits"), cache.int_value("misses")])
 		item.set_text(4, "unavailable" if cache.float_value("hit_rate", -1.0) < 0.0 else "%.1f%%" % (cache.float_value("hit_rate") * 100.0))
 		item.set_text(5, str(cache.int_value("evictions")))
@@ -395,16 +431,15 @@ func _update_cpu_profile_product(p_cpu: Terrain3DRuntimeValueMap) -> void:
 		["Node streaming / migration", "node_streaming_migration_cpu_usec", "Node streamer CPU work"],
 		["Baked lighting streaming", "baked_lighting_streaming_cpu_usec", "Lightmap residency CPU work"],
 		["Collision rebuild", "collision_rebuild_cpu_usec", "Collision CPU work"],
-		["Far height rebuild", "far_height_rebuild_cpu_usec", "Far atlas CPU rebuild"],
-		["Far color rebuild", "far_color_rebuild_cpu_usec", "Far atlas CPU rebuild"],
-		["Far atlas publication", "far_atlas_publication_cpu_usec", "CPU time spent submitting the full far Texture2D payload"],
-		["Far atlas rebuild / publication", "far_atlas_rebuild_publication_cpu_usec", "Combined far-atlas rebuild and texture publication CPU"],
+		# The native CPU profile currently substitutes zero for four deleted FAR
+		# timing producers. Their values are never real timing measurements.
+		["FAR / V1 cook and publication", "", "Owner timing has not been published"],
 		["Profiler collection", "profiler_collection_cpu_usec_last", "Diagnostics collection overhead"],
 	]
 	for row: Array in rows:
 		var item: TreeItem = _diagnostics_cpu_tree.create_item(root)
 		item.set_text(0, str(row[0]))
-		item.set_text(1, _format_usec(p_cpu.float_value(str(row[1]))))
+		item.set_text(1, _format_usec(p_cpu.float_value(str(row[1]))) if not str(row[1]).is_empty() and p_cpu.has(str(row[1])) else "unavailable")
 		item.set_text(2, str(row[2]))
 
 
@@ -1171,9 +1206,9 @@ func _update_pressure(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	var instance_cache: Terrain3DRuntimeValueMap = p_snapshot.map_value("instance_cache")
 	var instancer: Terrain3DRuntimeValueMap = p_snapshot.map_value("instancer")
 	var nodes: Terrain3DRuntimeValueMap = p_snapshot.map_value("nodes")
-	_set_pressure("gpu_residency", "GPU mapped pages", gpu.float_value("resident"),
+	_set_pressure("gpu_residency", "GPU region-cache pages", gpu.float_value("resident"),
 		gpu.float_value("capacity"), "gpu_missing_required")
-	_set_pressure("gpu_upload_pages", "GPU upload pages / tick", gpu.float_value("uploads_last_tick"),
+	_set_pressure("gpu_upload_pages", "GPU region-page uploads / tick", gpu.float_value("uploads_last_tick"),
 		gpu.float_value("effective_upload_limit_last_tick"), "gpu_missing_required")
 	_set_pressure("gpu_upload_bytes", "GPU upload bytes", gpu.float_value("upload_bytes_last_tick"),
 		gpu.float_value("upload_budget_mb") * 1048576.0, "gpu_upload_bytes", true)
@@ -1207,7 +1242,7 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	var aggregate_root: Terrain3DRuntimeValueMap = p_snapshot.map_value("aggregate")
 	var aggregate: Terrain3DRuntimeValueMap = aggregate_root.map_value("gpu")
 	var required_ratio: float = gpu.float_value("required_residency_ratio", 1.0)
-	_add_efficiency_row(root, "Required residency", "%.1f%%" % (required_ratio * 100.0),
+	_add_efficiency_row(root, "Region required residency", "%.1f%%" % (required_ratio * 100.0),
 		"%d / %d pages" % [gpu.int_value("required_resident_last_tick"), gpu.int_value("required_last_tick")])
 	var cooked_ratio: float = aggregate.float_value("cooked_hit_ratio", -1.0)
 	_add_efficiency_row(root, "Cooked-page hit rate",
@@ -1219,7 +1254,7 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		"%d used / %d discarded / %d pending" % [gpu.int_value("prefetch_used_total"),
 			gpu.int_value("prefetch_discarded_total"), gpu.int_value("prefetch_pending")])
 	var departed_pages: int = gpu.int_value("departed_pages_total")
-	_add_efficiency_row(root, "Average GPU-page lifetime",
+	_add_efficiency_row(root, "Average GPU region-page lifetime",
 		"%.1f ticks" % gpu.float_value("average_resident_ticks") if departed_pages > 0 else "No departures",
 		"%d departed pages since cache reset" % departed_pages)
 	var distance_m: float = aggregate.float_value("distance_travelled_m")
@@ -1227,22 +1262,38 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		if distance_m > 0.0 else "No movement", "%.1f m sampled" % distance_m)
 	_add_efficiency_row(root, "Eviction rate", "%.2f / km" % aggregate.float_value("evictions_per_km")
 		if distance_m > 0.0 else "No movement", "%d total evictions" % aggregate.int_value("evictions"))
+	# The ordinary runtime snapshot publishes a *flat* budget model. Its
+	# deep-only fixed/managed submaps are absent until deep introspection runs.
+	# Do not silently turn missing keys into zero, or sum unrelated caches as
+	# if they were live V1 physical pages.
+	var known_key: String = "tracked_current_residency_bytes" if memory.has("tracked_current_residency_bytes") else "current_known_bytes"
+	_add_efficiency_row(root, "Terrain3D known memory",
+		Terrain3DRuntimeValueMap.format_bytes(memory.float_value(known_key)) if memory.has(known_key) else "unavailable",
+		"Terrain3D owner accounting" if known_key == "tracked_current_residency_bytes" else "runtime memory budget model, not GPU physical VT residency")
 	var fixed_memory: Terrain3DRuntimeValueMap = memory.map_value("fixed_unavoidable")
 	var managed_memory: Terrain3DRuntimeValueMap = memory.map_value("managed_resident")
-	_add_efficiency_row(root, "Terrain3D tracked memory", Terrain3DRuntimeValueMap.format_bytes(memory.float_value("tracked_current_residency_bytes")),
-		"Tracked current Terrain3D-owned memory; unavailable renderer/driver allocations remain explicit")
+	var cpu_available: bool = fixed_memory.has("repository_and_authoritative_storage_bytes") and managed_memory.has("cpu_terrain_page_cache_bytes")
 	_add_efficiency_row(root, "Terrain map CPU memory",
 		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("cpu_terrain_page_cache_bytes") +
-			fixed_memory.float_value("repository_and_authoritative_storage_bytes")),
-		"CPU page cache + authoritative repository/storage")
-	_add_efficiency_row(root, "Terrain texture GPU memory",
-		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("gpu_terrain_page_pool_bytes") + fixed_memory.float_value("far_atlas_bytes") +
-			fixed_memory.float_value("material_texture_arrays_bytes")), "managed terrain pages + fixed far atlas/material arrays")
+			fixed_memory.float_value("repository_and_authoritative_storage_bytes")) if cpu_available else "unavailable (deep snapshot)",
+		"CPU page cache + authoritative repository/storage (deep owner estimate)")
+	# This is an estimated reservation of the legacy *region* page pool.
+	# It does not measure Terrain3DVirtualTexture physical V1 page residency.
+	var region_gpu_available: bool = managed_memory.has("gpu_terrain_page_pool_estimated_bytes")
+	_add_efficiency_row(root, "GPU region-cache reservation",
+		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("gpu_terrain_page_pool_estimated_bytes")) if region_gpu_available else "unavailable (deep snapshot)",
+		"Region page cache owner estimate; excludes physical V1 pages")
+	_add_efficiency_row(root, "V1 VT physical-page bytes", "unavailable",
+		"Terrain3DVirtualTexture does not publish physical resident bytes in this snapshot")
+	var v1_source_cache_available: bool = gpu.has("source_io_cache_resident_bytes")
+	_add_efficiency_row(root, "Region source I/O cache",
+		Terrain3DRuntimeValueMap.format_bytes(gpu.float_value("source_io_cache_resident_bytes")) if v1_source_cache_available else "unavailable",
+		"GPU region-cache owner source I/O range cache; excludes physical V1 pages")
+	var instance_available: bool = managed_memory.has("instance_region_page_bytes") and fixed_memory.has("active_multimesh_bytes") and fixed_memory.has("instancer_retained_bytes")
 	_add_efficiency_row(root, "Instance resident memory",
 		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("instance_region_page_bytes") +
-			fixed_memory.float_value("active_multimesh_bytes") + fixed_memory.float_value("instancer_retained_bytes")),
+			fixed_memory.float_value("active_multimesh_bytes") + fixed_memory.float_value("instancer_retained_bytes")) if instance_available else "unavailable (deep snapshot)",
 		"instance pages + active RD instance data + retained instancer containers")
-
 
 func _add_efficiency_row(p_root: TreeItem, p_metric: String, p_value: String, p_context: String) -> void:
 	var item: TreeItem = _efficiency_items.get(p_metric)

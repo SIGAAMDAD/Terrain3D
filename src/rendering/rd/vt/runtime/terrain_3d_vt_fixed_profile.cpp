@@ -4,28 +4,11 @@
 
 #define T3D_VT_MASK( channel ) T3D_VT_LOGICAL_CHANNEL_BIT( channel )
 
-static uint32_t t3d_vt_fixed_profile_consumer_allowed_mask(
-	const t3dVTConsumer_t Consumer ) {
-	switch ( Consumer ) {
-	case T3D_VT_CONSUMER_CLIPMAP:
-		return T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
-	case T3D_VT_CONSUMER_INSTANCE:
-		return T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
-	default:
-		return 0u;
-	}
+static uint32_t t3d_vt_fixed_profile_consumer_allowed_mask( const t3dVTConsumer_t consumer ) {
+    return t3d_vt_consumer_allowed_mask( consumer );
 }
-
-static uint32_t t3d_vt_fixed_profile_consumer_required_mask(
-	const t3dVTConsumer_t Consumer ) {
-	switch ( Consumer ) {
-	case T3D_VT_CONSUMER_CLIPMAP:
-		return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR );
-	case T3D_VT_CONSUMER_INSTANCE:
-		return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO );
-	default:
-		return 0u;
-	}
+static uint32_t t3d_vt_fixed_profile_consumer_required_mask( const t3dVTConsumer_t consumer ) {
+    return t3d_vt_consumer_required_mask( consumer );
 }
 
 static uint32_t t3d_vt_fixed_profile_clamp_source_extent(
@@ -35,21 +18,23 @@ static uint32_t t3d_vt_fixed_profile_clamp_source_extent(
 
 static const t3dVTFixedProfileDesc_t s_VtFixedProfiles[T3D_VT_FIXED_PROFILE_COUNT] = {
 	// Just Make It Run: Albedo 256, PBR/Normal 128, no Height/ORM.
-	{ { 256u, 128u, 0u, 128u, 0u },
+	{ { 256u, 128u, 128u, 128u, 0u, 128u },
 	  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR ) |
-		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) },
+		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) |
+          T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_HEIGHT ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) },
 	// Low: Albedo 512, 256 secondary maps, no Height.
-	{ { 512u, 256u, 0u, 256u, 256u },
+	{ { 512u, 256u, 256u, 256u, 256u, 256u },
 	  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR ) |
-		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ORM ) },
+		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ORM ) |
+          T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_HEIGHT ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) },
 	// Normal: Albedo 1024, 512 secondary maps.
-	{ { 1024u, 512u, 512u, 512u, 512u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
+	{ { 1024u, 512u, 512u, 512u, 512u, 512u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 	// High: Albedo 2048, 1024 secondary maps.
-	{ { 2048u, 1024u, 1024u, 1024u, 1024u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
+	{ { 2048u, 1024u, 1024u, 1024u, 1024u, 1024u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 	// Very High: Albedo 4096, 2048 secondary maps.
-	{ { 4096u, 2048u, 2048u, 2048u, 2048u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
+	{ { 4096u, 2048u, 2048u, 2048u, 2048u, 2048u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 	// Make My GPU SCREAM: all channels at 4096.
-	{ { 4096u, 4096u, 4096u, 4096u, 4096u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
+	{ { 4096u, 4096u, 4096u, 4096u, 4096u, 4096u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 };
 
 const t3dVTFixedProfileDesc_t *t3d_vt_fixed_profile_get(

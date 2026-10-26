@@ -579,6 +579,129 @@ void Terrain3DCollision::initialize(
 	build();
 }
 
+bool Terrain3DCollision::editedSamplesTouchShape(
+	const Vector2i &rShapeGridPosition,
+	const int nShapeSize,
+	const Vector2i &rSampleMin,
+	const Vector2i &rSampleMax ) const {
+	return rShapeGridPosition.x <= rSampleMax.x && rShapeGridPosition.y <= rSampleMax.y &&
+		   rShapeGridPosition.x + nShapeSize >= rSampleMin.x &&
+		   rShapeGridPosition.y + nShapeSize >= rSampleMin.y;
+}
+
+void Terrain3DCollision::requestEditedHeightfieldArea(
+	const AABB &rArea ) {
+	if ( !m_bInitialized || !m_pTerrain || !m_pTerrain->dataObject() || m_bColdRebuildPending ) {
+		return;
+	}
+	const real_t inverse_spacing = 1.0f / s_fRegionVertexSpacing;
+	const Vector3 end = rArea.get_end();
+	// Include the shared (shape_size + 1) edge vertex and the sampling halo.
+	const Vector2i first( ( int ) Math::floor( rArea.position.x * inverse_spacing ) - 1,
+		( int ) Math::floor( rArea.position.z * inverse_spacing ) - 1 );
+	const Vector2i last( ( int ) Math::ceil( end.x * inverse_spacing ) + 1,
+		( int ) Math::ceil( end.z * inverse_spacing ) + 1 );
+	if ( usesDynamicShapePool() ) {
+		for ( int i = 0; i < m_nShapeRecordCount; ++i ) {
+			const Vector2i position = m_szShapeRecords[i].m_gridPosition;
+			if ( position != s_v2iMax && editedSamplesTouchShape( position, m_nShapeSize, first, last ) ) {
+				m_dirtyEditedShapes.set( ( size_t ) i );
+			}
+		}
+		const int grid_width = t3dIntCeilPow2( m_nRadius * 2 / m_nShapeSize, 4 );
+		const int grid_count = grid_width * grid_width;
+		if ( grid_count != m_nShapeRecordCount || grid_count > T3D_MAX_COLLISION_SHAPE_RECORDS ) {
+			requestColdRebuild();
+			return;
+		}
+		const Vector2i snapped = snapToGrid( m_pTerrain->getClipmapTargetPosition() / s_fRegionVertexSpacing );
+		const Vector2i corner = snapped - V2I( grid_width / 2 ) * m_nShapeSize;
+		for ( int i = 0; i < grid_count; ++i ) {
+			if ( !m_emptyGridCells.test( ( size_t ) i ) ) {
+				continue;
+			}
+			const Vector2i position = corner + Vector2i( i % grid_width, i / grid_width ) * m_nShapeSize;
+			if ( editedSamplesTouchShape( position, m_nShapeSize, first, last ) ) {
+				m_emptyGridCells.reset( ( size_t ) i );
+				m_bDynamicUpdatePending = true;
+			}
+		}
+		return;
+	}
+	const t3dRegionCoord_t *const slots = m_pTerrain->dataObject()->getRegionSlotsInternal();
+	const int slot_count = m_pTerrain->dataObject()->getRegionSlotCountInternal();
+	if ( slot_count != m_nShapeRecordCount ) {
+		requestColdRebuild();
+		return;
+	}
+	for ( int i = 0; i < slot_count; ++i ) {
+		if ( !t3dRegionCoordValid( slots[i] ) ) {
+			continue;
+		}
+		const Vector2i location = t3dUnpackRegionCoord( slots[i] );
+		if ( editedSamplesTouchShape( location * T3D_REGION_SIZE, T3D_REGION_SIZE, first, last ) ) {
+			m_dirtyEditedShapes.set( ( size_t ) i );
+		}
+	}
+}
+
+void Terrain3DCollision::serviceEditedDynamicShapes(
+	const Vector2i &rTarget,
+	const uint64_t nStartedUsec ) {
+	const int64_t immediate_radius = ( int64_t ) m_nShapeSize * 2;
+	const int64_t immediate_radius_squared = immediate_radius * immediate_radius;
+	const Vector2i shape_offset = V2I( m_nShapeSize / 2 );
+	for ( int pass = 0; pass < 2; ++pass ) {
+		for ( int i = 0; i < m_nShapeRecordCount; ++i ) {
+			if ( !m_dirtyEditedShapes.test( ( size_t ) i ) ) {
+				continue;
+			}
+			t3dCollisionShapeRecord_t &record = m_szShapeRecords[i];
+			if ( record.m_gridPosition == s_v2iMax ) {
+				m_dirtyEditedShapes.reset( ( size_t ) i );
+				continue;
+			}
+			const Vector2i center = record.m_gridPosition + shape_offset;
+			if ( ( center.distance_squared_to( rTarget ) <= immediate_radius_squared ) != ( pass == 0 ) ) {
+				continue;
+			}
+			if ( m_nShapesRebuiltLastUpdate >= 16 ||
+				Time::get_singleton()->get_ticks_usec() - nStartedUsec >= 2000u ) {
+				m_bDynamicUpdatePending = true;
+				return;
+			}
+			record.m_nPendingHeightBuffer = ( uint8_t ) ( record.m_nUploadedHeightBuffer ^ 1u );
+			PackedRealArray &heights = record.m_dynamicHeightBuffers[record.m_nPendingHeightBuffer];
+			record.m_bEmptySurface = false;
+			const uint64_t started = Time::get_singleton()->get_ticks_usec();
+			const bool ready = getShapeData( record.m_gridPosition, m_nShapeSize, record, heights );
+			m_nPreparationUsecLast += Time::get_singleton()->get_ticks_usec() - started;
+			if ( !ready ) {
+				if ( record.m_bEmptySurface ) {
+					shapeSetDisabled( i, true );
+					++m_nShapesDeactivatedLastUpdate;
+					// Keep its grid assignment and RID for future hole-fill edits.
+					m_dirtyEditedShapes.reset( ( size_t ) i );
+					continue;
+				}
+				m_bDynamicUpdatePending = true;
+				continue;
+			}
+			Transform3D transform = record.m_data.m_transform;
+			transform.scale( Vector3( s_fRegionVertexSpacing, 1.0f, s_fRegionVertexSpacing ) );
+			shapeSetTransform( i, transform );
+			const uint64_t upload_started = Time::get_singleton()->get_ticks_usec();
+			shapeSetData( i, heights );
+			m_nUploadUsecLast += Time::get_singleton()->get_ticks_usec() - upload_started;
+			record.m_nUploadedHeightBuffer = record.m_nPendingHeightBuffer;
+			shapeSetDisabled( i, false );
+			m_nHeightSamplesUploadedLastUpdate += heights.size();
+			++m_nShapesRebuiltLastUpdate;
+			m_dirtyEditedShapes.reset( ( size_t ) i );
+		}
+	}
+}
+
 void Terrain3DCollision::onRegionMapChanged(
 	void ) {
 	// The region-map transition is serviced by Terrain3D::physicsProcess().
@@ -800,7 +923,7 @@ void Terrain3DCollision::update(
 		const Vector2i snapped_position = snapToGrid( m_pTerrain->getClipmapTargetPosition() / fSpacing );
 		LOG( EXTREME, "Updating collision at ", snapped_position );
 		refreshBakedRegionCache( snapped_position );
-		if ( !bRebuild && !m_bDynamicUpdatePending && m_lastSnappedPos == snapped_position ) {
+		if ( !bRebuild && !m_bDynamicUpdatePending && m_dirtyEditedShapes.none() && m_lastSnappedPos == snapped_position ) {
 			m_bUpdateSkippedUnchangedLast = true;
 			m_nUpdateUsecLast = Time::get_singleton()->get_ticks_usec() - start_time;
 			return;
@@ -830,6 +953,7 @@ void Terrain3DCollision::update(
 		for ( int shape_id = 0; shape_id < ( int ) ( m_nShapeRecordCount ); ++shape_id ) {
 			t3dCollisionShapeRecord_t &record = m_szShapeRecords[( size_t ) ( shape_id )];
 			if ( bRebuild || record.m_gridPosition == s_v2iMax ) {
+				m_dirtyEditedShapes.reset( ( size_t ) shape_id );
 				deactivateShape( shape_id );
 				++m_nShapesDeactivatedLastUpdate;
 				m_inactiveShapeIds.push_back( shape_id );
@@ -843,12 +967,15 @@ void Terrain3DCollision::update(
 				const int	   grid_index = gridLocation.y * grid_width + gridLocation.x;
 				if ( grid_index >= 0 && grid_index < grid_count && m_gridScratch[( size_t ) ( grid_index )] < 0 ) {
 					m_gridScratch[( size_t ) ( grid_index )] = shape_id;
-					shapeSetDisabled( shape_id, false );
+					if ( record.m_data.m_bValid && !record.m_bEmptySurface ) {
+						shapeSetDisabled( shape_id, false );
+					}
 					++m_nShapesReusedLastUpdate;
 					continue;
 				}
 			}
 
+			m_dirtyEditedShapes.reset( ( size_t ) shape_id );
 			deactivateShape( shape_id );
 			++m_nShapesDeactivatedLastUpdate;
 			m_inactiveShapeIds.push_back( shape_id );
@@ -858,6 +985,8 @@ void Terrain3DCollision::update(
 			m_emptyGridCells.reset();
 		}
 		m_bDynamicUpdatePending = false;
+		const uint64_t edited_work_started = Time::get_singleton()->get_ticks_usec();
+		serviceEditedDynamicShapes( snapped_position, edited_work_started );
 		const uint64_t shape_work_started = Time::get_singleton()->get_ticks_usec();
 		const int64_t  immediate_radius = ( int64_t ) m_nShapeSize * 2;
 		const int64_t  immediate_radius_squared = immediate_radius * immediate_radius;
@@ -947,7 +1076,8 @@ void Terrain3DCollision::update(
 			return;
 		}
 		const uint64_t streaming_generation = m_pTerrain->getRegionStreamingGeneration();
-		if ( !bRebuild && rRegionLoc == s_v2iMax && streaming_generation == m_nStreamingGenerationLast ) {
+		if ( !bRebuild && rRegionLoc == s_v2iMax && m_dirtyEditedShapes.none() &&
+			streaming_generation == m_nStreamingGenerationLast ) {
 			m_bUpdateSkippedUnchangedLast = true;
 			m_nUpdateUsecLast = Time::get_singleton()->get_ticks_usec() - start_time;
 			return;
@@ -956,6 +1086,7 @@ void Terrain3DCollision::update(
 			const int region_id = m_pTerrain->dataObject()->getRegionId( rRegionLoc );
 			if ( region_id >= 0 ) {
 				updateFullShape( region_id, rRegionLoc );
+				m_dirtyEditedShapes.reset( ( size_t ) region_id );
 				m_szFullStreamingResident[( size_t ) ( region_id )] = regionAllowsCollision( rRegionLoc ) ? 1u : 0u;
 			}
 		} else {
@@ -966,6 +1097,7 @@ void Terrain3DCollision::update(
 					 m_nFullRegionSlotCount != region_slot_count ||
 					 !t3dRegionCoordEquals( m_szFullRegionSlots[( size_t ) ( i )], region ) ) {
 					updateFullShape( i, region );
+					m_dirtyEditedShapes.reset( ( size_t ) i );
 					m_szFullStreamingResident[( size_t ) ( i )] = desired;
 				} else {
 					++m_nShapesReusedLastUpdate;
@@ -977,6 +1109,20 @@ void Terrain3DCollision::update(
 		}
 		m_nFullRegionSlotCount = region_slot_count;
 		m_nStreamingGenerationLast = streaming_generation;
+		const uint64_t dirty_started = Time::get_singleton()->get_ticks_usec();
+		for ( int i = 0; i < region_slot_count; ++i ) {
+			if ( !m_dirtyEditedShapes.test( ( size_t ) i ) ) {
+				continue;
+			}
+			if ( m_nShapesRebuiltLastUpdate >= 8 ||
+				Time::get_singleton()->get_ticks_usec() - dirty_started >= 2000u ) {
+				break;
+			}
+			const Vector2i region = t3dUnpackRegionCoord( pRegionSlots[i] );
+			updateFullShape( i, region );
+			m_szFullStreamingResident[( size_t ) i] = regionAllowsCollision( region ) ? 1u : 0u;
+			m_dirtyEditedShapes.reset( ( size_t ) i );
+		}
 	}
 	LOG( EXTREME,
 		 "Collision update time (sampling + full backend heightmap ingestion): ",
@@ -1017,6 +1163,7 @@ void Terrain3DCollision::destroy(
 	m_lastSnappedPos = s_v2iMax;
 	m_bDynamicUpdatePending = false;
 	m_emptyGridCells.reset();
+	m_dirtyEditedShapes.reset();
 	m_bRegionMapUpdatePending = false;
 	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
 		m_szFullRegionSlots[i] = t3dInvalidRegionCoord();
@@ -1273,6 +1420,7 @@ Dictionary Terrain3DCollision::getStats(
 	stats["full_regions_updated_last_update"] = m_nFullRegionsUpdatedLastUpdate;
 	stats["update_skipped_unchanged_last"] = m_bUpdateSkippedUnchangedLast;
 	stats["dynamic_update_pending"] = m_bDynamicUpdatePending;
+	stats["edited_shape_requests_pending"] = ( int64_t ) m_dirtyEditedShapes.count();
 	stats["rebuild_requested_last"] = m_bRebuildRequestedLast;
 	stats["full_region_slots"] = m_nFullRegionSlotCount;
 	stats["physics_layer"] = ( int64_t ) ( m_nLayer );

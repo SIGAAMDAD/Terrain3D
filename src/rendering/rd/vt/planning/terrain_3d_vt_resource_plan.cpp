@@ -157,7 +157,7 @@ bool t3d_vt_compute_resource_plan(
 	uint64_t nBytes = 0u;
 	uint64_t nCount = 0u;
 	if ( !t3dCheckedMultiply< uint64_t >( pLimits.nMaxMaterials, 4u, nCount ) ||
-		 !t3dCheckedAdd< uint64_t >( nCount, ( uint64_t ) T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 4u, nCount ) ||
+		 !t3dCheckedAdd< uint64_t >( nCount, ( uint64_t ) T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 12u, nCount ) ||
 		 !t3dCheckedMultiply< uint64_t >( nCount, pProfile.nVtAllocationRecordBytes, nBytes ) )
 		return false;
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_ALLOCATION_TABLE] = nBytes;
@@ -178,7 +178,7 @@ bool t3d_vt_compute_resource_plan(
 #endif
 
 	uint64_t nTailEntries = 0u;
-	if ( !t3dCheckedAdd< uint64_t >( pLimits.nMaxMaterials, T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY, nTailEntries ) ||
+	if ( !t3dCheckedAdd< uint64_t >( pLimits.nMaxMaterials, T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u, nTailEntries ) ||
 		 !t3dCheckedMultiply< uint64_t >( nTailEntries, 4u, nTailEntries ) || nTailEntries == 0u ||
 		 nTailEntries > UINT32_MAX ) {
 		return false;
@@ -208,7 +208,7 @@ bool t3d_vt_compute_resource_plan(
 	const uint64_t nLegacyTailRows64 = ( nTailEntries + T3D_VT_TAIL_TILES_PER_ROW - 1u ) / T3D_VT_TAIL_TILES_PER_ROW;
 	// BC1 can hold two logical channels (instance ALBEDO and ORM).
 	const uint64_t nPackFamilySlots =
-		( ( uint64_t ) pLimits.nMaxMaterials + T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) * 2u;
+		( ( uint64_t ) pLimits.nMaxMaterials + T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u ) * 3u;
 	const uint64_t nPackTailRows64 = ( nPackFamilySlots + T3D_VT_PACK_TAILS_PER_ROW - 1u ) / T3D_VT_PACK_TAILS_PER_ROW;
 	if ( T3D_VT_PACK_TAILS_PER_ROW == 0u || nLegacyTailRows64 == 0u || nPackTailRows64 == 0u ||
 		 nLegacyTailRows64 > UINT32_MAX / T3D_VT_TAIL_TILE ||
@@ -278,6 +278,11 @@ bool t3d_vt_compute_resource_plan(
 		return false;
 	}
 
+    if ( !t3d_vt_compute_block_texture_bytes( nTile, nTile, pLimits.nMaxVtPhysicalPageSets,
+                                              1u, 1u, 2u, rPlan.nVtPhysicalBytes[T3D_VT_RESOURCE_HEIGHT16] ) ) {
+        return false;
+    }
+
 	const uint32_t nTailWidth = rPlan.nVtTailAtlasWidth;
 	const uint32_t nTailHeight = rPlan.nVtTailAtlasHeight;
 	if ( !t3d_vt_compute_block_texture_bytes( nTailWidth,
@@ -316,6 +321,11 @@ bool t3d_vt_compute_resource_plan(
 											  rPlan.nVtTailBytes[T3D_VT_RESOURCE_HEIGHT] ) ) {
 		return false;
 	}
+
+    if ( !t3d_vt_compute_block_texture_bytes( nTailWidth, nTailHeight, 1u, 1u, 1u, 2u,
+                                              rPlan.nVtTailBytes[T3D_VT_RESOURCE_HEIGHT16] ) ) {
+        return false;
+    }
 
 	for ( uint32_t iChannel = 0u; iChannel < T3D_VT_CHANNEL_COUNT; ++iChannel ) {
 		if ( !t3d_vt_add_plan_bytes( rPlan.nVtPhysicalBytes[iChannel], rPlan.nTotalTextureBytes ) ||

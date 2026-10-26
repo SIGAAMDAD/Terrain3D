@@ -111,7 +111,7 @@ inline bool t3d_vt_feedback_multi_validate(
 		T3D_VT_FEEDBACK_MULTI_RECORD_WORDS;
 }
 
-// V3 must never call t3dVTFeedbackGridSlot_t::complete(), which checks V2.
+// V1 must never call t3dVTFeedbackGridSlot_t::complete(), which checks V2.
 struct t3dVTFeedbackMultiSlot_t
 {
 	t3dVTFeedbackGridHeader_t m_Header{};

@@ -547,16 +547,16 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
     vec4 surface_texel = vec4(1.0);
     if (has_surface) {
-        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v3(
+        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
             material.vtAllocation, 2u, footprint, base_plan, albedo_address);
-        surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+        surface_texel = t3d_vt_consumer_sample_orm_v1(surface_address);
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
         t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
 #endif
     }
     vt_address = t3d_vt_consumer_invalid_address();
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-        vt_address = t3d_vt_consumer_resolve_material_sibling_v3(
+        vt_address = t3d_vt_consumer_resolve_material_sibling_v1(
             material.vtAllocation, 1u, footprint, base_plan, albedo_address);
     }
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
@@ -945,7 +945,7 @@ void main() {
             t3d_inst_evaluate_surface(material, base_footprint, base_address_plan, base_albedo_address,
                 vt_address, metallic, roughness, ao, normal_scale);
             if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-                normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(vt_address), normal_scale), normal);
+                normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v1(vt_address), normal_scale), normal);
             }
         } // P63: only shaded pixels sample surface and normal
         emission += t3d_inst_unpack_rgbe9995(material.packedEmission);
@@ -965,7 +965,7 @@ void main() {
             ao = mix(ao, overlay_ao, overlay_weight);
             if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
                 vec3 overlay_normal = tangent_to_world(
-                    decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
+                    decode_normal_sample(t3d_vt_consumer_sample_normal_v1(overlay_vt_address), overlay_normal_scale), normal);
                 normal = normalize(mix(normal, overlay_normal, overlay_weight));
             }
         } // P63: overlay material's surface/normal paths

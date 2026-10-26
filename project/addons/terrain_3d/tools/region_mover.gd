@@ -7,7 +7,9 @@
 extends Terrain3D
 
 const INVALIDATED_DATASET_FILES := [
-	"terrain3d_far_atlas.t3dfar",
+	"terrain3d_instances.t3dvt",
+	"terrain3d_far_atlas.t3dfar", # One-time cleanup of obsolete cooked assets.
+	"terrain3d_far.t3dfar",
 	"terrain3d_world.t3dmanifest",
 	"terrain3d_cook.t3ddb",
 	"terrain3d_hlod_manifest.tres",
@@ -158,6 +160,13 @@ func _invalidate_location_dependent_artifacts(directory_path: String, directory:
 		_remove_relative_file(directory, page_name)
 	for file_name: String in INVALIDATED_DATASET_FILES:
 		_remove_relative_file(directory, file_name)
+	# Regional V1 page IDs are location-keyed; all old pages must be retired.
+	var regional_vt_directory: String = directory_path.path_join("terrain3d_far_vt")
+	var vt_folder := DirAccess.open(regional_vt_directory)
+	if vt_folder != null:
+		for file_name: String in vt_folder.get_files():
+			if file_name.ends_with(".t3avt"):
+				_remove_relative_file(vt_folder, file_name)
 	# A custom HLOD manifest inside the terrain data directory is just as stale as
 	# the default manifest after a region-coordinate shift.
 	var configured_hlod_path: String = hlod_manifest_path.simplify_path()

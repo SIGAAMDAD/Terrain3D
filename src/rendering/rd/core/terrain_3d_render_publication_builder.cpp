@@ -853,14 +853,16 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 		LOG( ERROR, "Unable to refresh Terrain3D regional shadowmask residency after lighting change" );
 		return false;
 	}
-	const uint64_t far_color_layout_generation = data->getFarPackedColorLayoutGeneration();
+    const uint64_t far_vt_publication_generation = rServices.m_virtualTexture.getPackagePublicationGeneration();
+    const uint64_t far_avt_source_publication_revision = data->getGpuFarAvtPublicationRevision();
 	const bool	   region_map_changed =
-		!m_bRegionMapInitialized || far_color_layout_generation != m_nFarColorLayoutGeneration ||
+		!m_bRegionMapInitialized ||
 		physical_region_map_generation != m_nPhysicalRegionMapGeneration ||
 		region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ||
-		data->getFarColorMapRid() != m_lastPublishedResources.m_hFarColorTextureRd ||
 		height_texture_ready != m_bRegionMapHeightTextureReady || bTerrainMegaVTReady != m_bTerrainMegaVTReady ||
-		nTerrainMegaVTPublicationGeneration != m_nTerrainMegaVTPublicationGeneration;
+		nTerrainMegaVTPublicationGeneration != m_nTerrainMegaVTPublicationGeneration ||
+        far_vt_publication_generation != m_nFarVTPublicationGeneration ||
+        far_avt_source_publication_revision != m_nFarAvtSourcePublicationRevision;
 	if ( region_map_changed ) {
 		const uint32_t pending_bank = pPending ? pPending->m_nRegionMapBank : T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 		const uint32_t bank =
@@ -900,11 +902,45 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 				}
 			}
 			t3dRdTerrainRegionGpu_t gpu_region = {};
-			const uint32_t			nFarSlot = ( uint32_t ) data->getFarPackedColorSlot( map_location );
-			// Bits 18..29 were unused; zero means no physical far-color tile.
+			// Physical-layer and shadowmask ownership remain in the existing record.
+			// Retired bits 18..29 no longer encode a separate far-color GPU slot.
 			gpu_region.m_nPackedPhysicalFlags =
-				nPhysicalLayer | ( nShadowmaskMode << 16u ) | ( ( nFarSlot & 0xFFFu ) << 18u ) | nLogicalPresent;
+				nPhysicalLayer | ( nShadowmaskMode << 16u ) | nLogicalPresent;
 			gpu_region.m_nMegaVTAllocation = T3D_VT_INVALID_ALLOCATION;
+            gpu_region.m_nFarVTAllocation = T3D_VT_INVALID_ALLOCATION;
+            gpu_region.m_nComposedVTAllocation = T3D_VT_INVALID_ALLOCATION;
+            gpu_region.m_nComposedVTGeneration = 0u;
+            if ( nLogicalPresent != 0u ) {
+                // The renderer may keep its previous package while an authoring
+                // transaction is dirty. Never sample its stale FAR allocation.
+                bool current = true;
+#if defined( T3D_EDITOR_NATIVE )
+                current = !data->isGpuFarAvtRegionCookDirty( map_location );
+#endif
+                if ( current ) {
+                    const bool farReady = rServices.m_virtualTexture.getFarSurfaceAllocationCold(
+                        ( uint32_t ) source_index, gpu_region.m_nFarVTAllocation,
+                        gpu_region.m_nFarVTGeneration );
+#if defined( T3D_EDITOR_NATIVE )
+                    // A successful regional disk cook can precede (or survive a
+                    // failure of) the shared V1 package publication. Compare
+                    // the authored tile signature against the active package;
+                    // an older package must not silently become current.
+                    current = farReady && gpu_region.m_nFarVTGeneration ==
+                        data->getGpuFarAvtCookedPackageGeneration( map_location );
+#else
+                    current = farReady;
+#endif
+                    if ( current ) {
+                        rServices.m_virtualTexture.getComposedRegionAllocationCold(
+                            ( uint32_t ) source_index, gpu_region.m_nComposedVTAllocation,
+                            gpu_region.m_nComposedVTGeneration );
+                    } else {
+                        gpu_region.m_nFarVTAllocation = T3D_VT_INVALID_ALLOCATION;
+                        gpu_region.m_nFarVTGeneration = 0u;
+                    }
+                }
+            }
 			if ( nLogicalPresent != 0u && bTerrainMegaVTReady ) {
 				const t3dTerrainMegaVTRegion_t *const pMegaRegion =
 					rServices.m_terrainMegaVT.getRegion( ( uint32_t ) ( source_index ) );
@@ -922,11 +958,12 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 					sizeof( gpu_region ) );
 		}
 		m_nRegionTopologyGeneration = region_topology_generation;
-		m_nFarColorLayoutGeneration = far_color_layout_generation;
 		m_nPhysicalRegionMapGeneration = physical_region_map_generation;
 		m_nRegionLightingSignature = region_lighting_signature;
 		m_bRegionMapHeightTextureReady = height_texture_ready;
 		m_nTerrainMegaVTPublicationGeneration = nTerrainMegaVTPublicationGeneration;
+        m_nFarVTPublicationGeneration = far_vt_publication_generation;
+        m_nFarAvtSourcePublicationRevision = far_avt_source_publication_revision;
 		m_bTerrainMegaVTReady = bTerrainMegaVTReady;
 		m_nRegionMapGeneration = t3dNextGeneration( m_nRegionMapGeneration );
 		m_regionMapBanks[bank].m_nGeneration = m_nRegionMapGeneration;
@@ -957,8 +994,6 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 	resources.m_hTerrainShadowMaskTextureRd = data->getTerrainShadowMasksRid();
 	resources.m_hMiddleHeightTextureRd = data->getMiddleHeightMapsRid();
 	resources.m_hMiddleHeightRegionMapTextureRd = data->getMiddleHeightRegionMapRid();
-	resources.m_hFarHeightTextureRd = data->getFarHeightMapRid();
-	resources.m_hFarColorTextureRd = data->getFarColorMapRid();
 	resources.m_hAlbedoTextureRd = assets.is_valid() ? assets->getAlbedoArrayRid() : RID();
 	resources.m_hFarAlbedoTextureRd = assets.is_valid() ? assets->getFarAlbedoArrayRid() : RID();
 	resources.m_hNormalTextureRd = assets.is_valid() ? assets->getNormalArrayRid() : RID();
@@ -982,9 +1017,7 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 		resources.m_hMiddleCompositeTextureRd != m_lastPublishedResources.m_hMiddleCompositeTextureRd ||
 		resources.m_hTerrainShadowMaskTextureRd != m_lastPublishedResources.m_hTerrainShadowMaskTextureRd ||
 		resources.m_hMiddleHeightTextureRd != m_lastPublishedResources.m_hMiddleHeightTextureRd ||
-		resources.m_hMiddleHeightRegionMapTextureRd != m_lastPublishedResources.m_hMiddleHeightRegionMapTextureRd ||
-		resources.m_hFarHeightTextureRd != m_lastPublishedResources.m_hFarHeightTextureRd ||
-		resources.m_hFarColorTextureRd != m_lastPublishedResources.m_hFarColorTextureRd;
+		resources.m_hMiddleHeightRegionMapTextureRd != m_lastPublishedResources.m_hMiddleHeightRegionMapTextureRd;
 	if ( bTerrainTexturesChanged ) {
 		m_nTerrainTextureGeneration = t3dNextGeneration( m_nTerrainTextureGeneration );
 	}
@@ -1984,7 +2017,8 @@ void Terrain3DRenderPublicationBuilder::reset(
 	m_nCurrentOceanStripBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nCurrentWorldPublicationBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nRegionTopologyGeneration = 0u;
-	m_nFarColorLayoutGeneration = 0u;
+    m_nFarVTPublicationGeneration = UINT64_MAX;
+    m_nFarAvtSourcePublicationRevision = UINT64_MAX;
 	m_nPhysicalRegionMapGeneration = 0u;
 	m_nRegionLightingSignature = 0u;
 	m_nRegionMapGeneration = 0u;

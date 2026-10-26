@@ -1,4 +1,4 @@
-// CS01: independent composed-result sidecar; the Sparse VT V3 contract is unchanged.
+// CS01: independent composed-result sidecar; the Sparse VT V1 contract is unchanged.
 #ifndef TERRAIN3D_COMPOSED_SURFACE_CONTRACT_H
 #define TERRAIN3D_COMPOSED_SURFACE_CONTRACT_H
 

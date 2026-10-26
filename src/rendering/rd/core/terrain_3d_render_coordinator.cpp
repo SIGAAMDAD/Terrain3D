@@ -11,9 +11,12 @@
 #include "authoring/vt/integration/terrain_3d_render_authoring_companion.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_coordinator_hooks.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_editor_cook.h"
+#include "authoring/vt/io/terrain_3d_vt_godot_cooker.h"
+#include "authoring/vt/build/terrain_3d_vt_demand_cooker.h"
 #include <godot_cpp/core/memory.hpp>
 #endif
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_global_descriptor_cache.h"
+#include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 
 #include "assets/catalog/terrain_3d_assets.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
@@ -92,12 +95,118 @@ const char *Terrain3DRenderCoordinator::startupGpuStageName(
 }
 
 #if defined( T3D_EDITOR_NATIVE )
+static bool t3dRdPrepareComposedShippingV1Cold(
+    Terrain3DOwner *const pTerrain,
+    Terrain3DRenderAuthoringCompanion &rAuthoring,
+    const PackedByteArray &rComposed,
+    const uint32_t nRevision,
+    String &rOutputPath,
+    PackedByteArray &rShipping,
+    String &rDemandPath,
+    PackedByteArray &rDemand,
+    String &rV1Path,
+    PackedByteArray &rV1,
+    String &rError ) {
+    Terrain3DData *const pData = pTerrain ? pTerrain->dataObject() : NULL;
+    if ( pData == NULL || rComposed.is_empty() ) {
+        rError = "Approved composed V1 package has no terrain source";
+        return false;
+    }
+    Terrain3DMemoryAccount *const pAccount = rAuthoring.m_cooker.getAuthoringMemoryAccountCold();
+    Terrain3DMemoryAccountScope authoring_scope( pAccount );
+    PackedByteArray base;
+    uint32_t nBaseGeneration = 0u;
+    uint32_t nMaterialCount = 0u;
+    if ( !pData->publishRuntimeVirtualTexturesCold( rOutputPath, nBaseGeneration,
+            nMaterialCount, rError, &base, pAccount ) ) {
+        return false;
+    }
+    const PackedByteArray fragments[2] = { base, rComposed };
+    const uint32_t nGeneration = t3dNextGeneration( nBaseGeneration ^ nRevision );
+    if ( !t3d_vt_godot_merge_packages_v1( fragments, 2u, nGeneration,
+            rShipping, t3dMemoryCookingLimit( pAccount ) ) ) {
+        rError = "Composed V1 pages could not merge into the shipping package";
+        return false;
+    }
+    const Ref< Terrain3DAssets > assets = pTerrain->assetsResource();
+    if ( assets.is_valid() && !assets->get_path().is_empty() &&
+         !t3d_vt_demand_cook_asset_sidecar_cold( *pData, assets, rShipping,
+            rDemand, rDemandPath, rError, &rV1, &rV1Path ) ) {
+        return false;
+    }
+    return true;
+}
+
 bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
     const t3dCs14EditorCookRequest_t &request, t3dCs14EditorCookResult_t &result )
 {
     // The editor owner supplies the edit-serialization commit hooks. The
     // source pack and control-map snapshots must remain pinned during the cook.
-    return t3d_cs14_editor_cook_cold( m_composedSurfaceEdits, request, result );
+    if ( !t3d_cs14_editor_cook_cold( m_composedSurfaceEdits, request, result ) ) {
+        return false;
+    }
+    // Candidate/reference cooks cannot supply production V1 allocations.
+    // The canonical parity acceptance bit is the existing CS13/CS14 contract,
+    // established by the caller under the editor commit lock.
+    if ( !m_pAuthoring || request.m_cook.m_bReferenceOnly ||
+         !request.m_cook.m_source.m_bCanonicalMaterialParityAccepted ) {
+        return true;
+    }
+    PackedByteArray composed;
+    String error;
+    const uint32_t generation = t3dNextGeneration( ( uint32_t ) result.m_nClaimRevision );
+    if ( !t3d_vt_godot_import_composed_sidecar_v1(
+            request.m_cook.m_pOutput, result.m_cook.m_nWrittenBytes,
+            result.m_cook.m_nSourceFingerprint, generation, composed, &error ) ) {
+        m_pAuthoring->m_approvedComposedV1Fragment.clear();
+        m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
+        m_pAuthoring->m_approvedComposedStatus = "v1_import_failed: " + error;
+        requestMegaVTPackageRecomposeCold();
+        return true; // The CS14 sidecar transaction was already committed.
+    }
+    const auto &stats = m_composedSurfaceEdits.statsCold();
+    const uint64_t nEditStamp =
+        stats.m_nEditEvents + stats.m_nSourceInvalidations + stats.m_nRemovedRegions;
+    const uint64_t nSourceGeneration = m_nComposedSourceGeneration;
+    const uint64_t nTopologyGeneration = m_terrainMegaVT.getTopologyGeneration();
+    String shippingPath, demandPath, v1Path;
+    PackedByteArray shipping, demand, v1;
+    if ( !t3dRdPrepareComposedShippingV1Cold( m_pTerrain, *m_pAuthoring,
+            composed, generation, shippingPath, shipping, demandPath,
+            demand, v1Path, v1, error ) ) {
+        m_pAuthoring->m_approvedComposedV1Fragment.clear();
+        m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
+        m_pAuthoring->m_approvedComposedStatus = "v1_shipping_prepare_failed: " + error;
+        requestMegaVTPackageRecomposeCold();
+        return true;
+    }
+    const auto &currentStats = m_composedSurfaceEdits.statsCold();
+    if ( nSourceGeneration != m_nComposedSourceGeneration ||
+         nTopologyGeneration != m_terrainMegaVT.getTopologyGeneration() ||
+         nEditStamp != currentStats.m_nEditEvents +
+                       currentStats.m_nSourceInvalidations + currentStats.m_nRemovedRegions ) {
+        m_pAuthoring->m_approvedComposedV1Fragment.clear();
+        m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
+        m_pAuthoring->m_approvedComposedStatus = "v1_shipping_source_changed";
+        requestMegaVTPackageRecomposeCold();
+        return true;
+    }
+    if ( !t3d_vt_demand_publish_triplet_cold( shippingPath, shipping,
+            demandPath, demand, v1Path, v1, error ) ) {
+        m_pAuthoring->m_approvedComposedV1Fragment.clear();
+        m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
+        m_pAuthoring->m_approvedComposedStatus = "v1_shipping_publish_failed: " + error;
+        requestMegaVTPackageRecomposeCold();
+        return true;
+    }
+    m_pAuthoring->m_approvedComposedV1Fragment = composed;
+    m_pAuthoring->m_nApprovedComposedFingerprint = result.m_cook.m_nSourceFingerprint;
+    m_pAuthoring->m_nApprovedComposedSourceGeneration = nSourceGeneration;
+    m_pAuthoring->m_nApprovedComposedTopologyGeneration = nTopologyGeneration;
+    m_pAuthoring->m_nApprovedComposedEditStamp = nEditStamp;
+    m_pAuthoring->m_approvedComposedStatus = "v1_shipping_package_published";
+    requestMegaVTPackageRecomposeCold();
+    return true;
 }
 #endif
 
@@ -181,7 +290,7 @@ void Terrain3DRenderCoordinator::stageAssetVtDemandIndexCold(
     // The GPU visibility sidecar is a separate sibling of canonical v2.
     // T04 reads its directory only after the final VT package is loaded;
     // the on-disk bundle payloads are exclusively owned by its worker.
-    ( void ) vt.stageDemandV3Cold( path.is_empty() ? String() : path + String( ".v3" ), path );
+    ( void ) vt.stageDemandV1Cold( path.is_empty() ? String() : path + String( ".v1" ), path );
 	Terrain3DScopedLock lock( m_vtDemandIndexMutex );
 	m_vtDemandIndexPath = path;
 	m_vtDemandIndexStatus = status;
@@ -2602,10 +2711,465 @@ void Terrain3DRenderCoordinator::recoverRendererLifecycleOnRenderThread(
 	}
 }
 
+#if defined( T3D_EDITOR_NATIVE )
+// GPU resources are allocated, read back, and freed by the existing shared RD
+// owner. They are deliberately not exposed through the editor attachment.
+bool Terrain3DRenderCoordinator::beginEditorBrushStrokeCold(
+    const Terrain3DEditorBrushTransaction &rTransaction,
+    const PackedByteArray &rSource, const PackedByteArray &rMaskBits,
+    const uint32_t nMaskWidth, const uint32_t nMaskHeight ) {
+    if ( !m_effect.is_valid() || rSource.is_empty() ||
+         rTransaction.state() != T3D_EDITOR_BRUSH_ACTIVE ||
+         rTransaction.payloadBytes() != ( uint32_t ) rSource.size() ||
+         !Terrain3DRdContext::getShared().isReady() ||
+         rTransaction.deviceGeneration() != Terrain3DRdContext::getShared().getDeviceGeneration() ||
+         rTransaction.strokeId() > INT64_MAX ||
+         nMaskWidth == 0u || nMaskHeight == 0u ||
+         uint64_t( nMaskWidth ) * nMaskHeight > 1024u * 1024u ||
+         uint64_t( nMaskWidth ) * nMaskHeight * 4u != ( uint64_t ) rMaskBits.size() ) return false;
+    {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        if ( m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_IDLE ||
+             rTransaction.strokeId() <= m_nLastEditorBrushStrokeId ) return false;
+        m_nLastEditorBrushStrokeId = rTransaction.strokeId();
+        m_editorBrushTransaction = rTransaction;
+        m_editorBrushInitial = rSource;
+        m_editorBrushMaskUpload = rMaskBits;
+        m_nEditorBrushMaskWidth = nMaskWidth;
+        m_nEditorBrushMaskHeight = nMaskHeight;
+        m_editorBrushCompleted.clear();
+        m_bEditorBrushGpuPending = false;
+        m_bEditorBrushOutputProduced = false;
+        m_bEditorBrushReadbackInFlight = false;
+    }
+    const bool queued = Terrain3DRdContext::enqueueOnRenderThread(
+        callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::initializeEditorBrushOnRenderThread )
+        .bind( ( int64_t ) rTransaction.strokeId() ) );
+    if ( !queued ) {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        m_editorBrushTransaction.reset();
+        m_editorBrushInitial.clear();
+    }
+    return queued;
+}
+
+bool Terrain3DRenderCoordinator::prepareEditorBrushComputeOnRenderThread() {
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    RenderingDevice *const rd = context.getDevice();
+    if ( !rd ) return false;
+    if ( !m_editorBrushShader.isValid() && !m_editorBrushShader.createTracked( context,
+         T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.Editor.Brush.Shader", T3D_RD_SHADER_EDITOR_BRUSH_TILES ) ) return false;
+    if ( !m_editorBrushPipeline.isValid() && !m_editorBrushPipeline.createTrackedCompute( context,
+         T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.Editor.Brush.Pipeline", m_editorBrushShader.rid() ) ) return false;
+    const RID shader = m_editorBrushShader.rid();
+    const RID working = m_editorBrushWorking.rid();
+    const RID tiles = m_editorBrushTileTable.rid();
+    const RID mask = m_editorBrushMask.rid();
+    TypedArray< Ref< RDUniform > > bindings;
+    bindings.push_back( Terrain3DRdBindingBuilder::storage( 0, working ) );
+    bindings.push_back( Terrain3DRdBindingBuilder::storage( 1, tiles ) );
+    bindings.push_back( Terrain3DRdBindingBuilder::storage( 2, mask ) );
+    m_hEditorBrushComputeSet = m_editorBrushSets.getOrCreate(
+        {shader, working, tiles, mask}, "T3D.Editor.Brush.ComputeSet", bindings, shader, 0u );
+    return m_hEditorBrushComputeSet.is_valid();
+}
+
+void Terrain3DRenderCoordinator::initializeEditorBrushOnRenderThread(
+    const uint64_t nStrokeId ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         ( m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_ACTIVE &&
+           m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_SEALED ) ||
+         m_editorBrushTransaction.deviceGeneration() != context.getDeviceGeneration() ) return;
+    // Fixed, bounded buffer, permitting first-touch tile uploads during a
+    // moving stroke without replacing its RID or descriptors.
+    t3dRdGpuBufferSpec_t spec{};
+    spec.m_owner = T3D_RD_CONTEXT_OWNER_TERRAIN;
+    spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
+    spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
+    spec.m_growth = T3D_GPU_EXACT;
+    spec.m_pName = "T3D.Editor.Brush.Working";
+    if ( !m_editorBrushWorking.isConfigured() && !m_editorBrushWorking.configure( spec ) ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    spec.m_pName = "T3D.Editor.Brush.Tiles";
+    if ( !m_editorBrushTileTable.isConfigured() && !m_editorBrushTileTable.configure( spec ) ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    spec.m_pName = "T3D.Editor.Brush.Mask";
+    if ( !m_editorBrushMask.isConfigured() && !m_editorBrushMask.configure( spec ) ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    PackedByteArray payload;
+    payload.resize( T3D_EDITOR_BRUSH_MAX_TRANSFER_BYTES );
+    memset( payload.ptrw(), 0, ( size_t ) payload.size() );
+    memcpy( payload.ptrw(), m_editorBrushInitial.ptr(), ( size_t ) m_editorBrushInitial.size() );
+    PackedByteArray tileBytes;
+    tileBytes.resize( sizeof( t3dEditorBrushGpuTile_t ) * T3D_EDITOR_BRUSH_MAX_TILES + 65536u * 4u );
+    memset( tileBytes.ptrw(), 0, ( size_t ) tileBytes.size() );
+    for ( uint32_t i = 0u; i < m_editorBrushTransaction.tileCount(); ++i ) {
+        const t3dEditorBrushTile_t &tile = m_editorBrushTransaction.tile( i );
+        const t3dEditorBrushGpuTile_t entry{tile.m_nRegionX, tile.m_nRegionY, tile.m_nByteOffset,
+            tile.m_nEncoding, tile.m_nMinX, tile.m_nMinY, tile.m_nWidth, tile.m_nHeight};
+        memcpy( tileBytes.ptrw() + i * sizeof( entry ), &entry, sizeof( entry ) );
+        const uint32_t address = ( uint32_t ) ( ( ( tile.m_nRegionY + 16 ) * 8 + tile.m_nMinY / 16 ) * 256 +
+            ( tile.m_nRegionX + 16 ) * 8 + tile.m_nMinX / 16 );
+        if ( address < 65536u ) {
+            const uint32_t index = i + 1u;
+            memcpy( tileBytes.ptrw() + sizeof( t3dEditorBrushGpuTile_t ) * T3D_EDITOR_BRUSH_MAX_TILES + address * 4u,
+                &index, 4u );
+        }
+    }
+    if ( !m_editorBrushWorking.createTracked( context, ( uint32_t ) payload.size(), payload ) ||
+         !m_editorBrushTileTable.createTracked( context, ( uint32_t ) tileBytes.size(), tileBytes ) ||
+         !m_editorBrushMask.createTracked( context, ( uint32_t ) m_editorBrushMaskUpload.size(), m_editorBrushMaskUpload ) ||
+         !prepareEditorBrushComputeOnRenderThread() ) {
+        m_editorBrushTransaction.fail();
+        m_editorBrushSets.clear();
+        m_editorBrushWorking.releaseTracked( context );
+        m_editorBrushTileTable.releaseTracked( context );
+        m_editorBrushMask.releaseTracked( context );
+        return;
+    }
+    m_editorBrushPushBytes.resize( sizeof( t3dEditorBrushGpuPush_t ) );
+    m_bEditorBrushGpuPending = true;
+    m_renderer.setEditorBrushOverlayOnRenderThread( m_editorBrushWorking.rid(), m_editorBrushTileTable.rid() );
+    m_editorBrushInitial.clear();
+    m_editorBrushMaskUpload.clear();
+}
+
+void Terrain3DRenderCoordinator::uploadEditorBrushTileOnRenderThread(
+    const uint64_t nStrokeId, const uint32_t nTile, const PackedByteArray &rSource ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         ( m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_ACTIVE &&
+           m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_SEALED ) ||
+         nTile >= m_editorBrushTransaction.tileCount() || !m_bEditorBrushGpuPending ) return;
+    const t3dEditorBrushTile_t &tile = m_editorBrushTransaction.tile( nTile );
+    const uint32_t bytes = tile.m_nHeight * tile.m_nRowStrideBytes;
+    if ( ( uint32_t ) rSource.size() != bytes || tile.m_nByteOffset + bytes > m_editorBrushWorking.capacityBytes() ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    RenderingDevice *const rd = Terrain3DRdContext::getShared().getDevice();
+    if ( !rd || rd->buffer_update( m_editorBrushWorking.rid(), tile.m_nByteOffset, bytes, rSource ) != OK ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    const t3dEditorBrushGpuTile_t entry{tile.m_nRegionX, tile.m_nRegionY, tile.m_nByteOffset,
+        tile.m_nEncoding, tile.m_nMinX, tile.m_nMinY, tile.m_nWidth, tile.m_nHeight};
+    PackedByteArray tileBytes;
+    tileBytes.resize( sizeof( entry ) );
+    memcpy( tileBytes.ptrw(), &entry, sizeof( entry ) );
+    if ( rd->buffer_update( m_editorBrushTileTable.rid(), nTile * sizeof( entry ), sizeof( entry ), tileBytes ) != OK ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    if ( tile.m_nRegionX < -16 || tile.m_nRegionX > 15 ||
+         tile.m_nRegionY < -16 || tile.m_nRegionY > 15 ) { m_editorBrushTransaction.fail(); return; }
+    const uint32_t lookupIndex = ( ( tile.m_nRegionY + 16 ) * 8 + tile.m_nMinY / 16 ) * 256u +
+        ( tile.m_nRegionX + 16 ) * 8u + tile.m_nMinX / 16;
+    const uint32_t index = nTile + 1u;
+    PackedByteArray lookupBytes;
+    lookupBytes.resize( 4 );
+    memcpy( lookupBytes.ptrw(), &index, 4 );
+    if ( rd->buffer_update( m_editorBrushTileTable.rid(),
+            sizeof( t3dEditorBrushGpuTile_t ) * T3D_EDITOR_BRUSH_MAX_TILES + lookupIndex * 4u,
+            4u, lookupBytes ) != OK ) m_editorBrushTransaction.fail();
+}
+
+void Terrain3DRenderCoordinator::executeEditorBrushCommandOnRenderThread(
+    const uint64_t nStrokeId, const uint32_t nCommand ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         ( m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_ACTIVE &&
+           m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_SEALED ) ||
+         m_editorBrushTransaction.deviceGeneration() != context.getDeviceGeneration() ||
+         nCommand >= m_editorBrushTransaction.commandCount() || !m_bEditorBrushGpuPending ) return;
+    const t3dEditorBrushCommand_t &cmd = m_editorBrushTransaction.command( nCommand );
+    // AVERAGE, gradient and filtered texture/color painting retain CPU parity
+    // until they have a complete shader-side source/filter implementation.
+    const bool control = cmd.m_nMapType == 1u && ( cmd.m_nTool == 3u || cmd.m_nTool == 6u || cmd.m_nTool == 7u || cmd.m_nTool == 8u ) &&
+        ( cmd.m_nOperation <= 1u || ( cmd.m_nTool == 3u && cmd.m_nOperation == 2u ) );
+    const bool height = cmd.m_nMapType == 0u && ( cmd.m_nTool == 1u || cmd.m_nTool == 2u ) &&
+        ( cmd.m_nOperation <= 1u || cmd.m_nOperation == 4u );
+    const bool color = cmd.m_nMapType == 2u && ( cmd.m_nTool == 4u || cmd.m_nTool == 5u ) && cmd.m_nOperation <= 1u;
+    if ( ( !control && !height && !color ) ||
+         cmd.m_nMaskWidth != m_nEditorBrushMaskWidth || cmd.m_nMaskHeight != m_nEditorBrushMaskHeight ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    RenderingDevice *const rd = context.getDevice();
+    const RID descriptor = m_editorBrushSets.resolve( m_hEditorBrushComputeSet );
+    if ( !rd || !descriptor.is_valid() || !m_editorBrushPipeline.isValid() ) {
+        m_editorBrushTransaction.fail(); return;
+    }
+    t3dEditorBrushGpuPush_t push{};
+    push.m_nTileCount = cmd.m_nTileCountAtEnqueue;
+    push.m_nMapType = cmd.m_nMapType;
+    push.m_nTool = cmd.m_nTool;
+    push.m_nOperation = cmd.m_nOperation;
+    push.m_fCenterX = cmd.m_fCenterX;
+    push.m_fCenterZ = cmd.m_fCenterZ;
+    push.m_fBrushSize = cmd.m_fRadius * 2.f;
+    push.m_fStrength = cmd.m_fStrength;
+    push.m_fRotationCos = cosf( cmd.m_fRotation );
+    push.m_fRotationSin = sinf( cmd.m_fRotation );
+    push.m_fVertexSpacing = cmd.m_fVertexSpacing;
+    push.m_fSelectedHeight = cmd.m_fSelectedHeight;
+    push.m_nMaskWidth = cmd.m_nMaskWidth;
+    push.m_nMaskHeight = cmd.m_nMaskHeight;
+    push.m_nFlags = cmd.m_nFlags;
+    push.m_nColorRGBA8 = cmd.m_nPackedColor;
+    push.m_fRoughness = cmd.m_fRoughness;
+    push.m_fCenterHeight = cmd.m_fCenterHeight;
+    push.m_nAssetId = cmd.m_nAssetId;
+    push.m_nUvRotation = cmd.m_nUvRotation;
+    push.m_nUvScale = cmd.m_nUvScale;
+    push.m_fGradientX1 = cmd.m_fGradientX1;
+    push.m_fGradientY1 = cmd.m_fGradientY1;
+    push.m_fGradientZ1 = cmd.m_fGradientZ1;
+    push.m_fGradientX2 = cmd.m_fGradientX2;
+    push.m_fGradientY2 = cmd.m_fGradientY2;
+    push.m_fGradientZ2 = cmd.m_fGradientZ2;
+    push.m_fMotionX = cmd.m_fMotionX;
+    push.m_fMotionZ = cmd.m_fMotionZ;
+    memcpy( m_editorBrushPushBytes.ptrw(), &push, sizeof( push ) );
+    const int64_t list = rd->compute_list_begin();
+    if ( list == RenderingDevice::INVALID_ID ) { m_editorBrushTransaction.fail(); return; }
+    rd->compute_list_bind_compute_pipeline( list, m_editorBrushPipeline.rid() );
+    rd->compute_list_bind_uniform_set( list, descriptor, 0u );
+    rd->compute_list_set_push_constant( list, m_editorBrushPushBytes, sizeof( push ) );
+    rd->compute_list_dispatch( list, 4u, push.m_nTileCount, 1u );
+    rd->compute_list_add_barrier( list );
+    rd->compute_list_end();
+    m_bEditorBrushOutputProduced = true;
+}
+
+t3dEditorBrushStrokeState_t Terrain3DRenderCoordinator::getEditorBrushStrokeStateCold(
+    const uint64_t nStrokeId ) const {
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    return m_editorBrushTransaction.strokeId() == nStrokeId ?
+        m_editorBrushTransaction.state() : T3D_EDITOR_BRUSH_IDLE;
+}
+
+bool Terrain3DRenderCoordinator::appendEditorBrushTileCold(
+    const uint64_t nStrokeId, const t3dEditorBrushTile_t &rTile, const PackedByteArray &rSource ) {
+    if ( !m_effect.is_valid() || nStrokeId > INT64_MAX || rTile.m_nMinX % 16u ||
+         rTile.m_nMinY % 16u || rTile.m_nWidth != 16u || rTile.m_nHeight != 16u ||
+         rSource.size() != ( int64_t ) ( rTile.m_nHeight * rTile.m_nRowStrideBytes ) ) return false;
+    uint32_t tileIndex = 0u;
+    {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        if ( m_editorBrushTransaction.strokeId() != nStrokeId ) return false;
+        tileIndex = m_editorBrushTransaction.tileCount();
+        if ( !m_editorBrushTransaction.appendTile( rTile ) ) return false;
+    }
+    return Terrain3DRdContext::enqueueOnRenderThread(
+        callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::uploadEditorBrushTileOnRenderThread )
+        .bind( ( int64_t ) nStrokeId, ( int64_t ) tileIndex, rSource ) );
+}
+
+bool Terrain3DRenderCoordinator::enqueueEditorBrushCommandCold(
+    const uint64_t nStrokeId, const t3dEditorBrushCommand_t &rCommand ) {
+    if ( !m_effect.is_valid() || nStrokeId > INT64_MAX ) return false;
+    uint32_t commandIndex = 0u;
+    {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        if ( m_editorBrushTransaction.strokeId() != nStrokeId ) return false;
+        commandIndex = m_editorBrushTransaction.commandCount();
+        if ( !m_editorBrushTransaction.acceptCommand( rCommand ) ) return false;
+    }
+    return Terrain3DRdContext::enqueueOnRenderThread(
+        callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::executeEditorBrushCommandOnRenderThread )
+        .bind( ( int64_t ) nStrokeId, ( int64_t ) commandIndex ) );
+}
+
+bool Terrain3DRenderCoordinator::sealEditorBrushStrokeCold( const uint64_t nStrokeId ) {
+    if ( !m_effect.is_valid() || nStrokeId > INT64_MAX ) return false;
+    {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        // Dispatch and seal callbacks are FIFO on the shared render queue.
+        // The render thread verifies at least one successful dispatch.
+        if ( m_editorBrushTransaction.strokeId() != nStrokeId ) return false;
+        if ( !m_editorBrushTransaction.seal() ) return false;
+    }
+    if ( Terrain3DRdContext::enqueueOnRenderThread(
+        callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::sealEditorBrushOnRenderThread )
+        .bind( ( int64_t ) nStrokeId ) ) ) return true;
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    m_editorBrushTransaction.fail();
+    return false;
+}
+
+void Terrain3DRenderCoordinator::sealEditorBrushOnRenderThread( const uint64_t nStrokeId ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    RenderingDevice *const rd = context.getDevice();
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_SEALED ||
+         m_editorBrushTransaction.deviceGeneration() != context.getDeviceGeneration() ||
+         !m_bEditorBrushGpuPending || !m_bEditorBrushOutputProduced ||
+         !rd || !m_editorBrushWorking.isValid() ) {
+        if ( m_editorBrushTransaction.strokeId() == nStrokeId ) m_editorBrushTransaction.fail();
+        return;
+    }
+    const uint32_t bytes = m_editorBrushTransaction.payloadBytes();
+    t3dGpuTransferTicket_t ticket;
+    if ( !Terrain3DGpuTransferBudget::get().reserve( T3D_GPU_TRANSFER_REGION, bytes, 1u, ticket ) ) {
+        m_editorBrushTransaction.fail();
+        return;
+    }
+    const Callable callback = callable_mp( m_effect.ptr(),
+        &Terrain3DRdCompositorEffect::consumeEditorBrushReadbackOnRenderThread )
+        .bind( ( int64_t ) nStrokeId, ( int64_t ) m_editorBrushTransaction.ownerGeneration(),
+            ( int64_t ) m_editorBrushTransaction.deviceGeneration() );
+    const Error result = rd->buffer_get_data_async( m_editorBrushWorking.rid(), callback, 0u, bytes );
+    if ( result != OK ) {
+        Terrain3DGpuTransferBudget::get().refund( ticket, bytes, 1u );
+        m_editorBrushTransaction.fail();
+        return;
+    }
+    m_editorBrushTransaction.markReadbackPending();
+    m_bEditorBrushReadbackInFlight = true;
+}
+
+void Terrain3DRenderCoordinator::consumeEditorBrushReadbackOnRenderThread(
+    const PackedByteArray &rBytes, const uint64_t nStrokeId,
+    const uint32_t nOwnerGeneration, const uint64_t nDeviceGeneration ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    // A callback from a prior device/stroke must not touch the current slot.
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         m_editorBrushTransaction.ownerGeneration() != nOwnerGeneration ||
+         m_editorBrushTransaction.deviceGeneration() != nDeviceGeneration ) {
+        ++m_nEditorBrushRejectedCompletions;
+        return;
+    }
+    m_bEditorBrushReadbackInFlight = false;
+    const bool accepted = m_editorBrushTransaction.acceptReadback( nStrokeId,
+        nOwnerGeneration, ( uint32_t ) nDeviceGeneration,
+        ( uint32_t ) rBytes.size() );
+    if ( !accepted ) ++m_nEditorBrushRejectedCompletions;
+    else m_editorBrushCompleted = rBytes;
+    m_renderer.setEditorBrushOverlayOnRenderThread( RID(), RID() );
+    m_editorBrushSets.clear();
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    if ( m_editorBrushMask.isValid() ) m_editorBrushMask.releaseTracked( context );
+    if ( m_editorBrushTileTable.isValid() ) m_editorBrushTileTable.releaseTracked( context );
+    if ( m_editorBrushWorking.isValid() ) m_editorBrushWorking.releaseTracked( context );
+    m_hEditorBrushComputeSet = RID();
+    m_bEditorBrushGpuPending = false;
+    m_bEditorBrushOutputProduced = false;
+    if ( m_editorBrushTransaction.state() == T3D_EDITOR_BRUSH_CANCELED ) {
+        m_editorBrushTransaction.reset();
+        m_editorBrushInitial.clear();
+    } else if ( !accepted ) {
+        m_editorBrushTransaction.fail();
+    }
+}
+
+bool Terrain3DRenderCoordinator::takeEditorBrushReadbackCold(
+    const uint64_t nStrokeId, Terrain3DEditorBrushTransaction &rTransaction,
+    PackedByteArray &rBytes ) {
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         !m_editorBrushTransaction.claimReadbackForCommit() ) return false;
+    rTransaction = m_editorBrushTransaction;
+    rBytes = m_editorBrushCompleted;
+    return true;
+}
+
+bool Terrain3DRenderCoordinator::acknowledgeEditorBrushCommitCold( const uint64_t nStrokeId ) {
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         !m_editorBrushTransaction.markCpuCommitted() ) return false;
+    m_editorBrushTransaction.reset();
+    m_editorBrushCompleted.clear();
+    return true;
+}
+
+void Terrain3DRenderCoordinator::cancelEditorBrushStrokeCold( const uint64_t nStrokeId ) {
+    if ( !nStrokeId || nStrokeId > INT64_MAX ) return;
+    {
+        Terrain3DScopedLock lock( m_editorBrushMutex );
+        if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+             m_editorBrushTransaction.state() == T3D_EDITOR_BRUSH_IDLE ) return;
+        m_editorBrushTransaction.cancel();
+        m_editorBrushCompleted.clear();
+    }
+    // FIFO with any earlier init/seal; only the RD owner may free a live RID.
+    if ( m_effect.is_valid() ) {
+        ( void ) Terrain3DRdContext::enqueueOnRenderThread(
+            callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::discardEditorBrushOnRenderThread )
+            .bind( ( int64_t ) nStrokeId ) );
+    }
+}
+
+void Terrain3DRenderCoordinator::discardEditorBrushOnRenderThread( const uint64_t nStrokeId ) {
+#ifdef DEBUG_ENABLED
+    ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    if ( m_editorBrushTransaction.strokeId() != nStrokeId ||
+         m_editorBrushTransaction.state() != T3D_EDITOR_BRUSH_CANCELED ||
+         m_bEditorBrushReadbackInFlight ) return;
+    m_renderer.setEditorBrushOverlayOnRenderThread( RID(), RID() );
+    m_editorBrushSets.clear();
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    if ( m_editorBrushMask.isValid() ) m_editorBrushMask.releaseTracked( context );
+    if ( m_editorBrushTileTable.isValid() ) m_editorBrushTileTable.releaseTracked( context );
+    if ( m_editorBrushWorking.isValid() ) m_editorBrushWorking.releaseTracked( context );
+    m_hEditorBrushComputeSet = RID();
+    m_bEditorBrushGpuPending = false;
+    m_bEditorBrushOutputProduced = false;
+    m_editorBrushInitial.clear();
+    m_editorBrushCompleted.clear();
+    m_editorBrushTransaction.reset();
+}
+
+void Terrain3DRenderCoordinator::releaseEditorBrushOnRenderThread( void ) {
+    Terrain3DScopedLock lock( m_editorBrushMutex );
+    m_renderer.setEditorBrushOverlayOnRenderThread( RID(), RID() );
+    m_editorBrushSets.clear();
+    m_editorBrushPipeline.releaseTracked( Terrain3DRdContext::getShared() );
+    m_editorBrushShader.releaseTracked( Terrain3DRdContext::getShared() );
+    m_editorBrushTransaction.cancel();
+    Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+    if ( m_editorBrushMask.isValid() ) m_editorBrushMask.releaseTracked( context );
+    if ( m_editorBrushTileTable.isValid() ) m_editorBrushTileTable.releaseTracked( context );
+    if ( m_editorBrushWorking.isValid() ) m_editorBrushWorking.releaseTracked( context );
+    m_hEditorBrushComputeSet = RID();
+    m_bEditorBrushGpuPending = false;
+    m_bEditorBrushOutputProduced = false;
+    m_editorBrushInitial.clear();
+    m_editorBrushCompleted.clear();
+    m_bEditorBrushReadbackInFlight = false;
+    m_editorBrushTransaction.reset();
+    // The callback carries a stroke + device token; any later completion is
+    // discarded rather than being published into an owner map.
+}
+#endif
+
 void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread(
 	const bool bPreserveTailStaging ) {
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
+#endif
+#if defined( T3D_EDITOR_NATIVE )
+    releaseEditorBrushOnRenderThread();
 #endif
 	m_previewService.shutdownRendererOnRenderThread( previewServices() );
 	m_worldRuntime.shutdownCold();
@@ -2753,12 +3317,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass(
 					&Terrain3DRdCompositorEffect::consumeDescriptorFenceOnRenderThread ) );
 			}
 			pCache->beginRenderFrameHot( rContext.m_nRenderFrame );
-            // Publish completed composed uploads only at a coherent PREPARE
-            // boundary. The GPU fence callback advances the completed epoch;
-            // no frame count or CPU submission implies completion.
-            if ( m_sharedVtRuntime.isComposedSurfaceReady() ) {
-                ( void ) m_sharedVtRuntime.serviceComposedGpuCompletionsHot( Terrain3DRdContext::getShared() );
-            }
+
 		}
 	}
 	const t3dStreamProfileStage_t stage =

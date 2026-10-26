@@ -2343,7 +2343,7 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials(
 		for ( size_t iMaterial = 0u; iMaterial < nMaterialCount; ++iMaterial ) {
 			uint32_t nAllocationId = T3D_VT_INVALID_ALLOCATION;
 			if ( pStableKeys[iMaterial] == 0u || m_pVirtualTexture == NULL ||
-				 m_pVirtualTexture->getDatabaseKind() != T3D_VT_RUNTIME_DATABASE_PACK_V3 ||
+				 m_pVirtualTexture->getDatabaseKind() != T3D_VT_RUNTIME_DATABASE_PACK_V1 ||
 				 !m_pVirtualTexture->findMaterialAllocationCold( pStableKeys[iMaterial], nAllocationId ) ) {
 				++m_nVtStableKeyMissCount;
 				nAllocationId = T3D_VT_INVALID_ALLOCATION;
@@ -2361,9 +2361,9 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials(
 			}
 			pResolvedMaterials[iMaterial].m_nVtAllocation = nAllocationId;
 			if ( nAllocationId != T3D_VT_INVALID_ALLOCATION ) {
-				pResolvedMaterials[iMaterial].m_nFlags |= T3D_VT_MATERIAL_V3_LAYOUT;
+				pResolvedMaterials[iMaterial].m_nFlags |= T3D_VT_MATERIAL_V1_LAYOUT;
 			} else {
-				pResolvedMaterials[iMaterial].m_nFlags &= ~T3D_VT_MATERIAL_V3_LAYOUT;
+				pResolvedMaterials[iMaterial].m_nFlags &= ~T3D_VT_MATERIAL_V1_LAYOUT;
 			}
 			pResolvedMaterials[iMaterial].m_nOverlayVtAllocation = T3D_VT_INVALID_ALLOCATION;
 		}
@@ -2641,7 +2641,7 @@ void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot(
 				}
 			}
 		}
-		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION && attempts_left > 0u;
+		for ( uint32_t channel = 0u; channel < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION && attempts_left > 0u;
 			  ++channel ) {
 			if ( diagnostic_mode == 2u && channel != 0u ) {
 				continue;

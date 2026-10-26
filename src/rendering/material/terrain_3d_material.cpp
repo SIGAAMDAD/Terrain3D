@@ -739,21 +739,6 @@ void Terrain3DMaterial::initialize(
 		const TypedArray< Image > ia = { pImg };
 		m_runtimeState.m_generatedDummy.create( ia, T3D_RD_TEXTURE_LINEAR_DATA );
 
-		// Far atlases are sampler2D, not sampler2DArray. Binding the layered
-		// dummy to them causes GL_INVALID_OPERATION on the compatibility renderer
-		// and repeated driver validation work during material updates.
-		const uint16_t	encoded_zero_height = t3dRegionCodecEncodeHeightU16( 0.0f );
-		PackedByteArray far_height_bytes;
-		far_height_bytes.resize( 2 );
-		memcpy( far_height_bytes.ptrw(), &encoded_zero_height, sizeof( encoded_zero_height ) );
-		const Ref< Image > pFarHeightImg = Image::create_from_data( 1, 1, false, Image::FORMAT_R16, far_height_bytes );
-		m_runtimeState.m_generatedFarHeightDummy.create( pFarHeightImg, T3D_RD_TEXTURE_LINEAR_DATA );
-		Ref< Image > pFarColorImg = Image::create( 1, 1, false, Image::FORMAT_RGBA8 );
-		// Alpha is packed far-surface metadata. A fallback texture must describe
-		// empty terrain; 0.5 rounds to bit 7 and therefore means solid terrain.
-		pFarColorImg->fill( Color( 1.0, 1.0, 1.0, 0.0 ) );
-		m_runtimeState.m_generatedFarColorDummy.create( pFarColorImg, T3D_RD_TEXTURE_SOURCE_COLOR );
-
 		const Ref< Image >		  pSurfaceImg = Terrain3DUtil::getDefaultSurfaceImage( V2I( 1 ), false );
 		const TypedArray< Image > surface_array = { pSurfaceImg };
 		m_runtimeState.m_generatedSurfaceDummy.create( surface_array, T3D_RD_TEXTURE_LINEAR_DATA );
@@ -805,8 +790,6 @@ void Terrain3DMaterial::destroy(
 	m_authoringState.m_shaderParamDefaults.clear();
 	m_runtimeState.m_runtimeMaterialParams.clear();
 	m_runtimeState.m_generatedDummy.clear();
-	m_runtimeState.m_generatedFarHeightDummy.clear();
-	m_runtimeState.m_generatedFarColorDummy.clear();
 	m_runtimeState.m_generatedSurfaceDummy.clear();
 	m_runtimeState.m_generatedDisplacementDummy.clear();
 	invalidateRegionPageTables();
@@ -894,11 +877,6 @@ void Terrain3DMaterial::updateRegionPageTable(
 			LOG( ERROR, "Cannot publish terrain page tables: texture allocation/update failed" );
 		}
 	}
-}
-
-void Terrain3DMaterial::updateFarAtlasTextures(
-	void ) {
-	// Far-atlas RIDs are read directly from Terrain3DData by the RD coordinator.
 }
 
 void Terrain3DMaterial::setDisplacementScale(
@@ -2987,7 +2965,7 @@ bool t3dTerrainShaderPipelineKeyIsValid(
 		return false;
 	}
 	if ( rKey.m_nShaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL ) {
-		if ( rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3 ||
+		if ( rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 ||
 			 ( rKey.m_nShippingFeatureClass & ~T3D_TERRAIN_SHIPPING_FEATURE_MASK ) != 0u ) {
 			return false;
 		}

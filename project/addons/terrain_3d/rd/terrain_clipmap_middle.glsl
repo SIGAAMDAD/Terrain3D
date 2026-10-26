@@ -125,8 +125,11 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 #VERSION_DEFINES
 #define T3D_TIER 1
 #include "terrain_strip_topology_inc.glslinc"
+#include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
+#include "terrain_far_height_vertex_v1.glslinc"
+#include "terrain_clipmap_editor_brush_overlay.glslinc"
 #include "terrain_clipmap_vertex_inc.glslinc"
 
 #[fragment]
@@ -158,6 +161,7 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 vec3 decode_surface_normal(vec2 encoded_xy);
 #include "terrain_composed_surface_sampling.glslinc"
 #endif
+#include "terrain_clipmap_editor_brush_overlay.glslinc"
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \
     T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \

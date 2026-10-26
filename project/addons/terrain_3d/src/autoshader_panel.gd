@@ -7,6 +7,7 @@ extends PopupPanel
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
 const AutoShaderProfile = preload("res://addons/terrain_3d/src/autoshader_profile.gd")
 const AutoShaderRule = preload("res://addons/terrain_3d/src/autoshader_rule.gd")
+const AuthoringDependencies = preload("res://addons/terrain_3d/tools/authoring_dependencies.gd")
 
 enum BakeScope {
 	SELECTED_REGION,
@@ -81,8 +82,8 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 		_connected_data = _terrain.data
 		_connected_assets = _terrain.assets
 		if is_instance_valid(_connected_data):
-			if not _connected_data.maps_edited.is_connected(_on_maps_edited):
-				_connected_data.maps_edited.connect(_on_maps_edited)
+			if not _connected_data.maps_edit_committed.is_connected(_on_map_edit_committed):
+				_connected_data.maps_edit_committed.connect(_on_map_edit_committed)
 			if not _connected_data.region_map_changed.is_connected(_on_region_map_changed):
 				_connected_data.region_map_changed.connect(_on_region_map_changed)
 		if is_instance_valid(_connected_assets) and not _connected_assets.textures_changed.is_connected(_on_textures_changed):
@@ -107,8 +108,8 @@ func _cancel_auto_rebake() -> void:
 
 func _disconnect_sources() -> void:
 	if is_instance_valid(_connected_data):
-		if _connected_data.maps_edited.is_connected(_on_maps_edited):
-			_connected_data.maps_edited.disconnect(_on_maps_edited)
+		if _connected_data.maps_edit_committed.is_connected(_on_map_edit_committed):
+			_connected_data.maps_edit_committed.disconnect(_on_map_edit_committed)
 		if _connected_data.region_map_changed.is_connected(_on_region_map_changed):
 			_connected_data.region_map_changed.disconnect(_on_region_map_changed)
 	if is_instance_valid(_connected_assets) and _connected_assets.textures_changed.is_connected(_on_textures_changed):
@@ -1038,24 +1039,17 @@ func _format_result(action: String, result: Terrain3DAutoShaderBakeResult) -> St
 	return text
 
 
-func _on_maps_edited(area: AABB) -> void:
+func _on_map_edit_committed(map_type: int, changed_regions: Array[Vector2i], area: AABB) -> void:
 	if _suppress_dirty_tracking or not is_instance_valid(_terrain):
 		return
-	var world_size := float(_terrain.region_size) * _terrain.vertex_spacing
-	if world_size <= 0.0 or area.size.x <= 0.0 or area.size.z <= 0.0:
-		_mark_all_dirty()
-		_schedule_auto_rebake()
+	var products: int = AuthoringDependencies.products_for_sources(AuthoringDependencies.source_for_map_type(map_type))
+	if (products & AuthoringDependencies.AUTOSHADER) == 0:
 		return
-	var dependency_margin := maxf(_terrain.vertex_spacing, 0.001)
-	var start_position := area.position - Vector3(dependency_margin, 0.0, dependency_margin)
-	var end_position := area.position + area.size + Vector3(dependency_margin, 0.0, dependency_margin)
-	var start := Vector2i(floori(start_position.x / world_size), floori(start_position.z / world_size))
-	var end := Vector2i(floori((end_position.x - 0.001) / world_size), floori((end_position.z - 0.001) / world_size))
-	for region_y: int in range(start.y, end.y + 1):
-		for region_x: int in range(start.x, end.x + 1):
-			var location := Vector2i(region_x, region_y)
-			if _terrain.data.has_region(location):
-				_dirty_regions[location] = true
+	var locations: Array[Vector2i] = AuthoringDependencies.regions_for_committed_edit(_terrain, changed_regions, area)
+	if locations.is_empty():
+		return
+	for location: Vector2i in locations:
+		_dirty_regions[location] = true
 	_update_stale_status()
 	_schedule_auto_rebake()
 
@@ -1174,8 +1168,6 @@ func _schedule_auto_rebake() -> void:
 	if _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		_auto_rebake_timer.start(_profile.auto_rebake_delay)
 		return
-	if _profile.mode == Terrain3DAutoShaderProfile.Mode.BAKED and _profile.auto_rebake_after_sculpt:
-		_auto_rebake_timer.start(_profile.auto_rebake_delay)
 
 
 func _on_auto_rebake_timeout() -> void:
@@ -1183,55 +1175,6 @@ func _on_auto_rebake_timeout() -> void:
 		return
 	if _profile.mode == Terrain3DAutoShaderProfile.Mode.EDITOR_PREVIEW:
 		_refresh_editor_preview()
-		return
-	if _profile.mode != Terrain3DAutoShaderProfile.Mode.BAKED or not _profile.auto_rebake_after_sculpt:
-		return
-	var locations := _dirty_scope_locations()
-	if locations.is_empty():
-		return
-	var before := _capture_snapshot(locations)
-	var before_mode: int = _profile.mode
-	var before_auto_shader := bool(_terrain.material.auto_shader_enabled) if is_instance_valid(_terrain.material) else false
-	var before_signatures: Dictionary[String, int] = _copy_signatures(_profile.baked_region_signatures)
-	var result := _run_bake(locations, false)
-	if not result.ok:
-		_apply_snapshot(_terrain, before)
-	else:
-		var after := _capture_snapshot(locations)
-		var after_signatures := _merge_signatures(before_signatures, result.region_signatures)
-		_apply_bake_transaction(
-			_terrain,
-			after,
-			_profile,
-			before_mode,
-			before_auto_shader,
-			after_signatures,
-		)
-		var undo := plugin.get_undo_redo()
-		undo.create_action("Automatic Terrain3D Autoshader Rebake")
-		undo.add_do_method(
-			self,
-			"_apply_bake_transaction",
-			_terrain,
-			after,
-			_profile,
-			before_mode,
-			before_auto_shader,
-			after_signatures,
-		)
-		undo.add_undo_method(
-			self,
-			"_apply_bake_transaction",
-			_terrain,
-			before,
-			_profile,
-			before_mode,
-			before_auto_shader,
-			before_signatures,
-		)
-		undo.commit_action(false)
-	_set_status(_format_result("Automatic rebake", result))
-	_refresh_ui()
 
 
 func _set_status(text: String) -> void:

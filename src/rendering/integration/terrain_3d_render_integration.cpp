@@ -797,11 +797,6 @@ void Terrain3D::setRuntimeShaderTieringEnabled(
 	SET_IF_DIFF( m_bRuntimeShaderTieringEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
 	LOG( INFO, "Setting runtime shader tiering: ", bEnabled );
-	if ( bEnabled && m_pData && m_bInitialized && !m_pData->ensureFarAtlases() ) {
-		LOG( WARN,
-			 "Runtime far shader tier could not prepare coarse terrain atlases; far-tier rendering may use fallback "
-			 "textures until terrain data is ready." );
-	}
 	if ( m_material.is_valid() && m_material->isInitialized() ) {
 		m_material->update( FULL_REBUILD );
 	}

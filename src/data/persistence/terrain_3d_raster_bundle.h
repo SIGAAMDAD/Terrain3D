@@ -8,7 +8,7 @@
 #include <EASTL/array.h>
 #include "core/utility/terrain_3d_sync.h"
 
-// Derived source raster bundle; the existing region resources and V7/V3 formats
+// Derived source raster bundle; the existing region resources and V7/V1 formats
 // remain authoritative and readable. No automatic VT cook is performed.
 class Terrain3DRasterBundle
 {

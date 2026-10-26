@@ -1,14 +1,14 @@
 #ifndef TERRAIN3D_VT_COMMON_INC_GLSL
 #define TERRAIN3D_VT_COMMON_INC_GLSL
 
-// Shared Terrain3D VT v2 GPU ABI. 16-bit CPU field pairs are intentionally
+// Shared Terrain3D VT V1 GPU ABI. 16-bit CPU field pairs are intentionally
 // exposed as packed uints so std430 does not require 16-bit storage support.
-#define T3D_VT_FILE_VERSION 2u
+#define T3D_VT_FILE_VERSION 1u
 #define T3D_VT_PAGE_INTERIOR 128u
 #define T3D_VT_PAGE_GUTTER 4u
 #define T3D_VT_PHYSICAL_TILE 136u
 #define T3D_VT_MAX_ANISOTROPY 4u
-#define T3D_VT_CHANNEL_COUNT 4u
+#define T3D_VT_CHANNEL_COUNT 5u
 #define T3D_VT_CHANNEL_MASK_ALL ((1u << T3D_VT_CHANNEL_COUNT) - 1u)
 #define T3D_VT_INVALID_PAGE 0xffffffffu
 #define T3D_VT_INVALID_SLOT 0xffffffffu
@@ -88,35 +88,38 @@
 #define T3D_VT_CHANNEL_NORMAL 1u
 #define T3D_VT_CHANNEL_SURFACE 2u
 #define T3D_VT_CHANNEL_HEIGHT 3u
+#define T3D_VT_CHANNEL_HEIGHT16 4u
 
 #define T3D_VT_FORMAT_ALBEDO_BC1_SRGB 0u
 #define T3D_VT_FORMAT_NORMAL_BC5_UNORM 1u
 #define T3D_VT_FORMAT_SURFACE_BC7_UNORM 2u
 #define T3D_VT_FORMAT_HEIGHT_R8_UNORM 3u
 
-// Sparse VT V3 logical channels are independent from physical format families.
+// Sparse VT V1 logical channels are independent from physical format families.
 #define T3D_VT_LOGICAL_CHANNEL_ALBEDO 0u
 #define T3D_VT_LOGICAL_CHANNEL_PBR 1u
 #define T3D_VT_LOGICAL_CHANNEL_HEIGHT 2u
 #define T3D_VT_LOGICAL_CHANNEL_NORMAL 3u
 #define T3D_VT_LOGICAL_CHANNEL_ORM 4u
-#define T3D_VT_LOGICAL_CHANNEL_COUNT 5u
+#define T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT 5u
+#define T3D_VT_LOGICAL_CHANNEL_COUNT 6u
 
 #define T3D_VT_PHYSICAL_FORMAT_BC1_UNORM 0u
 #define T3D_VT_PHYSICAL_FORMAT_BC7_UNORM 1u
 #define T3D_VT_PHYSICAL_FORMAT_BC5_UNORM 2u
 #define T3D_VT_PHYSICAL_FORMAT_R8_UNORM 3u
-#define T3D_VT_PHYSICAL_FORMAT_COUNT 4u
-#define T3D_VT_V3_PHYSICAL_FAMILY_SHIFT 30u
-#define T3D_VT_V3_PHYSICAL_FAMILY_MASK 0xc0000000u
-#define T3D_VT_V3_PHYSICAL_SLOT_MASK 0x3fffffffu
+#define T3D_VT_PHYSICAL_FORMAT_R16_UNORM 4u
+#define T3D_VT_PHYSICAL_FORMAT_COUNT 5u
+#define T3D_VT_V1_PHYSICAL_FAMILY_SHIFT 29u
+#define T3D_VT_V1_PHYSICAL_FAMILY_MASK 0xe0000000u
+#define T3D_VT_V1_PHYSICAL_SLOT_MASK 0x1fffffffu
 
-uint t3d_vt_v3_physical_family(uint packedAddress) {
-    return (packedAddress & T3D_VT_V3_PHYSICAL_FAMILY_MASK) >> T3D_VT_V3_PHYSICAL_FAMILY_SHIFT;
+uint t3d_vt_v1_physical_family(uint packedAddress) {
+    return (packedAddress & T3D_VT_V1_PHYSICAL_FAMILY_MASK) >> T3D_VT_V1_PHYSICAL_FAMILY_SHIFT;
 }
 
-uint t3d_vt_v3_physical_slot(uint packedAddress) {
-    return packedAddress & T3D_VT_V3_PHYSICAL_SLOT_MASK;
+uint t3d_vt_v1_physical_slot(uint packedAddress) {
+    return packedAddress & T3D_VT_V1_PHYSICAL_SLOT_MASK;
 }
 
 vec3 t3d_vt_srgb_to_linear_rgb(vec3 value) {
@@ -182,7 +185,7 @@ vec4 t3d_vt_decode_srgb_albedo(vec4 value) {
 #define T3D_VT_MATERIAL_DIRECT_ORM (1u << 12u)
 #define T3D_VT_MATERIAL_ALBEDO_SATURATION (1u << 13u)
 #define T3D_VT_MATERIAL_STYLIZED_SUN (1u << 14u)
-#define T3D_VT_MATERIAL_V3_LAYOUT (1u << 15u)
+#define T3D_VT_MATERIAL_V1_LAYOUT (1u << 15u)
 #define T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE (1u << 16u)
 #define T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN (1u << 17u)
 
@@ -190,7 +193,7 @@ bool t3d_vt_material_has_surface_texture(uint flags) {
     return (flags & T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE) != 0u
         || (flags & T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN) == 0u;
 }
-#define T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION 3u
+#define T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION 3u
 
 struct T3DVTAllocation {
     uint baseVirtualPage;
@@ -386,11 +389,11 @@ uint t3d_vt_prediction_mip_base(T3DVTAllocation allocation, uint mip) {
 
 bool t3d_vt_prediction_page_set_sibling(
     uint allocation_a_id, T3DVTAllocation a, uint allocation_b_id, T3DVTAllocation b) {
-    // V3 runtime expands each canonical logical allocation into a fixed three-slot
+    // V1 runtime expands each canonical logical allocation into a fixed three-slot
     // channel group. Integer group identity is collision-free; matching layout
     // fields prove that one mip/rectangle derivation is valid for both siblings.
-    return allocation_a_id / T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION
-            == allocation_b_id / T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION
+    return allocation_a_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
+            == allocation_b_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
         && a.pageCount == b.pageCount && a.packedMip0Extent == b.packedMip0Extent
         && a.packedMipCountFlags == b.packedMipCountFlags && a.generation == b.generation
         && a.contentId == b.contentId;

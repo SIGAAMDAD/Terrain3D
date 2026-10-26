@@ -57,8 +57,6 @@ typedef struct t3dRdWorldTerrainRasterBindings_s
 	RID		 m_hMiddleCompositeTexture;
 	RID		 m_hMiddleHeightTexture;
 	RID		 m_hMiddleHeightRegionMapTexture;
-	RID		 m_hFarHeightTexture;
-	RID		 m_hFarColorTexture;
 	RID		 m_hFarAlbedoTexture;
 	RID		 m_hWorldNoiseTexture;
 	RID		 m_hMacroNoiseTexture;
@@ -238,8 +236,6 @@ private:
 		RID		 m_hBoundTerrainShadowMaskTexture;
 		RID		 m_hBoundMiddleHeightTexture;
 		RID		 m_hBoundMiddleHeightRegionMapTexture;
-		RID		 m_hBoundFarHeightTexture;
-		RID		 m_hBoundFarColorTexture;
 		RID		 m_hBoundAlbedoTexture;
 		RID		 m_hBoundFarAlbedoTexture;
 		RID		 m_hBoundNormalTexture;
@@ -266,8 +262,6 @@ private:
 				   m_hBoundTerrainShadowMaskTexture == rOther.m_hBoundTerrainShadowMaskTexture &&
 				   m_hBoundMiddleHeightTexture == rOther.m_hBoundMiddleHeightTexture &&
 				   m_hBoundMiddleHeightRegionMapTexture == rOther.m_hBoundMiddleHeightRegionMapTexture &&
-				   m_hBoundFarHeightTexture == rOther.m_hBoundFarHeightTexture &&
-				   m_hBoundFarColorTexture == rOther.m_hBoundFarColorTexture &&
 				   m_hBoundAlbedoTexture == rOther.m_hBoundAlbedoTexture &&
 				   m_hBoundFarAlbedoTexture == rOther.m_hBoundFarAlbedoTexture &&
 				   m_hBoundNormalTexture == rOther.m_hBoundNormalTexture &&
@@ -297,6 +291,21 @@ private:
 	// Three ordinary sets plus three hint-ABI sets can coexist in a color pass.
     // A four-lease table evicted live bindings before the draw list consumed them.
     Terrain3DRdDescriptorLeaseTable< t3dSetCacheKey_t, 8u > m_descriptorCache;
+    struct EditorBrushOverlaySetKey {
+        RID shader, working, table;
+        bool operator==( const EditorBrushOverlaySetKey &r ) const {
+            return shader == r.shader && working == r.working && table == r.table;
+        }
+    };
+    Terrain3DRdDescriptorLeaseTable< EditorBrushOverlaySetKey, 8u > m_editorBrushOverlaySets{
+        m_context, T3D_RD_CONTEXT_OWNER_TERRAIN };
+    Terrain3DRdGpuBuffer m_editorBrushEmptyWork;
+    Terrain3DRdGpuBuffer m_editorBrushEmptyTable;
+    RID m_hEditorBrushWork;
+    RID m_hEditorBrushTable;
+    bool ensureEditorBrushOverlayDefaultsOnRenderThread();
+    RID getEditorBrushOverlaySetOnRenderThread( const RID &rShader );
+
 
 	t3dRdClipmapDescriptorKey_t m_boundDescriptorKey{};
 	bool						m_bBoundDescriptorKeyValid = false;
@@ -467,6 +476,11 @@ public:
 		return m_bDirectDrawDebugEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	void setFeedbackOwner( Terrain3DVTGpu *pOwner ) { m_pFeedbackOwner = pOwner; }
+#if defined( T3D_EDITOR_NATIVE )
+    // Render-thread-only borrowed handles; GPU resources remain coordinator-owned.
+    void setEditorBrushOverlayOnRenderThread( const RID &rWorking, const RID &rTable );
+#endif
+
 	EA_FORCE_INLINE void setMotionDebugEnabled(
 		const bool bEnabled ) {
 		m_bMotionDebugEnabled.store( bEnabled, T3D_MEMORY_ORDER_RELEASE );

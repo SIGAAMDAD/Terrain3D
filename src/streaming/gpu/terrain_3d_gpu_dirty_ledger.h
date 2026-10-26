@@ -16,7 +16,7 @@ public:
 		COMPOSITE = 1u << 1u,
 		SHADOW = 1u << 2u,
 		MIDDLE_HEIGHT = 1u << 3u,
-		FAR_ATLAS = 1u << 4u,
+		FAR_VT = 1u << 4u,
 		MATERIAL_VT = 1u << 5u,
 		CPU_COLLISION = 1u << 6u
 	};

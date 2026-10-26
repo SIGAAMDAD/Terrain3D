@@ -9,6 +9,7 @@ const TRANSACTION_SCRIPT = preload("res://addons/terrain_3d/tools/foliage_transa
 const ASYNC_TRANSACTION = preload("res://addons/terrain_3d/tools/foliage_async_transaction.gd")
 const SOURCE_JOB = preload("res://addons/terrain_3d/tools/foliage_source_job.gd")
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
+const AuthoringDependencies = preload("res://addons/terrain_3d/tools/authoring_dependencies.gd")
 
 var plugin: Terrain3DEditorPluginBase
 var _terrain: Terrain3D
@@ -24,6 +25,8 @@ var _generator: Terrain3DFoliageGenerator
 var _active: bool = false
 var _pending_mode: String = ""
 var _pending_regions: Array[Vector2i] = []
+var _source_dirty_regions: Dictionary[Vector2i, bool] = {}
+var _connected_data: Terrain3DData
 var _pending_keys: Dictionary[String, String] = {}
 var _pending_records: Array[Dictionary] = []
 var _saving: bool = false
@@ -97,7 +100,13 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 		_abort()
 	if is_instance_valid(_watched_terrain) and _watched_terrain.tree_exiting.is_connected(_on_terrain_exiting):
 		_watched_terrain.tree_exiting.disconnect(_on_terrain_exiting)
+	_disconnect_source_events()
 	_terrain = p_terrain
+	_source_dirty_regions.clear()
+	if is_instance_valid(_terrain) and is_instance_valid(_terrain.data):
+		_connected_data = _terrain.data
+		_connected_data.maps_edit_committed.connect(_on_source_map_edit_committed)
+		_connected_data.region_map_changed.connect(_on_source_topology_changed)
 	_watched_terrain = p_terrain
 	if _watched_terrain != null:
 		_watched_terrain.tree_exiting.connect(_on_terrain_exiting)
@@ -281,6 +290,7 @@ func _build_ui() -> void:
 	_scope = OptionButton.new()
 	_scope.add_item("Selected Region", 0)
 	_scope.add_item("All Regions", 1)
+	_scope.add_item("Dirty Regions", 2)
 	_scope.item_selected.connect(func(_index: int) -> void: _scope_changed())
 	settings.add_child(_scope)
 	_region_selector = OptionButton.new()
@@ -302,6 +312,7 @@ func _build_ui() -> void:
 	vertical.add_child(actions)
 	_generate = _button("Generate", actions, func() -> void: _start("generate"))
 	_regenerate = _button("Regenerate", actions, func() -> void: _start("regenerate"))
+	_button("Regenerate Dirty", actions, func() -> void: _start("regenerate_dirty"))
 	_clear = _button("Clear Generated", actions, func() -> void: _start("clear"))
 	_cancel = _button("Cancel", actions, _abort)
 	_cancel.disabled = true
@@ -392,10 +403,43 @@ func _selected_regions() -> Array[Vector2i]:
 	if is_instance_valid(_scope) and _scope.selected == 0:
 		if _terrain.data.has_region(_target_region):
 			locations.append(_target_region)
+	elif is_instance_valid(_scope) and _scope.selected == 2:
+		for location: Vector2i in _terrain.data.get_region_locations():
+			if _source_dirty_regions.has(location) or _is_region_stale(location):
+				locations.append(location)
 	else:
 		locations.assign(_terrain.data.get_region_locations())
 	locations.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.x < b.x or (a.x == b.x and a.y < b.y))
 	return locations
+
+
+func _disconnect_source_events() -> void:
+	if not is_instance_valid(_connected_data):
+		return
+	if _connected_data.maps_edit_committed.is_connected(_on_source_map_edit_committed):
+		_connected_data.maps_edit_committed.disconnect(_on_source_map_edit_committed)
+	if _connected_data.region_map_changed.is_connected(_on_source_topology_changed):
+		_connected_data.region_map_changed.disconnect(_on_source_topology_changed)
+	_connected_data = null
+
+
+func _on_source_map_edit_committed(map_type: int, changed_regions: Array[Vector2i], area: AABB) -> void:
+	var products: int = AuthoringDependencies.products_for_sources(AuthoringDependencies.source_for_map_type(map_type))
+	if (products & AuthoringDependencies.FOLIAGE) == 0:
+		return
+	for location: Vector2i in AuthoringDependencies.regions_for_committed_edit(_terrain, changed_regions, area):
+		_source_dirty_regions[location] = true
+	# No regeneration or saves during strokes, preview or undo/redo.
+	if visible and not _active and not _saving:
+		_refresh_status()
+
+
+func _on_source_topology_changed() -> void:
+	AuthoringDependencies.reconcile_regions(_terrain, _source_dirty_regions)
+	if visible and not _active and not _saving:
+		_populate_region_selector(false)
+		_refresh_status()
+
 
 func _resource_key(resource: Resource) -> String:
 	if resource == null:
@@ -587,6 +631,8 @@ func _refresh_status() -> void:
 		return
 	var result: Dictionary = _validation("regenerate")
 	_status.text = "%d regions; estimated %d placements before terrain filters. Regenerate reconciles earlier presets." % [result["regions"].size(), result["estimate"]]
+	if not _source_dirty_regions.is_empty():
+		_status.text += " %d committed source regions changed; use Regenerate Dirty." % _source_dirty_regions.size()
 	if not result["problems"].is_empty():
 		_status.text += "\n" + "\n".join(result["problems"])
 
@@ -767,13 +813,25 @@ func _start(mode: String) -> void:
 	if not _import_legacy_manifest():
 		_fail(_ledger_error)
 		return
-	var validation: Dictionary = _validation(mode)
+	var validation: Dictionary = _validation("regenerate" if mode == "regenerate_dirty" else mode)
 	_problems.assign(validation["problems"])
 	if validation["kind"] == "error":
 		_fail("\n".join(_problems))
 		return
 	var regions: Array[Vector2i] = []
 	regions.assign(validation["regions"])
+	if mode == "regenerate_dirty":
+		var selected: Array[Vector2i] = []
+		for region: Vector2i in regions:
+			if _is_region_stale(region):
+				selected.append(region)
+		regions = selected
+		if regions.is_empty():
+			_set_state(JobState.DONE)
+			_status.text = "Foliage sources unchanged; no region recook required."
+			_source_dirty_regions.clear()
+			return
+		mode = "regenerate"
 	_last_job_metrics.clear()
 	_progress.value = 0.0
 	_pending_mode = mode
@@ -1018,6 +1076,8 @@ func _poll_commit() -> void:
 		return
 	if _terrain == _commit_terrain:
 		_manifest = result["manifest"]
+		for region: Vector2i in _pending_regions:
+			_source_dirty_regions.erase(region)
 	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	if not is_instance_valid(_commit_terrain):
 		_status.text = "Foliage saved to the original terrain data directory."
@@ -1110,6 +1170,7 @@ func _on_terrain_exiting() -> void:
 	_active = false
 
 func _exit_tree() -> void:
+	_disconnect_source_events()
 	if _transaction_job != null:
 		_transaction_job.shutdown_async()
 	if _source_job != null:

@@ -37,23 +37,23 @@ bool Terrain3DVTDemandBundleStore::openCold(
     Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
     if ( file.is_null() ) return false;
     const uint64_t size = file->get_length();
-    if ( size < T3D_VT_DEMAND_V3_HEADER_BYTES || size > T3D_VT_DEMAND_V3_MAX_FILE_BYTES ) return false;
-    const PackedByteArray head = file->get_buffer( T3D_VT_DEMAND_V3_HEADER_BYTES );
-    if ( head.size() != T3D_VT_DEMAND_V3_HEADER_BYTES ) return false;
+    if ( size < T3D_VT_DEMAND_V1_HEADER_BYTES || size > T3D_VT_DEMAND_V1_MAX_FILE_BYTES ) return false;
+    const PackedByteArray head = file->get_buffer( T3D_VT_DEMAND_V1_HEADER_BYTES );
+    if ( head.size() != T3D_VT_DEMAND_V1_HEADER_BYTES ) return false;
     // Read directory length from the header, then let the independent codec
     // validate every count, signature, offset and directory checksum.
     uint64_t directoryBytes = 0u;
     for ( uint32_t i = 0u; i < 8u; ++i ) directoryBytes |= ( uint64_t ) head[104 + i] << ( i * 8u );
-    if ( directoryBytes < T3D_VT_DEMAND_V3_HEADER_BYTES ||
-         directoryBytes > size || directoryBytes > T3D_VT_DEMAND_V3_HEADER_BYTES +
-         ( uint64_t ) T3D_VT_DEMAND_V3_MAX_CELLS *
-         ( T3D_VT_DEMAND_V3_CELL_BYTES + T3D_VT_DEMAND_V3_BUNDLE_BYTES ) ) return false;
+    if ( directoryBytes < T3D_VT_DEMAND_V1_HEADER_BYTES ||
+         directoryBytes > size || directoryBytes > T3D_VT_DEMAND_V1_HEADER_BYTES +
+         ( uint64_t ) T3D_VT_DEMAND_V1_MAX_CELLS *
+         ( T3D_VT_DEMAND_V1_CELL_BYTES + T3D_VT_DEMAND_V1_BUNDLE_BYTES ) ) return false;
     file->seek( 0u );
     const PackedByteArray directory = file->get_buffer( ( int64_t ) directoryBytes );
     if ( directory.size() != ( int64_t ) directoryBytes ||
          !m_directory.loadCold( directory.ptr(), directoryBytes, size,
                                 packageSignature, assetIdentity ) ) return false;
-    for ( Slot &s : m_slots ) s.records.resize( T3D_VT_V3_BUNDLE_MAX_RECORDS );
+    for ( Slot &s : m_slots ) s.records.resize( T3D_VT_V1_BUNDLE_MAX_RECORDS );
     m_path = path;
     m_bOpen = true;
     m_worker = Terrain3DThread( [this]() { workerMain(); } );
@@ -65,7 +65,7 @@ bool Terrain3DVTDemandBundleStore::validFor( const uint64_t signature ) const {
 }
 
 int32_t Terrain3DVTDemandBundleStore::findSlotLocked( const uint32_t bundle ) const {
-    for ( uint32_t i = 0u; i < T3D_VT_V3_BUNDLE_CACHE_SLOTS; ++i )
+    for ( uint32_t i = 0u; i < T3D_VT_V1_BUNDLE_CACHE_SLOTS; ++i )
         if ( m_slots[i].state != FREE && m_slots[i].nBundle == bundle &&
              m_slots[i].nEpoch == m_nEpoch ) return ( int32_t ) i;
     return -1;
@@ -89,7 +89,7 @@ void Terrain3DVTDemandBundleStore::requestCellHot(
         }
     }
     int32_t victim = -1;
-    for ( uint32_t i = 0u; i < T3D_VT_V3_BUNDLE_CACHE_SLOTS; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_VT_V1_BUNDLE_CACHE_SLOTS; ++i ) {
         if ( m_slots[i].state == FREE || m_slots[i].state == FAILED ) {
             victim = ( int32_t ) i; break;
         }
@@ -107,7 +107,7 @@ void Terrain3DVTDemandBundleStore::requestCellHot(
 
 int32_t Terrain3DVTDemandBundleStore::selectQueuedLocked() const {
     int32_t selected = -1;
-    for ( uint32_t i = 0u; i < T3D_VT_V3_BUNDLE_CACHE_SLOTS; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_VT_V1_BUNDLE_CACHE_SLOTS; ++i ) {
         const Slot &s = m_slots[i];
         if ( s.state != QUEUED ) continue;
         if ( selected < 0 || s.nPriority > m_slots[selected].nPriority ||
@@ -120,8 +120,8 @@ int32_t Terrain3DVTDemandBundleStore::selectQueuedLocked() const {
 void Terrain3DVTDemandBundleStore::workerMain() {
     // Worker allocations, FileAccess and decompression are isolated from
     // all RenderingDevice callbacks. One read at a time, four decoded slots.
-    std::vector< uint8_t > encoded( T3D_VT_DEMAND_V3_MAX_BUNDLE_BYTES );
-    std::vector< uint8_t > scratch( T3D_VT_DEMAND_V3_MAX_BUNDLE_BYTES );
+    std::vector< uint8_t > encoded( T3D_VT_DEMAND_V1_MAX_BUNDLE_BYTES );
+    std::vector< uint8_t > scratch( T3D_VT_DEMAND_V1_MAX_BUNDLE_BYTES );
     for ( ;; ) {
         int32_t chosen = -1;
         uint32_t bundle = UINT32_MAX;
@@ -142,9 +142,9 @@ void Terrain3DVTDemandBundleStore::workerMain() {
             const PackedByteArray bytes = file->get_buffer( entry.nEncodedBytes );
             if ( bytes.size() == entry.nEncodedBytes ) {
                 memcpy( encoded.data(), bytes.ptr(), entry.nEncodedBytes );
-                ok = t3d_vt_demand_decode_v3_bundle( encoded.data(), entry.nEncodedBytes,
+                ok = t3d_vt_demand_decode_v1_bundle( encoded.data(), entry.nEncodedBytes,
                     entry, scratch.data(), ( uint32_t ) scratch.size(),
-                    m_slots[chosen].records.data(), T3D_VT_V3_BUNDLE_MAX_RECORDS );
+                    m_slots[chosen].records.data(), T3D_VT_V1_BUNDLE_MAX_RECORDS );
             }
         }
         // Validate per-cell key/view ordering before publishing any decoded
@@ -152,7 +152,7 @@ void Terrain3DVTDemandBundleStore::workerMain() {
         if ( ok ) {
             for ( const auto &c : m_directory.cells() ) {
                 if ( c.nBundle != bundle ) continue;
-                const uint32_t first = c.nByteOffset / T3D_VT_DEMAND_V3_RECORD_BYTES;
+                const uint32_t first = c.nByteOffset / T3D_VT_DEMAND_V1_RECORD_BYTES;
                 for ( uint32_t k = 1u; k < c.nCount; ++k ) {
                     const auto &a = m_slots[chosen].records[first + k - 1u];
                     const auto &b = m_slots[chosen].records[first + k];
@@ -179,7 +179,7 @@ void Terrain3DVTDemandBundleStore::workerMain() {
     }
 }
 
-const t3dVTDemandV3Record_t *Terrain3DVTDemandBundleStore::findCellHot(
+const t3dVTDemandV1Record_t *Terrain3DVTDemandBundleStore::findCellHot(
     const int32_t x, const int32_t z, uint32_t &count, uint32_t &flags ) {
     count = 0u; flags = 0u;
     uint32_t id = 0u;
@@ -194,7 +194,7 @@ const t3dVTDemandV3Record_t *Terrain3DVTDemandBundleStore::findCellHot(
     ++m_stats.nCacheHits;
     s.nAge = ++m_nUseClock;
     flags = c.nFlags; count = c.nCount;
-    return s.records.data() + c.nByteOffset / T3D_VT_DEMAND_V3_RECORD_BYTES;
+    return s.records.data() + c.nByteOffset / T3D_VT_DEMAND_V1_RECORD_BYTES;
 }
 
 t3dVTDemandBundleStats_t Terrain3DVTDemandBundleStore::stats() const {

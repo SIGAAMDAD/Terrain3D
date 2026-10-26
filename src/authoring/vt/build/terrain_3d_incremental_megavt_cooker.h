@@ -206,13 +206,14 @@ public:
 												const PackedByteArray			 *pShippingBytes = NULL,
 												const String					 *pDemandPath = NULL,
 												const PackedByteArray             *pDemandBytes = NULL,
-                                                const String *pV3Path = NULL,
-                                                const PackedByteArray *pV3Bytes = NULL );
+                                                const String *pV1Path = NULL,
+                                                const PackedByteArray *pV1Bytes = NULL );
 	void	   shutdownCold( Terrain3DTerrainMegaVT &rMegaVT );
 	bool	   composePackageCold( PackedByteArray					&rPackage,
 								   uint32_t							&rGeneration,
 								   uint64_t							&rFingerprint,
-								   Terrain3DSharedMemoryReservation *pPackageMemory = NULL );
+								   Terrain3DSharedMemoryReservation *pPackageMemory = NULL,
+                                   const PackedByteArray *pApprovedComposedFragment = NULL );
 	Dictionary getDiagnosticsCold( void ) const;
 	size_t	   getRetainedCpuBytesCold( void ) const;
 	uint64_t   getReservedCpuBytesCold() const {
@@ -223,6 +224,13 @@ public:
 	}
 	// Explicit export is synchronous authoring. It uses the same capture/cook
 	// contract and emits all regions, independently of preview/GPU readiness.
+	// Read-only byte comparison for the already published V1 triplet. Does not
+	// mutate the runtime loader or the atomic publication protocol.
+	static bool publishedArtifactsMatchCold( const String &rPackagePath,
+		const PackedByteArray &rPackage, const String &rDemandPath,
+		const PackedByteArray &rDemand, const String &rV1Path,
+		const PackedByteArray &rV1 );
+	static Dictionary getExportCacheDiagnosticsCold( void );
 	static bool appendRuntimeRegionsCold( const t3dMegaVTAuthoringInputs_t &rInputs,
 										  PackedByteArray				   &rPackage,
 										  uint32_t						   &rGeneration,

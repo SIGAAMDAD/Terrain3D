@@ -109,6 +109,6 @@ static_assert( T3D_REGION_SLOTS == 1024, "P25 MegaVT stable allocation domain re
 static_assert( sizeof( t3dTerrainMegaVTRegion_t ) == 48u, "Terrain MegaVT CPU region ABI changed" );
 static_assert( sizeof( t3dTerrainMegaVTEditorState_t ) == 16u, "Terrain MegaVT editor state ABI changed" );
 static_assert( sizeof( t3dTerrainMegaVTCookTicket_t ) == 32u, "Terrain MegaVT cook ticket ABI changed" );
-static_assert( sizeof( t3dRdTerrainRegionGpu_t ) == 32u, "Terrain MegaVT draw-region ABI changed" );
+static_assert( sizeof( t3dRdTerrainRegionGpu_t ) == 48u, "Terrain MegaVT draw-region ABI changed" );
 
 #endif // TERRAIN3D_TERRAIN_MEGAVT_H

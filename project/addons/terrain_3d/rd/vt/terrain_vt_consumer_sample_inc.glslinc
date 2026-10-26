@@ -290,8 +290,8 @@ T3DVTConsumerAddress t3d_vt_consumer_finalize_address(uint allocation_id,
                 address.tile_uv = (floor(address.tile_uv * float(T3D_VT_PHYSICAL_TILE)) + vec2(0.5)) / float(T3D_VT_PHYSICAL_TILE);
             }
         }
-        address.layer = t3d_vt_v3_physical_slot(result.physicalSlot);
-        address.physical_family = t3d_vt_v3_physical_family(result.physicalSlot);
+        address.layer = t3d_vt_v1_physical_slot(result.physicalSlot);
+        address.physical_family = t3d_vt_v1_physical_family(result.physicalSlot);
         address.resolved_mip = resolved_mip;
         address.resolved_packed_extent = resolved_layout.packedExtent;
         address.valid = 1u;
@@ -359,16 +359,16 @@ T3DVTConsumerAddress t3d_vt_consumer_resolve_sibling(uint allocation_id,
     return t3d_vt_consumer_resolve_plan(plan, footprint, reuse);
 }
 
-// Lazy channel resolution lets opacity reject a fragment before any other V3
+// Lazy channel resolution lets opacity reject a fragment before any other V1
 // channel walks the page table. Guard the base before adding sibling offsets.
 bool t3d_vt_consumer_material_page_set_valid(uint base_allocation, T3DVTConsumerFootprint footprint) {
     return base_allocation != T3D_VT_INVALID_ALLOCATION && base_allocation < footprint.allocation_count
-        && footprint.allocation_count - base_allocation >= T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
+        && footprint.allocation_count - base_allocation >= T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
 }
 
-T3DVTConsumerAddress t3d_vt_consumer_resolve_material_channel_v3(
+T3DVTConsumerAddress t3d_vt_consumer_resolve_material_channel_v1(
     uint base_allocation, uint channel, T3DVTConsumerFootprint footprint) {
-    if (channel >= T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION
+    if (channel >= T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
         || !t3d_vt_consumer_material_page_set_valid(base_allocation, footprint)) {
         return t3d_vt_consumer_invalid_address();
     }
@@ -378,20 +378,20 @@ T3DVTConsumerAddress t3d_vt_consumer_resolve_material_channel_v3(
 // Preserve opacity-first material ordering: callers resolve channel zero,
 // reject alpha, and only then reuse its plan for sibling channels. A sibling
 // with different extent/base MIP falls back to the complete resolver.
-T3DVTConsumerAddress t3d_vt_consumer_resolve_material_sibling_v3(uint base_allocation,
+T3DVTConsumerAddress t3d_vt_consumer_resolve_material_sibling_v1(uint base_allocation,
     uint channel, T3DVTConsumerFootprint footprint, T3DVTConsumerAddressPlan base_plan,
     T3DVTConsumerAddress albedo_address) {
-    if (channel >= T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION
+    if (channel >= T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
         || !t3d_vt_consumer_material_page_set_valid(base_allocation, footprint)) {
         return t3d_vt_consumer_invalid_address();
     }
     return t3d_vt_consumer_resolve_sibling(base_allocation + channel, footprint, base_plan, albedo_address);
 }
 
-T3DVTConsumerPageSet3 t3d_vt_consumer_resolve_page_set3_v3(uint base_allocation, T3DVTConsumerFootprint footprint) {
+T3DVTConsumerPageSet3 t3d_vt_consumer_resolve_page_set3_v1(uint base_allocation, T3DVTConsumerFootprint footprint) {
     T3DVTConsumerPageSet3 page_set;
     if (base_allocation == T3D_VT_INVALID_ALLOCATION || base_allocation >= footprint.allocation_count
-        || footprint.allocation_count - base_allocation < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION) {
+        || footprint.allocation_count - base_allocation < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION) {
         page_set.channel0 = t3d_vt_consumer_invalid_address();
         page_set.channel1 = t3d_vt_consumer_invalid_address();
         page_set.channel2 = t3d_vt_consumer_invalid_address();
@@ -699,7 +699,7 @@ vec4 t3d_vt_consumer_sample_albedo_single(T3DVTConsumerAddress address) {
     return sum / float(max(plan.tap_count, 1u));
 }
 
-vec4 t3d_vt_consumer_sample_normal_v3_single(T3DVTConsumerAddress address) {
+vec4 t3d_vt_consumer_sample_normal_v1_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(0.5, 0.5, 1.0, 1.0);
     if (address.valid == 1u) {
         T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
@@ -749,7 +749,7 @@ vec4 t3d_vt_consumer_sample_normal_v3_single(T3DVTConsumerAddress address) {
     return sum / float(max(plan.tap_count, 1u));
 }
 
-vec4 t3d_vt_consumer_sample_surface_v3_single(T3DVTConsumerAddress address) {
+vec4 t3d_vt_consumer_sample_surface_v1_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(1.0);
     if (address.valid == 1u) {
         T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
@@ -799,7 +799,7 @@ vec4 t3d_vt_consumer_sample_surface_v3_single(T3DVTConsumerAddress address) {
     return sum / float(max(plan.tap_count, 1u));
 }
 
-vec4 t3d_vt_consumer_sample_orm_v3_single(T3DVTConsumerAddress address) {
+vec4 t3d_vt_consumer_sample_orm_v1_single(T3DVTConsumerAddress address) {
     if (address.valid == 0u) return vec4(1.0);
     if (address.valid == 1u) {
         T3DVTBoundedFilterPlan plan = t3d_vt_physical_filter_plan(address.tile_uv, address.ddx_uv, address.ddy_uv,
@@ -1106,27 +1106,27 @@ float t3d_vt_consumer_sample_albedo_alpha(T3DVTConsumerAddress address) {
 }
 #endif
 
-vec4 t3d_vt_consumer_sample_normal_v3(T3DVTConsumerAddress address) {
-    vec4 base_sample = t3d_vt_consumer_sample_normal_v3_single(address);
+vec4 t3d_vt_consumer_sample_normal_v1(T3DVTConsumerAddress address) {
+    vec4 base_sample = t3d_vt_consumer_sample_normal_v1_single(address);
     T3DVTConsumerTrilinearPair pair = t3d_vt_consumer_resolve_trilinear_pair(address);
     if (pair.blend == 0u) return base_sample;
-    vec4 other_sample = t3d_vt_consumer_sample_normal_v3_single(pair.other);
+    vec4 other_sample = t3d_vt_consumer_sample_normal_v1_single(pair.other);
     return mix(base_sample, other_sample, pair.other_weight);
 }
 
-vec4 t3d_vt_consumer_sample_surface_v3(T3DVTConsumerAddress address) {
-    vec4 base_sample = t3d_vt_consumer_sample_surface_v3_single(address);
+vec4 t3d_vt_consumer_sample_surface_v1(T3DVTConsumerAddress address) {
+    vec4 base_sample = t3d_vt_consumer_sample_surface_v1_single(address);
     T3DVTConsumerTrilinearPair pair = t3d_vt_consumer_resolve_trilinear_pair(address);
     if (pair.blend == 0u) return base_sample;
-    vec4 other_sample = t3d_vt_consumer_sample_surface_v3_single(pair.other);
+    vec4 other_sample = t3d_vt_consumer_sample_surface_v1_single(pair.other);
     return mix(base_sample, other_sample, pair.other_weight);
 }
 
-vec4 t3d_vt_consumer_sample_orm_v3(T3DVTConsumerAddress address) {
-    vec4 base_sample = t3d_vt_consumer_sample_orm_v3_single(address);
+vec4 t3d_vt_consumer_sample_orm_v1(T3DVTConsumerAddress address) {
+    vec4 base_sample = t3d_vt_consumer_sample_orm_v1_single(address);
     T3DVTConsumerTrilinearPair pair = t3d_vt_consumer_resolve_trilinear_pair(address);
     if (pair.blend == 0u) return base_sample;
-    vec4 other_sample = t3d_vt_consumer_sample_orm_v3_single(pair.other);
+    vec4 other_sample = t3d_vt_consumer_sample_orm_v1_single(pair.other);
     return mix(base_sample, other_sample, pair.other_weight);
 }
 

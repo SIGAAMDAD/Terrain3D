@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 
-// Exact, sample-weighted V2-to-V3 direct-page recall diagnostics.
+// Exact, sample-weighted V2-to-V1 direct-page recall diagnostics.
 // Four cold-owned V2 snapshots cover the existing asynchronous feedback ring.
 // Neither this cache nor its comparisons admit a page to residency.
 #define T3D_VT_MULTI_PARITY_MAX_WORDS ( 240u * 136u )
@@ -64,22 +64,22 @@ public:
 		return true;
 	}
 
-	bool compare( const t3dVTFeedbackGridHeader_t &rV3,
-		const uint32_t nPageCount, const Terrain3DVTFeedbackReducer &rV3Reducer,
+	bool compare( const t3dVTFeedbackGridHeader_t &rV1,
+		const uint32_t nPageCount, const Terrain3DVTFeedbackReducer &rV1Reducer,
 		t3dVTFeedbackMultiParitySample_t &rResult ) const {
 		rResult = t3dVTFeedbackMultiParitySample_t{};
-		if ( m_pWords == NULL || nPageCount == 0u || rV3.m_nVersion != T3D_VT_FEEDBACK_MULTI_VERSION ) {
+		if ( m_pWords == NULL || nPageCount == 0u || rV1.m_nVersion != T3D_VT_FEEDBACK_MULTI_VERSION ) {
 			return false;
 		}
 		for ( uint32_t slot = 0u; slot < T3D_VT_FEEDBACK_GRID_SLOT_COUNT; ++slot ) {
 			const t3dVTFeedbackMultiParitySlot_t &rSlot = m_Slots[slot];
-			if ( !rSlot.m_bValid || !sameFrame( rSlot.m_Header, rV3 ) ) continue;
+			if ( !rSlot.m_bValid || !sameFrame( rSlot.m_Header, rV1 ) ) continue;
 			const uint32_t *const pPages = m_pWords + ( size_t ) slot * T3D_VT_MULTI_PARITY_MAX_WORDS;
 			for ( uint32_t i = 0u; i < rSlot.m_nWords; ++i ) {
 				const uint32_t page = pPages[i];
 				if ( page >= nPageCount ) continue;
 				++rResult.m_nObserved;
-				if ( rV3Reducer.hasDirectPage( page ) ) {
+				if ( rV1Reducer.hasDirectPage( page ) ) {
 					++rResult.m_nCovered;
 				} else {
 					++rResult.m_nMissing;

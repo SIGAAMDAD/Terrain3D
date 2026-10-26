@@ -1,4 +1,4 @@
-// Editor-only, non-authoritative V3 composed candidate bake from real terrain data.
+// Editor-only, non-authoritative V1 composed candidate bake from real terrain data.
 #ifndef TERRAIN3D_COMPOSED_SURFACE_EDITOR_SOURCE_H
 #define TERRAIN3D_COMPOSED_SURFACE_EDITOR_SOURCE_H
 

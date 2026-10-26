@@ -23,7 +23,7 @@ typedef bool ( *t3dComposedSurfaceEvaluateFn )( void *pUser,
                                                  const t3dComposedSurfaceCookPage_t &page,
                                                  uint32_t nChannel,
                                                  uint8_t *pRgba, uint32_t nBytes );
-// Offline compression, compatible with the existing V3 BC1/BC5/BC7 encoder.
+// Offline compression, compatible with the existing V1 BC1/BC5/BC7 encoder.
 typedef bool ( *t3dComposedSurfaceEncodeFn )( void *pUser, uint32_t nChannel,
                                                const uint8_t *pRgba, uint32_t nRgbaBytes,
                                                uint8_t *pCompressed, uint32_t nCapacity,

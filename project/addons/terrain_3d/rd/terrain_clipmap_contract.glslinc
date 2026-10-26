@@ -38,6 +38,10 @@ struct TerrainRegionRecord {
     uint megavt_generation;
     uint megavt_flags;
     vec4 megavt_world_to_uv;
+    uint far_vt_allocation;
+    uint far_vt_generation;
+    uint composed_vt_allocation;
+    uint composed_vt_generation;
 };
 
 struct TierMaterialConfig {

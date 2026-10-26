@@ -90,9 +90,9 @@ public:
 	virtual int										 getFarMaterialResolution( void ) const = 0;
 	virtual bool									 getFarShadowEnabled( void ) const = 0;
 	virtual int										 getFarShadowLodCount( void ) const = 0;
-	virtual int										 getGpuFarHeightAtlasSide( void ) const = 0;
+	virtual int										 getFarVtHeightSourceSide( void ) const = 0;
 	virtual int										 getGpuFarQualityDivisor( void ) const = 0;
-	virtual int										 getGpuFarSurfaceAtlasSide( void ) const = 0;
+	virtual int										 getFarVtSurfaceSourceSide( void ) const = 0;
 	virtual int										 getGpuRegionCachePageLimit( void ) const = 0;
 	virtual int										 getGpuRegionColorResolutionDivisor( void ) const = 0;
 	virtual int										 getGpuRegionDerivedResolutionDivisor( void ) const = 0;

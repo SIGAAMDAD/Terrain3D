@@ -1,6 +1,6 @@
 // Godot cold authoring decoder; never called by the shipping raster thread.
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_godot_decode.h"
-#include "authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_godot_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
 #include "data/formats/terrain_3d_vt_pack_format.h"
 #include <godot_cpp/classes/image.hpp>
@@ -15,13 +15,13 @@ bool t3d_cs12_decode_godot_image( void *, uint32_t format,
     using godot::PackedByteArray;
     using godot::Ref;
     if (!bytes || !out || capacity != T3D_VT_PHYSICAL_TILE*T3D_VT_PHYSICAL_TILE*4u ||
-        size != t3d_vt_pack_expected_physical_tile_bytes_v3(format)) return false;
+        size != t3d_vt_pack_expected_physical_tile_bytes_v1(format)) return false;
     if (format == T3D_VT_PHYSICAL_FORMAT_R8_UNORM ||
         format == T3D_VT_PHYSICAL_FORMAT_BC1_UNORM ||
         format == T3D_VT_PHYSICAL_FORMAT_BC5_UNORM)
         return t3d_cs15_decode_reference_tile(format, bytes, size, out, capacity);
     if (format != T3D_VT_PHYSICAL_FORMAT_BC7_UNORM) return false;
-    // The cold V3 reference encoder produces mode-6 BC7. Decode those
+    // The cold V1 reference encoder produces mode-6 BC7. Decode those
     // directly; retain Godot BPTC support for packs from other encoders.
     const uint32_t block_count = ( T3D_VT_PHYSICAL_TILE / 4u ) * ( T3D_VT_PHYSICAL_TILE / 4u );
     bool all_mode6 = true;

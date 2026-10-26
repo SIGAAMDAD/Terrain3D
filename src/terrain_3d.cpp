@@ -54,23 +54,21 @@
 // Initialize static member variable
 
 // -----------------------------------------------------------------------------
-// Opt-in viewport VRS experiment. Godot owns shading-rate attachments; the
-// extension owns only a low-resolution density texture and its restoration.
-// This is viewport-level VRS, not a terrain-only per-draw shading-rate override.
-void Terrain3D::applyViewportVrsTrial(
+// Optional production viewport VRS profile. The Godot viewport owns its VRS
+// attachment; Terrain3D owns only the density texture while attached. The
+// project setting is intentionally absent/disabled by default. Unsupported
+// renderers and externally configured viewports retain their existing modes.
+void Terrain3D::applyViewportVrsProfile(
 	void ) {
-	if ( m_nVrsTrialViewportId != 0u || !is_inside_tree() || Engine::get_singleton()->is_editor_hint() ) {
+	if ( m_nVrsViewportId != 0u || !is_inside_tree() || Engine::get_singleton()->is_editor_hint() ) {
 		return;
 	}
-	String trial = OS::get_singleton()->get_environment( "TERRAIN3D_VRS_TRIAL" );
-	if ( trial.is_empty() ) {
-#if T3D_DEFAULT_VRS_TRIAL == 1
-		trial = "uniform";
-#elif T3D_DEFAULT_VRS_TRIAL == 2
-		trial = "conservative";
-#endif
+	ProjectSettings *const pSettings = ProjectSettings::get_singleton();
+	if ( !pSettings || !pSettings->has_setting( "terrain3d/rendering/vrs_profile" ) ) {
+		return;
 	}
-	if ( trial != "uniform" && trial != "conservative" ) {
+	const String profile = String( pSettings->get_setting( "terrain3d/rendering/vrs_profile" ) ).to_lower();
+	if ( profile != "uniform" && profile != "conservative" ) {
 		return;
 	}
 	RenderingServer *const pServer = RenderingServer::get_singleton();
@@ -94,7 +92,7 @@ void Terrain3D::applyViewportVrsTrial(
 		for ( int32_t x = 0; x < nWidth; ++x ) {
 			const float fX = ( ( float ) x + 0.5f ) / ( float ) nWidth * 2.0f - 1.0f;
 			// Reserve the central 80% ellipse for full-rate shading.
-			const bool bCoarse = trial == "uniform" || ( fX * fX + fY * fY ) > 0.64f;
+			const bool bCoarse = profile == "uniform" || ( fX * fX + fY * fY ) > 0.64f;
 			image->set_pixel( x, y, bCoarse ? halfRate : fullRate );
 		}
 	}
@@ -104,28 +102,28 @@ void Terrain3D::applyViewportVrsTrial(
 	}
 	m_hVrsPreviousTexture = pViewport->get_vrs_texture();
 	m_nPreviousVrsUpdateMode = ( int32_t ) pViewport->get_vrs_update_mode();
-	m_hVrsTrialTexture = density;
-	m_nVrsTrialViewportId = pViewport->get_instance_id();
+	m_hVrsProfileTexture = density;
+	m_nVrsViewportId = pViewport->get_instance_id();
 	pViewport->set_vrs_texture( density );
 	pViewport->set_vrs_update_mode( Viewport::VRS_UPDATE_ONCE );
 	pViewport->set_vrs_mode( Viewport::VRS_TEXTURE );
 }
 
-void Terrain3D::releaseViewportVrsTrial(
+void Terrain3D::releaseViewportVrsProfile(
 	void ) {
-	if ( m_nVrsTrialViewportId == 0u ) {
+	if ( m_nVrsViewportId == 0u ) {
 		return;
 	}
-	Object *const pObject = ObjectDB::get_instance( m_nVrsTrialViewportId );
+	Object *const pObject = ObjectDB::get_instance( m_nVrsViewportId );
 	Viewport *const pViewport = Object::cast_to< Viewport >( pObject );
 	if ( pViewport && pViewport->get_vrs_mode() == Viewport::VRS_TEXTURE &&
-		pViewport->get_vrs_texture() == m_hVrsTrialTexture ) {
+		pViewport->get_vrs_texture() == m_hVrsProfileTexture ) {
 		pViewport->set_vrs_mode( Viewport::VRS_DISABLED );
 		pViewport->set_vrs_texture( m_hVrsPreviousTexture );
 		pViewport->set_vrs_update_mode( ( Viewport::VRSUpdateMode ) m_nPreviousVrsUpdateMode );
 	}
-	m_nVrsTrialViewportId = 0u;
-	m_hVrsTrialTexture.unref();
+	m_nVrsViewportId = 0u;
+	m_hVrsProfileTexture.unref();
 	m_hVrsPreviousTexture.unref();
 }
 
@@ -360,11 +358,6 @@ void Terrain3D::prepareStartupResidencyStageCold(
 	m_pData->updateRegionResidency( m_startupInitialTarget, true );
 }
 
-void Terrain3D::prepareStartupFarAtlasesStageCold(
-	void ) {
-	m_pData->ensureFarAtlases();
-}
-
 void Terrain3D::prepareStartupMaterialStageCold(
 	void ) {
 	m_material->initialize( this );
@@ -466,10 +459,6 @@ bool Terrain3D::prepareStartupOwnerCold(
 	// center/generation equals the zero/default cached state.
 	runStartupOwnerStage( "Residency", &Terrain3D::prepareStartupResidencyStageCold );
 
-	// Asset arrays are already initialized above so cooked-page source signatures
-	// are authoritative before residency. Build the whole-world far atlases before
-	// tier materials take their initial sampler bindings.
-	runStartupOwnerStage( "FarAtlases", &Terrain3D::prepareStartupFarAtlasesStageCold );
 	runStartupOwnerStage( "Material", &Terrain3D::prepareStartupMaterialStageCold );
 	if ( !m_material->isRenderShaderReady() ) {
 		m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
@@ -548,7 +537,7 @@ bool Terrain3D::finalizeStartupOwnerCold(
 		m_nStartupOwnerFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - owner_finalize_started_usec;
 		return false;
 	}
-	// V3 pages and shader state are committed. Authoring Texture2D resources
+	// V1 pages and shader state are committed. Authoring Texture2D resources
 	// are no longer an authority in cooked runtime. Preserve scalar identities.
 	if ( m_bFreeEditorTextures && !IS_EDITOR && m_assets.is_valid() && !isEditorAuthoringModeInternal() &&
 		 isGpuRegionCookedPagesEnabled() && m_assets->usesPackedPbr() ) {
@@ -1057,7 +1046,7 @@ Terrain3D::Terrain3D(
 
 Terrain3D::~Terrain3D(
 	void ) {
-	releaseViewportVrsTrial();
+	releaseViewportVrsProfile();
 	if ( m_pAuthoringHooks ) {
 		m_pAuthoringHooks->onTerrainOwnerDetached();
 		m_pAuthoringHooks = NULL;
@@ -1171,7 +1160,7 @@ void Terrain3D::_notification(
 		// idempotent and must run after both conditions become true.
 		initializeInternal();
 		if ( is_inside_tree() ) {
-			applyViewportVrsTrial();
+			applyViewportVrsProfile();
 			set_physics_process( true );
 		}
 		break;
@@ -1187,7 +1176,7 @@ void Terrain3D::_notification(
 		setupMousePicking();
 		setupDisplacementBuffer();
 		initializeInternal(); // Rebuild anything freed: meshes, collision, instancer
-		applyViewportVrsTrial();
+		applyViewportVrsProfile();
 		set_physics_process( true );
 		break;
 	}
@@ -1280,7 +1269,7 @@ void Terrain3D::_notification(
 		// Node is about to exit a SceneTree
 		// Sent on scene changes
 		LOG( INFO, "NOTIFICATION_EXIT_TREE" );
-		releaseViewportVrsTrial();
+		releaseViewportVrsProfile();
 		deactivateRuntime();
 		destroyMousePicking();
 		break;
@@ -1290,7 +1279,7 @@ void Terrain3D::_notification(
 		// Node3D unregistered from current World3D
 		// Sent on scene changes
 		LOG( INFO, "NOTIFICATION_EXIT_WORLD" );
-		releaseViewportVrsTrial();
+		releaseViewportVrsProfile();
 		// Rendering/physics RIDs and process-static terrain storage belong to the
 		// active World3D. Preserve the loaded repository, but release every runtime
 		// owner so another scene can activate before this node is destroyed.

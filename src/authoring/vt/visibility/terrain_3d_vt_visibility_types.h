@@ -9,20 +9,20 @@
 // View bin 0 looks +X; bins increment toward +Z in 45-degree steps.
 // Cubemap face vectors (+X,-X,+Y,-Y,+Z,-Z) are mapped to those octants
 // during the future T02 bake. No RenderingDevice RIDs in these inputs.
-#define T3D_VT_DEMAND_VERSION_V3 3u
-#define T3D_VT_DEMAND_V3_ENDIAN_TAG 0x01020304u
-#define T3D_VT_DEMAND_V3_CELL_METERS 128u
-#define T3D_VT_DEMAND_V3_VIEW_BINS 8u
-#define T3D_VT_DEMAND_V3_MIP_BINS 16u
-#define T3D_VT_DEMAND_V3_GROUP_EDGE 4u
-#define T3D_VT_DEMAND_V3_HEADER_BYTES 136u
-#define T3D_VT_DEMAND_V3_CELL_BYTES 32u
-#define T3D_VT_DEMAND_V3_BUNDLE_BYTES 40u
-#define T3D_VT_DEMAND_V3_RECORD_BYTES 64u
-#define T3D_VT_DEMAND_V3_MAX_CELLS 4096u
-#define T3D_VT_DEMAND_V3_MAX_RECORDS 1048576u
-#define T3D_VT_DEMAND_V3_MAX_BUNDLE_BYTES ( 1024u * 1024u )
-#define T3D_VT_DEMAND_V3_MAX_FILE_BYTES ( 128u * 1024u * 1024u )
+#define T3D_VT_DEMAND_VERSION_V1 1u
+#define T3D_VT_DEMAND_V1_ENDIAN_TAG 0x01020304u
+#define T3D_VT_DEMAND_V1_CELL_METERS 128u
+#define T3D_VT_DEMAND_V1_VIEW_BINS 8u
+#define T3D_VT_DEMAND_V1_MIP_BINS 16u
+#define T3D_VT_DEMAND_V1_GROUP_EDGE 4u
+#define T3D_VT_DEMAND_V1_HEADER_BYTES 136u
+#define T3D_VT_DEMAND_V1_CELL_BYTES 32u
+#define T3D_VT_DEMAND_V1_BUNDLE_BYTES 40u
+#define T3D_VT_DEMAND_V1_RECORD_BYTES 64u
+#define T3D_VT_DEMAND_V1_MAX_CELLS 4096u
+#define T3D_VT_DEMAND_V1_MAX_RECORDS 1048576u
+#define T3D_VT_DEMAND_V1_MAX_BUNDLE_BYTES ( 1024u * 1024u )
+#define T3D_VT_DEMAND_V1_MAX_FILE_BYTES ( 128u * 1024u * 1024u )
 
 // A material record without visible samples is explicit: no-visible flag and
 // zero histogram. A PARTIAL record always retains reactive VT feedback.
@@ -76,7 +76,7 @@ struct t3dVTVisibilityStaticSceneView_t
 // Histogram weights are 16-bit quantized visible-pixel contributions.
 // m_nSampleCount is the original count (before 16-bit quantization);
 // confidence is normalized 0..65535 and zero means unknown/absent.
-struct t3dVTDemandV3CookConfig_t
+struct t3dVTDemandV1CookConfig_t
 {
 	uint64_t m_nPackageSignature = 0u;
 	uint64_t m_nAssetIdentityHash = 0u;
@@ -88,7 +88,7 @@ struct t3dVTDemandV3CookConfig_t
 	uint32_t m_nAlgorithmRevision = 1u;
 };
 
-struct t3dVTDemandV3Cell_t
+struct t3dVTDemandV1Cell_t
 {
 	int32_t m_nX = 0, m_nZ = 0;
 	uint32_t m_nFirstRecord = 0u;
@@ -96,10 +96,10 @@ struct t3dVTDemandV3Cell_t
 	uint32_t m_nFlags = 0u; // bit0 = partial/uncovered
 };
 
-struct t3dVTDemandV3Record_t
+struct t3dVTDemandV1Record_t
 {
 	uint64_t m_nStableMaterialKey = 0u;
-	uint16_t m_szMipWeight[T3D_VT_DEMAND_V3_MIP_BINS]{};
+	uint16_t m_szMipWeight[T3D_VT_DEMAND_V1_MIP_BINS]{};
 	uint32_t m_nSampleCount = 0u;
 	uint32_t m_nSourceRevision = 0u;
 	uint32_t m_nProbeCount = 0u;
@@ -113,17 +113,17 @@ struct t3dVTDemandV3Record_t
 // Cells sort by (floor(x/4),floor(z/4),x,z), including negative coordinates.
 // Within each cell records sort by (stableMaterialKey,viewBin). Bundles are
 // 4x4 cells with codec 0 (raw) or T03 codec 1 (canonical PackBits).
-bool t3d_vt_demand_write_v3(
-	const t3dVTDemandV3Cell_t *pCells, uint32_t nCellCount,
-	const t3dVTDemandV3Record_t *pRecords, uint32_t nRecordCount,
-	const t3dVTDemandV3CookConfig_t &rConfig, std::vector< uint8_t > &rBytes );
+bool t3d_vt_demand_write_v1(
+	const t3dVTDemandV1Cell_t *pCells, uint32_t nCellCount,
+	const t3dVTDemandV1Record_t *pRecords, uint32_t nRecordCount,
+	const t3dVTDemandV1CookConfig_t &rConfig, std::vector< uint8_t > &rBytes );
 
 // Fully validates every directory/record/hash and requires exact VT package
 // and authored-source signatures. T01 does not select this path at runtime.
-bool t3d_vt_demand_read_v3(
+bool t3d_vt_demand_read_v1(
 	const uint8_t *pBytes, uint64_t nBytes, uint64_t nExpectedPackageSignature,
-	uint64_t nExpectedSourceSignature, std::vector< t3dVTDemandV3Cell_t > &rCells,
-	std::vector< t3dVTDemandV3Record_t > &rRecords,
-	t3dVTDemandV3CookConfig_t *pConfig = nullptr );
+	uint64_t nExpectedSourceSignature, std::vector< t3dVTDemandV1Cell_t > &rCells,
+	std::vector< t3dVTDemandV1Record_t > &rRecords,
+	t3dVTDemandV1CookConfig_t *pConfig = nullptr );
 
 #endif

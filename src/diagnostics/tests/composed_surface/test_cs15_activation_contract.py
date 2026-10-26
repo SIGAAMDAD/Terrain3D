@@ -2,8 +2,8 @@
 """CS15: source-only guard that the new cold decoder cannot enable composed raster."""
 from pathlib import Path
 root = Path(__file__).resolve().parents[4]
-decode = (root / 'src/authoring/vt/build/terrain_3d_composed_surface_v3_godot_decode.cpp').read_text()
-source = (root / 'src/authoring/vt/build/terrain_3d_composed_surface_v3_reference_decode.cpp').read_text()
+decode = (root / 'src/authoring/vt/build/terrain_3d_composed_surface_v1_godot_decode.cpp').read_text()
+source = (root / 'src/authoring/vt/build/terrain_3d_composed_surface_v1_reference_decode.cpp').read_text()
 shader = (root / 'project/addons/terrain_3d/rd/terrain_clipmap_fragment_inc.glslinc').read_text()
 assert 't3d_cs15_decode_reference_tile' in decode
 assert 'Image::FORMAT_BPTC_RGBA' in decode

@@ -7,6 +7,11 @@
 #error "terrain_clipmap_fragment_interface.glslinc requires terrain_material_vt_contract.glslinc at the shader stage root"
 #endif
 
+// The composed-result evaluator uses ordinary V1 physical banks and the
+// existing region-map SSBO. There are no composed-only descriptors or trials.
+#ifndef T3D_WORLD_RASTER_MESH
+#define T3D_CS_ACTIVE 1
+#endif
 #ifndef T3D_WORLD_RASTER_MESH
 #define T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(logical_material_id) (materials[T3D_CLIPMAP_MATERIAL_BASE + int(logical_material_id)].micro_vt_allocation)
 
@@ -90,8 +95,6 @@ layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
 layout(set = 0, binding = 15) uniform sampler2DArray middle_composite_maps;
 layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
 layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
-layout(set = 0, binding = 18) uniform sampler2D far_height_map;
-layout(set = 0, binding = 19) uniform sampler2D far_color_map;
 layout(set = 0, binding = 20) uniform sampler2DArray far_albedo_maps;
 layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
 layout(set = 0, binding = 22) uniform sampler2D macro_noise_texture;
@@ -128,6 +131,7 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALBEDO_BIND
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_NORMAL_BINDING) uniform sampler2DArray terrain_vt_normal_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_SURFACE_BINDING) uniform sampler2DArray terrain_vt_surface_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT_BINDING) uniform sampler2DArray terrain_vt_height_bank0;
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT16_BINDING) uniform sampler2DArray terrain_vt_height16_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET,
     binding = T3D_TERRAIN_VT_TAIL_METADATA_BINDING,
     std430) readonly buffer TerrainVTTailMetadataBuffer {
@@ -137,6 +141,7 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALBEDO_TAIL
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_NORMAL_TAIL_BINDING) uniform sampler2D terrain_vt_normal_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_SURFACE_TAIL_BINDING) uniform sampler2D terrain_vt_surface_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT_TAIL_BINDING) uniform sampler2D terrain_vt_height_tail;
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT16_TAIL_BINDING) uniform sampler2D terrain_vt_height16_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_MIP_LAYOUT_BINDING, std430) readonly buffer TerrainVTMipLayoutBuffer {
     T3DVTMipLayout terrain_vt_mip_layouts[];
 };
@@ -146,29 +151,8 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDIN
 };
 #endif
 
-// Independently versioned composed-result descriptor extension, cold-specialized.
-// Legacy variants declare no additional bindings or descriptor requirements.
-#ifdef T3D_CS_ACTIVE
-struct T3DComposedGpuEntry {
-    ivec2 world_page;
-    uint mip;
-    uint physical_slot;
-    uint generation;
-    uint device_generation;
-    uint revision_lo;
-    uint revision_hi;
-    uint state;
-    uint channels;
-    uint reserved0;
-    uint reserved1;
-};
-layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_PAGE_TABLE_BINDING, std430) readonly buffer T3DComposedPageLookup {
-    T3DComposedGpuEntry terrain_cs_pages[];
-};
-layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_ALBEDO_BINDING) uniform sampler2DArray terrain_cs_albedo;
-layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_NORMAL_BINDING) uniform sampler2DArray terrain_cs_normal;
-layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_SURFACE_BINDING) uniform sampler2DArray terrain_cs_surface;
-#endif
+// Composed surface pages use the same V1 allocation/page-table/physical-bank
+// descriptors above. The retired standalone table and textures are not bound.
 
 #ifndef T3D_WORLD_RASTER_MESH
 layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
