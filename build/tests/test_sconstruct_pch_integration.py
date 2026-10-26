@@ -50,10 +50,23 @@ class SConstructPchWiring(unittest.TestCase):
         self.assertIn('object_env.AppendUnique(CPPDEFINES=["T3D_TESTS_ENABLED"])', self.script)
         self.assertIn('env.Alias("terrain3d-pch", pch_nodes[0])', self.script)
 
-    def test_no_duplicate_pch_object_in_final_library(self):
+    def test_pch_producer_object_is_linked_once_when_pch_enabled(self):
+        # With the base env as link_env, SCons does not automatically insert
+        # the /Yc companion object. Omitting it causes MSVC LNK2011.
+        self.assertIn('if pch_nodes:', self.script)
+        self.assertIn('if len(pch_nodes) != 2:', self.script)
+        self.assertEqual(self.script.count('objects.append(pch_nodes[1])'), 1)
         self.assertNotIn('objects.extend(pch_nodes)', self.script)
-        self.assertNotIn('objects.append(pch_nodes[1])', self.script)
+        self.assertLess(self.script.index('objects.append(pch_nodes[1])'),
+                        self.script.index('library = env.SharedLibrary('))
         self.assertIn('source=objects', self.script)
+
+    def test_pch_link_has_a_matching_producer_and_consumer_contract(self):
+        adapter = (ROOT / 'build/pch.py').read_text(encoding='utf-8')
+        self.assertIn('cloned["PCH"] = nodes[0]', adapter)
+        self.assertIn('return cloned, tuple(nodes)', adapter)
+        self.assertIn('object_env = pch_env if use_pch else env', self.script)
+        self.assertIn('objects.append(pch_nodes[1])', self.script)
 
 
 if __name__ == "__main__":

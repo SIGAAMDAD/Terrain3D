@@ -7,12 +7,12 @@ The supplied parent `SConstruct` is now included in the integrated source and ca
 - On MSVC the default is `pch=stable`. Pass `pch=off` to restore the former build behavior; on non-MSVC the default is `pch=off`.
 - `pch` is hidden from `godot-cpp/SConstruct` argument validation, then restored for Terrain3D processing.
 - Each native target produces a PCH under `build/obj/<target>/<platform>/<arch>/<editor|runtime>/pch/`. The adapter uses MSVC `/Yc` on the producer and `/Yu` plus `/FI` on eligible translation units.
-- The PCH producer (`src/core/build/terrain_3d_pch.cpp`) is excluded from recursive source discovery.
+- The PCH producer (`src/core/build/terrain_3d_pch.cpp`) is excluded from recursive source discovery. **Its `/Yc` companion `.obj` is explicitly linked once in the final DLL**; the `.pch` stays a compiler input. This is required by MSVC to avoid LNK2011 because the final link uses the base environment without the `PCH` variable.
 - Test, registration, generated and ISA backend translation units compile without PCH. `register_types.cpp` keeps its existing `T3D_TESTS_ENABLED` define in test builds.
 - The PCH producer shares the same native macros/optimization and CRT settings as the ordinary objects. Each native target gets its own PCH artifact, without a second source manifest.
 - For a PCH-only build run `scons terrain3d-pch target=editor ... pch=stable`. The ordinary target builds it as a dependency of eligible objects.
 
-**Windows acceptance:** run `scons target=editor platform=windows arch=x86_64 pch=stable use_static_cpp=yes debug_crt=no`, repeat `pch=off`, and verify both link. Repeat for `target=template_debug`, then inspect `/Yc` versus `/Yu` compile commands and benchmark clean/warm builds.
+**Windows acceptance:** confirm the MSVC final `link.exe` command contains `terrain_3d_stable.obj` exactly once when `pch=stable`, and not at all for `pch=off`. Then run `scons target=editor platform=windows arch=x86_64 pch=stable use_static_cpp=yes debug_crt=no`, repeat `pch=off`, and verify both link. Repeat for `target=template_debug`, then inspect `/Yc` versus `/Yu` compile commands and benchmark clean/warm builds.
 
 ## Ownership rule
 

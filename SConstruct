@@ -436,6 +436,13 @@ for source in sources:
 print("Terrain3D native PCH: mode=%s target=%s eligible=%d/%d" % (
     pch_mode, native_target, pch_object_count, len(sources)))
 if pch_nodes:
+    # MSVC requires the object emitted by /Yc to be linked with every /Yu
+    # consumer. The link environment is the base env (without PCH), so SCons
+    # cannot implicitly append that producer object for this SharedLibrary.
+    # nodes[0] is the compiler-only .pch; nodes[1] is the linker-required .obj.
+    if len(pch_nodes) != 2:
+        raise RuntimeError("Terrain3D PCH builder must produce a .pch and companion .obj")
+    objects.append(pch_nodes[1])
     env.Alias("terrain3d-pch", pch_nodes[0])
 
 if env.get("is_msvc", False) and env.get("debug_symbols", False):

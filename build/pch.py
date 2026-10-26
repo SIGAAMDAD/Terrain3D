@@ -51,7 +51,8 @@ def build_flavor_pch(env, flavor, mode="off", build_dir="build/obj", source_root
         for src in editor_source_set:
             use_env = pch_env if pch_eligible(src) else editor_env
             objects.append(use_env.SharedObject(target=object_path(src), source=src))
-        # Let SCons track the PCH dependency; do not duplicate PCH .obj at link.
+        # The final DLL must link pch_nodes[1] ONCE. With an unmodified base
+        # env as the link environment, SCons cannot append that object itself.
     """
     if flavor not in VALID_FLAVORS:
         raise ValueError("Unsupported Terrain3D native flavor: " + str(flavor))
@@ -81,7 +82,8 @@ def build_flavor_pch(env, flavor, mode="off", build_dir="build/obj", source_root
     producer.AppendUnique(CXXFLAGS=["/FI" + PCH_HEADER])
     target = str(pch_dir / "terrain_3d_stable.pch")
     nodes = producer.PCH(target=target, source=str(Path(source_root) / PCH_SOURCE))
-    # PCH() returns [pch, obj]; use only the first node as the PCH property.
+    # PCH() returns [pch, obj]. The first feeds /Yu; the second MUST be
+    # present exactly once in the final DLL link (MSVC LNK2011 otherwise).
     cloned["PCH"] = nodes[0]
     cloned.AppendUnique(CXXFLAGS=["/FI" + PCH_HEADER])
     return cloned, tuple(nodes)
