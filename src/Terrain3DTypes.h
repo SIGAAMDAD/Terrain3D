@@ -3143,8 +3143,8 @@ typedef struct t3dTerrainShaderPipelineKey_s
 {
 	uint8_t m_nPassClass = T3D_TERRAIN_SHADER_PASS_COLOR_GENERAL;
 	uint8_t m_nTier = 0u;
-	uint8_t m_nShaderPath = T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
-	uint8_t m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
+	uint8_t m_nShaderPath = T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
+	uint8_t m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 	uint8_t m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
 	uint8_t m_nLightingModelClass = T3D_TERRAIN_LIGHTING_MODEL_RUNTIME;
 	uint8_t m_nSceneIntegrationClass = T3D_TERRAIN_SCENE_INTEGRATION_RUNTIME;

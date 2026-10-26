@@ -29,11 +29,9 @@
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
-// Compute acceleration has two explicit device domains:
-// - a local RenderingDevice for CPU-authoritative brush/derived jobs that require readback;
-// - the renderer-owned global RenderingDevice for render-thread displacement generation.
-// The caller retains terrain mutation ownership and publishes results through the
-// existing Terrain3D transactions.
+// Interactive edits use BRP GPU tiles and the CPU-authoritative edit service.
+// This class retains displacement jobs on the shared renderer RenderingDevice.
+// Local-device brush/derived compute pipelines have been retired.
 
 typedef struct t3dDisplacementRequest_s
 {
@@ -81,11 +79,8 @@ public:
 		return m_lastError;
 	}
 
-	bool		processBrush( eastl::vector< t3dBrushElement_t, Terrain3DEastlAllocator > &rElements,
-							  const t3dBrushParams_t									  &rParams );
 	static void processBrushCpu( eastl::vector< t3dBrushElement_t, Terrain3DEastlAllocator > &rElements,
 								 const t3dBrushParams_t										 &rParams );
-	bool		generateDerivedMaps( t3dDerivedMapComputeJob_t *pJobs, uint32_t nJobCount );
 	// Builds a render-thread-safe snapshot without touching the global RenderingDevice.
 	// The raw GLSL path is intentionally restricted to non-projected, non-detiled
 	// packed-PBR/R8 materials; all other variants retain the raster fallback.
@@ -96,28 +91,14 @@ public:
 	bool dispatchDisplacementRequest( const t3dDisplacementRequest_t &rRequest, RID &rTexture );
 	// Must execute on the render thread before Terrain3DCompute is destroyed.
 	void					 shutdownDisplacementResources( void );
-	EA_FORCE_INLINE uint64_t getRetainedLocalGpuBufferBytes(
-		void ) const {
-		uint64_t bytes = m_brushStorage.retainedBytes();
-		for ( uint32_t slot = 0u; slot < T3D_DERIVED_READBACK_SLOT_COUNT; ++slot ) {
-			bytes += m_derivedStorage[slot].retainedBytes();
-		}
-		return bytes;
-	}
-	t3dLocalComputeBufferStats_t getLocalBufferStats(
-		void ) const {
-		return m_localBuffers.getStats();
-	}
+    EA_FORCE_INLINE uint64_t getRetainedLocalGpuBufferBytes( void ) const { return 0u; }
+    t3dLocalComputeBufferStats_t getLocalBufferStats( void ) const {
+        return t3dLocalComputeBufferStats_t{};
+    }
 
 private:
-	RenderingDevice					  *m_pRd = NULL; // Owned local device for readback workloads.
-	Terrain3DLocalComputeBufferService m_localBuffers;
 	RenderingDevice					  *m_pRenderRd = NULL; // Non-owning global renderer device.
-	t3dPipeline_t					   m_brushPipeline;
-	t3dPipeline_t					   m_derivedPipeline;
 	t3dPipeline_t					   m_displacementPipeline;
-	t3dLocalComputeStorageSet_t		   m_brushStorage;
-	t3dLocalComputeStoragePairSet_t	   m_derivedStorage[T3D_DERIVED_READBACK_SLOT_COUNT];
 	t3dRdDescriptorLease_t			   m_hDisplacementDescriptor{};
 	Terrain3DRdGpuBuffer			   m_hDisplacementRegionBuffer;
 	Terrain3DRdGpuBuffer			   m_hDisplacementMaterialBuffer;
@@ -132,15 +113,10 @@ private:
 	uint32_t						   m_nDisplacementHeight = 0u;
 	mutable Terrain3DMutex			   m_errorMutex;
 	String							   m_lastError;
-	bool							   m_bDeviceAttempted = false;
 	bool							   m_bRenderDeviceAttempted = false;
 
-	bool ensureDevice( void );
 	bool ensureRenderDevice( void );
-	bool ensurePipeline( t3dPipeline_t &rPipeline, t3dRdShaderId_t id, const String &rName );
 	bool ensureRenderPipeline( t3dPipeline_t &rPipeline, const Ref< RDShaderSPIRV > &rSpirv, const String &rName );
-	bool ensureBrushCapacity( uint32_t nBytes );
-	bool ensureDerivedCapacity( uint32_t nSlot, uint32_t nInputBytes, uint32_t nOutputBytes );
 	bool ensureDisplacementResources( uint32_t nWidth, uint32_t nHeight, const Ref< RDShaderSPIRV > &rSpirv );
 	void releaseDisplacementDescriptor( void );
 	void freeRenderPipeline( t3dPipeline_t &rPipeline );

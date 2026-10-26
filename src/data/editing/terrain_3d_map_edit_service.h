@@ -140,9 +140,7 @@ private:
 
 	// Reused on the synchronous edit path. Worker tasks receive retained, disjoint halo spans.
 	eastl::vector< t3dDerivedMapTask_t, Terrain3DEastlAllocator >	m_derivedTaskScratch;
-	eastl::vector< float, Terrain3DEastlAllocator >					m_fDerivedHaloScratch;
 	eastl::vector< float, Terrain3DEastlAllocator >					m_fDerivedWorkerHaloScratch;
-	eastl::vector< uint8_t, Terrain3DEastlAllocator >				m_derivedComputeScratch;
 	eastl::vector< uint8_t, Terrain3DEastlAllocator >				m_derivedOutputScratch;
 	eastl::vector< Vector2i, Terrain3DEastlAllocator >				m_activeLocationScratch;
 	eastl::vector< Vector2i, Terrain3DEastlAllocator >				m_derivedLocationScratch;

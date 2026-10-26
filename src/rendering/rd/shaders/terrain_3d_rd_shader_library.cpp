@@ -176,7 +176,7 @@ bool Terrain3DRdShaderLibrary::isPageReductionEnabledCold( void ) {
 bool Terrain3DRdShaderLibrary::physicalCacheReady(
 	void ) {
 	const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
-	return pState && pState->m_nPhysicalUsers != 0u && pState->m_nPhysicalPrewarmCursor == T3D_RD_SHADER_COUNT &&
+	return pState && pState->m_nPhysicalUsers != 0u && pState->m_nPhysicalPrewarmCursor == t3dRdShaderCatalogActiveCount() &&
 		   pState->m_nPhysicalFailureCount == 0u;
 }
 
@@ -196,86 +196,12 @@ static uint64_t t3dRdShaderTicksUsec(
 
 // Shader ID slots remain append-stable. Only real, reachable shader versions
 // are loaded and physically prewarmed; retired slots have no catalog source.
-static bool t3dRdShaderCatalogEntryEnabled( const t3dRdShaderId_t id ) {
-    if ( id >= T3D_RD_SHADER_TERRAIN_FORWARD_BASE && id < T3D_RD_SHADER_TERRAIN_CULL ) return false;
-    if ( id >= T3D_RD_SHADER_TERRAIN_FEEDBACK_BASE && id < T3D_RD_SHADER_WORLD_CS_BASE ) return false;
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE && id < T3D_RD_SHADER_INSTANCE_COMPACT_BASE ) return false;
-    if ( id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE && id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR ) return false;
-    if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) return false;
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS ) return false;
-    if ( id >= T3D_RD_SHADER_UCMP_ALIAS && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES ) {
-        // UCMP shaders are acquired on the accepted unified backend, never prewarmed
-        // as an additional copy of the legacy distance-tier family.
-        if ( id >= T3D_RD_SHADER_UCMP_COMPACT_BASE && id < T3D_RD_SHADER_UCMP_FEEDBACK_BASE )
-            return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
-        if ( id >= T3D_RD_SHADER_UCMP_FEEDBACK_COMPACT_BASE )
-            return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
-        return true;
-    }
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS ) {
-        return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
-    }
-    if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE &&
-         id < T3D_RD_SHADER_ENVIRONMENT_STATE ) {
-#if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-        return ( ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) %
-            T3D_RD_VT_FEEDBACK_HINT_VARIANT_COUNT ) == 1u;
-#else
-        return false;
-#endif
-    }
-    if ( id >= T3D_RD_SHADER_ENVIRONMENT_STATE &&
-         id < T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE ) {
-        return id != T3D_RD_SHADER_RETIRED_OCEAN_ENV_PREPARED_COLOR &&
-            Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold();
-    }
-    if ( id >= T3D_RD_SHADER_RETIRED_MATERIAL_BASE &&
-         id < T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE ) {
-#if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-        return id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE &&
-            id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR &&
-            ( ( ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE ) %
-                T3D_RD_VT_COLOR_HINT_ID_STRIDE ) == 2u;
-#else
-        return false;
-#endif
-    }
-    if ( id == T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE ||
-         id == T3D_RD_SHADER_RETIRED_SCREEN_SPACE_SHADE ||
-         id == T3D_RD_SHADER_RETIRED_INSTANCE_CULL_COMMAND_OWNER ||
-         id == T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI ||
-         ( id >= T3D_RD_SHADER_WORLD_CS_BASE && id < T3D_RD_SHADER_WORLD_CS_END ) ) {
-        return false;
-    }
-    if ( id == T3D_RD_SHADER_CLUSTER_COMPACT ||
-         ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE &&
-           id < T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE ) ) {
-        return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
-    }
-    if ( id >= T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE &&
-         id <= T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL ) {
-        return Terrain3DRdShaderLibrary::isPageReductionEnabledCold();
-    }
-    if ( id >= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_CLASSIFY &&
-         id <= T3D_RD_SHADER_WORLD_VISIBILITY_SCAN_FINALIZE ) {
-        return Terrain3DRdShaderLibrary::isWorldScanEnabledCold();
-    }
-    if ( id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_SMALL ) {
-        return Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold();
-    }
-    if ( id == T3D_RD_SHADER_INSTANCE_CULL_GROUPED ||
-         id == T3D_RD_SHADER_WORLD_VISIBILITY_CULL_GROUPED ) {
-        return Terrain3DRdShaderLibrary::isGroupedCullEnabledCold();
-    }
-    return id != T3D_RD_SHADER_TERRAIN_CULL && id >= T3D_RD_SHADER_NEAR_ALIAS;
-}
-
 static uint32_t t3dRdExpectedPhysicalShaderCount(
 	void ) {
 	uint32_t nCount = 0u;
-	for ( uint32_t value = 0u; value < T3D_RD_SHADER_COUNT; ++value ) {
-		const t3dRdShaderId_t id = ( t3dRdShaderId_t ) value;
-		if ( !t3dRdShaderCatalogEntryEnabled( id ) ) {
+	for ( uint32_t value = 0u; value < t3dRdShaderCatalogActiveCount(); ++value ) {
+		const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( value );
+		if ( !t3dRdShaderCatalogIsActive( id ) ) {
 			continue;
 		}
 		if ( t3dRdShaderCatalogGet( id ).m_domain == T3D_RD_SHADER_GLOBAL_DEVICE )
@@ -288,7 +214,7 @@ static uint32_t t3dRdExpectedShaderLoadCount(
 	void ) {
 	uint32_t nCount = 0u;
 	for ( uint32_t value = 0u; value < T3D_RD_SHADER_COUNT; ++value ) {
-		if ( t3dRdShaderCatalogEntryEnabled( ( t3dRdShaderId_t ) value ) )
+		if ( t3dRdShaderCatalogIsActive( ( t3dRdShaderId_t ) value ) )
 			++nCount;
 	}
 	return nCount;
@@ -529,7 +455,7 @@ Ref< RDShaderSPIRV > Terrain3DRdShaderLibrary::borrowSpirv(
 		return Ref< RDShaderSPIRV >();
 	}
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
-	if ( id >= T3D_RD_SHADER_COUNT ) {
+	if ( !t3dRdShaderCatalogIsActive( id ) ) {
 		return Ref< RDShaderSPIRV >();
 	}
 	Terrain3DScopedLock lock( state.m_sourceMutex );
@@ -559,7 +485,7 @@ RID Terrain3DRdShaderLibrary::borrowPhysical(
 		return RID();
 	}
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
-	if ( id >= T3D_RD_SHADER_COUNT || !physicalCacheReady() ) {
+	if ( !t3dRdShaderCatalogIsActive( id ) || !physicalCacheReady() ) {
 		return RID();
 	}
 	const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
@@ -575,7 +501,7 @@ RID Terrain3DRdShaderLibrary::borrowPhysical(
 RID Terrain3DRdShaderLibrary::acquirePhysicalCold(
 	Terrain3DRdContext	 &context,
 	const t3dRdShaderId_t id ) {
-	if ( !t3dRdShaderSharedStateGet() || id >= T3D_RD_SHADER_COUNT || !physicalCacheReady() ) {
+	if ( !t3dRdShaderSharedStateGet() || !t3dRdShaderCatalogIsActive( id ) || !physicalCacheReady() ) {
 		return RID();
 	}
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
@@ -623,7 +549,7 @@ bool Terrain3DRdShaderLibrary::isPhysicalReady(
 	}
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
 	return m_bPhysicalUser && m_nPhysicalDeviceGeneration == state.m_nPhysicalDeviceGeneration &&
-		   state.m_nPhysicalPrewarmCursor == T3D_RD_SHADER_COUNT && state.m_nPhysicalFailureCount == 0u;
+		   state.m_nPhysicalPrewarmCursor == t3dRdShaderCatalogActiveCount() && state.m_nPhysicalFailureCount == 0u;
 }
 
 bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm(
@@ -699,11 +625,11 @@ bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm(
 		state.m_bPhysicalMetadataPrepared = true;
 	}
 	const uint32_t limit = budget > 0u ? budget : 1u;
-	for ( uint32_t work = 0u; work < limit && state.m_nPhysicalPrewarmCursor < T3D_RD_SHADER_COUNT;
+	for ( uint32_t work = 0u; work < limit && state.m_nPhysicalPrewarmCursor < t3dRdShaderCatalogActiveCount();
 		  ++state.m_nPhysicalPrewarmCursor ) {
 		const uint32_t		  nCursor = state.m_nPhysicalPrewarmCursor.load();
-		const t3dRdShaderId_t id = ( t3dRdShaderId_t ) nCursor;
-		if ( !t3dRdShaderCatalogEntryEnabled( id ) || !t3dRdShaderNeedsStartupPhysical( id ) ) {
+		const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( nCursor );
+		if ( !t3dRdShaderCatalogIsActive( id ) || !t3dRdShaderNeedsStartupPhysical( id ) ) {
 			continue;
 		}
 		const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
@@ -947,14 +873,18 @@ void Terrain3DRdShaderLibrary::cancelLoadCold(
 
 bool Terrain3DRdShaderLibrary::resolveCatalogCold(
 	void ) {
-	for ( uint32_t index = 0u; index < T3D_RD_SHADER_COUNT; ++index ) {
-		const t3dRdShaderId_t id = ( t3dRdShaderId_t ) index;
+	for ( uint32_t index = 0u; index < t3dRdShaderCatalogActiveCount(); ++index ) {
+		const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( index );
 		// Startup totals and physical prewarming already exclude retired shader IDs.
 		// The CPU resolver must use the same catalog policy or retired entries
 		// with no shader path cause a false startup failure after valid loads.
-		if ( !t3dRdShaderCatalogEntryEnabled( id ) ) {
+		if ( !t3dRdShaderCatalogIsActive( id ) ) {
 			continue;
 		}
+		const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
+        UtilityFunctions::print( "[Terrain3D][ShaderTrace] source=", entry.m_path,
+            " version=", entry.m_version ? entry.m_version : "", " id=", ( int64_t ) id,
+            " generation=", ( int64_t ) m_nStartupGeneration );
 		if ( loadCatalogShader( id ).is_null() ) {
 			return abortShaderLoad();
 		}
@@ -1089,7 +1019,6 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics(
 	result["physical_ready_global"] = ( int64_t ) physical_by_domain[T3D_RD_SHADER_GLOBAL_DEVICE];
 	result["physical_ready_local"] = ( int64_t ) physical_by_domain[T3D_RD_SHADER_LOCAL_DEVICE];
 	result["unified_material_loaded"] = getShader( T3D_RD_SHADER_UCMP_ALIAS ).is_valid();
-	result["cull_loaded"] = getShader( T3D_RD_SHADER_TERRAIN_CULL ).is_valid();
 	result["instances_loaded"] = getShader( T3D_RD_SHADER_INSTANCE_ALIAS ).is_valid();
 	result["instance_occluder_depth_loaded"] = getShader( T3D_RD_SHADER_INSTANCE_OCCLUDER_DEPTH ).is_valid();
 	result["hlod_cull_loaded"] = getShader( T3D_RD_SHADER_HLOD_CULL ).is_valid();
@@ -1139,7 +1068,7 @@ bool Terrain3DRdShaderLibrary::isReady(
 	for ( uint32_t id = 0u; id < T3D_RD_SHADER_COUNT; ++id ) {
 		const t3dRdShaderId_t shaderId = ( t3dRdShaderId_t ) id;
 		// Match the CPU catalog resolver: retired shader IDs intentionally have no SPIR-V.
-		if ( !t3dRdShaderCatalogEntryEnabled( shaderId ) ) {
+		if ( !t3dRdShaderCatalogIsActive( shaderId ) ) {
 			continue;
 		}
 		if ( getCatalogShader( shaderId ).is_null() ) {

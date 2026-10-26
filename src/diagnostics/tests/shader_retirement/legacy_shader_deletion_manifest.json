@@ -1,0 +1,1428 @@
+{
+  "schema": "RET-06-deletion-v1",
+  "referenced_paths": [],
+  "prefix_references": [],
+  "deleted": [
+    {
+      "path": "project/addons/terrain_3d/shaders/main_far.gdshaderinc",
+      "sha256": "050d78eb744dbeeae244ab66a1147811976a0792b125fd17a703a09e28334195",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main_far.gdshaderinc.uid",
+      "sha256": "9966f8b0fb844677ed4539fe6513430c477a21e882e301d8cccdaf490dd9a2c2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main_middle.gdshaderinc.uid",
+      "sha256": "15f2c34270b136e5cb9de35093f27c5b5b9240768a61c6ef948105aff8dda22f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main_shadow.gdshaderinc.uid",
+      "sha256": "4becc1c6167581e52c3587295754f818788034077c01141f2e0326c1bc9256d3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main_middle.gdshaderinc",
+      "sha256": "4f2e8abe135e85957b0b92d39fea085facae3c16d2849ffbc0b630817e92b981",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main.gdshaderinc",
+      "sha256": "8481625be366b9cdcb84bd68541d6b8db323f7d6adf413cddf74793d46a17a1a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/displacement_buffer.gdshaderinc.uid",
+      "sha256": "c362fe7c81418957f0d8741df0b7a4d30fb0b6b69aa7e21f5a7ca251bf3316f5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/displacement_buffer.gdshaderinc",
+      "sha256": "c9ac69cdeb5d065fc060f960e1055c58592cb90aa1a59205dad2bc79bfd82385",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main.gdshaderinc.uid",
+      "sha256": "75041bf9cabbcfa46cc83b1e0b79af85a7a27f3a80501971efa5788fb5c1b357",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/main_shadow.gdshaderinc",
+      "sha256": "8656084d833c575d7d0a2f961be7dece267dea3dab31854164b0bdde73e160fb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_jaggedness.gdshaderinc.uid",
+      "sha256": "7430f5abd1c57c32954e75bb5f1c8c95bc5fdd8d27ca47687403d379e8567859",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/none_check.gdshaderinc",
+      "sha256": "c5a02e8864f014727d9a1fb6f873cb2cdcd84232b1b880b14e843a10f0775274",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_ambient_occlusion.gdshaderinc.uid",
+      "sha256": "fe1666479b62a13b098c4fee3966eefd2bc9f936eea538a19fd7ab72a4c63e68",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_region_lookup.gdshaderinc.uid",
+      "sha256": "54d7329963687f57db889114afbf6a8a640a32171c6fc447ebfc0e69f83ccd12",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/auto_shader_uniforms.gdshaderinc.uid",
+      "sha256": "20e3ad79e215786af18af599c5ee6ae3ff865dc6821114cd90e13d2ad213ecc2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_blend.gdshaderinc.uid",
+      "sha256": "2eeeac8d004ef94f77ece82fcee7405a423368f8e88c887a4141e6e7f64d05f7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_region_lookup.gdshaderinc",
+      "sha256": "ef58beca92ec92b3f79723a15a910f346304b046c2cda1ab2d21f142f20e3404",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_checkered.gdshaderinc.uid",
+      "sha256": "01bab303cd11e77961cea01cce15427cbdeab2c7963181badc09aea806f9e8a3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_texture.gdshaderinc.uid",
+      "sha256": "4496a468701cd1842f62adb11e786720bae0b861903e5882eca7f020859db3cd",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_core_functions.gdshaderinc.uid",
+      "sha256": "ffbf070363565338bdd92668246d0ecc2e4aa050007a0f4a2bc2a871e0450f35",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/render_vertex_world_setup.gdshaderinc",
+      "sha256": "280fcb6383d2a712e70d9900fa62315cade73dd8e8dc5a9e9a791532462c79a1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_middle_height_uniforms.gdshaderinc.uid",
+      "sha256": "019cda7a31c31838026aa8bd9a004c618e22b926ba2572d7df781f11ea25f930",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/material_layer_map.gdshaderinc",
+      "sha256": "f7a883d4d16165ada6654368693b0e8aea11e215082ab08070543fa48732cd9f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_autoshader.gdshaderinc",
+      "sha256": "4794e7b9a71fa56bf5543fb3e19c8ee70e9d6223ad368201fe7dc9031da807e5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_uniforms.gdshaderinc",
+      "sha256": "3a940b2e1c3a11f1c0797848e49b3861df8f1a6c85f9b442893876860b5c43e9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_metallic.gdshaderinc.uid",
+      "sha256": "0716b85532540d600d9c3064fe8c066781b9751296d7bc2b8fcba7117e6d36d6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/blend_weight_functions.gdshaderinc",
+      "sha256": "aef90f93ac4a283b1421d83640d0973b7e5dee79fad2f125b4103320d6cf72df",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_displacement_uniform.gdshaderinc.uid",
+      "sha256": "bd88517d07f109d820675c819f16a8ec729f9699ce1bcd6b54168bffd24b4d08",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_ao.gdshaderinc.uid",
+      "sha256": "40485888c47a38b9ac9790dce55109442e46cd477de42aeb7ff195bb30b11dd7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_condition_1.gdshaderinc.uid",
+      "sha256": "b6d2fb2337a86ff642bbb69d8036b774cc6cad483b7083f0907e3c5a0b8ea691",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_nearest.gdshaderinc.uid",
+      "sha256": "e240439f40beba8886c43aba04f2db1f64508e3deccddda73bd5966c19a6a57d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/material_layer_map.gdshaderinc.uid",
+      "sha256": "c77ce010457f374c5bcc77e18c9068ddae2b53b38fe5b9bc65c73c11bc478ea1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_linear_anisotropic.gdshaderinc.uid",
+      "sha256": "2c3326e4697012ca5d695e19d65b613b68dc507ce996558ccb36ec2a704383f0",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near_far_cached_material.gdshaderinc.uid",
+      "sha256": "1a125a7bc7af9a28b80f9942c5f2ebf23988a2d29bd6436bf016175f16438c25",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_ambient_occlusion.gdshaderinc",
+      "sha256": "04372309e977f01a7df8a301daeab6b42bb312e19467eddc98ce8e667c9b86c8",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle_none_fragment.gdshaderinc.uid",
+      "sha256": "f9c4b8c5230e1f89da38999f779dbecdce093fd9b928648f9a6c82b8680f5fd3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_nearest_anisotropic.gdshaderinc.uid",
+      "sha256": "955d9b44b9990805c06917a3bcf26ba8729bbc844c566d572a77cfb2c0600ee6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_factor.gdshaderinc",
+      "sha256": "471f49fd711d727e66859d75ba4ba8f0597e442c9dc2b48a0df8a41d92f6dc24",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_albedo.gdshaderinc",
+      "sha256": "29c54d13d5a5a593f7573c97c828f983521c7f374af87be163781da728a7282f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_specular.gdshaderinc",
+      "sha256": "e9ffd0a87b6d1f8b5cae56fa3c79c2a4f9f7579d27ac854383986da2ab0e2da9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_albedo_grey.gdshaderinc.uid",
+      "sha256": "ced625dea66931badd422756d5c9e673ffa7b652c038a76aa644e28d43321221",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_instancer_grid.gdshaderinc.uid",
+      "sha256": "57ce6d1cdf1f067e7b76a371af2b43a00e469ae9630041f15ecb6741ed27d924",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_albedo.gdshaderinc.uid",
+      "sha256": "645b8efa526ece5e26e8d33b8e4341abe1cbc56f4ec9414d214b51848ce33b93",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_middle_height_uniforms.gdshaderinc",
+      "sha256": "7b0e1294961eff782034bb05b16c4ca6c9081aa3e3360cb96dca518b5b495049",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_displacement_functions.gdshaderinc",
+      "sha256": "bac82a2a11ecd35633d2131c166397304a8d404e4ba11d0d7c94a1902a3cc212",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_instancer_grid.gdshaderinc",
+      "sha256": "8294b3116c0aaadb84d29cbf7501da0c098ea04428a9a118d380acb36d85db8e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_vertex.gdshaderinc.uid",
+      "sha256": "eb423462351805cfe32f2713a2776347ea2ee8988fb817cba4e389d11cc03f02",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_linear.gdshaderinc.uid",
+      "sha256": "1e00391094b20bf32468c5d0d0563a0934dbe3c2ee1d7ed39ae15e39eed6d342",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/clipmap_batching_functions.gdshaderinc.uid",
+      "sha256": "e59358157f55982eb17b10493cac08f6f9adc06818d56b1888fd9a4877f4ab24",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_blend.gdshaderinc",
+      "sha256": "e53284900fdc9754fddb535c9c1654aec6ebf5aa9609da615f1f6441d8c681ba",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_colormap.gdshaderinc",
+      "sha256": "e22fce9b11f553aad079804b3983724a73dd259d1b71b706427d0aee5ac971a4",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_linear.gdshaderinc",
+      "sha256": "1e1f6d9c12e82a009bd4f44f60066f099fd4b328e3f86d6930fcdd26001dac2e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_specular_none.gdshaderinc.uid",
+      "sha256": "a157bce707525f01b9c2efb9fa3bee6c3a3b7b6b8ca214414c10e3a72aaf9e57",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling.gdshaderinc",
+      "sha256": "4d01e37e105c230d22c9eca633eeb17ff79bd7a1bb873ea0fd8f81e202f17102",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/blend_weight_functions.gdshaderinc.uid",
+      "sha256": "79ce47c3152e9d0704a5e98d8507f54b20676d9fd759698d2dde3f5c727aa3a2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_material_functions.gdshaderinc",
+      "sha256": "c956d0a2d8ff031305fea5d8a244f7b264ec6a326003f8733a32e7ca096498d3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_displacement_uniform.gdshaderinc",
+      "sha256": "ca244d5ef471067e87da847c65571b00d49b61f03eb1e9bbbccf8a86d52e36e9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_navigation.gdshaderinc",
+      "sha256": "89158e0c7a8a808a7bbe825b4b6199ef3f024c1f698400b1157fd861170eecb3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/blinn_phong.gdshaderinc.uid",
+      "sha256": "f4825364e762f11876a96e9a83a39384fd2859a144b2019ec0758eb201369b21",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_atlas_bounds.gdshaderinc.uid",
+      "sha256": "04ddbe661cea291bb2c13f07b88bd1f559c87fa09dd8c1db75429c95168a4306",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_render_varyings.gdshaderinc",
+      "sha256": "0b44e5f144b00267c32de1e564be976b7dacbc1288c70d7495f862c65c78f0f1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_nearest.gdshaderinc",
+      "sha256": "6fba035de1007dbd8aec6d5a48f22351381ddee5fdff2baa5e07bea92d1dddd5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/runtime_material_streaming.gdshaderinc",
+      "sha256": "45ffb48727d31cd2d7a3eed2378d80217f6d118ce2145bdaedef20027d42215f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/clipmap_batching_functions.gdshaderinc",
+      "sha256": "663aa8664a4051afa9eb2646e2208806fa672be01fc0b6858478a47883a957e9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_fragment.gdshaderinc.uid",
+      "sha256": "6ae15bc5ccb90f88cb27a0af13be6ee0e9e5f4c44cab1d32383923abdc7a2a00",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/blinn_phong.gdshaderinc",
+      "sha256": "e1ccde8a63fb685d76e818c512ad986c3e5855d7e5aea12747c3c7c1de319df6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_vertex.gdshaderinc",
+      "sha256": "fc60a120d3b7559210ed7b5904bcf2feb6d9574d8698bd8533463d3a57d4eddc",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_mix.gdshaderinc.uid",
+      "sha256": "d2890eb268ed4c4e8daf3b3d6b2a987707fb2a9f132432cd6e40f83ccb313a64",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_nearest_anisotropic.gdshaderinc",
+      "sha256": "968062739f25cd3b6d2443871c60212ba6fa545dc9d0b1420f31582ced878556",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle_none_fragment.gdshaderinc",
+      "sha256": "5eccd89b3058461551bbdf9b9262bb69684d28ab2103abe359f98c93ab643204",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle_color_functions.gdshaderinc.uid",
+      "sha256": "18b79ce45d5722ada512cc7c50da5a7d15ff1d773f0eb8a4f459a8bc53c1c51c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_vertex.gdshaderinc.uid",
+      "sha256": "35e15f1bc3ca6cd3d0df82f0a29e1e4149fb8101049fa30d8b718fad6f7331e8",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_common_defines.gdshaderinc",
+      "sha256": "0f3b44a4f41bcf4ee2da35334e70345993dbb1e56a86229df90efeb98e2c6ac1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_uniforms.gdshaderinc",
+      "sha256": "224a83555d7ca5b633b36da799470773bee16902bffa319fcc41d41bb1f2eb61",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_uniforms.gdshaderinc.uid",
+      "sha256": "c9bdbd098df15a268aa9369dcd52b94793912c6544c065459b742438bee17eab",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_common_defines.gdshaderinc.uid",
+      "sha256": "940b8baf56842874cb097af74f0db8957f95879acd52179ed7827315885cfd79",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_color_filtered.gdshaderinc.uid",
+      "sha256": "770d2a282f1d2b6542ef575b177eee50e18045cce44631762335b66c78524789",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_uniforms.gdshaderinc.uid",
+      "sha256": "8b3c2c431b2ba7c0bef52f7ab376fa476160d116e215efe0dc02f0ccf829d289",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_checkered.gdshaderinc",
+      "sha256": "a9e1a6d5ec7cf62e52c383cfa42c958a537db931ef12afcc2675e48c9ba188e8",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling.gdshaderinc.uid",
+      "sha256": "5286579c896a4c412194a5452b1bd777b6cb66d98d2a155785ae8f4f0db9168e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_decal_setup.gdshaderinc",
+      "sha256": "0bedd9467fa1defc5de89c8869cd3058e60306fd3a77bbf7f5a83066de339fd5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/projection.gdshaderinc",
+      "sha256": "192987901559a991a35828759b98537379bb61f130f4f00ea0f4e8a5e8b1b32d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_height_decode.gdshaderinc.uid",
+      "sha256": "1519da042ea5b4f4bbf744e0ee21975aaff9c247bf707e613906865860775623",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_heightmap_setup.gdshaderinc.uid",
+      "sha256": "5510ee6bd17551c6bfbf2320dc603e9fb9186993356d2c35f727186d1fbe4651",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/projection_displacement.gdshaderinc.uid",
+      "sha256": "1f394b397373148554a02e6ab01534d8dee78d332e663a9b03ab89797235bf7b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_fragment.gdshaderinc.uid",
+      "sha256": "07cf4c859e14cb0f920b4a20714655a46d3066aafa1ea257a5e5136c29e8abc7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/none_check.gdshaderinc.uid",
+      "sha256": "e12572963140730cf47c20fadc67f66b3f499b20e7a8f885e8abca7f45fcc847",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_displacement_buffer.gdshaderinc",
+      "sha256": "9a5dfeed07a12b8f4c96c42bc0c3b016b53ee542a9dd8540b378e30877f73224",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_uniforms.gdshaderinc.uid",
+      "sha256": "6976473bb17b0ff727c81c5291dbe1e43eafe91b147c8368f37eff30728a36fe",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_region_grid.gdshaderinc.uid",
+      "sha256": "7e7161ca82397a10ec8ee767509b924b95dc3a4ff5ed8a3ce3adc3cfb478691e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_normal.gdshaderinc.uid",
+      "sha256": "242f81ee22a991b2ab7a4cd71240a919df2f734b335ee641a546eab1b0e0fe7e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_uniforms.gdshaderinc",
+      "sha256": "1c811c3ac20844921e7c625ba68aabcc483a3886f6588211e48a827c022e021a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_region_grid.gdshaderinc",
+      "sha256": "7222e45b01914692fde3a078511f4c38eb59a7ba2adff2e545424079fde111da",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_setup.gdshaderinc.uid",
+      "sha256": "f1530595354714794186b9a4961e7032a4395ad2e09fef8b3cd47c6d285a6cfa",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_material_sampling.gdshaderinc.uid",
+      "sha256": "03fe4c6b29375ebf62dbc22d6b8e77befb9ef561e78ab69ed4777b2ba18af441",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_height.gdshaderinc.uid",
+      "sha256": "4c59c5b1a98e33d3a01e04f5771c6024555d5f9cf8458fdc2e88e5014f8eef98",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_uniforms.gdshaderinc.uid",
+      "sha256": "a2e8b0b7ae699ea20a62b6707ced6f27324917104883757c21fb48af1125ebb8",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_material_functions.gdshaderinc.uid",
+      "sha256": "bf0f14bbaccdafcd0fe05e755d8441ff07c8087356efa7f1df7a1c67b721c8a7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_texture.gdshaderinc",
+      "sha256": "05f57ff9b5cb8a750033c83a052d5f6a5950f5fb27227416ed246fc7b17d7d37",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_height.gdshaderinc.uid",
+      "sha256": "574690191d1c705b7027f4844d2860e59a4ff66943c2eac5b730be3fb6737b88",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_height.gdshaderinc",
+      "sha256": "ee0e18a6de7ee4a6cfbb1d51df339ea13dedb93fc97cd09a7d07f269c7c6ac54",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_none_fragment.gdshaderinc.uid",
+      "sha256": "6556a60eaae4098f4e81d602f6dfee4cdd0e671b088990fc16e20ebda1548c7a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_contours_setup.gdshaderinc",
+      "sha256": "8a00d6f528cbc5225e30943e2817ee6862f2cea9f38feef6714e979bad512513",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_control_lookup.gdshaderinc",
+      "sha256": "47341846e0f57c4957ccef93b73d8cebaa69e55c706a80c8b689cfd37089e87e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/macro_variation_uniforms.gdshaderinc",
+      "sha256": "0a0f8d8b101ac43a183864c7ded6421016e25519fe4359bd78ffa0c112a2b42d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_uniforms.gdshaderinc.uid",
+      "sha256": "46e7503a0b5b34ef4159742bc03baf1129434bdf7e6ebb49ac814b0b41643853",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_normal.gdshaderinc",
+      "sha256": "a41388fcc17e6aac8580398a853e5e0089dd420d0f0fbc4623d84a12a20f7746",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/macro_variation_uniforms.gdshaderinc.uid",
+      "sha256": "781703fb42272ac7289402c48307ed82b97953a4018b2c7f0822966ff3eeb7ae",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_angle.gdshaderinc.uid",
+      "sha256": "3ff4af8ef99e1bc6f19c7f6eaedcd498f3665cea9db14e660e4d576eb165e561",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_height_decode.gdshaderinc",
+      "sha256": "ace0b2d0cc34d19270c94504a60f10e3043550ac95e330e7dab736c7c036fa27",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_vertex.gdshaderinc",
+      "sha256": "068cba643bc8bde1fbbace6f1082517b04323f6f4f3d6465fb1cc915c9fc3b58",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_displacement_functions.gdshaderinc.uid",
+      "sha256": "ed862088e29230965e9266f88a602aabec129809e62351de756f2560345e9d90",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_factor.gdshaderinc.uid",
+      "sha256": "978bdc0c1fb8132f6ee30a999046d2d01fbb01eb2ba932081482dca7da2ed81e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/texture_samplers_linear_anisotropic.gdshaderinc",
+      "sha256": "d20001584f212ffc83c0fda1328c9074b07e5ebf27a24d76f32c1b52c231e1aa",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_functions.gdshaderinc.uid",
+      "sha256": "3ec67add2d083b11c209ed19dabc270d7b37a98bd2913c31da09763a5dcde26f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_angle.gdshaderinc",
+      "sha256": "0b9179abe04ffaf697e8c437f7d3770f3367a5520b30e3a158662cc0dab459e9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_flat_functions.gdshaderinc.uid",
+      "sha256": "d5ae0bf345f3ff4280b3a0924686164e3aad48d2866a7c9fedfca87397c8e880",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/runtime_material_streaming.gdshaderinc.uid",
+      "sha256": "99ccb82c46af8b039e663f708b83a58966997c5ad020e755fb3c49d4700643cb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_fragment.gdshaderinc.uid",
+      "sha256": "c40657b77e54b9b02dab1a95bfbaed94bc6eae5ca3a7b70b59c8cdec0a1d81bb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_jaggedness.gdshaderinc",
+      "sha256": "5dbf257fcfd1b1d0bff9e2e617448f2eeff63eccdda4eb99b1c6427099e517b1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_fragment.gdshaderinc",
+      "sha256": "a66860e8b224ff1dcdca29faa67032b190a727360f16ca1bb9766aba80225ad6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_color_filtered.gdshaderinc",
+      "sha256": "c5b0de9da40adf2565423466e4384502a90395440eb2c83b02d5ee4fba94bc78",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_albedo_grey.gdshaderinc",
+      "sha256": "b0b393957f8f4a953a7f51e080793a748c0602e563be7dcdbcd8b49f2fbdcdd9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_heightmap_setup.gdshaderinc",
+      "sha256": "ecd504ef5c2aede9950c30291a24a9333dcf3ac18150b269d08c1e3875d5c0a2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_setup.gdshaderinc",
+      "sha256": "9879218efad6f6522925252aec6fec9905ee25d3ab59d2f0c91b0a3964f1d3f9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_roughness.gdshaderinc",
+      "sha256": "1dbfee53fe50197f949ea8858afb79cba4e1b88958f06dddb72850bfdab3e727",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_vertex.gdshaderinc.uid",
+      "sha256": "527fbdfad5933e99a917a452f0cd1c02e4cb865dc87e2c63962f8a96a62742cd",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_height_interpolation.gdshaderinc",
+      "sha256": "de1437a63255afe3285dfb602f53380c3a00ccc66685f540d6e67274c8f9b766",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_decal_render.gdshaderinc.uid",
+      "sha256": "80951ad83f2ccea9be8f7013bf4055bcabdaf90457c55c42e2296f7a37d9bc36",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_none_fragment.gdshaderinc",
+      "sha256": "f0888319efe4b9f71932f527d9fd3264904d905312d498e12f5182226b1adde2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/clipmap_vertex_setup.gdshaderinc.uid",
+      "sha256": "c54c66815552ba3d7cfa14f397bac9f87770c0d3579baa01e09c80b0237478f7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_render_varyings.gdshaderinc.uid",
+      "sha256": "e819bb75ad01859067bb453215de3e2c46d4bc269ab83bafe1150390e362dc2e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/auto_shader.gdshaderinc",
+      "sha256": "25ef67c74323d1399a9b0efb7b35b3cc62b32c8264f180779f01b501f79bc807",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_albedo.gdshaderinc",
+      "sha256": "94e251cda27a0ada13de365bf08762a0e055f8ad2920ee42fb5df0cd1e6efa2c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/clipmap_vertex_setup.gdshaderinc",
+      "sha256": "947219610e10e13dcf05e589db83aace8f20f2c99b863647898fcad2e7ae7ee7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near_far_cached_material.gdshaderinc",
+      "sha256": "ef0ac729dbb2c424904293d842d9e674cc3546cfd5f197c64da3bac1ad0ec3a5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_heightmap.gdshaderinc.uid",
+      "sha256": "afb0eaba314d568eb9d62d91e567943406fb3549bf692a6eae6ff4280b5e9d4a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_color.gdshaderinc.uid",
+      "sha256": "c3b2f92c099339cbc64a74180932ded84826bed3327a91824215edb2174b7fec",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_flat_functions.gdshaderinc",
+      "sha256": "21f8d228b1649d00b5176af7cba771b52d7f20cd63f738c687bd3c6e2786b4cd",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/macro_variation.gdshaderinc",
+      "sha256": "d41b85a415a0dfabf66543d57ee4442347b733f2d80bcd27fcff3f3039f627f0",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/wrapped_diffuse_light.gdshaderinc",
+      "sha256": "bf0f8ebde7f142eebab2a8e8966e05b34d87f2c9a2d3d4aed8fc572428eb6b5b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_mix.gdshaderinc",
+      "sha256": "7c14763caa4c603f53083e1572c240756eb6de4fd02abc166fe1b74c3c43bbf9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_contours_setup.gdshaderinc.uid",
+      "sha256": "d6f85f23443c1c5a2b063ae15c08623f1b9fd7e76da447cd1c2f69df66ac1e42",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_roughness.gdshaderinc.uid",
+      "sha256": "88661561d233515fac72bc0a5d903a86a9b87ad88af3446a1d8386e210617600",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_albedo.gdshaderinc.uid",
+      "sha256": "74a0972e5a6e6038c10943ed3710be9c6e3a756010caa0b3ef85dfbd63273c8c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_roughness.gdshaderinc.uid",
+      "sha256": "6515f0e60b3d7abf13b996c07e85d925ac0048c33b4f7f4ee6586943d69006ec",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_control_lookup.gdshaderinc.uid",
+      "sha256": "599581f92f220d805f535b8bba32337b808f3fc9ea7155a03f598c784a8f75a9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/render_vertex_world_setup.gdshaderinc.uid",
+      "sha256": "6224eae002a6521e33b2b24410f490f0bc284e156f919cf3cc774a6d2fa5988e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_region_map_uniform.gdshaderinc",
+      "sha256": "139eaecf8a23402c86d0ccd94ad5afeb0f2b549d60c15b0daed3341afe1511cc",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_grey.gdshaderinc.uid",
+      "sha256": "051b81c70267299c322e87e56b58d8436af47042e9d8466323014b97278e968d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_decal_render.gdshaderinc",
+      "sha256": "f1f0604bbc8d6a712c73a8e460d813482a5aa7b583242223c7923d3e3adad3de",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_uniforms.gdshaderinc.uid",
+      "sha256": "9e6488695740b8369d359bb9ea5701028011a9769330bebff2ca322acb933234",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_normal_map.gdshaderinc.uid",
+      "sha256": "1ea0b11f145cd15d090451dbad254c81fc28841e3ae29fa647f7d2c8f29628b5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_fragment.gdshaderinc",
+      "sha256": "f2ad96fed9a03c9b28a252018f3758c186cb9ac1aff338f59ca07747b1725fa5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_material_sampling.gdshaderinc",
+      "sha256": "d2c1a66296f1abd9bb1250ef2334ada230423c5cb77a202b56d01babf09e4649",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_missing_texture.gdshaderinc",
+      "sha256": "bf21f19ec7cf93f03c79379b3b411e2493a364db384ae441c7187c4c17289945",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_decal_setup.gdshaderinc.uid",
+      "sha256": "055fcfe3265a4cb72227ebf4f7e4e5e259c712a1a6c8ae609d08d8a76ef03176",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/auto_shader_uniforms.gdshaderinc",
+      "sha256": "ff6b5e1e0c175ee5941129cd98744f5f016ef51b2a275f6efc43ef4de18e1fce",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle_color_functions.gdshaderinc",
+      "sha256": "ffeeae8adb479ea47de016bbc3a976a9652465e4470d792f002105ea8950d48e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_condition_0.gdshaderinc",
+      "sha256": "e27d6ee0ad0438a9ae3b4c99897c66eaf05ce23c5887958717320b8b0d6fcee7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_normal.gdshaderinc.uid",
+      "sha256": "f328fc3e2d038653156309ab3fc0712a6447ed34236f951ec71452955441b19a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_vertex.gdshaderinc",
+      "sha256": "58a6285f1855e9faf589c9c9606dbf6d8de060552f4659e4ac627b9d8e0253a4",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_metallic.gdshaderinc",
+      "sha256": "9b45e74a7fe25eb6e9b32bd4af0fd7c4ddcf569b48ca7b54650d8c2b70774690",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/projection.gdshaderinc.uid",
+      "sha256": "646e324a0e8016cbd9cb9e7932c38d3b5b1862e40d30bb14b192d21ecfec14af",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_common_uniforms.gdshaderinc",
+      "sha256": "3d7ffa5b834e8bbf9288fb0c5283d1c1f57d43110145c9c77cb888847d82c15f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_ao.gdshaderinc",
+      "sha256": "6c323cf37b5d27250ee330873fe9263a8e781c401f17cbae5b4ec83d2b428a88",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_material_functions.gdshaderinc",
+      "sha256": "4ea3a1cd67c155d52a57a18b24f12d903321f5dd3cde4779fbd56165bacb3b4c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_render_common_uniforms.gdshaderinc.uid",
+      "sha256": "2456b6f849a3f7ab4ed7f77ac0f92eb12910c65e9ff7640101a461337d01b6fd",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_roughmap.gdshaderinc.uid",
+      "sha256": "d4b4712be13a55e01973018292da6207b691f43f352961298475ba5f0ebe078c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_displacement_buffer.gdshaderinc.uid",
+      "sha256": "70f11f73a52927c1d45a70804602bfedde43580718bf7c524e9e5b71dc317a16",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_heightmap.gdshaderinc",
+      "sha256": "f582c04bf1607d6c8be4689f3452ebc89b52739606cc95ca85b00a8466abbda6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_none_functions.gdshaderinc.uid",
+      "sha256": "e52a1753440ae8ad58052773b9169591a332c248e26e55a29eec4af1acf3695e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_vertex_grid.gdshaderinc",
+      "sha256": "a9e446c96e2dd730971d3e093204f21a1744949f56253479339f1386a26b3c6f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_autoshader.gdshaderinc.uid",
+      "sha256": "70b6a888ee7651fa7418f4a8099acbdac6263021bfcd7cb2a066d42bb036832c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_uniforms.gdshaderinc",
+      "sha256": "42a0a89de195d052808b694d256bc3bb04d3624736310cfdef8a7ff4c76317e1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_functions.gdshaderinc.uid",
+      "sha256": "f4070ab725cb83596e90416a8021e30323626605abe288ce5b3be8fdc1bfb907",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_specular.gdshaderinc.uid",
+      "sha256": "c9fcc04792e8292d9e7aa50e4f8c6b6ff18974f4ce8d6e730ff899b33461c447",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_uniforms.gdshaderinc",
+      "sha256": "e63ae04312d873708469080f9504f3d652dbc0715c86a3ebb53d6456afffd39e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_vertex_grid.gdshaderinc.uid",
+      "sha256": "d5b6a4949a580bc63ec11e10fccee8e719ffba268bafde32bd3e0b5b0a62e5d1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_roughmap.gdshaderinc",
+      "sha256": "59488c61cf2d2efc4115801e34d3b2c84654f0cd8d6cd342f10ffff17c1ebca8",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_color.gdshaderinc",
+      "sha256": "b308bd8fdffebda1f91f71889e50281365873a5f2a86a78fd53aa37a1ff6eb09",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_normal_map.gdshaderinc",
+      "sha256": "c4e9a0ad1f441bef9a90c601cebdb5ea46ac2256625b5a12fe454b627da46d2c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far_none_functions.gdshaderinc",
+      "sha256": "3faa2298773a94b5d20bd703ce9b1b658549a9b6454b25bc5a21b0d93798b4b2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_functions.gdshaderinc",
+      "sha256": "161a1754034699462822fffcfd19c00de37c40c00cc8715bf342a301339706ac",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/none_functions.gdshaderinc",
+      "sha256": "38eeccb75709568099b208603dd8b0d9d5745fbf54baae2455c497e97e1910e3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/legacy_pbr_displacement_functions.gdshaderinc.uid",
+      "sha256": "25b76c53cdd2ac88da3478499f58559c029dc0803cdfa60369b3bebd58f18ae1",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_material_functions.gdshaderinc.uid",
+      "sha256": "4e6de3c878f337502acf981b2e4477001e834d419df576344b1988205162af4f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/world_noise_fragment.gdshaderinc",
+      "sha256": "757db972381e2b09294181fd757b795ae94cfe92978cced847f7f865e05883df",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_atlas_bounds.gdshaderinc",
+      "sha256": "b50f97ddb08443b4689dd93e3f3f8a7105edf689c44944c7f0c24a89bd32e711",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_condition_1.gdshaderinc",
+      "sha256": "b5ada7cc363998ba489fd34b742d3335bf8ffe013b014dfd2744cd694899b785",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_specular_none.gdshaderinc",
+      "sha256": "f7fe7919efa97703c54c49495626d81fb476cdd8f35ad9f1bf326ca0753bcbbb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_grey.gdshaderinc",
+      "sha256": "39d70608707befe84482f6bd0c642ab3641cec29979fab2c92506a37c57fe6a3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_colormap.gdshaderinc.uid",
+      "sha256": "6c0589deef4c991d169ae78f30fab34954fdb4fabc8d138e37451f22c3e1c2fe",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/editor_navigation.gdshaderinc.uid",
+      "sha256": "1754b3ff051d0ba30e1c9a4b9c1f4799645a3a272983862122f7924b52fabd43",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_region_map_uniform.gdshaderinc.uid",
+      "sha256": "f9466f9908e67f71bebd22be916fa75c9555a96d923484c3ca86c6df7d94003d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_displacement_functions.gdshaderinc",
+      "sha256": "06b94ac44e6058f75ee85c25f4ed486b0d46e66ed5e8e61d01d18f1c3f0b9214",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/macro_variation.gdshaderinc.uid",
+      "sha256": "02115593e411edfc5fd3edd47311077ddf637d81503941dfc21435adf45590b7",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/output_roughness.gdshaderinc",
+      "sha256": "88560812d313ab4a6b5d766566f3ccde70b44af8adeeac2083df1745b48d4e8d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_height.gdshaderinc",
+      "sha256": "77b45d95c39b7d28b6ef6ebbae5e2eccca03bf8cde92b3d8d61dcb3419d5f239",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/dual_scaling_condition_0.gdshaderinc.uid",
+      "sha256": "8f697ef40f4d05cba5e3a55f4dabfd2bf00d7ef8025e7f36b95ced41238e5994",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_height_interpolation.gdshaderinc.uid",
+      "sha256": "8c59e79e6d4217e3234f45b854dd2f8dec3992acd37d590439ffa963827c6d6f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_common_uniforms.gdshaderinc.uid",
+      "sha256": "21eb000aa930cd340476fa00d8306456e60abb390ba62c759910beae0418df18",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_surface.gdshaderinc.uid",
+      "sha256": "97e1eaaefb934a239e15d84288170a2f17167746963509a29b75b4932770f4c2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_functions.gdshaderinc.uid",
+      "sha256": "30ecda26009e4016e82660a6cc1aec73c145a34f265e0a8dd647899e5e793220",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/pbr_texture_normal.gdshaderinc",
+      "sha256": "582d9adee0b4e277a7f4eab7d7c6cd2c0b245817f8a4c48ef3f813e6461e2d5a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_missing_texture.gdshaderinc.uid",
+      "sha256": "1f35a88c86bd20b139b7e2303f1fdfca682a29a61976e0d2f1aa5fd63efe73bf",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/auto_shader.gdshaderinc.uid",
+      "sha256": "bdb5d6ed884992ad6288b54b4abe3d1c79864b6f68456008dfa1140dd41216da",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/surface_pbr_core_functions.gdshaderinc",
+      "sha256": "fd0d8e0c1384fc1b10c43c328446ca2fa7db879a277e84fcd18480b771c2c497",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_instancer_grid_setup.gdshaderinc.uid",
+      "sha256": "355354dcda247b67f5e7c64e9c014c8f25cb95d413338987e7f520a1e55edeb6",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/none_functions.gdshaderinc.uid",
+      "sha256": "a7dc12b421e8a0ddc06215e831bb705b8dbbf9a021aee91f313a8f0316e5205d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_scale.gdshaderinc",
+      "sha256": "16fe2a56f42d0537929727e56a2079d1e6252131e32e063ba122ea507301a29e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_contours_render.gdshaderinc.uid",
+      "sha256": "84c556cac33edcf4475cc70d54f0b5f420f21fc161218602707809cb9e8ac5bb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/wrapped_diffuse_light.gdshaderinc.uid",
+      "sha256": "534d49f9db40f4a2de61445c887a37296bc9a1cdfa0d37fc93e8d988b25b012d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_uniforms.gdshaderinc",
+      "sha256": "2de7a9139667ba5104d65f743c53bae6e881516b1cfe4d19b97d9f172a19f5cb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/displacement_functions.gdshaderinc",
+      "sha256": "0a846db2cbe59956ad4fe2621cfca5fe1bba160818b76b3fab47df7546daff0c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/flat_functions.gdshaderinc",
+      "sha256": "40347d58738b7a093b1af48b430fa150e2dc4f1c711de47e76a0170d9f4fb5a4",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/debug_control_scale.gdshaderinc.uid",
+      "sha256": "522b6dbbe15fe713210faad6502c8a92af0f6b0ecbe6f2cdab2e7668bcbe4b52",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_render_common_uniforms.gdshaderinc",
+      "sha256": "c0058610b7c58678b0106dbad04ea4e1374a5c4927ed90f3e656eabfcd2f4d3b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_instancer_grid_setup.gdshaderinc",
+      "sha256": "7a353c1e4df335df3c36f04d42111ed33b23402995c7f500f258c24536a0daa3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/projection_displacement.gdshaderinc",
+      "sha256": "db9cfd85da235a3ff6f0234c3695dd437a28c199aee426e3e439864ee0afd2de",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/overlay_contours_render.gdshaderinc",
+      "sha256": "a5d8467123b9034494a775340d0e31ab069d34220fd71faf828a373b903bdf1a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/terrain_far_surface.gdshaderinc",
+      "sha256": "641ea5239b7a8fd86449fef41d243b1525093a0846467fd4386041d8b9035910",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_uniforms.gdshaderinc",
+      "sha256": "61e8efbaa1044b38fc5a51801e4eab871a1c9f772c4aa9d3f31efc5f14d61662",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_height_functions.gdshaderinc",
+      "sha256": "bbb670519ab9aa5ce20bf7aa1d8852c343d183c29160290c1ee9915181e192e3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_vertex_body.gdshaderinc",
+      "sha256": "db476b5e1ad53d70d73ff194bc6c05c46dee8c2e6e88bb444e6a15ff7bf6a63f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_vertex_body.gdshaderinc.uid",
+      "sha256": "4b0b642eb369d483191e51f3859b0cf1030e2859f828bb8977e1cf3c66a93b82",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_height_functions.gdshaderinc.uid",
+      "sha256": "3c2a0c3b79cf1e2210e68ca31b170209637ca3ec140a06c9e08722092fbb0749",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shadow/shadow_uniforms.gdshaderinc.uid",
+      "sha256": "abddc4a51a78c2249ea07f9518f72ddfd48bce96f40212c04671b1241ffbf562",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shared/terrain_render_samplers.gdshaderinc.uid",
+      "sha256": "739746110d111dfa39a20990ae68134bbe5a0a10343365fcfc4e7780d1da33db",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/shared/terrain_render_samplers.gdshaderinc",
+      "sha256": "3874e1d8892f4dd0d61d2849064dbb33169e0fbc39396ae31c979da61a5e1dc3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_vertex_body.gdshaderinc",
+      "sha256": "41c7196288fcc954b6bd127e92908de686316b88314ea63fdaa2e14f5e314bce",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_vertex_body.gdshaderinc.uid",
+      "sha256": "21aa8de17c2f524b28d42641e8aaa3725a8b55083e922aed9b1d280d7e96e2f3",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_terrain_functions.gdshaderinc.uid",
+      "sha256": "423f41794bf89b579fda448d515426a1c741ed388d7b2b9222b1afa271c00b7b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_lighting.gdshaderinc",
+      "sha256": "3049d1a9451b7a2c9293efe256aadb49ed5d1e2ccad1b36f88868ed3197854c9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_fragment_body.gdshaderinc",
+      "sha256": "802e423455aeeda671c58d02b6db6f4a786f3da14a7d2bd94e2e4463cff7960a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_fragment_body.gdshaderinc.uid",
+      "sha256": "fa20403c71a591ee60890e3c62636438ffc267bf286e28be0e8023daaa052294",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_terrain_functions.gdshaderinc",
+      "sha256": "8675ae0355f24ca21e21b4ccbe7905706e605c97864436817d04125b636ea057",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_lighting.gdshaderinc.uid",
+      "sha256": "bddbd530f01b3fde6b19f708d15b9336ff94a2448d20c63b95159c437b98cd64",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_uniforms.gdshaderinc.uid",
+      "sha256": "47b755324a6d2983d7b66d0cf124b12c1e634c229c1a2e85ce52f899b156140e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/middle/middle_uniforms.gdshaderinc",
+      "sha256": "a5ffbd4e97d63e5cc329118bb83448068a040a3740802a86c0e493103a3717af",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_lighting.gdshaderinc.uid",
+      "sha256": "951e1a23fd8c5c497ede0a4be22d39e58f144e785081881113830bb0eeb064cf",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_terrain_functions.gdshaderinc",
+      "sha256": "9c6c12a261580a30a7e28445da619fe6946946c8d5d77afc6a5c2c398fe5fb3c",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_vertex_body.gdshaderinc.uid",
+      "sha256": "7ca5a920cb3df80cbe3083ea6ab3ead1153d294c930732ae62732144432f8c4e",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_vertex_body.gdshaderinc",
+      "sha256": "a5c2052fe8dc1669bc18f4415431d98d649e7f9ff5d6bef3fe17895220f01a21",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_fragment_body.gdshaderinc",
+      "sha256": "5dec2b98da76599d61fe202e51922ede7c53a53bb8c723140141e409162769ff",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_lighting.gdshaderinc",
+      "sha256": "19e811da98c018ebab94bda9c6a9713e844674a9bc8199ca366e6a9cb015647f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_uniforms.gdshaderinc.uid",
+      "sha256": "fbe9d200a0653296546cdffdee6b43264fe8d5540b6c365ce6741de7d541b161",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_fragment_body.gdshaderinc.uid",
+      "sha256": "39ab7f01eb704d39aa54d84a404be3e13fee79af85f87ee059e7b1a3b75de5ac",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_uniforms.gdshaderinc",
+      "sha256": "1cbf7f796d591338373606fcf3eee87a354dcd5ec882afc435891e24fe0cf383",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/far/far_terrain_functions.gdshaderinc.uid",
+      "sha256": "3ace77f9fb9ba702fae707cbc8c08bf2f779236d53643fcbd89a30f35a1c7c16",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_uniforms.gdshaderinc.uid",
+      "sha256": "cbcaf53377beeefe81fd7d9d382b07726b8516d1fe6685d653d001dd1f2d7370",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_fragment_terrain.gdshaderinc.uid",
+      "sha256": "94920991a84f6da22763dc7a44fdff3d70dcf0f73f4b64d21f4f01fe4b0d5e37",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_pbr_outputs.gdshaderinc",
+      "sha256": "4e38f13bedcb7d022da4c0e81e7b05db504cde4ecd268b05455652e6cfacdb89",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_pbr_outputs.gdshaderinc.uid",
+      "sha256": "6cca8f11b14dad48d3eff9a9d54d3abbda4626d87d81068b67dc82e4927303dc",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_lighting.gdshaderinc.uid",
+      "sha256": "ece9cee21b9ba662dcb52353946d12fb006f6b4c20d09df22eb15c2c0dfc7eaf",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_material_functions.gdshaderinc.uid",
+      "sha256": "35499ff2b528cdd7dfd5cfd5be2b29939332fd51e4f8e51377ef06302d781ab5",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_detailed_material.gdshaderinc",
+      "sha256": "a69d547099a3c1a7841547c4e307c0f1ce403a9a43aa755a616b2576881189c4",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_detiling_functions.gdshaderinc",
+      "sha256": "f75180ef0b2138fc5e71bd6f07056c79253e13561fe9b78b39fbdff2a875abe9",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_terrain_functions.gdshaderinc.uid",
+      "sha256": "f28741cfb25ac3a32723e8d2dcf9e37234ee5f7309382538476a1cb58f28a623",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_fragment_terrain.gdshaderinc",
+      "sha256": "f0d3ef58d3c453108cff4e5dc7262ab03d4242389c6767705ae37ca480924bcb",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_vertex_body.gdshaderinc",
+      "sha256": "a8600a62e7d5608073e38b80198e49f229f3970bb769b23ffc96874976d6d121",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_vertex_body.gdshaderinc.uid",
+      "sha256": "6222c5a75ebdecf5cd9848ab4c7e84f55eb654adb087dc1b90c32bc5b63d4bb4",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_material_functions.gdshaderinc",
+      "sha256": "b92fe94d950d307ab734c64358ea9f2fd70e448b066339e5dcda0d9cf08a11dc",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_fragment_material.gdshaderinc",
+      "sha256": "72a31c2a1a5920606ce47a5fe3b0caadbb310648fe3a3ed486a5e37ac85ad564",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_fragment_material.gdshaderinc.uid",
+      "sha256": "b94c39b40fd46c77bdf8954fda9794da0fef5b210b003a99518d4eb9768314ec",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_types.gdshaderinc",
+      "sha256": "e66d49df9c8db747ec7f6e4db593ec8fb3ef57c96529a081543c25fa858d3c85",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_detiling_functions.gdshaderinc.uid",
+      "sha256": "9db6920754e230719d739345d494db908269ffb9084f3c6323063c1cb01d4946",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_uniforms.gdshaderinc",
+      "sha256": "497bbe3a099dac2973346427e78e63a3b3954fc18eec44882ae829ac41125856",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_types.gdshaderinc.uid",
+      "sha256": "2bcb448fd552310fc6395c2441ff0a43c4271a035cd0e2f19fda4b0a79a8fa1b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_terrain_functions.gdshaderinc",
+      "sha256": "8b9d7716d95a16c1694733031a91ea393105e8d7d3831ae041c911f3d41ddd75",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_detailed_material.gdshaderinc.uid",
+      "sha256": "7f2caab3e78c48db3ed4e19937e77fea42b2bb9d654dfd81ed5beb17e24ec076",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/near_lighting.gdshaderinc",
+      "sha256": "7f644ca6d9420b843910e6af3c221b6abf3c1143e32a924477848b050379db8d",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/single.gdshaderinc",
+      "sha256": "361ac1f3117ac8c427e8bed6764fa3edbd8594d1115f3533fc8d2f51ef42fe84",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/cinematic.gdshaderinc.uid",
+      "sha256": "cb263bcaa56971d921045785b39c1c13578d088756d53e439b24bc937a9e71b2",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/distance_adaptive.gdshaderinc.uid",
+      "sha256": "e0078a90e98f50a6e7d0ef18792c1445bdb62d40d7493b4b4f1426d13086e114",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/two_corner.gdshaderinc",
+      "sha256": "3aab944816f9fb044410537cc4e686fa43821ffcf112c5fbc839892a46e4a09b",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/cinematic.gdshaderinc",
+      "sha256": "b461f15c2d28278286532d01ba59f53ade2d07f1381e657437b3aedaf9c6f698",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/two_corner.gdshaderinc.uid",
+      "sha256": "e567883a477f789511824cfd78a966c64ed1e43c86ad662bc155284a7eeabf65",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/single.gdshaderinc.uid",
+      "sha256": "13e803d6e9d801ace2de972df37cfb198e1adf9d0d9f98708629851a9584ba60",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/distance_adaptive.gdshaderinc",
+      "sha256": "7cc994545a6eda16d72cca111bb6c17ca6093ca324dd67e7a39a61f56a381a4a",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/weighted.gdshaderinc.uid",
+      "sha256": "bfb8dbb3c2c303e9172d1c896e62a7bc31103b7292af91e1035fae968ebce647",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/adaptive.gdshaderinc.uid",
+      "sha256": "821a623928586071a392f49451f29cc6621461598839afb474bd458704e468cd",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/weighted.gdshaderinc",
+      "sha256": "37c3db38b6dde78ecd4f6e1d2c2ecb20d6aa2b26ce405cec83310a1ee35ad67f",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    },
+    {
+      "path": "project/addons/terrain_3d/shaders/includes/near/material_sampling/adaptive.gdshaderinc",
+      "sha256": "22d5f77bbbab7216f847919c4782274f82aa966e028f1cd1cc732325c5999a82",
+      "reason": "No external resource-path or UID inbound references; only obsolete internal Godot material source tree"
+    }
+  ],
+  "retained": []
+}

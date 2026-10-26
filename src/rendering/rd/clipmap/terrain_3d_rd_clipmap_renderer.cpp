@@ -235,101 +235,24 @@ bool Terrain3DRdClipmapRenderer::ensureShaders(
 }
 
 bool Terrain3DRdClipmapRenderer::ensureForwardShaders(
-	const t3dTerrainShaderPath_t	  path,
-	const t3dRdForwardShaderVariant_t variant,
-	const bool						  bOneSunLighting ) {
-	if ( !m_context.getDevice() ) {
-		return false;
-	}
-	if ( path >= T3D_TERRAIN_SHADER_PATH_COUNT || variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ) {
-		return false;
-	}
-    if ( m_bUnifiedCookedMaterialActive ) {
-        if ( !m_hUnifiedRasterShader.isValid() &&
-             !m_hUnifiedRasterShader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-                "T3D.UCMP.Raster", T3D_RD_SHADER_UCMP_ALIAS ) ) return false;
-        const bool oneSun = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-        const bool compact = !oneSun && m_forwardLighting.compactRequested() &&
-            variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-        Terrain3DRdShader &shader = oneSun ? m_hszUnifiedOneSunShaders[path][variant] :
-            ( compact ? m_hszUnifiedCompactShaders[path][variant] : m_hszUnifiedForwardShaders[path][variant] );
-        if ( shader.isValid() ) return true;
-        const t3dRdShaderId_t id = t3dRdUnifiedTerrainId(
-            ( uint32_t ) path, ( uint32_t ) variant, false, oneSun, compact );
-        m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
-        return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.UCMP.Forward", id );
-    }
-	const bool one_sun = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-	const bool compact = !one_sun && m_forwardLighting.compactRequested() &&
-		variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-		Terrain3DRdShader &shader = one_sun ? m_hszForwardOneSunShaders[path][tier][variant] :
-			( compact ? m_hszForwardCompactShaders[path][tier][variant] : m_hszForwardShaders[path][tier][variant] );
-		if ( shader.isValid() ) {
-			continue;
-		}
-		const String name = String( one_sun ? "T3D.Forward.Shader.TerrainOneSun." : "T3D.Forward.Shader.Terrain." ) +
-							String::num_int64( path ) + "." + String::num_int64( tier ) + "." +
-							String::num_int64( variant );
-		const t3dRdShaderId_t id = one_sun ? t3dRdTerrainOneSunId( path, tier, variant ) :
-			( compact ? ( t3dRdShaderId_t ) ( T3D_RD_SHADER_TERRAIN_COMPACT_BASE +
-				( ( uint32_t ) path * 3u + tier ) * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + variant ) :
-				t3dRdTerrainForwardId( path, tier, variant ) );
-		m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
-		if ( !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, id ) ) {
-			return false;
-		}
-	}
-	return true;
-}
-
-// A feedback-capable hint shader must be chosen before binding set 3.
-// Selecting a baseline feedback shader first would rebuild its descriptor
-// every frame, then rebuild it again for the hint shader in the same frame.
-// The hint producer is owned by the existing shared VT service. Its RID is
-// a layout capability, not an editor trial selection. The non-hint shader
-// always uses the same resolver with the 16-probe ancestor fallback.
-static bool t3dRdCanonicalHintAvailable(
-    const t3dTerrainShaderPath_t shaderPath,
-    const t3dRdForwardShaderVariant_t variant, const bool bOneSunLighting,
-    const bool bCompactLighting, const t3dSharedVTBindings_t *const pSharedVTBindings ) {
-#if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-    return shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
-        variant == T3D_RD_FORWARD_SHADER_COLOR && !bOneSunLighting && !bCompactLighting &&
-        pSharedVTBindings && pSharedVTBindings->hAncestorHints.is_valid();
-#else
-    return false;
-#endif
-}
-
-bool Terrain3DRdClipmapRenderer::ensureCanonicalVtShaders(
-    const t3dTerrainShaderPath_t shaderPath,
-    const t3dRdForwardShaderVariant_t variant, const bool bOneSunLighting,
-    const t3dSharedVTBindings_t *const pSharedVTBindings ) {
-    memset( m_bszCanonicalHintsActive, 0, sizeof( m_bszCanonicalHintsActive ) );
-    if ( m_bUnifiedCookedMaterialActive ) return true;
-    if ( !t3dRdCanonicalHintAvailable( shaderPath, variant, bOneSunLighting,
-        m_forwardLighting.compactRequested(), pSharedVTBindings ) ) {
-        return true;
-    }
-    for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-        Terrain3DRdShader &shader = m_bForwardFeedbackActive ?
-            m_hszCanonicalHintFeedbackShaders[tier] : m_hszCanonicalHintColorShaders[tier];
-        if ( !shader.isValid() ) {
-            const t3dRdShaderId_t id = m_bForwardFeedbackActive ?
-                t3dRdCanonicalVtFeedbackHintId( tier ) : t3dRdCanonicalVtColorHintId( tier );
-            const String name = String( "T3D.VT.Canonical.Ancestor." ) + String::num_int64( tier ) +
-                ( m_bForwardFeedbackActive ? ".Feedback" : ".Color" );
-            m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
-            if ( !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, id ) ) {
-                setError( "Failed to acquire canonical resident-ancestor shader" );
-                return false;
-            }
-        }
-        m_bszCanonicalHintsActive[tier] = true;
-        ++m_nVtHintPrepareCount;
-    }
-    return true;
+    const t3dTerrainShaderPath_t path,
+    const t3dRdForwardShaderVariant_t variant,
+    const bool bOneSunLighting ) {
+    if ( !m_context.getDevice() ||
+         ( path != T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
+           path != T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ) ||
+         variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ) return false;
+    const uint32_t capability = path == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ? 1u : 0u;
+    const bool oneSun = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
+    const bool compact = !oneSun && m_forwardLighting.compactRequested() &&
+        variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
+    Terrain3DRdShader &shader = oneSun ? m_hszUnifiedOneSunShaders[capability][variant] :
+        ( compact ? m_hszUnifiedCompactShaders[capability][variant] : m_hszUnifiedForwardShaders[capability][variant] );
+    if ( shader.isValid() ) return true;
+    const t3dRdShaderId_t id = t3dRdUnifiedTerrainId( ( uint32_t ) path,
+        ( uint32_t ) variant, false, oneSun, compact );
+    m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
+    return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.UCMP.Forward", id );
 }
 
 void Terrain3DRdClipmapRenderer::freeForwardPipelines(
@@ -340,14 +263,12 @@ void Terrain3DRdClipmapRenderer::freeForwardPipelines(
 }
 
 const Terrain3DRdClipmapRenderer::t3dRdForwardPipelineEntry_t *Terrain3DRdClipmapRenderer::findForwardPipeline(
-	const t3dRdForwardPipelineKey_t &rKey ) const {
-	if ( !t3dRdFindForwardPipelineVariants( m_currentForwardPipelineEntry.m_hszPipelines, [&]( const uint32_t nTier ) {
-             return m_forwardPipelines.find( { rKey, rKey.m_bUnifiedCooked ? 0u : nTier } );
-		 } ) ) {
-		return NULL;
-	}
-	m_currentForwardPipelineEntry.m_key = rKey;
-	return &m_currentForwardPipelineEntry;
+    const t3dRdForwardPipelineKey_t &rKey ) const {
+    const auto *const pEntry = m_forwardPipelines.find( rKey );
+    if ( !pEntry ) return NULL;
+    m_currentForwardPipelineEntry.m_hszPipelines[0] = pEntry->m_pipeline.rid();
+    m_currentForwardPipelineEntry.m_key = rKey;
+    return &m_currentForwardPipelineEntry;
 }
 
 static void t3dRdApplyShadowCasterPolicy(
@@ -393,21 +314,18 @@ static void t3dRdApplyShadowCasterPolicy(
 }
 
 t3dTerrainShaderPath_t Terrain3DRdClipmapRenderer::selectTerrainShaderPath(
-	const t3dRdFrameSnapshot_t &rSnapshot ) const {
-	bool editor_debug = rSnapshot.m_materialConfig.m_nDebugFlags != 0u;
+    const t3dRdFrameSnapshot_t &rSnapshot ) const {
 #if defined( T3D_EDITOR_NATIVE )
-    editor_debug |= m_hEditorBrushWork.is_valid() && m_hEditorBrushTable.is_valid();
+    bool editor = rSnapshot.m_materialConfig.m_nDebugFlags != 0u ||
+        ( m_hEditorBrushWork.is_valid() && m_hEditorBrushTable.is_valid() );
+    for ( uint32_t i = 0u; !editor && i < T3D_ARRAY_COUNT( rSnapshot.m_editorOverlayConfig.m_szDecals ); ++i )
+        editor = rSnapshot.m_editorOverlayConfig.m_szDecals[i].m_nVisible != 0u;
+    return editor ? T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED :
+        T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
+#else
+    ( void ) rSnapshot;
+    return T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
 #endif
-	for ( uint32_t i = 0u; !editor_debug && i < T3D_ARRAY_COUNT( rSnapshot.m_editorOverlayConfig.m_szDecals ); ++i ) {
-		editor_debug = rSnapshot.m_editorOverlayConfig.m_szDecals[i].m_nVisible != 0u;
-	}
-	if ( editor_debug ) {
-		return T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED;
-	}
-	return ( rSnapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ||
-               rSnapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 )
-			   ? T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
-			   : T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
 }
 
 // BR05: cold selection follows published toolbar/brush state, not per-pixel
@@ -538,50 +456,26 @@ static uint8_t t3dRdTerrainMiddleSurfaceClass(
 }
 
 RID Terrain3DRdClipmapRenderer::getForwardShader(
-	const uint32_t					  nTier,
-	const t3dRdForwardShaderVariant_t variant,
-	const bool						  bOneSunLighting,
-	const t3dTerrainShaderPath_t	  shaderPath ) const {
-	if ( shaderPath >= T3D_TERRAIN_SHADER_PATH_COUNT || nTier >= 3u || variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ) {
-		return RID();
-	}
-    if ( m_bUnifiedCookedMaterialActive ) {
-        if ( m_bForwardFeedbackActive && shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
-            variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
-            return ( bOneSunLighting ? m_hszUnifiedFeedbackOneSunShaders[variant] :
-                ( m_forwardLighting.compactRequested() ? m_hszUnifiedFeedbackCompactShaders[variant] :
-                  m_hszUnifiedFeedbackShaders[variant] ) ).rid();
-        }
-        if ( bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT )
-            return m_hszUnifiedOneSunShaders[shaderPath][variant].rid();
-        if ( m_forwardLighting.compactRequested() && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT )
-            return m_hszUnifiedCompactShaders[shaderPath][variant].rid();
-        return m_hszUnifiedForwardShaders[shaderPath][variant].rid();
-    }
+    const uint32_t nTier,
+    const t3dRdForwardShaderVariant_t variant,
+    const bool bOneSunLighting,
+    const t3dTerrainShaderPath_t shaderPath ) const {
+    ( void ) nTier; // Clipmap geometry tier never selects a material shader.
+    if ( variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ||
+         ( shaderPath != T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
+           shaderPath != T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ) ) return RID();
     if ( m_bForwardFeedbackActive && shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
          variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
-        if ( variant == T3D_RD_FORWARD_SHADER_COLOR && !bOneSunLighting &&
-             m_bszCanonicalHintsActive[nTier] ) {
-            return m_hszCanonicalHintFeedbackShaders[nTier].rid();
-        }
-        if ( !bOneSunLighting && m_forwardLighting.compactRequested() ) {
-            return m_hszFeedbackCompactShaders[nTier][variant].rid();
-        }
-        return bOneSunLighting ? m_hszFeedbackOneSunShaders[nTier][variant].rid() :
-            m_hszFeedbackShaders[nTier][variant].rid();
+        return ( bOneSunLighting ? m_hszUnifiedFeedbackOneSunShaders[variant] :
+            ( m_forwardLighting.compactRequested() ? m_hszUnifiedFeedbackCompactShaders[variant] :
+              m_hszUnifiedFeedbackShaders[variant] ) ).rid();
     }
-    if ( variant == T3D_RD_FORWARD_SHADER_COLOR && !bOneSunLighting &&
-         shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
-         m_bszCanonicalHintsActive[nTier] ) {
-        return m_hszCanonicalHintColorShaders[nTier].rid();
-    }
-	if ( bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
-		return m_hszForwardOneSunShaders[shaderPath][nTier][variant].rid();
-	}
-	if ( m_forwardLighting.compactRequested() && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT ) {
-		return m_hszForwardCompactShaders[shaderPath][nTier][variant].rid();
-	}
-	return m_hszForwardShaders[shaderPath][nTier][variant].rid();
+    const uint32_t capability = shaderPath == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ? 1u : 0u;
+    if ( bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT )
+        return m_hszUnifiedOneSunShaders[capability][variant].rid();
+    if ( m_forwardLighting.compactRequested() && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT )
+        return m_hszUnifiedCompactShaders[capability][variant].rid();
+    return m_hszUnifiedForwardShaders[capability][variant].rid();
 }
 
 static t3dTerrainShaderPassClass_t t3dRdTerrainShaderPassClass(
@@ -620,25 +514,22 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 	}
 	key.m_bOneSunLighting = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
 	key.m_bFeedbackEnabled = m_bForwardFeedbackActive;
-    key.m_bUnifiedCooked = m_bUnifiedCookedMaterialActive;
-	key.m_bCompactLighting = !key.m_bOneSunLighting && m_forwardLighting.compactRequested() &&
+    	key.m_bCompactLighting = !key.m_bOneSunLighting && m_forwardLighting.compactRequested() &&
 		variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
 	key.m_shaderPath = shaderPath;
 	key.m_nShippingFeatureClass = nShippingFeatureClass;
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
 		key.m_nszLightingModelClass[tier] =
-			pLightingModelClasses ? pLightingModelClasses[key.m_bUnifiedCooked ? 0u : tier] : T3D_TERRAIN_LIGHTING_MODEL_RUNTIME;
+			pLightingModelClasses ? pLightingModelClasses[0] : T3D_TERRAIN_LIGHTING_MODEL_RUNTIME;
 	}
 	key.m_nSceneIntegrationClass = nSceneIntegrationClass;
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-		key.m_nszDnrOutputClass[tier] = pDnrOutputClasses ? pDnrOutputClasses[key.m_bUnifiedCooked ? 0u : tier] : T3D_TERRAIN_DNR_OUTPUT_RUNTIME;
+		key.m_nszDnrOutputClass[tier] = pDnrOutputClasses ? pDnrOutputClasses[0] : T3D_TERRAIN_DNR_OUTPUT_RUNTIME;
 	}
 	key.m_nMiddleSurfaceClass = nMiddleSurfaceClass;
 	key.m_nEditorDiagnosticClass = nEditorDiagnosticClass;
 	key.m_nNoiseSourceClass = nNoiseSourceClass;
-    for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-        key.m_nszVtHintLayout[tier] = m_bszCanonicalHintsActive[tier] ? 1u : 0u;
-    }
+    
 	if ( findForwardPipeline( key ) ) {
 		m_lastForwardPipelineKey = key;
 		m_bLastForwardPipelineKeyValid = true;
@@ -664,7 +555,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 	Ref< RDPipelineDepthStencilState >	depth = pipeline_states.m_depth;
 	Ref< RDPipelineColorBlendState >	blend = pipeline_states.m_blend;
 	m_context.beginResourceRebuild();
-	for ( uint32_t tier = 0u; tier < ( key.m_bUnifiedCooked ? 1u : 3u ); ++tier ) {
+	for ( uint32_t tier = 0u; tier < 1u; ++tier ) {
 		TypedArray< Ref< RDPipelineSpecializationConstant > > specialization_constants;
 		if ( key.m_shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL ) {
 			Ref< RDPipelineSpecializationConstant > feature_class_constant;
@@ -707,18 +598,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 				dnr_output_constant->set_value( Variant( ( int64_t ) ( key.m_nszDnrOutputClass[tier] ) ) );
 				specialization_constants.push_back( dnr_output_constant );
 			}
-			if ( !key.m_bUnifiedCooked && tier == 1u ) {
-				Ref< RDPipelineSpecializationConstant > middle_surface_constant;
-				middle_surface_constant.instantiate();
-				if ( middle_surface_constant.is_null() ) {
-					m_context.endResourceRebuild();
-					setError( "Failed to allocate Terrain3D middle-surface specialization constant" );
-					return false;
-				}
-				middle_surface_constant->set_constant_id( T3D_TERRAIN_SPEC_CONSTANT_MIDDLE_SURFACE_CLASS );
-				middle_surface_constant->set_value( Variant( ( int64_t ) ( key.m_nMiddleSurfaceClass ) ) );
-				specialization_constants.push_back( middle_surface_constant );
-			}
+
 		}
 #if T3D_ENABLE_COLD_MATERIAL_CLASSES
 		Ref< RDPipelineSpecializationConstant > noise_source_constant;
@@ -749,10 +629,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 		shader_key.m_nPassClass = ( uint8_t ) ( t3dRdTerrainShaderPassClass( variant, key.m_bOneSunLighting ) );
 		shader_key.m_nTier = ( uint8_t ) ( tier );
 		shader_key.m_nShaderPath = ( uint8_t ) ( key.m_shaderPath );
-		shader_key.m_nMaterialBackend = key.m_bUnifiedCooked ? T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 :
-            ( key.m_shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
-                        ? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
-											: T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED );
+		shader_key.m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 		shader_key.m_nShippingFeatureClass = key.m_nShippingFeatureClass;
 		shader_key.m_nEditorDiagnosticClass = key.m_nEditorDiagnosticClass;
 		shader_key.m_nNoiseSourceClass = key.m_nNoiseSourceClass;
@@ -764,9 +641,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 			 variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI ) {
 			shader_key.m_nDnrOutputClass = key.m_nszDnrOutputClass[tier];
 		}
-		if ( !key.m_bUnifiedCooked && tier == 1u ) {
-			shader_key.m_nMiddleSurfaceClass = key.m_nMiddleSurfaceClass;
-		}
+
 		if ( !t3dTerrainShaderPipelineKeyIsValid( shader_key ) ) {
 			m_context.endResourceRebuild();
 			setError( "Invalid bounded Terrain3D shader pipeline key" );
@@ -781,9 +656,8 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 			String::num_int64( key.m_nSceneIntegrationClass ) + ".D" +
 			String::num_int64( key.m_nszDnrOutputClass[tier] ) + ".M" + String::num_int64( key.m_nMiddleSurfaceClass ) +
 			".E" + String::num_int64( key.m_nEditorDiagnosticClass ) +
-			".N" + String::num_int64( key.m_nNoiseSourceClass ) +
-			".HintLayout" + String::num_int64( key.m_nszVtHintLayout[tier] );
-		const RID pipeline = m_forwardPipelines.getOrCreateRaster( { key, tier },
+			".N" + String::num_int64( key.m_nNoiseSourceClass );
+		const RID pipeline = m_forwardPipelines.getOrCreateRaster( key,
 																   name,
 																   shader,
 																   rContext.m_nFramebufferFormat,
@@ -1093,7 +967,6 @@ void Terrain3DRdClipmapRenderer::freeUniformSets(
 	m_descriptorCache.clear();
 	for ( size_t iSet = 0u; iSet < T3D_ARRAY_COUNT( m_hszRasterUniformSets ); iSet++ ) {
 		m_hszRasterUniformSets[iSet] = RID();
-		m_hszRasterHintSets[iSet] = RID();
 	}
 	m_hCullUniformSet = RID();
 	m_boundDescriptorKey = t3dRdClipmapDescriptorKey_t{};
@@ -1105,13 +978,7 @@ Terrain3DRdClipmapRenderer::t3dRdClipmapDescriptorKey_t Terrain3DRdClipmapRender
 	const t3dRdMaterialConfig_t		  &rMaterialConfig,
 	const t3dSharedVTBindings_t *const pSharedVTBindings ) const {
 	t3dRdClipmapDescriptorKey_t key{};
-    key.m_bUnifiedCooked = m_bUnifiedCookedMaterialActive;
-    key.m_hBoundAncestorHints = pSharedVTBindings ? pSharedVTBindings->hAncestorHints : RID();
-    for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-        key.m_hszBoundHintShaders[tier] = m_bszCanonicalHintsActive[tier] ?
-            ( m_bForwardFeedbackActive ? m_hszCanonicalHintFeedbackShaders[tier].rid() :
-                m_hszCanonicalHintColorShaders[tier].rid() ) : RID();
-    }
+        key.m_hBoundAncestorHints = pSharedVTBindings ? pSharedVTBindings->hAncestorHints : RID();
 	key.m_hBoundHeightTexture = rBindings.m_hHeightTextureRd;
 	key.m_hBoundDerivedTexture = rBindings.m_hDerivedTextureRd;
 	key.m_hBoundControlTexture = rBindings.m_hControlTextureRd;
@@ -1130,9 +997,7 @@ Terrain3DRdClipmapRenderer::t3dRdClipmapDescriptorKey_t Terrain3DRdClipmapRender
 	key.m_hBoundMacroNoiseTexture = rBindings.m_hMacroNoiseTextureRd;
 	key.m_hBoundEditorBrushTexture = rBindings.m_hEditorBrushTextureRd;
 	key.m_nBoundSharedVTResourceGeneration = pSharedVTBindings ? pSharedVTBindings->nResourceGeneration : 0u;
-	for ( uint32_t i = 0u; i < 3u; ++i ) {
-		key.m_nszBoundTierFiltering[i] = rMaterialConfig.m_szTier[0].m_nFiltering;
-	}
+	key.m_nBoundFiltering = rMaterialConfig.m_szTier[0].m_nFiltering;
 	return key;
 }
 
@@ -1164,11 +1029,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 	const RID						 &rEditorBrush = rBindings.m_hEditorBrushTextureRd;
 	const t3dRdClipmapDescriptorKey_t descriptor_key =
 		buildUniformSetDescriptorKey( rBindings, rMaterialConfig, pSharedVTBindings );
-	bool bUniformSetsReady = m_hszRasterUniformSets[0].is_valid() &&
-        ( m_bUnifiedCookedMaterialActive ||
-          ( m_hszRasterUniformSets[1].is_valid() && m_hszRasterUniformSets[2].is_valid() ) );
-	for ( uint32_t i = 0u; i < 3u; ++i )
-		if ( m_bszCanonicalHintsActive[i] && !m_hszRasterHintSets[i].is_valid() ) bUniformSetsReady = false;
+	const bool bUniformSetsReady = m_hszRasterUniformSets[0].is_valid();
 	const bool bCullUniformSetReady =
 		!m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) || m_hCullUniformSet.is_valid();
 	if ( bUniformSetsReady && bCullUniformSetReady && hasCompatibleUniformSetDescriptorKey( descriptor_key ) ) {
@@ -1185,7 +1046,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 	const RenderingDevice::UniformType cpu_storage_type = m_bPersistentCpuBuffers
 															  ? RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC
 															  : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
-	for ( int i = 0; i < ( m_bUnifiedCookedMaterialActive ? 1 : 3 ); ++i ) {
+	for ( int i = 0; i < ( 1 ); ++i ) {
 		const uint32_t				   nFiltering = MIN( rMaterialConfig.m_szTier[0].m_nFiltering, 3u );
 		TypedArray< Ref< RDUniform > > uniforms;
 		uniforms.push_back(
@@ -1212,10 +1073,7 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( 13, cpu_storage_type, sectionRid( MATERIAL_CONFIG ) ) );
 		uniforms.push_back(
 			Terrain3DRdBindingBuilder::samplerTexture( 14, m_hszMapSamplers[nFiltering].rid(), rDerived ) );
-        if ( !m_bUnifiedCookedMaterialActive ) {
-            uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture(
-                15, m_hszMapSamplers[3].rid(), rMiddleComposite ) );
-        }
+
 		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 16, m_hTerrainSampler.rid(), rMiddleHeight ) );
 		uniforms.push_back(
 			Terrain3DRdBindingBuilder::samplerTexture( 17, m_hTerrainSampler.rid(), rMiddleHeightRegionMap ) );
@@ -1299,38 +1157,17 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 															   sectionRid( STRIP_PARTS ) ) );
 		const String name = String( "T3D.UniformSet.Raster." ) + String::num_int64( i );
 		m_hszRasterUniformSets[i] = m_descriptorCache.getOrCreate( {
-            m_bUnifiedCookedMaterialActive ? m_hUnifiedRasterShader.rid() : m_hszShaders[i].rid(), descriptor_key },
+            m_hUnifiedRasterShader.rid(), descriptor_key },
 																   name,
 																   uniforms,
-																   m_bUnifiedCookedMaterialActive ? m_hUnifiedRasterShader.rid() : m_hszShaders[i].rid(),
+																   m_hUnifiedRasterShader.rid(),
 																   0u );
 		if ( !m_hszRasterUniformSets[i].is_valid() ) {
 			m_context.recordResourceCreationFailure( name, T3D_RD_CONTEXT_RESOURCE_UNIFORM_SET );
 			setError( "Failed to create Terrain3D raster uniform set" );
 			return false;
 		}
-		// BR20: the hint descriptor is absent from every original shader's set-0 ABI.
-		// Create it only against the matching shader version and resource generation.
-		if ( m_bszCanonicalHintsActive[i] ) {
-#if defined( T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ) && T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS
-			if ( !pSharedVTBindings || !pSharedVTBindings->hAncestorHints.is_valid() ) return false;
-			TypedArray< Ref< RDUniform > > hint_uniforms = uniforms;
-			hint_uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_TERRAIN_VT_HINT_BINDING,
-				RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, pSharedVTBindings->hAncestorHints ) );
-            const RID shader = m_bForwardFeedbackActive ?
-                m_hszCanonicalHintFeedbackShaders[i].rid() : m_hszCanonicalHintColorShaders[i].rid();
-			const String hint_name = String( "T3D.UniformSet.Hints." ) + String::num_int64( i );
-			m_hszRasterHintSets[i] = m_descriptorCache.getOrCreate( { shader, descriptor_key },
-				hint_name, hint_uniforms, shader, 0u );
-			if ( !m_hszRasterHintSets[i].is_valid() ) {
-				m_context.recordResourceCreationFailure( hint_name, T3D_RD_CONTEXT_RESOURCE_UNIFORM_SET );
-				setError( "Failed to create VT ancestor-hint uniform set" );
-				return false;
-			}
-#else
-			return false;
-#endif
-		}
+
 	}
 	if ( m_bGpuCullingReady.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		TypedArray< Ref< RDUniform > > cull_uniforms;
@@ -1416,12 +1253,12 @@ bool Terrain3DRdClipmapRenderer::ensureViewState(
 		return false;
 	}
 	const int64_t framebuffer_format = state.m_hFramebuffer.format( rd );
-	for ( int i = 0; i < 3; ++i ) {
+	for ( int i = 0; i < 1; ++i ) {
 		const String pipeline_name =
 			String( "T3D.Pipeline.View" ) + String::num_int64( nView ) + "." + String::num_int64( i );
-		state.m_hszPipelines[i] = m_viewPipelines.getOrCreateRaster( nView * 3u + ( uint32_t ) i,
+		state.m_hszPipelines[i] = m_viewPipelines.getOrCreateRaster( nView,
 																	 pipeline_name,
-																	 m_hszShaders[i].rid(),
+																	 m_hUnifiedRasterShader.rid(),
 																	 framebuffer_format,
 																	 -1,
 																	 RenderingDevice::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
@@ -1446,7 +1283,6 @@ bool Terrain3DRdClipmapRenderer::ensureViewState(
 bool Terrain3DRdClipmapRenderer::initialize(
 	void ) {
     const Ref< RDShaderSPIRV > rUnified = Terrain3DRdShaderLibrary::borrowSpirv( T3D_RD_SHADER_UCMP_ALIAS );
-	const Ref< RDShaderSPIRV > rCull = Terrain3DRdShaderLibrary::borrowSpirv( T3D_RD_SHADER_TERRAIN_CULL );
 	Terrain3DScopedLock		   state_lock( m_resourceStateMutex );
 	if ( isReady() ) {
 		return true;
@@ -1466,13 +1302,15 @@ bool Terrain3DRdClipmapRenderer::initialize(
 	// metadata to match the fixed creation mode before creating descriptors.
 	auto clear_dynamic = [this]( const Ref< RDShaderSPIRV > &shader ) { m_context.markHotShader( shader ); };
     clear_dynamic( rUnified );
-    clear_dynamic( rCull );
-    for ( uint32_t path = 0u; path < T3D_TERRAIN_SHADER_PATH_COUNT; ++path ) {
-        for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
+#if defined( T3D_EDITOR_NATIVE )
+    const uint32_t capabilityCount = 2u;
+#else
+    const uint32_t capabilityCount = 1u;
+#endif
+    for ( uint32_t capability = 0u; capability < capabilityCount; ++capability )
+        for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant )
             clear_dynamic( Terrain3DRdShaderLibrary::borrowSpirv(
-                t3dRdUnifiedTerrainId( path, variant, false, false, false ) ) );
-        }
-    }
+                t3dRdUnifiedTerrainId( capability * 2u, variant, false, false, false ) ) );
 	m_bPersistentCpuBuffers = false; // Stable arenas support independent dirty subranges.
 	if ( !ensureShaders() || !ensureSamplers() || !ensureFallbackTextures() || !ensureBuffers() ) {
 		return false;
@@ -1520,19 +1358,8 @@ void Terrain3DRdClipmapRenderer::shutdown(
 	m_hTerrainSampler.releaseTracked( m_context );
 	m_cullPipelines.clear();
 	m_hCullShader.releaseTracked( m_context );
-	for ( uint32_t path = 0u; path < T3D_TERRAIN_SHADER_PATH_COUNT; ++path ) {
-		for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
-				m_hszForwardShaders[path][tier][variant].releaseTracked( m_context );
-			}
-			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant ) {
-				m_hszForwardCompactShaders[path][tier][variant].releaseTracked( m_context );
-				m_hszForwardOneSunShaders[path][tier][variant].releaseTracked( m_context );
-			}
-		}
-	}
     m_hUnifiedRasterShader.releaseTracked( m_context );
-    for ( uint32_t path = 0u; path < T3D_TERRAIN_SHADER_PATH_COUNT; ++path ) {
+    for ( uint32_t path = 0u; path < 2u; ++path ) {
         for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant )
             m_hszUnifiedForwardShaders[path][variant].releaseTracked( m_context );
         for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant ) {
@@ -1545,22 +1372,9 @@ void Terrain3DRdClipmapRenderer::shutdown(
         m_hszUnifiedFeedbackOneSunShaders[variant].releaseTracked( m_context );
         m_hszUnifiedFeedbackCompactShaders[variant].releaseTracked( m_context );
     }
-    m_bUnifiedCookedMaterialActive = false;
-	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-        m_bszCanonicalHintsActive[tier] = false;
-        m_hszCanonicalHintColorShaders[tier].releaseTracked( m_context );
-        m_hszCanonicalHintFeedbackShaders[tier].releaseTracked( m_context );
-		for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant ) {
-			m_hszFeedbackCompactShaders[tier][variant].releaseTracked( m_context );
-			m_hszFeedbackShaders[tier][variant].releaseTracked( m_context );
-			m_hszFeedbackOneSunShaders[tier][variant].releaseTracked( m_context );
-			m_hszFeedbackSets[tier][variant] = RID();
-		}
-	}
-	m_bForwardFeedbackActive = false;
-	for ( size_t iShader = 0u; iShader < T3D_ARRAY_COUNT( m_hszShaders ); iShader++ ) {
-		m_hszShaders[iShader].releaseTracked( m_context );
-	}
+    for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant )
+        m_hszFeedbackSets[variant] = RID();
+    m_bForwardFeedbackActive = false;
 	m_indexedIndirectSlice = {};
 	m_stripIndirectSlice = {};
 	m_hFallbackDisplacementTexture.abandon();
@@ -1915,15 +1729,15 @@ bool Terrain3DRdClipmapRenderer::drawView(
 			rd->draw_list_end();
 			return false;
 		}
-		const int tier = m_bUnifiedCookedMaterialActive ? 0 : ( group <= 1u ? 0 : ( group == 2u ? 1 : 2 ) );
+		const int tier = 0;
 		t3dRdDrawPushConstants_t constants;
 		t3dRdDrawPushConstantsInit( &constants );
 		constants.m_nPadding1 = getStripDescriptorBaseForGroup( group );
 		constants.m_nHotIndex = m_hotIndex;
 		memcpy( m_drawPushBytes.ptrw(), &constants, sizeof( constants ) );
-		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[tier] );
+		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[0] );
 		rd->draw_list_set_push_constant( draw_list, m_drawPushBytes, sizeof( constants ) );
-		const RID rasterSet = m_descriptorCache.resolve( m_hszRasterUniformSets[tier] );
+		const RID rasterSet = m_descriptorCache.resolve( m_hszRasterUniformSets[0] );
 		if ( !rasterSet.is_valid() ) {
 			rd->draw_list_end();
 			return false;
@@ -1957,11 +1771,11 @@ bool Terrain3DRdClipmapRenderer::drawViewDirect(
 		return false;
 	}
 	for ( uint32_t group = 0u; group < T3D_RD_DRAW_GROUP_COUNT; ++group ) {
-		const int tier = m_bUnifiedCookedMaterialActive ? 0 : ( group <= 1u ? 0 : ( group == 2u ? 1 : 2 ) );
+		const int tier = 0;
 		const t3dMeshType_t type = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? LOD0_MESH : OUTER_RING_MESH;
 		const uint32_t		part_count = m_szStripPartCounts[type];
-		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[tier] );
-		const RID rasterSet = m_descriptorCache.resolve( m_hszRasterUniformSets[tier] );
+		rd->draw_list_bind_render_pipeline( draw_list, state.m_hszPipelines[0] );
+		const RID rasterSet = m_descriptorCache.resolve( m_hszRasterUniformSets[0] );
 		if ( !rasterSet.is_valid() ) {
 			rd->draw_list_end();
 			return false;
@@ -2228,11 +2042,10 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 		m_nForwardPrepareFailureStage = 7u;
 		return false;
 	}
-    const bool unified = rSnapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
-    if ( m_bUnifiedCookedMaterialActive != unified ) {
-        m_bUnifiedCookedMaterialActive = unified;
-        freeForwardPipelines();
-        freeUniformSets();
+    if ( rSnapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) {
+        m_nForwardPrepareFailureStage = 8u;
+        setError( "Retired terrain material backend rejected before UCMP pipeline publication" );
+        return false;
     }
 	const bool					 one_sun_lighting = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
 	const t3dTerrainShaderPath_t shader_path = selectTerrainShaderPath( rSnapshot );
@@ -2244,52 +2057,21 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 	m_bForwardFeedbackActive = false;
 	const bool compact_lighting = !one_sun_lighting && m_forwardLighting.compactRequested() &&
 		variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-	const bool use_feedback_hints = t3dRdCanonicalHintAvailable(
-		shader_path, variant, one_sun_lighting, compact_lighting, pSharedVTBindings );
-	if ( bPrepareRasterPipelines && shader_path == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
-		 variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT && m_pFeedbackOwner &&
-		 m_pFeedbackOwner->is_feedback_grid_enabled() && m_pFeedbackOwner->is_readback_enabled() ) {
-		bool ready = true;
-        for ( uint32_t tier = 0u; tier < ( unified ? 1u : 3u ); ++tier ) {
-            Terrain3DRdShader &shader = unified ?
-                ( one_sun_lighting ? m_hszUnifiedFeedbackOneSunShaders[variant] :
-                    ( compact_lighting ? m_hszUnifiedFeedbackCompactShaders[variant] :
-                      m_hszUnifiedFeedbackShaders[variant] ) ) :
-                ( use_feedback_hints ?
-                m_hszCanonicalHintFeedbackShaders[tier] :
-				( compact_lighting ? m_hszFeedbackCompactShaders[tier][variant] :
-                  ( one_sun_lighting ? m_hszFeedbackOneSunShaders[tier][variant] : m_hszFeedbackShaders[tier][variant] ) ) );
-			if ( !shader.isValid() ) {
-                const t3dRdShaderId_t id = unified ? t3dRdUnifiedTerrainId(
-                    ( uint32_t ) shader_path, ( uint32_t ) variant, true, one_sun_lighting, compact_lighting ) :
-                    ( use_feedback_hints ? t3dRdCanonicalVtFeedbackHintId( tier ) :
-                        ( compact_lighting ? t3dRdTerrainCompactFeedbackId( tier, variant ) :
-                            t3dRdTerrainFeedbackId( tier, variant, one_sun_lighting ) ) );
-				const String name = String( "T3D.Forward.Shader.TerrainFeedback." ) + String::num_int64( tier ) + "." + String::num_int64( variant ) + "." + String::num_int64( one_sun_lighting );
-				m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
-				if ( !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, id ) ) {
-					ready = false;
-					break;
-				}
-			}
-			const uint32_t slot = ( one_sun_lighting ? 5u : 2u ) * T3D_RD_FORWARD_COLOR_VARIANT_COUNT +
-									 tier * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + ( uint32_t ) variant;
-			m_hszFeedbackSets[tier][variant] = m_pFeedbackOwner->get_fragment_feedback_set_cold( shader.rid(), slot );
-			if ( !m_hszFeedbackSets[tier][variant].is_valid() ) {
-				ready = false;
-				break;
-			}
-		}
-		m_bForwardFeedbackActive = ready;
-	}
-    // Both hint and baseline shaders share one production material/VT evaluator.
-    if ( bPrepareRasterPipelines && !ensureCanonicalVtShaders(
-        shader_path, variant, one_sun_lighting, pSharedVTBindings ) ) {
-        setError( "Failed to prepare canonical VT shader" );
-        return false;
-    }
-    if ( !bPrepareRasterPipelines ) {
-        memset( m_bszCanonicalHintsActive, 0, sizeof( m_bszCanonicalHintsActive ) );
+    if ( bPrepareRasterPipelines && shader_path == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
+         variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT && m_pFeedbackOwner &&
+         m_pFeedbackOwner->is_feedback_grid_enabled() && m_pFeedbackOwner->is_readback_enabled() ) {
+        Terrain3DRdShader &shader = one_sun_lighting ? m_hszUnifiedFeedbackOneSunShaders[variant] :
+            ( compact_lighting ? m_hszUnifiedFeedbackCompactShaders[variant] : m_hszUnifiedFeedbackShaders[variant] );
+        if ( !shader.isValid() ) {
+            const t3dRdShaderId_t id = t3dRdUnifiedTerrainId( ( uint32_t ) shader_path,
+                ( uint32_t ) variant, true, one_sun_lighting, compact_lighting );
+            m_context.markHotShader( Terrain3DRdShaderLibrary::borrowSpirv( id ) );
+            if ( !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.UCMP.Feedback", id ) )
+                return false;
+        }
+        const uint32_t slot = ( one_sun_lighting ? 5u : 2u ) * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + variant;
+        m_hszFeedbackSets[variant] = m_pFeedbackOwner->get_fragment_feedback_set_cold( shader.rid(), slot );
+        m_bForwardFeedbackActive = m_hszFeedbackSets[variant].is_valid();
     }
 	const uint8_t shipping_feature_class = t3dRdTerrainShippingFeatureClass( rSnapshot, shader_path );
 	uint8_t		  lighting_model_classes[3];
@@ -2397,7 +2179,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 		clearError();
 		return true;
 	}
-	for ( uint32_t tier = 0u; tier < 3u; ++tier ) m_hszCompactSets[tier] = RID();
+	m_hszCompactSets[0] = RID();
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 		if ( bViewportReconfigured ) {
 			m_forwardLighting.invalidateBorrowedState();
@@ -2407,7 +2189,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 					  String( m_forwardLighting.getDiagnostics().get( "forward_light_last_error", "unknown" ) ) );
 			return false;
 		}
-		for ( uint32_t tier = 0u; tier < ( m_bUnifiedCookedMaterialActive ? 1u : 3u ); ++tier ) {
+		for ( uint32_t tier = 0u; tier < ( 1u ); ++tier ) {
 			const RID shader = getForwardShader( tier, variant, one_sun_lighting, shader_path );
 			if ( !m_forwardLighting.ensureSet( shader ).is_valid() ) {
 				setError( "Failed to cache Terrain3D Forward+ terrain lighting descriptor" );
@@ -2416,8 +2198,8 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 			// Compact feedback uses the same set-4 cluster storage as compact color.
 			const bool compact = m_forwardLighting.compactRequested() && !one_sun_lighting &&
 				variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
-			m_hszCompactSets[tier] = compact ? m_forwardLighting.ensureCompactSet( shader ) : RID();
-			if ( compact && !m_hszCompactSets[tier].is_valid() ) return false;
+			m_hszCompactSets[0] = compact ? m_forwardLighting.ensureCompactSet( shader ) : RID();
+			if ( compact && !m_hszCompactSets[0].is_valid() ) return false;
 		}
 	}
 	if ( !ensureForwardPipelines( rContext,
@@ -2462,16 +2244,16 @@ bool Terrain3DRdClipmapRenderer::drawForwardView(
 	const bool capture_terrain_timing = Terrain3DRdShaderLibrary::isTerrainGpuTimestampEnabledCold();
 	if ( capture_terrain_timing ) rd->capture_timestamp( "T3D.W1.Terrain.Forward.Begin" );
 	for ( uint32_t group = 0u; group < T3D_RD_DRAW_GROUP_COUNT; ++group ) {
-		const uint32_t tier = m_bUnifiedCookedMaterialActive ? 0u : ( group <= 1u ? 0u : ( group == 2u ? 1u : 2u ) );
+		const uint32_t tier = 0u;
 		const t3dMeshType_t type = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? LOD0_MESH : OUTER_RING_MESH;
 		const uint32_t		part_count = m_szStripPartCounts[type];
 		if ( part_count == 0u || part_count > T3D_CLIPMAP_STRIP_PART_CAPACITY ) {
 			return false;
 		}
-		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[tier] );
-        const bool hint_shader = m_lastForwardPipelineKey.m_nszVtHintLayout[tier] != 0u;
+		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[0] );
+        const bool hint_shader = false;
 		const RID rasterSet = m_descriptorCache.resolve(
-			hint_shader ? m_hszRasterHintSets[tier] : m_hszRasterUniformSets[tier] );
+			m_hszRasterUniformSets[0] );
 		if ( !rasterSet.is_valid() ) {
 			return false;
 		}
@@ -2484,7 +2266,7 @@ bool Terrain3DRdClipmapRenderer::drawForwardView(
             rd->draw_list_bind_uniform_set( draw_list, overlaySet, 5u );
         }
 		if ( m_lastForwardPipelineKey.m_bFeedbackEnabled ) {
-			const RID feedbackSet = m_pFeedbackOwner ? m_pFeedbackOwner->resolve_fragment_feedback_set_hot( m_hszFeedbackSets[tier][variant] ) : RID();
+			const RID feedbackSet = m_pFeedbackOwner ? m_pFeedbackOwner->resolve_fragment_feedback_set_hot( m_hszFeedbackSets[variant] ) : RID();
 			if ( !feedbackSet.is_valid() ) {
 				return false;
 			}
@@ -2500,8 +2282,8 @@ bool Terrain3DRdClipmapRenderer::drawForwardView(
 				return false;
 			}
 			rd->draw_list_bind_uniform_set( draw_list, lighting_set, 2u );
-			if ( m_hszCompactSets[tier].is_valid() )
-				rd->draw_list_bind_uniform_set( draw_list, m_hszCompactSets[tier], 4u );
+			if ( m_hszCompactSets[0].is_valid() )
+				rd->draw_list_bind_uniform_set( draw_list, m_hszCompactSets[0], 4u );
 		}
 		if ( direct ) {
 			const uint32_t count = m_cpuCullResult.m_szCommands[group].m_nInstanceCount;
@@ -2682,8 +2464,8 @@ Dictionary Terrain3DRdClipmapRenderer::getDiagnostics(
 			tiers.push_back( row );
 		}
 		result["staged_normal_tiers"] = tiers;
-        result["ucmp_unified_material_active"] = m_bUnifiedCookedMaterialActive;
-        result["ucmp_material_shader_instances_per_pass"] = m_bUnifiedCookedMaterialActive ? 1 : 3;
+        result["ucmp_unified_material_active"] = true;
+        result["ucmp_material_shader_instances_per_pass"] = 1;
 		result["staged_normal_state_source"] =
 			"Latest CPU upload staging copy; may differ from committed GPU state after upload failure; no GPU readback";
 	}
@@ -2693,11 +2475,10 @@ Dictionary Terrain3DRdClipmapRenderer::getDiagnostics(
     result["forward_pipeline_cache_capacity"] = ( int64_t ) m_forwardPipelines.capacity();
     result["forward_pipeline_cache_high_water"] = ( int64_t ) m_forwardPipelines.highWater();
     result["forward_pipeline_cache_evictions"] = ( int64_t ) m_forwardPipelines.evictionCount();
-    result["canonical_vt_ancestor_hints_active"] = m_bszCanonicalHintsActive[0];
-    result["vt_resident_hint_near"] = m_bszCanonicalHintsActive[0];
-    result["vt_resident_hint_middle"] = m_bszCanonicalHintsActive[1];
-    result["vt_resident_hint_far"] = m_bszCanonicalHintsActive[2];
-    result["vt_resident_hint_prepares"] = ( int64_t ) m_nVtHintPrepareCount;
+    result["canonical_vt_ancestor_hints_active"] = false;
+    result["vt_resident_hint_near"] = false;
+    result["vt_resident_hint_middle"] = false;
+    result["vt_resident_hint_far"] = false;
     result["canonical_adaptive_control_active"] = m_bLastForwardPipelineKeyValid &&
         m_lastForwardPipelineKey.m_shaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
     result["canonical_prepared_mip_bias_active"] = m_bLastForwardPipelineKeyValid &&

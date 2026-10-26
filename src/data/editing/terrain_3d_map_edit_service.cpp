@@ -169,9 +169,7 @@ void Terrain3DMapEditService::reset(
 	m_masterHeightRange = s_v2Zero;
     for ( uint32_t i = 0u; i < T3D_REGION_SLOTS; ++i ) t3d_material_tiles_invalidate( m_controlTileClasses[i] );
 	m_derivedTaskScratch.clear();
-	m_fDerivedHaloScratch.clear();
 	m_fDerivedWorkerHaloScratch.clear();
-	m_derivedComputeScratch.clear();
 	m_derivedOutputScratch.clear();
 	m_activeLocationScratch.clear();
 	m_derivedLocationScratch.clear();
@@ -182,9 +180,7 @@ void Terrain3DMapEditService::releaseRuntimeAllocatorStorage(
 	void ) {
 	reset();
 	t3dVectorRelease( m_derivedTaskScratch );
-	t3dVectorRelease( m_fDerivedHaloScratch );
 	t3dVectorRelease( m_fDerivedWorkerHaloScratch );
-	t3dVectorRelease( m_derivedComputeScratch );
 	t3dVectorRelease( m_derivedOutputScratch );
 	t3dVectorRelease( m_activeLocationScratch );
 	t3dVectorRelease( m_derivedLocationScratch );
@@ -335,67 +331,11 @@ const eastl::vector< t3dDerivedMapUpdate_t, Terrain3DEastlAllocator > &Terrain3D
 	m_fDerivedWorkerHaloScratch.resize( maxHaloElements * ( size_t ) workerCount );
 
 	const t3dSamplingSource_t samplingSource{ m_pRepository, m_pSamplingStorage };
-	if ( pCompute && eligibleTaskCount > 0u && maxHaloElements > 0u && maxComputeOutputBytes > 0u &&
-		 maxHaloElements <= UINT32_MAX && maxComputeOutputBytes <= UINT32_MAX ) {
-		m_fDerivedHaloScratch.resize( maxHaloElements * T3D_COMPUTE_BATCH_SIZE );
-		m_derivedComputeScratch.resize( maxComputeOutputBytes * T3D_COMPUTE_BATCH_SIZE );
-		Terrain3DSampler sampler( samplingSource );
-		size_t			 taskCursor = 0u;
-		while ( taskCursor < tasks.size() ) {
-			eastl::fixed_vector< t3dDerivedMapComputeJob_t, T3D_COMPUTE_BATCH_SIZE, false > jobs;
-			eastl::fixed_vector< size_t, T3D_COMPUTE_BATCH_SIZE, false >					task_indices;
-			while ( taskCursor < tasks.size() && jobs.size() < T3D_COMPUTE_BATCH_SIZE ) {
-				t3dDerivedMapTask_t &task = tasks[taskCursor];
-				const size_t		 currentTask = taskCursor++;
-				const int			 width = task.m_dirtyRect.size.x;
-				const int			 height = task.m_dirtyRect.size.y;
-				if ( !task.m_bAvailable || width <= 0 || height <= 0 ) {
-					continue;
-				}
-				const size_t job_index = jobs.size();
-				const size_t rgbaBytes = ( size_t ) width * ( size_t ) height * sizeof( uint32_t );
-				float *const pHalo = m_fDerivedHaloScratch.data() + job_index * maxHaloElements;
-				int			 haloStride = 0;
-				size_t		 haloElements = 0u;
-				if ( !t3dMapEditServicePrepareDerivedHeightHalo( sampler,
-																 task,
-																 pHalo,
-																 maxHaloElements,
-																 haloStride,
-																 haloElements ) ) {
-					continue;
-				}
-				jobs.push_back( t3dDerivedMapComputeJob_t{} );
-				t3dDerivedMapComputeJob_t &job = jobs.back();
-				job.m_pHeightHalo = pHalo;
-				job.m_pRgbaOutput = m_derivedComputeScratch.data() + job_index * maxComputeOutputBytes;
-				job.m_nHaloElements = ( uint32_t ) haloElements;
-				job.m_nOutputBytes = ( uint32_t ) rgbaBytes;
-				job.m_nWidth = ( uint32_t ) width;
-				job.m_nHeight = ( uint32_t ) height;
-				job.m_fVertexSpacing = ( float ) ( s_fRegionVertexSpacing );
-				task_indices.push_back( currentTask );
-			}
-			if ( jobs.empty() ) {
-				continue;
-			}
-			pCompute->generateDerivedMaps( jobs.data(), ( uint32_t ) ( jobs.size() ) );
-			for ( size_t slot = 0u; slot < jobs.size(); ++slot ) {
-				if ( !jobs[slot].m_bSuccess ) {
-					continue;
-				}
-				t3dDerivedMapTask_t &task = tasks[task_indices[slot]];
-				const size_t texelCount = ( size_t ) task.m_dirtyRect.size.x * ( size_t ) task.m_dirtyRect.size.y;
-				const uint8_t *const pRgba = jobs[slot].m_pRgbaOutput;
-				uint8_t *const		 pOutput = m_derivedOutputScratch.data() + task.m_iOutputOffset;
-				for ( size_t texel = 0u; texel < texelCount; ++texel ) {
-					pOutput[texel * 2u] = pRgba[texel * 4u];
-					pOutput[texel * 2u + 1u] = pRgba[texel * 4u + 2u];
-				}
-				task.m_bSuccess = true;
-			}
-		}
-	}
+    // Derived RG8 maps use the already established parallel halo/SIMD builder.
+    // No local-device shader, submission, synchronous readback or RGBA staging.
+    ( void ) pCompute;
+    ( void ) eligibleTaskCount;
+    ( void ) maxComputeOutputBytes;
 
 	const Terrain3DParallelExecutor executor( workerCount );
 	t3dDerivedMapBuildContext_t		buildContext;
@@ -994,7 +934,6 @@ Ref< Image > Terrain3DMapEditService::layeredToImage(
 size_t Terrain3DMapEditService::getTransientScratchBytes(
 	void ) const {
 	return m_derivedTaskScratch.capacity() * sizeof( t3dDerivedMapTask_t ) +
-		   m_fDerivedHaloScratch.capacity() * sizeof( float ) +
 		   m_fDerivedWorkerHaloScratch.capacity() * sizeof( float ) +
 		   m_derivedOutputScratch.capacity() * sizeof( uint8_t ) +
 		   m_activeLocationScratch.capacity() * sizeof( Vector2i ) +

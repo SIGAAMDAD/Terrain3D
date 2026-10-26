@@ -72,20 +72,7 @@ const float T3D_REGION_INV_SIZE_F = 0.0078125;
 const float T3D_WORLD_SIZE_F = 4096.0;
 const float T3D_WORLD_HALF_SIZE_F = 2048.0;
 const uint T3D_FEATURE_FAR_ALBEDO = 1u << 11u;
-// WG-A bounded pipeline/material authority. Unversioned `color` keeps the
-// legacy editor-compatible behavior; Forward+ versions always define both.
-#ifndef T3D_TERRAIN_SHADER_PATH
-#define T3D_TERRAIN_SHADER_PATH 2
-#endif
-#ifndef T3D_TERRAIN_MATERIAL_BACKEND
-#define T3D_TERRAIN_MATERIAL_BACKEND 1
-#endif
-#define T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL 0
-#define T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED 1
-#define T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED 2
-#define T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 0
-#define T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED 1
-
+// UCMP shipping and editor share one cooked evaluator and material configuration.
 // WG-C compile-time specialization contract. Pass/tier/lighting are already
 // bounded by the existing root/version graph; this block names those seams and
 // adds one 3-bit pipeline specialization constant for draw-wide shipping features.
@@ -116,12 +103,12 @@ const uint T3D_SPECIALIZED_FEATURE_DUAL_SCALE = 1u << 1u;
 const uint T3D_SPECIALIZED_FEATURE_MEGAVT = 1u << 2u;
 const uint T3D_SPECIALIZED_FEATURE_MASK = 0x7u;
 const uint T3D_SPECIALIZED_FEATURE_RUNTIME = 0xffu;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
+#if !defined(T3D_UCMP_EDITOR)
 layout(constant_id = 24) const uint t3d_shipping_feature_class = T3D_SPECIALIZED_FEATURE_RUNTIME;
 #endif
 
 bool t3d_feature_auto_shader_enabled() {
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_shipping_feature_class != T3D_SPECIALIZED_FEATURE_RUNTIME) {
         return (t3d_shipping_feature_class & T3D_SPECIALIZED_FEATURE_AUTO_SHADER) != 0u;
     }
@@ -130,7 +117,7 @@ bool t3d_feature_auto_shader_enabled() {
 }
 
 bool t3d_feature_dual_scale_enabled() {
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_shipping_feature_class != T3D_SPECIALIZED_FEATURE_RUNTIME) {
         return (t3d_shipping_feature_class & T3D_SPECIALIZED_FEATURE_DUAL_SCALE) != 0u;
     }
@@ -139,7 +126,7 @@ bool t3d_feature_dual_scale_enabled() {
 }
 
 bool t3d_feature_megavt_enabled() {
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_shipping_feature_class != T3D_SPECIALIZED_FEATURE_RUNTIME) {
         return (t3d_shipping_feature_class & T3D_SPECIALIZED_FEATURE_MEGAVT) != 0u;
     }
@@ -169,16 +156,16 @@ const uint T3D_DNR_OUTPUT_RUNTIME = 0xffu;
 const uint T3D_MIDDLE_SURFACE_DETAILED = 0u;
 const uint T3D_MIDDLE_SURFACE_COMPOSITE = 1u;
 const uint T3D_MIDDLE_SURFACE_RUNTIME = 0xffu;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && defined(T3D_FORWARD_DEPTH) \
+#if !defined(T3D_UCMP_EDITOR) && defined(T3D_FORWARD_DEPTH) \
     && defined(T3D_FORWARD_NORMAL_ROUGHNESS)
 layout(constant_id = 27) const uint t3d_dnr_output_class = T3D_DNR_OUTPUT_RUNTIME;
 #endif
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && T3D_TIER == 1
+#if !defined(T3D_UCMP_EDITOR) && T3D_TIER == 1
 layout(constant_id = 28) const uint t3d_middle_surface_class = T3D_MIDDLE_SURFACE_RUNTIME;
 #endif
 
 bool t3d_dnr_require_normal(TierMaterialConfig tier_config) {
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && defined(T3D_FORWARD_DEPTH) \
+#if !defined(T3D_UCMP_EDITOR) && defined(T3D_FORWARD_DEPTH) \
     && defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     if (t3d_dnr_output_class != T3D_DNR_OUTPUT_RUNTIME) {
         return (t3d_dnr_output_class & T3D_DNR_OUTPUT_NORMAL) != 0u;
@@ -188,7 +175,7 @@ bool t3d_dnr_require_normal(TierMaterialConfig tier_config) {
 }
 
 bool t3d_dnr_require_roughness() {
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && defined(T3D_FORWARD_DEPTH) \
+#if !defined(T3D_UCMP_EDITOR) && defined(T3D_FORWARD_DEPTH) \
     && defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     if (t3d_dnr_output_class != T3D_DNR_OUTPUT_RUNTIME) {
         return (t3d_dnr_output_class & T3D_DNR_OUTPUT_ROUGHNESS) != 0u;
@@ -198,7 +185,7 @@ bool t3d_dnr_require_roughness() {
 }
 
 bool t3d_middle_use_composite(TierMaterialConfig tier_config) {
-#if T3D_TIER == 1 && T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && !defined(T3D_RUNTIME_TIER)
+#if T3D_TIER == 1 && !defined(T3D_UCMP_EDITOR) && !defined(T3D_RUNTIME_TIER)
     if (t3d_middle_surface_class != T3D_MIDDLE_SURFACE_RUNTIME) {
         return t3d_middle_surface_class == T3D_MIDDLE_SURFACE_COMPOSITE;
     }
@@ -220,7 +207,7 @@ const uint T3D_OUTPUT_AO = 1u << 4u;
 // authoritative runtime path; only the clipmap renderer publishes IDs 29/30.
 #if !defined(T3D_WORLD_RASTER_EMBEDDED)
 layout(constant_id = 30) const uint t3d_noise_source_class = 0u;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+#if defined(T3D_UCMP_EDITOR)
 layout(constant_id = 29) const uint t3d_editor_diagnostic_class = 0u;
 #endif
 #endif
@@ -1329,7 +1316,7 @@ float far_surface_alpha(uint bits) {
 }
 
 uint read_control(ivec2 texel) {
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     uint edited_control;
     if (t3d_editor_brush_lookup(texel, 1u, edited_control)) return edited_control;
 #endif
@@ -1354,7 +1341,7 @@ vec4 far_authored_color(vec2 world_texel) {
     return color;
 }
 vec4 color_texel(ivec2 texel) {
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     uint edited_color;
     if (t3d_editor_brush_lookup(texel, 2u, edited_color)) return unpackUnorm4x8(edited_color);
 #endif
@@ -1564,7 +1551,7 @@ void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config, 
         terrain_sampling_context.side_projection = 1u;
     }
 #endif // T3D_MATERIAL_PROJECTION_CLASS == 0; planar keeps identity alignment.
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     // WG-B P04/P07: canonical shipping materials all use the same tier-level
     // micro-VT bias and dual transition factor, so derive both once per fragment.
     terrain_sampling_context.micro_vt_mip_bias =
@@ -1706,7 +1693,7 @@ bool t3d_cs_sample_normal_roughness(vec2 world_texel, vec2 world_grad_x, vec2 wo
 // This predicate is shared by the color and depth-normal-roughness paths.
 #ifdef T3D_CS_ACTIVE
 bool t3d_cs_static_v1_runtime_eligible(TierMaterialConfig tier_config) {
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     bool explicit_controls = tier_config.sampling_mode == 1u || tier_config.sampling_mode == 2u ||
                              tier_config.sampling_mode == 5u;
     float far_bias_scale = max(material_config.depth_blur + 1.0, 0.0001);
@@ -1956,14 +1943,14 @@ SampledMaterial sample_material(int logical_id,
     TierMaterialConfig tier_config,
     bool use_far_array,
     bool need_height) {
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     need_height = need_height || (material_config.debug_flags & T3D_DEBUG_TEX_HEIGHT) != 0u;
     return sample_material_canonical_v1(logical_id, world_xz, control_state, tier_config, need_height);
 #else
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
     MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     // Host publication guarantees these predicates before this family is selected.
     const bool resident = false;
     const bool packed_surface = false;
@@ -2757,13 +2744,13 @@ NormalRoughnessSource sample_material_normal_roughness(int logical_id,
     bool require_height,
     bool require_normal,
     bool require_roughness) {
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     return sample_material_normal_roughness_canonical_v1(logical_id, world_xz, control_state, tier_config, require_height, require_normal, require_roughness);
 #else
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
     MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
-#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
+#if !defined(T3D_UCMP_EDITOR)
     // Host publication guarantees these predicates before this family is selected.
     const bool resident = false;
     const bool packed_surface = false;
@@ -3475,7 +3462,7 @@ float editor_reticle(vec2 world_xz, EditorDecal decal,
 
 // Unified terrain strips use the canonical material path even in the editor.
 // Their bound overlay buffer still controls brush/reticle visibility at runtime.
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED || defined(T3D_WORLD_RASTER_TERRAIN_STRIP)
+#if defined(T3D_UCMP_EDITOR) || defined(T3D_WORLD_RASTER_TERRAIN_STRIP)
 vec3 apply_editor_decals(vec3 color) {
     bool reticle_constants_ready = false;
     float reticle_view_scale = 1.0;
@@ -3549,7 +3536,7 @@ vec3 apply_editor_decals(vec3 color) {
 }
 #endif
 
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+#if defined(T3D_UCMP_EDITOR)
 vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto,
     float instancer_grid_footprint) {
     uint flags = material_config.debug_flags;
@@ -3680,7 +3667,7 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
         tier == 1u &&
 #endif
         !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
         && !t3d_editor_brush_invalidates_composed(world_texel)
 #endif
         ) {
@@ -3844,7 +3831,7 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
 // coverage. Never take this shortcut in feedback variants, whose texture
 // requests are part of the streaming contract, or in editor/embedded paths.
 #if T3D_SILHOUETTE_FAST_PATH && !defined(T3D_VT_FRAGMENT_FEEDBACK) && !defined(T3D_WORLD_RASTER_EMBEDDED) \
-    && T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && !defined(T3D_FORWARD_DEPTH)
+    && !defined(T3D_UCMP_EDITOR) && !defined(T3D_FORWARD_DEPTH)
 #define T3D_SILHOUETTE_FAST_ACTIVE 1
 vec4 t3d_silhouette_color_map(vec2 world_texel, TierMaterialConfig tier_config,
     bool outside_region, vec4 far_surface, uint far_bits, bool need_authored_color) {
@@ -3900,7 +3887,7 @@ void main() {
 #endif
     vec2 world_texel = terrain_world_texel;
     float instancer_grid_footprint = 0.0;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED && !defined(T3D_FORWARD_DEPTH)
+#if defined(T3D_UCMP_EDITOR) && !defined(T3D_FORWARD_DEPTH)
     // Uniform debug bit: no derivative-group divergence. Do this before
     // any fragment coverage discard rather than inside debug_visualization.
     if ((material_config.debug_flags & T3D_DEBUG_INSTANCER_GRID) != 0u) {
@@ -4026,7 +4013,7 @@ void main() {
 #else
     bool composed_eligible = T3D_TIER == 1;
 #endif
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     composed_eligible = composed_eligible && !t3d_editor_brush_invalidates_composed(world_texel);
 #endif
     if (composed_eligible && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)) {
@@ -4218,7 +4205,7 @@ void main() {
 #endif
 #else
 
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED \
+#if defined(T3D_UCMP_EDITOR) \
     && !defined(T3D_FORWARD_SPECULAR) && !defined(T3D_FORWARD_MOTION) \
     && !defined(T3D_VT_FRAGMENT_FEEDBACK) && !defined(T3D_WORLD_RASTER_EMBEDDED)
 // Exclusive diagnostic modes replace the entire lit color and do not use
@@ -4264,7 +4251,7 @@ SampledMaterial material = material_zero();
 // the color texture. Keep the editor COLORMAP diagnostic's exact sampling.
 bool need_authored_color = tier_config.authored_color_contribution > 0.0
     || tier_config.wetness_contribution > 0.0;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+#if defined(T3D_UCMP_EDITOR)
 need_authored_color = need_authored_color || (material_config.debug_flags & T3D_DEBUG_COLORMAP) != 0u;
 #endif
 vec4 cooked_macro = vec4(1.0, 1.0, 1.0, 0.5);
@@ -4305,7 +4292,7 @@ if (tier_config.texture_surface_mode == 1u) {
 // material normal is actually consumed. Editor TEX_NORMAL also reads it.
 bool need_material_tangent = (material_config.output_flags & T3D_OUTPUT_NORMAL) != 0u
     && tier_config.surface_response != 0u;
-#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+#if defined(T3D_UCMP_EDITOR)
 need_material_tangent = need_material_tangent || (material_config.debug_flags & T3D_DEBUG_TEX_NORMAL) != 0u;
 #endif
 if (tier_config.texture_surface_mode != 1u && need_material_tangent) {

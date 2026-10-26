@@ -109,22 +109,6 @@ public:
 	}
 
 	bool			isReady( void ) const;
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getNear(
-		void ) const {
-		return getShader( T3D_RD_SHADER_NEAR_ALIAS );
-	}
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getMiddle(
-		void ) const {
-		return getShader( T3D_RD_SHADER_MIDDLE_ALIAS );
-	}
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getFar(
-		void ) const {
-		return getShader( T3D_RD_SHADER_FAR_ALIAS );
-	}
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getCull(
-		void ) const {
-		return getShader( T3D_RD_SHADER_TERRAIN_CULL );
-	}
 	EA_FORCE_INLINE Ref< RDShaderSPIRV > getInstances(
 		void ) const {
 		return getShader( T3D_RD_SHADER_INSTANCE_ALIAS );
@@ -185,22 +169,6 @@ public:
 	EA_FORCE_INLINE Ref< RDShaderSPIRV > getOceanShadow(
 		void ) const {
 		return getShader( T3D_RD_SHADER_OCEAN_SHADOW );
-	}
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getTerrainForward(
-		const t3dTerrainShaderPath_t	  path,
-		const uint32_t					  nTier,
-		const t3dRdForwardShaderVariant_t variant ) const {
-		return path < T3D_TERRAIN_SHADER_PATH_COUNT && nTier < 3u && variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX
-				   ? getShader( t3dRdTerrainForwardId( path, nTier, variant ) )
-				   : Ref< RDShaderSPIRV >();
-	}
-	EA_FORCE_INLINE Ref< RDShaderSPIRV > getTerrainForwardOneSun(
-		const t3dTerrainShaderPath_t	  path,
-		const uint32_t					  nTier,
-		const t3dRdForwardShaderVariant_t variant ) const {
-		return path < T3D_TERRAIN_SHADER_PATH_COUNT && nTier < 3u && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT
-				   ? getShader( t3dRdTerrainOneSunId( path, nTier, variant ) )
-				   : Ref< RDShaderSPIRV >();
 	}
 	EA_FORCE_INLINE Ref< RDShaderSPIRV > getInstanceForward(
 		const t3dRdForwardShaderVariant_t variant ) const {

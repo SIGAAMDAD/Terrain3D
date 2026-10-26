@@ -34,7 +34,7 @@ OPCODES = {61: 'OpLoad', 62: 'OpStore', 65: 'OpAccessChain',
 # count should be interpreted as a GPU cycle count.
 QUICK = {
     'terrain_clipmap.glsl': ('color_native', 'feedback_color_native', 'depth',
-                                 'depth_normal_roughness', 'compat_color_native', 'editor_color_native'),
+                                 'depth_normal_roughness', 'editor_color_native'),
     'terrain_instances.glsl': ('color_native', 'feedback_color_native', 'depth_normal_roughness'),
     'terrain_world_raster.glsl': ('mesh_color_native', 'feedback_mesh_color_native',
                                   'terrain_strip_color_native', 'terrain_strip_depth_normal_roughness'),

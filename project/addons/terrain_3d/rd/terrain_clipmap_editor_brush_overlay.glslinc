@@ -1,5 +1,5 @@
 // Editor-only transient working-tile sampling. Unchanged shipping path ABI.
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
 struct T3DEditorGpuTile {
     ivec2 region;
     uint byte_offset;
@@ -42,7 +42,7 @@ bool t3d_editor_brush_lookup(ivec2 texel, uint map_type, out uint packed) {
 // A cooked material page represents a snapshot of the authored height/control
 // neighborhood. Until the edit is committed and re-cooked, the editor must
 // evaluate edited source pixels instead of the stale cooked material.
-#if defined(T3D_EDITOR_BRUSH_FRAGMENT_STAGE) && T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_EDITOR_BRUSH_FRAGMENT_STAGE) && defined(T3D_UCMP_EDITOR)
 bool t3d_editor_brush_invalidates_composed(vec2 world_texel) {
     ivec2 base = ivec2(floor(world_texel));
     uint packed;

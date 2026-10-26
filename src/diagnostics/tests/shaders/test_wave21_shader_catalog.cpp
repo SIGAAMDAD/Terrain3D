@@ -1,26 +1,25 @@
-// BR10-BR13: shader IDs, variant mapping and default startup policy.
+// RET-07: retired compact terrain IDs are tombstones; UCMP owns terrain materials.
 #include "rendering/rd/shaders/terrain_3d_rd_shader_catalog.h"
 #include <assert.h>
 #include <string.h>
 
 int main() {
-	static_assert( T3D_RD_SHADER_INSTANCE_COMPACT_BASE - T3D_RD_SHADER_TERRAIN_COMPACT_BASE == 72u,
-		"BR21 terrain variant count" );
-	static_assert( T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE - T3D_RD_SHADER_INSTANCE_COMPACT_BASE == 24u,
-		"BR21 instance/world variant count" );
-	for ( uint32_t id = T3D_RD_SHADER_TERRAIN_COMPACT_BASE; id < T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE; ++id ) {
-		const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( ( t3dRdShaderId_t ) id );
-		assert( entry.m_path && entry.m_version );
-		assert( strstr( entry.m_version, "_compact" ) != NULL );
-		assert( !t3dRdShaderNeedsStartupPhysical( ( t3dRdShaderId_t ) id ) );
-	}
-    const t3dRdShaderCatalogEntry_t coverage = t3dRdShaderCatalogGet( T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE );
-    const t3dRdShaderCatalogEntry_t shade = t3dRdShaderCatalogGet( T3D_RD_SHADER_RETIRED_SCREEN_SPACE_SHADE );
-    assert( !coverage.m_path && !coverage.m_version );
-    assert( !shade.m_path && !shade.m_version );
-    assert( !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_RETIRED_SCREEN_SPACE_SHADE ) );
-	const t3dRdShaderCatalogEntry_t compute = t3dRdShaderCatalogGet( T3D_RD_SHADER_CLUSTER_COMPACT );
-	assert( compute.m_path && strstr( compute.m_path, "terrain_cluster_compact.glsl" ) );
-	assert( !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_CLUSTER_COMPACT ) );
-	return 0;
+    for ( uint32_t raw = T3D_RD_SHADER_TERRAIN_COMPACT_BASE;
+          raw < T3D_RD_SHADER_INSTANCE_COMPACT_BASE; ++raw ) {
+        const t3dRdShaderId_t id = ( t3dRdShaderId_t ) raw;
+        const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
+        assert( !entry.m_path && !entry.m_version );
+        assert( !t3dRdShaderCatalogIsActive( id ) );
+        assert( !t3dRdShaderNeedsStartupPhysical( id ) );
+    }
+    for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant ) {
+        const t3dRdShaderId_t id = t3dRdUnifiedTerrainId( 0u, variant, false, false, true );
+        const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
+        assert( entry.m_path && entry.m_version && strstr( entry.m_version, "_compact" ) );
+    }
+    assert( !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_BRUSH_COMPUTE ) );
+    assert( !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_DERIVED_COMPUTE ) );
+    const t3dRdShaderCatalogEntry_t compute = t3dRdShaderCatalogGet( T3D_RD_SHADER_CLUSTER_COMPACT );
+    assert( compute.m_path && strstr( compute.m_path, "terrain_cluster_compact.glsl" ) );
+    return 0;
 }

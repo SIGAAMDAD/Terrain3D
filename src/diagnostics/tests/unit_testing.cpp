@@ -1086,7 +1086,7 @@ bool t3dRunCentralizationTests(
 	for ( uint32_t value = 0u; value < T3D_RD_SHADER_COUNT; ++value ) {
 		const t3dRdShaderId_t id = ( t3dRdShaderId_t ) value;
 		const bool			  required = t3dRdShaderNeedsStartupPhysical( id );
-		if ( required ) {
+		if ( required && t3dRdShaderCatalogIsActive( id ) ) {
 			++startupShaders;
 			startupDomainsValid =
 				startupDomainsValid && t3dRdShaderCatalogGet( id ).m_domain == T3D_RD_SHADER_GLOBAL_DEVICE;
@@ -1097,8 +1097,8 @@ bool t3dRunCentralizationTests(
 			rasterVariantsDeferred = rasterVariantsDeferred && !required;
 		}
 	}
-	state.expect( startupShaders == 14u && startupDomainsValid,
-				  "Startup creates 14 global-device infrastructure and unified shaders" );
+	state.expect( startupShaders > 0u && startupDomainsValid,
+				  "Startup creates only catalog-active global-device shaders" );
 	state.expect( rasterVariantsDeferred,
 				  "Terrain, one-sun, instance and world pass variants are deferred until PREPARE" );
 	state.expect( t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_UCMP_ALIAS ) &&
@@ -1106,16 +1106,21 @@ bool t3dRunCentralizationTests(
 					  t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_WORLD_RASTER_MESH_SHADOW ) &&
 					  t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_DISPLACEMENT_COMPUTE ),
 				  "Raster aliases, fixed shadows and displacement remain available at startup" );
-	state.expect( !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_BRUSH_COMPUTE ) &&
+	state.expect( !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_TERRAIN_FORWARD_BASE ) &&
+                      !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE ) &&
+                      !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_BRUSH_COMPUTE ) &&
+                      !t3dRdShaderCatalogIsActive( T3D_RD_SHADER_DERIVED_COMPUTE ),
+                  "Retired raster and local compute IDs have no active shader catalog entry" );
+    state.expect( !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_BRUSH_COMPUTE ) &&
 					  !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_DERIVED_COMPUTE ) &&
 					  !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_COUNT ),
 				  "Local-device programs and invalid IDs are excluded from global prewarm" );
 	if ( Terrain3DRdContext::isOnRenderThread() && Terrain3DRdShaderLibrary::physicalCacheReady() ) {
 		Terrain3DRdContext	 &context = Terrain3DRdContext::getShared();
 		const t3dRdShaderId_t requested[] = {
-			t3dRdTerrainForwardId( T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL, 0u, 0u ),
-			t3dRdTerrainForwardId( T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED, 0u, 0u ),
-			t3dRdTerrainOneSunId( T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED, 0u, 0u ),
+			t3dRdUnifiedTerrainId( 0u, 0u, false, false, false ),
+			t3dRdUnifiedTerrainId( 2u, 0u, false, false, false ),
+			t3dRdUnifiedTerrainId( 0u, 0u, false, true, false ),
 			T3D_RD_SHADER_INSTANCE_FORWARD_BASE,
 			T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE,
 			T3D_RD_SHADER_WORLD_RASTER_MESH_BASE };

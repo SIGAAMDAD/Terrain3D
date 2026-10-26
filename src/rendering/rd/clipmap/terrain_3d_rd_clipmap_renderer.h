@@ -73,7 +73,7 @@ private:
 	typedef struct t3dRdViewState_s
 	{
 		Terrain3DRdFramebuffer			m_hFramebuffer;
-		RID								m_hszPipelines[3];
+		RID								m_hszPipelines[1];
 		RID								m_hColor;
 		RID								m_hDepth;
 		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
@@ -84,9 +84,8 @@ private:
 	{
 		bool				   m_bOneSunLighting = false;
 		bool m_bFeedbackEnabled = false;
-        bool m_bUnifiedCooked = false;
         bool m_bCompactLighting = false;
-		t3dTerrainShaderPath_t m_shaderPath = T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
+		t3dTerrainShaderPath_t m_shaderPath = T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
 		uint8_t				   m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
 		uint8_t				   m_nszLightingModelClass[3] = { T3D_TERRAIN_LIGHTING_MODEL_RUNTIME,
 															  T3D_TERRAIN_LIGHTING_MODEL_RUNTIME,
@@ -98,7 +97,6 @@ private:
 		uint8_t				   m_nMiddleSurfaceClass = T3D_TERRAIN_MIDDLE_SURFACE_RUNTIME;
 		uint8_t			   m_nEditorDiagnosticClass = T3D_TERRAIN_EDITOR_DIAGNOSTIC_RUNTIME;
 		uint8_t			   m_nNoiseSourceClass = T3D_TERRAIN_NOISE_SOURCE_RUNTIME;
-		uint8_t m_nszVtHintLayout[3]{};
 
 		bool operator==(
 			const t3dRdForwardPipelineKey_s &rOther ) const {
@@ -106,7 +104,7 @@ private:
 					   ( const t3dRdForwardPipelineBaseKey_t & ) ( rOther ) &&
 				   m_bOneSunLighting == rOther.m_bOneSunLighting && m_bFeedbackEnabled == rOther.m_bFeedbackEnabled &&
                    m_bCompactLighting == rOther.m_bCompactLighting &&
-                   m_bUnifiedCooked == rOther.m_bUnifiedCooked && m_shaderPath == rOther.m_shaderPath &&
+m_shaderPath == rOther.m_shaderPath &&
 				   m_nShippingFeatureClass == rOther.m_nShippingFeatureClass &&
 				   m_nszLightingModelClass[0] == rOther.m_nszLightingModelClass[0] &&
 				   m_nszLightingModelClass[1] == rOther.m_nszLightingModelClass[1] &&
@@ -117,32 +115,19 @@ private:
 				   m_nszDnrOutputClass[2] == rOther.m_nszDnrOutputClass[2] &&
 				   m_nMiddleSurfaceClass == rOther.m_nMiddleSurfaceClass &&
 				   m_nEditorDiagnosticClass == rOther.m_nEditorDiagnosticClass &&
-				   m_nNoiseSourceClass == rOther.m_nNoiseSourceClass &&
-				   m_nszVtHintLayout[0] == rOther.m_nszVtHintLayout[0] &&
-				   m_nszVtHintLayout[1] == rOther.m_nszVtHintLayout[1] &&
-				   m_nszVtHintLayout[2] == rOther.m_nszVtHintLayout[2];
+				   m_nNoiseSourceClass == rOther.m_nNoiseSourceClass;
 		}
 	} t3dRdForwardPipelineKey_t;
 
 	typedef struct t3dRdForwardPipelineEntry_s
 	{
 		t3dRdForwardPipelineKey_t m_key;
-		RID						  m_hszPipelines[3];
+		RID						  m_hszPipelines[1];
 	} t3dRdForwardPipelineEntry_t;
-
-	typedef struct t3dRdTierPipelineKey_s
-	{
-		t3dRdForwardPipelineKey_t forward;
-		uint32_t				  tier = 0u;
-		bool					  operator==(
-			 const t3dRdTierPipelineKey_s &rOther ) const {
-			return tier == rOther.tier && forward == rOther.forward;
-		}
-	} t3dRdTierPipelineKey_t;
 
 	Terrain3DRdContext		  &m_context;
 	Terrain3DRdForwardLighting m_forwardLighting;
-	RID m_hszCompactSets[3]{};
+	RID m_hszCompactSets[1]{};
 	static_assert( T3D_CLIPMAP_INDIRECT_ARENA_BYTES <=
 					   t3d_rd_context_contract::fixedIndirectCapacity( T3D_RD_CONTEXT_FIXED_INDIRECT_CLIPMAP ),
 				   "Clipmap indirect commands exceed the shared fixed slice" );
@@ -154,35 +139,22 @@ private:
 				   "Clipmap strip commands must start at a whole-command offset" );
 	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
 	uint16_t			  m_szStripPartCounts[MESH_TYPE_COUNT]{};
-	Terrain3DRdShader	  m_hszShaders[3];
     Terrain3DRdShader m_hUnifiedRasterShader;
-    Terrain3DRdShader m_hszUnifiedForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-    Terrain3DRdShader m_hszUnifiedCompactShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-    Terrain3DRdShader m_hszUnifiedOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    // UCMP keeps shipping and editor capabilities; geometry tiers share a shader.
+    Terrain3DRdShader m_hszUnifiedForwardShaders[2][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+    Terrain3DRdShader m_hszUnifiedCompactShaders[2][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    Terrain3DRdShader m_hszUnifiedOneSunShaders[2][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
     Terrain3DRdShader m_hszUnifiedFeedbackShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
     Terrain3DRdShader m_hszUnifiedFeedbackOneSunShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
     Terrain3DRdShader m_hszUnifiedFeedbackCompactShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-    bool m_bUnifiedCookedMaterialActive = false;
-    // One combined resident-ancestor + prepared-mip-bias shader per terrain tier.
-    // The non-hint evaluator always retains the bounded VT fallback.
-    Terrain3DRdShader m_hszCanonicalHintColorShaders[3];
-    Terrain3DRdShader m_hszCanonicalHintFeedbackShaders[3];
-    bool m_bszCanonicalHintsActive[3]{};
-    uint64_t m_nVtHintPrepareCount = 0u;
-    Terrain3DRdShader m_hszFeedbackCompactShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	uint64_t m_nTerrainTimestampPairs = 0u;
-	Terrain3DRdShader	  m_hszForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-	Terrain3DRdShader m_hszForwardCompactShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	Terrain3DRdShader m_hszForwardOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	Terrain3DRdShader m_hszFeedbackShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	Terrain3DRdShader m_hszFeedbackOneSunShaders[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	RID m_hszFeedbackSets[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	Terrain3DVTGpu *m_pFeedbackOwner = NULL; // Borrowed shared VT owner.
-	bool m_bForwardFeedbackActive = false;
+    RID m_hszFeedbackSets[T3D_RD_FORWARD_COLOR_VARIANT_COUNT]{};
+    Terrain3DVTGpu *m_pFeedbackOwner = NULL; // Borrowed shared VT owner.
+    bool m_bForwardFeedbackActive = false;
 	Terrain3DRdShader m_hCullShader;
 	RID				  m_hCullPipeline;
 	Terrain3DRdPipelineCache< RID, 1u >						 m_cullPipelines;
-	Terrain3DRdPipelineCache< uint32_t, T3D_MAX_VIEWS * 3u > m_viewPipelines;
+	Terrain3DRdPipelineCache< uint32_t, T3D_MAX_VIEWS > m_viewPipelines;
 	Terrain3DRdSampler										 m_hTerrainSampler;
 	Terrain3DRdSampler										 m_hszMaterialSamplers[4];
 	Terrain3DRdSampler										 m_hszMapSamplers[4];
@@ -230,14 +202,13 @@ private:
 	t3dRdGpuBufferSlice_t m_indexedIndirectSlice;
 	t3dRdGpuBufferSlice_t m_stripIndirectSlice;
 	t3dRdGpuBufferSlice_t m_commandsSpan;
-	RID					  m_hszRasterUniformSets[3];
-	RID m_hszRasterHintSets[3]{};
+	RID					  m_hszRasterUniformSets[1];
+	
 	RID					  m_hCullUniformSet;
 
 	typedef struct t3dRdClipmapDescriptorKey_s
 	{
         RID      m_hBoundAncestorHints;
-        RID      m_hszBoundHintShaders[3];
 		RID		 m_hBoundHeightTexture;
 		RID		 m_hBoundDerivedTexture;
 		RID		 m_hBoundControlTexture;
@@ -256,16 +227,11 @@ private:
 		RID		 m_hBoundMacroNoiseTexture;
 		RID		 m_hBoundEditorBrushTexture;
 		uint64_t m_nBoundSharedVTResourceGeneration = 0u;
-		uint32_t m_nszBoundTierFiltering[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
-        bool m_bUnifiedCooked = false;
+		uint32_t m_nBoundFiltering = 0xFFFFFFFFu;
 
 		bool operator==(
 			const t3dRdClipmapDescriptorKey_s &rOther ) const {
-			return m_bUnifiedCooked == rOther.m_bUnifiedCooked &&
-                m_hBoundAncestorHints == rOther.m_hBoundAncestorHints &&
-                   m_hszBoundHintShaders[0] == rOther.m_hszBoundHintShaders[0] &&
-                   m_hszBoundHintShaders[1] == rOther.m_hszBoundHintShaders[1] &&
-                   m_hszBoundHintShaders[2] == rOther.m_hszBoundHintShaders[2] &&
+			return m_hBoundAncestorHints == rOther.m_hBoundAncestorHints &&
                    m_hBoundHeightTexture == rOther.m_hBoundHeightTexture &&
 				   m_hBoundDerivedTexture == rOther.m_hBoundDerivedTexture &&
 				   m_hBoundControlTexture == rOther.m_hBoundControlTexture &&
@@ -284,9 +250,7 @@ private:
 				   m_hBoundMacroNoiseTexture == rOther.m_hBoundMacroNoiseTexture &&
 				   m_hBoundEditorBrushTexture == rOther.m_hBoundEditorBrushTexture &&
 				   m_nBoundSharedVTResourceGeneration == rOther.m_nBoundSharedVTResourceGeneration &&
-				   m_nszBoundTierFiltering[0] == rOther.m_nszBoundTierFiltering[0] &&
-				   m_nszBoundTierFiltering[1] == rOther.m_nszBoundTierFiltering[1] &&
-				   m_nszBoundTierFiltering[2] == rOther.m_nszBoundTierFiltering[2];
+				   m_nBoundFiltering == rOther.m_nBoundFiltering;
 		}
 	} t3dRdClipmapDescriptorKey_t;
 
@@ -300,8 +264,7 @@ private:
 		}
 	} t3dSetCacheKey_t;
 
-	// Three ordinary sets plus three hint-ABI sets can coexist in a color pass.
-    // A four-lease table evicted live bindings before the draw list consumed them.
+    // Shared UCMP descriptors are leased across color/depth/editor passes.
     Terrain3DRdDescriptorLeaseTable< t3dSetCacheKey_t, 8u > m_descriptorCache;
     struct EditorBrushOverlaySetKey {
         RID shader, working, table;
@@ -323,7 +286,7 @@ private:
 	bool						m_bBoundDescriptorKeyValid = false;
 	t3dRdViewState_t			m_szViewStates[T3D_MAX_VIEWS]{};
 
-	Terrain3DRdPipelineCache< t3dRdTierPipelineKey_t, T3D_FORWARD_PIPELINE_CAPACITY * 3u > m_forwardPipelines;
+	Terrain3DRdPipelineCache< t3dRdForwardPipelineKey_t, T3D_FORWARD_PIPELINE_CAPACITY > m_forwardPipelines;
 	mutable t3dRdForwardPipelineEntry_t m_currentForwardPipelineEntry{};
 	uint64_t							m_nRegionMapGeneration = 0u;
 	uint64_t							m_nMaterialGeneration = 0u;
@@ -375,8 +338,6 @@ private:
 	bool ensureDevice( void );
 	bool ensureShaders( void );
 	bool ensureForwardShaders( t3dTerrainShaderPath_t path, t3dRdForwardShaderVariant_t variant, bool bOneSunLighting );
-	bool ensureCanonicalVtShaders( t3dTerrainShaderPath_t shaderPath, t3dRdForwardShaderVariant_t variant,
-		bool bOneSunLighting, const t3dSharedVTBindings_t *pSharedVTBindings );
 	void freeForwardPipelines( void );
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext,
 								 t3dRdForwardShaderVariant_t	  variant,
@@ -500,8 +461,7 @@ public:
 
 	EA_FORCE_INLINE bool isReady(
 		void ) const {
-		return m_context.isReady() && m_hszShaders[0].isValid() && m_hszShaders[1].isValid() &&
-			   m_hszShaders[2].isValid() && m_context.arena( Terrain3DRdContext::COLD ).ownsSlice( m_coldSpan ) &&
+		return m_context.isReady() && m_hUnifiedRasterShader.isValid() && m_context.arena( Terrain3DRdContext::COLD ).ownsSlice( m_coldSpan ) &&
 			   m_context.arena( Terrain3DRdContext::SCRATCH ).ownsSlice( m_scratchSpan ) && m_pIndirectBuffer &&
 			   m_pIndirectBuffer->ownsSlice( m_indexedIndirectSlice ) &&
 			   m_pIndirectBuffer->ownsSlice( m_stripIndirectSlice );

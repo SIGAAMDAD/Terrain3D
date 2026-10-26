@@ -88,28 +88,6 @@ PackedByteArray Terrain3DCompute::copyToBytes(
 	return bytes;
 }
 
-bool Terrain3DCompute::ensureDevice(
-	void ) {
-	if ( m_pRd ) {
-		return true;
-	}
-	if ( m_bDeviceAttempted ) {
-		return false;
-	}
-	m_bDeviceAttempted = true;
-	if ( !Terrain3DRdContext::getGlobalDevice() ) {
-		setError( "RenderingDevice is unavailable (Compatibility renderer or headless runtime)" );
-		return false;
-	}
-	m_pRd = Terrain3DRdContext::createLocalDevice();
-	if ( !m_pRd ) {
-		setError( "Could not create a local RenderingDevice" );
-		return false;
-	}
-	m_localBuffers.setDevice( m_pRd );
-	return true;
-}
-
 bool Terrain3DCompute::ensureRenderDevice(
 	void ) {
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
@@ -131,32 +109,6 @@ bool Terrain3DCompute::ensureRenderDevice(
 	m_pRenderRd = context.getDevice();
 	if ( !m_pRenderRd ) {
 		setError( "Global RenderingDevice is unavailable (Compatibility renderer or headless runtime)" );
-		return false;
-	}
-	return true;
-}
-
-bool Terrain3DCompute::ensurePipeline(
-	t3dPipeline_t		 &rPipeline,
-	const t3dRdShaderId_t id,
-	const String		 &rName ) {
-	if ( rPipeline.m_hPipeline.isValid() ) {
-		return true;
-	}
-	if ( rPipeline.m_bAttempted || !ensureDevice() ) {
-		return false;
-	}
-	const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
-	const Ref< RDShaderSPIRV >		pSpirv = Terrain3DRdShaderLibrary::resolveComputeShader( id );
-	if ( pSpirv.is_null() ) {
-		setError( String( "Compute shader cache is not ready: " ) +
-				  String( entry.m_path ? entry.m_path : "invalid ID" ) );
-		return false;
-	}
-	rPipeline.m_bAttempted = true;
-	if ( !m_localBuffers.createPipeline( pSpirv, rName, rPipeline.m_hShader, rPipeline.m_hPipeline ) ) {
-		setError( String( "Failed to create compute pipeline: " ) +
-				  String( entry.m_path ? entry.m_path : "invalid ID" ) );
 		return false;
 	}
 	return true;
@@ -212,32 +164,6 @@ void Terrain3DCompute::freeRenderPipeline(
 	rPipeline.m_hPipeline.releaseTracked( context );
 	rPipeline.m_hShader.releaseTracked( context );
 	rPipeline.m_bAttempted = false;
-}
-
-bool Terrain3DCompute::ensureBrushCapacity(
-	const uint32_t nBytes ) {
-	if ( !m_localBuffers.ensureStorageSet( m_brushStorage, nBytes, m_brushPipeline.m_hShader.rid() ) ) {
-		setError( "Failed to rebuild brush compute buffer and uniform set" );
-		return false;
-	}
-	return true;
-}
-
-bool Terrain3DCompute::ensureDerivedCapacity(
-	const uint32_t nSlot,
-	const uint32_t nInputBytes,
-	const uint32_t nOutputBytes ) {
-	if ( nSlot >= T3D_DERIVED_READBACK_SLOT_COUNT ) {
-		return false;
-	}
-	if ( !m_localBuffers.ensureStoragePairSet( m_derivedStorage[nSlot],
-											   nInputBytes,
-											   nOutputBytes,
-											   m_derivedPipeline.m_hShader.rid() ) ) {
-		setError( "Failed to rebuild derived-map compute buffers and uniform set" );
-		return false;
-	}
-	return true;
 }
 
 void Terrain3DCompute::freeDisplacementTexture(
@@ -599,7 +525,7 @@ void Terrain3DCompute::shutdownDisplacementResources(
 
 bool Terrain3DCompute::isAvailable(
 	void ) {
-	return ensureDevice();
+	return Terrain3DRdContext::getGlobalDevice() != NULL;
 }
 
 void Terrain3DCompute::processBrushCpu(
@@ -753,137 +679,6 @@ void Terrain3DCompute::processBrushCpu(
 	}
 }
 
-bool Terrain3DCompute::processBrush(
-	eastl::vector< t3dBrushElement_t, Terrain3DEastlAllocator > &rElements,
-	const t3dBrushParams_t										&rParams ) {
-	if ( rElements.empty() ) {
-		return true;
-	}
-	if ( rElements.size() > ( size_t ) ( eastl::numeric_limits< uint32_t >::max() ) ) {
-		setError( "Brush batch exceeds RenderingDevice dispatch limits" );
-		return false;
-	}
-	if ( !ensurePipeline( m_brushPipeline, T3D_RD_SHADER_BRUSH_COMPUTE, "Terrain3D brush compute" ) ) {
-		return false;
-	}
-	const uint64_t byte_count_64 = ( uint64_t ) ( rElements.size() ) * sizeof( t3dBrushElement_t );
-	if ( byte_count_64 > eastl::numeric_limits< uint32_t >::max() ) {
-		setError( "Brush batch exceeds 4 GiB" );
-		return false;
-	}
-	const uint32_t byte_count = ( uint32_t ) ( byte_count_64 );
-	if ( !ensureBrushCapacity( byte_count ) ) {
-		return false;
-	}
-	const PackedByteArray input = copyToBytes( rElements.data(), byte_count );
-	if ( !m_localBuffers.upload( m_brushStorage, input, byte_count ) ) {
-		setError( "Failed to upload brush compute batch" );
-		return false;
-	}
-	t3dBrushParams_t params = rParams;
-	params.m_nCount = ( uint32_t ) ( rElements.size() );
-	const PackedByteArray push = copyToBytes( &params, sizeof( params ) );
-	const int64_t		  list = m_pRd->compute_list_begin();
-	m_pRd->compute_list_bind_compute_pipeline( list, m_brushPipeline.m_hPipeline.rid() );
-	m_pRd->compute_list_bind_uniform_set( list, m_brushStorage.uniformSet.rid(), 0u );
-	m_pRd->compute_list_set_push_constant( list, push, ( uint32_t ) ( sizeof( params ) ) );
-	m_pRd->compute_list_dispatch( list,
-								  ( params.m_nCount + T3D_COMPUTE_WORKGROUP_SIZE - 1u ) / T3D_COMPUTE_WORKGROUP_SIZE,
-								  1u,
-								  1u );
-	m_pRd->compute_list_end();
-	m_pRd->submit();
-	m_pRd->sync();
-	const PackedByteArray output = m_localBuffers.readback( m_brushStorage, byte_count );
-	if ( output.size() != byte_count ) {
-		setError( "Brush compute readback returned an unexpected byte count" );
-		return false;
-	}
-	memcpy( rElements.data(), output.ptr(), byte_count );
-	return true;
-}
-
-bool Terrain3DCompute::generateDerivedMaps(
-	t3dDerivedMapComputeJob_t *const pJobs,
-	const uint32_t					 nJobCount ) {
-	if ( !pJobs || nJobCount == 0u || nJobCount > T3D_DERIVED_READBACK_SLOT_COUNT ) {
-		setError( "Derived-map compute batch must contain one to three jobs" );
-		return false;
-	}
-	if ( !ensurePipeline( m_derivedPipeline, T3D_RD_SHADER_DERIVED_COMPUTE, "Terrain3D derived map compute" ) ) {
-		return false;
-	}
-	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
-		t3dDerivedMapComputeJob_t &job = pJobs[slot];
-		job.m_bSuccess = false;
-		if ( !job.m_pHeightHalo || !job.m_pRgbaOutput || job.m_nWidth == 0u || job.m_nHeight == 0u ||
-			 job.m_fVertexSpacing <= 0.0f || job.m_nHaloElements != ( job.m_nWidth + 2u ) * ( job.m_nHeight + 2u ) ||
-			 job.m_nOutputBytes != job.m_nWidth * job.m_nHeight * sizeof( uint32_t ) ) {
-			setError( "Invalid derived-map batch job" );
-			return false;
-		}
-		const uint64_t input_bytes_64 = ( uint64_t ) job.m_nHaloElements * sizeof( float );
-		if ( input_bytes_64 > eastl::numeric_limits< uint32_t >::max() ) {
-			setError( "Derived-map input exceeds 4 GiB" );
-			return false;
-		}
-		const uint32_t input_bytes = ( uint32_t ) input_bytes_64;
-		if ( !ensureDerivedCapacity( slot, input_bytes, job.m_nOutputBytes ) ) {
-			return false;
-		}
-		const PackedByteArray input = copyToBytes( job.m_pHeightHalo, input_bytes );
-		if ( !m_localBuffers.uploadInput( m_derivedStorage[slot], input, input_bytes ) ) {
-			setError( "Failed to upload derived-map height halo" );
-			return false;
-		}
-	}
-
-	const int64_t list = m_pRd->compute_list_begin();
-	m_pRd->compute_list_bind_compute_pipeline( list, m_derivedPipeline.m_hPipeline.rid() );
-	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
-		const t3dDerivedMapComputeJob_t &job = pJobs[slot];
-		const t3dDerivedParams_t		 params{ job.m_nWidth, job.m_nHeight, job.m_nWidth + 2u, job.m_fVertexSpacing };
-		const PackedByteArray			 push = copyToBytes( &params, sizeof( params ) );
-		const uint32_t					 count = job.m_nWidth * job.m_nHeight;
-		m_pRd->compute_list_bind_uniform_set( list, m_derivedStorage[slot].uniformSet.rid(), 0u );
-		m_pRd->compute_list_set_push_constant( list, push, ( uint32_t ) ( sizeof( params ) ) );
-		m_pRd->compute_list_dispatch( list,
-									  ( count + T3D_COMPUTE_WORKGROUP_SIZE - 1u ) / T3D_COMPUTE_WORKGROUP_SIZE,
-									  1u,
-									  1u );
-	}
-	m_pRd->compute_list_end();
-	m_pRd->submit();
-	// All outputs are consumed immediately by the edit transaction. This is the
-	// single dependency point for the whole batch, rather than one sync per job.
-	m_pRd->sync();
-	for ( uint32_t slot = 0u; slot < nJobCount; ++slot ) {
-		t3dDerivedMapComputeJob_t &job = pJobs[slot];
-		const PackedByteArray	   output = m_localBuffers.readbackOutput( m_derivedStorage[slot], job.m_nOutputBytes );
-		if ( output.size() != job.m_nOutputBytes ) {
-			setError( "Derived-map compute readback returned an unexpected byte count" );
-			continue;
-		}
-		memcpy( job.m_pRgbaOutput, output.ptr(), job.m_nOutputBytes );
-		job.m_bSuccess = true;
-	}
-	return true;
-}
-
-void Terrain3DCompute::shutdown(
-	void ) {
-	if ( !m_pRd ) {
-		return;
-	}
-	m_localBuffers.release( m_brushStorage );
-	for ( uint32_t slot = 0u; slot < T3D_DERIVED_READBACK_SLOT_COUNT; ++slot ) {
-		m_localBuffers.release( m_derivedStorage[slot] );
-	}
-	m_localBuffers.releasePipeline( m_brushPipeline.m_hPipeline, m_brushPipeline.m_hShader );
-	m_localBuffers.releasePipeline( m_derivedPipeline.m_hPipeline, m_derivedPipeline.m_hShader );
-	m_brushPipeline.m_bAttempted = false;
-	m_derivedPipeline.m_bAttempted = false;
-	memdelete( m_pRd );
-	m_pRd = NULL;
-	m_localBuffers.setDevice( NULL );
+void Terrain3DCompute::shutdown( void ) {
+    // Displacement resources are released explicitly on their global RD owner.
 }

@@ -364,7 +364,7 @@ HeightSamples4 sample_middle_height_texels4(ivec2 t0, ivec2 t1, ivec2 t2, ivec2 
 }
 #endif
 float sample_height_texel_mode(ivec2 texel, bool normal_sample) {
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     uint authored_height;
     if (t3d_editor_brush_lookup(texel, 0u, authored_height))
         return decode_height(float(authored_height) * (1.0 / 65535.0));
@@ -388,7 +388,7 @@ float sample_height_texel_mode(ivec2 texel, bool normal_sample) {
 #endif
 }
 HeightSamples4 sample_height_texels4(ivec2 t0, ivec2 t1, ivec2 t2, ivec2 t3, bool normal_sample) {
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     uint edited;
     if (t3d_editor_brush_lookup(t0, 0u, edited) ||
         t3d_editor_brush_lookup(t1, 0u, edited) ||
@@ -423,7 +423,7 @@ float sample_height_interpolated_texel(vec2 world_texel, ivec2 base) {
 }
 
 bool try_sample_derived_normal(ivec2 texel, int layer, out vec3 normal) {
-#if T3D_TERRAIN_SHADER_PATH == 2
+#if defined(T3D_UCMP_EDITOR)
     uint edited;
     if (t3d_editor_brush_lookup(texel, 0u, edited) ||
         t3d_editor_brush_lookup(texel + ivec2(1, 0), 0u, edited) ||

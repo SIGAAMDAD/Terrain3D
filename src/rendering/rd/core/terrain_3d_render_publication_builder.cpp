@@ -990,9 +990,7 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 	resources.m_hDerivedTextureRd = data->getDerivedMapsRid();
 	resources.m_hControlTextureRd = data->getControlMapsRid();
 	resources.m_hColorTextureRd = data->getColorMapsRid();
-	resources.m_hMiddleCompositeTextureRd =
-		snapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1
-			? RID() : data->getMiddleCompositeMapsRid();
+	resources.m_hMiddleCompositeTextureRd = RID();
 	resources.m_hTerrainShadowMaskTextureRd = data->getTerrainShadowMasksRid();
 	resources.m_hMiddleHeightTextureRd = data->getMiddleHeightMapsRid();
 	resources.m_hMiddleHeightRegionMapTextureRd = data->getMiddleHeightRegionMapRid();
@@ -1856,6 +1854,10 @@ void Terrain3DRenderPublicationBuilder::publish(
 		pending_slot < T3D_RD_FRAME_SNAPSHOT_SLOT_COUNT ? &m_snapshotSlots[pending_slot] : NULL;
 	publishPatchState( rServices, snapshot );
 	if ( !rServices.m_materialStateBuilder.publishSnapshotState( rServices.m_materialSources, snapshot ) ) {
+		return;
+	}
+	if ( snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) {
+		rServices.m_host.reportPublicationError( "Retired terrain material backend rejected before publication" );
 		return;
 	}
 	publishLightingState( rServices, snapshot );

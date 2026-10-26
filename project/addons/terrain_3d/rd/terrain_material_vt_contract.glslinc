@@ -60,7 +60,7 @@
 // evaluator across color, feedback, compact, one-sun and depth variants.
 // Alternate material modes continue to be resolved from authored tier data.
 // Hint-buffer presence changes the descriptor ABI, not the material algorithm.
-#if !defined(T3D_WORLD_RASTER_EMBEDDED) && defined(T3D_TERRAIN_SHADER_PATH) && T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_WORLD_RASTER_EMBEDDED) && !defined(T3D_UCMP_EDITOR)
 #ifndef T3D_CONTROL_FILTER_CLASS
 #define T3D_CONTROL_FILTER_CLASS 3
 #endif

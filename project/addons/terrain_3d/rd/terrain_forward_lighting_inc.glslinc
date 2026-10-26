@@ -12,13 +12,13 @@
 const uint T3D_LIGHTING_MODEL_RUNTIME = 0xffu;
 const uint T3D_SCENE_INTEGRATION_DYNAMIC = 0u;
 const uint T3D_SCENE_INTEGRATION_NONE = 1u;
-#if T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_UCMP_EDITOR)
 layout(constant_id = 25) const uint t3d_lighting_model_class = T3D_LIGHTING_MODEL_RUNTIME;
 layout(constant_id = 26) const uint t3d_scene_integration_class = T3D_SCENE_INTEGRATION_DYNAMIC;
 #endif
 
 uint t3d_forward_lighting_model(uint runtime_model) {
-#if T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_lighting_model_class != T3D_LIGHTING_MODEL_RUNTIME) {
         return t3d_lighting_model_class;
     }
@@ -533,7 +533,7 @@ bool t3d_scene_feature(uint feature) {
 }
 
 bool t3d_scene_decals_enabled() {
-#if T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_scene_integration_class == T3D_SCENE_INTEGRATION_NONE) {
         return false;
     }
@@ -542,7 +542,7 @@ bool t3d_scene_decals_enabled() {
 }
 
 bool t3d_scene_reflections_enabled() {
-#if T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_UCMP_EDITOR)
     if (t3d_scene_integration_class == T3D_SCENE_INTEGRATION_NONE) {
         return false;
     }
@@ -978,7 +978,7 @@ void t3d_light_response(T3DBrdfContext brdf,
     inout vec3 specular_light) {
     float ndotl = max(dot(brdf.normal, light_direction), 0.0);
     if (ndotl <= 0.0 || attenuation <= 0.0) return;
-#if T3D_TERRAIN_SHADER_PATH == 0
+#if !defined(T3D_UCMP_EDITOR)
     // ID 25 is already published by the clipmap pipeline for every canonical
     // color draw. Specialization folds this dispatch into one BRDF body.
     if (t3d_lighting_model_class != T3D_LIGHTING_MODEL_RUNTIME) {
