@@ -88,9 +88,8 @@ public:
 		const uint64_t allocator_contained = rInput.m_nAllocatorContainedFixedBytes < rInput.m_nFixedBytes
 		        ? rInput.m_nAllocatorContainedFixedBytes
 		        : rInput.m_nFixedBytes;
-		result.m_nAllocatorContainedFixedBytes = allocator_contained < rInput.m_nAllocatorReserveBytes
-		        ? allocator_contained
-		        : rInput.m_nAllocatorReserveBytes;
+		result.m_nAllocatorContainedFixedBytes =
+		        allocator_contained < rInput.m_nAllocatorReserveBytes ? allocator_contained : rInput.m_nAllocatorReserveBytes;
 		result.m_nFixedBytes = rInput.m_nFixedBytes - result.m_nAllocatorContainedFixedBytes;
 		result.m_nAllocatorReserveBytes = rInput.m_nAllocatorReserveBytes;
 		result.m_nTransientReserveBytes = rInput.m_nTransientReserveBytes;
@@ -117,8 +116,10 @@ public:
 				allocation.m_nEffectiveBytes = capped_manual < remaining ? capped_manual : remaining;
 				allocation.m_limitingReason = allocation.m_nEffectiveBytes < capped_manual
 				        ? TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET
-				        : ( capped_manual < input.m_nManualBytes ? TERRAIN3D_MEMORY_LIMIT_FIXED_CAP : TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE );
-				result.m_nManualReservedBytes = addChecked( result.m_nManualReservedBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
+				        : ( capped_manual < input.m_nManualBytes ? TERRAIN3D_MEMORY_LIMIT_FIXED_CAP
+				                                                 : TERRAIN3D_MEMORY_LIMIT_MANUAL_OVERRIDE );
+				result.m_nManualReservedBytes =
+				        addChecked( result.m_nManualReservedBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
 				remaining -= allocation.m_nEffectiveBytes;
 				if ( allocation.m_nEffectiveBytes < capped_manual ) {
 					result.m_bHardOvercommit = true;
@@ -178,8 +179,7 @@ public:
 				allocation.m_nRequestedBytes = addChecked( allocation.m_nRequestedBytes, add, arithmetic_overflow );
 				allocation.m_nEffectiveBytes = addChecked( allocation.m_nEffectiveBytes, add, arithmetic_overflow );
 				distributed = addChecked( distributed, add, arithmetic_overflow );
-				if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes
-				        && input.m_nHardCapBytes != UINT64_MAX ) {
+				if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes && input.m_nHardCapBytes != UINT64_MAX ) {
 					allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_FIXED_CAP;
 				}
 			}
@@ -195,8 +195,7 @@ public:
 					allocation.m_nRequestedBytes = addChecked( allocation.m_nRequestedBytes, add, arithmetic_overflow );
 					allocation.m_nEffectiveBytes = addChecked( allocation.m_nEffectiveBytes, add, arithmetic_overflow );
 					distributed = add;
-					if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes
-					        && input.m_nHardCapBytes != UINT64_MAX ) {
+					if ( allocation.m_nEffectiveBytes >= input.m_nHardCapBytes && input.m_nHardCapBytes != UINT64_MAX ) {
 						allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_FIXED_CAP;
 					}
 					break;
@@ -211,13 +210,15 @@ public:
 		result.m_nManagedEffectiveBytes = 0u;
 		for ( int index = 0; index < TERRAIN3D_MEMORY_SUBSYSTEM_COUNT; ++index ) {
 			t3dMemorySubsystemAllocation_t &allocation = result.m_szSubsystems[( size_t )( index )];
-			result.m_nManagedEffectiveBytes = addChecked( result.m_nManagedEffectiveBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
+			result.m_nManagedEffectiveBytes =
+			        addChecked( result.m_nManagedEffectiveBytes, allocation.m_nEffectiveBytes, arithmetic_overflow );
 			if ( allocation.m_limitingReason == TERRAIN3D_MEMORY_LIMIT_NONE && allocation.m_nEffectiveBytes > 0u && remaining == 0u ) {
 				allocation.m_limitingReason = TERRAIN3D_MEMORY_LIMIT_TOTAL_BUDGET;
 			}
 		}
 		result.m_nCommittedBytes = addChecked( fixed_and_transient, result.m_nManagedEffectiveBytes, arithmetic_overflow );
-		result.m_nHeadroomBytes = rInput.m_nTotalBudgetBytes > result.m_nCommittedBytes ? rInput.m_nTotalBudgetBytes - result.m_nCommittedBytes : 0u;
+		result.m_nHeadroomBytes =
+		        rInput.m_nTotalBudgetBytes > result.m_nCommittedBytes ? rInput.m_nTotalBudgetBytes - result.m_nCommittedBytes : 0u;
 		result.m_bHardOvercommit = result.m_bHardOvercommit || arithmetic_overflow || result.m_nCommittedBytes > rInput.m_nTotalBudgetBytes;
 		return result;
 	}

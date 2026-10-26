@@ -89,16 +89,16 @@ bool Terrain3DRdCpuCuller::isCommandRangeValid(
 
 bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
         const Projection &rViewProjection,
-        const uint32_t nLod0IndexCount,
-        const uint32_t nOuterIndexCount,
+        const uint32_t nLod0PartCount,
+        const uint32_t nOuterPartCount,
         t3dRdCpuCullResult_t &rResult ) {
 	t3dRdCpuCullResultReset( &rResult );
-	if ( rSnapshot.m_nPatchCount > s_nMaxClipmapLevels || nLod0IndexCount == 0u || nOuterIndexCount == 0u ) {
+	if ( rSnapshot.m_nPatchCount > s_nMaxClipmapLevels || nLod0PartCount == 0u || nOuterPartCount == 0u ) {
 		return false;
 	}
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
 		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
-		command.m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0IndexCount : nOuterIndexCount;
+		command.m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0PartCount : nOuterPartCount;
 		command.m_nFirstInstance = group * s_nMaxClipmapLevels;
 	}
 	for ( uint32_t patch_index = 0u; patch_index < rSnapshot.m_nPatchCount; ++patch_index ) {
@@ -119,23 +119,23 @@ bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
 		rResult.m_szVisibleIndices[group * s_nMaxClipmapLevels + slot] = patch_index;
 		++rResult.m_nVisibleCount;
 	}
-	return rResult.m_nInvalidPatchCount == 0u && validate( rSnapshot, rViewProjection, nLod0IndexCount, nOuterIndexCount, rResult );
+	return rResult.m_nInvalidPatchCount == 0u && validate( rSnapshot, rViewProjection, nLod0PartCount, nOuterPartCount, rResult );
 }
 
 bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot,
         const Projection *const pViewProjections,
         const uint32_t nViewCount,
-        const uint32_t nLod0IndexCount,
-        const uint32_t nOuterIndexCount,
+        const uint32_t nLod0PartCount,
+        const uint32_t nOuterPartCount,
         t3dRdCpuCullResult_t &rResult ) {
 	t3dRdCpuCullResultReset( &rResult );
 	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews || rSnapshot.m_nPatchCount > s_nMaxClipmapLevels
-	        || nLod0IndexCount == 0u || nOuterIndexCount == 0u ) {
+	        || nLod0PartCount == 0u || nOuterPartCount == 0u ) {
 		return false;
 	}
 	for ( uint32_t group = 0u; group < s_nRdDrawGroupCount; ++group ) {
 		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
-		command.m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0IndexCount : nOuterIndexCount;
+		command.m_nIndexCount = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0PartCount : nOuterPartCount;
 		command.m_nFirstInstance = group * s_nMaxClipmapLevels;
 	}
 	for ( uint32_t patch_index = 0u; patch_index < rSnapshot.m_nPatchCount; ++patch_index ) {
@@ -164,8 +164,8 @@ bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot
 
 bool Terrain3DRdCpuCuller::validate( const t3dRdFrameSnapshot_t &rSnapshot,
         const Projection &rViewProjection,
-        const uint32_t nLod0IndexCount,
-        const uint32_t nOuterIndexCount,
+        const uint32_t nLod0PartCount,
+        const uint32_t nOuterPartCount,
         const t3dRdCpuCullResult_t &rResult ) {
 	if ( rSnapshot.m_nPatchCount > s_nMaxClipmapLevels || rResult.m_nInvalidPatchCount != 0u ) {
 		return false;
@@ -179,8 +179,8 @@ bool Terrain3DRdCpuCuller::validate( const t3dRdFrameSnapshot_t &rSnapshot,
 			return false;
 		}
 		const t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
-		const uint32_t expected_indices = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0IndexCount : nOuterIndexCount;
-		if ( command.m_nIndexCount != expected_indices || command.m_nInstanceCount > s_nMaxClipmapLevels || command.m_nFirstIndex != 0u
+		const uint32_t expected_parts = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0PartCount : nOuterPartCount;
+		if ( command.m_nIndexCount != expected_parts || command.m_nInstanceCount > s_nMaxClipmapLevels || command.m_nFirstIndex != 0u
 		        || command.m_nVertexOffset != 0 || command.m_nFirstInstance != group * s_nMaxClipmapLevels ) {
 			return false;
 		}

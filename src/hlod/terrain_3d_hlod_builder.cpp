@@ -471,25 +471,26 @@ Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
 		result["error"] = "mesh asset is not HLOD eligible";
 		return result;
 	}
-	if ( asset->getMaterialOverlay().is_valid() ) {
+	if ( asset->getMaterialOverlay().is_valid() || asset->getRenderingMaterialOverlay().is_valid() ) {
 		result["error"] = "material_overlay is unsupported for HLOD proxy baking";
 		return result;
 	}
 	const Ref<Mesh> mesh = asset->getMesh( 0 );
-	if ( mesh.is_null() || mesh->get_surface_count() <= 0 ) {
-		result["error"] = "mesh asset has no supported static LOD0 geometry";
+	ArrayMesh *const pArrayMesh = mesh.is_valid() ? Object::cast_to<ArrayMesh>( mesh.ptr() ) : NULL;
+	if ( !pArrayMesh || pArrayMesh->get_surface_count() <= 0 ) {
+		result["error"] = "HLOD instancer source requires non-empty ArrayMesh LOD0 geometry";
 		return result;
 	}
 	int64_t triangles_per_instance = 0;
-	for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-		if ( !mesh->surface_get_blend_shape_arrays( surface ).is_empty() ) {
+	for ( int surface = 0; surface < pArrayMesh->get_surface_count(); ++surface ) {
+		if ( !pArrayMesh->surface_get_blend_shape_arrays( surface ).is_empty() ) {
 			result["error"] = "blend shapes are unsupported by HLOD proxies";
 			return result;
 		}
-		if ( ( Mesh::PrimitiveType )mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+		if ( pArrayMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
-		const Array arrays = mesh->surface_get_arrays( surface );
+		const Array arrays = pArrayMesh->surface_get_arrays( surface );
 		if ( t3dHlodBuilderHasUnsupportedStaticAttributes( arrays ) ) {
 			result["error"] = "mesh uses custom/skinned vertex attributes unsupported by HLOD proxies";
 			return result;
@@ -507,12 +508,16 @@ Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
 		return result;
 	}
 
-	const AABB mesh_bounds = mesh->get_aabb();
+	const AABB mesh_bounds = pArrayMesh->get_aabb();
 	AABB bounds;
 	bool have_bounds = false;
 	int64_t instance_count = 0;
 	uint64_t signature = 1469598103934665603ull;
 	signature = t3dHlodBuilderHashBytes( signature, &nMeshId, sizeof( nMeshId ) );
+	const uint32_t category = ( uint32_t )( asset->getInstanceCategory() );
+	const uint32_t hlod_min_level = ( uint32_t )( asset->getHlodMinLevel() );
+	signature = t3dHlodBuilderHashBytes( signature, &category, sizeof( category ) );
+	signature = t3dHlodBuilderHashBytes( signature, &hlod_min_level, sizeof( hlod_min_level ) );
 	for ( size_t iCell = 0u; iCell < source_instances->m_cells.size(); ++iCell ) {
 		const t3dInstanceCell_t &cell = source_instances->m_cells[iCell];
 		signature = t3dHlodBuilderHashBytes( signature, &cell.m_location, sizeof( cell.m_location ) );
@@ -551,16 +556,20 @@ Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
 	result["triangles_per_instance"] = triangles_per_instance;
 	result["source_triangles"] = triangles_per_instance * instance_count;
 	result["instance_signature"] = ( int64_t )( signature & 0x7FFFFFFFFFFFFFFFull );
+	result["instance_category"] = ( int )( asset->getInstanceCategory() );
 	return result;
 }
 
-static Ref<ArrayMesh> t3dHlodBuilderBuildInstancerChunk( const Ref<Mesh> &rMesh,
-        const Ref<Terrain3DMeshAsset> &rAsset,
-        const eastl::vector<Transform3D> &rTransforms ) {
+static Ref<ArrayMesh> t3dHlodBuilderBuildInstancerChunk(
+        const Ref<Mesh> &rMesh, const Ref<Terrain3DMeshAsset> &rAsset, const eastl::vector<Transform3D> &rTransforms ) {
 	Ref<ArrayMesh> merged;
+	ArrayMesh *const pArrayMesh = rMesh.is_valid() ? Object::cast_to<ArrayMesh>( rMesh.ptr() ) : NULL;
+	if ( !pArrayMesh ) {
+		return merged;
+	}
 	merged.instantiate();
-	for ( int surface = 0; surface < rMesh->get_surface_count(); ++surface ) {
-		if ( ( Mesh::PrimitiveType )rMesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+	for ( int surface = 0; surface < pArrayMesh->get_surface_count(); ++surface ) {
+		if ( pArrayMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
 		Ref<SurfaceTool> tool;
@@ -571,7 +580,7 @@ static Ref<ArrayMesh> t3dHlodBuilderBuildInstancerChunk( const Ref<Mesh> &rMesh,
 		}
 		tool->index();
 		const Ref<Material> material =
-		        rAsset->getMaterialOverride().is_valid() ? rAsset->getMaterialOverride() : rMesh->surface_get_material( surface );
+		        rAsset->getMaterialOverride().is_valid() ? rAsset->getMaterialOverride() : pArrayMesh->surface_get_material( surface );
 		tool->set_material( material );
 		merged = tool->commit( merged );
 	}
@@ -654,26 +663,27 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 		return result;
 	}
 	const Ref<Mesh> mesh = asset->getMesh( 0 );
+	ArrayMesh *const pArrayMesh = mesh.is_valid() ? Object::cast_to<ArrayMesh>( mesh.ptr() ) : NULL;
 	bool has_blend_shapes = false;
-	if ( mesh.is_valid() ) {
-		for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-			if ( !mesh->surface_get_blend_shape_arrays( surface ).is_empty() ) {
+	if ( pArrayMesh ) {
+		for ( int surface = 0; surface < pArrayMesh->get_surface_count(); ++surface ) {
+			if ( !pArrayMesh->surface_get_blend_shape_arrays( surface ).is_empty() ) {
 				has_blend_shapes = true;
 				break;
 			}
 		}
 	}
-	if ( mesh.is_null() || mesh->get_surface_count() <= 0 || has_blend_shapes ) {
-		result["error"] = "mesh asset has no supported static LOD0 geometry";
+	if ( !pArrayMesh || pArrayMesh->get_surface_count() <= 0 || has_blend_shapes ) {
+		result["error"] = "HLOD instancer source requires non-empty static ArrayMesh LOD0 geometry";
 		return result;
 	}
 
 	int64_t triangles_per_instance = 0;
-	for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
-		if ( ( Mesh::PrimitiveType )mesh->_surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+	for ( int surface = 0; surface < pArrayMesh->get_surface_count(); ++surface ) {
+		if ( pArrayMesh->surface_get_primitive_type( surface ) != Mesh::PRIMITIVE_TRIANGLES ) {
 			continue;
 		}
-		const Array arrays = mesh->surface_get_arrays( surface );
+		const Array arrays = pArrayMesh->surface_get_arrays( surface );
 		if ( t3dHlodBuilderHasUnsupportedStaticAttributes( arrays ) ) {
 			result["error"] = "mesh uses custom/skinned vertex attributes unsupported by HLOD proxies";
 			return result;
@@ -720,8 +730,7 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 	static const int64_t s_nPreProxyTriangleBudget = 262144;
 	static const int s_nMaxInstancesPerChunk = 128;
 	const int64_t source_triangles = triangles_per_instance * instance_count;
-	const int max_instances_by_triangles =
-	        ( int )MAX<int64_t>( 1, s_nChunkTriangleBudget / MAX<int64_t>( triangles_per_instance, 1 ) );
+	const int max_instances_by_triangles = ( int )MAX<int64_t>( 1, s_nChunkTriangleBudget / MAX<int64_t>( triangles_per_instance, 1 ) );
 	const int max_instances_per_chunk = MIN( s_nMaxInstancesPerChunk, max_instances_by_triangles );
 	const real_t pre_ratio = source_triangles > s_nPreProxyTriangleBudget
 	        ? CLAMP( ( real_t )s_nPreProxyTriangleBudget / ( real_t )source_triangles, 0.01f, 1.0f )
@@ -740,18 +749,36 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 		const t3dInstanceCell_t &cell = ( source_instances->m_cells )[iCell];
 		for ( size_t transform_index = 0u; transform_index < cell.m_transforms.size(); ++transform_index ) {
 			transforms.push_back( cell.getTransform( transform_index ) );
-			if ( ( int )transforms.size() >= max_instances_per_chunk &&
-			        !t3dHlodBuilderFlushInstancerChunk( this, mesh, asset, transforms, pre_ratio, triangles_per_instance, chunks,
-			                source_bounds, have_bounds, proxy_triangles, pre_geometric_error ) ) {
+			if ( ( int )transforms.size() >= max_instances_per_chunk
+			        && !t3dHlodBuilderFlushInstancerChunk( this,
+			                mesh,
+			                asset,
+			                transforms,
+			                pre_ratio,
+			                triangles_per_instance,
+			                chunks,
+			                source_bounds,
+			                have_bounds,
+			                proxy_triangles,
+			                pre_geometric_error ) ) {
 				result["error"] = "instancer HLOD chunk construction/simplification failed";
 				return result;
 			}
 		}
 		// Cell boundaries are spatial boundaries. Flush a partially-filled chunk
 		// here so unrelated cells are never merged merely to fill a batch.
-		if ( !transforms.empty() &&
-		        !t3dHlodBuilderFlushInstancerChunk( this, mesh, asset, transforms, pre_ratio, triangles_per_instance, chunks,
-		                source_bounds, have_bounds, proxy_triangles, pre_geometric_error ) ) {
+		if ( !transforms.empty()
+		        && !t3dHlodBuilderFlushInstancerChunk( this,
+		                mesh,
+		                asset,
+		                transforms,
+		                pre_ratio,
+		                triangles_per_instance,
+		                chunks,
+		                source_bounds,
+		                have_bounds,
+		                proxy_triangles,
+		                pre_geometric_error ) ) {
 			result["error"] = "instancer HLOD chunk construction/simplification failed";
 			return result;
 		}
@@ -853,8 +880,8 @@ Dictionary Terrain3DHLODBuilder::simplifyMesh( const Ref<ArrayMesh> &rMesh, cons
 
 void Terrain3DHLODBuilder::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_instancer_mesh_ids", "region" ), &Terrain3DHLODBuilder::getInstancerMeshIds );
-	ClassDB::bind_method( D_METHOD( "analyze_instancer_source", "terrain", "region", "mesh_id" ),
-	        &Terrain3DHLODBuilder::analyzeInstancerSource );
+	ClassDB::bind_method(
+	        D_METHOD( "analyze_instancer_source", "terrain", "region", "mesh_id" ), &Terrain3DHLODBuilder::analyzeInstancerSource );
 	ClassDB::bind_method(
 	        D_METHOD( "build_instancer_source", "terrain", "region", "mesh_id" ), &Terrain3DHLODBuilder::buildInstancerSource );
 	ClassDB::bind_method( D_METHOD( "simplify_mesh", "mesh", "ratio" ), &Terrain3DHLODBuilder::simplifyMesh );

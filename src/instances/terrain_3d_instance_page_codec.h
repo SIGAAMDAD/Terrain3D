@@ -35,6 +35,10 @@ public:
 	        uint32_t &nInstanceCount,
 	        uint16_t &nMeshCount );
 	static bool inspect( const PackedByteArray &rPage, uint32_t *pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount );
+#if defined( TERRAIN3D_INSTANCE_PAGE_CODEC_TEST_ACCESS )
+	static void testSetDecodeFailureCountdown( int nCountdown );
+	static void testClearDecodeFailure( void );
+#endif
 };
 
 #endif // TERRAIN3D_INSTANCE_PAGE_CODEC_H

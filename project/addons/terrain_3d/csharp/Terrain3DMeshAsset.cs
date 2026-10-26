@@ -67,11 +67,31 @@ public partial class Terrain3DMeshAsset : Resource
 		Max = 2,
 	}
 
+	public enum InstanceCategory
+	{
+		Clutter = 0,
+		GroundCover = 1,
+		Occluder = 2,
+	}
+
+	public enum TerrainAlignment
+	{
+		Upright = 0,
+		AlignToTerrainNormal = 1,
+	}
+
 	public enum HlodContribution
 	{
 		Auto = 0,
 		Include = 1,
 		Exclude = 2,
+	}
+
+	public enum InstanceOcclusionPolicy
+	{
+		None = 0,
+		Box = 1,
+		ExplicitMesh = 2,
 	}
 
 	public new class GDExtensionSignalName : Resource.SignalName
@@ -212,6 +232,14 @@ public partial class Terrain3DMeshAsset : Resource
 		/// Cached name for the 'generated_type' member.
 		/// </summary>
 		public new static readonly StringName GeneratedType = "generated_type";
+		/// <summary>Cached name for the instance category policy root.</summary>
+		public new static readonly StringName InstanceCategory = "instance_category";
+		public new static readonly StringName InstanceOcclusionPolicy = "instance_occlusion_policy";
+		public new static readonly StringName InstanceOcclusionBox = "instance_occlusion_box";
+		public new static readonly StringName InstanceOcclusionProxyMesh = "instance_occlusion_proxy_mesh";
+		public new static readonly StringName InstanceOcclusionRange = "instance_occlusion_range";
+		/// <summary>Cached name for persistent terrain alignment policy.</summary>
+		public new static readonly StringName TerrainAlignment = "terrain_alignment";
 		/// <summary>Cached name for HLOD contribution policy.</summary>
 		public new static readonly StringName HlodContribution = "hlod_contribution";
 		/// <summary>Cached name for minimum legal HLOD representation level.</summary>
@@ -338,6 +366,42 @@ public partial class Terrain3DMeshAsset : Resource
 	{
 		get => Get(GDExtensionPropertyName.GeneratedType).As<Terrain3DMeshAsset.GenType>();
 		set => Set(GDExtensionPropertyName.GeneratedType, Variant.From(value));
+	}
+
+	public new Terrain3DMeshAsset.InstanceCategory InstanceCategoryMode
+	{
+		get => Get(GDExtensionPropertyName.InstanceCategory).As<Terrain3DMeshAsset.InstanceCategory>();
+		set => Set(GDExtensionPropertyName.InstanceCategory, Variant.From(value));
+	}
+
+	public new InstanceOcclusionPolicy InstanceOcclusionPolicyMode
+	{
+		get => Get(GDExtensionPropertyName.InstanceOcclusionPolicy).As<InstanceOcclusionPolicy>();
+		set => Set(GDExtensionPropertyName.InstanceOcclusionPolicy, Variant.From(value));
+	}
+
+	public new Aabb InstanceOcclusionBox
+	{
+		get => Get(GDExtensionPropertyName.InstanceOcclusionBox).As<Aabb>();
+		set => Set(GDExtensionPropertyName.InstanceOcclusionBox, value);
+	}
+
+	public new ArrayMesh InstanceOcclusionProxyMesh
+	{
+		get => Get(GDExtensionPropertyName.InstanceOcclusionProxyMesh).As<ArrayMesh>();
+		set => Set(GDExtensionPropertyName.InstanceOcclusionProxyMesh, value);
+	}
+
+	public new double InstanceOcclusionRange
+	{
+		get => Get(GDExtensionPropertyName.InstanceOcclusionRange).As<double>();
+		set => Set(GDExtensionPropertyName.InstanceOcclusionRange, value);
+	}
+
+	public new TerrainAlignment TerrainAlignmentMode
+	{
+		get => Get(GDExtensionPropertyName.TerrainAlignment).As<TerrainAlignment>();
+		set => Set(GDExtensionPropertyName.TerrainAlignment, Variant.From(value));
 	}
 
 	public new HlodContribution HlodContributionMode
@@ -527,6 +591,12 @@ public partial class Terrain3DMeshAsset : Resource
 		/// Cached name for the 'get_instance_count' member.
 		/// </summary>
 		public new static readonly StringName GetInstanceCount = "get_instance_count";
+		public new static readonly StringName HasMeshDerivedInstanceProxy = "has_mesh_derived_instance_proxy";
+		public new static readonly StringName IsInstanceProxyImportedOccluder = "is_instance_proxy_imported_occluder";
+		public new static readonly StringName GetInstanceOccluder = "get_instance_occluder";
+		public new static readonly StringName GetInstanceCollisionShape = "get_instance_collision_shape";
+		public new static readonly StringName GetInstanceProxyVertexCount = "get_instance_proxy_vertex_count";
+		public new static readonly StringName GetInstanceProxyTriangleCount = "get_instance_proxy_triangle_count";
 	}
 
 	public new void Clear() =>
@@ -555,6 +625,24 @@ public partial class Terrain3DMeshAsset : Resource
 
 	public new long GetInstanceCount() =>
 		Call(GDExtensionMethodName.GetInstanceCount, []).As<long>();
+
+	public new bool HasMeshDerivedInstanceProxy() =>
+		Call(GDExtensionMethodName.HasMeshDerivedInstanceProxy, []).As<bool>();
+
+	public new bool IsInstanceProxyImportedOccluder() =>
+		Call(GDExtensionMethodName.IsInstanceProxyImportedOccluder, []).As<bool>();
+
+	public new ArrayOccluder3D GetInstanceOccluder() =>
+		Call(GDExtensionMethodName.GetInstanceOccluder, []).As<ArrayOccluder3D>();
+
+	public new ConcavePolygonShape3D GetInstanceCollisionShape() =>
+		Call(GDExtensionMethodName.GetInstanceCollisionShape, []).As<ConcavePolygonShape3D>();
+
+	public new long GetInstanceProxyVertexCount() =>
+		Call(GDExtensionMethodName.GetInstanceProxyVertexCount, []).As<long>();
+
+	public new long GetInstanceProxyTriangleCount() =>
+		Call(GDExtensionMethodName.GetInstanceProxyTriangleCount, []).As<long>();
 
 }
 

@@ -25,6 +25,26 @@ typedef struct t3dInstanceRegionCacheChanges_s {
 	void recordEvicted( const Vector2i &vLocation );
 } t3dInstanceRegionCacheChanges_t;
 
+typedef enum t3dInstanceRegionCacheEvictionReason_e : uint8_t {
+	TERRAIN3D_INSTANCE_REGION_EVICTION_NONE = 0u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_EXPLICIT = 1u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_INVALIDATE = 2u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_RESET = 3u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_SLOT_PRESSURE = 4u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_DEMAND_BUDGET = 5u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_BUDGET_RECOVERY = 6u,
+	TERRAIN3D_INSTANCE_REGION_EVICTION_SELECTION_CHANGE = 7u,
+} t3dInstanceRegionCacheEvictionReason_t;
+
+typedef struct t3dInstanceRegionCacheEvictionDiagnostic_s {
+	t3dRegionCoord_t m_admittedLocation = t3dInvalidRegionCoord();
+	t3dRegionCoord_t m_evictedLocation = t3dInvalidRegionCoord();
+	size_t m_nTrackedBytes = 0u;
+	size_t m_nCurrentBytes = 0u;
+	size_t m_nBudgetBytes = 0u;
+	t3dInstanceRegionCacheEvictionReason_t m_eReason = TERRAIN3D_INSTANCE_REGION_EVICTION_NONE;
+} t3dInstanceRegionCacheEvictionDiagnostic_t;
+
 typedef struct t3dInstanceRegionCacheStats_s {
 	bool m_bEnabled = false;
 	bool m_bSelectionPending = true;
@@ -41,6 +61,10 @@ typedef struct t3dInstanceRegionCacheStats_s {
 	bool m_bMaterializationServiceActive = false;
 	uint64_t m_nColdMaterializations = 0u;
 	uint64_t m_nMaterializationMisses = 0u;
+	uint64_t m_nEvictionsTotal = 0u;
+	uint64_t m_nCachePolicyEvictions = 0u;
+	size_t m_nTrackedResidentBytes = 0u;
+	t3dInstanceRegionCacheEvictionDiagnostic_t m_lastEviction;
 } t3dInstanceRegionCacheStats_t;
 
 class Terrain3DInstanceRegionCache {
@@ -52,6 +76,13 @@ public:
 	void invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
 	bool evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
 	bool ensureResident( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges = NULL );
+	bool refreshResidentBytes( const Vector2i &vLocation );
+	size_t reconcileResidentBytes( void );
+	size_t getTrackedResidentBytes( const Vector2i &vLocation ) const;
+	size_t getTrackedResidentBytesSum( void ) const;
+	EA_FORCE_INLINE const t3dInstanceRegionCacheEvictionDiagnostic_t &getLastEvictionDiagnostic( void ) const {
+		return m_lastEviction;
+	}
 	void serviceColdMaterialization( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages );
 	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, int nEffectiveLoadPages, t3dInstanceRegionCacheChanges_t &rChanges );
 
@@ -102,15 +133,28 @@ private:
 	bool m_bMaterializationServiceActive = false;
 	uint64_t m_nColdMaterializations = 0u;
 	uint64_t m_nMaterializationMisses = 0u;
+	uint64_t m_nEvictionsTotal = 0u;
+	uint64_t m_nCachePolicyEvictions = 0u;
 	uint64_t m_nPrefetchStreamingGenerationLast = 0u;
 	Vector2i m_center = s_v2iMax;
 	t3dRegionCoord_t m_szLocations[s_nInstanceCacheMaxPages] = {};
+	size_t m_szResidentBytes[s_nInstanceCacheMaxPages] = {};
 	uint8_t m_szRegionMap[s_nRegionSlots] = {};
+	t3dInstanceRegionCacheEvictionDiagnostic_t m_lastEviction;
 
 	int findSlot( const Vector2i &vLocation ) const;
 	bool attachResidentStore( const Vector2i &vLocation, bool bDemandLoad, t3dInstanceRegionCacheChanges_t *pChanges );
 	bool materializeRegionCold( const Vector2i &vLocation, const t3dResidencyFrameState_t &rFrame );
-	bool evictSlot( int iSlot, t3dInstanceRegionCacheChanges_t *pChanges );
+	void updateTrackedResidentBytes( int iSlot, size_t nCurrentBytes );
+	void recordEvictionDiagnostic( int iSlot,
+	        const Vector2i &rLocation,
+	        const Vector2i &rAdmittedLocation,
+	        size_t nCurrentBytes,
+	        t3dInstanceRegionCacheEvictionReason_t eReason );
+	bool evictSlot( int iSlot,
+	        t3dInstanceRegionCacheChanges_t *pChanges,
+	        t3dInstanceRegionCacheEvictionReason_t eReason,
+	        const Vector2i &rAdmittedLocation );
 	int collectDesired( const t3dResidencyFrameState_t &rFrame, const Vector2i &rCenter, Vector2i *pLocations, int nCapacity ) const;
 };
 

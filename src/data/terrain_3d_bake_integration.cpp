@@ -61,10 +61,8 @@ t3dBakeSnapshot_t Terrain3D::createBakeSnapshot( void ) const {
 
 	const TypedArray<Vector2i> region_locations = m_pData->getRegionLocations();
 	snapshot.m_regions.reserve( region_locations.size() );
-	const int64_t expected_height_bytes =
-	        ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint16_t ) );
-	const int64_t expected_control_bytes =
-	        ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint32_t ) );
+	const int64_t expected_height_bytes = ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint16_t ) );
+	const int64_t expected_control_bytes = ( int64_t )( s_nRegionSize ) * ( int64_t )( s_nRegionSize ) * ( int64_t )( sizeof( uint32_t ) );
 
 	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locations ).size() ); iRegion++ ) {
 		const Vector2i regionLocation = ( region_locations )[iRegion];
@@ -281,8 +279,8 @@ void Terrain3D::generateTriangles( PackedVector3Array &rVertices,
 
 		for ( int32_t z = z_start; z < z_end; z += step ) {
 			for ( int32_t x = x_start; x < x_end; x += step ) {
-				const real_t fHeight =
-				        m_pData->getHeight( Vector3( ( real_t )( x )*s_fRegionVertexSpacing, 0.f, ( real_t )( z )*s_fRegionVertexSpacing ) );
+				const real_t fHeight = m_pData->getHeight(
+				        Vector3( ( real_t )( x )*s_fRegionVertexSpacing, 0.f, ( real_t )( z )*s_fRegionVertexSpacing ) );
 				if ( fHeight >= rGlobalAabb.position.y && fHeight <= rGlobalAabb.get_end().y ) {
 					generateTrianglePair( buffer, generate_uvs, nLod, filter, bRequireNav, x, z );
 				}

@@ -4,23 +4,17 @@
 #define TERRAIN3D_DATA_CLASS_H
 
 #include "core/terrain_3d_eastl_helpers.h"
+#include "core/terrain_3d_startup_state.h"
 #include "Terrain3DConstants.h"
 #include "assets/generated_texture.h"
+#include "data/terrain_3d_data_residency_adapter.h"
 #include "data/terrain_3d_map_edit_service.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_persistence.h"
 #include "data/terrain_3d_region_repository.h"
-#include "data/terrain_3d_runtime_world_manifest.h"
+#include "data/terrain_3d_runtime_artifact_service.h"
 #include "data/terrain_3d_sampling_storage.h"
 #include "eastl_config.h"
-#include "rendering/terrain_3d_far_surface_atlas_cache.h"
-#include "streaming/terrain_3d_active_height_residency.h"
-#include "streaming/terrain_3d_cpu_region_cache.h"
-#include "streaming/terrain_3d_gpu_region_cache.h"
-#include "streaming/terrain_3d_instance_region_cache.h"
-#include "streaming/terrain_3d_middle_height_region_cache.h"
-#include "streaming/terrain_3d_region_residency.h"
-#include "streaming/terrain_3d_runtime_page_store.h"
 #include "streaming/terrain_3d_runtime_profile.h"
 
 #include <EASTL/array.h>
@@ -62,15 +56,8 @@ private:
 	Terrain3DSamplingStorage m_samplingStorage;
 	Terrain3DMapEditService m_mapEditService;
 	Terrain3DRegionPersistence m_regionPersistence;
-	Terrain3DRuntimePageStore m_runtimePageStore;
-	Terrain3DRuntimeWorldManifest m_runtimeWorldManifest;
-	Terrain3DCpuRegionCache m_cpuRegionCache;
-	Terrain3DInstanceRegionCache m_instanceRegionCache;
-	Terrain3DMiddleHeightRegionCache m_middleHeightRegionCache;
-	Terrain3DGpuRegionCache m_gpuRegionCache;
-	Terrain3DFarSurfaceAtlasCache m_farSurfaceAtlasCache;
-	Terrain3DActiveHeightResidency m_activeHeightResidency;
-	Terrain3DRegionResidency m_regionResidency;
+	Terrain3DRuntimeArtifactService m_runtimeArtifacts;
+	Terrain3DDataResidencyAdapter m_residency;
 	bool m_bRuntimeActive = false;
 
 	TypedArray<Image> m_heightMaps;
@@ -94,6 +81,26 @@ private:
 	// initialized. Suppress redundant startup signals/snaps and defer spare layers.
 	bool m_bStartupBulkLoad = false;
 	bool m_bSkipSlotReserveOnce = false;
+	uint32_t m_nStartupGenerationLast = 0u;
+	t3dStartupDomainState_t m_startupState;
+	uint64_t m_nStartupInitializeCount = 0u;
+	uint64_t m_nStartupInitializeUsecLast = 0u;
+	uint64_t m_nStartupDirectoryLoadCount = 0u;
+	uint64_t m_nStartupDirectoryLoadUsecLast = 0u;
+	uint64_t m_nStartupRehydrateCount = 0u;
+	uint64_t m_nStartupRehydrateUsecLast = 0u;
+	uint64_t m_nStartupBytesReadLast = 0u;
+	uint32_t m_nStartupRegionCountLast = 0u;
+	t3dStagedRepository_t m_startupPreparedRepository;
+	Terrain3DRuntimeWorldManifest m_startupPreparedWorldManifest;
+	String m_startupPreparedDirectory;
+	bool m_bStartupPreparationValid = false;
+	bool m_bStartupInitialDirectoryLoad = false;
+	bool m_bStartupPreparedDirectory = false;
+	bool m_bStartupPreparedBoundedCpuLoad = false;
+	bool m_bStartupPreparedCookedManifest = false;
+	bool m_bStartupNeedsRehydrate = false;
+	bool m_bStartupDerivedPending = false;
 
 	// These contain direct RenderingDevice Texture2DArray RIDs. In bounded
 	// residency mode they hold physical cache layers rather than repository slots.
@@ -130,6 +137,17 @@ private:
 		m_samplingStorage.resetResidentPool();
 	}
 	Error rehydrateActiveStorage( void );
+	void resetStartupPreparationCold( void );
+	Error prepareDirectoryCandidateCold( const String &rDir,
+	        t3dStagedRepository_t &rStaged,
+	        bool &rBoundedCpuLoad,
+	        bool &rCookedRuntimeManifest );
+	Error commitDirectoryCandidateCold( const String &rDir,
+	        t3dStagedRepository_t &rStaged,
+	        bool bBoundedCpuLoad,
+	        bool bCookedRuntimeManifest,
+	        bool bFinalizeDerived );
+	void finalizeDirectoryCandidateCold( bool bCookedRuntimeManifest );
 	bool syncActiveRegion( const Vector2i &vLocation, const Terrain3DRegion *pRegion );
 	Ref<Image> getRegionMapOrDefault( const Terrain3DRegion *pRegion, t3dMapType_t mapType ) const;
 	Ref<Image> makeGpuColorImage( const Ref<Image> &rImage ) const;
@@ -209,11 +227,26 @@ private:
 
 public:
 	Terrain3DData( void );
-	Error initialize( Terrain3D *pTerrain );
+	Error beginStartupCold( Terrain3D *pTerrain, uint32_t nStartupGeneration );
+	Error prepareStartupCold( uint32_t nStartupGeneration );
+	Error commitStartupCold( uint32_t nStartupGeneration );
+	void finalizeStartupDerivedCold( uint32_t nStartupGeneration );
+	void cancelStartupCold( uint32_t nStartupGeneration );
+	EA_FORCE_INLINE bool isStartupCpuReady( const uint32_t nStartupGeneration ) const {
+		const t3dStartupDomainSnapshot_t state = getStartupSnapshot();
+		return state.m_nGeneration == nStartupGeneration && state.m_eStage >= T3D_STARTUP_CPU_READY;
+	}
+	EA_FORCE_INLINE bool isStartupCommitted( const uint32_t nStartupGeneration ) const {
+		const t3dStartupDomainSnapshot_t state = getStartupSnapshot();
+		return state.m_nGeneration == nStartupGeneration && state.m_eStage == T3D_STARTUP_COMMITTED;
+	}
 	void deactivateRuntimeStorage( Terrain3D *pTerrain );
 	~Terrain3DData( void );
 	EA_FORCE_INLINE bool isInitializedFor( const Terrain3D *pTerrain ) const {
 		return m_bRuntimeActive && m_pTerrain == pTerrain;
+	}
+	EA_FORCE_INLINE t3dStartupDomainSnapshot_t getStartupSnapshot( void ) const {
+		return t3dStartupDomainSnapshot( m_startupState );
 	}
 	EA_FORCE_INLINE bool isRuntimeReady( void ) const {
 		return m_bRuntimeActive && m_samplingStorage.isActiveOwner() && m_regionRepository.getRegionMapSize() > 0;
@@ -262,10 +295,11 @@ public:
 		return m_regionRepository.getTopologyGeneration();
 	}
 	EA_FORCE_INLINE uint64_t getPhysicalRegionMapGenerationInternal( void ) const {
-		return m_gpuRegionCache.getPhysicalPageTableGeneration();
+		return m_residency.gpuRegionCache().getPhysicalPageTableGeneration();
 	}
 	EA_FORCE_INLINE const uint16_t *getPhysicalRegionMapDataInternal( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRegionMapData() : m_regionRepository.getLogicalRegionMapData();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getRegionMapData()
+		                                                : m_regionRepository.getLogicalRegionMapData();
 	}
 	EA_FORCE_INLINE const uint16_t *getLogicalRegionMapDataInternal( void ) const {
 		return m_regionRepository.getLogicalRegionMapData();
@@ -361,18 +395,18 @@ public:
 	int getEffectiveCpuRegionLoadBudgetLayers( void ) const;
 	int getEffectiveInstanceRegionLoadBudgetPages( void ) const;
 	EA_FORCE_INLINE uint32_t getGpuRegionStallFlagsLastTick( void ) const {
-		return m_gpuRegionCache.getStallFlagsLastTick();
+		return m_residency.gpuRegionCache().getStallFlagsLastTick();
 	}
 	EA_FORCE_INLINE uint32_t getCpuRegionStallFlagsLastTick( void ) const {
-		return m_cpuRegionCache.getStallFlagsLastTick();
+		return m_residency.cpuRegionCache().getStallFlagsLastTick();
 	}
 	EA_FORCE_INLINE uint32_t getInstanceRegionStallFlagsLastTick( void ) const {
-		return m_instanceRegionCache.getStallFlagsLastTick();
+		return m_residency.instanceRegionCache().getStallFlagsLastTick();
 	}
 	bool ensureCpuRegionResident( const Vector2i &vLocation );
 
 	EA_FORCE_INLINE uint64_t getCookedWorldMaterialSignatureInternal( void ) const {
-		return m_runtimeWorldManifest.isLoaded() ? m_runtimeWorldManifest.getMaterialSignature() : 0u;
+		return m_runtimeArtifacts.worldManifest().isLoaded() ? m_runtimeArtifacts.worldManifest().getMaterialSignature() : 0u;
 	}
 
 	bool ensureCookedNodeDescriptors( const Vector2i &vLocation );
@@ -402,21 +436,21 @@ public:
 	void resetRuntimeStreamingCaches( void );
 	void appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const;
 	EA_FORCE_INLINE bool isGpuRegionCacheEnabled( void ) const {
-		return m_gpuRegionCache.isEnabled();
+		return m_residency.gpuRegionCache().isEnabled();
 	}
 	EA_FORCE_INLINE int getGpuRegionCacheCapacity( void ) const {
-		return m_gpuRegionCache.getCapacity();
+		return m_residency.gpuRegionCache().getCapacity();
 	}
 	EA_FORCE_INLINE int getAuthoringGpuRegionBudgetMb( void ) const {
-		return m_gpuRegionCache.getAuthoringBudgetMb();
+		return m_residency.gpuRegionCache().getAuthoringBudgetMb();
 	}
 	bool isAuthoringGpuFullResidencyPossible( void ) const;
 	bool isAuthoringGpuReadbackSafe( void ) const;
 	EA_FORCE_INLINE int getGpuRegionRequiredRadius( void ) const {
-		return m_gpuRegionCache.getRequiredRadius();
+		return m_residency.gpuRegionCache().getRequiredRadius();
 	}
 	EA_FORCE_INLINE int getGpuRegionRequiredCorePages( void ) const {
-		const int radius = m_gpuRegionCache.getRequiredRadius();
+		const int radius = m_residency.gpuRegionCache().getRequiredRadius();
 		const int diameter = radius * 2 + 1;
 		return MIN( diameter * diameter, m_regionRepository.getRegionMapSize() * m_regionRepository.getRegionMapSize() );
 	}
@@ -432,7 +466,7 @@ public:
 	size_t getCpuRegionCacheMinimumBytes( void ) const;
 	size_t getCpuRegionCacheHardCapBytes( void ) const;
 	EA_FORCE_INLINE size_t getInstanceRegionCacheReservedBytes( void ) const {
-		return m_instanceRegionCache.getReservedBytes();
+		return m_residency.instanceRegionCache().getReservedBytes();
 	}
 	void setRuntimePagePreparedByteBudget( uint64_t nBytes );
 	size_t getMemoryRuntimePagePreparedBytes( void ) const;
@@ -441,6 +475,7 @@ public:
 	size_t getMemoryFixedRepositoryBytes( void ) const;
 	size_t getMemoryAllocatorContainedRepositoryBytes( void ) const;
 	uint64_t getMemoryComputeLocalGpuBytes( void ) const;
+	Dictionary getComputeLocalGpuTelemetry( void ) const;
 	Dictionary getRuntimeResidencyGrid( int nRadius = 6 ) const;
 	void invalidateGpuFarSurface( void );
 	void invalidateGpuFarAtlasLayout( void );
@@ -454,70 +489,74 @@ public:
 	Dictionary getInstanceRegionCacheStats( void ) const;
 	Dictionary getInstanceRegionCacheStatsFast( void ) const;
 	EA_FORCE_INLINE bool isInstanceRegionCacheEnabled( void ) const {
-		return m_instanceRegionCache.isEnabled();
+		return m_residency.instanceRegionCache().isEnabled();
 	}
 	EA_FORCE_INLINE bool isInstanceRegionResident( const Vector2i &vLocation ) const {
-		return m_instanceRegionCache.isResident( vLocation );
+		return m_residency.instanceRegionCache().isResident( vLocation );
 	}
 	EA_FORCE_INLINE bool ensureInstanceRegionResident( const Vector2i &vLocation ) {
 		return ensureInstanceRegionResidentInternal( vLocation, true );
 	}
 	bool evictInstanceRegion( const Vector2i &vLocation );
 	EA_FORCE_INLINE bool isCpuRegionCacheEnabled( void ) const {
-		return m_cpuRegionCache.isEnabled();
+		return m_residency.cpuRegionCache().isEnabled();
 	}
 	EA_FORCE_INLINE int getCpuRegionCacheCapacity( void ) const {
-		return m_cpuRegionCache.getCapacity();
+		return m_residency.cpuRegionCache().getCapacity();
 	}
 	void regenerateDerivedMaps(
 	        const eastl::vector<Vector2i, Terrain3DEastlAllocator> &rRegionLocations, const AABB &rEditedArea = AABB() );
 	void publishDerivedMapUpdates( const eastl::vector<t3dDerivedMapUpdate_t, Terrain3DEastlAllocator> &rUpdates );
 	Ref<Terrain3DErosionJob> createErosionJob( const Ref<Terrain3DErosionSettings> &rSettings );
 	EA_FORCE_INLINE RID getHeightMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getHeightMapsRid() : m_generatedHeightMaps.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getHeightMapsRid() : m_generatedHeightMaps.getRid();
 	}
 	EA_FORCE_INLINE RID getDerivedMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getDerivedMapsRid() : m_generatedDerivedMaps.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getDerivedMapsRid()
+		                                                : m_generatedDerivedMaps.getRid();
 	}
 	EA_FORCE_INLINE RID getControlMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getControlMapsRid() : m_generatedControlMaps.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getControlMapsRid()
+		                                                : m_generatedControlMaps.getRid();
 	}
 	EA_FORCE_INLINE RID getColorMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getColorMapsRid() : m_generatedColorMaps.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getColorMapsRid() : m_generatedColorMaps.getRid();
 	}
 	EA_FORCE_INLINE RID getMiddleCompositeMapsRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getMiddleCompositeMapsRid() : m_generatedMiddleCompositeMaps.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getMiddleCompositeMapsRid()
+		                                                : m_generatedMiddleCompositeMaps.getRid();
 	}
 	bool refreshTerrainShadowMasksInternal( void );
 	EA_FORCE_INLINE RID getTerrainShadowMasksRid( void ) const {
-		return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getTerrainShadowMasksRid() : m_generatedTerrainShadowMasks.getRid();
+		return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getTerrainShadowMasksRid()
+		                                                : m_generatedTerrainShadowMasks.getRid();
 	}
 	EA_FORCE_INLINE RID getMiddleHeightMapsRid( void ) const {
-		return m_middleHeightRegionCache.getHeightMapsRid();
+		return m_residency.middleHeightRegionCache().getHeightMapsRid();
 	}
 	EA_FORCE_INLINE RID getMiddleHeightRegionMapRid( void ) const {
-		return m_middleHeightRegionCache.getRegionMapRid();
+		return m_residency.middleHeightRegionCache().getRegionMapRid();
 	}
 	EA_FORCE_INLINE int getMiddleHeightResidentCount( void ) const {
-		return m_middleHeightRegionCache.getResidentCount();
+		return m_residency.middleHeightRegionCache().getResidentCount();
 	}
 	EA_FORCE_INLINE int getMiddleHeightMissingRequiredLastTick( void ) const {
-		return m_middleHeightRegionCache.getMissingRequiredLastTick();
+		return m_residency.middleHeightRegionCache().getMissingRequiredLastTick();
 	}
 	EA_FORCE_INLINE bool isMiddleHeightRegionResident( const Vector2i &vLocation ) const {
-		return m_middleHeightRegionCache.isResident( vLocation );
+		return m_residency.middleHeightRegionCache().isResident( vLocation );
 	}
 	EA_FORCE_INLINE bool isGpuSurfaceRegionResident( const Vector2i &vLocation ) const {
-		return m_gpuRegionCache.isResident( vLocation );
+		return m_residency.gpuRegionCache().isResident( vLocation );
 	}
 	Dictionary getMiddleHeightCacheStats( void ) const;
 	size_t getMiddleHeightCacheReservedBytes( void ) const;
 	int fillGpuMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
 	EA_FORCE_INLINE RID getFarHeightMapRid( void ) const {
-		return m_farSurfaceAtlasCache.getHeightMapRid();
+		return m_residency.farSurfaceAtlasCache().getHeightMapRid();
 	}
 	EA_FORCE_INLINE RID getFarColorMapRid( void ) const {
-		return m_farSurfaceAtlasCache.getColorMapRid();
+		return m_residency.farSurfaceAtlasCache().getColorMapRid();
 	}
 	EA_FORCE_INLINE bool areControlMapsImplicit( void ) const {
 		return m_bControlMapsImplicit;

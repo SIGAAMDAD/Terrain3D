@@ -3,6 +3,9 @@
 #ifndef TERRAIN3D_RENDER_WORLD_CONTRACT_H
 #define TERRAIN3D_RENDER_WORLD_CONTRACT_H
 
+#include "rendering/rd/vt/terrain_3d_vt_contract.h"
+#include "rendering/rd/world/terrain_3d_world_contract.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -11,14 +14,16 @@ static const uint32_t T3D_RW_CLUSTER_MAX_VERTICES = 64u;
 static const uint32_t T3D_RW_CLUSTER_MAX_TRIANGLES = 124u;
 static const uint32_t T3D_RW_CLUSTER_RASTER_VERTEX_COUNT = T3D_RW_CLUSTER_MAX_TRIANGLES * 3u;
 
-enum T3DRenderWorldTier : uint32_t {
+enum T3DRenderWorldTier : uint32_t
+{
 	T3D_RW_TIER_WORLD = 0,
 	T3D_RW_TIER_CLUTTER = 1,
 	T3D_RW_TIER_FOLIAGE = 2,
 	T3D_RW_TIER_COUNT = 3
 };
 
-enum T3DOperationClass : uint32_t {
+enum T3DOperationClass : uint32_t
+{
 	T3D_OPCLASS_HOT = 0,
 	T3D_OPCLASS_ASYNC,
 	T3D_OPCLASS_WARM,
@@ -27,7 +32,8 @@ enum T3DOperationClass : uint32_t {
 	T3D_OPCLASS_FORBIDDEN
 };
 
-enum T3DOperationType : uint32_t {
+enum T3DOperationType : uint32_t
+{
 	T3D_OP_ALLOC_CPU = 0,
 	T3D_OP_FREE_CPU,
 	T3D_OP_GPU_CREATE,
@@ -52,20 +58,16 @@ enum T3DOperationType : uint32_t {
 	T3D_OP_COUNT
 };
 
-struct T3DPrototypeVertex {
-	float vPosition[3];
-	uint32_t nPackedNormal;
-	uint32_t nPackedTangent;
-	float vUv[2];
-	uint32_t nPackedColor;
-};
+typedef t3dWorldVertex_t T3DPrototypeVertex;
 
-struct T3DPackedClusterTriangle {
+struct T3DPackedClusterTriangle
+{
 	uint32_t nLocalIndices;
 };
 
-struct T3DSceneCell {
-	float vCenter[3];
+struct T3DSceneCell
+{
+	float vCenter[ 3 ];
 	float fRadius;
 	uint32_t nInstanceOffset;
 	uint32_t nInstanceCount;
@@ -73,7 +75,8 @@ struct T3DSceneCell {
 	uint32_t nGeneration;
 };
 
-struct T3DMeshRecord {
+struct T3DMeshRecord
+{
 	uint32_t nClusterOffset;
 	uint32_t nClusterCount;
 	uint32_t nLodOffset;
@@ -84,7 +87,8 @@ struct T3DMeshRecord {
 	uint32_t nReserved1;
 };
 
-struct T3DMeshLodRecord {
+struct T3DMeshLodRecord
+{
 	uint32_t nClusterOffset;
 	uint32_t nClusterCount;
 	float fMinDistance;
@@ -95,10 +99,11 @@ struct T3DMeshLodRecord {
 	uint32_t nReserved1;
 };
 
-struct T3DClusterRecord {
-	float vCenter[3];
+struct T3DClusterRecord
+{
+	float vCenter[ 3 ];
 	float fRadius;
-	float vConeAxis[3];
+	float vConeAxis[ 3 ];
 	float fConeCutoff;
 	uint32_t nVertexIndexOffset;
 	uint32_t nTriangleOffset;
@@ -112,15 +117,17 @@ struct T3DClusterRecord {
 	uint32_t nTexelDensity;
 };
 
-struct T3DInstanceRecord {
-	float mTransform3x4[12];
+struct T3DInstanceRecord
+{
+	float mTransform3x4[ 12 ];
 	uint32_t nMeshId;
 	uint32_t nMaterialOverride;
 	uint32_t nFlags;
 	uint32_t nCellId;
 };
 
-enum T3DRenderWorldMaterialFlags : uint32_t {
+enum T3DRenderWorldMaterialFlags : uint32_t
+{
 	T3D_RW_MATERIAL_FLAG_ALPHA_SCISSOR = 1u << 0u,
 	T3D_RW_MATERIAL_FLAG_FOLIAGE = 1u << 1u,
 	T3D_RW_MATERIAL_FLAG_CAST_SHADOWS = 1u << 2u,
@@ -128,45 +135,40 @@ enum T3DRenderWorldMaterialFlags : uint32_t {
 	T3D_RW_MATERIAL_FLAG_TWO_SIDED = 1u << 4u
 };
 
-enum T3DRenderWorldSamplerClass : uint32_t {
+static_assert( (uint32_t)( T3D_RW_MATERIAL_FLAG_ALPHA_SCISSOR ) == (uint32_t)( T3D_VT_MATERIAL_ALPHA_SCISSOR ),
+               "VT material alpha flag drifted" );
+static_assert(
+    (uint32_t)( T3D_RW_MATERIAL_FLAG_FOLIAGE ) == (uint32_t)( T3D_VT_MATERIAL_FOLIAGE ), "VT material foliage flag drifted" );
+static_assert( (uint32_t)( T3D_RW_MATERIAL_FLAG_CAST_SHADOWS ) == (uint32_t)( T3D_VT_MATERIAL_CAST_SHADOWS ),
+               "VT material cast-shadow flag drifted" );
+static_assert( (uint32_t)( T3D_RW_MATERIAL_FLAG_RECEIVE_SHADOWS ) == (uint32_t)( T3D_VT_MATERIAL_RECEIVE_SHADOWS ),
+               "VT material receive-shadow flag drifted" );
+static_assert(
+    (uint32_t)( T3D_RW_MATERIAL_FLAG_TWO_SIDED ) == (uint32_t)( T3D_VT_MATERIAL_TWO_SIDED ), "VT material two-sided flag drifted" );
+
+enum T3DRenderWorldSamplerClass : uint32_t
+{
 	T3D_RW_SAMPLER_REPEAT = 0u,
 	T3D_RW_SAMPLER_CLAMP = 1u
 };
 
-struct T3DMaterialRecord {
-	uint32_t nAlbedoVT;
-	uint32_t nNormalVT;
-	uint32_t nSurfaceVT;
-	uint32_t nHeightVT;
-	float vBaseColor[4];
-	float vUvScaleBias[4];
-	uint32_t nFlags;
-	uint32_t nSamplerClass;
-	uint32_t nPackedScalars0;
-	uint32_t nPackedScalars1;
-};
-
-struct T3DVisibleCluster {
+struct T3DVisibleCluster
+{
 	uint32_t nClusterId;
 	uint32_t nInstanceId;
 };
 
-struct T3DDrawIndirectArgs {
+struct T3DDrawIndirectArgs
+{
 	uint32_t nVertexCount;
 	uint32_t nInstanceCount;
 	uint32_t nFirstVertex;
 	uint32_t nFirstInstance;
 };
 
-enum T3DVTPageFlags : uint16_t {
-	T3D_VT_PAGE_VALID = 1u << 0u,
-	T3D_VT_PAGE_RESIDENT = 1u << 1u,
-	T3D_VT_PAGE_PINNED = 1u << 2u,
-	T3D_VT_PAGE_NEUTRAL = 1u << 3u,
-	T3D_VT_PAGE_ROOT = 1u << 4u
-};
-
-struct T3DVTAllocationRecord {
+// Legacy channel-owned allocation ABI. P16/P17 replace this with t3dVTAllocation_t page sets.
+struct T3DVTAllocationRecordV1
+{
 	uint32_t nBaseVirtualPage;
 	uint32_t nPageCount;
 	uint32_t nMip0WidthPages;
@@ -179,7 +181,8 @@ struct T3DVTAllocationRecord {
 	uint32_t nReserved1;
 };
 
-struct T3DVTPageTableEntry {
+struct T3DVTPageTableEntry
+{
 	uint32_t nPhysicalSlot;
 	uint32_t nParentPage;
 	uint32_t nGeneration;
@@ -187,7 +190,8 @@ struct T3DVTPageTableEntry {
 	uint16_t nFlags;
 };
 
-struct T3DVTGpuCounters {
+struct T3DVTGpuCounters
+{
 	uint32_t nRequestCount;
 	uint32_t nPredictedRequestCount;
 	uint32_t nDedupRequestCount;
@@ -198,20 +202,22 @@ struct T3DVTGpuCounters {
 	uint32_t nReserved;
 };
 
-struct T3DVTRequest {
+struct T3DVTRequest
+{
 	uint32_t nVirtualPage;
 	uint16_t nWantedMip;
 	uint16_t nPriority;
 };
 
-struct T3DVisibilityFrame {
-	float mViewProjection[16];
-	float mPreviousViewProjection[16];
-	float mViewMatrix[16];
-	float vFrustumPlanes[24];
-	float vCameraPositionAndMaxDistance[4];
-	float vViewportAndMotion[4];
-	float vMotionJitter[4];
+struct T3DVisibilityFrame
+{
+	float mViewProjection[ 16 ];
+	float mPreviousViewProjection[ 16 ];
+	float mViewMatrix[ 16 ];
+	float vFrustumPlanes[ 24 ];
+	float vCameraPositionAndMaxDistance[ 4 ];
+	float vViewportAndMotion[ 4 ];
+	float vMotionJitter[ 4 ];
 	uint32_t nFrameId;
 	uint32_t nFlags;
 	uint32_t nHiZInvalidReason;
@@ -234,10 +240,11 @@ struct T3DVisibilityFrame {
 	uint32_t nResourceCountReserved;
 };
 
-struct T3DVisibilityCounters {
+struct T3DVisibilityCounters
+{
 	uint32_t nVisibleCellCount;
 	uint32_t nVisibleInstanceCount;
-	uint32_t nVisibleClusterCount[T3D_RW_TIER_COUNT];
+	uint32_t nVisibleClusterCount[ T3D_RW_TIER_COUNT ];
 	uint32_t nCandidateClusterCount;
 	uint32_t nCellRejectCount;
 	uint32_t nInstanceRejectCount;
@@ -246,17 +253,19 @@ struct T3DVisibilityCounters {
 	uint32_t nClusterHiZRejectCount;
 	uint32_t nOverflowBits;
 	uint32_t nFallbackCount;
-	uint32_t nReserved[3];
+	uint32_t nReserved[ 3 ];
 };
 
-struct T3DHiZDispatchConstants {
+struct T3DHiZDispatchConstants
+{
 	uint32_t nSourceWidth;
 	uint32_t nSourceHeight;
 	uint32_t nDestinationWidth;
 	uint32_t nDestinationHeight;
 };
 
-struct T3DRenderWorldLimits {
+struct T3DRenderWorldLimits
+{
 	uint32_t nMaxCells;
 	uint32_t nMaxInstances;
 	uint32_t nMaxMeshes;
@@ -265,12 +274,9 @@ struct T3DRenderWorldLimits {
 	uint32_t nMaxMaterials;
 	uint32_t nMaxVisibleCells;
 	uint32_t nMaxVisibleInstances;
-	uint32_t nMaxVisibleClusters[T3D_RW_TIER_COUNT];
+	uint32_t nMaxVisibleClusters[ T3D_RW_TIER_COUNT ];
 	uint32_t nMaxVtVirtualPages;
-	uint32_t nMaxVtPhysicalAlbedoPages;
-	uint32_t nMaxVtPhysicalNormalPages;
-	uint32_t nMaxVtPhysicalSurfacePages;
-	uint32_t nMaxVtPhysicalHeightPages;
+	uint32_t nMaxVtPhysicalPageSets;
 	uint32_t nMaxVtRequests;
 	uint32_t nMaxStreamJobs;
 	uint32_t nStreamScratchLaneCount;
@@ -287,7 +293,8 @@ struct T3DRenderWorldLimits {
 	uint32_t nReserved;
 };
 
-struct T3DRenderWorldMemoryPlan {
+struct T3DRenderWorldMemoryPlan
+{
 	uint64_t nCpuPermanentBytes;
 	uint64_t nCpuResidentBytes;
 	uint64_t nCpuSnapshotBytes;
@@ -301,7 +308,8 @@ struct T3DRenderWorldMemoryPlan {
 	uint64_t nGpuMiscBytes;
 };
 
-struct T3DOperationEvent {
+struct T3DOperationEvent
+{
 	uint64_t nFrameId;
 	uint64_t nBeginTicks;
 	uint64_t nDurationTicks;
@@ -323,10 +331,9 @@ static_assert( sizeof( T3DMeshRecord ) == 32, "T3DMeshRecord ABI mismatch" );
 static_assert( sizeof( T3DMeshLodRecord ) == 32, "T3DMeshLodRecord ABI mismatch" );
 static_assert( sizeof( T3DClusterRecord ) == 64, "T3DClusterRecord ABI mismatch" );
 static_assert( sizeof( T3DInstanceRecord ) == 64, "T3DInstanceRecord ABI mismatch" );
-static_assert( sizeof( T3DMaterialRecord ) == 64, "T3DMaterialRecord ABI mismatch" );
 static_assert( sizeof( T3DVisibleCluster ) == 8, "T3DVisibleCluster ABI mismatch" );
 static_assert( sizeof( T3DDrawIndirectArgs ) == 16, "T3DDrawIndirectArgs ABI mismatch" );
-static_assert( sizeof( T3DVTAllocationRecord ) == 32, "T3DVTAllocationRecord ABI mismatch" );
+static_assert( sizeof( T3DVTAllocationRecordV1 ) == 32, "T3DVTAllocationRecordV1 ABI mismatch" );
 static_assert( sizeof( T3DVTPageTableEntry ) == 16, "T3DVTPageTableEntry ABI mismatch" );
 static_assert( sizeof( T3DVTGpuCounters ) == 32, "T3DVTGpuCounters ABI mismatch" );
 static_assert( sizeof( T3DVTRequest ) == 8, "T3DVTRequest ABI mismatch" );
@@ -335,8 +342,10 @@ static_assert( sizeof( T3DVisibilityCounters ) == 64, "T3DVisibilityCounters ABI
 static_assert( sizeof( T3DHiZDispatchConstants ) == 16, "T3DHiZDispatchConstants ABI mismatch" );
 
 T3DRenderWorldLimits t3d_render_world_make_prototype_limits();
-bool t3d_render_world_validate_limits( const T3DRenderWorldLimits &pLimits );
-uint64_t t3d_render_world_limits_signature( const T3DRenderWorldLimits &pLimits );
-T3DRenderWorldMemoryPlan t3d_render_world_compute_minimum_memory_plan( const T3DRenderWorldLimits &pLimits );
+T3DRenderWorldLimits t3d_render_world_make_runtime_limits( const t3dWorldResourceLimits_t& rWorldLimits );
+T3DRenderWorldLimits t3d_render_world_make_preview_limits( uint32_t nMaterialCapacity, uint32_t nVirtualPageCapacity );
+bool t3d_render_world_validate_limits( const T3DRenderWorldLimits& pLimits );
+uint64_t t3d_render_world_limits_signature( const T3DRenderWorldLimits& pLimits );
+T3DRenderWorldMemoryPlan t3d_render_world_compute_minimum_memory_plan( const T3DRenderWorldLimits& pLimits );
 
 #endif // TERRAIN3D_RENDER_WORLD_CONTRACT_H

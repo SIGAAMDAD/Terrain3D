@@ -13,6 +13,10 @@ typedef struct t3dAdaptiveBudgetValues_s {
 	int m_nInstancerCells = 32;
 	int m_nNodeLoadRegions = 2;
 	int m_nNodeUnloadRegions = 4;
+	int m_nWorldUploadKb = 4096;
+	int m_nWorldClusters = 8192;
+	int m_nVtRequests = 2048;
+	int m_nVtAdmissions = 64;
 } t3dAdaptiveBudgetValues_t;
 
 typedef struct t3dAdaptiveBudgetLimits_s {
@@ -30,6 +34,8 @@ typedef struct t3dAdaptiveBudgetPressure_s {
 	bool m_bInstancerLimited = false;
 	bool m_bNodeLoadLimited = false;
 	bool m_bNodeUnloadLimited = false;
+	bool m_bWorldLimited = false;
+	bool m_bVtLimited = false;
 } t3dAdaptiveBudgetPressure_t;
 
 typedef enum t3dAdaptiveBudgetReason_e {
@@ -62,6 +68,10 @@ inline void t3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits ) {
 	rLimits.m_maximum.m_nInstancerCells = MAX( 0, rLimits.m_maximum.m_nInstancerCells );
 	rLimits.m_maximum.m_nNodeLoadRegions = MAX( 0, rLimits.m_maximum.m_nNodeLoadRegions );
 	rLimits.m_maximum.m_nNodeUnloadRegions = MAX( 0, rLimits.m_maximum.m_nNodeUnloadRegions );
+	rLimits.m_maximum.m_nWorldUploadKb = MAX( 1, rLimits.m_maximum.m_nWorldUploadKb );
+	rLimits.m_maximum.m_nWorldClusters = MAX( 1, rLimits.m_maximum.m_nWorldClusters );
+	rLimits.m_maximum.m_nVtRequests = MAX( 1, rLimits.m_maximum.m_nVtRequests );
+	rLimits.m_maximum.m_nVtAdmissions = MAX( 1, rLimits.m_maximum.m_nVtAdmissions );
 	rLimits.m_minimum.m_nGpuPages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nGpuPages, 0, rLimits.m_maximum.m_nGpuPages );
 	rLimits.m_minimum.m_nCpuPages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nCpuPages, 0, rLimits.m_maximum.m_nCpuPages );
 	rLimits.m_minimum.m_nInstancePages = t3dAdaptiveClampValue( rLimits.m_minimum.m_nInstancePages, 0, rLimits.m_maximum.m_nInstancePages );
@@ -71,6 +81,10 @@ inline void t3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits ) {
 	        t3dAdaptiveClampValue( rLimits.m_minimum.m_nNodeLoadRegions, 0, rLimits.m_maximum.m_nNodeLoadRegions );
 	rLimits.m_minimum.m_nNodeUnloadRegions =
 	        t3dAdaptiveClampValue( rLimits.m_minimum.m_nNodeUnloadRegions, 0, rLimits.m_maximum.m_nNodeUnloadRegions );
+	rLimits.m_minimum.m_nWorldUploadKb = t3dAdaptiveClampValue( rLimits.m_minimum.m_nWorldUploadKb, 1, rLimits.m_maximum.m_nWorldUploadKb );
+	rLimits.m_minimum.m_nWorldClusters = t3dAdaptiveClampValue( rLimits.m_minimum.m_nWorldClusters, 1, rLimits.m_maximum.m_nWorldClusters );
+	rLimits.m_minimum.m_nVtRequests = t3dAdaptiveClampValue( rLimits.m_minimum.m_nVtRequests, 1, rLimits.m_maximum.m_nVtRequests );
+	rLimits.m_minimum.m_nVtAdmissions = t3dAdaptiveClampValue( rLimits.m_minimum.m_nVtAdmissions, 1, rLimits.m_maximum.m_nVtAdmissions );
 	rLimits.m_nTargetUsec = MAX( 1u, rLimits.m_nTargetUsec );
 	rLimits.m_nHardMaxUsec = MAX( rLimits.m_nTargetUsec, rLimits.m_nHardMaxUsec );
 	rLimits.m_nAdjustmentWindowFrames = MAX( 1, rLimits.m_nAdjustmentWindowFrames );
@@ -114,6 +128,14 @@ inline void t3dAdaptiveClampState( const t3dAdaptiveBudgetLimits_t &rLimits, t3d
 	        rState.m_effective.m_nNodeLoadRegions, rLimits.m_minimum.m_nNodeLoadRegions, rLimits.m_maximum.m_nNodeLoadRegions );
 	rState.m_effective.m_nNodeUnloadRegions = t3dAdaptiveClampValue(
 	        rState.m_effective.m_nNodeUnloadRegions, rLimits.m_minimum.m_nNodeUnloadRegions, rLimits.m_maximum.m_nNodeUnloadRegions );
+	rState.m_effective.m_nWorldUploadKb = t3dAdaptiveClampValue(
+	        rState.m_effective.m_nWorldUploadKb, rLimits.m_minimum.m_nWorldUploadKb, rLimits.m_maximum.m_nWorldUploadKb );
+	rState.m_effective.m_nWorldClusters = t3dAdaptiveClampValue(
+	        rState.m_effective.m_nWorldClusters, rLimits.m_minimum.m_nWorldClusters, rLimits.m_maximum.m_nWorldClusters );
+	rState.m_effective.m_nVtRequests =
+	        t3dAdaptiveClampValue( rState.m_effective.m_nVtRequests, rLimits.m_minimum.m_nVtRequests, rLimits.m_maximum.m_nVtRequests );
+	rState.m_effective.m_nVtAdmissions = t3dAdaptiveClampValue(
+	        rState.m_effective.m_nVtAdmissions, rLimits.m_minimum.m_nVtAdmissions, rLimits.m_maximum.m_nVtAdmissions );
 }
 
 inline bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t &rLimits,
@@ -143,6 +165,12 @@ inline bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t &rLimits,
 		        t3dAdaptiveDecrease( rState.m_effective.m_nNodeLoadRegions, rLimits.m_minimum.m_nNodeLoadRegions );
 		rState.m_effective.m_nNodeUnloadRegions =
 		        t3dAdaptiveDecrease( rState.m_effective.m_nNodeUnloadRegions, rLimits.m_minimum.m_nNodeUnloadRegions );
+		rState.m_effective.m_nWorldUploadKb =
+		        t3dAdaptiveDecrease( rState.m_effective.m_nWorldUploadKb, rLimits.m_minimum.m_nWorldUploadKb );
+		rState.m_effective.m_nWorldClusters =
+		        t3dAdaptiveDecrease( rState.m_effective.m_nWorldClusters, rLimits.m_minimum.m_nWorldClusters );
+		rState.m_effective.m_nVtRequests = t3dAdaptiveDecrease( rState.m_effective.m_nVtRequests, rLimits.m_minimum.m_nVtRequests );
+		rState.m_effective.m_nVtAdmissions = t3dAdaptiveDecrease( rState.m_effective.m_nVtAdmissions, rLimits.m_minimum.m_nVtAdmissions );
 		rState.m_nOverBudgetStreak = 0;
 		rState.m_reason = TERRAIN3D_ADAPTIVE_REASON_HARD_LIMIT;
 		const bool bChanged = previous.m_nGpuPages != rState.m_effective.m_nGpuPages
@@ -150,7 +178,11 @@ inline bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t &rLimits,
 		        || previous.m_nInstancePages != rState.m_effective.m_nInstancePages
 		        || previous.m_nInstancerCells != rState.m_effective.m_nInstancerCells
 		        || previous.m_nNodeLoadRegions != rState.m_effective.m_nNodeLoadRegions
-		        || previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions;
+		        || previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions
+		        || previous.m_nWorldUploadKb != rState.m_effective.m_nWorldUploadKb
+		        || previous.m_nWorldClusters != rState.m_effective.m_nWorldClusters
+		        || previous.m_nVtRequests != rState.m_effective.m_nVtRequests
+		        || previous.m_nVtAdmissions != rState.m_effective.m_nVtAdmissions;
 		if ( bChanged ) {
 			++rState.m_nAdjustmentCount;
 		}
@@ -186,13 +218,28 @@ inline bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t &rLimits,
 			rState.m_effective.m_nNodeUnloadRegions =
 			        t3dAdaptiveIncrease( rState.m_effective.m_nNodeUnloadRegions, rLimits.m_maximum.m_nNodeUnloadRegions );
 		}
+		if ( rPressure.m_bWorldLimited ) {
+			rState.m_effective.m_nWorldUploadKb =
+			        t3dAdaptiveIncrease( rState.m_effective.m_nWorldUploadKb, rLimits.m_maximum.m_nWorldUploadKb );
+			rState.m_effective.m_nWorldClusters =
+			        t3dAdaptiveIncrease( rState.m_effective.m_nWorldClusters, rLimits.m_maximum.m_nWorldClusters );
+		}
+		if ( rPressure.m_bVtLimited ) {
+			rState.m_effective.m_nVtRequests = t3dAdaptiveIncrease( rState.m_effective.m_nVtRequests, rLimits.m_maximum.m_nVtRequests );
+			rState.m_effective.m_nVtAdmissions =
+			        t3dAdaptiveIncrease( rState.m_effective.m_nVtAdmissions, rLimits.m_maximum.m_nVtAdmissions );
+		}
 		rState.m_nUnderBudgetStreak = 0;
 		const bool bChanged = previous.m_nGpuPages != rState.m_effective.m_nGpuPages
 		        || previous.m_nCpuPages != rState.m_effective.m_nCpuPages
 		        || previous.m_nInstancePages != rState.m_effective.m_nInstancePages
 		        || previous.m_nInstancerCells != rState.m_effective.m_nInstancerCells
 		        || previous.m_nNodeLoadRegions != rState.m_effective.m_nNodeLoadRegions
-		        || previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions;
+		        || previous.m_nNodeUnloadRegions != rState.m_effective.m_nNodeUnloadRegions
+		        || previous.m_nWorldUploadKb != rState.m_effective.m_nWorldUploadKb
+		        || previous.m_nWorldClusters != rState.m_effective.m_nWorldClusters
+		        || previous.m_nVtRequests != rState.m_effective.m_nVtRequests
+		        || previous.m_nVtAdmissions != rState.m_effective.m_nVtAdmissions;
 		rState.m_reason = bChanged ? TERRAIN3D_ADAPTIVE_REASON_BACKLOG_RECOVERY : TERRAIN3D_ADAPTIVE_REASON_UNDER_TARGET_NO_BACKLOG;
 		if ( bChanged ) {
 			++rState.m_nAdjustmentCount;

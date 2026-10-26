@@ -18,6 +18,7 @@ struct T3DRwGeometryDerivedCluster {
 uint32_t t3d_rw_geometry_float_bits( float pValue );
 bool t3d_rw_geometry_finite( float pValue );
 float t3d_rw_geometry_length3( float pX, float pY, float pZ );
+float t3d_rw_geometry_unpack_half( uint16_t nHalf );
 
 bool t3d_rw_geometry_get_triangle_classification( const T3DGeometrySourceMesh &pSource,
         const T3DGeometrySourceLod &pLod,

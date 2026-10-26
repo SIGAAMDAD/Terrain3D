@@ -917,8 +917,7 @@ static void t3dCalculateLandformRegions( void *pContext, const size_t nBegin, co
 						fNeighborTarget = t3dLandformBakerThermalTarget(
 						        pWorking, s_nRegionSize, x, y, context->m_fSpacing, settings.m_fAngleOfRepose );
 					} else if ( settings.m_mode == MORPHOLOGY ) {
-						fNeighborTarget =
-						        t3dLandformBakerMorphologyTarget( pWorking, s_nRegionSize, x, y, settings.m_morphologyMode );
+						fNeighborTarget = t3dLandformBakerMorphologyTarget( pWorking, s_nRegionSize, x, y, settings.m_morphologyMode );
 					}
 					const float fEvaluated = t3dLandformBakerEvaluateHeight( settings,
 					        projection,

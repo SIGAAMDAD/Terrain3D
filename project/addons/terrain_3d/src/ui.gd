@@ -360,6 +360,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 			set_menu_visibility(tool_settings.advanced_list, true)
 
 		Terrain3DEditor.INSTANCER:
+			to_show.push_back("instance_edit_mode")
 			to_show.push_back("size")
 			to_show.push_back("strength")
 			to_show.push_back("slope")
@@ -422,6 +423,9 @@ func _on_setting_changed() -> void:
 		print("Terrain3DUI: _on_setting_changed: selected resource ID: ", brush_data["asset_id"])
 	if plugin.editor:
 		plugin.editor.set_brush_data(brush_data)
+	plugin.set_instance_edit_mode(
+		_selected_tool == Terrain3DEditor.INSTANCER and bool(brush_data.get("instance_edit_mode", false))
+	)
 	_touchscreen_invert_active = bool(brush_data.get("invert", false))
 	if _touchscreen_invert_active != previous_touchscreen_invert_active:
 		plugin._read_input() # Revalidate keyboard input for modifier_ctrl.
@@ -847,7 +851,9 @@ func update_decal() -> void:
 				editor_decal_color[0].a = 0.48
 			Terrain3DEditor.INSTANCER:
 				editor_decal_part[0] = false # Hide brush
-				if active_operation == Terrain3DEditor.SUBTRACT:
+				if bool(brush_data.get("instance_edit_mode", false)):
+					editor_decal_visible[0] = false
+				elif active_operation == Terrain3DEditor.SUBTRACT:
 					editor_decal_color[0] = COLOR_UNINSTANCE
 					editor_decal_color[0].a = .75
 				else:

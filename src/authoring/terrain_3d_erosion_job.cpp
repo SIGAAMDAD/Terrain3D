@@ -3269,7 +3269,7 @@ Error Terrain3DErosionJob::setup( Terrain3DData *const pData, const Ref<Terrain3
 		setFailed( "Terrain3D's first active region could not be read." );
 		return ERR_DOES_NOT_EXIST;
 	}
-		m_fVertexSpacing = pFirstRegion->getVertexSpacing();
+	m_fVertexSpacing = pFirstRegion->getVertexSpacing();
 	m_nSourceControlSnapshotBytes = 0;
 	const uint64_t source_texel_count = ( uint64_t )( s_nRegionSize ) * ( uint64_t )( s_nRegionSize );
 	const uint64_t control_bytes_per_region = source_texel_count * sizeof( float );

@@ -1,0 +1,234 @@
+#ifndef TERRAIN3D_WORLD_CONTRACT_GLSLINC
+#define TERRAIN3D_WORLD_CONTRACT_GLSLINC
+
+#define T3D_WORLD_ABI_VERSION 2u
+#define T3D_WORLD_INVALID_ID 0xffffffffu
+#define T3D_WORLD_CLUSTER_MAX_VERTICES 64u
+#define T3D_WORLD_CLUSTER_MAX_TRIANGLES 124u
+#define T3D_WORLD_CLUSTER_RASTER_VERTEX_COUNT 372u
+#define T3D_WORLD_TERRAIN_STRIP_RASTER_VERTEX_COUNT 372u
+#define T3D_WORLD_TERRAIN_STRIP_MAX_CELL_WIDTH 184u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT 6u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_0_VERTEX_COUNT 64u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_1_VERTEX_COUNT 128u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_2_VERTEX_COUNT 192u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_3_VERTEX_COUNT 256u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_4_VERTEX_COUNT 320u
+#define T3D_WORLD_TERRAIN_STRIP_BUCKET_5_VERTEX_COUNT 372u
+
+#define T3D_WORLD_INDIRECT_TERRAIN_STRIP_INDEX 0u
+#define T3D_WORLD_INDIRECT_NONTERRAIN_INDEX T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT
+#define T3D_WORLD_INDIRECT_COMMAND_COUNT (T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT + 1u)
+
+#define T3D_WORLD_FRAME_FLAG_HIZ_VALID (1u << 0u)
+
+#define T3D_WORLD_VIS_COUNTER_VISIBLE 0u
+#define T3D_WORLD_VIS_COUNTER_CANDIDATE 1u
+#define T3D_WORLD_VIS_COUNTER_FRUSTUM_REJECT 2u
+#define T3D_WORLD_VIS_COUNTER_LOD_REJECT 3u
+#define T3D_WORLD_VIS_COUNTER_CONE_REJECT 4u
+#define T3D_WORLD_VIS_COUNTER_HIZ_REJECT 5u
+#define T3D_WORLD_VIS_COUNTER_OVERFLOW 6u
+#define T3D_WORLD_VIS_COUNTER_TERRAIN 7u
+#define T3D_WORLD_VIS_COUNTER_MESH 8u
+#define T3D_WORLD_VIS_COUNTER_HLOD 9u
+#define T3D_WORLD_VIS_COUNTER_STATIC 10u
+#define T3D_WORLD_VIS_COUNTER_NONTERRAIN 11u
+#define T3D_WORLD_VIS_COUNTER_TERRAIN_BUCKET_BASE 12u
+#define T3D_WORLD_VIS_COUNTER_TERRAIN_USEFUL_VERTICES 18u
+#define T3D_WORLD_VIS_COUNTER_TERRAIN_SUBMITTED_VERTICES 19u
+#define T3D_WORLD_VIS_COUNTER_COUNT 20u
+
+#define T3D_WORLD_VERTEX_SIZE_BYTES 32u
+#define T3D_WORLD_CLUSTER_SIZE_BYTES 64u
+#define T3D_WORLD_TERRAIN_CLUSTER_SIZE_BYTES 48u
+#define T3D_WORLD_TRANSFORM_SIZE_BYTES 48u
+#define T3D_WORLD_VISIBLE_ITEM_SIZE_BYTES 16u
+#define T3D_WORLD_DRAW_INDIRECT_ARGS_SIZE_BYTES 16u
+#define T3D_WORLD_INDIRECT_BUFFER_SIZE_BYTES 112u
+#define T3D_WORLD_FRAME_SIZE_BYTES 336u
+
+#define T3D_WORLD_GEOMETRY_TERRAIN 0u
+#define T3D_WORLD_GEOMETRY_MESH_CLUSTER 1u
+#define T3D_WORLD_GEOMETRY_HLOD_CLUSTER 2u
+#define T3D_WORLD_GEOMETRY_STATIC_CLUSTER 3u
+#define T3D_WORLD_GEOMETRY_KIND_COUNT 4u
+
+#define T3D_WORLD_TERRAIN_PATCH_FLAGS_MASK 0x0000ffffu
+#define T3D_WORLD_TERRAIN_TIER_SHIFT 16u
+#define T3D_WORLD_TERRAIN_TIER_MASK 0x00030000u
+#define T3D_WORLD_TERRAIN_SERPENTINE_ROWS_BIT 18u
+#define T3D_WORLD_TERRAIN_SERPENTINE_BASE_ODD_BIT 19u
+#define T3D_WORLD_TERRAIN_STITCH_X_SHIFT 20u
+#define T3D_WORLD_TERRAIN_STITCH_X_MASK 0x00300000u
+#define T3D_WORLD_TERRAIN_STITCH_Z_SHIFT 22u
+#define T3D_WORLD_TERRAIN_STITCH_Z_MASK 0x00c00000u
+#define T3D_WORLD_TERRAIN_PART_CODE_SHIFT 24u
+#define T3D_WORLD_TERRAIN_PART_CODE_MASK 0x07000000u
+
+// Vertex heap uses eight uint words per vertex. Position words are floatBitsToUint.
+struct T3DWorldVertexWords {
+    uvec4 words0;
+    uvec4 words1;
+};
+
+struct T3DWorldCluster {
+    vec4 sphere;
+    vec4 cone;
+    uint vertexIndexOffset;
+    uint triangleOffset;
+    uint packedCounts;
+    uint packedLodGeometryKind;
+    uint materialId;
+    uint flags;
+    uint sourceId;
+    uint reserved;
+};
+
+// ABI-v2 procedural terrain strip cluster.
+struct T3DWorldTerrainCluster {
+    uvec4 strip0; // patchId, packedGridOrigin, packedGridExtent, packedVertexCountLod
+    uint flags;
+    float originX;
+    float originZ;
+    float scale;
+    uvec4 materialAndReserved;
+};
+
+struct T3DWorldTransform {
+    vec4 row0;
+    vec4 row1;
+    vec4 row2;
+};
+
+struct T3DWorldVisibleItem {
+    uint clusterOrTerrainId;
+    uint instanceOrPatchId;
+    uint geometryKind;
+    uint flags;
+};
+
+struct T3DWorldDrawIndirectArgs {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+struct T3DWorldFrame {
+    mat4 viewProjection;
+    mat4 previousViewProjection;
+    vec4 frustumPlanes[6];
+    vec4 cameraAndMaxDistance;
+    vec4 viewportAndInvSize;
+    vec4 motionJitter;
+    uvec4 counts0;
+    uvec4 counts1;
+    uvec4 generations;
+    uvec4 hizAndFlags;
+};
+
+uint t3d_world_terrain_visible_base() {
+    return 0u;
+}
+
+uint t3d_world_terrain_visible_capacity(uint terrainClusterCount, uint visibleCapacity) {
+    return min(terrainClusterCount, visibleCapacity);
+}
+
+uint t3d_world_nonterrain_visible_base(uint terrainClusterCount, uint visibleCapacity) {
+    return terrainClusterCount;
+}
+
+uint t3d_world_nonterrain_visible_capacity(uint terrainClusterCount, uint visibleCapacity) {
+    uint base = t3d_world_nonterrain_visible_base(terrainClusterCount, visibleCapacity);
+    return visibleCapacity > base ? visibleCapacity - base : 0u;
+}
+
+uint t3d_world_indirect_offset_bytes(uint commandIndex) {
+    return commandIndex * T3D_WORLD_DRAW_INDIRECT_ARGS_SIZE_BYTES;
+}
+
+uint t3d_world_terrain_strip_bucket_vertex_count(uint bucket) {
+    if (bucket == 0u) return T3D_WORLD_TERRAIN_STRIP_BUCKET_0_VERTEX_COUNT;
+    if (bucket == 1u) return T3D_WORLD_TERRAIN_STRIP_BUCKET_1_VERTEX_COUNT;
+    if (bucket == 2u) return T3D_WORLD_TERRAIN_STRIP_BUCKET_2_VERTEX_COUNT;
+    if (bucket == 3u) return T3D_WORLD_TERRAIN_STRIP_BUCKET_3_VERTEX_COUNT;
+    if (bucket == 4u) return T3D_WORLD_TERRAIN_STRIP_BUCKET_4_VERTEX_COUNT;
+    return T3D_WORLD_TERRAIN_STRIP_BUCKET_5_VERTEX_COUNT;
+}
+
+uint t3d_world_terrain_strip_bucket_index(uint actualVertexCount) {
+    if (actualVertexCount <= T3D_WORLD_TERRAIN_STRIP_BUCKET_0_VERTEX_COUNT) return 0u;
+    if (actualVertexCount <= T3D_WORLD_TERRAIN_STRIP_BUCKET_1_VERTEX_COUNT) return 1u;
+    if (actualVertexCount <= T3D_WORLD_TERRAIN_STRIP_BUCKET_2_VERTEX_COUNT) return 2u;
+    if (actualVertexCount <= T3D_WORLD_TERRAIN_STRIP_BUCKET_3_VERTEX_COUNT) return 3u;
+    if (actualVertexCount <= T3D_WORLD_TERRAIN_STRIP_BUCKET_4_VERTEX_COUNT) return 4u;
+    return 5u;
+}
+
+uint t3d_world_terrain_strip_bucket_counter(uint bucket) {
+    return T3D_WORLD_VIS_COUNTER_TERRAIN_BUCKET_BASE + bucket;
+}
+
+uint t3d_world_count_low16(uint packedValue) {
+    return packedValue & 0xffffu;
+}
+
+uint t3d_world_count_high16(uint packedValue) {
+    return packedValue >> 16u;
+}
+
+int t3d_world_terrain_grid_origin_x(uint packedValue) {
+    return bitfieldExtract(int(packedValue), 0, 16);
+}
+
+int t3d_world_terrain_grid_origin_z(uint packedValue) {
+    return bitfieldExtract(int(packedValue), 16, 16);
+}
+
+uint t3d_world_terrain_cell_width(uint packedValue) {
+    return packedValue & 0xffffu;
+}
+
+uint t3d_world_terrain_row_count(uint packedValue) {
+    return packedValue >> 16u;
+}
+
+uint t3d_world_terrain_vertex_count(uint packedValue) {
+    return packedValue & 0xffffu;
+}
+
+uint t3d_world_terrain_lod(uint packedValue) {
+    return packedValue >> 16u;
+}
+
+uint t3d_world_terrain_patch_flags(uint flags) {
+    return flags & T3D_WORLD_TERRAIN_PATCH_FLAGS_MASK;
+}
+
+uint t3d_world_terrain_tier(uint flags) {
+    return (flags & T3D_WORLD_TERRAIN_TIER_MASK) >> T3D_WORLD_TERRAIN_TIER_SHIFT;
+}
+
+uint t3d_world_terrain_stitch_x(uint flags) {
+    return (flags & T3D_WORLD_TERRAIN_STITCH_X_MASK) >> T3D_WORLD_TERRAIN_STITCH_X_SHIFT;
+}
+
+uint t3d_world_terrain_stitch_z(uint flags) {
+    return (flags & T3D_WORLD_TERRAIN_STITCH_Z_MASK) >> T3D_WORLD_TERRAIN_STITCH_Z_SHIFT;
+}
+
+uint t3d_world_terrain_part_code(uint flags) {
+    return (flags & T3D_WORLD_TERRAIN_PART_CODE_MASK) >> T3D_WORLD_TERRAIN_PART_CODE_SHIFT;
+}
+
+bool t3d_world_terrain_serpentine_rows(uint flags) {
+    return (flags & (1u << T3D_WORLD_TERRAIN_SERPENTINE_ROWS_BIT)) != 0u;
+}
+
+bool t3d_world_terrain_serpentine_base_odd(uint flags) {
+    return (flags & (1u << T3D_WORLD_TERRAIN_SERPENTINE_BASE_ODD_BIT)) != 0u;
+}
+
+#endif // TERRAIN3D_WORLD_CONTRACT_GLSLINC

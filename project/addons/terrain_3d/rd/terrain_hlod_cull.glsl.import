@@ -2,6 +2,7 @@
 
 importer="glsl"
 type="RDShaderFile"
+uid="uid://bydqs6g2r5qfb"
 path="res://.godot/imported/terrain_hlod_cull.glsl-8eb95407cc53f0a99be3e8193dd72a54.res"
 
 [deps]
@@ -10,3 +11,4 @@ source_file="res://addons/terrain_3d/rd/terrain_hlod_cull.glsl"
 dest_files=["res://.godot/imported/terrain_hlod_cull.glsl-8eb95407cc53f0a99be3e8193dd72a54.res"]
 
 [params]
+

@@ -364,6 +364,105 @@ static bool t3dRuntimePageStoreStageBlobChannel( t3dStagedPageBuild_t &rBuild,
 	return true;
 }
 
+enum t3dRuntimePageStageFailure_e {
+	T3D_RUNTIME_PAGE_STAGE_OK = 0u,
+	T3D_RUNTIME_PAGE_STAGE_HEIGHT = 1u << 0u,
+	T3D_RUNTIME_PAGE_STAGE_CONTROL = 1u << 1u,
+	T3D_RUNTIME_PAGE_STAGE_COLOR = 1u << 2u,
+	T3D_RUNTIME_PAGE_STAGE_DERIVED = 1u << 3u,
+	T3D_RUNTIME_PAGE_STAGE_MIDDLE_HEIGHT = 1u << 4u,
+	T3D_RUNTIME_PAGE_STAGE_MIDDLE_COMPOSITE = 1u << 5u,
+	T3D_RUNTIME_PAGE_STAGE_TERRAIN_SHADOW_MASK = 1u << 6u,
+	T3D_RUNTIME_PAGE_STAGE_STATIC_INSTANCES = 1u << 7u,
+	T3D_RUNTIME_PAGE_STAGE_HOLE_MASK = 1u << 8u,
+	T3D_RUNTIME_PAGE_STAGE_COLLISION_HEIGHT = 1u << 9u,
+	T3D_RUNTIME_PAGE_STAGE_COLLISION_BOUNDS = 1u << 10u,
+	T3D_RUNTIME_PAGE_STAGE_NAVIGATION = 1u << 11u,
+	T3D_RUNTIME_PAGE_STAGE_MIN_MAX_HEIGHT = 1u << 12u,
+	T3D_RUNTIME_PAGE_STAGE_NODE_DESCRIPTORS = 1u << 13u,
+	T3D_RUNTIME_PAGE_STAGE_INSTANCE_METADATA = 1u << 14u,
+	T3D_RUNTIME_PAGE_STAGE_LIGHTING_RECEIVERS = 1u << 15u,
+	T3D_RUNTIME_PAGE_STAGE_MULTIMESH_FAST_START = 1u << 16u,
+};
+
+static uint32_t t3dRuntimePageStoreStageCookChannels( t3dStagedPageBuild_t &rBuild,
+        t3dRuntimePageHeader_t &rHeader,
+        const t3dRuntimePageCookPayload_t &rPayload,
+        const PackedByteArray &rInstancePage ) {
+	if ( !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_HEIGHT, rPayload.m_height ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_HEIGHT;
+	}
+	if ( rPayload.m_control.is_valid()
+	        && !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_CONTROL, rPayload.m_control ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_CONTROL;
+	}
+	if ( rPayload.m_color.is_valid()
+	        && !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_COLOR, rPayload.m_color ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_COLOR;
+	}
+	if ( !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_DERIVED, rPayload.m_derived ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_DERIVED;
+	}
+	if ( !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, rPayload.m_middleHeight ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_MIDDLE_HEIGHT;
+	}
+	if ( !t3dRuntimePageStoreStageImageChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE, rPayload.m_middleComposite ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_MIDDLE_COMPOSITE;
+	}
+	if ( rPayload.m_terrainShadowMask.is_valid()
+	        && !t3dRuntimePageStoreStageImageChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK, rPayload.m_terrainShadowMask ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_TERRAIN_SHADOW_MASK;
+	}
+	if ( !rInstancePage.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, rInstancePage ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_STATIC_INSTANCES;
+	}
+	if ( !rPayload.m_holeMask.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.m_holeMask ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_HOLE_MASK;
+	}
+	if ( !rPayload.m_collisionHeight.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.m_collisionHeight ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_COLLISION_HEIGHT;
+	}
+	if ( !rPayload.m_collisionBounds.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPayload.m_collisionBounds ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_COLLISION_BOUNDS;
+	}
+	if ( !rPayload.m_navigation.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.m_navigation ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_NAVIGATION;
+	}
+	if ( !rPayload.m_minMaxHeight.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel( rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.m_minMaxHeight ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_MIN_MAX_HEIGHT;
+	}
+	if ( !rPayload.m_nodeDescriptors.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPayload.m_nodeDescriptors ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_NODE_DESCRIPTORS;
+	}
+	if ( !rPayload.m_instanceMetadata.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.m_instanceMetadata ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_INSTANCE_METADATA;
+	}
+	if ( !rPayload.m_lightingReceivers.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS, rPayload.m_lightingReceivers ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_LIGHTING_RECEIVERS;
+	}
+	if ( !rPayload.m_multimeshFastStart.is_empty()
+	        && !t3dRuntimePageStoreStageBlobChannel(
+	                rBuild, rHeader, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.m_multimeshFastStart ) ) {
+		return T3D_RUNTIME_PAGE_STAGE_MULTIMESH_FAST_START;
+	}
+	return T3D_RUNTIME_PAGE_STAGE_OK;
+}
+
 static bool t3dRuntimePageStoreFinalizePageBytes(
         const t3dStagedPageBuild_t &rBuild, t3dRuntimePageHeader_t &rHeader, PackedByteArray &rFileBytes ) {
 	if ( rBuild.m_nTotalBytes < s_nRuntimePageHeaderBytes || rBuild.m_nTotalBytes > s_nRuntimePageMaxBytes ) {
@@ -1277,6 +1376,259 @@ bool Terrain3DRuntimePageStore::removePage( const String &rPagePath ) const {
 	return removed;
 }
 
+static bool t3dLoadSnapshotImageChannels( t3dRuntimePageMeta_t &rMeta,
+        t3dRuntimePagePayload_t &rPayload,
+        const Ref<FileAccess> &rFile,
+        const t3dRuntimePageHeader_t &rHeader,
+        const uint32_t nExpectedFlags,
+        const bool bPreserveMaterialized ) {
+	const bool bNeedGpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
+	const bool bNeedCpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
+	const bool bNeedActiveHeight = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT ) != 0u;
+	const bool bNeedMiddle = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u;
+	const bool bNeedTerrainShadow = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
+	const bool bNeedHeight = bNeedGpu || bNeedCpu || bNeedActiveHeight;
+	const bool bMaterializeHeight = bNeedGpu || bNeedCpu;
+	const t3dRuntimePageChannelInfo_t *const pHeightChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_HEIGHT );
+	if ( !pHeightChannel ) {
+		return false;
+	}
+	if ( bNeedHeight ) {
+		if ( !bPreserveMaterialized || rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
+			if ( !t3dRuntimePageStoreReadImageFixed( rFile,
+			             *pHeightChannel,
+			             rPayload.m_heightBytes,
+			             rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT],
+			             rPayload.m_height,
+			             rMeta.m_nFileReadUsec,
+			             rMeta.m_nValidationUsec,
+			             rMeta.m_nMaterializeUsec,
+			             bMaterializeHeight ) ) {
+				return false;
+			}
+		} else if ( bMaterializeHeight && rPayload.m_height.is_null() ) {
+			Time *const pTime = Time::get_singleton();
+			const uint64_t materialize_started = pTime ? pTime->get_ticks_usec() : 0u;
+			rPayload.m_height = Image::create_from_data( ( int )pHeightChannel->m_nWidth,
+			        ( int )pHeightChannel->m_nHeight,
+			        pHeightChannel->m_nMipCount > 1u,
+			        Image::Format( pHeightChannel->m_nFormat ),
+			        rPayload.m_heightBytes );
+			const uint64_t materialize_finished = pTime ? pTime->get_ticks_usec() : materialize_started;
+			rMeta.m_nMaterializeUsec += materialize_finished - materialize_started;
+		}
+		if ( rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
+			return false;
+		}
+	}
+
+	if ( bNeedGpu || bNeedCpu ) {
+		const t3dRuntimePageChannelInfo_t *const pDerivedChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_DERIVED );
+		if ( !pDerivedChannel
+		        || ( ( !bPreserveMaterialized || rPayload.m_derived.is_null() )
+		                && !t3dRuntimePageStoreReadImageFixed( rFile,
+		                        *pDerivedChannel,
+		                        rPayload.m_derivedBytes,
+		                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_DERIVED],
+		                        rPayload.m_derived,
+		                        rMeta.m_nFileReadUsec,
+		                        rMeta.m_nValidationUsec,
+		                        rMeta.m_nMaterializeUsec,
+		                        true ) ) ) {
+			return false;
+		}
+	}
+	if ( bNeedMiddle ) {
+		const t3dRuntimePageChannelInfo_t *const pChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT );
+		if ( !pChannel
+		        || ( ( !bPreserveMaterialized || rPayload.m_middleHeight.is_null() )
+		                && !t3dRuntimePageStoreReadImageFixed( rFile,
+		                        *pChannel,
+		                        rPayload.m_middleHeightBytes,
+		                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT],
+		                        rPayload.m_middleHeight,
+		                        rMeta.m_nFileReadUsec,
+		                        rMeta.m_nValidationUsec,
+		                        rMeta.m_nMaterializeUsec,
+		                        true ) ) ) {
+			return false;
+		}
+	}
+	if ( bNeedGpu ) {
+		const t3dRuntimePageChannelInfo_t *const pChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE );
+		if ( !pChannel
+		        || ( ( !bPreserveMaterialized || rPayload.m_middleComposite.is_null() )
+		                && !t3dRuntimePageStoreReadImageFixed( rFile,
+		                        *pChannel,
+		                        rPayload.m_middleCompositeBytes,
+		                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE],
+		                        rPayload.m_middleComposite,
+		                        rMeta.m_nFileReadUsec,
+		                        rMeta.m_nValidationUsec,
+		                        rMeta.m_nMaterializeUsec,
+		                        true ) ) ) {
+			return false;
+		}
+	}
+	if ( bNeedTerrainShadow ) {
+		const t3dRuntimePageChannelInfo_t *const pChannel =
+		        t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK );
+		if ( !pChannel
+		        || ( ( !bPreserveMaterialized || rPayload.m_terrainShadowMask.is_null() )
+		                && !t3dRuntimePageStoreReadImageFixed( rFile,
+		                        *pChannel,
+		                        rPayload.m_terrainShadowMaskBytes,
+		                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK],
+		                        rPayload.m_terrainShadowMask,
+		                        rMeta.m_nFileReadUsec,
+		                        rMeta.m_nValidationUsec,
+		                        rMeta.m_nMaterializeUsec,
+		                        true ) ) ) {
+			return false;
+		}
+	}
+	if ( bNeedGpu || bNeedCpu ) {
+		if ( ( nExpectedFlags & ( uint32_t )( REGION_CHANNEL_CONTROL ) ) != 0u ) {
+			const t3dRuntimePageChannelInfo_t *const pChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_CONTROL );
+			if ( !pChannel
+			        || ( ( !bPreserveMaterialized || rPayload.m_control.is_null() )
+			                && !t3dRuntimePageStoreReadImageFixed( rFile,
+			                        *pChannel,
+			                        rPayload.m_controlBytes,
+			                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_CONTROL],
+			                        rPayload.m_control,
+			                        rMeta.m_nFileReadUsec,
+			                        rMeta.m_nValidationUsec,
+			                        rMeta.m_nMaterializeUsec,
+			                        true ) ) ) {
+				return false;
+			}
+		}
+		if ( ( nExpectedFlags & ( uint32_t )( REGION_CHANNEL_COLOR ) ) != 0u ) {
+			const t3dRuntimePageChannelInfo_t *const pChannel = t3dRuntimePageFindChannel( rHeader, TERRAIN3D_RUNTIME_PAGE_COLOR );
+			if ( !pChannel
+			        || ( ( !bPreserveMaterialized || rPayload.m_color.is_null() )
+			                && !t3dRuntimePageStoreReadImageFixed( rFile,
+			                        *pChannel,
+			                        rPayload.m_colorBytes,
+			                        rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_COLOR],
+			                        rPayload.m_color,
+			                        rMeta.m_nFileReadUsec,
+			                        rMeta.m_nValidationUsec,
+			                        rMeta.m_nMaterializeUsec,
+			                        true ) ) ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+static bool t3dLoadSnapshotBlobChannels( t3dRuntimePageMeta_t &rMeta,
+        t3dRuntimePagePayload_t &rPayload,
+        t3dRuntimePageWorkerScratch_t &rScratch,
+        const Ref<FileAccess> &rFile,
+        const t3dRuntimePageHeader_t &rHeader ) {
+	const bool bNeedInstances = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u;
+	const bool bNeedNodes = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u;
+	const bool bNeedCollision = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u;
+	const bool bNeedNavigation = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u;
+	if ( bNeedInstances
+	        && !t3dRuntimePageStoreReadOptionalBlob(
+	                rFile, rHeader, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, rPayload.m_instancePage, false ) ) {
+		return false;
+	}
+	if ( bNeedNodes
+	        && !t3dRuntimePageStoreReadOptionalBlob( rFile,
+	                rHeader,
+	                rPayload,
+	                rScratch,
+	                rMeta,
+	                TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS,
+	                rPayload.m_nodeDescriptors,
+	                false ) ) {
+		return false;
+	}
+	if ( bNeedCollision
+	        && ( !t3dRuntimePageStoreReadOptionalBlob( rFile,
+	                     rHeader,
+	                     rPayload,
+	                     rScratch,
+	                     rMeta,
+	                     TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT,
+	                     rPayload.m_collisionHeight,
+	                     true )
+	                || !t3dRuntimePageStoreReadOptionalBlob( rFile,
+	                        rHeader,
+	                        rPayload,
+	                        rScratch,
+	                        rMeta,
+	                        TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS,
+	                        rPayload.m_collisionBounds,
+	                        true )
+	                || !t3dRuntimePageStoreReadOptionalBlob(
+	                        rFile, rHeader, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.m_holeMask, true ) ) ) {
+		return false;
+	}
+	if ( bNeedNavigation
+	        && !t3dRuntimePageStoreReadOptionalBlob(
+	                rFile, rHeader, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.m_navigation, true ) ) {
+		return false;
+	}
+	if ( rMeta.m_bLoadMinMax
+	        && !t3dRuntimePageStoreReadOptionalBlob(
+	                rFile, rHeader, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.m_minMaxHeight, true ) ) {
+		return false;
+	}
+	if ( bNeedInstances ) {
+		t3dRuntimePageStoreReadOptionalBlob(
+		        rFile, rHeader, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.m_instanceMetadata, false );
+		t3dRuntimePageStoreReadOptionalBlob( rFile,
+		        rHeader,
+		        rPayload,
+		        rScratch,
+		        rMeta,
+		        TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START,
+		        rPayload.m_multimeshFastStart,
+		        false );
+	}
+	return true;
+}
+
+static bool t3dValidateSnapshotPayload( t3dRuntimePageMeta_t &rMeta, const t3dRuntimePagePayload_t &rPayload ) {
+	const bool bNeedGpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
+	const bool bNeedCpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
+	const bool bNeedMiddle = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u;
+	const bool bNeedTerrainShadow = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
+	const bool bMaterializeHeight = bNeedGpu || bNeedCpu;
+	Time *const pTime = Time::get_singleton();
+	const uint64_t validation_started = pTime ? pTime->get_ticks_usec() : 0u;
+	const int color_size = MAX( 1, s_nRegionSize / rMeta.m_nColorDivisor );
+	const int derived_size = MAX( 1, s_nRegionSize / rMeta.m_nDerivedDivisor );
+	const int middle_height_size = MAX( 1, ( s_nRegionSize + rMeta.m_nMiddleHeightDivisor - 1 ) / rMeta.m_nMiddleHeightDivisor );
+	const bool invalid =
+	        ( bMaterializeHeight
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_height, s_nRegionSize, s_nRegionSize, Image::FORMAT_R16, false ) )
+	        || ( ( bNeedGpu || bNeedCpu )
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_derived, derived_size, derived_size, Image::FORMAT_RG8, false ) )
+	        || ( bNeedMiddle
+	                && !t3dRuntimePageStoreValidImage(
+	                        rPayload.m_middleHeight, middle_height_size, middle_height_size, Image::FORMAT_R16, false ) )
+	        || ( bNeedGpu
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) )
+	        || ( bNeedTerrainShadow
+	                && ( rPayload.m_terrainShadowMask.is_null() || rPayload.m_terrainShadowMask->is_empty()
+	                        || rPayload.m_terrainShadowMask->get_format() != Image::FORMAT_L8
+	                        || !rPayload.m_terrainShadowMask->has_mipmaps()
+	                        || rPayload.m_terrainShadowMask->get_width() != rPayload.m_terrainShadowMask->get_height() ) )
+	        || ( rPayload.m_control.is_valid()
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_control, s_nRegionSize, s_nRegionSize, Image::FORMAT_RF, false ) )
+	        || ( rPayload.m_color.is_valid()
+	                && !t3dRuntimePageStoreValidImage( rPayload.m_color, color_size, color_size, Image::FORMAT_RGBA8, true ) );
+	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
+	return !invalid;
+}
+
 bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
         t3dRuntimePagePayload_t &rPayload,
         t3dRuntimePageWorkerScratch_t &rScratch,
@@ -1359,248 +1711,14 @@ bool Terrain3DRuntimePageStore::loadSnapshot( t3dRuntimePageMeta_t &rMeta,
 		return false;
 	}
 	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
-
-	const t3dRuntimePageChannelInfo_t *const pHeightChannel = t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_HEIGHT );
-	if ( !pHeightChannel ) {
-		return false;
-	}
-	const bool bNeedGpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_GPU_DETAIL ) != 0u;
-	const bool bNeedCpu = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_CPU_MAPS ) != 0u;
-	const bool bNeedActiveHeight = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_ACTIVE_HEIGHT ) != 0u;
-	const bool bNeedMiddle = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_MIDDLE_HEIGHT ) != 0u;
-	const bool bNeedTerrainShadow = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_TERRAIN_SHADOW ) != 0u;
-	const bool bNeedHeight = bNeedGpu || bNeedCpu || bNeedActiveHeight;
-	const bool bMaterializeHeight = bNeedGpu || bNeedCpu;
-	if ( bNeedHeight ) {
-		if ( !bPreserveMaterialized || rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
-			if ( !t3dRuntimePageStoreReadImageFixed( pFile,
-			             *pHeightChannel,
-			             rPayload.m_heightBytes,
-			             rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT],
-			             rPayload.m_height,
-			             rMeta.m_nFileReadUsec,
-			             rMeta.m_nValidationUsec,
-			             rMeta.m_nMaterializeUsec,
-			             bMaterializeHeight ) ) {
-				return false;
-			}
-		} else if ( bMaterializeHeight && rPayload.m_height.is_null() ) {
-			const uint64_t materialize_started = pTime ? pTime->get_ticks_usec() : 0u;
-			rPayload.m_height = Image::create_from_data( ( int )pHeightChannel->m_nWidth,
-			        ( int )pHeightChannel->m_nHeight,
-			        pHeightChannel->m_nMipCount > 1u,
-			        Image::Format( pHeightChannel->m_nFormat ),
-			        rPayload.m_heightBytes );
-			const uint64_t materialize_finished = pTime ? pTime->get_ticks_usec() : materialize_started;
-			rMeta.m_nMaterializeUsec += materialize_finished - materialize_started;
-		}
-		if ( rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_HEIGHT] == 0u ) {
-			return false;
-		}
-	}
 	rMeta.m_nMaterialMask = header.m_nMaterialMask;
-
-	if ( bNeedGpu || bNeedCpu ) {
-		const t3dRuntimePageChannelInfo_t *const pDerivedChannel = t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_DERIVED );
-		if ( !pDerivedChannel ) {
-			return false;
-		}
-		if ( ( !bPreserveMaterialized || rPayload.m_derived.is_null() )
-		        && !t3dRuntimePageStoreReadImageFixed( pFile,
-		                *pDerivedChannel,
-		                rPayload.m_derivedBytes,
-		                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_DERIVED],
-		                rPayload.m_derived,
-		                rMeta.m_nFileReadUsec,
-		                rMeta.m_nValidationUsec,
-		                rMeta.m_nMaterializeUsec,
-		                true ) ) {
-			return false;
-		}
-	}
-	if ( bNeedMiddle ) {
-		const t3dRuntimePageChannelInfo_t *const pMiddleHeightChannel =
-		        t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT );
-		if ( !pMiddleHeightChannel ) {
-			return false;
-		}
-		if ( ( !bPreserveMaterialized || rPayload.m_middleHeight.is_null() )
-		        && !t3dRuntimePageStoreReadImageFixed( pFile,
-		                *pMiddleHeightChannel,
-		                rPayload.m_middleHeightBytes,
-		                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT],
-		                rPayload.m_middleHeight,
-		                rMeta.m_nFileReadUsec,
-		                rMeta.m_nValidationUsec,
-		                rMeta.m_nMaterializeUsec,
-		                true ) ) {
-			return false;
-		}
-	}
-	if ( bNeedGpu ) {
-		const t3dRuntimePageChannelInfo_t *const pMiddleCompositeChannel =
-		        t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE );
-		if ( !pMiddleCompositeChannel ) {
-			return false;
-		}
-		if ( ( !bPreserveMaterialized || rPayload.m_middleComposite.is_null() )
-		        && !t3dRuntimePageStoreReadImageFixed( pFile,
-		                *pMiddleCompositeChannel,
-		                rPayload.m_middleCompositeBytes,
-		                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE],
-		                rPayload.m_middleComposite,
-		                rMeta.m_nFileReadUsec,
-		                rMeta.m_nValidationUsec,
-		                rMeta.m_nMaterializeUsec,
-		                true ) ) {
-			return false;
-		}
-	}
-	if ( bNeedTerrainShadow ) {
-		const t3dRuntimePageChannelInfo_t *const pShadowChannel =
-		        t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK );
-		if ( !pShadowChannel ) {
-			return false;
-		}
-		if ( ( !bPreserveMaterialized || rPayload.m_terrainShadowMask.is_null() )
-		        && !t3dRuntimePageStoreReadImageFixed( pFile,
-		                *pShadowChannel,
-		                rPayload.m_terrainShadowMaskBytes,
-		                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK],
-		                rPayload.m_terrainShadowMask,
-		                rMeta.m_nFileReadUsec,
-		                rMeta.m_nValidationUsec,
-		                rMeta.m_nMaterializeUsec,
-		                true ) ) {
-			return false;
-		}
-	}
-	if ( bNeedGpu || bNeedCpu ) {
-		if ( ( expected_flags & ( uint32_t )( REGION_CHANNEL_CONTROL ) ) != 0u ) {
-			const t3dRuntimePageChannelInfo_t *const pControlChannel = t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_CONTROL );
-			if ( !pControlChannel ) {
-				return false;
-			}
-			if ( ( !bPreserveMaterialized || rPayload.m_control.is_null() )
-			        && !t3dRuntimePageStoreReadImageFixed( pFile,
-			                *pControlChannel,
-			                rPayload.m_controlBytes,
-			                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_CONTROL],
-			                rPayload.m_control,
-			                rMeta.m_nFileReadUsec,
-			                rMeta.m_nValidationUsec,
-			                rMeta.m_nMaterializeUsec,
-			                true ) ) {
-				return false;
-			}
-		}
-		if ( ( expected_flags & ( uint32_t )( REGION_CHANNEL_COLOR ) ) != 0u ) {
-			const t3dRuntimePageChannelInfo_t *const pColorChannel = t3dRuntimePageFindChannel( header, TERRAIN3D_RUNTIME_PAGE_COLOR );
-			if ( !pColorChannel ) {
-				return false;
-			}
-			if ( ( !bPreserveMaterialized || rPayload.m_color.is_null() )
-			        && !t3dRuntimePageStoreReadImageFixed( pFile,
-			                *pColorChannel,
-			                rPayload.m_colorBytes,
-			                rPayload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_COLOR],
-			                rPayload.m_color,
-			                rMeta.m_nFileReadUsec,
-			                rMeta.m_nValidationUsec,
-			                rMeta.m_nMaterializeUsec,
-			                true ) ) {
-				return false;
-			}
-		}
-	}
-
-	const bool bNeedInstances = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u;
-	const bool bNeedNodes = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS ) != 0u;
-	const bool bNeedCollision = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_COLLISION ) != 0u;
-	const bool bNeedNavigation = ( rMeta.m_nConsumerMask & RUNTIME_PAGE_CONSUMER_NAVIGATION ) != 0u;
-	if ( bNeedInstances
-	        && !t3dRuntimePageStoreReadOptionalBlob(
-	                pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, rPayload.m_instancePage, false ) ) {
+	if ( !t3dLoadSnapshotImageChannels( rMeta, rPayload, pFile, header, expected_flags, bPreserveMaterialized ) ) {
 		return false;
 	}
-	if ( bNeedNodes
-	        && !t3dRuntimePageStoreReadOptionalBlob( pFile,
-	                header,
-	                rPayload,
-	                rScratch,
-	                rMeta,
-	                TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS,
-	                rPayload.m_nodeDescriptors,
-	                false ) ) {
+	if ( !t3dLoadSnapshotBlobChannels( rMeta, rPayload, rScratch, pFile, header ) ) {
 		return false;
 	}
-	if ( bNeedCollision ) {
-		if ( !t3dRuntimePageStoreReadOptionalBlob(
-		             pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.m_collisionHeight, true )
-		        || !t3dRuntimePageStoreReadOptionalBlob( pFile,
-		                header,
-		                rPayload,
-		                rScratch,
-		                rMeta,
-		                TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS,
-		                rPayload.m_collisionBounds,
-		                true )
-		        || !t3dRuntimePageStoreReadOptionalBlob(
-		                pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.m_holeMask, true ) ) {
-			return false;
-		}
-	}
-	if ( bNeedNavigation
-	        && !t3dRuntimePageStoreReadOptionalBlob(
-	                pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.m_navigation, true ) ) {
-		return false;
-	}
-	// Auxiliary acceleration blobs are materialized only for consumers that can use them.
-	if ( rMeta.m_bLoadMinMax
-	        && !t3dRuntimePageStoreReadOptionalBlob(
-	                pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.m_minMaxHeight, true ) ) {
-		return false;
-	}
-	if ( bNeedInstances ) {
-		t3dRuntimePageStoreReadOptionalBlob(
-		        pFile, header, rPayload, rScratch, rMeta, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.m_instanceMetadata, false );
-		t3dRuntimePageStoreReadOptionalBlob( pFile,
-		        header,
-		        rPayload,
-		        rScratch,
-		        rMeta,
-		        TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START,
-		        rPayload.m_multimeshFastStart,
-		        false );
-	}
-
-	validation_started = pTime ? pTime->get_ticks_usec() : 0u;
-	const int color_size = MAX( 1, s_nRegionSize / rMeta.m_nColorDivisor );
-	const int derived_size = MAX( 1, s_nRegionSize / rMeta.m_nDerivedDivisor );
-	const int middle_height_size = MAX( 1, ( s_nRegionSize + rMeta.m_nMiddleHeightDivisor - 1 ) / rMeta.m_nMiddleHeightDivisor );
-	if ( ( bMaterializeHeight
-	             && !t3dRuntimePageStoreValidImage( rPayload.m_height, s_nRegionSize, s_nRegionSize, Image::FORMAT_R16, false ) )
-	        || ( ( bNeedGpu || bNeedCpu )
-	                && !t3dRuntimePageStoreValidImage( rPayload.m_derived, derived_size, derived_size, Image::FORMAT_RG8, false ) )
-	        || ( bNeedMiddle
-	                && !t3dRuntimePageStoreValidImage(
-	                        rPayload.m_middleHeight, middle_height_size, middle_height_size, Image::FORMAT_R16, false ) )
-	        || ( bNeedGpu
-	                && !t3dRuntimePageStoreValidImage( rPayload.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) )
-	        || ( bNeedTerrainShadow
-	                && ( rPayload.m_terrainShadowMask.is_null() || rPayload.m_terrainShadowMask->is_empty()
-	                        || rPayload.m_terrainShadowMask->get_format() != Image::FORMAT_L8
-	                        || !rPayload.m_terrainShadowMask->has_mipmaps()
-	                        || rPayload.m_terrainShadowMask->get_width() != rPayload.m_terrainShadowMask->get_height() ) )
-	        || ( rPayload.m_control.is_valid()
-	                && !t3dRuntimePageStoreValidImage( rPayload.m_control, s_nRegionSize, s_nRegionSize, Image::FORMAT_RF, false ) )
-	        || ( rPayload.m_color.is_valid()
-	                && !t3dRuntimePageStoreValidImage( rPayload.m_color, color_size, color_size, Image::FORMAT_RGBA8, true ) ) ) {
-		rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
-		return false;
-	}
-	rMeta.m_nValidationUsec += ( pTime ? pTime->get_ticks_usec() : validation_started ) - validation_started;
-	return true;
+	return t3dValidateSnapshotPayload( rMeta, rPayload );
 }
 
 bool Terrain3DRuntimePageStore::validatePageForRegion( const Terrain3DRegion *const pRegion, const t3dRuntimePageConfig_t &rConfig ) const {
@@ -1851,11 +1969,10 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 		const int actual_height = rPayload.m_middleHeight.is_valid() ? rPayload.m_middleHeight->get_height() : 0;
 		const int actual_format = rPayload.m_middleHeight.is_valid() ? ( int )( rPayload.m_middleHeight->get_format() ) : -1;
 		return t3dRuntimePageStoreWriteFail( pError,
-		        String( "middle-height page has an invalid size/format; expected=" ) + String::num_int64( middle_height_size ) + String( "x" )
-		                + String::num_int64( middle_height_size ) + String( " R16 divisor=" )
-		                + String::num_int64( rConfig.m_nMiddleHeightDivisor ) + String( "; actual=" )
-		                + String::num_int64( actual_width ) + String( "x" ) + String::num_int64( actual_height ) + String( " format=" )
-		                + String::num_int64( actual_format ) );
+		        String( "middle-height page has an invalid size/format; expected=" ) + String::num_int64( middle_height_size )
+		                + String( "x" ) + String::num_int64( middle_height_size ) + String( " R16 divisor=" )
+		                + String::num_int64( rConfig.m_nMiddleHeightDivisor ) + String( "; actual=" ) + String::num_int64( actual_width )
+		                + String( "x" ) + String::num_int64( actual_height ) + String( " format=" ) + String::num_int64( actual_format ) );
 	}
 	if ( !t3dRuntimePageStoreValidImage( rPayload.m_middleComposite, color_size, color_size, Image::FORMAT_RGBA8, true ) ) {
 		return t3dRuntimePageStoreWriteFail( pError, "Middle composite page has an invalid size/format" );
@@ -1931,48 +2048,12 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 	t3dStagedPageBuild_t page_build;
 	PackedByteArray file_bytes;
 	const PackedByteArray instance_page = pRegion->getInstancePage();
-	if ( !t3dRuntimePageStoreStageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_HEIGHT, rPayload.m_height )
-	        || ( rPayload.m_control.is_valid()
-	                && !t3dRuntimePageStoreStageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_CONTROL, rPayload.m_control ) )
-	        || ( rPayload.m_color.is_valid()
-	                && !t3dRuntimePageStoreStageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_COLOR, rPayload.m_color ) )
-	        || !t3dRuntimePageStoreStageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_DERIVED, rPayload.m_derived )
-	        || !t3dRuntimePageStoreStageImageChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_HEIGHT, rPayload.m_middleHeight )
-	        || !t3dRuntimePageStoreStageImageChannel(
-	                page_build, header, TERRAIN3D_RUNTIME_PAGE_MIDDLE_COMPOSITE, rPayload.m_middleComposite )
-	        || ( rPayload.m_terrainShadowMask.is_valid()
-	                && !t3dRuntimePageStoreStageImageChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_TERRAIN_SHADOW_MASK, rPayload.m_terrainShadowMask ) )
-	        || ( !instance_page.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_STATIC_INSTANCES, instance_page ) )
-	        || ( !rPayload.m_holeMask.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel( page_build, header, TERRAIN3D_RUNTIME_PAGE_HOLE_MASK, rPayload.m_holeMask ) )
-	        || ( !rPayload.m_collisionHeight.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_HEIGHT, rPayload.m_collisionHeight ) )
-	        || ( !rPayload.m_collisionBounds.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_COLLISION_BOUNDS, rPayload.m_collisionBounds ) )
-	        || ( !rPayload.m_navigation.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_NAVIGATION, rPayload.m_navigation ) )
-	        || ( !rPayload.m_minMaxHeight.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_MIN_MAX_HEIGHT, rPayload.m_minMaxHeight ) )
-	        || ( !rPayload.m_nodeDescriptors.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_NODE_DESCRIPTORS, rPayload.m_nodeDescriptors ) )
-	        || ( !rPayload.m_instanceMetadata.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA, rPayload.m_instanceMetadata ) )
-	        || ( !rPayload.m_lightingReceivers.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_LIGHTING_RECEIVERS, rPayload.m_lightingReceivers ) )
-	        || ( !rPayload.m_multimeshFastStart.is_empty()
-	                && !t3dRuntimePageStoreStageBlobChannel(
-	                        page_build, header, TERRAIN3D_RUNTIME_PAGE_MULTIMESH_FAST_START, rPayload.m_multimeshFastStart ) ) ) {
-		return t3dRuntimePageStoreWriteFail( pError, "runtime page channel serialization failed" );
+	const uint32_t nStageFailureMask = t3dRuntimePageStoreStageCookChannels( page_build, header, rPayload, instance_page );
+	if ( nStageFailureMask != T3D_RUNTIME_PAGE_STAGE_OK ) {
+		return t3dRuntimePageStoreWriteFail(
+		        pError, String( "runtime page channel serialization failed; stage_mask=" ) + String::num_uint64( nStageFailureMask ) );
 	}
+
 	if ( !t3dRuntimePageStoreFinalizePageBytes( page_build, header, file_bytes ) ) {
 		return t3dRuntimePageStoreWriteFail( pError, "runtime page header/final byte serialization failed" );
 	}
@@ -2978,11 +3059,16 @@ bool Terrain3DRuntimePageStore::takeInstance( const Vector2i &rLocation,
 	}
 	const bool loaded = ( meta.m_nLoadedConsumerMask & RUNTIME_PAGE_CONSUMER_INSTANCE_STORE ) != 0u && meta.m_bInstanceLoaded;
 	if ( loaded ) {
-		rStore = eastl::move( payload.m_preparedInstanceStore );
-		payload.m_preparedInstanceStore = Terrain3DInstanceStore( TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED );
-		if ( !payload.m_preparedInstanceStore.bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy ) ) {
+		// Prepare the replacement before ownership can leave the payload. A failed
+		// allocator bind must leave both the caller and prepared payload untouched so
+		// the same prepared page can be retried without loss or double ownership.
+		Terrain3DInstanceStore replacement_store( TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED );
+		if ( !replacement_store.bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy ) ) {
 			return false;
 		}
+
+		rStore = eastl::move( payload.m_preparedInstanceStore );
+		payload.m_preparedInstanceStore = eastl::move( replacement_store );
 		if ( pInstanceMetadata ) {
 			if ( payload.m_szLogicalBytes[TERRAIN3D_RUNTIME_PAGE_INSTANCE_METADATA] > 0u ) {
 				*pInstanceMetadata = payload.m_instanceMetadata;

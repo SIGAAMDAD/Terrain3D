@@ -28,6 +28,7 @@ var _runtime_page_cook_result: AcceptDialog
 enum {
 	MENU_DIRECTORY_SETUP,
 	MENU_REGION_LIGHTMAP,
+	MENU_BAKE_VIRTUAL_TEXTURES,
 	MENU_HLOD,
 	MENU_COOK_RUNTIME_DATASET,
 	MENU_MIGRATE_RUNTIME_PAGES,
@@ -72,6 +73,7 @@ func _enter_tree() -> void:
 	var popup: PopupMenu = get_popup()
 	popup.add_item("Data Directory…", MENU_DIRECTORY_SETUP)
 	popup.add_item("Bake Region Lightmaps…", MENU_REGION_LIGHTMAP)
+	popup.add_item("Bake Virtual Textures", MENU_BAKE_VIRTUAL_TEXTURES)
 	popup.add_item("Hierarchical LOD…", MENU_HLOD)
 	popup.add_item("Cook Runtime Dataset…", MENU_COOK_RUNTIME_DATASET)
 	popup.add_item("Migrate Runtime Pages…", MENU_MIGRATE_RUNTIME_PAGES)
@@ -90,6 +92,7 @@ func _enter_tree() -> void:
 
 	_set_item_tooltip(popup, MENU_DIRECTORY_SETUP, "Choose the directory containing Terrain3D region resources.")
 	_set_item_tooltip(popup, MENU_REGION_LIGHTMAP, "Bake independent lightmaps for every authored Terrain3D region in the active data directory.")
+	_set_item_tooltip(popup, MENU_BAKE_VIRTUAL_TEXTURES, "Incrementally bake dirty V3 virtual-texture allocations/channels and publish the refreshed authoring package without discarding the VT cache.")
 	_set_item_tooltip(popup, MENU_HLOD, "Analyze, bake, validate, and preview Terrain3D hierarchical LOD proxies.")
 	_set_item_tooltip(popup, MENU_COOK_RUNTIME_DATASET, "Compile and reload-validate every authored terrain region as a .t3dpage runtime page, then rebuild the far atlas.")
 	_set_item_tooltip(popup, MENU_MIGRATE_RUNTIME_PAGES, "Scan only runtime-page headers and regenerate legacy .t3dpage files from authoritative region resources. Current pages are left untouched.")
@@ -125,6 +128,8 @@ func _on_menu_pressed(p_id: int) -> void:
 			directory_setup.directory_setup_popup()
 		MENU_REGION_LIGHTMAP:
 			plugin.open_region_lightmap_baker()
+		MENU_BAKE_VIRTUAL_TEXTURES:
+			_bake_virtual_textures()
 		MENU_HLOD:
 			plugin.open_hlod_panel()
 		MENU_COOK_RUNTIME_DATASET:
@@ -151,6 +156,33 @@ func _on_menu_pressed(p_id: int) -> void:
 			OS.shell_show_in_file_manager(
 				ProjectSettings.globalize_path("res://addons/terrain_3d/brushes")
 			)
+
+
+func _bake_virtual_textures() -> void:
+	if not is_instance_valid(plugin) or not is_instance_valid(plugin.terrain):
+		push_error("Select a Terrain3D node before baking virtual textures")
+		return
+	var result: Dictionary = plugin.terrain.bake_virtual_textures()
+	var complete: bool = bool(result.get("complete", false))
+	var lines: PackedStringArray = PackedStringArray([
+		"Status: %s" % ("COMPLETE" if complete else "FAILED"),
+		"Dirty allocations: %d" % int(result.get("dirty_allocations", 0)),
+		"Cache hits / misses: %d / %d" % [int(result.get("cache_hits", 0)), int(result.get("cache_misses", 0))],
+		"Package generation: %d" % int(result.get("package_generation", 0)),
+		"Package bytes: %d" % int(result.get("package_bytes", 0)),
+		"Publication queued: %s" % ("YES" if bool(result.get("republish_queued", false)) else "NO"),
+		"Publication pending: %s" % ("YES" if bool(result.get("republish_pending", false)) else "NO"),
+		"Cook ms (extract/filter/page/encode/pack): %.2f / %.2f / %.2f / %.2f / %.2f" % [
+			float(result.get("cook_ms_extract", 0.0)), float(result.get("cook_ms_filter", 0.0)),
+			float(result.get("cook_ms_page", 0.0)), float(result.get("cook_ms_encode", 0.0)),
+			float(result.get("cook_ms_pack", 0.0)),
+		],
+	])
+	var error_text: String = String(result.get("error", ""))
+	if not error_text.is_empty():
+		lines.append("")
+		lines.append("Error: %s" % error_text)
+	_show_runtime_page_result("Terrain3D Virtual Texture Bake", "\n".join(lines))
 
 
 func _open_runtime_page_migrate_confirmation() -> void:
@@ -337,6 +369,7 @@ func _on_menu_about_to_popup() -> void:
 	var popup: PopupMenu = get_popup()
 	popup.set_item_disabled(MENU_DIRECTORY_SETUP, not has_terrain)
 	popup.set_item_disabled(MENU_REGION_LIGHTMAP, not has_terrain)
+	popup.set_item_disabled(MENU_BAKE_VIRTUAL_TEXTURES, not has_terrain)
 	popup.set_item_disabled(MENU_HLOD, not has_terrain)
 	popup.set_item_disabled(MENU_COOK_RUNTIME_DATASET, not has_terrain)
 	popup.set_item_disabled(MENU_MIGRATE_RUNTIME_PAGES, not has_terrain)

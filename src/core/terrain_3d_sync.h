@@ -106,8 +106,8 @@ static inline bool t3dAtomicMsCompareExchange( volatile T *pValue, T &rExpected,
 		uint16_t nDesiredBits;
 		memcpy( &nExpectedBits, &rExpected, sizeof( nExpectedBits ) );
 		memcpy( &nDesiredBits, &desired, sizeof( nDesiredBits ) );
-		const uint16_t nObservedBits = ( uint16_t )_InterlockedCompareExchange16(
-		        ( volatile short * )pValue, ( short )nDesiredBits, ( short )nExpectedBits );
+		const uint16_t nObservedBits =
+		        ( uint16_t )_InterlockedCompareExchange16( ( volatile short * )pValue, ( short )nDesiredBits, ( short )nExpectedBits );
 		memcpy( &observed, &nObservedBits, sizeof( observed ) );
 	} else if constexpr ( sizeof( T ) == 4u ) {
 		uint32_t nExpectedBits;

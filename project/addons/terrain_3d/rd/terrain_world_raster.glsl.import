@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bunpeoyc14vkb"
+path="res://.godot/imported/terrain_world_raster.glsl-cabf3e2c0f64083c941e5211f5d38756.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/terrain_world_raster.glsl"
+dest_files=["res://.godot/imported/terrain_world_raster.glsl-cabf3e2c0f64083c941e5211f5d38756.res"]
+
+[params]
+

@@ -120,6 +120,36 @@ static uint32_t t3d_rw_geometry_pack_half2( float pX, float pY ) {
 	return ( uint32_t )t3d_rw_geometry_float_to_half( fX ) | ( ( uint32_t )t3d_rw_geometry_float_to_half( fY ) << 16u );
 }
 
+float t3d_rw_geometry_unpack_half( const uint16_t nHalf ) {
+	const uint32_t nSign = ( uint32_t )( nHalf & 0x8000u ) << 16u;
+	uint32_t nExponent = ( nHalf >> 10u ) & 0x1fu;
+	uint32_t nMantissa = nHalf & 0x03ffu;
+	uint32_t nBits = 0u;
+	if ( nExponent == 0u ) {
+		if ( nMantissa == 0u ) {
+			nBits = nSign;
+		} else {
+			int32_t iExponent = -14;
+			while ( ( nMantissa & 0x0400u ) == 0u ) {
+				nMantissa <<= 1u;
+				--iExponent;
+			}
+			nMantissa &= 0x03ffu;
+			nBits = nSign | ( ( uint32_t )( iExponent + 127 ) << 23u ) | ( nMantissa << 13u );
+		}
+	} else if ( nExponent == 31u ) {
+		nBits = nSign | 0x7f800000u | ( nMantissa << 13u );
+	} else {
+		nBits = nSign | ( ( nExponent + 112u ) << 23u ) | ( nMantissa << 13u );
+	}
+	return t3d_rw_geometry_bits_float( nBits );
+}
+
+static void t3d_rw_geometry_unpack_vertex_uv( const T3DPrototypeVertex &rVertex, float &rU, float &rV ) {
+	rU = t3d_rw_geometry_unpack_half( ( uint16_t )( rVertex.m_nPackedUv0 & 0xffffu ) );
+	rV = t3d_rw_geometry_unpack_half( ( uint16_t )( rVertex.m_nPackedUv0 >> 16u ) );
+}
+
 uint32_t t3d_render_world_geometry_pack_local_triangle( uint32_t pLocal0, uint32_t pLocal1, uint32_t pLocal2 ) {
 	if ( pLocal0 >= T3D_RW_CLUSTER_MAX_VERTICES || pLocal1 >= T3D_RW_CLUSTER_MAX_VERTICES || pLocal2 >= T3D_RW_CLUSTER_MAX_VERTICES ) {
 		return UINT32_MAX;
@@ -269,19 +299,19 @@ bool t3d_rw_geometry_validate_source( const T3DGeometrySourceMesh &pSource ) {
 
 	for ( uint32_t iVertex = 0u; iVertex < pSource.nVertexCount; ++iVertex ) {
 		const T3DPrototypeVertex &Vertex = pSource.pVertices[iVertex];
-		if ( !t3d_rw_geometry_finite( Vertex.vPosition[0] ) ) {
+		if ( !t3d_rw_geometry_finite( Vertex.m_fPosition[0] ) ) {
 			return false;
 		}
-		if ( !t3d_rw_geometry_finite( Vertex.vPosition[1] ) ) {
+		if ( !t3d_rw_geometry_finite( Vertex.m_fPosition[1] ) ) {
 			return false;
 		}
-		if ( !t3d_rw_geometry_finite( Vertex.vPosition[2] ) ) {
+		if ( !t3d_rw_geometry_finite( Vertex.m_fPosition[2] ) ) {
 			return false;
 		}
-		if ( !t3d_rw_geometry_finite( Vertex.vUv[0] ) ) {
-			return false;
-		}
-		if ( !t3d_rw_geometry_finite( Vertex.vUv[1] ) ) {
+		float fUvU = 0.0f;
+		float fUvV = 0.0f;
+		t3d_rw_geometry_unpack_vertex_uv( Vertex, fUvU, fUvV );
+		if ( !t3d_rw_geometry_finite( fUvU ) || !t3d_rw_geometry_finite( fUvV ) ) {
 			return false;
 		}
 	}
@@ -463,16 +493,19 @@ static T3DGeometryCookResult t3d_rw_geometry_preflight_mesh(
 }
 
 static float t3d_rw_geometry_edge_density( const T3DPrototypeVertex &pA, const T3DPrototypeVertex &pB ) {
-	const float fDx = pB.vPosition[0] - pA.vPosition[0];
-	const float fDy = pB.vPosition[1] - pA.vPosition[1];
-	const float fDz = pB.vPosition[2] - pA.vPosition[2];
+	const float fDx = pB.m_fPosition[0] - pA.m_fPosition[0];
+	const float fDy = pB.m_fPosition[1] - pA.m_fPosition[1];
+	const float fDz = pB.m_fPosition[2] - pA.m_fPosition[2];
 	const float fWorldLength = t3d_rw_geometry_length3( fDx, fDy, fDz );
 	if ( fWorldLength <= 1.0e-20f ) {
 		return 0.0f;
 	}
 
-	const float fDu = pB.vUv[0] - pA.vUv[0];
-	const float fDv = pB.vUv[1] - pA.vUv[1];
+	float fAu = 0.0f, fAv = 0.0f, fBu = 0.0f, fBv = 0.0f;
+	t3d_rw_geometry_unpack_vertex_uv( pA, fAu, fAv );
+	t3d_rw_geometry_unpack_vertex_uv( pB, fBu, fBv );
+	const float fDu = fBu - fAu;
+	const float fDv = fBv - fAv;
 	const float fUvLength = sqrtf( fDu * fDu + fDv * fDv );
 	return fUvLength / fWorldLength;
 }
@@ -508,24 +541,27 @@ bool t3d_rw_geometry_compute_derived_cluster( const T3DPrototypeVertex *pVertexH
 		}
 		const T3DPrototypeVertex &Vertex = pVertexHeap[nGlobalVertex];
 		for ( uint32_t iAxis = 0u; iAxis < 3u; ++iAxis ) {
-			if ( Vertex.vPosition[iAxis] < vMin[iAxis] ) {
-				vMin[iAxis] = Vertex.vPosition[iAxis];
+			if ( Vertex.m_fPosition[iAxis] < vMin[iAxis] ) {
+				vMin[iAxis] = Vertex.m_fPosition[iAxis];
 			}
-			if ( Vertex.vPosition[iAxis] > vMax[iAxis] ) {
-				vMax[iAxis] = Vertex.vPosition[iAxis];
+			if ( Vertex.m_fPosition[iAxis] > vMax[iAxis] ) {
+				vMax[iAxis] = Vertex.m_fPosition[iAxis];
 			}
 		}
-		if ( Vertex.vUv[0] < fUvMinU ) {
-			fUvMinU = Vertex.vUv[0];
+		float fUvU = 0.0f;
+		float fUvV = 0.0f;
+		t3d_rw_geometry_unpack_vertex_uv( Vertex, fUvU, fUvV );
+		if ( fUvU < fUvMinU ) {
+			fUvMinU = fUvU;
 		}
-		if ( Vertex.vUv[1] < fUvMinV ) {
-			fUvMinV = Vertex.vUv[1];
+		if ( fUvV < fUvMinV ) {
+			fUvMinV = fUvV;
 		}
-		if ( Vertex.vUv[0] > fUvMaxU ) {
-			fUvMaxU = Vertex.vUv[0];
+		if ( fUvU > fUvMaxU ) {
+			fUvMaxU = fUvU;
 		}
-		if ( Vertex.vUv[1] > fUvMaxV ) {
-			fUvMaxV = Vertex.vUv[1];
+		if ( fUvV > fUvMaxV ) {
+			fUvMaxV = fUvV;
 		}
 	}
 
@@ -536,9 +572,9 @@ bool t3d_rw_geometry_compute_derived_cluster( const T3DPrototypeVertex *pVertexH
 
 	for ( uint32_t iVertex = 0u; iVertex < pVertexCount; ++iVertex ) {
 		const T3DPrototypeVertex &Vertex = pVertexHeap[pClusterVertexIndices[iVertex]];
-		const float fDx = Vertex.vPosition[0] - rDerived.vCenter[0];
-		const float fDy = Vertex.vPosition[1] - rDerived.vCenter[1];
-		const float fDz = Vertex.vPosition[2] - rDerived.vCenter[2];
+		const float fDx = Vertex.m_fPosition[0] - rDerived.vCenter[0];
+		const float fDy = Vertex.m_fPosition[1] - rDerived.vCenter[1];
+		const float fDz = Vertex.m_fPosition[2] - rDerived.vCenter[2];
 		const float fDistance = t3d_rw_geometry_length3( fDx, fDy, fDz );
 		if ( fDistance > rDerived.fRadius ) {
 			rDerived.fRadius = fDistance;
@@ -565,12 +601,12 @@ bool t3d_rw_geometry_compute_derived_cluster( const T3DPrototypeVertex *pVertexH
 		const T3DPrototypeVertex &V1 = pVertexHeap[pClusterVertexIndices[nLocal1]];
 		const T3DPrototypeVertex &V2 = pVertexHeap[pClusterVertexIndices[nLocal2]];
 
-		const float fE10x = V1.vPosition[0] - V0.vPosition[0];
-		const float fE10y = V1.vPosition[1] - V0.vPosition[1];
-		const float fE10z = V1.vPosition[2] - V0.vPosition[2];
-		const float fE20x = V2.vPosition[0] - V0.vPosition[0];
-		const float fE20y = V2.vPosition[1] - V0.vPosition[1];
-		const float fE20z = V2.vPosition[2] - V0.vPosition[2];
+		const float fE10x = V1.m_fPosition[0] - V0.m_fPosition[0];
+		const float fE10y = V1.m_fPosition[1] - V0.m_fPosition[1];
+		const float fE10z = V1.m_fPosition[2] - V0.m_fPosition[2];
+		const float fE20x = V2.m_fPosition[0] - V0.m_fPosition[0];
+		const float fE20y = V2.m_fPosition[1] - V0.m_fPosition[1];
+		const float fE20z = V2.m_fPosition[2] - V0.m_fPosition[2];
 		float fNx = fE10y * fE20z - fE10z * fE20y;
 		float fNy = fE10z * fE20x - fE10x * fE20z;
 		float fNz = fE10x * fE20y - fE10y * fE20x;
@@ -619,12 +655,12 @@ bool t3d_rw_geometry_compute_derived_cluster( const T3DPrototypeVertex *pVertexH
 			const T3DPrototypeVertex &V0 = pVertexHeap[pClusterVertexIndices[nLocal0]];
 			const T3DPrototypeVertex &V1 = pVertexHeap[pClusterVertexIndices[nLocal1]];
 			const T3DPrototypeVertex &V2 = pVertexHeap[pClusterVertexIndices[nLocal2]];
-			const float fE10x = V1.vPosition[0] - V0.vPosition[0];
-			const float fE10y = V1.vPosition[1] - V0.vPosition[1];
-			const float fE10z = V1.vPosition[2] - V0.vPosition[2];
-			const float fE20x = V2.vPosition[0] - V0.vPosition[0];
-			const float fE20y = V2.vPosition[1] - V0.vPosition[1];
-			const float fE20z = V2.vPosition[2] - V0.vPosition[2];
+			const float fE10x = V1.m_fPosition[0] - V0.m_fPosition[0];
+			const float fE10y = V1.m_fPosition[1] - V0.m_fPosition[1];
+			const float fE10z = V1.m_fPosition[2] - V0.m_fPosition[2];
+			const float fE20x = V2.m_fPosition[0] - V0.m_fPosition[0];
+			const float fE20y = V2.m_fPosition[1] - V0.m_fPosition[1];
+			const float fE20z = V2.m_fPosition[2] - V0.m_fPosition[2];
 			float fNx = fE10y * fE20z - fE10z * fE20y;
 			float fNy = fE10z * fE20x - fE10x * fE20z;
 			float fNz = fE10x * fE20y - fE10y * fE20x;
@@ -711,6 +747,32 @@ static bool t3d_rw_geometry_write_cluster( T3DGeometryDatabase &rDatabase,
 	Cluster.nPackedUvMin = Derived.nPackedUvMin;
 	Cluster.nPackedUvMax = Derived.nPackedUvMax;
 	Cluster.nTexelDensity = Derived.nTexelDensity;
+
+	if ( rDatabase.Buffers.pWorldClusterRecords && rDatabase.Buffers.pWorldClusterVtMetadata ) {
+		t3dWorldCluster_t &World = rDatabase.Buffers.pWorldClusterRecords[rClusterCursor];
+		memset( &World, 0, sizeof( World ) );
+		World.m_fCenter[0] = Derived.vCenter[0];
+		World.m_fCenter[1] = Derived.vCenter[1];
+		World.m_fCenter[2] = Derived.vCenter[2];
+		World.m_fRadius = Derived.fRadius;
+		World.m_fConeAxis[0] = Derived.vConeAxis[0];
+		World.m_fConeAxis[1] = Derived.vConeAxis[1];
+		World.m_fConeAxis[2] = Derived.vConeAxis[2];
+		World.m_fConeCutoff = Derived.fConeCutoff;
+		World.m_nVertexIndexOffset = rVertexIndexCursor;
+		World.m_nTriangleOffset = rTriangleCursor;
+		World.m_nPackedCounts = t3dWorldPackU16Pair( ( uint16_t )pBuilder.nVertexCount, ( uint16_t )pBuilder.nTriangleCount );
+		World.m_nPackedLodGeometryKind = t3dWorldPackU16Pair( ( uint16_t )pLodIndex, ( uint16_t )T3D_WORLD_GEOMETRY_STATIC_CLUSTER );
+		World.m_nMaterial = pBuilder.nMaterialId;
+		World.m_nFlags = pSource.nFlags;
+		World.m_nSourceId = rClusterCursor;
+
+		t3dWorldClusterVtMetadata_t &WorldVt = rDatabase.Buffers.pWorldClusterVtMetadata[rClusterCursor];
+		WorldVt.m_nPackedUvMin = Derived.nPackedUvMin;
+		WorldVt.m_nPackedUvMax = Derived.nPackedUvMax;
+		WorldVt.m_nTexelDensity = Derived.nTexelDensity;
+		WorldVt.m_nReserved = 0u;
+	}
 
 	++rClusterCursor;
 	rVertexIndexCursor += pBuilder.nVertexCount;

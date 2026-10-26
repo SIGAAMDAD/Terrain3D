@@ -111,7 +111,8 @@ void Terrain3DRuntimeWorldManifest::rebuildLookup( void ) {
 	eastl::fill_n( m_regionLookup, s_nRegionSlots, ( int16_t )-1 );
 	eastl::fill_n( m_topologyBits, s_nRegionSlots / 64, 0u );
 	for ( int index = 0; index < ( int )( m_regions.size() ); ++index ) {
-		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( t3dUnpackRegionCoord( m_regions[( size_t )( index )].m_location ) );
+		const int map_index =
+		        Terrain3DRegionRepository::getRegionMapIndex( t3dUnpackRegionCoord( m_regions[( size_t )( index )].m_location ) );
 		if ( map_index >= 0 && map_index < s_nRegionSlots ) {
 			m_regionLookup[( size_t )( map_index )] = ( int16_t )( index );
 			m_topologyBits[( size_t )( map_index >> 6 )] |= 1ull << ( map_index & 63 );
@@ -287,7 +288,8 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		const String page_path = rPageStore.getPagePath( pRegion, rDataDirectory );
 		if ( !rPageStore.readSourceSignature( page_path, page_signature ) || page_signature == 0u ) {
 			if ( pErrors ) {
-				pErrors->push_back( String( "Missing/invalid runtime page for manifest region " ) + String( t3dUnpackRegionCoord( record.m_location ) ) );
+				pErrors->push_back( String( "Missing/invalid runtime page for manifest region " )
+				        + String( t3dUnpackRegionCoord( record.m_location ) ) );
 			}
 			return false;
 		}
@@ -461,9 +463,8 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 	m_worldRegionMax = t3dPackRegionCoord( world_region_max );
 	const uint32_t topology_bytes = pFile->get_32();
 	pFile->get_32();
-	if ( geometry_signature != s_nRegionGeometrySignature || geometry_reserved != 0u || region_count == 0u
-	        || region_count > s_nRegionSlots || dependency_count > UINT16_MAX
-	        || record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t )
+	if ( geometry_signature != s_nRegionGeometrySignature || geometry_reserved != 0u || region_count == 0u || region_count > s_nRegionSlots
+	        || dependency_count > UINT16_MAX || record_bytes != s_nManifestRegionBaseBytes + s_nMaxMeshAssets * sizeof( uint32_t )
 	        || topology_bytes != s_nManifestTopologyBytes || serialized_vertex_spacing != s_fRegionVertexSpacing ) {
 		if ( pErrors ) {
 			pErrors->push_back( "Cooked world manifest dimensions are invalid." );
@@ -561,8 +562,8 @@ bool Terrain3DRuntimeWorldManifest::load( const String &rDataDirectory, PackedSt
 			reset();
 			return false;
 		}
-		const String source_path =
-		        rDataDirectory.trim_suffix( "/" ) + String( "/" ) + Terrain3DUtil::locationToFilename( t3dUnpackRegionCoord( record.m_location ) );
+		const String source_path = rDataDirectory.trim_suffix( "/" ) + String( "/" )
+		        + Terrain3DUtil::locationToFilename( t3dUnpackRegionCoord( record.m_location ) );
 		const String page_path = source_path.get_basename() + String( ".t3dpage" );
 		if ( !FileAccess::file_exists( page_path ) ) {
 			if ( pErrors ) {

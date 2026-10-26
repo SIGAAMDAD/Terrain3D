@@ -308,99 +308,20 @@ typedef enum t3dPageTableBuildResult_e {
 	PAGE_TABLE_TEXTURE_ALLOCATION_FAILED,
 } t3dPageTableBuildResult_t;
 
-class Terrain3DMaterial : public Resource {
-	GDCLASS( Terrain3DMaterial, Resource );
-	CLASS_NAME();
-
+// Post-P34 R08 material decomposition. Terrain3DMaterial remains the serialized
+// Resource facade; these embedded concrete owners separate authoring truth from
+// derived runtime/shader/VT state without introducing independent lifetimes.
+struct Terrain3DMaterialAuthoringState {
 	bool m_bPersistenceDirty = false;
-
-public: // Constants
-	// Controls the compile-time shader permutation cache. Feature modules
-	// are gated by preprocessor defines and resolved through standard shader includes.
-	// High-level profiles exposed by the Terrain3D editor sidebar. CUSTOM keeps
-	// every individual hotpath control available. The other profiles assign a
-	// bounded group of compile-time modes and then compile/cache that exact path.
-	// Independently compiled clipmap shader tiers. These are internal runtime
-	// materials, not user-facing material resources. Near preserves the selected
-	// surface model, middle resolves only control/color/derived-normal data, and
-	// far uses the coarse world atlases.
-	// Controls terrain control-map and normal interpolation. Static modes remove
-	// the distance-dependent bilinear branch from the generated fragment shader.
-	// Controls the final terrain geometric normal source. Static modes remove the
-	// public flat_terrain_normals uniform branch.
-	// Controls regional color/wetness filtering. AUTO uses one hardware-filtered
-	// sample inside a region and exact four-corner sampling only at layer edges.
-	// Controls steep-surface UV projection. SHARED uses the final fragment terrain
-	// normal for all material corners; EXACT evaluates each corner independently.
-	// Controls whether tessellation displacement is sampled again in the fragment
-	// material path for height blending/AO suppression.
-	// Controls whether the material surface array is fetched. AUTO retains the
-	// fetch only when an enabled PBR output consumes normal/roughness/AO data.
-	// Controls whether terrain texture arrays participate in the surface pass.
-	// SILHOUETTE preserves all authored texture/control data while compiling the
-	// material texture sampling path out of the terrain shaders.
-	// Selects compile-time Godot spatial render modes and lighting frequency.
-	// Near, middle, and far rendering share one semantic quality schema.
-	// Each tier maps these choices onto a tier-appropriate implementation rather
-	// than exposing the legacy Near shader internals directly.
-	// Detiling quality/cost. DISCRETE_8 replaces the sine hash plus per-material
-	// sin/cos pair with an integer hash and an eight-entry rotation table.
-	// Dynamic preserves the public uniforms. The static modes remove both world
-	// noise source branches from the compiled shader.
-private:
-	Terrain3D *m_pTerrain = NULL;
-
-	Ref<Shader> m_shader; // Active near shader
-	bool m_bNearShaderReady = false;
-	Ref<Shader> m_szTierShaders[SHADER_TIER_COUNT];
-	Ref<Shader> m_shadowShader;
-	Dictionary m_shaderTemplates; // External root shader templates loaded from the addon
-	bool m_bRuntimeShaderPackLoaded = false;
-	uint64_t m_nRuntimeShaderPackStateSignature = 0u;
-	String m_szRuntimeShaderPackTierSource[SHADER_TIER_COUNT];
-	String m_runtimeShaderPackBufferSource;
-	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxShaderVariantCacheLimit, false> m_runtimeShaderVariantEntries;
-	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxEditorShaderVariantCacheLimit, false> m_editorShaderVariantEntries;
-	uint64_t m_nRuntimeShaderVariantSourceBytes = 0;
-	uint64_t m_nEditorShaderVariantSourceBytes = 0;
-	bool m_bShaderOverrideEnabled = false;
-	Ref<Shader> m_shaderOverride; // User's shader we copy code from
-	Ref<Shader> m_connectedShaderOverride;
-	mutable TypedArray<StringName> m_activeParams; // All public shader params in the current shader
-	mutable Dictionary m_shaderParams;             // Public shader params saved to disk
+	mutable Dictionary m_shaderParams;
 	eastl::vector<PropertyInfo, Terrain3DEastlAllocator> m_shaderPropertyCache;
 	Dictionary m_shaderParamDefaults;
-	// Mirrors values pushed to private/runtime uniforms so hot callers never read
-	// runtime material state back to the CPU.
-	mutable Dictionary m_runtimeMaterialParams;
-	uint64_t m_nRdPublicationGeneration = 1u;
-	uint64_t m_nShaderParameterListQueryCount = 0u;
-	uint64_t m_nShaderParameterDefaultQueryCount = 0u;
-	mutable uint64_t m_nShaderInspectorRuntimeReadCount = 0u;
-
-	Ref<Shader> m_bufferShader; // Active buffer shader
-	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxBufferShaderVariantCacheLimit, false> m_bufferShaderVariantEntries;
-	uint64_t m_nBufferShaderVariantSourceBytes = 0;
+	bool m_bShaderOverrideEnabled = false;
+	Ref<Shader> m_shaderOverride;
 	bool m_bBufferShaderOverrideEnabled = false;
-	Ref<Shader> m_bufferShaderOverride; // User's shader we copy code from
-	Ref<Shader> m_connectedBufferShaderOverride;
+	Ref<Shader> m_bufferShaderOverride;
 	real_t m_fDisplacementScale = 1.0f;
 	real_t m_fDisplacementSharpness = 0.5f;
-	Terrain3DGeneratedTexture m_generatedDummy;
-	Terrain3DGeneratedTexture m_generatedFarHeightDummy;
-	Terrain3DGeneratedTexture m_generatedFarColorDummy;
-	Terrain3DGeneratedTexture m_generatedSurfaceDummy;
-	Terrain3DGeneratedTexture m_generatedDisplacementDummy;
-	Terrain3DGeneratedTexture m_generatedRegionMap;
-	uint64_t m_nRegionMapTextureHash = 0u;
-	int m_nRegionMapTextureSize = 0;
-	Terrain3DGeneratedTexture m_generatedLogicalRegionMap;
-	uint64_t m_nLogicalRegionMapTextureHash = 0u;
-	int m_nLogicalRegionMapTextureSize = 0;
-	uint32_t m_nRegionPageTableOwnerGeneration = 0u;
-	Ref<NoiseTexture2D> m_worldNoiseCache;
-
-	// Material Features
 	t3dWorldBackground_t m_worldBackground = FLAT;
 	t3dShaderVariantMode_t m_shaderVariantMode = SHADER_VARIANTS_PREWARM_ACTIVE_AND_RECENT;
 	t3dShaderPerformancePreset_t m_shaderPerformancePreset = SHADER_PRESET_CUSTOM;
@@ -443,9 +364,72 @@ private:
 		1.0f,
 		1.0f,
 		-0.5f };
+	bool m_bOutputAlbedoEnabled = true;
+	bool m_bOutputRoughnessEnabled = true;
+	bool m_bOutputSpecularEnabled = true;
+	bool m_bOutputNormalMapEnabled = true;
+	bool m_bOutputAmbientOcclusionEnabled = true;
+	bool m_bShowRegionGrid = false;
+	bool m_bShowInstancerGrid = false;
+	bool m_bShowVertexGrid = false;
+	bool m_bShowContours = false;
+	bool m_bShowNavigation = false;
+	bool m_bDebugViewCheckered = false;
+	bool m_bDebugViewGrey = false;
+	bool m_bDebugViewHeightmap = false;
+	bool m_bDebugViewJaggedness = false;
+	bool m_bDebugViewAutoshader = false;
+	bool m_bDebugViewControlTexture = false;
+	bool m_bDebugViewControlBlend = false;
+	bool m_bDebugViewControlAngle = false;
+	bool m_bDebugViewControlScale = false;
+	bool m_bDebugViewColormap = false;
+	bool m_bDebugViewRoughmap = false;
+	bool m_bDebugViewDisplacementBuffer = false;
+	bool m_bPbrViewTexAlbedo = false;
+	bool m_bPbrViewTexHeight = false;
+	bool m_bPbrViewTexNormal = false;
+	bool m_bPbrViewTexAo = false;
+	bool m_bPbrViewTexRough = false;
+};
+
+struct Terrain3DMaterialRuntimeState {
+	mutable TypedArray<StringName> m_activeParams;
+	mutable Dictionary m_runtimeMaterialParams;
+	uint64_t m_nRdPublicationGeneration = 1u;
+	uint64_t m_nShaderParameterListQueryCount = 0u;
+	uint64_t m_nShaderParameterDefaultQueryCount = 0u;
+	mutable uint64_t m_nShaderInspectorRuntimeReadCount = 0u;
+	Terrain3DGeneratedTexture m_generatedDummy;
+	Terrain3DGeneratedTexture m_generatedFarHeightDummy;
+	Terrain3DGeneratedTexture m_generatedFarColorDummy;
+	Terrain3DGeneratedTexture m_generatedSurfaceDummy;
+	Terrain3DGeneratedTexture m_generatedDisplacementDummy;
+	Ref<NoiseTexture2D> m_worldNoiseCache;
 #ifdef DEBUG_ENABLED
 	uint64_t m_szTierUniformPublicationCount[SHADER_TIER_COUNT] = {};
 #endif
+};
+
+struct Terrain3DMaterialShaderConfig {
+	Ref<Shader> m_shader;
+	bool m_bNearShaderReady = false;
+	Ref<Shader> m_szTierShaders[SHADER_TIER_COUNT];
+	Ref<Shader> m_shadowShader;
+	Dictionary m_shaderTemplates;
+	bool m_bRuntimeShaderPackLoaded = false;
+	uint64_t m_nRuntimeShaderPackStateSignature = 0u;
+	String m_szRuntimeShaderPackTierSource[SHADER_TIER_COUNT];
+	String m_runtimeShaderPackBufferSource;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxShaderVariantCacheLimit, false> m_runtimeShaderVariantEntries;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxEditorShaderVariantCacheLimit, false> m_editorShaderVariantEntries;
+	uint64_t m_nRuntimeShaderVariantSourceBytes = 0;
+	uint64_t m_nEditorShaderVariantSourceBytes = 0;
+	Ref<Shader> m_connectedShaderOverride;
+	Ref<Shader> m_bufferShader;
+	eastl::fixed_vector<t3dShaderVariantEntry_t, s_nMaxBufferShaderVariantCacheLimit, false> m_bufferShaderVariantEntries;
+	uint64_t m_nBufferShaderVariantSourceBytes = 0;
+	Ref<Shader> m_connectedBufferShaderOverride;
 	uint64_t m_nPrewarmSignature = UINT64_MAX;
 	int m_nShaderVariantCacheLimit = 32;
 	int m_nShaderVariantPrewarmLimit = 8;
@@ -482,40 +466,63 @@ private:
 	bool m_bLastVariantRequestHit = false;
 	bool m_bLastVariantRequestPrewarm = false;
 	uint32_t m_nLastVariantRequestSourceBytes = 0;
-	// PBR Outputs
-	bool m_bOutputAlbedoEnabled = true;
-	bool m_bOutputRoughnessEnabled = true;
-	bool m_bOutputSpecularEnabled = true;
-	bool m_bOutputNormalMapEnabled = true;
-	bool m_bOutputAmbientOcclusionEnabled = true;
+};
 
-	// Overlays
-	bool m_bShowRegionGrid = false;
-	bool m_bShowInstancerGrid = false;
-	bool m_bShowVertexGrid = false;
-	bool m_bShowContours = false;
-	bool m_bShowNavigation = false;
+struct Terrain3DMaterialVtBinding {
+	Terrain3DGeneratedTexture m_generatedRegionMap;
+	uint64_t m_nRegionMapTextureHash = 0u;
+	int m_nRegionMapTextureSize = 0;
+	Terrain3DGeneratedTexture m_generatedLogicalRegionMap;
+	uint64_t m_nLogicalRegionMapTextureHash = 0u;
+	int m_nLogicalRegionMapTextureSize = 0;
+	uint32_t m_nRegionPageTableOwnerGeneration = 0u;
+};
 
-	// Debug Views
-	bool m_bDebugViewCheckered = false;
-	bool m_bDebugViewGrey = false;
-	bool m_bDebugViewHeightmap = false;
-	bool m_bDebugViewJaggedness = false;
-	bool m_bDebugViewAutoshader = false;
-	bool m_bDebugViewControlTexture = false;
-	bool m_bDebugViewControlBlend = false;
-	bool m_bDebugViewControlAngle = false;
-	bool m_bDebugViewControlScale = false;
-	bool m_bDebugViewColormap = false;
-	bool m_bDebugViewRoughmap = false;
-	bool m_bDebugViewDisplacementBuffer = false;
+class Terrain3DMaterial : public Resource {
+	GDCLASS( Terrain3DMaterial, Resource );
+	CLASS_NAME();
 
-	// PBR Views
-	bool m_bPbrViewTexAlbedo = false;
-	bool m_bPbrViewTexHeight = false;
-	bool m_bPbrViewTexNormal = false;
-	bool m_bPbrViewTexAo = false;
-	bool m_bPbrViewTexRough = false;
+
+public: // Constants
+	// Controls the compile-time shader permutation cache. Feature modules
+	// are gated by preprocessor defines and resolved through standard shader includes.
+	// High-level profiles exposed by the Terrain3D editor sidebar. CUSTOM keeps
+	// every individual hotpath control available. The other profiles assign a
+	// bounded group of compile-time modes and then compile/cache that exact path.
+	// Independently compiled clipmap shader tiers. These are internal runtime
+	// materials, not user-facing material resources. Near preserves the selected
+	// surface model, middle resolves only control/color/derived-normal data, and
+	// far uses the coarse world atlases.
+	// Controls terrain control-map and normal interpolation. Static modes remove
+	// the distance-dependent bilinear branch from the generated fragment shader.
+	// Controls the final terrain geometric normal source. Static modes remove the
+	// public flat_terrain_normals uniform branch.
+	// Controls regional color/wetness filtering. AUTO uses one hardware-filtered
+	// sample inside a region and exact four-corner sampling only at layer edges.
+	// Controls steep-surface UV projection. SHARED uses the final fragment terrain
+	// normal for all material corners; EXACT evaluates each corner independently.
+	// Controls whether tessellation displacement is sampled again in the fragment
+	// material path for height blending/AO suppression.
+	// Controls whether the material surface array is fetched. AUTO retains the
+	// fetch only when an enabled PBR output consumes normal/roughness/AO data.
+	// Controls whether terrain texture arrays participate in the surface pass.
+	// SILHOUETTE preserves all authored texture/control data while compiling the
+	// material texture sampling path out of the terrain shaders.
+	// Selects compile-time Godot spatial render modes and lighting frequency.
+	// Near, middle, and far rendering share one semantic quality schema.
+	// Each tier maps these choices onto a tier-appropriate implementation rather
+	// than exposing the legacy Near shader internals directly.
+	// Detiling quality/cost. DISCRETE_8 replaces the sine hash plus per-material
+	// sin/cos pair with an integer hash and an eight-entry rotation table.
+	// Dynamic preserves the public uniforms. The static modes remove both world
+	// noise source branches from the compiled shader.
+private:
+	Terrain3D *m_pTerrain = NULL;
+
+	Terrain3DMaterialAuthoringState m_authoringState;
+	Terrain3DMaterialRuntimeState m_runtimeState;
+	Terrain3DMaterialShaderConfig m_shaderConfig;
+	Terrain3DMaterialVtBinding m_vtBinding;
 
 	// Functions
 	void preloadShaders( void );
@@ -605,7 +612,7 @@ private:
 	t3dPageTableBuildResult_t prepareRegionPageTables( void );
 	void setShaderParameters( const Dictionary &rDict );
 	EA_FORCE_INLINE Dictionary getShaderParameters( void ) const {
-		return m_shaderParams;
+		return m_authoringState.m_shaderParams;
 	}
 
 public:
@@ -625,7 +632,7 @@ public:
 		return m_pTerrain;
 	}
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
-		return m_nRdPublicationGeneration;
+		return m_runtimeState.m_nRdPublicationGeneration;
 	}
 	void uninitialize( Terrain3D *pTerrain );
 	void destroy( void );
@@ -633,163 +640,163 @@ public:
 	void update( const uint32_t nFlags = UNIFORMS_ONLY );
 	void updateEditorOverlay( void );
 	EA_FORCE_INLINE bool isRenderShaderReady( void ) const {
-		return m_bNearShaderReady && m_shader.is_valid() && m_shader->get_rid().is_valid();
+		return m_shaderConfig.m_bNearShaderReady && m_shaderConfig.m_shader.is_valid() && m_shaderConfig.m_shader->get_rid().is_valid();
 	}
 	void updateRegionPageTable( void );
 	EA_FORCE_INLINE bool isRegionPageTableValid( void ) const {
-		return m_generatedRegionMap.getRid().is_valid() && m_generatedLogicalRegionMap.getRid().is_valid() && m_nRegionMapTextureSize > 0
-		        && m_nLogicalRegionMapTextureSize == m_nRegionMapTextureSize;
+		return m_vtBinding.m_generatedRegionMap.getRid().is_valid() && m_vtBinding.m_generatedLogicalRegionMap.getRid().is_valid()
+		        && m_vtBinding.m_nRegionMapTextureSize > 0
+		        && m_vtBinding.m_nLogicalRegionMapTextureSize == m_vtBinding.m_nRegionMapTextureSize;
 	}
 	void updateFarAtlasTextures( void );
-	void updateRuntimeMaterialLayerMap( void );
 	RID getShaderRidForTier( const t3dShaderTier_t tier ) const {
-		if ( tier <= SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || m_szTierShaders[tier].is_null() ) {
+		if ( tier <= SHADER_TIER_NEAR || tier >= SHADER_TIER_COUNT || m_shaderConfig.m_szTierShaders[tier].is_null() ) {
 			return getShaderRid();
 		}
-		return m_szTierShaders[tier]->get_rid();
+		return m_shaderConfig.m_szTierShaders[tier]->get_rid();
 	}
 	EA_FORCE_INLINE RID getShaderRid( void ) const {
-		return m_shader.is_valid() ? m_shader->get_rid() : RID();
+		return m_shaderConfig.m_shader.is_valid() ? m_shaderConfig.m_shader->get_rid() : RID();
 	}
 
 	EA_FORCE_INLINE RID getBufferShaderRid( void ) const {
-		return m_bufferShader.is_valid() ? m_bufferShader->get_rid() : RID();
+		return m_shaderConfig.m_bufferShader.is_valid() ? m_shaderConfig.m_bufferShader->get_rid() : RID();
 	}
 
 	// Material settings
 	void setDisplacementScale( const real_t fDisplacementScale );
 	EA_FORCE_INLINE real_t getDisplacementScale( void ) const {
-		return m_fDisplacementScale;
+		return m_authoringState.m_fDisplacementScale;
 	}
 	void setDisplacementSharpness( const real_t fDisplacementSharpness );
 	EA_FORCE_INLINE real_t getDisplacementSharpness( void ) const {
-		return m_fDisplacementSharpness;
+		return m_authoringState.m_fDisplacementSharpness;
 	}
 	void setWorldBackground( const t3dWorldBackground_t background );
 	EA_FORCE_INLINE t3dWorldBackground_t getWorldBackground( void ) const {
-		return m_worldBackground;
+		return m_authoringState.m_worldBackground;
 	}
 	// Shared 11-row quality-tier schema.
 	void setNearTextureFiltering( t3dTextureFiltering_t filtering );
 	EA_FORCE_INLINE t3dTextureFiltering_t getNearTextureFiltering( void ) const {
-		return m_nearQuality.m_textureFiltering;
+		return m_authoringState.m_nearQuality.m_textureFiltering;
 	}
 	void setNearMaterialSamplingQuality( t3dMaterialSamplingQuality_t eQuality );
 	EA_FORCE_INLINE t3dMaterialSamplingQuality_t getNearMaterialSamplingQuality( void ) const {
-		return m_nearQuality.m_materialSamplingQuality;
+		return m_authoringState.m_nearQuality.m_materialSamplingQuality;
 	}
 	void setNearTerrainNormalQuality( t3dTerrainNormalQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainNormalQuality_t getNearTerrainNormalQuality( void ) const {
-		return m_nearQuality.m_terrainNormalQuality;
+		return m_authoringState.m_nearQuality.m_terrainNormalQuality;
 	}
 	void setNearTerrainColorQuality( t3dTerrainColorQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainColorQuality_t getNearTerrainColorQuality( void ) const {
-		return m_nearQuality.m_terrainColorQuality;
+		return m_authoringState.m_nearQuality.m_terrainColorQuality;
 	}
 	void setNearSurfaceResponseQuality( t3dSurfaceResponseQuality_t eQuality );
 	EA_FORCE_INLINE t3dSurfaceResponseQuality_t getNearSurfaceResponseQuality( void ) const {
-		return m_nearQuality.m_surfaceResponseQuality;
+		return m_authoringState.m_nearQuality.m_surfaceResponseQuality;
 	}
 	void setNearTextureSurfaceMode( t3dTextureSurfaceMode_t mode );
 	EA_FORCE_INLINE t3dTextureSurfaceMode_t getNearTextureSurfaceMode( void ) const {
-		return m_nearQuality.m_textureSurfaceMode;
+		return m_authoringState.m_nearQuality.m_textureSurfaceMode;
 	}
 	void setNearLightingModel( t3dTierLightingModel_t model );
 	EA_FORCE_INLINE t3dTierLightingModel_t getNearLightingModel( void ) const {
-		return m_nearQuality.m_lightingModel;
+		return m_authoringState.m_nearQuality.m_lightingModel;
 	}
 	void setNearDetilingQuality( t3dTierDetilingQuality_t eQuality );
 	EA_FORCE_INLINE t3dTierDetilingQuality_t getNearDetilingQuality( void ) const {
-		return m_nearQuality.m_detilingQuality;
+		return m_authoringState.m_nearQuality.m_detilingQuality;
 	}
 	void setNearAuthoredColorContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getNearAuthoredColorContribution( void ) const {
-		return m_nearQuality.m_fAuthoredColorContribution;
+		return m_authoringState.m_nearQuality.m_fAuthoredColorContribution;
 	}
 	void setNearWetnessContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getNearWetnessContribution( void ) const {
-		return m_nearQuality.m_fWetnessContribution;
+		return m_authoringState.m_nearQuality.m_fWetnessContribution;
 	}
 	void setNearMaterialLodBias( real_t fBias );
 	EA_FORCE_INLINE real_t getNearMaterialLodBias( void ) const {
-		return m_nearQuality.m_fMaterialLodBias;
+		return m_authoringState.m_nearQuality.m_fMaterialLodBias;
 	}
 
 	void setMiddleMaterialSamplingQuality( t3dMaterialSamplingQuality_t eQuality );
 	EA_FORCE_INLINE t3dMaterialSamplingQuality_t getMiddleMaterialSamplingQuality( void ) const {
-		return m_middleQuality.m_materialSamplingQuality;
+		return m_authoringState.m_middleQuality.m_materialSamplingQuality;
 	}
 	EA_FORCE_INLINE void setMiddleSurfaceSource( t3dMiddleSurfaceSource_t eSource ) {
 		setMiddleMaterialSamplingQuality( eSource == MIDDLE_SURFACE_BAKED_COMPOSITE ? MATERIAL_SAMPLING_FAST : MATERIAL_SAMPLING_FULL );
 	}
 	EA_FORCE_INLINE t3dMiddleSurfaceSource_t getMiddleSurfaceSource( void ) const {
-		return m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? MIDDLE_SURFACE_BAKED_COMPOSITE
-		                                                                           : MIDDLE_SURFACE_RUNTIME_MATERIAL;
+		return m_authoringState.m_middleQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? MIDDLE_SURFACE_BAKED_COMPOSITE
+		                                                                                            : MIDDLE_SURFACE_RUNTIME_MATERIAL;
 	}
 	void setMiddleTerrainNormalQuality( t3dTerrainNormalQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainNormalQuality_t getMiddleTerrainNormalQuality( void ) const {
-		return m_middleQuality.m_terrainNormalQuality;
+		return m_authoringState.m_middleQuality.m_terrainNormalQuality;
 	}
 	void setMiddleTerrainColorQuality( t3dTerrainColorQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainColorQuality_t getMiddleTerrainColorQuality( void ) const {
-		return m_middleQuality.m_terrainColorQuality;
+		return m_authoringState.m_middleQuality.m_terrainColorQuality;
 	}
 	void setMiddleSurfaceResponseQuality( t3dSurfaceResponseQuality_t eQuality );
 	EA_FORCE_INLINE t3dSurfaceResponseQuality_t getMiddleSurfaceResponseQuality( void ) const {
-		return m_middleQuality.m_surfaceResponseQuality;
+		return m_authoringState.m_middleQuality.m_surfaceResponseQuality;
 	}
 	void setMiddleLightingModel( t3dTierLightingModel_t model );
 	EA_FORCE_INLINE t3dTierLightingModel_t getMiddleLightingModel( void ) const {
-		return m_middleQuality.m_lightingModel;
+		return m_authoringState.m_middleQuality.m_lightingModel;
 	}
 	void setMiddleDetilingQuality( t3dTierDetilingQuality_t eQuality );
 	EA_FORCE_INLINE t3dTierDetilingQuality_t getMiddleDetilingQuality( void ) const {
-		return m_middleQuality.m_detilingQuality;
+		return m_authoringState.m_middleQuality.m_detilingQuality;
 	}
 	void setMiddleAuthoredColorContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getMiddleAuthoredColorContribution( void ) const {
-		return m_middleQuality.m_fAuthoredColorContribution;
+		return m_authoringState.m_middleQuality.m_fAuthoredColorContribution;
 	}
 	void setMiddleWetnessContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getMiddleWetnessContribution( void ) const {
-		return m_middleQuality.m_fWetnessContribution;
+		return m_authoringState.m_middleQuality.m_fWetnessContribution;
 	}
 
 	void setFarMaterialSamplingQuality( t3dMaterialSamplingQuality_t eQuality );
 	EA_FORCE_INLINE t3dMaterialSamplingQuality_t getFarMaterialSamplingQuality( void ) const {
-		return m_farQuality.m_materialSamplingQuality;
+		return m_authoringState.m_farQuality.m_materialSamplingQuality;
 	}
 	void setFarTerrainNormalQuality( t3dTerrainNormalQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainNormalQuality_t getFarTerrainNormalQuality( void ) const {
-		return m_farQuality.m_terrainNormalQuality;
+		return m_authoringState.m_farQuality.m_terrainNormalQuality;
 	}
 	void setFarTerrainColorQuality( t3dTerrainColorQuality_t eQuality );
 	EA_FORCE_INLINE t3dTerrainColorQuality_t getFarTerrainColorQuality( void ) const {
-		return m_farQuality.m_terrainColorQuality;
+		return m_authoringState.m_farQuality.m_terrainColorQuality;
 	}
 	void setFarSurfaceResponseQuality( t3dSurfaceResponseQuality_t eQuality );
 	EA_FORCE_INLINE t3dSurfaceResponseQuality_t getFarSurfaceResponseQuality( void ) const {
-		return m_farQuality.m_surfaceResponseQuality;
+		return m_authoringState.m_farQuality.m_surfaceResponseQuality;
 	}
 	void setFarLightingModel( t3dTierLightingModel_t model );
 	EA_FORCE_INLINE t3dTierLightingModel_t getFarLightingModel( void ) const {
-		return m_farQuality.m_lightingModel;
+		return m_authoringState.m_farQuality.m_lightingModel;
 	}
 	void setFarDetilingQuality( t3dTierDetilingQuality_t eQuality );
 	EA_FORCE_INLINE t3dTierDetilingQuality_t getFarDetilingQuality( void ) const {
-		return m_farQuality.m_detilingQuality;
+		return m_authoringState.m_farQuality.m_detilingQuality;
 	}
 	void setFarAuthoredColorContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getFarAuthoredColorContribution( void ) const {
-		return m_farQuality.m_fAuthoredColorContribution;
+		return m_authoringState.m_farQuality.m_fAuthoredColorContribution;
 	}
 	void setFarWetnessContribution( real_t fContribution );
 	EA_FORCE_INLINE real_t getFarWetnessContribution( void ) const {
-		return m_farQuality.m_fWetnessContribution;
+		return m_authoringState.m_farQuality.m_fWetnessContribution;
 	}
 	void setFarMaterialLodBias( real_t fBias );
 	EA_FORCE_INLINE real_t getFarMaterialLodBias( void ) const {
-		return m_farQuality.m_fMaterialLodBias;
+		return m_authoringState.m_farQuality.m_fMaterialLodBias;
 	}
 
 	EA_FORCE_INLINE String getNearRangeContext( void ) const {
@@ -824,39 +831,39 @@ public:
 	// canonical t3dTierQualityConfig_t rows above.
 	void setTextureFiltering( const t3dTextureFiltering_t filtering );
 	EA_FORCE_INLINE t3dTextureFiltering_t getTextureFiltering( void ) const {
-		return m_nearQuality.m_textureFiltering;
+		return m_authoringState.m_nearQuality.m_textureFiltering;
 	}
 	void setShaderVariantMode( const t3dShaderVariantMode_t mode );
 	EA_FORCE_INLINE t3dShaderVariantMode_t getShaderVariantMode( void ) const {
-		return m_shaderVariantMode;
+		return m_authoringState.m_shaderVariantMode;
 	}
 	void setShaderVariantCacheLimit( const int nLimit );
 	EA_FORCE_INLINE int getShaderVariantCacheLimit( void ) const {
-		return m_nShaderVariantCacheLimit;
+		return m_shaderConfig.m_nShaderVariantCacheLimit;
 	}
 	void setShaderVariantPrewarmLimit( const int nLimit );
 	EA_FORCE_INLINE int getShaderVariantPrewarmLimit( void ) const {
-		return m_nShaderVariantPrewarmLimit;
+		return m_shaderConfig.m_nShaderVariantPrewarmLimit;
 	}
 	void setShaderVariantSourceBudgetMb( const int nBudgetMb );
 	EA_FORCE_INLINE int getShaderVariantSourceBudgetMb( void ) const {
-		return m_nShaderVariantSourceBudgetMb;
+		return m_shaderConfig.m_nShaderVariantSourceBudgetMb;
 	}
 	void setEffectiveShaderVariantSourceBudgetMb( int nBudgetMb );
 	EA_FORCE_INLINE int getEffectiveShaderVariantSourceBudgetMb( void ) const {
-		return m_nShaderVariantEffectiveSourceBudgetMb;
+		return m_shaderConfig.m_nShaderVariantEffectiveSourceBudgetMb;
 	}
 	EA_FORCE_INLINE size_t getShaderVariantSourceBytesNative( void ) const {
 		return getShaderVariantSourceBytesRaw();
 	}
 	void setShaderPerformancePreset( const t3dShaderPerformancePreset_t preset );
 	EA_FORCE_INLINE t3dShaderPerformancePreset_t getShaderPerformancePreset( void ) const {
-		return m_shaderPerformancePreset;
+		return m_authoringState.m_shaderPerformancePreset;
 	}
 	// Middle tier quality. Existing unprefixed quality properties remain the Near tier.
 	void setMiddleTextureFiltering( t3dTextureFiltering_t filtering );
 	EA_FORCE_INLINE t3dTextureFiltering_t getMiddleTextureFiltering( void ) const {
-		return m_middleQuality.m_textureFiltering;
+		return m_authoringState.m_middleQuality.m_textureFiltering;
 	}
 	void setMiddleTerrainSamplingMode( t3dTerrainSamplingMode_t mode );
 	t3dTerrainSamplingMode_t getMiddleTerrainSamplingMode( void ) const;
@@ -868,7 +875,7 @@ public:
 	t3dSurfaceDataMode_t getMiddleSurfaceDataMode( void ) const;
 	void setMiddleTextureSurfaceMode( t3dTextureSurfaceMode_t mode );
 	EA_FORCE_INLINE t3dTextureSurfaceMode_t getMiddleTextureSurfaceMode( void ) const {
-		return m_middleQuality.m_textureSurfaceMode;
+		return m_authoringState.m_middleQuality.m_textureSurfaceMode;
 	}
 	void setMiddleTerrainShadingMode( t3dTerrainShadingMode_t mode );
 	t3dTerrainShadingMode_t getMiddleTerrainShadingMode( void ) const;
@@ -876,121 +883,123 @@ public:
 	t3dDetilingMode_t getMiddleDetilingMode( void ) const;
 	void setMiddleAutoShaderEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getMiddleAutoShaderEnabled( void ) const {
-		return m_bAutoShaderEnabled;
+		return m_authoringState.m_bAutoShaderEnabled;
 	}
 	void setMiddleAuthoredColorEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getMiddleAuthoredColorEnabled( void ) const {
-		return m_middleQuality.m_fAuthoredColorContribution > 0.0f;
+		return m_authoringState.m_middleQuality.m_fAuthoredColorContribution > 0.0f;
 	}
 	void setMiddleWetnessEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getMiddleWetnessEnabled( void ) const {
-		return m_middleQuality.m_fWetnessContribution > 0.0f;
+		return m_authoringState.m_middleQuality.m_fWetnessContribution > 0.0f;
 	}
 	void setMiddleMaterialLodBias( real_t fBias );
 	EA_FORCE_INLINE real_t getMiddleMaterialLodBias( void ) const {
-		return m_middleQuality.m_fMaterialLodBias;
+		return m_authoringState.m_middleQuality.m_fMaterialLodBias;
 	}
 
 	// Far tier quality. The far shader intentionally remains a dominant-material, one-albedo-sample path.
 	void setFarTextureFiltering( t3dTextureFiltering_t filtering );
 	EA_FORCE_INLINE t3dTextureFiltering_t getFarTextureFiltering( void ) const {
-		return m_farQuality.m_textureFiltering;
+		return m_authoringState.m_farQuality.m_textureFiltering;
 	}
 	void setFarTextureSurfaceMode( t3dTextureSurfaceMode_t mode );
 	EA_FORCE_INLINE t3dTextureSurfaceMode_t getFarTextureSurfaceMode( void ) const {
-		return m_farQuality.m_textureSurfaceMode;
+		return m_authoringState.m_farQuality.m_textureSurfaceMode;
 	}
 	void setFarTerrainShadingMode( t3dTerrainShadingMode_t mode );
 	t3dTerrainShadingMode_t getFarTerrainShadingMode( void ) const;
 	void setFarMaterialLod( real_t fLod );
 	EA_FORCE_INLINE real_t getFarMaterialLod( void ) const {
-		return m_farQuality.m_fMaterialLodBias + 4.0f;
+		return m_authoringState.m_farQuality.m_fMaterialLodBias + 4.0f;
 	}
 	void setFarAuthoredColorEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getFarAuthoredColorEnabled( void ) const {
-		return m_farQuality.m_fAuthoredColorContribution > 0.0f;
+		return m_authoringState.m_farQuality.m_fAuthoredColorContribution > 0.0f;
 	}
 	void setFarWetnessEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool getFarWetnessEnabled( void ) const {
-		return m_farQuality.m_fWetnessContribution > 0.0f;
+		return m_authoringState.m_farQuality.m_fWetnessContribution > 0.0f;
 	}
 
 	void setTerrainSamplingMode( const t3dTerrainSamplingMode_t mode );
 	EA_FORCE_INLINE t3dTerrainSamplingMode_t getTerrainSamplingMode( void ) const {
-		return m_nearQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE
-		                                                                         : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
+		return m_authoringState.m_nearQuality.m_materialSamplingQuality == MATERIAL_SAMPLING_FAST ? TERRAIN_SAMPLING_SINGLE_SAMPLE
+		                                                                                          : TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED;
 	}
 	void setTerrainNormalMode( const t3dTerrainNormalMode_t mode );
 	EA_FORCE_INLINE t3dTerrainNormalMode_t getTerrainNormalMode( void ) const {
-		return m_nearQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
-		                                                                               : TERRAIN_NORMAL_DERIVED_TEXTURE;
+		return m_authoringState.m_nearQuality.m_terrainNormalQuality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? TERRAIN_NORMAL_GEOMETRY_DERIVATIVE
+		                                                                                                : TERRAIN_NORMAL_DERIVED_TEXTURE;
 	}
 	void setColorSamplingMode( const t3dColorSamplingMode_t mode );
 	EA_FORCE_INLINE t3dColorSamplingMode_t getColorSamplingMode( void ) const {
-		return m_nearQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_FAST ? COLOR_SAMPLING_HARDWARE_FILTERED
-		                                                                         : COLOR_SAMPLING_EXACT_4_TAP;
+		return m_authoringState.m_nearQuality.m_terrainColorQuality == TERRAIN_COLOR_QUALITY_FAST ? COLOR_SAMPLING_HARDWARE_FILTERED
+		                                                                                          : COLOR_SAMPLING_EXACT_4_TAP;
 	}
 	void setProjectionMode( const t3dProjectionMode_t mode );
 	EA_FORCE_INLINE t3dProjectionMode_t getProjectionMode( void ) const {
-		return m_projectionMode;
+		return m_authoringState.m_projectionMode;
 	}
 	void setTessellationMaterialMode( const t3dTessellationMaterialMode_t mode );
 	EA_FORCE_INLINE t3dTessellationMaterialMode_t getTessellationMaterialMode( void ) const {
-		return m_tessellationMaterialMode;
+		return m_authoringState.m_tessellationMaterialMode;
 	}
 	void setSurfaceDataMode( const t3dSurfaceDataMode_t mode );
 	EA_FORCE_INLINE t3dSurfaceDataMode_t getSurfaceDataMode( void ) const {
-		return m_nearQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_SIMPLE ? SURFACE_DATA_ALBEDO_ONLY : SURFACE_DATA_FULL;
+		return m_authoringState.m_nearQuality.m_surfaceResponseQuality == SURFACE_RESPONSE_SIMPLE ? SURFACE_DATA_ALBEDO_ONLY
+		                                                                                          : SURFACE_DATA_FULL;
 	}
 	void setTextureSurfaceMode( const t3dTextureSurfaceMode_t mode );
 	EA_FORCE_INLINE t3dTextureSurfaceMode_t getTextureSurfaceMode( void ) const {
-		return m_nearQuality.m_textureSurfaceMode;
+		return m_authoringState.m_nearQuality.m_textureSurfaceMode;
 	}
 	void setTerrainShadingMode( const t3dTerrainShadingMode_t mode );
 	t3dTerrainShadingMode_t getTerrainShadingMode( void ) const {
-		return m_nearQuality.m_lightingModel == TIER_LIGHTING_UNSHADED
+		return m_authoringState.m_nearQuality.m_lightingModel == TIER_LIGHTING_UNSHADED
 		        ? SHADING_UNSHADED
-		        : ( m_nearQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG
+		        : ( m_authoringState.m_nearQuality.m_lightingModel == TIER_LIGHTING_BLINN_PHONG
 		                          ? SHADING_XBOX_360_BLINN_PHONG
-		                          : ( m_nearQuality.m_lightingModel == TIER_LIGHTING_PBR ? SHADING_BURLEY_GGX
-		                                                                                 : SHADING_LAMBERT_DIFFUSE_ONLY ) );
+		                          : ( m_authoringState.m_nearQuality.m_lightingModel == TIER_LIGHTING_PBR
+		                                            ? SHADING_BURLEY_GGX
+		                                            : SHADING_LAMBERT_DIFFUSE_ONLY ) );
 	}
 	void setDetilingMode( const t3dDetilingMode_t mode );
 	EA_FORCE_INLINE t3dDetilingMode_t getDetilingMode( void ) const {
-		return m_nearQuality.m_detilingQuality == TIER_DETILING_DISABLED ? DETILING_DISABLED : DETILING_DISCRETE_8;
+		return m_authoringState.m_nearQuality.m_detilingQuality == TIER_DETILING_DISABLED ? DETILING_DISABLED : DETILING_DISCRETE_8;
 	}
 	void setWorldNoiseShaderMode( const t3dWorldNoiseShaderMode_t mode );
 	EA_FORCE_INLINE t3dWorldNoiseShaderMode_t getWorldNoiseShaderMode( void ) const {
-		return m_worldNoiseShaderMode;
+		return m_authoringState.m_worldNoiseShaderMode;
 	}
 	void prewarmShaderVariants( void );
 	Dictionary cookRuntimeShaderPack( void );
 	bool loadRuntimeShaderPack( void );
 	EA_FORCE_INLINE bool hasRuntimeShaderPack( void ) const {
-		return m_bRuntimeShaderPackLoaded;
+		return m_shaderConfig.m_bRuntimeShaderPackLoaded;
 	}
 	void clearShaderVariantCache( void );
 	EA_FORCE_INLINE int getShaderVariantCount( void ) const {
-		return ( int )( m_runtimeShaderVariantEntries.size() + m_editorShaderVariantEntries.size() );
+		return ( int )( m_shaderConfig.m_runtimeShaderVariantEntries.size() + m_shaderConfig.m_editorShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getRuntimeShaderVariantCount( void ) const {
-		return ( int )( m_runtimeShaderVariantEntries.size() );
+		return ( int )( m_shaderConfig.m_runtimeShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getEditorShaderVariantCount( void ) const {
-		return ( int )( m_editorShaderVariantEntries.size() );
+		return ( int )( m_shaderConfig.m_editorShaderVariantEntries.size() );
 	}
 	EA_FORCE_INLINE int getBufferShaderVariantCount( void ) const {
-		return ( int )( m_bufferShaderVariantEntries.size() );
+		return ( int )( m_shaderConfig.m_bufferShaderVariantEntries.size() );
 	}
 	int getSpeculativeShaderVariantCount( void ) const;
 	EA_FORCE_INLINE int64_t getShaderVariantSourceBytes( void ) const {
 		return ( int64_t )( getShaderVariantSourceBytesRaw() );
 	}
 	EA_FORCE_INLINE int getLastPrewarmVariantCount( void ) const {
-		return m_nLastPrewarmVariantCount;
+		return m_shaderConfig.m_nLastPrewarmVariantCount;
 	}
 	EA_FORCE_INLINE int getLastPrewarmSkippedCount( void ) const {
-		return m_nLastPrewarmSkippedCount;
+		return m_shaderConfig.m_nLastPrewarmSkippedCount;
 	}
 	EA_FORCE_INLINE int64_t getTheoreticalShaderVariantCount( void ) const {
 		return 1492992000LL;
@@ -1005,16 +1014,16 @@ public:
 	Variant getTierRegressionMaterialParam( const int nTier, const StringName &rName ) const;
 #endif
 	EA_FORCE_INLINE uint64_t getShaderUpdateCount( void ) const {
-		return m_nShaderUpdateCount;
+		return m_shaderConfig.m_nShaderUpdateCount;
 	}
 	EA_FORCE_INLINE uint64_t getShaderVariantCreationCount( void ) const {
-		return m_nVariantCreationsTotal;
+		return m_shaderConfig.m_nVariantCreationsTotal;
 	}
 	EA_FORCE_INLINE uint64_t getShaderSourceSubmissionUsecLast( void ) const {
-		return m_nVariantSourceSubmissionUsecLast;
+		return m_shaderConfig.m_nVariantSourceSubmissionUsecLast;
 	}
 	EA_FORCE_INLINE uint64_t getShaderUpdateUsecLast( void ) const {
-		return m_nShaderUpdateUsecLast;
+		return m_shaderConfig.m_nShaderUpdateUsecLast;
 	}
 	void setPackedPbrSingleFetch( const bool bEnabled );
 	EA_FORCE_INLINE bool getPackedPbrSingleFetch( void ) const {
@@ -1025,37 +1034,37 @@ public:
 	// not alter the serialized performance preset or dirty the material resource.
 	void setAutoShaderEnabledTransient( const bool bEnabled );
 	EA_FORCE_INLINE bool getAutoShaderEnabled( void ) const {
-		return m_bAutoShaderEnabled;
+		return m_authoringState.m_bAutoShaderEnabled;
 	}
 	void setDualScalingEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getDualScalingEnabled( void ) const {
-		return m_bDualScalingEnabled;
+		return m_authoringState.m_bDualScalingEnabled;
 	}
 	void setMacroVariationEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getMacroVariationEnabled( void ) const {
-		return m_bMacroVariationEnabled;
+		return m_authoringState.m_bMacroVariationEnabled;
 	}
 	void setProjectionEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getProjectionEnabled( void ) const {
-		return m_projectionMode != PROJECTION_DISABLED;
+		return m_authoringState.m_projectionMode != PROJECTION_DISABLED;
 	}
 
 	void setShaderOverrideEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool isShaderOverrideEnabled( void ) const {
-		return m_bShaderOverrideEnabled;
+		return m_authoringState.m_bShaderOverrideEnabled;
 	}
 	void setShaderOverride( const Ref<Shader> &rShader );
 	EA_FORCE_INLINE Ref<Shader> getShaderOverride( void ) const {
-		return m_shaderOverride;
+		return m_authoringState.m_shaderOverride;
 	}
 
 	void setBufferShaderOverrideEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool isBufferShaderOverrideEnabled( void ) const {
-		return m_bBufferShaderOverrideEnabled;
+		return m_authoringState.m_bBufferShaderOverrideEnabled;
 	}
 	void setBufferShaderOverride( const Ref<Shader> &rShader );
 	EA_FORCE_INLINE Ref<Shader> getBufferShaderOverride( void ) const {
-		return m_bufferShaderOverride;
+		return m_authoringState.m_bufferShaderOverride;
 	}
 
 	void setShaderParam( const StringName &rName, const Variant &rValue );
@@ -1064,117 +1073,117 @@ public:
 	// PBR outputs
 	void setOutputAlbedoEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getOutputAlbedoEnabled( void ) const {
-		return m_bOutputAlbedoEnabled;
+		return m_authoringState.m_bOutputAlbedoEnabled;
 	}
 	void setOutputRoughnessEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getOutputRoughnessEnabled( void ) const {
-		return m_bOutputRoughnessEnabled;
+		return m_authoringState.m_bOutputRoughnessEnabled;
 	}
 	void setOutputSpecularEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getOutputSpecularEnabled( void ) const {
-		return m_bOutputSpecularEnabled;
+		return m_authoringState.m_bOutputSpecularEnabled;
 	}
 	void setOutputNormalMapEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getOutputNormalMapEnabled( void ) const {
-		return m_bOutputNormalMapEnabled;
+		return m_authoringState.m_bOutputNormalMapEnabled;
 	}
 	void setOutputAmbientOcclusionEnabled( const bool bEnabled );
 	EA_FORCE_INLINE bool getOutputAmbientOcclusionEnabled( void ) const {
-		return m_bOutputAmbientOcclusionEnabled;
+		return m_authoringState.m_bOutputAmbientOcclusionEnabled;
 	}
 
 	// Overlays
 	void setShowRegionGrid( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowRegionGrid( void ) const {
-		return m_bShowRegionGrid;
+		return m_authoringState.m_bShowRegionGrid;
 	}
 	void setShowInstancerGrid( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowInstancerGrid( void ) const {
-		return m_bShowInstancerGrid;
+		return m_authoringState.m_bShowInstancerGrid;
 	}
 	void setShowVertexGrid( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowVertexGrid( void ) const {
-		return m_bShowVertexGrid;
+		return m_authoringState.m_bShowVertexGrid;
 	}
 	void setShowContours( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowContours( void ) const {
-		return m_bShowContours;
+		return m_authoringState.m_bShowContours;
 	}
 	void setShowNavigation( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowNavigation( void ) const {
-		return m_bShowNavigation;
+		return m_authoringState.m_bShowNavigation;
 	}
 
 	// Debug views
 	void setShowCheckered( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowCheckered( void ) const {
-		return m_bDebugViewCheckered;
+		return m_authoringState.m_bDebugViewCheckered;
 	}
 	void setShowGrey( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowGrey( void ) const {
-		return m_bDebugViewGrey;
+		return m_authoringState.m_bDebugViewGrey;
 	}
 	void setShowHeightmap( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowHeightmap( void ) const {
-		return m_bDebugViewHeightmap;
+		return m_authoringState.m_bDebugViewHeightmap;
 	}
 	void setShowJaggedness( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowJaggedness( void ) const {
-		return m_bDebugViewJaggedness;
+		return m_authoringState.m_bDebugViewJaggedness;
 	}
 	void setShowAutoshader( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowAutoshader( void ) const {
-		return m_bDebugViewAutoshader;
+		return m_authoringState.m_bDebugViewAutoshader;
 	}
 	void setShowControlTexture( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowControlTexture( void ) const {
-		return m_bDebugViewControlTexture;
+		return m_authoringState.m_bDebugViewControlTexture;
 	}
 	void setShowControlBlend( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowControlBlend( void ) const {
-		return m_bDebugViewControlBlend;
+		return m_authoringState.m_bDebugViewControlBlend;
 	}
 	void setShowControlAngle( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowControlAngle( void ) const {
-		return m_bDebugViewControlAngle;
+		return m_authoringState.m_bDebugViewControlAngle;
 	}
 	void setShowControlScale( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowControlScale( void ) const {
-		return m_bDebugViewControlScale;
+		return m_authoringState.m_bDebugViewControlScale;
 	}
 	void setShowColormap( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowColormap( void ) const {
-		return m_bDebugViewColormap;
+		return m_authoringState.m_bDebugViewColormap;
 	}
 	void setShowRoughmap( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowRoughmap( void ) const {
-		return m_bDebugViewRoughmap;
+		return m_authoringState.m_bDebugViewRoughmap;
 	}
 	void setShowDisplacementBuffer( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowDisplacementBuffer( void ) const {
-		return m_bDebugViewDisplacementBuffer;
+		return m_authoringState.m_bDebugViewDisplacementBuffer;
 	}
 
 	// PBR Views
 	void setShowTextureAlbedo( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowTextureAlbedo( void ) const {
-		return m_bPbrViewTexAlbedo;
+		return m_authoringState.m_bPbrViewTexAlbedo;
 	}
 	void setShowTextureHeight( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowTextureHeight( void ) const {
-		return m_bPbrViewTexHeight;
+		return m_authoringState.m_bPbrViewTexHeight;
 	}
 	void setShowTextureNormal( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowTextureNormal( void ) const {
-		return m_bPbrViewTexNormal;
+		return m_authoringState.m_bPbrViewTexNormal;
 	}
 	void setShowTextureRough( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowTextureRough( void ) const {
-		return m_bPbrViewTexRough;
+		return m_authoringState.m_bPbrViewTexRough;
 	}
 	void setShowTextureAo( const bool bEnabled );
 	EA_FORCE_INLINE bool getShowTextureAo( void ) const {
-		return m_bPbrViewTexAo;
+		return m_authoringState.m_bPbrViewTexAo;
 	}
 
 	Error save( const String &rPath = "" );

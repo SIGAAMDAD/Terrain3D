@@ -19,6 +19,7 @@
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
+#include "rendering/rd/infrastructure/terrain_3d_local_compute_buffer_service.h"
 
 // Compute acceleration has two explicit device domains:
 // - a local RenderingDevice for CPU-authoritative brush/derived jobs that require readback;
@@ -50,8 +51,7 @@ typedef struct t3dDisplacementRequest_s {
 
 	bool valid( void ) const {
 		return m_shaderSpirv.is_valid() && m_hHeightTexture.is_valid() && m_hControlTexture.is_valid() && m_hDisplacementTexture.is_valid()
-		        && m_nWidth > 0u && m_nHeight > 0u
-		        && m_regionMap.size() == s_nRegionSlots && !m_materialData.is_empty()
+		        && m_nWidth > 0u && m_nHeight > 0u && m_regionMap.size() == s_nRegionSlots && !m_materialData.is_empty()
 		        && !m_pushConstants.is_empty();
 	}
 } t3dDisplacementRequest_t;
@@ -115,31 +115,24 @@ public:
 	// Must execute on the render thread before Terrain3DCompute is destroyed.
 	void shutdownDisplacementResources( void );
 	EA_FORCE_INLINE uint64_t getRetainedLocalGpuBufferBytes( void ) const {
-		uint64_t bytes = m_hBrushBuffer.is_valid() ? m_nBrushCapacity : 0u;
+		uint64_t bytes = m_brushStorage.retainedBytes();
 		for ( uint32_t slot = 0u; slot < s_nDerivedReadbackSlotCount; ++slot ) {
-			if ( m_szDerivedInputBuffer[slot].is_valid() ) {
-				bytes += m_nszDerivedInputCapacity[slot];
-			}
-			if ( m_szDerivedOutputBuffer[slot].is_valid() ) {
-				bytes += m_nszDerivedOutputCapacity[slot];
-			}
+			bytes += m_derivedStorage[slot].retainedBytes();
 		}
 		return bytes;
 	}
+	Terrain3DLocalComputeBufferService::Stats getLocalBufferStats( void ) const { return m_localBuffers.getStats(); }
 
 private:
 	RenderingDevice *m_pRd = NULL;       // Owned local device for readback workloads.
+	Terrain3DLocalComputeBufferService m_localBuffers;
 	RenderingDevice *m_pRenderRd = NULL; // Non-owning global renderer device.
 	t3dPipeline_t m_brushPipeline;
 	t3dPipeline_t m_derivedPipeline;
 	t3dPipeline_t m_displacementPipeline;
 	Ref<RDShaderSPIRV> m_displacementSpirv;
-	RID m_hBrushBuffer;
-
-	RID m_szDerivedInputBuffer[s_nDerivedReadbackSlotCount];
-	RID m_szDerivedOutputBuffer[s_nDerivedReadbackSlotCount];
-	RID m_hBrushUniformSet;
-	RID m_szDerivedUniformSet[s_nDerivedReadbackSlotCount];
+	Terrain3DLocalComputeBufferService::StorageSet m_brushStorage;
+	Terrain3DLocalComputeBufferService::StoragePairSet m_derivedStorage[s_nDerivedReadbackSlotCount];
 	RID m_hDisplacementUniformSet;
 	RID m_hDisplacementRegionBuffer;
 	RID m_hDisplacementMaterialBuffer;
@@ -156,9 +149,6 @@ private:
 	bool m_bPersistentDisplacementBuffers = false;
 	uint32_t m_nDisplacementWidth = 0u;
 	uint32_t m_nDisplacementHeight = 0u;
-	uint32_t m_nBrushCapacity = 0u;
-	uint32_t m_nszDerivedInputCapacity[s_nDerivedReadbackSlotCount]{};
-	uint32_t m_nszDerivedOutputCapacity[s_nDerivedReadbackSlotCount]{};
 	mutable t3dMutex_t m_errorMutex;
 	String m_lastError;
 	bool m_bDeviceAttempted = false;
@@ -171,9 +161,6 @@ private:
 	bool ensureBrushCapacity( uint32_t nBytes );
 	bool ensureDerivedCapacity( uint32_t nSlot, uint32_t nInputBytes, uint32_t nOutputBytes );
 	bool ensureDisplacementResources( uint32_t nWidth, uint32_t nHeight, const Ref<RDShaderSPIRV> &rSpirv );
-	void freeUniformSet( RID &rUniformSet );
-	void freeBuffer( RID &rBuffer );
-	void freePipeline( t3dPipeline_t &rPipeline );
 	void freeRenderUniformSet( RID &rUniformSet );
 	void freeRenderRid( RID &rRid );
 	void freeRenderPipeline( t3dPipeline_t &rPipeline );
@@ -183,7 +170,6 @@ private:
 		t3dScopedLock_t lock( m_errorMutex );
 		m_lastError = rError;
 	}
-	static uint32_t growthCapacity( uint32_t nRequired );
 	static PackedByteArray copyToBytes( const void *pData, size_t nSize );
 };
 

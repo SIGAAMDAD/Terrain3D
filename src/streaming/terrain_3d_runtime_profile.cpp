@@ -14,6 +14,8 @@
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
 #include "rendering/terrain_3d_compute.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
+#include "rendering/rd/vt/terrain_3d_vt_contract.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
 #include "streaming/terrain_3d_performance_profile.h"
@@ -47,12 +49,20 @@ t3dAdaptiveBudgetLimits_t Terrain3D::getRuntimeAdaptiveBudgetLimits( void ) cons
 	limits.m_minimum.m_nInstancerCells = m_nRuntimeAdaptiveMinInstancerCells;
 	limits.m_minimum.m_nNodeLoadRegions = m_nRuntimeAdaptiveMinNodeLoadRegions;
 	limits.m_minimum.m_nNodeUnloadRegions = m_nRuntimeAdaptiveMinNodeUnloadRegions;
+	limits.m_minimum.m_nWorldUploadKb = m_nRuntimeAdaptiveMinWorldUploadKb;
+	limits.m_minimum.m_nWorldClusters = m_nRuntimeAdaptiveMinWorldClusters;
+	limits.m_minimum.m_nVtRequests = m_nRuntimeAdaptiveMinVtRequests;
+	limits.m_minimum.m_nVtAdmissions = m_nRuntimeAdaptiveMinVtAdmissions;
 	limits.m_maximum.m_nGpuPages = m_nGpuRegionUploadBudgetLayers;
 	limits.m_maximum.m_nCpuPages = m_nCpuRegionLoadBudgetLayers;
 	limits.m_maximum.m_nInstancePages = m_nInstanceRegionLoadBudgetPages;
 	limits.m_maximum.m_nInstancerCells = m_nInstancerUpdateCellBudget == 0 ? 65536 : m_nInstancerUpdateCellBudget;
 	limits.m_maximum.m_nNodeLoadRegions = m_nDynamicNodeLoadRegionBudget;
 	limits.m_maximum.m_nNodeUnloadRegions = m_nDynamicNodeUnloadRegionBudget;
+	limits.m_maximum.m_nWorldUploadKb = ( int )m_nWorldUploadBudgetKb;
+	limits.m_maximum.m_nWorldClusters = ( int )m_nWorldClusterUploadBudget;
+	limits.m_maximum.m_nVtRequests = ( int )m_nVtRequestBudget;
+	limits.m_maximum.m_nVtAdmissions = ( int )m_nVtAdmissionBudget;
 	limits.m_nTargetUsec = m_nRuntimeAdaptiveTargetUsec;
 	limits.m_nHardMaxUsec = m_nRuntimeAdaptiveHardMaxUsec;
 	limits.m_nAdjustmentWindowFrames = m_nRuntimeAdaptiveAdjustmentWindowFrames;
@@ -76,6 +86,12 @@ t3dAdaptiveBudgetPressure_t Terrain3D::getRuntimeAdaptiveBudgetPressure( void ) 
 	        effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer && m_pNodeStreamer->isLoadRegionBudgetLimitedLastTick();
 	pressure.m_bNodeUnloadLimited =
 	        effectiveDynamicNodeStreamingEnabled() && m_pNodeStreamer && m_pNodeStreamer->isUnloadRegionBudgetLimitedLastTick();
+	if ( m_pRenderCoordinator ) {
+		const uint64_t nWorldDeferrals = m_pRenderCoordinator->getWorldBudgetDeferralCount();
+		const uint64_t nVtDeferrals = m_pRenderCoordinator->getVirtualTextureBudgetDeferralCount();
+		pressure.m_bWorldLimited = nWorldDeferrals > m_nRuntimeAdaptiveWorldDeferralsSeen;
+		pressure.m_bVtLimited = nVtDeferrals > m_nRuntimeAdaptiveVtDeferralsSeen;
+	}
 	return pressure;
 }
 
@@ -91,6 +107,13 @@ void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 			m_pNodeStreamer->setRuntimeLoadRegionBudgetOverride( -1 );
 			m_pNodeStreamer->setRuntimeUnloadRegionBudgetOverride( -1 );
 		}
+		if ( m_pRenderCoordinator ) {
+			m_pRenderCoordinator->setUnifiedWorldFramePolicy( m_nWorldUploadBudgetKb,
+			        m_nWorldClusterUploadBudget,
+			        m_nVtRequestBudget,
+			        m_nVtAdmissionBudget,
+			        m_bRuntimeBoundaryWorldDeferredLastTick );
+		}
 		return;
 	}
 	const t3dAdaptiveBudgetValues_t &effective = m_nRuntimeAdaptiveBudgetState.m_effective;
@@ -103,6 +126,15 @@ void Terrain3D::applyRuntimeAdaptiveWorkBudgets( void ) {
 	if ( m_pNodeStreamer && effectiveDynamicNodeStreamingEnabled() ) {
 		m_pNodeStreamer->setRuntimeLoadRegionBudgetOverride( effective.m_nNodeLoadRegions );
 		m_pNodeStreamer->setRuntimeUnloadRegionBudgetOverride( effective.m_nNodeUnloadRegions );
+	}
+	if ( m_pRenderCoordinator ) {
+		m_pRenderCoordinator->setUnifiedWorldFramePolicy( ( uint32_t )effective.m_nWorldUploadKb,
+		        ( uint32_t )effective.m_nWorldClusters,
+		        ( uint32_t )effective.m_nVtRequests,
+		        ( uint32_t )effective.m_nVtAdmissions,
+		        m_bRuntimeBoundaryWorldDeferredLastTick );
+		m_nRuntimeAdaptiveWorldDeferralsSeen = m_pRenderCoordinator->getWorldBudgetDeferralCount();
+		m_nRuntimeAdaptiveVtDeferralsSeen = m_pRenderCoordinator->getVirtualTextureBudgetDeferralCount();
 	}
 }
 
@@ -924,6 +956,31 @@ void Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions( const int nRegions ) {
 	m_nRuntimeAdaptiveMinNodeUnloadRegions = regions;
 }
 
+void Terrain3D::setRuntimeAdaptiveMinWorldUploadKb( const int nKb ) {
+	const int value = CLAMP( nKb, 1, 65536 );
+	if ( m_nRuntimeAdaptiveMinWorldUploadKb == value ) return;
+	refreshPerformanceProfileConformity();
+	m_nRuntimeAdaptiveMinWorldUploadKb = value;
+}
+void Terrain3D::setRuntimeAdaptiveMinWorldClusters( const int nClusters ) {
+	const int value = CLAMP( nClusters, 1, 1048576 );
+	if ( m_nRuntimeAdaptiveMinWorldClusters == value ) return;
+	refreshPerformanceProfileConformity();
+	m_nRuntimeAdaptiveMinWorldClusters = value;
+}
+void Terrain3D::setRuntimeAdaptiveMinVtRequests( const int nRequests ) {
+	const int value = CLAMP( nRequests, 1, 65536 );
+	if ( m_nRuntimeAdaptiveMinVtRequests == value ) return;
+	refreshPerformanceProfileConformity();
+	m_nRuntimeAdaptiveMinVtRequests = value;
+}
+void Terrain3D::setRuntimeAdaptiveMinVtAdmissions( const int nAdmissions ) {
+	const int value = CLAMP( nAdmissions, 1, 4096 );
+	if ( m_nRuntimeAdaptiveMinVtAdmissions == value ) return;
+	refreshPerformanceProfileConformity();
+	m_nRuntimeAdaptiveMinVtAdmissions = value;
+}
+
 void Terrain3D::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	if ( m_bRuntimeBoundaryWorkPhasingEnabled == bEnabled ) {
 		return;
@@ -932,8 +989,10 @@ void Terrain3D::setRuntimeBoundaryWorkPhasingEnabled( const bool bEnabled ) {
 	m_bRuntimeBoundaryWorkPhasingEnabled = bEnabled;
 	m_bRuntimeBoundaryNodeDeferredLastTick = false;
 	m_bRuntimeBoundaryInstancerDeferredLastTick = false;
+	m_bRuntimeBoundaryWorldDeferredLastTick = false;
 	m_nRuntimeBoundaryNodeDeferralStreak = 0;
 	m_nRuntimeBoundaryInstancerDeferralStreak = 0;
+	m_nRuntimeBoundaryWorldDeferralStreak = 0;
 }
 
 void Terrain3D::setRuntimeBoundaryNodeDelayFrames( const int nFrames ) {
@@ -954,6 +1013,13 @@ void Terrain3D::setRuntimeBoundaryInstancerDelayFrames( const int nFrames ) {
 	m_nRuntimeBoundaryInstancerDelayFrames = frames;
 }
 
+void Terrain3D::setRuntimeBoundaryWorldDelayFrames( const int nFrames ) {
+	const int frames = CLAMP( nFrames, 0, 8 );
+	if ( m_nRuntimeBoundaryWorldDelayFrames == frames ) return;
+	refreshPerformanceProfileConformity();
+	m_nRuntimeBoundaryWorldDelayFrames = frames;
+}
+
 Dictionary Terrain3D::getRuntimeBoundaryPhasingStats( void ) const {
 	Dictionary stats;
 	stats["enabled"] = m_bRuntimeBoundaryWorkPhasingEnabled;
@@ -961,12 +1027,16 @@ Dictionary Terrain3D::getRuntimeBoundaryPhasingStats( void ) const {
 	stats["frames_since_boundary"] = ( int64_t )( m_iRuntimePhysicsFrameIndex - m_nRuntimeBoundaryTransitionFrame );
 	stats["node_delay_frames"] = m_nRuntimeBoundaryNodeDelayFrames;
 	stats["instancer_delay_frames"] = m_nRuntimeBoundaryInstancerDelayFrames;
+	stats["world_delay_frames"] = m_nRuntimeBoundaryWorldDelayFrames;
 	stats["node_deferred_last_tick"] = m_bRuntimeBoundaryNodeDeferredLastTick;
 	stats["instancer_deferred_last_tick"] = m_bRuntimeBoundaryInstancerDeferredLastTick;
+	stats["world_deferred_last_tick"] = m_bRuntimeBoundaryWorldDeferredLastTick;
 	stats["node_deferral_streak"] = m_nRuntimeBoundaryNodeDeferralStreak;
 	stats["instancer_deferral_streak"] = m_nRuntimeBoundaryInstancerDeferralStreak;
+	stats["world_deferral_streak"] = m_nRuntimeBoundaryWorldDeferralStreak;
 	stats["node_deferrals_total"] = ( int64_t )( m_nRuntimeBoundaryNodeDeferralsTotal );
 	stats["instancer_deferrals_total"] = ( int64_t )( m_nRuntimeBoundaryInstancerDeferralsTotal );
+	stats["world_deferrals_total"] = ( int64_t )( m_nRuntimeBoundaryWorldDeferralsTotal );
 	return stats;
 }
 
@@ -992,6 +1062,10 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	configured["instancer_cells"] = limits.m_maximum.m_nInstancerCells;
 	configured["node_load_regions"] = limits.m_maximum.m_nNodeLoadRegions;
 	configured["node_unload_regions"] = limits.m_maximum.m_nNodeUnloadRegions;
+	configured["world_upload_kb"] = limits.m_maximum.m_nWorldUploadKb;
+	configured["world_clusters"] = limits.m_maximum.m_nWorldClusters;
+	configured["vt_requests"] = limits.m_maximum.m_nVtRequests;
+	configured["vt_admissions"] = limits.m_maximum.m_nVtAdmissions;
 	stats["configured_maximum"] = configured;
 
 	Dictionary requested_minimum;
@@ -1001,6 +1075,10 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	requested_minimum["instancer_cells"] = m_nRuntimeAdaptiveMinInstancerCells;
 	requested_minimum["node_load_regions"] = m_nRuntimeAdaptiveMinNodeLoadRegions;
 	requested_minimum["node_unload_regions"] = m_nRuntimeAdaptiveMinNodeUnloadRegions;
+	requested_minimum["world_upload_kb"] = m_nRuntimeAdaptiveMinWorldUploadKb;
+	requested_minimum["world_clusters"] = m_nRuntimeAdaptiveMinWorldClusters;
+	requested_minimum["vt_requests"] = m_nRuntimeAdaptiveMinVtRequests;
+	requested_minimum["vt_admissions"] = m_nRuntimeAdaptiveMinVtAdmissions;
 	stats["requested_minimum"] = requested_minimum;
 
 	Dictionary minimum;
@@ -1010,6 +1088,10 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	minimum["instancer_cells"] = limits.m_minimum.m_nInstancerCells;
 	minimum["node_load_regions"] = limits.m_minimum.m_nNodeLoadRegions;
 	minimum["node_unload_regions"] = limits.m_minimum.m_nNodeUnloadRegions;
+	minimum["world_upload_kb"] = limits.m_minimum.m_nWorldUploadKb;
+	minimum["world_clusters"] = limits.m_minimum.m_nWorldClusters;
+	minimum["vt_requests"] = limits.m_minimum.m_nVtRequests;
+	minimum["vt_admissions"] = limits.m_minimum.m_nVtAdmissions;
 	stats["minimum"] = minimum;
 
 	t3dAdaptiveBudgetState_t displayed_state = m_nRuntimeAdaptiveBudgetState;
@@ -1025,6 +1107,10 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	effective["instancer_cells"] = displayed_state.m_effective.m_nInstancerCells;
 	effective["node_load_regions"] = displayed_state.m_effective.m_nNodeLoadRegions;
 	effective["node_unload_regions"] = displayed_state.m_effective.m_nNodeUnloadRegions;
+	effective["world_upload_kb"] = displayed_state.m_effective.m_nWorldUploadKb;
+	effective["world_clusters"] = displayed_state.m_effective.m_nWorldClusters;
+	effective["vt_requests"] = displayed_state.m_effective.m_nVtRequests;
+	effective["vt_admissions"] = displayed_state.m_effective.m_nVtAdmissions;
 	stats["effective"] = effective;
 
 	Dictionary limited;
@@ -1034,8 +1120,65 @@ Dictionary Terrain3D::getRuntimeAdaptiveBudgetStats( void ) const {
 	limited["instancer"] = pressure.m_bInstancerLimited;
 	limited["node_load"] = pressure.m_bNodeLoadLimited;
 	limited["node_unload"] = pressure.m_bNodeUnloadLimited;
+	limited["world"] = pressure.m_bWorldLimited;
+	limited["virtual_texture"] = pressure.m_bVtLimited;
 	stats["limited"] = limited;
 	return stats;
+}
+
+#define T3D_DEFINE_WORLD_LIMIT_SETTER( Name, Member, Minimum, Maximum ) \
+	void Terrain3D::Name( const int nValue ) { \
+		const uint32_t value = ( uint32_t )CLAMP( nValue, Minimum, Maximum ); \
+		if ( Member == value ) return; \
+		refreshPerformanceProfileConformity(); \
+		Member = value; \
+	}
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxSourceVertices, m_nWorldMaxSourceVertices, 1024, 16777216 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxClusters, m_nWorldMaxClusters, 256, 1048576 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxTerrainClusters, m_nWorldMaxTerrainClusters, 64, 1048576 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxTransforms, m_nWorldMaxTransforms, 256, 1048576 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxVisibleItems, m_nWorldMaxVisibleItems, 256, 1048576 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldMaxMaterials, m_nWorldMaxMaterials, 16, 65536 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldUploadBudgetKb, m_nWorldUploadBudgetKb, 64, 65536 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldClusterUploadBudget, m_nWorldClusterUploadBudget, 64, 1048576 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldHiZMaxDimension, m_nWorldHiZMaxDimension, 64, 8192 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setWorldHiZMaxMipCount, m_nWorldHiZMaxMipCount, 1, 16 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setVtRequestBudget, m_nVtRequestBudget, 1, 65536 )
+T3D_DEFINE_WORLD_LIMIT_SETTER( setVtAdmissionBudget, m_nVtAdmissionBudget, 1, 4096 )
+#undef T3D_DEFINE_WORLD_LIMIT_SETTER
+
+t3dWorldResourceLimits_t Terrain3D::getWorldResourceLimitsInternal( void ) const {
+	t3dWorldResourceLimits_t limits{};
+	limits.m_nMaxSourceVertices = m_nWorldMaxSourceVertices;
+	limits.m_nMaxClusters = m_nWorldMaxClusters;
+	limits.m_nMaxTerrainClusters = m_nWorldMaxTerrainClusters;
+	limits.m_nMaxTransforms = m_nWorldMaxTransforms;
+	limits.m_nMaxVisibleItems = m_nWorldMaxVisibleItems;
+	limits.m_nMaxMaterials = m_nWorldMaxMaterials;
+	const uint64_t nClusterIndices = ( uint64_t )m_nWorldMaxClusters * T3D_WORLD_CLUSTER_MAX_VERTICES;
+	const uint64_t nTriangleSlots = ( uint64_t )m_nWorldMaxClusters * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+	limits.m_nMaxClusterVertexIndices = ( uint32_t )MIN( nClusterIndices, ( uint64_t )UINT32_MAX );
+	limits.m_nMaxTriangleSlots = ( uint32_t )MIN( nTriangleSlots, ( uint64_t )UINT32_MAX );
+	limits.m_nGeometryHeapBytes = ( uint64_t )m_nWorldMaxSourceVertices * sizeof( t3dWorldVertex_t );
+	limits.m_nTriangleHeapBytes = nTriangleSlots * sizeof( uint32_t );
+	limits.m_nVisibilityBytes = ( uint64_t )m_nWorldMaxVisibleItems * sizeof( t3dWorldVisibleItem_t ) * 2u;
+	limits.m_nWorldUploadBytesPerFrame = ( uint64_t )m_nWorldUploadBudgetKb * 1024u;
+	limits.m_nPublicationScratchBytes = MAX( limits.m_nWorldUploadBytesPerFrame, 1024ull * 1024ull );
+	limits.m_nHiZMaxWidth = m_nWorldHiZMaxDimension;
+	limits.m_nHiZMaxHeight = m_nWorldHiZMaxDimension;
+	limits.m_nHiZMaxMipCount = m_nWorldHiZMaxMipCount;
+	limits.m_nVtPageRequestBudget = m_nVtRequestBudget;
+	limits.m_nVtPageAdmissionBudget = m_nVtAdmissionBudget;
+	return limits;
+}
+
+void Terrain3D::setVirtualTextureQualityProfile( const int nProfile ) {
+	if ( nProfile < 0 || nProfile >= ( int )T3D_VT_QUALITY_PROFILE_COUNT ) return;
+	const uint32_t nPreviousProfile = m_nVirtualTextureQualityProfile;
+	m_nVirtualTextureQualityProfile = ( uint32_t )nProfile;
+	if ( m_pRenderCoordinator != NULL && !m_pRenderCoordinator->setVirtualTextureQualityProfile( m_nVirtualTextureQualityProfile ) ) {
+		m_nVirtualTextureQualityProfile = nPreviousProfile;
+	}
 }
 
 void Terrain3D::setPerformanceTargetStorage( const t3dPerformanceTarget_t target ) {

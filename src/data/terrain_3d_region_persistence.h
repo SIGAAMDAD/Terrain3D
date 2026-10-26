@@ -85,6 +85,7 @@ typedef struct t3dStartupLoadStats_s {
 	uint64_t m_nFinalizeUsecLast = 0u;
 	int m_nRegionFilesLast = 0;
 	int m_nRegionsPublishedLast = 0;
+	uint64_t m_nBytesReadLast = 0u;
 	bool m_bSucceededLast = false;
 } t3dStartupLoadStats_t;
 

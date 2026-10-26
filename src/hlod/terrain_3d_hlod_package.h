@@ -3,12 +3,14 @@
 #define TERRAIN3D_HLOD_PACKAGE_H
 
 #include "Terrain3DConstants.h"
+#include "assets/terrain_3d_rendering_material.h"
 #include "core/terrain_3d_compiler.h"
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
@@ -25,6 +27,7 @@ class Terrain3DHLODPackage : public Resource {
 	Vector2i m_regionMax = s_v2iZero;
 	AABB m_localBounds;
 	Ref<ArrayMesh> m_mesh;
+	TypedArray<Terrain3DRenderingMaterial> m_renderingMaterials;
 	real_t m_fGeometricError = 1.0f;
 	int64_t m_nSourceSignature = 0;
 	int64_t m_nBuildSignature = 0;
@@ -32,6 +35,8 @@ class Terrain3DHLODPackage : public Resource {
 	int64_t m_nProxyTriangles = 0;
 	int64_t m_nEstimatedGpuBytes = 0;
 	int64_t m_nBuiltUnix = 0;
+
+	String getVtMaterialOwnerIdentityCold( void ) const;
 
 public:
 	void setLevel( int nLevel );
@@ -58,6 +63,14 @@ public:
 	EA_FORCE_INLINE Ref<ArrayMesh> getMesh( void ) const {
 		return m_mesh;
 	}
+	void setRenderingMaterials( const TypedArray<Terrain3DRenderingMaterial> &rMaterials );
+	EA_FORCE_INLINE TypedArray<Terrain3DRenderingMaterial> getRenderingMaterials( void ) const {
+		return m_renderingMaterials;
+	}
+	bool captureRenderingMaterialsCold( void );
+	bool ensureRenderingMaterialStableKeysCold( void );
+	bool hasCanonicalRenderingMaterials( void ) const;
+	const Terrain3DRenderingMaterial *getRenderingMaterialPtr( uint32_t nSurface ) const;
 	void setGeometricError( real_t fError );
 	EA_FORCE_INLINE real_t getGeometricError( void ) const {
 		return m_fGeometricError;

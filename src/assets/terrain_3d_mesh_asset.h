@@ -5,14 +5,20 @@
 
 #include "Terrain3DConstants.h"
 #include "assets/terrain_3d_asset_resource.h"
+#include "assets/terrain_3d_rendering_material.h"
 #include "eastl_config.h"
 
 #include <godot_cpp/classes/array_mesh.hpp>
+#include <godot_cpp/classes/array_occluder3d.hpp>
+#include <godot_cpp/classes/concave_polygon_shape3d.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/classes/geometry_instance3d.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
+#include <godot_cpp/variant/aabb.hpp>
 
 typedef GeometryInstance3D::ShadowCastingSetting ShadowCasting;
 
@@ -22,11 +28,28 @@ typedef GeometryInstance3D::ShadowCastingSetting ShadowCasting;
  * enter initialization through distinct Terrain3DAssets paths.
  */
 
+typedef enum t3dInstanceCategory_e {
+	INSTANCE_CATEGORY_CLUTTER = 0,
+	INSTANCE_CATEGORY_GROUND_COVER = 1,
+	INSTANCE_CATEGORY_OCCLUDER = 2,
+} t3dInstanceCategory_t;
+
+typedef enum t3dTerrainAlignment_e {
+	TERRAIN_ALIGNMENT_UPRIGHT = 0,
+	TERRAIN_ALIGNMENT_NORMAL = 1,
+} t3dTerrainAlignment_t;
+
 typedef enum t3dHlodContribution_e {
 	HLOD_AUTO = 0,
 	HLOD_INCLUDE = 1,
 	HLOD_EXCLUDE = 2,
 } t3dHlodContribution_t;
+
+typedef enum t3dInstanceOcclusionPolicy_e {
+	INSTANCE_OCCLUSION_NONE = 0,
+	INSTANCE_OCCLUSION_BOX = 1,
+	INSTANCE_OCCLUSION_EXPLICIT_MESH = 2,
+} t3dInstanceOcclusionPolicy_t;
 
 typedef enum t3dGenType_e {
 	TYPE_NONE,
@@ -44,16 +67,36 @@ private:
 	bool m_bEnabled = true;
 	Ref<PackedScene> m_packedScene;
 	t3dGenType_t m_generatedType = TYPE_NONE;
+	t3dInstanceCategory_t m_instanceCategory = INSTANCE_CATEGORY_GROUND_COVER;
+	t3dTerrainAlignment_t m_terrainAlignment = TERRAIN_ALIGNMENT_UPRIGHT;
 	t3dHlodContribution_t m_hlodContribution = HLOD_AUTO;
 	int m_nHlodMinLevel = 1;
+	t3dInstanceOcclusionPolicy_t m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_NONE;
+	AABB m_instanceOcclusionBox = AABB( Vector3( -0.5f, 0.0f, -0.5f ), Vector3( 1.0f, 1.0f, 1.0f ) );
+	Ref<ArrayMesh> m_instanceOcclusionProxyMesh;
+	Ref<ArrayOccluder3D> m_instanceOccluder;
+	Ref<ConcavePolygonShape3D> m_instanceCollisionShape;
+	uint32_t m_nInstanceCollisionVertexCount = 0u;
+	uint32_t m_nInstanceCollisionTriangleCount = 0u;
+	uint32_t m_nInstanceCollisionGeneration = 1u;
+	uint32_t m_nInstanceOcclusionProxyVertexCount = 0u;
+	uint32_t m_nInstanceOcclusionProxyTriangleCount = 0u;
+	uint32_t m_nInstanceOcclusionProxyGeneration = 1u;
+	bool m_bInstanceCollisionDerived = false;
+	bool m_bInstanceOcclusionProxyDerived = false;
+	bool m_bInstanceProxyImportedOccluder = false;
+	real_t m_fInstanceOcclusionRange = 256.0f;
 	int m_nGeneratedFaces = 2;
 	Vector2 m_generatedSize = V2( 1.f );
 	real_t m_fHeightOffset = 0.f;
 	real_t m_fDensity = 0.f;
 	ShadowCasting m_castShadows = s_shadowCastingOn;
 	uint32_t m_nVisibilityLayers = 1;
-	Ref<Material> m_materialOverride;
-	Ref<Material> m_materialOverlay;
+	Ref<Material> m_materialOverride; // Legacy import/migration source only.
+	Ref<Material> m_materialOverlay;  // Legacy import/migration source only.
+	Ref<Terrain3DRenderingMaterial> m_renderingMaterialOverride;
+	Ref<Terrain3DRenderingMaterial> m_renderingMaterialOverlay;
+	TypedArray<Terrain3DRenderingMaterial> m_surfaceRenderingMaterials;
 	int m_iLastLod = s_nMeshMaxLodCount - 1;
 	int m_iLastShadowLod = s_nMeshMaxLodCount - 1;
 	int m_nShadowImpostor = 0;
@@ -64,6 +107,10 @@ private:
 	Ref<Material> m_highlightMat;
 	TypedArray<Mesh> m_meshes;
 	TypedArray<Mesh> m_pendingMeshes; // Queue to avoid renderer warnings on mesh swap
+	TypedArray<Terrain3DRenderingMaterial> m_pendingSurfaceRenderingMaterials;
+	PackedVector3Array m_pendingInstanceOccluderVertices;
+	PackedInt32Array m_pendingInstanceOccluderIndices;
+	bool m_bPendingImportedOccluder = false;
 	uint32_t m_nInstanceCount = 0;
 
 	void clearLodRanges( void );
@@ -75,6 +122,17 @@ private:
 	}
 	Ref<Material> getMaterial( void );
 	TypedArray<Mesh> getMeshes( void ) const;
+	void clearInstanceCollisionGeometry( void );
+	void clearInstanceOcclusionGeometry( void );
+	void clearInstanceDerivedGeometry( void );
+	bool rebuildInstanceCollisionGeometry( void );
+	bool rebuildInstanceOcclusionGeometry( void );
+	bool rebuildInstanceDerivedGeometry( void );
+	void onRenderingMaterialChanged( void );
+	void disconnectRenderingMaterialSignals( void );
+	void connectRenderingMaterialSignals( void );
+	bool capturePendingSurfaceRenderingMaterialsCold( void );
+	String getVtMaterialOwnerIdentityCold( void ) const;
 
 public:
 	EA_FORCE_INLINE Terrain3DMeshAsset( void ) {
@@ -124,6 +182,95 @@ public:
 		return m_pendingMeshes.size() > 0;
 	}
 	void commitMeshes( void );
+	void setInstanceCategory( t3dInstanceCategory_t eCategory );
+	EA_FORCE_INLINE t3dInstanceCategory_t getInstanceCategory( void ) const {
+		return m_instanceCategory;
+	}
+	EA_FORCE_INLINE int getCategoryMaximumLodCount( void ) const {
+		return m_instanceCategory == INSTANCE_CATEGORY_CLUTTER ? 2 : s_nMeshMaxLodCount;
+	}
+	EA_FORCE_INLINE bool isIndividuallyEditable( void ) const {
+		return m_instanceCategory != INSTANCE_CATEGORY_CLUTTER;
+	}
+	EA_FORCE_INLINE bool requiresInstancePhysics( void ) const {
+		return m_instanceCategory == INSTANCE_CATEGORY_GROUND_COVER || m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER;
+	}
+	EA_FORCE_INLINE bool usesInstanceOcclusion( void ) const {
+		return m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER && m_instanceOcclusionPolicy == INSTANCE_OCCLUSION_EXPLICIT_MESH;
+	}
+	EA_FORCE_INLINE bool usesFullInstanceOcclusion( void ) const {
+		return m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER && m_instanceOcclusionPolicy == INSTANCE_OCCLUSION_EXPLICIT_MESH;
+	}
+	EA_FORCE_INLINE bool hasInstanceCollisionProxy( void ) const {
+		return m_bInstanceCollisionDerived && m_instanceCollisionShape.is_valid();
+	}
+	EA_FORCE_INLINE bool hasInstanceOcclusionProxy( void ) const {
+		return m_bInstanceOcclusionProxyDerived && m_instanceOcclusionProxyMesh.is_valid() && m_instanceOccluder.is_valid();
+	}
+	// Compatibility query retained for callers that still require both products.
+	EA_FORCE_INLINE bool hasMeshDerivedInstanceProxy( void ) const {
+		return hasInstanceCollisionProxy() && hasInstanceOcclusionProxy();
+	}
+	EA_FORCE_INLINE bool isInstanceProxyImportedOccluder( void ) const {
+		return m_bInstanceProxyImportedOccluder;
+	}
+	void setInstanceOcclusionPolicy( t3dInstanceOcclusionPolicy_t ePolicy );
+	EA_FORCE_INLINE t3dInstanceOcclusionPolicy_t getInstanceOcclusionPolicy( void ) const {
+		return m_instanceOcclusionPolicy;
+	}
+	void setInstanceOcclusionBox( const AABB &rBox );
+	EA_FORCE_INLINE AABB getInstanceOcclusionBox( void ) const {
+		return m_instanceOcclusionBox;
+	}
+	void setInstanceOcclusionProxyMesh( const Ref<ArrayMesh> &rMesh );
+	EA_FORCE_INLINE Ref<ArrayMesh> getInstanceOcclusionProxyMesh( void ) const {
+		return m_instanceOcclusionProxyMesh;
+	}
+	EA_FORCE_INLINE Ref<ArrayOccluder3D> getInstanceOccluder( void ) const {
+		return m_instanceOccluder;
+	}
+	EA_FORCE_INLINE Ref<ConcavePolygonShape3D> getInstanceCollisionShape( void ) const {
+		return m_instanceCollisionShape;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceCollisionVertexCount( void ) const {
+		return m_nInstanceCollisionVertexCount;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceCollisionTriangleCount( void ) const {
+		return m_nInstanceCollisionTriangleCount;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceCollisionGeneration( void ) const {
+		return m_nInstanceCollisionGeneration;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceOcclusionProxyVertexCount( void ) const {
+		return m_nInstanceOcclusionProxyVertexCount;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceOcclusionProxyTriangleCount( void ) const {
+		return m_nInstanceOcclusionProxyTriangleCount;
+	}
+	EA_FORCE_INLINE uint32_t getInstanceOcclusionProxyGeneration( void ) const {
+		return m_nInstanceOcclusionProxyGeneration;
+	}
+	// Compatibility aliases: historical proxy statistics describe occlusion geometry.
+	EA_FORCE_INLINE uint32_t getInstanceProxyVertexCount( void ) const {
+		return getInstanceOcclusionProxyVertexCount();
+	}
+	EA_FORCE_INLINE uint32_t getInstanceProxyTriangleCount( void ) const {
+		return getInstanceOcclusionProxyTriangleCount();
+	}
+	EA_FORCE_INLINE uint32_t getInstanceProxyGeneration( void ) const {
+		return getInstanceOcclusionProxyGeneration();
+	}
+	void setInstanceOcclusionRange( real_t fRange );
+	EA_FORCE_INLINE real_t getInstanceOcclusionRange( void ) const {
+		return m_fInstanceOcclusionRange;
+	}
+	void setTerrainAlignment( t3dTerrainAlignment_t eAlignment );
+	EA_FORCE_INLINE t3dTerrainAlignment_t getTerrainAlignment( void ) const {
+		return m_terrainAlignment;
+	}
+	EA_FORCE_INLINE bool alignsToTerrainNormal( void ) const {
+		return m_terrainAlignment == TERRAIN_ALIGNMENT_NORMAL;
+	}
 	void setHlodContribution( t3dHlodContribution_t mode );
 	EA_FORCE_INLINE t3dHlodContribution_t getHlodContribution( void ) const {
 		return m_hlodContribution;
@@ -132,11 +279,8 @@ public:
 	EA_FORCE_INLINE int getHlodMinLevel( void ) const {
 		return m_nHlodMinLevel;
 	}
-	bool isHlodEligible( void ) const {
-		if ( m_hlodContribution == HLOD_EXCLUDE ) {
-			return false;
-		}
-		return m_hlodContribution == HLOD_INCLUDE || m_generatedType == TYPE_NONE;
+	EA_FORCE_INLINE bool isHlodEligible( void ) const {
+		return m_instanceCategory != INSTANCE_CATEGORY_CLUTTER;
 	}
 
 	void setGeneratedType( const t3dGenType_t type );
@@ -172,6 +316,21 @@ public:
 	EA_FORCE_INLINE Ref<Material> getMaterialOverlay( void ) const {
 		return m_materialOverlay;
 	}
+	void setRenderingMaterialOverride( const Ref<Terrain3DRenderingMaterial> &rMaterial );
+	EA_FORCE_INLINE Ref<Terrain3DRenderingMaterial> getRenderingMaterialOverride( void ) const {
+		return m_renderingMaterialOverride;
+	}
+	void setRenderingMaterialOverlay( const Ref<Terrain3DRenderingMaterial> &rMaterial );
+	bool ensureRenderingMaterialStableKeysCold( void );
+	EA_FORCE_INLINE Ref<Terrain3DRenderingMaterial> getRenderingMaterialOverlay( void ) const {
+		return m_renderingMaterialOverlay;
+	}
+	void setSurfaceRenderingMaterials( const TypedArray<Terrain3DRenderingMaterial> &rMaterials );
+	EA_FORCE_INLINE TypedArray<Terrain3DRenderingMaterial> getSurfaceRenderingMaterials( void ) const {
+		return m_surfaceRenderingMaterials;
+	}
+	Ref<Terrain3DRenderingMaterial> getSurfaceRenderingMaterial( int nLod, uint32_t nSurface ) const;
+	const Terrain3DRenderingMaterial *getSurfaceRenderingMaterialPtr( int nLod, uint32_t nSurface ) const;
 
 	void setGeneratedFaces( const int nCount );
 	EA_FORCE_INLINE int getGeneratedFaces( void ) const {
@@ -275,7 +434,10 @@ protected:
 };
 
 VARIANT_ENUM_CAST( t3dGenType_t );
+VARIANT_ENUM_CAST( t3dInstanceCategory_t );
+VARIANT_ENUM_CAST( t3dTerrainAlignment_t );
 VARIANT_ENUM_CAST( t3dHlodContribution_t );
+VARIANT_ENUM_CAST( t3dInstanceOcclusionPolicy_t );
 
 inline TypedArray<Mesh> Terrain3DMeshAsset::getMeshes( void ) const {
 	if ( !m_pendingMeshes.is_empty() ) {

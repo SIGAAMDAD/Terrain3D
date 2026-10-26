@@ -50,6 +50,8 @@ struct T3DGeometryDatabaseBuffers {
 	T3DMeshLodRecord *pLodRecords;
 	uint32_t nLodCapacity;
 	T3DClusterRecord *pClusterRecords;
+	t3dWorldCluster_t *pWorldClusterRecords;
+	t3dWorldClusterVtMetadata_t *pWorldClusterVtMetadata;
 	uint32_t nClusterCapacity;
 };
 

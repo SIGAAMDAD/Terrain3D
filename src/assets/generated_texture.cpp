@@ -22,6 +22,22 @@ static Terrain3DRdTextureManager *t3dGeneratedTextureManager( void ) {
 	return pManager;
 }
 
+static Ref<Image> t3dGeneratedTextureCanonicalizeUploadImage( const Ref<Image> &rImage ) {
+	if ( rImage.is_null() || rImage->is_empty() || rImage->get_format() != Image::FORMAT_RGB8 ) {
+		return rImage;
+	}
+	Ref<Image> pImage = Ref<Image>( rImage->duplicate() );
+	if ( pImage.is_null() ) {
+		return Ref<Image>();
+	}
+	pImage->convert( Image::FORMAT_RGBA8 );
+	if ( pImage->get_format() != Image::FORMAT_RGBA8 || pImage->get_width() != rImage->get_width()
+	        || pImage->get_height() != rImage->get_height() || pImage->has_mipmaps() != rImage->has_mipmaps() ) {
+		return Ref<Image>();
+	}
+	return pImage;
+}
+
 // -----------------------------------------------------------------------------
 // Private functions
 
@@ -37,11 +53,12 @@ String Terrain3DGeneratedTexture::getResourceName( const String &rSuffix ) const
 }
 
 bool Terrain3DGeneratedTexture::ensureRegionStaging( const Ref<Image> &rImage ) {
-	if ( rImage.is_null() || rImage->is_empty() || rImage->has_mipmaps() ) {
+	const Ref<Image> pImage = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
+	if ( pImage.is_null() || pImage->is_empty() || pImage->has_mipmaps() ) {
 		return false;
 	}
-	if ( m_hRegionStagingRid.is_valid() && m_nRegionStagingWidth == rImage->get_width() && m_nRegionStagingHeight == rImage->get_height()
-	        && m_nRegionStagingFormat == ( int )( rImage->get_format() ) ) {
+	if ( m_hRegionStagingRid.is_valid() && m_nRegionStagingWidth == pImage->get_width() && m_nRegionStagingHeight == pImage->get_height()
+	        && m_nRegionStagingFormat == ( int )( pImage->get_format() ) ) {
 		return true;
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();
@@ -53,9 +70,9 @@ bool Terrain3DGeneratedTexture::ensureRegionStaging( const Ref<Image> &rImage ) 
 		m_hRegionStagingRid = RID();
 		m_nRegionStagingBytes = 0u;
 	}
-	const PackedByteArray data = rImage->get_data();
+	const PackedByteArray data = pImage->get_data();
 	t3dRdTextureLayout_t layout;
-	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, ( uint64_t )( data.size() ), m_semantic, layout ) ) {
+	if ( !Terrain3DRdTextureManager::buildLayout( pImage, 1u, false, ( uint64_t )( data.size() ), m_semantic, layout ) ) {
 		return false;
 	}
 	TypedArray<PackedByteArray> initial_data;
@@ -65,9 +82,9 @@ bool Terrain3DGeneratedTexture::ensureRegionStaging( const Ref<Image> &rImage ) 
 	if ( !m_hRegionStagingRid.is_valid() ) {
 		return false;
 	}
-	m_nRegionStagingWidth = rImage->get_width();
-	m_nRegionStagingHeight = rImage->get_height();
-	m_nRegionStagingFormat = ( int )( rImage->get_format() );
+	m_nRegionStagingWidth = pImage->get_width();
+	m_nRegionStagingHeight = pImage->get_height();
+	m_nRegionStagingFormat = ( int )( pImage->get_format() );
 	m_nRegionStagingBytes = ( size_t )( data.size() );
 	return true;
 }
@@ -142,20 +159,26 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image> &rLayers, const t
 		clear();
 		return RID();
 	}
-	const Ref<Image> pFirst = rLayers[0];
-	if ( pFirst.is_null() || pFirst->is_empty() ) {
-		LOG( ERROR, "Cannot create Terrain3D direct RD texture array from an empty first layer" );
-		return RID();
+	TypedArray<Image> canonical_layers;
+	canonical_layers.resize( rLayers.size() );
+	for ( int layer = 0; layer < rLayers.size(); ++layer ) {
+		const Ref<Image> pCanonical = t3dGeneratedTextureCanonicalizeUploadImage( rLayers[layer] );
+		if ( pCanonical.is_null() || pCanonical->is_empty() ) {
+			LOG( ERROR, "Cannot canonicalize Terrain3D direct RD texture-array layer ", layer );
+			return RID();
+		}
+		canonical_layers[layer] = pCanonical;
 	}
+	const Ref<Image> pFirst = canonical_layers[0];
 	const int width = pFirst->get_width();
 	const int height = pFirst->get_height();
 	const int format = ( int )( pFirst->get_format() );
 	const bool bMipmaps = pFirst->has_mipmaps();
 	TypedArray<PackedByteArray> initial_data;
-	initial_data.resize( rLayers.size() );
+	initial_data.resize( canonical_layers.size() );
 	size_t payload_bytes = 0u;
-	for ( int layer = 0; layer < rLayers.size(); ++layer ) {
-		const Ref<Image> pImage = rLayers[layer];
+	for ( int layer = 0; layer < canonical_layers.size(); ++layer ) {
+		const Ref<Image> pImage = canonical_layers[layer];
 		if ( pImage.is_null() || pImage->is_empty() || pImage->get_width() != width || pImage->get_height() != height
 		        || ( int )( pImage->get_format() ) != format || pImage->has_mipmaps() != bMipmaps ) {
 			LOG( ERROR, "Rejected incompatible Terrain3D direct RD texture-array layer ", layer );
@@ -168,7 +191,7 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image> &rLayers, const t
 
 	t3dRdTextureLayout_t layout;
 	if ( !Terrain3DRdTextureManager::buildLayout(
-	             pFirst, ( uint32_t )( rLayers.size() ), true, ( uint64_t )( payload_bytes ), semantic, layout ) ) {
+	             pFirst, ( uint32_t )( canonical_layers.size() ), true, ( uint64_t )( payload_bytes ), semantic, layout ) ) {
 		LOG( ERROR, "Unsupported Terrain3D generated texture-array image format: ", format );
 		return RID();
 	}
@@ -189,11 +212,11 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image> &rLayers, const t
 		pManager->freeResource( m_hRegionStagingRid, m_nRegionStagingBytes );
 	}
 	m_image.unref();
-	m_layers = rLayers.duplicate();
+	m_layers = canonical_layers.duplicate();
 	m_hRid = new_rid;
 	m_hRegionStagingRid = RID();
 	m_bDirty = false;
-	m_nSize = rLayers.size();
+	m_nSize = canonical_layers.size();
 	m_nWidth = width;
 	m_nHeight = height;
 	m_nFormat = format;
@@ -212,7 +235,8 @@ RID Terrain3DGeneratedTexture::create( const TypedArray<Image> &rLayers, const t
 }
 
 bool Terrain3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLayer ) {
-	if ( !m_hRid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize || !matchesLayout( rImage ) ) {
+	const Ref<Image> pImage = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
+	if ( !m_hRid.is_valid() || m_bDirty || !m_bLayered || nLayer < 0 || nLayer >= m_nSize || !matchesLayout( pImage ) ) {
 		LOG( ERROR,
 		        "Rejected direct RD Texture2DArray update. RID valid: ",
 		        m_hRid.is_valid(),
@@ -225,30 +249,31 @@ bool Terrain3DGeneratedTexture::update( const Ref<Image> &rImage, const int nLay
 		        ", layer count: ",
 		        m_nSize,
 		        ", compatible image: ",
-		        matchesLayout( rImage ) );
+		        matchesLayout( pImage ) );
 		return false;
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();
-	if ( !pManager || !pManager->updateTexture( m_hRid, ( uint32_t )( nLayer ), rImage->get_data() ) ) {
+	if ( !pManager || !pManager->updateTexture( m_hRid, ( uint32_t )( nLayer ), pImage->get_data() ) ) {
 		return false;
 	}
 	if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE ) {
-		m_layers[nLayer] = rImage;
+		m_layers[nLayer] = pImage;
 	}
 	return true;
 }
 
 RID Terrain3DGeneratedTexture::create( const Ref<Image> &rImage, const t3dRdTextureSemantic_t semantic ) {
-	if ( rImage.is_null() || rImage->is_empty() ) {
+	const Ref<Image> pImage = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
+	if ( pImage.is_null() || pImage->is_empty() ) {
 		m_bDirty = true;
 		LOG( ERROR, "Cannot create generated direct RD Texture2D from an empty image" );
 		return RID();
 	}
-	const PackedByteArray data = rImage->get_data();
+	const PackedByteArray data = pImage->get_data();
 	t3dRdTextureLayout_t layout;
-	if ( !Terrain3DRdTextureManager::buildLayout( rImage, 1u, false, ( uint64_t )( data.size() ), semantic, layout ) ) {
+	if ( !Terrain3DRdTextureManager::buildLayout( pImage, 1u, false, ( uint64_t )( data.size() ), semantic, layout ) ) {
 		m_bDirty = true;
-		LOG( ERROR, "Unsupported Terrain3D generated Texture2D image format: ", ( int )( rImage->get_format() ) );
+		LOG( ERROR, "Unsupported Terrain3D generated Texture2D image format: ", ( int )( pImage->get_format() ) );
 		return RID();
 	}
 	TypedArray<PackedByteArray> initial_data;
@@ -269,19 +294,19 @@ RID Terrain3DGeneratedTexture::create( const Ref<Image> &rImage, const t3dRdText
 	if ( m_hRegionStagingRid.is_valid() ) {
 		pManager->freeResource( m_hRegionStagingRid, m_nRegionStagingBytes );
 	}
-	m_image = rImage;
+	m_image = pImage;
 	m_layers.clear();
 	m_hRid = new_rid;
 	m_hRegionStagingRid = RID();
 	m_bDirty = false;
 	m_nSize = 1;
-	m_nWidth = rImage->get_width();
-	m_nHeight = rImage->get_height();
-	m_nFormat = ( int )( rImage->get_format() );
+	m_nWidth = pImage->get_width();
+	m_nHeight = pImage->get_height();
+	m_nFormat = ( int )( pImage->get_format() );
 	m_nRegionStagingWidth = 0;
 	m_nRegionStagingHeight = 0;
 	m_nRegionStagingFormat = -1;
-	m_bMipmaps = rImage->has_mipmaps();
+	m_bMipmaps = pImage->has_mipmaps();
 	m_bLayered = false;
 	m_nPayloadBytes = ( size_t )( data.size() );
 	m_nRegionStagingBytes = 0u;
@@ -293,33 +318,35 @@ RID Terrain3DGeneratedTexture::create( const Ref<Image> &rImage, const t3dRdText
 }
 
 bool Terrain3DGeneratedTexture::update2d( const Ref<Image> &rImage ) {
+	const Ref<Image> pImage = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
 	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 ) {
 		return false;
 	}
-	if ( !matchesLayout( rImage ) ) {
+	if ( !matchesLayout( pImage ) ) {
 		// A 2D generated texture has complete replacement data in this call, so a
 		// layout change can be reconstructed deterministically without a native texture bridge.
-		return create( rImage, m_semantic ).is_valid();
+		return create( pImage, m_semantic ).is_valid();
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();
-	if ( !pManager || !pManager->updateTexture( m_hRid, 0u, rImage->get_data() ) ) {
+	if ( !pManager || !pManager->updateTexture( m_hRid, 0u, pImage->get_data() ) ) {
 		return false;
 	}
 	if ( m_sourceRetentionPolicy == RETAIN_CPU_SOURCE ) {
-		m_image = rImage;
+		m_image = pImage;
 	}
 	return true;
 }
 
 bool Terrain3DGeneratedTexture::updateRegion2d( const Ref<Image> &rImage, const Rect2i &rDestination ) {
-	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || m_bMipmaps || rImage.is_null() || rImage->is_empty()
-	        || rImage->has_mipmaps() || ( int )( rImage->get_format() ) != m_nFormat || rDestination.position.x < 0
+	const Ref<Image> pImage = t3dGeneratedTextureCanonicalizeUploadImage( rImage );
+	if ( !m_hRid.is_valid() || m_bDirty || m_bLayered || m_nSize != 1 || m_bMipmaps || pImage.is_null() || pImage->is_empty()
+	        || pImage->has_mipmaps() || ( int )( pImage->get_format() ) != m_nFormat || rDestination.position.x < 0
 	        || rDestination.position.y < 0 || rDestination.size.x <= 0 || rDestination.size.y <= 0
-	        || rDestination.size.x != rImage->get_width() || rDestination.size.y != rImage->get_height()
+	        || rDestination.size.x != pImage->get_width() || rDestination.size.y != pImage->get_height()
 	        || rDestination.get_end().x > m_nWidth || rDestination.get_end().y > m_nHeight ) {
 		return false;
 	}
-	if ( !ensureRegionStaging( rImage ) ) {
+	if ( !ensureRegionStaging( pImage ) ) {
 		return false;
 	}
 	Terrain3DRdTextureManager *const pManager = t3dGeneratedTextureManager();
@@ -330,5 +357,5 @@ bool Terrain3DGeneratedTexture::updateRegion2d( const Ref<Image> &rImage, const 
 	                ( uint32_t )( rDestination.position.y ),
 	                ( uint32_t )( rDestination.size.x ),
 	                ( uint32_t )( rDestination.size.y ),
-	                rImage->get_data() );
+	                pImage->get_data() );
 }

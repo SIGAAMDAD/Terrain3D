@@ -9,10 +9,13 @@
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "eastl_config.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
+#include "instances/terrain_3d_instance_occlusion.h"
+#include "instances/terrain_3d_instance_physics.h"
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
 #include "memory/terrain_3d_zone_allocator.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "rendering/terrain_3d_compute.h"
 #include "simd/terrain_3d_parallel.h"
 #include "streaming/terrain_3d_node_streamer.h"
@@ -361,15 +364,10 @@ Dictionary Terrain3D::getRuntimeParitySnapshot( void ) const {
 	snapshot["middle_shadow_enabled"] = m_bMiddleShadowEnabled;
 	snapshot["far_shadow_enabled"] = m_bFarShadowEnabled;
 
-	const Dictionary materials = m_assets.is_valid() ? m_assets->getRuntimeMaterialCacheStats() : Dictionary();
-	snapshot["runtime_material_cache_active"] = ( bool )( materials.get( "active", false ) );
-	snapshot["runtime_material_physical_layers"] = ( int )( materials.get( "physical_layers", 0 ) );
-	snapshot["runtime_material_logical_to_physical_hash"] = materials.get( "logical_to_physical_hash", String() );
-	snapshot["runtime_material_source_textures_released"] = ( bool )( materials.get( "source_textures_released", false ) );
-	snapshot["first_visible_material_required"] = ( int )( materials.get( "first_visible_required", 0 ) );
-	snapshot["first_visible_material_resident"] = ( int )( materials.get( "first_visible_resident", 0 ) );
-	snapshot["first_visible_material_pending"] = ( int )( materials.get( "first_visible_pending", 0 ) );
-	snapshot["first_visible_material_ready"] = ( bool )( materials.get( "first_visible_ready", true ) );
+	const bool legacy_material_arrays_active = m_assets.is_valid() && m_assets->getAlbedoArrayRid().is_valid();
+	snapshot["legacy_material_arrays_active"] = legacy_material_arrays_active;
+	snapshot["vt_v3_material_residency_authoritative"] = m_assets.is_valid() && m_assets->usesPackedPbr()
+	        && m_bGpuRegionCookedPagesEnabled && !isEditorAuthoringModeInternal();
 	return snapshot;
 }
 
@@ -433,6 +431,72 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["region_streaming"] = getRegionStreamingStats();
 	diagnostics["region_streaming_configuration"] = getRegionStreamingConfigurationStatus();
 	diagnostics["memory"] = bDeep ? getMemoryEstimate() : getRuntimeMemoryStatsFast();
+
+	Dictionary startup;
+	startup["generation"] = ( int64_t )( m_nStartupGeneration );
+	startup["attempt_count"] = ( int64_t )( m_nStartupAttemptCount );
+	startup["cancellation_count"] = ( int64_t )( m_nStartupCancellationCount );
+	startup["generation_invalidation_count"] = ( int64_t )( m_nStartupGenerationInvalidationCount );
+	startup["lifecycle_state"] = ( int64_t )( m_runtimeLifecycleState );
+	startup["start_usec"] = ( int64_t )( m_nStartupStartUsec );
+	startup["end_usec"] = ( int64_t )( m_nStartupEndUsec );
+	startup["total_usec_last"] = ( int64_t )( m_nStartupTotalUsecLast );
+	startup["data_initialize_usec_last"] = ( int64_t )( m_nStartupDataInitializeUsecLast );
+	startup["owner_prepare_usec_last"] = ( int64_t )( m_nStartupOwnerPrepareUsecLast );
+	startup["coordinator_initialize_usec_last"] = ( int64_t )( m_nStartupCoordinatorInitializeUsecLast );
+	startup["owner_finalize_usec_last"] = ( int64_t )( m_nStartupOwnerFinalizeUsecLast );
+	startup["succeeded_last"] = m_bStartupSucceededLast;
+	Dictionary finalization;
+	const t3dStartupDomainSnapshot_t finalizationSnapshot = t3dStartupDomainSnapshot( m_startupFinalizationState );
+	const t3dStartupStage_t eFinalizationStage = t3dStartupDomainGetStage( finalizationSnapshot );
+	finalization["stage"] = ( int64_t )( eFinalizationStage );
+	finalization["stage_name"] = String( t3dStartupStageName( eFinalizationStage ) );
+	finalization["generation"] = ( int64_t )( finalizationSnapshot.m_nGeneration );
+	finalization["completed_units"] = ( int64_t )( finalizationSnapshot.m_nCompletedUnits );
+	finalization["total_units"] = ( int64_t )( finalizationSnapshot.m_nTotalUnits );
+	finalization["start_usec"] = ( int64_t )( finalizationSnapshot.m_nStartUsec );
+	finalization["end_usec"] = ( int64_t )( finalizationSnapshot.m_nEndUsec );
+	startup["finalization"] = finalization;
+	const uint64_t nAccountedStartupUsec = m_nStartupDataInitializeUsecLast + m_nStartupOwnerPrepareUsecLast
+	        + m_nStartupCoordinatorInitializeUsecLast + m_nStartupOwnerFinalizeUsecLast;
+	startup["accounted_usec_last"] = ( int64_t )( nAccountedStartupUsec );
+	startup["unaccounted_usec_last"] = ( int64_t )( m_nStartupTotalUsecLast > nAccountedStartupUsec
+	                ? m_nStartupTotalUsecLast - nAccountedStartupUsec
+	                : 0u );
+	const Dictionary dataStartup = m_pData ? m_pData->getStartupLoadStats() : Dictionary();
+	const Dictionary coordinatorStartup = m_pRenderCoordinator ? m_pRenderCoordinator->getStartupDiagnostics() : Dictionary();
+	const Dictionary shaderStartup = coordinatorStartup.get( "shader", Dictionary() );
+	const Dictionary vtStartup = coordinatorStartup.get( "virtual_texture", Dictionary() );
+	startup["startup_generation"] = ( int64_t )( m_nStartupGeneration );
+	startup["startup_state"] = String( t3dStartupStageName( eFinalizationStage ) );
+	startup["shader_stage"] = shaderStartup.get( "startup_stage_name", "IDLE" );
+	startup["shader_completed"] = shaderStartup.get( "shader_completed", 0 );
+	startup["shader_total"] = shaderStartup.get( "shader_total", 0 );
+	startup["shader_cpu_ready"] = shaderStartup.get( "shader_cpu_ready", false );
+	startup["shader_gpu_ready"] = shaderStartup.get( "shader_gpu_ready", false );
+	startup["shader_elapsed_ms"] = shaderStartup.get( "shader_elapsed_ms", 0.0 );
+	startup["vt_stage"] = vtStartup.get( "startup_stage_name", "IDLE" );
+	startup["vt_cpu_ready"] = vtStartup.get( "vt_cpu_ready", false );
+	startup["vt_storage_ready"] = vtStartup.get( "vt_storage_ready", false );
+	startup["vt_gpu_ready"] = vtStartup.get( "vt_gpu_ready", false );
+	startup["vt_cpu_bytes"] = vtStartup.get( "vt_cpu_bytes", 0 );
+	startup["vt_gpu_bytes"] = vtStartup.get( "vt_gpu_bytes", 0 );
+	startup["vt_elapsed_ms"] = vtStartup.get( "vt_elapsed_ms", 0.0 );
+	startup["terrain_data_stage"] = dataStartup.get( "startup_stage_name", "IDLE" );
+	startup["terrain_data_region_count"] = dataStartup.get( "startup_region_count", 0 );
+	startup["terrain_data_bytes_read"] = dataStartup.get( "startup_bytes_read", 0 );
+	startup["terrain_data_ready"] = dataStartup.get( "startup_ready", false );
+	startup["terrain_data_elapsed_ms"] = dataStartup.get( "startup_elapsed_ms", 0.0 );
+	startup["final_sync_attempts"] = coordinatorStartup.get( "final_sync_attempts", 0 );
+	startup["final_sync_successes"] = coordinatorStartup.get( "final_sync_successes", 0 );
+	startup["final_sync_failures"] = coordinatorStartup.get( "final_sync_failures", 0 );
+	startup["final_sync_elapsed_ms"] = coordinatorStartup.get( "final_sync_elapsed_ms", 0.0 );
+	startup["render_lifecycle_stage"] = coordinatorStartup.get( "render_lifecycle_stage", 0 );
+	startup["render_lifecycle_failure_code"] = coordinatorStartup.get( "render_lifecycle_failure_code", 0 );
+	startup["render_lifecycle_recovery_revision"] = coordinatorStartup.get( "render_lifecycle_recovery_revision", 0 );
+	startup["data"] = dataStartup;
+	startup["render_coordinator"] = coordinatorStartup;
+	diagnostics["startup"] = startup;
 
 	Dictionary frame;
 	frame["sequence"] = ( int64_t )( m_runtimeProfileLastSample.m_nFrameSequence );
@@ -522,6 +586,12 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	instancer["streaming_update_distance"] = m_fInstancerCellStreamingUpdateDistance;
 	instancer["update_cell_budget"] = m_nInstancerUpdateCellBudget;
 	diagnostics["instancer"] = instancer;
+	if ( m_pInstanceOcclusion ) {
+		diagnostics["instance_occlusion"] = m_pInstanceOcclusion->getStats();
+	}
+	if ( m_pInstancePhysics ) {
+		diagnostics["instance_physics"] = m_pInstancePhysics->getStats();
+	}
 
 	if ( m_pCollision ) {
 		Dictionary collision = bDeep ? m_pCollision->getStats() : Dictionary();

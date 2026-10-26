@@ -3,6 +3,7 @@
 #include "assets/terrain_3d_render_world_material_resource.h"
 
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/core/object.hpp>
 
 #include <string.h>
 
@@ -33,6 +34,71 @@ static uint16_t t3dRwMaterialFloatToHalf( const float fValue ) {
 
 static EA_FORCE_INLINE uint32_t t3dRwMaterialPackHalf2( const float fX, const float fY ) {
 	return ( uint32_t )( t3dRwMaterialFloatToHalf( fX ) ) | ( ( uint32_t )( t3dRwMaterialFloatToHalf( fY ) ) << 16u );
+}
+
+static EA_FORCE_INLINE uint32_t t3dRwMaterialPackUnorm8( const float fValue ) {
+	const float value = t3dRwMaterialClamp01( fValue );
+	return ( uint32_t )( value * 255.0f + 0.5f );
+}
+
+static EA_FORCE_INLINE uint32_t t3dRwMaterialPackVtScalars0(
+        const float fMetallic, const float fRoughness, const float fAo, const float fAlphaScissor ) {
+	return ( t3dRwMaterialPackUnorm8( fMetallic ) << T3D_VT_MATERIAL_METALLIC_SHIFT )
+	        | ( t3dRwMaterialPackUnorm8( fRoughness ) << T3D_VT_MATERIAL_ROUGHNESS_SHIFT )
+	        | ( t3dRwMaterialPackUnorm8( fAo ) << T3D_VT_MATERIAL_AO_SHIFT )
+	        | ( t3dRwMaterialPackUnorm8( fAlphaScissor ) << T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT );
+}
+
+static EA_FORCE_INLINE uint32_t t3dRwMaterialPackVtScalars1(
+        const float fNormalScale, const uint32_t nSurfaceLayout, const uint32_t nTextureFilter ) {
+	return ( uint32_t )( t3dRwMaterialFloatToHalf( fNormalScale ) )
+	        | ( ( nSurfaceLayout << T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT ) & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK )
+	        | ( ( nTextureFilter << T3D_VT_MATERIAL_FILTER_SHIFT ) & T3D_VT_MATERIAL_FILTER_MASK );
+}
+
+Terrain3DRenderWorldMaterial::~Terrain3DRenderWorldMaterial( void ) {
+	disconnectAllTextureSignals();
+}
+
+void Terrain3DRenderWorldMaterial::onTextureChanged( void ) {
+	emit_changed();
+}
+
+bool Terrain3DRenderWorldMaterial::referencesTexture( const Ref<Texture2D> &rTexture ) const {
+	return rTexture.is_valid()
+	        && ( m_albedoTexture == rTexture || m_normalTexture == rTexture || m_surfaceTexture == rTexture
+	                || m_heightTexture == rTexture );
+}
+
+void Terrain3DRenderWorldMaterial::disconnectTextureSignalIfUnused( const Ref<Texture2D> &rTexture ) {
+	if ( rTexture.is_null() || referencesTexture( rTexture ) ) {
+		return;
+	}
+	const Callable callback = callable_mp( this, &Terrain3DRenderWorldMaterial::onTextureChanged );
+	if ( rTexture->is_connected( "changed", callback ) ) {
+		rTexture->disconnect( "changed", callback );
+	}
+}
+
+void Terrain3DRenderWorldMaterial::connectTextureSignal( const Ref<Texture2D> &rTexture ) {
+	if ( rTexture.is_null() ) {
+		return;
+	}
+	const Callable callback = callable_mp( this, &Terrain3DRenderWorldMaterial::onTextureChanged );
+	if ( !rTexture->is_connected( "changed", callback ) ) {
+		rTexture->connect( "changed", callback );
+	}
+}
+
+void Terrain3DRenderWorldMaterial::disconnectAllTextureSignals( void ) {
+	const Callable callback = callable_mp( this, &Terrain3DRenderWorldMaterial::onTextureChanged );
+	Ref<Texture2D> textures[4] = { m_albedoTexture, m_normalTexture, m_surfaceTexture, m_heightTexture };
+	for ( uint32_t iTexture = 0u; iTexture < 4u; ++iTexture ) {
+		const Ref<Texture2D> &texture = textures[iTexture];
+		if ( texture.is_valid() && texture->is_connected( "changed", callback ) ) {
+			texture->disconnect( "changed", callback );
+		}
+	}
 }
 
 void Terrain3DRenderWorldMaterial::_bind_methods( void ) {
@@ -116,7 +182,10 @@ void Terrain3DRenderWorldMaterial::setAlbedoTexture( const Ref<Texture2D> &rValu
 	if ( m_albedoTexture == rValue ) {
 		return;
 	}
+	const Ref<Texture2D> previous = m_albedoTexture;
 	m_albedoTexture = rValue;
+	disconnectTextureSignalIfUnused( previous );
+	connectTextureSignal( m_albedoTexture );
 	emit_changed();
 }
 
@@ -124,7 +193,10 @@ void Terrain3DRenderWorldMaterial::setNormalTexture( const Ref<Texture2D> &rValu
 	if ( m_normalTexture == rValue ) {
 		return;
 	}
+	const Ref<Texture2D> previous = m_normalTexture;
 	m_normalTexture = rValue;
+	disconnectTextureSignalIfUnused( previous );
+	connectTextureSignal( m_normalTexture );
 	emit_changed();
 }
 
@@ -132,7 +204,10 @@ void Terrain3DRenderWorldMaterial::setSurfaceTexture( const Ref<Texture2D> &rVal
 	if ( m_surfaceTexture == rValue ) {
 		return;
 	}
+	const Ref<Texture2D> previous = m_surfaceTexture;
 	m_surfaceTexture = rValue;
+	disconnectTextureSignalIfUnused( previous );
+	connectTextureSignal( m_surfaceTexture );
 	emit_changed();
 }
 
@@ -140,7 +215,10 @@ void Terrain3DRenderWorldMaterial::setHeightTexture( const Ref<Texture2D> &rValu
 	if ( m_heightTexture == rValue ) {
 		return;
 	}
+	const Ref<Texture2D> previous = m_heightTexture;
 	m_heightTexture = rValue;
+	disconnectTextureSignalIfUnused( previous );
+	connectTextureSignal( m_heightTexture );
 	emit_changed();
 }
 
@@ -255,23 +333,33 @@ uint32_t Terrain3DRenderWorldMaterial::getMaterialFlags( void ) const {
 	return flags;
 }
 
-bool Terrain3DRenderWorldMaterial::compileRecordCold( const t3dRenderWorldMaterialVtBindings_t &rVt, T3DMaterialRecord &rRecord ) const {
+bool Terrain3DRenderWorldMaterial::compileVtRecordCold(
+        const t3dRenderingMaterialVtBindings_t &rVt, t3dRenderingMaterialGpu_t &rRecord ) const {
 	memset( &rRecord, 0, sizeof( rRecord ) );
-	rRecord.nAlbedoVT = rVt.m_nAlbedoVt;
-	rRecord.nNormalVT = rVt.m_nNormalVt;
-	rRecord.nSurfaceVT = rVt.m_nSurfaceVt;
-	rRecord.nHeightVT = rVt.m_nHeightVt;
-	rRecord.vBaseColor[0] = m_baseColor.r;
-	rRecord.vBaseColor[1] = m_baseColor.g;
-	rRecord.vBaseColor[2] = m_baseColor.b;
-	rRecord.vBaseColor[3] = m_baseColor.a;
-	rRecord.vUvScaleBias[0] = m_uvScale.x;
-	rRecord.vUvScaleBias[1] = m_uvScale.y;
-	rRecord.vUvScaleBias[2] = m_uvOffset.x;
-	rRecord.vUvScaleBias[3] = m_uvOffset.y;
-	rRecord.nFlags = getMaterialFlags();
-	rRecord.nSamplerClass = ( uint32_t )( m_iSamplerClass );
-	rRecord.nPackedScalars0 = t3dRwMaterialPackHalf2( m_fRoughness, m_fMetallic );
-	rRecord.nPackedScalars1 = t3dRwMaterialPackHalf2( m_fNormalScale, m_fAlphaScissorThreshold );
+	rRecord.m_nVtAllocation = rVt.m_nVtAllocation;
+	rRecord.m_nOverlayVtAllocation = rVt.m_nOverlayVtAllocation;
+	rRecord.m_nFlags = getMaterialFlags();
+	if ( m_normalTexture.is_valid() ) {
+		rRecord.m_nFlags |= T3D_VT_MATERIAL_NORMAL_MAPPING;
+	}
+	if ( m_heightTexture.is_valid() ) {
+		rRecord.m_nFlags |= T3D_VT_MATERIAL_HAS_HEIGHT;
+	}
+	if ( m_bAlphaScissor || m_baseColor.a < 1.0f ) {
+		rRecord.m_nFlags |= T3D_VT_MATERIAL_HAS_ALPHA;
+	}
+	rRecord.m_nPackedScalars0 = t3dRwMaterialPackVtScalars0( m_fMetallic, m_fRoughness, 1.0f, m_fAlphaScissorThreshold );
+	rRecord.m_vBaseColor[0] = ( float )( m_baseColor.r );
+	rRecord.m_vBaseColor[1] = ( float )( m_baseColor.g );
+	rRecord.m_vBaseColor[2] = ( float )( m_baseColor.b );
+	rRecord.m_vBaseColor[3] = ( float )( m_baseColor.a );
+	rRecord.m_vUvScaleBias[0] = ( float )( m_uvScale.x );
+	rRecord.m_vUvScaleBias[1] = ( float )( m_uvScale.y );
+	rRecord.m_vUvScaleBias[2] = ( float )( m_uvOffset.x );
+	rRecord.m_vUvScaleBias[3] = ( float )( m_uvOffset.y );
+	rRecord.m_nPackedEmission = 0u;
+	rRecord.m_nPackedScalars1 = t3dRwMaterialPackVtScalars1( m_fNormalScale, 0u, 3u );
+	rRecord.m_nSamplerClass = ( uint32_t )( m_iSamplerClass );
+	rRecord.m_nReserved = 0u;
 	return true;
 }

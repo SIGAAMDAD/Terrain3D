@@ -10,11 +10,14 @@
 #include "data/terrain_3d_region.h"
 #include "eastl_config.h"
 #include "instances/terrain_3d_instance_layout.h"
+#include "instances/terrain_3d_instance_mutation.h"
+#include "instances/terrain_3d_instance_publication_builder.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
 #include <EASTL/bitset.h>
 #include <stdint.h>
 #include <godot_cpp/classes/multi_mesh.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 
 class Terrain3D;
 class Terrain3DData;
@@ -168,6 +171,7 @@ typedef struct t3dPendingPlacement_s {
 	Transform3D m_transform;
 	Color m_color = s_colorWhite;
 	uint32_t m_nOwner = 0;
+	uint16_t m_nBehaviorFlags = T3D_INSTANCE_LEGACY_BEHAVIOR;
 } t3dPendingPlacement_t;
 
 typedef struct t3dLogicalCellState_s {
@@ -215,32 +219,11 @@ typedef eastl::vector_map<t3dTransitionBucketKey_t, t3dTransitionBucketState_t, 
 typedef eastl::vector_set<t3dCellUpdateKey_t, t3dCellUpdateKeyLess_t, Terrain3DEastlAllocator> t3dCellUpdateSet_t;
 typedef eastl::vector_map<t3dCellUpdateKey_t, t3dRdCellRange_t, t3dCellUpdateKeyLess_t, Terrain3DEastlAllocator> t3dRdSnapshotRangeMap_t;
 
-class Terrain3DInstancer : public Object {
-	GDCLASS( Terrain3DInstancer, Object );
-	CLASS_NAME();
-	friend Terrain3D;
-
-public: // Constants
-private:
-	Terrain3D *m_pTerrain = NULL;
-
-	// Runtime indices use EASTL contiguous sorted containers. Capacity is established
-	// during cold rebuilds; mutating runtime paths reject inserts once that capacity
-	// is exhausted instead of asking EASTL to grow implicitly.
-
-	eastl::vector<t3dRenderCell_t, Terrain3DEastlAllocator> m_renderCells;
-	t3dRenderCellIndex_t m_iRenderCellIndex;
-	t3dRegionList_t m_szRegionRenderLists[s_nInstanceRegionTableCapacity] = {};
-	eastl::vector<t3dRenderRegionNode_t, Terrain3DEastlAllocator> m_renderRegionNodes;
-	uint32_t m_nRenderRegionFreeHead = UINT32_MAX;
-	eastl::bitset<s_nInstanceRegionTableCapacity> m_regionRenderMask;
-	// One entry per persistent logical instance cell, independent of renderer
-	// residency. Asset counts describe authored terrain contents; streaming only
-	// creates or removes t3dRenderCell_t records and must never mutate these totals.
+// Post-P34 R09 instancer decomposition. Persistent authored instance records remain
+// authoritative in Terrain3DInstanceStore; these embedded domains own only the
+// facade's indices, mutation queues, immutable publication state, and runtime policy.
+struct Terrain3DInstanceRepository {
 	t3dLogicalCellMap_t m_logicalCellCounts;
-	t3dTransitionBucketMap_t m_singleLodTransitionBuckets;
-	eastl::vector<t3dTransitionCellNode_t, Terrain3DEastlAllocator> m_transitionCellNodes;
-	uint32_t m_nTransitionCellFreeHead = UINT32_MAX;
 	t3dRegionList_t m_szRegionLogicalLists[s_nInstanceRegionTableCapacity] = {};
 	eastl::vector<t3dLogicalRegionNode_t, Terrain3DEastlAllocator> m_logicalRegionNodes;
 	uint32_t m_nLogicalRegionFreeHead = UINT32_MAX;
@@ -248,19 +231,22 @@ private:
 	uint64_t m_szLogicalMeshInstanceTotals[s_nMaxMeshAssets] = {};
 	eastl::bitset<s_nMaxMeshAssets> m_dirtyLogicalMeshCounts;
 	bool m_bPublishingLogicalMeshCounts = false;
+	eastl::vector<Transform3D, Terrain3DEastlAllocator> m_placementTransforms;
+	eastl::vector<Color, Terrain3DEastlAllocator> m_placementColors;
+	eastl::vector<uint16_t, Terrain3DEastlAllocator> m_placementBehaviorFlags;
+	eastl::vector<t3dPendingPlacement_t, Terrain3DEastlAllocator> m_placementPending;
+	eastl::fixed_vector<Terrain3DRegion *, s_nRegionSlots, false> m_touchedRegions;
+};
+
+struct Terrain3DInstanceMutationService {
 	t3dRegionUpdateState_t m_szRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	eastl::bitset<s_nInstanceRegionUpdateCapacity> m_regionUpdateMask;
 	eastl::fixed_vector<uint16_t, s_nInstanceRegionUpdateCapacity, false> m_regionUpdateIndices;
 	t3dCellUpdateSet_t m_streamingUpdates;
-	// Dirty region topology is fixed by the maximum terrain domain. Only active
-	// indices are copied into the callback-safe snapshot between batches.
 	t3dRegionUpdateState_t m_szActiveRegionUpdates[s_nInstanceRegionUpdateCapacity] = {};
 	eastl::bitset<s_nInstanceRegionUpdateCapacity> m_activeRegionUpdateMask;
 	eastl::fixed_vector<uint16_t, s_nInstanceRegionUpdateCapacity, false> m_activeRegionUpdateIndices;
 	t3dCellUpdateSet_t m_activeStreamingUpdates;
-	// Dirty requests are converted into stable cell keys before publishing the
-	// immutable RD instance scene. Processing a bounded number of keys per frame
-	// prevents global asset or region changes from becoming one unbounded hitch.
 	eastl::vector<t3dCellUpdateKey_t, Terrain3DEastlAllocator> m_pendingCellUpdates;
 	eastl::vector<t3dCellUpdateKey_t, Terrain3DEastlAllocator> m_buildingCellUpdates;
 	eastl::bitset<s_nInstanceRegionTableCapacity> m_pendingRegionWorkMask;
@@ -279,6 +265,32 @@ private:
 	uint32_t m_nMultimeshUploadsLastFrame = 0u;
 	uint32_t m_nNewRenderInstancesLastFrame = 0u;
 	bool m_bStreamingSelectionDeferredLastFrame = false;
+	eastl::bitset<s_nMaxMeshAssets> m_globalMeshUpdates;
+	bool m_bUpdateAll = false;
+	bool m_bRebuildAll = false;
+	uint64_t m_nDerivedMutationGeneration = 1u;
+};
+
+struct Terrain3DInstanceSnapshotBuilder {
+	mutable PackedFloat32Array m_uploadBuffer;
+	uint64_t m_nRdPublicationGeneration = 1u;
+	uint64_t m_nHlodRepresentationRequiredGeneration = 0u;
+	mutable uint64_t m_nHlodRepresentationBuiltGeneration = 0u;
+	mutable uint64_t m_nLastAssetSourceFailureSignature = 0u;
+	mutable t3dInstancePublicationDiagnostics_t m_rdPublicationDiagnostics;
+	mutable t3dRdSnapshotRangeMap_t m_rdSnapshotRanges;
+};
+
+struct Terrain3DInstanceRuntimePolicy {
+	eastl::vector<t3dRenderCell_t, Terrain3DEastlAllocator> m_renderCells;
+	t3dRenderCellIndex_t m_iRenderCellIndex;
+	t3dRegionList_t m_szRegionRenderLists[s_nInstanceRegionTableCapacity] = {};
+	eastl::vector<t3dRenderRegionNode_t, Terrain3DEastlAllocator> m_renderRegionNodes;
+	uint32_t m_nRenderRegionFreeHead = UINT32_MAX;
+	eastl::bitset<s_nInstanceRegionTableCapacity> m_regionRenderMask;
+	t3dTransitionBucketMap_t m_singleLodTransitionBuckets;
+	eastl::vector<t3dTransitionCellNode_t, Terrain3DEastlAllocator> m_transitionCellNodes;
+	uint32_t m_nTransitionCellFreeHead = UINT32_MAX;
 	uint64_t m_nTransitionCellsExaminedLastScan = 0u;
 	uint64_t m_nTransitionLodEvaluationsLastScan = 0u;
 	uint64_t m_nTransitionsQueuedLastScan = 0u;
@@ -286,38 +298,63 @@ private:
 	uint64_t m_nTransitionBucketsExaminedLastScan = 0u;
 	uint64_t m_nTransitionCandidateBucketsLastScan = 0u;
 	uint64_t m_nTransitionFullRescanFallbackCount = 0u;
-	eastl::bitset<s_nMaxMeshAssets> m_globalMeshUpdates;
-	bool m_bUpdateAll = false;
-	bool m_bRebuildAll = false;
 	uint32_t m_szMeshSettingsRevision[s_nMaxMeshAssets] = {};
 	real_t m_szMeshStreamingRadius[s_nMaxMeshAssets] = {};
-	static_assert( s_nMaxMeshAssets <= UINT16_MAX, "Mesh asset IDs must fit in uint16_t" );
 	eastl::fixed_vector<uint16_t, s_nMaxMeshAssets, false> m_finiteStreamingMeshIds;
 	real_t m_fMaxStreamingRadius = 0.0f;
 	bool m_bStreamingCacheDirty = true;
-	mutable PackedFloat32Array m_uploadBuffer;
-	eastl::vector<Transform3D, Terrain3DEastlAllocator> m_placementTransforms;
-	eastl::vector<Color, Terrain3DEastlAllocator> m_placementColors;
-	eastl::vector<t3dPendingPlacement_t, Terrain3DEastlAllocator> m_placementPending;
-	eastl::fixed_vector<Terrain3DRegion *, s_nRegionSlots, false> m_touchedRegions;
-	uint64_t m_nRdPublicationGeneration = 1u;
-	mutable t3dRdSnapshotRangeMap_t m_rdSnapshotRanges;
 	size_t m_nRenderCellCapacity = 0u;
 	size_t m_nLogicalCellCapacity = 0u;
 	size_t m_nTransitionBucketCapacity = 0u;
 	size_t m_nCellUpdateQueueCapacity = 0u;
+	size_t m_nRequestedMutationLogicalCapacity = 0u;
 	bool m_bRuntimeStorageRebuildPending = false;
 	uint64_t m_nCapacityMissCount = 0u;
 	uint64_t m_nColdRebuildCount = 0u;
 	uint64_t m_nOwnerGrowthDeniedCount = 0u;
+	t3dInstancerMode_t m_mode = NORMAL;
+	uint32_t m_nDensityCounter = 0;
+	int m_nCellSize = s_nInstanceDefaultCellSize;
+	uint8_t m_nCellShift = 5u;
+	bool m_bCellStreamingEnabled = true;
+	bool m_bSingleLodInstanceBuffers = true;
+	real_t m_fCellStreamingMargin = 64.f;
+	real_t m_fCellStreamingStep = 16.f;
+	uint32_t m_nUpdateCellBudget = 32;
+	int m_nRuntimeUpdateCellBudgetOverride = -1;
+	Vector3 m_lastStreamPosition = s_v3Zero;
+	bool m_bStreamPositionValid = false;
+};
+
+class Terrain3DInstancer : public Object {
+	GDCLASS( Terrain3DInstancer, Object );
+	CLASS_NAME();
+	friend Terrain3D;
+
+public: // Constants
+private:
+	Terrain3D *m_pTerrain = NULL;
+
+	// Runtime indices use EASTL contiguous sorted containers. Capacity is established
+	// during cold rebuilds; mutating runtime paths reject inserts once that capacity
+	// is exhausted instead of asking EASTL to grow implicitly.
+
+	Terrain3DInstanceRepository m_repository;
+	Terrain3DInstanceMutationService m_mutationService;
+	Terrain3DInstanceSnapshotBuilder m_snapshotBuilder;
+	Terrain3DInstanceRuntimePolicy m_runtimePolicy;
 
 	static t3dRenderCellKey_t makeRenderKey( const t3dRenderCell_t &rCell );
 	void markRdPublicationDirty( void );
-	void requestRuntimeCapacityForMutation( size_t nAdditionalRecords );
+	void emitDerivedMutation( const Vector2i &rRegion, const Vector2i &rCell, int nMeshId, uint32_t nFlags, uint32_t nSourceRevision = 0u );
+	bool requestRuntimeCapacityForMutation( size_t nAdditionalRecords );
 	bool rebuildRuntimeStorageCapacities( void );
 	bool appendBuildingCellUpdate( const t3dCellUpdateKey_t &rKey );
 	bool insertStreamingUpdate( const t3dCellUpdateKey_t &rKey );
 	bool reportRuntimeCapacityExceeded( const char *pszStorage, size_t nRequired, size_t nCapacity );
+	bool buildAuthoritativeRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
+	bool buildMinimalRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
+	bool buildLegacyRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	static int getRegionTableIndex( const Vector2i &vRegion );
 	uint32_t allocateRenderRegionNode( size_t iRenderCell, uint16_t nRegionIndex );
 	void releaseRenderRegionNode( uint32_t nNode, uint16_t nRegionIndex );
@@ -344,7 +381,7 @@ private:
 	void clearLogicalCellCounts( void );
 	void rebuildLogicalCountsFromStore( void );
 	void reconcileLogicalRegion( Terrain3DRegion *pRegion, int nMeshId );
-	void swapLogicalMeshIds( int nSrcId, int nDstId );
+	bool swapLogicalMeshIds( int nSrcId, int nDstId );
 	bool hasPendingUpdates( void ) const;
 	bool hasPendingUpdatesForRegion( const Vector2i &rRegion ) const;
 	void markPendingRegionWork( const Vector2i &rRegion );
@@ -381,15 +418,18 @@ private:
 	        const Vector3 &rTargetPosition ) const;
 	const t3dRenderCell_t *findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const;
 	void queueSingleLodTransitions( const Vector3 &rPreviousPosition, const Vector3 &rTargetPosition );
-	void appendGlobalNative( int nMeshId,
+	bool appendGlobalNative( int nMeshId,
 	        const Transform3D *pTransforms,
 	        size_t nTransformCount,
 	        const Color *pColors,
 	        size_t nColorCount,
 	        bool bUpdate,
 	        uint32_t owner = 0,
-	        bool bBackup = true );
-	void appendRegionNative( Terrain3DRegion *pRegion,
+	        bool bBackup = true,
+	        uint16_t nBehaviorFlags = T3D_INSTANCE_LEGACY_BEHAVIOR,
+	        const uint16_t *pBehaviorFlags = NULL,
+	        size_t nBehaviorCount = 0u );
+	bool appendRegionNative( Terrain3DRegion *pRegion,
 	        int nMeshId,
 	        const Transform3D *pTransforms,
 	        size_t nTransformCount,
@@ -398,22 +438,11 @@ private:
 	        bool bGlobalSpace,
 	        bool bUpdate,
 	        bool bBackup = true,
-	        uint32_t nOwner = 0 );
+	        uint32_t nOwner = 0,
+	        uint16_t nBehaviorFlags = T3D_INSTANCE_LEGACY_BEHAVIOR,
+	        const uint16_t *pBehaviorFlags = NULL,
+	        size_t nBehaviorCount = 0u );
 
-	t3dInstancerMode_t m_mode = NORMAL;
-	uint32_t m_nDensityCounter = 0;
-	int m_nCellSize = s_nInstanceDefaultCellSize;
-	uint8_t m_nCellShift = 5u;
-	bool m_bCellStreamingEnabled = true;
-	// Single-LOD mode publishes one resident render descriptor per logical cell.
-	// Disabling it retains one logical descriptor per LOD for reference-style cross-fades.
-	bool m_bSingleLodInstanceBuffers = true;
-	real_t m_fCellStreamingMargin = 64.f;
-	real_t m_fCellStreamingStep = 16.f;
-	uint32_t m_nUpdateCellBudget = 32;
-	int m_nRuntimeUpdateCellBudgetOverride = -1;
-	Vector3 m_lastStreamPosition = s_v3Zero;
-	bool m_bStreamPositionValid = false;
 
 	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, uint8_t nCellShift ) const;
 	bool buildRepartitionedStore(
@@ -446,7 +475,7 @@ private:
 	        const t3dCellInterval_t &rOther,
 	        int nCellsPerRegion );
 	void backupRegion( const Ref<Terrain3DRegion> &rRegion );
-	void fillMultimeshBuffer(
+	bool fillMultimeshBuffer(
 	        const t3dInstanceCell_t &rCell, PackedFloat32Array &rBuffer, const AABB *pSourceMeshAabb = NULL, AABB *pCellAabb = NULL ) const;
 	Vector2i getCell( const Vector3 &rGlobalPosition ) const;
 	t3dUsableHeight_t getUsableHeight( Terrain3DSampler &rSampler,
@@ -455,6 +484,7 @@ private:
 	        bool bOnCollision,
 	        real_t fRaycastStart,
 	        bool bSampleNormal = false ) const;
+	int resnapInstancesToTerrain( const AABB &rAabb, bool bUseEditorCollision );
 
 public:
 	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
@@ -479,10 +509,10 @@ public:
 
 	void setMode( const t3dInstancerMode_t mode );
 	EA_FORCE_INLINE t3dInstancerMode_t getMode( void ) const {
-		return m_mode;
+		return m_runtimePolicy.m_mode;
 	}
 	EA_FORCE_INLINE bool isEnabled( void ) const {
-		return m_mode != INSTANCER_DISABLED;
+		return m_runtimePolicy.m_mode != INSTANCER_DISABLED;
 	}
 
 	void addInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams );
@@ -511,32 +541,28 @@ public:
 	        const PackedColorArray &rColors,
 	        const bool bUpdate = true );
 	void updateTransforms( const AABB &rAabb );
+	int snapInstancesToTerrain( const AABB &rAabb );
+	int setInstanceFollowPolicy( const AABB &rAabb, bool bFollowHeight, bool bFollowNormal, bool bManualOrientation, int nMeshId = -1 );
 	void updateStreaming( const Vector3 &rTargetPosition );
 	void synchronizeStreamingTarget( const Vector3 &rTargetPosition );
 	EA_FORCE_INLINE void deferStreamingSelectionForFrame( void ) {
-		m_bStreamingSelectionDeferredLastFrame = true;
+		m_mutationService.m_bStreamingSelectionDeferredLastFrame = true;
 	}
 	EA_FORCE_INLINE void resetStreamingResidency( void ) {
 		suspendRendering();
 	}
 	EA_FORCE_INLINE int getRenderCellCount( void ) const {
-		return ( int )( m_renderCells.size() );
+		return ( int )( m_runtimePolicy.m_renderCells.size() );
 	}
 	EA_FORCE_INLINE int getPendingStreamingUpdateCount( void ) const {
-		const size_t pending_count =
-		        m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor ? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor : 0u;
-		return ( int )( m_streamingUpdates.size() + m_activeStreamingUpdates.size() + pending_count );
+		const size_t pending_count = m_mutationService.m_pendingCellUpdates.size() > m_mutationService.m_iPendingCellUpdateCursor
+		        ? m_mutationService.m_pendingCellUpdates.size() - m_mutationService.m_iPendingCellUpdateCursor
+		        : 0u;
+		return ( int )( m_mutationService.m_streamingUpdates.size() + m_mutationService.m_activeStreamingUpdates.size() + pending_count );
 	}
-	bool areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
-		for ( int z = rRegionMin.y; z <= rRegionMax.y; ++z ) {
-			for ( int x = rRegionMin.x; x <= rRegionMax.x; ++x ) {
-				if ( hasPendingUpdatesForRegion( Vector2i( x, z ) ) ) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
+	void onHlodRepresentationChanged( const Vector2i &rRegion, uint64_t nRepresentationGeneration );
+	void onAssetPolicyChanged( int nMeshId );
+	bool areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
 	Dictionary getStats( void ) const;
 	Dictionary debugValidateSingleLodTransitionCandidates( const Vector3 &rPreviousPosition, const Vector3 &rTargetPosition ) const;
 	Dictionary debugValidateSingleLodState( const Vector3 &rTargetPosition ) const;
@@ -544,48 +570,53 @@ public:
 	size_t getActiveMultimeshBytes( void ) const;
 	void setCellSize( int nCellSize );
 	EA_FORCE_INLINE int getCellSize( void ) const {
-		return m_nCellSize;
+		return m_runtimePolicy.m_nCellSize;
 	}
 	int getCellsPerRegionAxis( void ) const;
 	bool ensureRegionLayout( Terrain3DRegion *pRegion );
 	bool refreshResidentRegionLayouts( void );
 	void setCellStreamingEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const {
-		return m_bCellStreamingEnabled;
+		return m_runtimePolicy.m_bCellStreamingEnabled;
 	}
 	void setSingleLodInstanceBuffers( bool bEnabled );
 	EA_FORCE_INLINE bool isSingleLodInstanceBuffers( void ) const {
-		return m_bSingleLodInstanceBuffers;
+		return m_runtimePolicy.m_bSingleLodInstanceBuffers;
 	}
 	void setCellStreamingMargin( real_t fMargin );
 	EA_FORCE_INLINE real_t getCellStreamingMargin( void ) const {
-		return m_fCellStreamingMargin;
+		return m_runtimePolicy.m_fCellStreamingMargin;
 	}
 	EA_FORCE_INLINE void setCellStreamingStep( const real_t fStep ) {
-		m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f );
+		m_runtimePolicy.m_fCellStreamingStep = CLAMP( fStep, 1.f, 256.f );
 	}
 	EA_FORCE_INLINE real_t getCellStreamingStep( void ) const {
-		return m_fCellStreamingStep;
+		return m_runtimePolicy.m_fCellStreamingStep;
 	}
 	void setUpdateCellBudget( int nBudget );
 	EA_FORCE_INLINE uint32_t getUpdateCellBudget( void ) const {
-		return m_nUpdateCellBudget;
+		return m_runtimePolicy.m_nUpdateCellBudget;
 	}
 	EA_FORCE_INLINE void setRuntimeUpdateCellBudgetOverride( const int nBudget ) {
-		m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 );
+		m_runtimePolicy.m_nRuntimeUpdateCellBudgetOverride = nBudget < 0 ? -1 : CLAMP( nBudget, 0, 65536 );
 	}
 	int getEffectiveUpdateCellBudget( void ) const {
-		if ( m_nRuntimeUpdateCellBudgetOverride < 0 ) {
-			return ( int )( m_nUpdateCellBudget );
+		if ( m_runtimePolicy.m_nRuntimeUpdateCellBudgetOverride < 0 ) {
+			return ( int )( m_runtimePolicy.m_nUpdateCellBudget );
 		}
-		return m_nUpdateCellBudget == 0u ? m_nRuntimeUpdateCellBudgetOverride
-		                                 : MIN( ( int )( m_nUpdateCellBudget ), m_nRuntimeUpdateCellBudgetOverride );
+		return m_runtimePolicy.m_nUpdateCellBudget == 0u
+		        ? m_runtimePolicy.m_nRuntimeUpdateCellBudgetOverride
+		        : MIN( ( int )( m_runtimePolicy.m_nUpdateCellBudget ), m_runtimePolicy.m_nRuntimeUpdateCellBudgetOverride );
 	}
 	EA_FORCE_INLINE bool isUpdateBudgetLimitedLastFrame( void ) const {
 		const int effective_budget = getEffectiveUpdateCellBudget();
-		return effective_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t )( effective_budget ) && m_nQueueAfterLastFrame > 0u;
+		return effective_budget > 0 && m_mutationService.m_nProcessedCellUpdatesLastFrame >= ( uint32_t )( effective_budget )
+		        && m_mutationService.m_nQueueAfterLastFrame > 0u;
 	}
 	int getClosestMeshId( const Vector3 &rGlobalPosition ) const;
+	Dictionary pickEditableInstance( const Vector3 &rRayOrigin, const Vector3 &rRayDirection, real_t fMaxDistance = 4096.0f ) const;
+	Dictionary getEditableInstance( const Dictionary &rHandle ) const;
+	Dictionary setEditableInstanceTransform( const Dictionary &rHandle, const Transform3D &rGlobalTransform, bool bManualize = false );
 	void copyPasteDfr( const Terrain3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Terrain3DRegion *pDstRegion );
 
 	void swapIds( const int nSrcId, const int nDstId );
@@ -598,18 +629,27 @@ public:
 
 	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
-		return m_nRdPublicationGeneration;
+		return m_snapshotBuilder.m_nRdPublicationGeneration;
 	}
 	EA_FORCE_INLINE size_t getRdSnapshotInstanceCapacity( void ) const {
-		return m_nLogicalCellCapacity;
+		return m_runtimePolicy.m_nLogicalCellCapacity;
 	}
 	EA_FORCE_INLINE size_t getRdSnapshotCellCapacity( void ) const {
-		return m_nRenderCellCapacity;
+		return m_runtimePolicy.m_nRenderCellCapacity;
 	}
 
 	EA_FORCE_INLINE void resetDensityCounter( void ) {
-		m_nDensityCounter = 0;
+		m_runtimePolicy.m_nDensityCounter = 0;
 	}
+
+#if defined( TERRAIN3D_INSTANCER_TRANSACTION_TEST_ACCESS )
+	static bool testPrepareStoreAppend( const Terrain3DInstanceStore &rSource,
+	        int nMeshId,
+	        const t3dPendingPlacement_t *pPlacements,
+	        size_t nPlacementCount,
+	        Terrain3DInstanceStore &rReplacement );
+	static bool testPrepareStoreEraseMesh( const Terrain3DInstanceStore &rSource, int nMeshId, Terrain3DInstanceStore &rReplacement );
+#endif
 
 protected:
 	static void _bind_methods( void );
@@ -620,7 +660,7 @@ VARIANT_ENUM_CAST( t3dInstancerMode_t );
 // Modifies _density_counter, not const!
 inline uint32_t Terrain3DInstancer::getDensityCount( const real_t fDensity ) {
 	uint32_t count = 0;
-	if ( fDensity < 1.f && m_nDensityCounter++ % ( uint32_t )( 1.f / fDensity ) == 0 ) {
+	if ( fDensity < 1.f && m_runtimePolicy.m_nDensityCounter++ % ( uint32_t )( 1.f / fDensity ) == 0 ) {
 		count = 1;
 	} else if ( fDensity >= 1.f ) {
 		count = ( uint32_t )( fDensity );

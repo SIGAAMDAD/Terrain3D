@@ -6,6 +6,7 @@ extends "res://addons/terrain_3d/src/editor_plugin_base.gd"
 
 # Includes
 const Terrain3DUI = preload("res://addons/terrain_3d/src/ui.gd")
+const InstanceTransformProxy = preload("res://addons/terrain_3d/src/instance_transform_proxy.gd")
 const ASSET_DOCK: PackedScene = preload("res://addons/terrain_3d/src/asset_dock.tscn")
 const ErosionInspectorPlugin = preload("res://addons/terrain_3d/menu/erosion_inspector_plugin.gd")
 const ShaderPerformancePanel = preload("res://addons/terrain_3d/src/shader_performance_panel.gd")
@@ -22,8 +23,8 @@ const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
 const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
 const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
 const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
-const EXPECTED_NATIVE_API_REVISION: int = 2026090601
-const EXPECTED_NATIVE_BUILD_ID: String = "instancer-authoritative-visible-index-fix-2026-09-09"
+const EXPECTED_NATIVE_API_REVISION: int = 2026091003
+const EXPECTED_NATIVE_BUILD_ID: String = "mesh-derived-instance-physics-occlusion-p13-2-rd-capacity-align-2026-09-16"
 
 # Editor Plugin
 var ui: Terrain3DUI
@@ -54,6 +55,8 @@ var _last_terrain: Terrain3D
 var _last_modifiers: int = 0
 var _use_meta: bool = false
 var _native_contract_error_reported: bool = false
+var _instance_edit_mode: bool = false
+var _instance_edit_proxy: Node3D
 
 
 func _init() -> void:
@@ -312,6 +315,8 @@ func _on_inspector_mouse_entered() -> void:
 func _handles(p_object: Object) -> bool:
 	if p_object is Terrain3D:
 		return true
+	elif _is_instance_edit_proxy(p_object):
+		return true
 	elif p_object is NavigationRegion3D and is_instance_valid(_last_terrain):
 		return true
 
@@ -336,6 +341,9 @@ func _edit(p_object: Object) -> void:
 
 	if p_object is Terrain3D:
 		_bind_terrain(p_object as Terrain3D)
+	elif _is_instance_edit_proxy(p_object) and is_terrain_valid(_last_terrain):
+		terrain = _last_terrain
+		ui.set_visible(true)
 	else:
 		_clear()
 
@@ -423,6 +431,8 @@ func _detach_current_terrain() -> void:
 	nav_region = null
 	viewport = null
 	_input_mode = 0
+	_instance_edit_mode = false
+	_destroy_instance_edit_proxy()
 	if is_instance_valid(ui):
 		ui.clear_picking()
 	if is_instance_valid(editor):
@@ -475,6 +485,9 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	var mouse_pos: Vector2 = vp_mouse_pos if full_resolution else vp_mouse_pos / 2
 	var camera_pos: Vector3 = p_viewport_camera.project_ray_origin(mouse_pos)
 	var camera_dir: Vector3 = p_viewport_camera.project_ray_normal(mouse_pos)
+
+	if _instance_edit_mode:
+		return _handle_instance_edit_input(p_event, camera_pos, camera_dir)
 
 	ui.update_decal()
 
@@ -636,6 +649,11 @@ func _read_input(p_event: InputEvent = null) -> AfterGUIInput:
 		| int(modifier_alt) << 2
 	)
 
+	## Instancer edit mode delegates keyboard transform shortcuts to Godot's native
+	## Node3D editor. Terrain3D must not steal W/E/S/etc. while the proxy gizmo is active.
+	if _instance_edit_mode and p_event is InputEventKey:
+		return AFTER_GUI_INPUT_PASS
+
 	## Process hotkeys.
 	var key_event: InputEventKey = p_event as InputEventKey
 	if (
@@ -785,7 +803,7 @@ func is_selected() -> bool:
 	var selected: Array[Node] = EditorInterface.get_selection().get_selected_nodes()
 	for node: Node in selected:
 		if ( is_instance_valid(_last_terrain) and node.get_instance_id() == _last_terrain.get_instance_id() ) or \
-			node is Terrain3D:
+			node is Terrain3D or _is_instance_edit_proxy(node):
 			return true
 	return false
 
@@ -799,6 +817,120 @@ func select_terrain() -> void:
 			print("Terrain3DEditorPlugin: Clearing and reselecting terrain")
 		es.clear()
 		es.add_node(_last_terrain)
+
+
+func set_instance_edit_mode(p_enabled: bool) -> void:
+	var enabled := p_enabled and is_terrain_valid() and is_instance_valid(editor) and editor.get_tool() == Terrain3DEditor.INSTANCER
+	if enabled == _instance_edit_mode:
+		return
+	_instance_edit_mode = enabled
+	if not enabled:
+		_clear_instance_edit_selection(true)
+
+
+func _is_instance_edit_proxy(p_object: Object) -> bool:
+	return is_instance_valid(_instance_edit_proxy) and p_object == _instance_edit_proxy
+
+
+func _is_instance_edit_proxy_selected() -> bool:
+	if not is_instance_valid(_instance_edit_proxy):
+		return false
+	return EditorInterface.get_selection().get_selected_nodes().has(_instance_edit_proxy)
+
+
+func _ensure_instance_edit_proxy() -> Node3D:
+	if is_instance_valid(_instance_edit_proxy):
+		return _instance_edit_proxy
+	if not is_terrain_valid():
+		return null
+	_instance_edit_proxy = InstanceTransformProxy.new()
+	_instance_edit_proxy.name = "Terrain3D Instance"
+	terrain.add_child(_instance_edit_proxy, false, INTERNAL_MODE_BACK)
+	_instance_edit_proxy.transform_edited.connect(_on_instance_edit_proxy_transform_edited)
+	return _instance_edit_proxy
+
+
+func _destroy_instance_edit_proxy() -> void:
+	if not is_instance_valid(_instance_edit_proxy):
+		_instance_edit_proxy = null
+		return
+	if _instance_edit_proxy.transform_edited.is_connected(_on_instance_edit_proxy_transform_edited):
+		_instance_edit_proxy.transform_edited.disconnect(_on_instance_edit_proxy_transform_edited)
+	var selection := EditorInterface.get_selection()
+	if selection.get_selected_nodes().has(_instance_edit_proxy):
+		selection.clear()
+	_instance_edit_proxy.queue_free()
+	_instance_edit_proxy = null
+
+
+func _clear_instance_edit_selection(p_reselect_terrain: bool = false) -> void:
+	if is_instance_valid(_instance_edit_proxy):
+		_instance_edit_proxy.clear_handle()
+	var selection := EditorInterface.get_selection()
+	if is_instance_valid(_instance_edit_proxy) and selection.get_selected_nodes().has(_instance_edit_proxy):
+		selection.clear()
+		if p_reselect_terrain and is_terrain_valid():
+			selection.add_node(terrain)
+
+
+func _select_editable_instance(p_handle: Dictionary) -> void:
+	if p_handle.is_empty() or not bool(p_handle.get("valid", false)):
+		return
+	var proxy := _ensure_instance_edit_proxy()
+	if not is_instance_valid(proxy):
+		return
+	proxy.bind_handle(p_handle)
+	proxy.name = "Terrain3D Instance %d" % int(p_handle.get("mesh_id", -1))
+	if is_instance_valid(asset_dock):
+		asset_dock.set_selected_by_asset_id(int(p_handle.get("mesh_id", -1)), Terrain3DAssets.TYPE_MESH)
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(proxy)
+
+
+func _handle_instance_edit_input(p_event: InputEvent, p_ray_origin: Vector3, p_ray_direction: Vector3) -> AfterGUIInput:
+	if not is_instance_valid(terrain) or not is_instance_valid(terrain.instancer):
+		return AFTER_GUI_INPUT_PASS
+	if not (p_event is InputEventMouseButton):
+		return AFTER_GUI_INPUT_PASS
+	var mouse_button := p_event as InputEventMouseButton
+	if mouse_button.button_index != MOUSE_BUTTON_LEFT or not mouse_button.pressed or _input_mode <= 0:
+		return AFTER_GUI_INPUT_PASS
+
+	# Once the native transform gizmo owns a selected proxy, normal clicks must pass
+	# through to Godot so translate/rotate/scale handles work. Shift-click explicitly
+	# asks Terrain3D to ray-pick a different editable instance.
+	if _is_instance_edit_proxy_selected() and _instance_edit_proxy.has_handle() and not modifier_shift:
+		return AFTER_GUI_INPUT_PASS
+
+	var hit: Dictionary = terrain.instancer.pick_editable_instance(p_ray_origin, p_ray_direction, 4096.0)
+	if hit.is_empty():
+		return AFTER_GUI_INPUT_PASS
+	# Handle identity includes the cell revision. A compacted/reinserted record may
+	# reuse the same dense index, but a revision change must rebind the proxy.
+	if is_instance_valid(_instance_edit_proxy) and _instance_edit_proxy.is_same_handle(hit):
+		return AFTER_GUI_INPUT_PASS
+	_select_editable_instance(hit)
+	return AFTER_GUI_INPUT_STOP
+
+
+func _on_instance_edit_proxy_transform_edited(p_global_transform: Transform3D) -> void:
+	if not _instance_edit_mode or not is_terrain_valid() or not is_instance_valid(_instance_edit_proxy):
+		return
+	var handle: Dictionary = _instance_edit_proxy.get_handle()
+	if handle.is_empty():
+		return
+	var updated: Dictionary = terrain.instancer.set_editable_instance_transform(handle, p_global_transform, false)
+	if updated.is_empty():
+		_instance_edit_proxy.restore_last_valid_transform()
+		# Distinguish an ordinary rejected transform from a stale dense-index handle.
+		# Native lookup is revision-checked, so an empty refresh means this selection
+		# no longer identifies the record it originally bound to.
+		var current: Dictionary = terrain.instancer.get_editable_instance(handle)
+		if current.is_empty():
+			_clear_instance_edit_selection(true)
+		return
+	_instance_edit_proxy.accept_handle(updated)
 
 
 ## Editor Settings

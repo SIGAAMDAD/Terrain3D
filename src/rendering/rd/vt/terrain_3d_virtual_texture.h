@@ -1,0 +1,267 @@
+// Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+
+#ifndef TERRAIN3D_VIRTUAL_TEXTURE_H
+#define TERRAIN3D_VIRTUAL_TEXTURE_H
+
+#include "core/terrain_3d_startup_state.h"
+#include "memory/terrain_3d_memory_zone.h"
+#include "rendering/rd/vt/terrain_3d_vt_contract.h"
+#include "rendering/rd/vt/terrain_3d_vt_gpu.h"
+#include "rendering/rd/vt/terrain_3d_vt_pack_runtime.h"
+
+#include <godot_cpp/variant/dictionary.hpp>
+
+struct T3DVirtualTextureStats {
+	uint64_t nInitializeCount;
+	uint64_t nShutdownCount;
+	uint64_t nCpuImageBytes;
+	uint64_t nPhysicalCacheCreateEpoch;
+	uint64_t nPhysicalCacheFreeEpoch;
+	uint32_t nPhysicalPageSetCapacity;
+	uint32_t nPhysicalCacheAllocationEvents;
+	uint32_t nPhysicalCacheAllocationEventsAfterSeal;
+	uint32_t nHotViolationCount;
+	uint64_t nQualityDemandResetCount;
+};
+
+enum T3DVTRequestProducer : uint16_t {
+	T3D_VT_REQUEST_PRODUCER_TERRAIN = 0u,
+	T3D_VT_REQUEST_PRODUCER_INSTANCE = 1u,
+	T3D_VT_REQUEST_PRODUCER_COUNT = 2u,
+};
+
+struct T3DVTStagedRequest {
+	T3DVTRequest Request;
+	uint16_t nProducer;
+	uint16_t nReserved;
+};
+
+struct T3DVTFinalTelemetry {
+	uint64_t nAllocations;
+	uint64_t nVirtualPages;
+	uint64_t nPhysicalCapacity;
+	uint64_t nPhysicalResident;
+	uint64_t nPhysicalFree;
+	uint64_t nPhysicalRetiring;
+	uint64_t nRequestCapacity;
+	uint64_t nRequestAttempts;
+	uint64_t nRequestUnique;
+	uint64_t nRequestSameKey;
+	uint64_t nRequestHashOverflow;
+	uint64_t nRequestListOverflow;
+	uint64_t nRequestDropped;
+	uint64_t nPageHits;
+	uint64_t nPageMisses;
+	uint64_t nParentFallbackHits;
+	uint64_t nTailFallbackHits;
+	uint64_t nResolverDepth0Samples;
+	uint64_t nResolverDepth1Samples;
+	uint64_t nResolverDepth2To3Samples;
+	uint64_t nResolverDepth4PlusSamples;
+	uint64_t nResolverTailSamples;
+	uint64_t nIoJobsPending;
+	uint64_t nIoBytesTotal;
+	uint64_t nIoBytesPerSecond;
+	uint64_t nUploadPageSetsFrame;
+	uint64_t nUploadBytesFrame;
+	uint64_t nUploadBytesTotal;
+	uint64_t nEvictionsFrame;
+	uint64_t nEvictionsTotal;
+	uint64_t nThrashCount;
+	uint64_t nResidentTerrain;
+	uint64_t nResidentClutter;
+	uint64_t nResidentGroundCover;
+	uint64_t nResidentOccluder;
+	uint64_t nResidentHlod;
+	uint64_t nDescriptorBindsInstancerPass;
+	uint64_t nDescriptorRebuildsRuntime;
+	uint64_t nGpuResourceCreatesAfterSeal;
+};
+
+class Terrain3DVirtualTexture {
+public:
+	Terrain3DVirtualTexture();
+	~Terrain3DVirtualTexture();
+
+	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone );
+	bool configure_streaming_limits_cold( const T3DVTStreamingLimits &pLimits );
+	void set_frame_budgets_hot( uint32_t nRequestBudget, uint32_t nAdmissionBudget );
+	const T3DVTStreamingLimits &get_streaming_limits() const;
+	bool configure_residency_policy_cold( const T3DVTResidencyPolicy &pPolicy );
+	const T3DVTResidencyPolicy &get_residency_policy() const;
+	bool prepare_cpu_cold( const T3DRenderWorldLimits &pLimits, const T3DVtGpuResourcePlan &pPlan, uint32_t nStartupGeneration );
+	bool prepare_gpu_storage_cold( Terrain3DVtResourceImage *pResources );
+	bool bind_gpu_executable_cold();
+	bool service_gpu_executable_cold( uint32_t nMaxWorkUnits );
+	bool publish_initial_cold();
+	bool service_initial_publication_cold( uint64_t nMaxBytes, uint32_t nMaxWorkUnits );
+	void shutdown_cold();
+	void seal_hot_runtime();
+
+	bool is_initialized() const;
+	bool is_cpu_ready() const;
+	bool is_gpu_storage_ready() const;
+	bool is_gpu_ready() const;
+	bool is_initial_published() const;
+	bool is_hot_sealed() const;
+	bool is_readback_enabled() const;
+	bool validate_hot_plateau_reference_debug();
+	uint64_t get_cpu_image_bytes() const;
+	uint64_t get_gpu_reserved_bytes() const;
+	uint32_t get_page_table_generation() const;
+	uint32_t getMaterialVTAllocationId( uint32_t nMaterialId ) const;
+	bool loadPackageCold( const void *pPackageBytes, uint64_t nPackageBytes );
+	bool clearPackageCold( void );
+	void set_startup_generation( uint32_t nGeneration );
+	void cancel_startup_cold( uint32_t nGeneration );
+	EA_FORCE_INLINE t3dStartupDomainSnapshot_t get_startup_snapshot() const {
+		return t3dStartupDomainSnapshot( m_startupState );
+	}
+	void mark_startup_failed( uint32_t nGeneration );
+	godot::Dictionary get_startup_diagnostics() const;
+	bool findMaterialAllocationCold( uint64_t nStableKey, uint32_t &rAllocationId ) const;
+	uint32_t getActiveAllocationCount() const;
+	uint32_t getActiveVirtualPageCount() const;
+	uint32_t getLoadedPackageAllocationCountCold() const;
+	uint32_t getLoadedPackageVirtualPageCountCold() const;
+	uint32_t getDatabaseGeneration() const;
+	uint32_t getPackageGeneration() const;
+	uint64_t getPackageContentSignature() const;
+	uint32_t getDatabaseKind() const;
+	bool supportsSparseV3() const;
+	uint32_t getTerrainMegaVTAllocationBase() const;
+	uint32_t getTerrainMegaVTAllocationId( uint32_t nRegionMapIndex ) const;
+	const T3DVTDatabaseView *get_database() const;
+	const Terrain3DVtResourceImage *get_resource_image() const;
+	bool set_quality_profile( uint32_t nProfile );
+	uint32_t get_requested_quality_profile() const;
+	uint32_t get_package_fully_supported_profile_mask() const;
+	uint32_t get_quality_fallback_allocation_count() const;
+	uint32_t get_quality_generation() const;
+	uint32_t get_allocations_by_highest_profile( uint32_t nProfile ) const;
+	uint32_t get_allocations_by_resolved_profile( uint32_t nProfile ) const;
+	uint32_t getPhysicalFormatFamilyCountV3() const;
+	bool getPhysicalFormatFamilyBindingV3( uint32_t nFamily, godot::RID &rRid, uint32_t &rLayerCount ) const;
+	T3DVTResidencyState &get_residency();
+	const T3DVTResidencyState &get_residency() const;
+	T3DVTStreamingState &get_streaming();
+	const T3DVTStreamingState &get_streaming() const;
+	Terrain3DVTGpu &get_gpu();
+	const Terrain3DVTGpu &get_gpu() const;
+	const T3DVirtualTextureStats &get_stats() const;
+	T3DVTFinalTelemetry get_final_telemetry_reference_debug() const;
+	uint32_t stage_material_footprint_hot( uint32_t nAllocationId,
+	        uint32_t nFrameId,
+	        const float pUvMin[2],
+	        const float pUvMax[2],
+	        uint16_t nWantedMip,
+	        uint32_t nMaxRequests,
+	        uint16_t nPriority,
+	        T3DVTRequestProducer eProducer );
+	bool flush_staged_material_requests_hot(
+	        uint32_t nFrameId, uint32_t &rTerrainAccepted, uint32_t &rInstanceAccepted );
+
+	bool claim_stream_job_owner_hot( uint32_t &rJobIndex );
+	bool cancel_stream_job_owner_hot( uint32_t pJobIndex );
+	bool execute_stream_job_async( uint32_t pJobIndex, T3DVTStreamReadDecodeFn pReadDecode, void *pUser );
+	uint64_t service_uploads_hot( uint32_t pFrameId );
+	bool service_retired_slots_hot( uint32_t pFrameId );
+
+private:
+	bool allocate_cpu_image_cold();
+	void release_cpu_image_cold();
+	bool prepare_neutral_legacy_cpu_cold();
+	bool prepare_runtime_package_cpu_cold();
+	bool publish_neutral_legacy_warm();
+	bool publish_runtime_package_warm();
+	void release_runtime_pack_cold();
+	uint32_t count_physical_banks() const;
+	bool apply_quality_profile_state_v3( t3dVTAllocation_t *pAllocations, uint32_t nAllocationCount );
+
+	Terrain3DVtResourceImage *m_pResources;
+	Terrain3DMemoryZone *m_pRuntimeAllocatorZone;
+	Terrain3DVTGpu m_Gpu;
+	T3DRenderWorldLimits m_Limits;
+	T3DVTResidencyState m_Residency;
+	T3DVTStreamingState m_Streaming;
+	T3DVTStreamingLimits m_StreamingLimits;
+	T3DVTResidencyPolicy m_ResidencyPolicy;
+	T3DVTDatabaseView m_NeutralDatabase;
+	T3DVTPackRuntimeStorage m_RuntimePack;
+	T3DVTFileHeader m_NeutralHeader;
+	T3DVTAllocationRecordV1 m_NeutralAllocations[T3D_RW_VT_CHANNELS];
+	T3DVTPageFileRecord m_NeutralPages[T3D_RW_VT_CHANNELS];
+	T3DVTPayloadRecord m_NeutralPayloads[T3D_RW_VT_CHANNELS];
+	uint8_t m_NeutralPayloadBytes[T3D_RW_VT_CHANNELS];
+	void *m_pCpuImage;
+	uint64_t m_nCpuImageBytes;
+	t3dVTAllocation_t *m_pAllocations;
+	t3dVTTailMetadata_t *m_pTailMetadata;
+	T3DVTPageTableEntry *m_pPageTable;
+	t3dVTPhysicalSlot_t *m_pPhysicalPageSets;
+	T3DVTStreamJob *m_pStreamJobs;
+	uint16_t *m_pStreamPageToJob;
+	uint16_t *m_pStreamFreeJobs;
+	uint16_t *m_pStreamQueuedJobs;
+	uint16_t *m_pStreamJobQueuePosition;
+	uint16_t *m_pStreamReadyJobs;
+	uint16_t *m_pStreamMergedWantedMip;
+	uint16_t *m_pStreamMergedPriority;
+	uint32_t *m_pFreePhysicalSlots;
+	T3DVTRetiredPageSet *m_pRetiredPageSets;
+	uint32_t *m_pLastEvictedFrame;
+	T3DVTStagedRequest *m_pStagedRequests;
+	uint32_t m_nStagedRequestCount;
+	uint32_t m_nStagedRequestFrame;
+	uint32_t m_nFrameRequestBudget = 1u;
+	uint8_t *m_pStreamScratch;
+	uint32_t *m_pScratchLaneOwner;
+	t3dAtomic_t<uint32_t> m_ScratchLaneCompletion[T3D_RW_MAX_STREAM_SCRATCH_LANES];
+	T3DVirtualTextureStats m_Stats;
+	T3DVTQualityRuntimeStats m_QualityStats;
+	uint32_t m_nRequestedQualityProfile;
+	uint32_t m_nQualityGeneration;
+	uint64_t m_nGpuHelperCreateEpoch;
+	uint64_t m_nTelemetryStartUsec;
+	uint64_t m_nTelemetryLastUploadedPageSets;
+	uint64_t m_nTelemetryLastEvictions;
+	uint64_t m_nTelemetryUploadPageSetsFrame;
+	uint64_t m_nTelemetryUploadBytesFrame;
+	uint64_t m_nTelemetryEvictionsFrame;
+	t3dAtomicU32_t m_nStartupGeneration{ 0u };
+	t3dStartupDomainState_t m_startupState;
+	uint64_t m_nStartupPackagePrepareCount;
+	uint64_t m_nStartupPackagePrepareUsecLast;
+	uint64_t m_nStartupCpuImagePrepareCount;
+	uint64_t m_nStartupCpuImagePrepareUsecLast;
+	uint64_t m_nStartupGpuInitializeCount;
+	uint64_t m_nStartupGpuInitializeUsecLast;
+	uint64_t m_nStartupGpuStoragePrepareCount;
+	uint64_t m_nStartupGpuStoragePrepareUsecLast;
+	uint64_t m_nStartupGpuBindCount;
+	uint64_t m_nStartupGpuBindUsecLast;
+	uint64_t m_nStartupInitialPublicationCount;
+	uint64_t m_nStartupInitialPublicationUsecLast;
+	uint64_t m_nResolverDepth0Samples;
+	uint64_t m_nResolverDepth1Samples;
+	uint64_t m_nResolverDepth2To3Samples;
+	uint64_t m_nResolverDepth4PlusSamples;
+	uint64_t m_nResolverTailSamples;
+	uint32_t m_nResolverTelemetrySampleFrame;
+	uint32_t m_nResolverTelemetrySamplesThisFrame;
+	uint32_t m_nUploadCadenceStableFrames;
+	uint64_t m_nUploadCadenceLastPageMisses;
+	uint64_t m_nUploadCadenceLastEvictions;
+	uint64_t m_nUploadCadenceLastThrash;
+	bool m_bStreamingLimitsConfigured;
+	bool m_bResidencyPolicyConfigured;
+	bool m_bRuntimePackLoaded;
+	bool m_bCpuPrepared;
+	bool m_bGpuStoragePrepared;
+	bool m_bExecutableBound;
+	bool m_bInitialPublished;
+	bool m_bInitialized;
+	bool m_bHotSealed;
+};
+
+#endif // TERRAIN3D_VIRTUAL_TEXTURE_H

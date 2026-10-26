@@ -40,63 +40,6 @@ typedef struct t3dTextureSettingsBlock_s {
 	int m_nCount = 0;
 } t3dTextureSettingsBlock_t;
 
-typedef enum t3dRuntimeMaterialChannel_e {
-	RUNTIME_MATERIAL_CHANNEL_ALBEDO = 0,
-	RUNTIME_MATERIAL_CHANNEL_NORMAL = 1,
-	RUNTIME_MATERIAL_CHANNEL_SURFACE = 2,
-	RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT = 3,
-	RUNTIME_MATERIAL_CHANNEL_FAR_ALBEDO = 4,
-	RUNTIME_MATERIAL_CHANNEL_COUNT = 5,
-} t3dRuntimeMaterialChannel_t;
-
-typedef struct t3dRuntimeMaterialImageInfo_s {
-	uint64_t m_iOffset = 0u;
-	uint32_t m_nSize = 0u;
-	uint32_t m_nChecksum = 0u;
-	int32_t m_nWidth = 0;
-	int32_t m_nHeight = 0;
-	int32_t m_nFormat = ( int32_t )( Image::FORMAT_MAX );
-	uint32_t m_nMipmaps = 0u;
-} t3dRuntimeMaterialImageInfo_t;
-
-typedef struct t3dRuntimeMaterialLayerInfo_s {
-	t3dRuntimeMaterialImageInfo_t m_szChannels[RUNTIME_MATERIAL_CHANNEL_COUNT]{};
-	Color m_averageAlbedo = s_colorWhite;
-	Color m_albedoColor = s_colorWhite;
-	float m_fNormalDepth = 1.0f;
-	float m_fAoStrength = 0.5f;
-	float m_fAoLightAffect = 0.0f;
-	float m_fRoughness = 0.0f;
-	float m_fMetallic = 0.0f;
-	float m_fUvScale = 0.1f;
-	Vector2 m_detile = Vector2();
-	Vector2 m_displacement = Vector2();
-	uint32_t m_iBundleIndex = 0u;
-} t3dRuntimeMaterialLayerInfo_t;
-
-
-typedef struct t3dRuntimeMaterialTokenBucket_s {
-	uint64_t m_nTokens = 0u;
-	uint64_t m_nRatePerSecond = 0u;
-	uint64_t m_nBurst = 0u;
-	uint64_t m_nLastRefillUsec = 0u;
-} t3dRuntimeMaterialTokenBucket_t;
-
-typedef struct t3dRuntimeMaterialReadRequest_s {
-	int16_t m_nLogicalId = -1;
-	uint32_t m_nReadBytes = 0u;
-	uint32_t m_nPreparedBytes = 0u;
-} t3dRuntimeMaterialReadRequest_t;
-
-typedef struct t3dRuntimeMaterialCompletion_s {
-	Ref<Image> m_szImages[RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT + 1];
-	int16_t m_nLogicalId = -1;
-	uint32_t m_nReadBytes = 0u;
-	uint32_t m_nUploadBytes = 0u;
-	uint8_t m_nTextureUpdateCalls = 0u;
-	bool m_bSuccess = false;
-} t3dRuntimeMaterialCompletion_t;
-
 typedef struct t3dTextureArrayLayout_s {
 	Vector2i m_vSize = s_v2iZero;
 	Image::Format m_eFormat = Image::FORMAT_MAX;
@@ -135,53 +78,16 @@ private:
 	PackedVector2Array m_textureDetiles;
 	PackedVector2Array m_textureDisplacements;
 	uint64_t m_nTexturePublicationGeneration = 1u;
-	uint64_t m_nTextureLayerMappingGeneration = 1u;
 	uint64_t m_nMeshSourceGeneration = 1u;
+	uint64_t m_nInstanceVtMaterialSourceGeneration = 1u;
+	int m_szThumbnailBatchIds[s_nMaxMeshAssets]{};
+	int m_nThumbnailBatchCount = 0;
+	int m_iThumbnailBatchCursor = 0;
+	Vector2i m_thumbnailBatchSize = V2I( 256 );
+	uint64_t m_nThumbnailBatchGeneration = 0u;
+	uint32_t m_nThumbnailBatchDeferredRetries = 0u;
+	bool m_bThumbnailBatchActive = false;
 
-	t3dRuntimeMaterialLayerInfo_t m_runtimeMaterialCookedLayers[s_nMaxTextureAssets]{};
-	int m_runtimeMaterialLogicalToPhysical[s_nMaxTextureAssets]{};
-	int m_runtimeMaterialPhysicalToLogical[s_nMaxTextureAssets]{};
-	uint64_t m_runtimeMaterialLastUseTick[s_nMaxTextureAssets]{};
-	uint64_t m_runtimeMaterialRetireAfterTick[s_nMaxTextureAssets]{};
-	String m_runtimeMaterialCachePath;
-	uint64_t m_nRuntimeMaterialCookedSignature = 0u;
-	uint64_t m_nRuntimeMaterialTick = 0u;
-	int m_nRuntimeMaterialPhysicalLayers = 0;
-	int m_nRuntimeMaterialResidentCount = 0;
-	int m_nRuntimeMaterialUploadsLastTick = 0;
-	int m_nRuntimeMaterialEvictionsLastTick = 0;
-	bool m_bRuntimeMaterialCacheActive = false;
-	bool m_bRuntimeMaterialCookedValid = false;
-	bool m_bRuntimeMaterialSourceTexturesReleased = false;
-
-	// Runtime material residency is producer/consumer: the owner thread admits
-	// byte-bounded work and performs GPU updates; one persistent worker owns the
-	// cooked-file handle, reads/checksums payloads, and constructs Images.
-	t3dThread_t m_runtimeMaterialWorker;
-	mutable t3dMutex_t m_runtimeMaterialWorkerMutex;
-	t3dCondition_t m_runtimeMaterialWorkerWake;
-	t3dRuntimeMaterialReadRequest_t m_runtimeMaterialRequestRing[s_nMaxTextureAssets]{};
-	t3dRuntimeMaterialCompletion_t m_runtimeMaterialCompletionRing[s_nMaxTextureAssets]{};
-	uint8_t m_runtimeMaterialRequestState[s_nMaxTextureAssets]{};
-	uint8_t m_runtimeMaterialChecksumVerified[s_nMaxTextureAssets][RUNTIME_MATERIAL_CHANNEL_DISPLACEMENT + 1]{};
-	int m_iRuntimeMaterialRequestRead = 0;
-	int m_iRuntimeMaterialRequestWrite = 0;
-	int m_nRuntimeMaterialRequestCount = 0;
-	int m_iRuntimeMaterialCompletionRead = 0;
-	int m_iRuntimeMaterialCompletionWrite = 0;
-	int m_nRuntimeMaterialCompletionCount = 0;
-	uint64_t m_nRuntimeMaterialPreparedBytesInFlight = 0u;
-	uint64_t m_nRuntimeMaterialReadBytesLastTick = 0u;
-	uint64_t m_nRuntimeMaterialUploadBytesLastTick = 0u;
-	uint64_t m_nRuntimeMaterialBudgetRejects = 0u;
-	uint64_t m_nRuntimeMaterialChecksumCacheHits = 0u;
-	uint64_t m_nRuntimeMaterialWorkerFileOpens = 0u;
-	int m_nRuntimeMaterialCompletionsLastTick = 0;
-	bool m_bRuntimeMaterialWorkerStop = false;
-	bool m_bRuntimeMaterialWorkerRunning = false;
-	t3dRuntimeMaterialTokenBucket_t m_runtimeMaterialDiskBucket;
-	t3dRuntimeMaterialTokenBucket_t m_runtimeMaterialGpuBucket;
-	t3dRuntimeMaterialTokenBucket_t m_runtimeMaterialUpdateCallBucket;
 
 	void swapIds( const t3dAssetType_t type, const int nSrcId, const int nDstId );
 	void connectAssetSignals( const t3dAssetType_t type, const Ref<Terrain3DAssetResource> &rAsset );
@@ -203,31 +109,18 @@ private:
 	void updateMeshInternal( const int nId, bool bPersistentChange );
 	void updateMesh( const int nId );
 	void updateMeshPreview( const int nId );
-	String getRuntimeMaterialCachePath( void ) const;
+	void serviceMeshThumbnailAsync( void );
+	void completeMeshThumbnailAsync( int64_t nAssetId,
+	        const Ref<Image> &rImage,
+	        int64_t nFailure,
+	        int64_t nBatchGeneration,
+	        int64_t nMeshSourceGeneration,
+	        int64_t nAssetObjectId );
 	uint64_t computeRuntimeMaterialSourceSignature( void ) const;
-	bool loadRuntimeMaterialCookedIndex( void );
-	void publishRuntimeMaterialCookedSettings( void );
-	Ref<Image> loadRuntimeMaterialCookedImage( int nLogicalId, int nChannel ) const;
-	bool createRuntimeMaterialChannelArray(
-	        Terrain3DGeneratedTexture &rGenerated, int nChannel, int nPhysicalLayers, bool bFullyResident ) const;
-	void refreshRuntimeMaterialBindings( void );
-	bool initializeRuntimeMaterialPhysicalArrays( int nLayerLimit = -1 );
 	bool initializeFarMaterialArray( void );
-	bool publishRuntimeMaterialPreparedLayer( const t3dRuntimeMaterialCompletion_t &rCompletion, int nPhysicalLayer );
-	void startRuntimeMaterialWorker( void );
-	void stopRuntimeMaterialWorker( void );
-	void runtimeMaterialWorkerMain( void );
-	bool queueRuntimeMaterialRead( int nLogicalId );
-	bool peekRuntimeMaterialCompletion( t3dRuntimeMaterialCompletion_t &rCompletion ) const;
-	void popRuntimeMaterialCompletion( void );
-	void initializeRuntimeMaterialBudgets( void );
-	static void refillRuntimeMaterialBucket( t3dRuntimeMaterialTokenBucket_t &rBucket, uint64_t nNowUsec );
-	static bool consumeRuntimeMaterialBucket( t3dRuntimeMaterialTokenBucket_t &rBucket, uint64_t nAmount, uint64_t nNowUsec );
-	void updateRuntimeMaterialResidencyInternal( const uint8_t *pPriorityIds, int nPriorityCount, int nUploadBudget );
-	void releaseRuntimeMaterialSourceTextures( void );
-	void resetRuntimeMaterialCacheState( bool bClearGeneratedArrays );
 	void advanceTexturePublicationGeneration( bool bMappingChanged );
 	void advanceMeshSourceGeneration( void );
+	void advanceInstanceVtMaterialSourceGeneration( void );
 
 public:
 	EA_FORCE_INLINE Terrain3DAssets( void ) {
@@ -343,43 +236,23 @@ public:
 	}
 	void clearTextures( const bool bUpdate = false );
 	void updateTextureList( void );
-	bool configureRuntimeMaterialCache( void );
-	Dictionary cookRuntimeMaterialCache( void );
-	void updateRuntimeMaterialResidency( const uint8_t *pPriorityIds, int nPriorityCount );
-	PackedInt32Array getTextureLayerMap( void ) const;
-	EA_FORCE_INLINE int getTextureLayerPhysicalIndexInternal( const int nLogical ) const {
-		if ( nLogical < 0 || nLogical >= s_nMaxTextureAssets ) {
-			return nLogical;
-		}
-		return m_bRuntimeMaterialCacheActive ? m_runtimeMaterialLogicalToPhysical[( size_t )( nLogical )] : nLogical;
-	}
 	EA_FORCE_INLINE uint64_t getTexturePublicationGeneration( void ) const {
 		return m_nTexturePublicationGeneration;
-	}
-	EA_FORCE_INLINE uint64_t getTextureLayerMappingGeneration( void ) const {
-		return m_nTextureLayerMappingGeneration;
 	}
 	EA_FORCE_INLINE uint64_t getMeshSourceGeneration( void ) const {
 		return m_nMeshSourceGeneration;
 	}
-	PackedColorArray getRuntimeMaterialAverageAlbedo( void ) const;
-	Dictionary getRuntimeMaterialCacheStats( void ) const;
+	EA_FORCE_INLINE uint64_t getInstanceVtMaterialSourceGeneration( void ) const {
+		return m_nInstanceVtMaterialSourceGeneration;
+	}
 	EA_FORCE_INLINE uint64_t getRuntimeMaterialSourceSignature( void ) const {
 		return computeRuntimeMaterialSourceSignature();
-	}
-	EA_FORCE_INLINE bool isRuntimeMaterialCacheActive( void ) const {
-		return m_bRuntimeMaterialCacheActive;
-	}
-	EA_FORCE_INLINE bool areRuntimeMaterialSourceTexturesReleased( void ) const {
-		return m_bRuntimeMaterialSourceTexturesReleased;
-	}
-	EA_FORCE_INLINE void invalidateRuntimeMaterialCache( void ) {
-		resetRuntimeMaterialCacheState( false );
 	}
 
 	void setMeshAsset( const int nId, const Ref<Terrain3DMeshAsset> &rMeshAsset );
 	Ref<Terrain3DMeshAsset> getMeshAsset( const int nId ) const;
 	void setMeshList( const TypedArray<Terrain3DMeshAsset> &rMeshList );
+	bool setMeshAssetsBatch( const Dictionary &rAssetsById );
 	TypedArray<Terrain3DMeshAsset> getMeshList( void ) const;
 	EA_FORCE_INLINE int getMeshCount( void ) const {
 		return m_meshList.size();

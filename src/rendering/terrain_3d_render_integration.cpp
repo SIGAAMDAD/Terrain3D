@@ -1,6 +1,8 @@
 #include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "core/terrain_3d_sync.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "instances/terrain_3d_instance_occlusion.h"
+#include "instances/terrain_3d_instance_physics.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
@@ -98,7 +100,7 @@ void Terrain3D::setupTerrainMesher( void ) {
 
 void Terrain3D::setupTerrainMesher( const Vector3 &rInitialTarget ) {
 	if ( !m_pTerrainMesher ) {
-		LOG( DEBUG, "Creating CPU clipmap topology producer" );
+		LOG( DEBUG, "Creating procedural clipmap layout producer" );
 		m_pTerrainMesher = memnew( Terrain3DMesher );
 	}
 	const bool bTieringActive = isRuntimeShaderTieringActive();
@@ -120,16 +122,9 @@ void Terrain3D::setupTerrainMesher( const Vector3 &rInitialTarget ) {
 	        m_nShadowLodCount,
 	        tier_shadow_enabled,
 	        tier_shadow_lod_counts,
-	        isGpuRegionCookedPagesEnabled() && !isEditorAuthoringModeInternal(),
 	        rInitialTarget );
-	if ( m_pRenderCoordinator && m_bInitialized ) {
-		m_pRenderCoordinator->initialize( this );
-	}
 }
 
-bool Terrain3D::cookRuntimeClipmapGeometryPack( void ) const {
-	return m_pTerrainMesher && m_pTerrainMesher->writeRuntimeGeometryPack( getDataDirectory() );
-}
 
 void Terrain3D::destroyTerrainMesher( const bool bFinal ) {
 	LOG( INFO, "Destroying terrain mesher" );
@@ -155,7 +150,7 @@ void Terrain3D::setupOceanMesher( const Vector3 &rInitialTarget ) {
 	m_bLightStateValid = false;
 	updateOceanShaderVariant();
 	if ( !m_pOceanMesher ) {
-		LOG( DEBUG, "Creating CPU ocean clipmap topology producer" );
+		LOG( DEBUG, "Creating procedural ocean clipmap layout producer" );
 		m_pOceanMesher = memnew( Terrain3DMesher );
 	}
 	m_pOceanMesher->initialize( this,
@@ -170,7 +165,6 @@ void Terrain3D::setupOceanMesher( const Vector3 &rInitialTarget ) {
 	        m_nOceanMeshLods + m_nOceanTessellationLevel,
 	        { true, true, true },
 	        { -1, -1, -1 },
-	        false,
 	        rInitialTarget );
 	m_pOceanMesher->updateAabbs( m_fOceanCullMargin, s_v2Zero );
 	if ( m_pRenderCoordinator && m_bInitialized ) {
@@ -475,6 +469,22 @@ void Terrain3D::destroyMousePicking( void ) {
 	}
 }
 
+void Terrain3D::destroyInstancePhysics( void ) {
+	if ( m_pInstancePhysics ) {
+		m_pInstancePhysics->destroy();
+		memdelete( m_pInstancePhysics );
+		m_pInstancePhysics = NULL;
+	}
+}
+
+void Terrain3D::destroyInstanceOcclusion( void ) {
+	if ( m_pInstanceOcclusion ) {
+		m_pInstanceOcclusion->destroy();
+		memdelete( m_pInstanceOcclusion );
+		m_pInstanceOcclusion = NULL;
+	}
+}
+
 void Terrain3D::destroyInstancer( void ) {
 	LOG( INFO, "Destroying Instancer" );
 	if ( m_pInstancer ) {
@@ -545,8 +555,8 @@ void Terrain3D::updateRegionLabels( void ) {
 			pLabel->set_visibility_range_end_margin( m_fLabelDistance / 10.f );
 			pLabel->set_visibility_range_fade_mode( GeometryInstance3D::VISIBILITY_RANGE_FADE_SELF );
 			m_pLabelParent->add_child( pLabel, true );
-			Vector3 pos =
-			        Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) * s_nRegionSize * s_fRegionVertexSpacing;
+			Vector3 pos = Vector3( ( real_t )( region_loc.x ) + .5f, 0.f, ( real_t )( region_loc.y ) + .5f ) * s_nRegionSize
+			        * s_fRegionVertexSpacing;
 			const real_t fHeight = m_pData->getHeight( pos );
 			pos.y = ( isnan( fHeight ) ) ? 0.f : fHeight;
 			pLabel->set_position( pos );
@@ -991,6 +1001,12 @@ void Terrain3D::setShadowLodCount( const int nCount ) {
 	}
 }
 
+void Terrain3D::setDominantSunOnly( const bool bEnabled ) {
+	SET_IF_DIFF( m_bDominantSunOnly, bEnabled );
+	refreshPerformanceProfileConformity();
+	LOG( INFO, "Setting terrain dominant-sun-only Forward+ lighting: ", bEnabled );
+}
+
 void Terrain3D::setNearShadowEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bNearShadowEnabled, bEnabled );
 	refreshPerformanceProfileConformity();
@@ -1420,7 +1436,9 @@ void Terrain3D::setupRenderCoordinator( void ) {
 			return;
 		}
 	}
-	m_pRenderCoordinator->initialize( this );
+	if ( !m_pRenderCoordinator->prepareStartupCold( m_nStartupGeneration ) ) {
+		LOG( ERROR, "Failed preparing render coordinator startup generation ", m_nStartupGeneration );
+	}
 }
 
 void Terrain3D::destroyRenderCoordinator( const bool bFinal ) {
@@ -1438,6 +1456,48 @@ Dictionary Terrain3D::getRdRendererDiagnostics( void ) const {
 	return m_pRenderCoordinator ? m_pRenderCoordinator->getDiagnostics() : Dictionary();
 }
 
-Ref<Image> Terrain3D::createRdMeshPreview( const uint16_t nAssetId, const Vector2i &rSize ) {
-	return m_pRenderCoordinator ? m_pRenderCoordinator->createMeshPreview( nAssetId, rSize ) : Ref<Image>();
+Dictionary Terrain3D::bakeVirtualTextures( void ) {
+	Dictionary result;
+	result["complete"] = false;
+	if ( !m_pRenderCoordinator ) {
+		result["error"] = "Terrain3D RD coordinator is unavailable";
+		return result;
+	}
+	String error;
+	const bool bComplete = m_pRenderCoordinator->bakePreviewVirtualTexturesCold( &error );
+	result["complete"] = bComplete;
+	result["error"] = error;
+	const Dictionary diagnostics = m_pRenderCoordinator->getDiagnostics();
+	result["dirty_allocations"] = diagnostics.get( "vt_editor_dirty_allocations", 0 );
+	result["cache_hits"] = diagnostics.get( "vt_editor_cache_hits", 0 );
+	result["cache_misses"] = diagnostics.get( "vt_editor_cache_misses", 0 );
+	result["package_bytes"] = diagnostics.get( "preview_vt_authoring_package_bytes", 0 );
+	result["package_generation"] = diagnostics.get( "preview_vt_authoring_package_generation", 0 );
+	result["republish_pending"] = diagnostics.get( "preview_vt_republish_pending", false );
+	result["republish_queued"] = diagnostics.get( "preview_vt_republish_queued", false );
+	result["cook_ms_extract"] = diagnostics.get( "vt_editor_cook_ms_extract", 0.0 );
+	result["cook_ms_filter"] = diagnostics.get( "vt_editor_cook_ms_filter", 0.0 );
+	result["cook_ms_page"] = diagnostics.get( "vt_editor_cook_ms_page", 0.0 );
+	result["cook_ms_encode"] = diagnostics.get( "vt_editor_cook_ms_encode", 0.0 );
+	result["cook_ms_pack"] = diagnostics.get( "vt_editor_cook_ms_pack", 0.0 );
+	return result;
+}
+
+Ref<Image> Terrain3D::createRdMeshPreview( const uint16_t nAssetId, const Vector2i &rSize, t3dRdPreviewFailure_t *const pFailure ) {
+	if ( pFailure ) {
+		*pFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
+	}
+	return m_pRenderCoordinator ? m_pRenderCoordinator->createMeshPreview( nAssetId, rSize, pFailure ) : Ref<Image>();
+}
+
+bool Terrain3D::requestRdMeshPreviewAsync( const uint16_t nAssetId,
+        const Vector2i &rSize,
+        const uint64_t nCompletionOwnerId,
+        const uint64_t nCompletionGeneration,
+        t3dRdPreviewFailure_t *const pFailure ) {
+	if ( pFailure ) {
+		*pFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
+	}
+	return m_pRenderCoordinator
+	        && m_pRenderCoordinator->requestMeshPreviewAsync( nAssetId, rSize, nCompletionOwnerId, nCompletionGeneration, pFailure );
 }

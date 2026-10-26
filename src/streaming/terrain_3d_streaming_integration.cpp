@@ -10,6 +10,8 @@
 #include "eastl_config.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "instances/terrain_3d_instancer_bringup.h"
+#include "instances/terrain_3d_instance_occlusion.h"
+#include "instances/terrain_3d_instance_physics.h"
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
@@ -261,8 +263,7 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
 	Dictionary status;
 	const int near_lods = MAX( 0, m_nRuntimeNearShaderLods );
 	const int middle_lods = MAX( 0, m_nRuntimeNearShaderLods + m_nRuntimeMiddleShaderLods );
-	const int required_active_radius =
-	        t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, near_lods );
+	const int required_active_radius = t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, near_lods );
 	const int required_hot_radius = t3dGpuCacheCalculateFootprintRadiusRegions( m_nMeshSize, middle_lods );
 	const bool active_range_valid = m_regionStreamingConfig.m_nActiveRadius >= required_active_radius;
 	const bool hot_range_valid = m_regionStreamingConfig.m_nHotRadius >= required_hot_radius;
@@ -272,7 +273,7 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus( void ) const {
 	const int required_active_surface_pages = MIN( authored_regions, active_side * active_side );
 	const int required_hot_height_pages = MIN( authored_regions, hot_side * hot_side );
 	int surface_capacity = isEditorAuthoringModeInternal() ? CLAMP( m_nEditorGpuRegionCachePages, 16, s_nGpuCacheEditorMaxLayers )
-	                                                     : CLAMP( m_nGpuRegionCachePageLimit, 16, s_nGpuCacheRuntimeMaxLayers );
+	                                                       : CLAMP( m_nGpuRegionCachePageLimit, 16, s_nGpuCacheRuntimeMaxLayers );
 	int height_capacity = s_nGpuHeightCacheMaxLayers;
 	if ( m_pData ) {
 		if ( m_pData->getGpuRegionCacheCapacity() > 0 ) {
@@ -560,10 +561,9 @@ void Terrain3D::setEditorExecutionMode( const t3dEditorExecutionMode_t mode ) {
 	m_editorExecutionMode = mode;
 	applyStreamingPolicy( true );
 	if ( m_assets.is_valid() && m_assets->isInitializedFor( this ) ) {
-		// Runtime Profile is a real execution-mode transition, not just a shader
-		// preview. Rebuild the exact bounded/full material representation selected
-		// by the new mode after GPU residency has established its priority set.
-		m_assets->configureRuntimeMaterialCache();
+		// Editor/legacy arrays remain a compatibility surface. V3 runtime residency
+		// is independent and does not use logical-to-physical material remapping.
+		m_assets->updateTextureList();
 	}
 	if ( m_pCollision ) {
 		m_pCollision->build();
@@ -866,51 +866,6 @@ void Terrain3D::setEditorGpuRegionCachePages( const int nPages ) {
 	}
 }
 
-void Terrain3D::setRuntimeMaterialStreamingEnabled( const bool bEnabled ) {
-	if ( m_bRuntimeMaterialStreamingEnabled == bEnabled ) {
-		return;
-	}
-	m_bRuntimeMaterialStreamingEnabled = bEnabled;
-	refreshPerformanceProfileConformity();
-	markMemoryBudgetDirty();
-	if ( m_assets.is_valid() && m_bInitialized ) {
-		m_assets->configureRuntimeMaterialCache();
-	}
-}
-
-void Terrain3D::setRuntimeMaterialCacheLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 4, s_nMaxTextureAssets );
-	if ( m_nRuntimeMaterialCacheLayers == layers ) {
-		return;
-	}
-	m_nRuntimeMaterialCacheLayers = layers;
-	refreshPerformanceProfileConformity();
-	markMemoryBudgetDirty();
-	if ( m_assets.is_valid() && m_bInitialized ) {
-		m_assets->configureRuntimeMaterialCache();
-	}
-}
-
-void Terrain3D::setRuntimeMaterialUploadBudgetLayers( const int nLayers ) {
-	const int layers = CLAMP( nLayers, 1, s_nMaxTextureAssets );
-	if ( m_nRuntimeMaterialUploadBudgetLayers == layers ) {
-		return;
-	}
-	m_nRuntimeMaterialUploadBudgetLayers = layers;
-	refreshPerformanceProfileConformity();
-}
-
-void Terrain3D::setRuntimeReleaseSourceMaterialTextures( const bool bEnabled ) {
-	if ( m_bRuntimeReleaseSourceMaterialTextures == bEnabled ) {
-		return;
-	}
-	m_bRuntimeReleaseSourceMaterialTextures = bEnabled;
-	refreshPerformanceProfileConformity();
-	if ( bEnabled && m_assets.is_valid() && m_bInitialized ) {
-		m_assets->configureRuntimeMaterialCache();
-	}
-}
-
 void Terrain3D::setGpuFarQualityDivisor( const int nDivisor ) {
 	const int nDivisorValue = nDivisor <= 1 ? 1 : ( nDivisor <= 2 ? 2 : ( nDivisor <= 4 ? 4 : 8 ) );
 	if ( m_nGpuFarQualityDivisor == nDivisorValue ) {
@@ -941,8 +896,9 @@ void Terrain3D::setFarMaterialResolution( const int nResolution ) {
 		return;
 	}
 	m_nFarMaterialResolution = resolution;
-	if ( m_assets.is_valid() ) {
-		m_assets->invalidateRuntimeMaterialCache();
+	if ( m_assets.is_valid() && m_assets->isInitializedFor( this )
+	        && ( isEditorAuthoringMode() || !m_bGpuRegionCookedPagesEnabled || !m_assets->usesPackedPbr() ) ) {
+		m_assets->updateTextureList();
 	}
 	refreshPerformanceProfileConformity();
 }
@@ -1432,6 +1388,12 @@ bool Terrain3D::reloadHlodManifest( void ) {
 Dictionary Terrain3D::getHlodStreamingStats( void ) const {
 	return m_pHlodStreamer ? m_pHlodStreamer->getStats() : Dictionary();
 }
+Dictionary Terrain3D::getInstanceOcclusionStats( void ) const {
+	return m_pInstanceOcclusion ? m_pInstanceOcclusion->getStats() : Dictionary();
+}
+Dictionary Terrain3D::getInstancePhysicsStats( void ) const {
+	return m_pInstancePhysics ? m_pInstancePhysics->getStats() : Dictionary();
+}
 Array Terrain3D::getHlodDebugEntries( void ) const {
 	return m_pHlodStreamer ? m_pHlodStreamer->getDebugEntries() : Array();
 }
@@ -1450,9 +1412,28 @@ uint8_t Terrain3D::getHlodInstancerMinimumLevel( const Vector2i &rRegion, const 
 uint8_t Terrain3D::getHlodNodeMinimumLevel( const Vector2i &rRegion, const int64_t nSpawnId ) const {
 	return m_pHlodStreamer ? m_pHlodStreamer->getNodeMinimumLevel( rRegion, nSpawnId ) : 0;
 }
+void Terrain3D::onInstanceDerivedMutation( const t3dInstanceMutationEvent_t &rEvent ) {
+	if ( m_pInstanceOcclusion ) {
+		m_pInstanceOcclusion->onMutation( rEvent );
+	}
+	if ( m_pInstancePhysics ) {
+		m_pInstancePhysics->onMutation( rEvent );
+	}
+	if ( m_pHlodStreamer ) {
+		m_pHlodStreamer->onInstanceMutation( rEvent );
+	}
+}
+
+void Terrain3D::onInstanceAssetPolicyChanged( const int nMeshId ) {
+	if ( m_pInstancer ) {
+		m_pInstancer->onAssetPolicyChanged( nMeshId );
+	}
+}
+
 void Terrain3D::onHlodRegionRepresentationChanged( const Vector2i &rRegion ) {
 	if ( m_pInstancer ) {
-		m_pInstancer->updateMmis( -1, rRegion, false );
+		const uint64_t representation_generation = m_pHlodStreamer ? m_pHlodStreamer->getRepresentationGeneration() : 0u;
+		m_pInstancer->onHlodRepresentationChanged( rRegion, representation_generation );
 	}
 	if ( m_pNodeStreamer ) {
 		m_pNodeStreamer->onHlodRepresentationChanged( rRegion );

@@ -6,6 +6,7 @@
 #include "rendering/rd/terrain_3d_render_coordinator.h"
 #include "terrain_3d.h"
 
+#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/object.hpp>
 
@@ -61,11 +62,21 @@ void Terrain3DRenderWorldController::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_rebuild_on_ready" ), "set_auto_rebuild_on_ready", "is_auto_rebuild_on_ready" );
 	ADD_GROUP( "Compatibility Ingress", "convert_" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_mesh_instances" ), "set_convert_mesh_instances", "is_convert_mesh_instances" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_dynamic_objects" ), "set_convert_dynamic_objects", "is_convert_dynamic_objects" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_dynamic_objects", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+	        "set_convert_dynamic_objects",
+	        "is_convert_dynamic_objects" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_hidden_objects" ), "set_convert_hidden_objects", "is_convert_hidden_objects" );
 }
 
 void Terrain3DRenderWorldController::_notification( const int32_t nWhat ) {
+	const Engine *const pEngine = Engine::get_singleton();
+	if ( !pEngine || !pEngine->is_editor_hint() ) {
+		if ( nWhat == NOTIFICATION_EXIT_TREE ) {
+			releasePublishedSceneCold();
+			m_pCoordinator = NULL;
+		}
+		return;
+	}
 	if ( nWhat == NOTIFICATION_ENTER_TREE ) {
 		bindNearestTerrainCold();
 	} else if ( nWhat == NOTIFICATION_READY ) {
@@ -115,7 +126,7 @@ bool Terrain3DRenderWorldController::publishAutoSceneCold(
 	if ( !pSelf || !pSelf->m_pCoordinator || !rBuffers.pGeometry ) {
 		return false;
 	}
-	return pSelf->m_pCoordinator->publishRenderWorldDatabaseCold( *rBuffers.pGeometry,
+	return pSelf->m_pCoordinator->publishStaticSceneDatabaseCold( *rBuffers.pGeometry,
 	        rBuffers.pCells,
 	        rBuffers.nCellCount,
 	        rBuffers.pInstances,
@@ -124,10 +135,20 @@ bool Terrain3DRenderWorldController::publishAutoSceneCold(
 	        rBuffers.nMaterialCount );
 }
 
+bool Terrain3DRenderWorldController::resolveAutoMaterialVtCold(
+        void *const pUser, const uint64_t nStableMaterialKey, uint32_t &rAllocationId ) {
+	Terrain3DRenderWorldController *const pSelf = ( Terrain3DRenderWorldController * )( pUser );
+	if ( !pSelf || !pSelf->m_pCoordinator ) {
+		rAllocationId = T3D_VT_INVALID_ALLOCATION;
+		return false;
+	}
+	return pSelf->m_pCoordinator->resolveVirtualTextureMaterialAllocationCold( nStableMaterialKey, rAllocationId );
+}
+
 void Terrain3DRenderWorldController::releaseAutoSceneCold( void *const pUser ) {
 	Terrain3DRenderWorldController *const pSelf = ( Terrain3DRenderWorldController * )( pUser );
 	if ( pSelf && pSelf->m_pCoordinator ) {
-		pSelf->m_pCoordinator->releaseRenderWorldDatabaseCold();
+		pSelf->m_pCoordinator->releaseStaticSceneDatabaseCold();
 	}
 }
 
@@ -155,7 +176,9 @@ bool Terrain3DRenderWorldController::initializeAuthoringImageCold( void ) {
 	valid = valid && Layout.addArray<T3DMeshRecord>( Limits.nMaxMeshes );
 	valid = valid && Layout.addArray<T3DMeshLodRecord>( Limits.nMaxMeshLods );
 	valid = valid && Layout.addArray<T3DClusterRecord>( Limits.nMaxClusters );
-	valid = valid && Layout.addArray<T3DMaterialRecord>( Limits.nMaxMaterials );
+	valid = valid && Layout.addArray<t3dWorldCluster_t>( Limits.nMaxClusters );
+	valid = valid && Layout.addArray<t3dWorldClusterVtMetadata_t>( Limits.nMaxClusters );
+	valid = valid && Layout.addArray<t3dRenderingMaterialGpu_t>( Limits.nMaxMaterials );
 	valid = valid && Layout.addArray<T3DSceneCell>( Limits.nMaxCells );
 	valid = valid && Layout.addArray<T3DInstanceRecord>( Limits.nMaxInstances );
 	valid = valid && Layout.addArray<uint64_t>( Limits.nMaxInstances );
@@ -199,10 +222,12 @@ bool Terrain3DRenderWorldController::initializeAuthoringImageCold( void ) {
 	GeometryBuffers.pLodRecords = m_AuthoringArena.allocateArray<T3DMeshLodRecord>( Limits.nMaxMeshLods );
 	GeometryBuffers.nLodCapacity = Limits.nMaxMeshLods;
 	GeometryBuffers.pClusterRecords = m_AuthoringArena.allocateArray<T3DClusterRecord>( Limits.nMaxClusters );
+	GeometryBuffers.pWorldClusterRecords = m_AuthoringArena.allocateArray<t3dWorldCluster_t>( Limits.nMaxClusters );
+	GeometryBuffers.pWorldClusterVtMetadata = m_AuthoringArena.allocateArray<t3dWorldClusterVtMetadata_t>( Limits.nMaxClusters );
 	GeometryBuffers.nClusterCapacity = Limits.nMaxClusters;
 
 	m_AuthoringBuffers.pGeometry = &m_AuthoringGeometry;
-	m_AuthoringBuffers.pMaterials = m_AuthoringArena.allocateArray<T3DMaterialRecord>( Limits.nMaxMaterials );
+	m_AuthoringBuffers.pMaterials = m_AuthoringArena.allocateArray<t3dRenderingMaterialGpu_t>( Limits.nMaxMaterials );
 	m_AuthoringBuffers.nMaterialCapacity = Limits.nMaxMaterials;
 	m_AuthoringBuffers.pCells = m_AuthoringArena.allocateArray<T3DSceneCell>( Limits.nMaxCells );
 	m_AuthoringBuffers.nCellCapacity = Limits.nMaxCells;
@@ -241,10 +266,10 @@ bool Terrain3DRenderWorldController::initializeAuthoringImageCold( void ) {
 
 	if ( !GeometryBuffers.pVertexHeap || !GeometryBuffers.pClusterVertexIndexHeap || !GeometryBuffers.pTriangleHeap
 	        || !GeometryBuffers.pMeshRecords || !GeometryBuffers.pLodRecords || !GeometryBuffers.pClusterRecords
-	        || !m_AuthoringBuffers.pMaterials || !m_AuthoringBuffers.pCells || !m_AuthoringBuffers.pInstances
-	        || !m_AuthoringBuffers.pInstanceSourceIds || !pOwnershipEntries || !m_AuthoringBuffers.pPrototypeEntries
-	        || !m_AuthoringBuffers.pPrototypeBoundsByMeshId || !m_AuthoringBuffers.pMaterialEntries || !m_AuthoringBuffers.pNativeVisuals
-	        || !m_AuthoringBuffers.Scratch.pVertices || !m_AuthoringBuffers.Scratch.pIndices
+	        || !GeometryBuffers.pWorldClusterRecords || !GeometryBuffers.pWorldClusterVtMetadata || !m_AuthoringBuffers.pMaterials
+	        || !m_AuthoringBuffers.pCells || !m_AuthoringBuffers.pInstances || !m_AuthoringBuffers.pInstanceSourceIds || !pOwnershipEntries
+	        || !m_AuthoringBuffers.pPrototypeEntries || !m_AuthoringBuffers.pPrototypeBoundsByMeshId || !m_AuthoringBuffers.pMaterialEntries
+	        || !m_AuthoringBuffers.pNativeVisuals || !m_AuthoringBuffers.Scratch.pVertices || !m_AuthoringBuffers.Scratch.pIndices
 	        || !m_AuthoringBuffers.Scratch.pTriangleMaterialOffsets || !m_AuthoringBuffers.Scratch.pTriangleTiers
 	        || !m_AuthoringBuffers.CellScratch.pReorderedInstances || !m_AuthoringBuffers.CellScratch.pReorderedSourceIds
 	        || !m_AuthoringBuffers.CellScratch.pInstanceCellIds || !m_AuthoringBuffers.CellScratch.pCellCounts
@@ -259,6 +284,8 @@ bool Terrain3DRenderWorldController::initializeAuthoringImageCold( void ) {
 		return false;
 	}
 	T3DRenderWorldGodotMaterialResolver resolver{};
+	resolver.pResolveMaterialVT = &Terrain3DRenderWorldController::resolveAutoMaterialVtCold;
+	resolver.pUser = this;
 	if ( !m_AutoConverter.initializeCold( buildPolicyCold(), resolver, &m_AuthoringBuffers ) ) {
 		releaseAuthoringImageCold();
 		return false;
@@ -344,7 +371,7 @@ T3DRenderWorldConversionPolicy Terrain3DRenderWorldController::buildPolicyCold( 
 	policy.eMode = m_bEnabled ? ( T3DRenderWorldMode )( m_iMode ) : T3D_RW_MODE_DISABLED;
 	policy.bConvertMeshInstances = m_bConvertMeshInstances;
 	policy.bConvertMultiMeshInstances = false;
-	policy.bConvertDynamicObjects = m_bConvertDynamicObjects;
+	policy.bConvertDynamicObjects = false;
 	policy.bConvertHiddenObjects = m_bConvertHiddenObjects;
 	policy.fCellSize = m_fCellSize;
 	if ( m_defaultProfile.is_valid() ) {
@@ -356,6 +383,10 @@ T3DRenderWorldConversionPolicy Terrain3DRenderWorldController::buildPolicyCold( 
 }
 
 bool Terrain3DRenderWorldController::requestColdRebuild( void ) {
+	const Engine *const pEngine = Engine::get_singleton();
+	if ( !pEngine || !pEngine->is_editor_hint() ) {
+		return false;
+	}
 	if ( !bindNearestTerrainCold() && !m_backend.pPublishSceneCold ) {
 		return false;
 	}

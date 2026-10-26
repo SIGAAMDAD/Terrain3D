@@ -179,7 +179,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
 	for ( size_t iMethod = 0u; iMethod < T3D_ARRAY_COUNT( required_methods ); iMethod++ ) {
 		const char *const method = ( required_methods )[iMethod];
 		if ( !m_pEngineBridge || !m_pEngineBridge->has_method( StringName( method ) ) ) {
-			return failConnection( String( "Terrain3DForwardPlusBridge singleton is missing required ABI 11 method: " ) + method );
+			return failConnection( String( "Terrain3DForwardPlusBridge singleton is missing required ABI 12 method: " ) + method );
 		}
 	}
 
@@ -218,7 +218,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge( void ) {
 	const bool registered = registered_value.get_type() == Variant::BOOL && ( bool )( registered_value );
 	m_bCallbackRegistered.store( registered, T3D_MEMORY_ORDER_RELEASE );
 	if ( !registered ) {
-		return failConnection( "Terrain3DForwardPlusBridge rejected the ABI 11 native callback registration" );
+		return failConnection( "Terrain3DForwardPlusBridge rejected the ABI 12 native callback registration" );
 	}
 
 	const Variant has_callback_value = m_pEngineBridge->call( StringName( "has_native_callback" ) );
@@ -310,7 +310,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::detachCoordinator( Terrain3DRenderCoor
 
 bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame ) {
 	if ( rFrame.m_nAbi != s_nBridgeAbiVersion || rFrame.m_nStructSize != sizeof( rFrame ) || rFrame.m_nGeneration == 0u ) {
-		setError( "Terrain3D ABI 11 frame packet validation failed" );
+		setError( "Terrain3D ABI 12 frame packet validation failed" );
 		return false;
 	}
 	if ( rFrame.m_nGeneration == m_nCachedFrameGeneration ) {
@@ -318,7 +318,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 	}
 	if ( rFrame.m_nViewCount == 0u || rFrame.m_nViewCount > s_nT3dForwardBridgeMaxViews
 	        || !t3dRdForwardValidSampleCount( rFrame.m_nSampleCount ) || !t3dRdForwardFiniteEnvironmentFrame( rFrame ) ) {
-		setError( "Terrain3D ABI 11 frame packet validation failed" );
+		setError( "Terrain3D ABI 12 frame packet validation failed" );
 		return false;
 	}
 
@@ -377,7 +377,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertFrame( const t3dRdForwardBridge
 bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBridgeResourcePacket_t &rResources ) {
 	if ( rResources.m_nAbi != s_nBridgeAbiVersion || rResources.m_nStructSize != sizeof( rResources ) || rResources.m_nGeneration == 0u
 	        || rResources.m_nReserved0 != 0u ) {
-		setError( "Terrain3D ABI 11 borrowed-resource packet validation failed" );
+		setError( "Terrain3D ABI 12 borrowed-resource packet validation failed" );
 		return false;
 	}
 	if ( rResources.m_nGeneration == m_nCachedResourceGeneration ) {
@@ -399,6 +399,8 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertResources( const t3dRdForwardBr
 	context.m_hDecalAtlasTexture = t3dRdForwardDecodeRid( rResources.m_hDecalAtlas );
 	context.m_hDecalAtlasSrgbTexture = t3dRdForwardDecodeRid( rResources.m_hDecalAtlasSrgb );
 	context.m_hRadianceTexture = t3dRdForwardDecodeRid( rResources.m_hRadianceTexture );
+	context.m_hPreviousDepthTexture = t3dRdForwardDecodeRid( rResources.m_hPreviousDepthTexture );
+	context.m_bTemporalHistoryValid = context.m_hPreviousDepthTexture.is_valid();
 	m_nCachedResourceGeneration = rResources.m_nGeneration;
 	return true;
 }
@@ -407,7 +409,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertPass( const t3dRdForwardBridgeP
 	if ( rPass.m_nAbi != s_nBridgeAbiVersion || rPass.m_nStructSize != sizeof( rPass ) || !t3dRdForwardOrdinaryPassKind( rPass.m_nPassKind )
 	        || rPass.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || rPass.m_nSerial == 0u || rPass.m_nFramebufferFormat < 0
 	        || rPass.m_hNativeFramebuffer == 0u ) {
-		setError( "Terrain3D ABI 11 ordinary-pass packet validation failed" );
+		setError( "Terrain3D ABI 12 ordinary-pass packet validation failed" );
 		return false;
 	}
 	t3dRdForwardPassContext_t &context = m_mainCallbackContext;
@@ -428,7 +430,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 	if ( rShadow.m_nAbi != s_nBridgeAbiVersion || rShadow.m_nStructSize != sizeof( rShadow )
 	        || rShadow.m_nNativePassMode > T3D_RD_FORWARD_NATIVE_PASS_SDF || !t3dRdForwardValidSampleCount( rShadow.m_nSampleCount )
 	        || rShadow.m_nReserved0 != 0u || rShadow.m_nSerial == 0u || rShadow.m_nFramebufferFormat < 0 ) {
-		setError( "Terrain3D ABI 11 shadow packet validation failed" );
+		setError( "Terrain3D ABI 12 shadow packet validation failed" );
 		return false;
 	}
 	m_shadowCallbackContext = t3dRdForwardPassContext_t{};
@@ -456,8 +458,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow( const t3dRdForwardBridg
 	return true;
 }
 
-bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators(
-        const t3dRdForwardPassContext_t &rContext, uint64_t nCoordinatorMask ) {
+bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators( const t3dRdForwardPassContext_t &rContext, uint64_t nCoordinatorMask ) {
 	bool dispatched = false;
 	bool accepted = true;
 	while ( nCoordinatorMask != 0u ) {
@@ -473,8 +474,7 @@ bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators(
 }
 
 static bool t3dRdForwardPassRequiresBorrowedResources( const t3dRdForwardPassKind_t passKind ) noexcept {
-	return passKind == T3D_RD_FORWARD_PASS_OPAQUE || passKind == T3D_RD_FORWARD_PASS_MOTION
-	        || passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+	return passKind == T3D_RD_FORWARD_PASS_OPAQUE || passKind == T3D_RD_FORWARD_PASS_MOTION || passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare( const t3dRdForwardBridgeFramePacket_t *const pFrame,

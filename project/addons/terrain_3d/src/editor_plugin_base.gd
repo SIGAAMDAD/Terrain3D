@@ -60,3 +60,5 @@ var rmb_release_time: int = 0
 @abstract func change_tool(_p_tool_name: String) -> void
 
 @abstract func notify_ui_setting_changed() -> void
+
+@abstract func set_instance_edit_mode(_p_enabled: bool) -> void

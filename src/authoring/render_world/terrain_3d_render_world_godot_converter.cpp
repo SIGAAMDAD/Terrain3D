@@ -2,6 +2,7 @@
 
 #include "authoring/render_world/terrain_3d_render_world_godot_converter.h"
 #include "rendering/rd/render_world/terrain_3d_render_world_visibility.h"
+#include "data/terrain_3d_half_buffer.h"
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/base_material3d.hpp>
@@ -66,6 +67,18 @@ static uint32_t t3d_rw_godot_pack_color( const Color &pColor ) {
 	const uint32_t b = ( uint32_t )lrintf( fB * 255.0f );
 	const uint32_t a = ( uint32_t )lrintf( fA * 255.0f );
 	return r | ( g << 8u ) | ( b << 16u ) | ( a << 24u );
+}
+
+static bool t3d_rw_godot_is_two_sided_material(
+        const Ref<Material> &pMaterial, const Ref<Terrain3DRenderWorldMaterial> &pExplicitMaterial ) {
+	if ( pExplicitMaterial.is_valid() ) {
+		return pExplicitMaterial->isTwoSided();
+	}
+	if ( pMaterial.is_null() ) {
+		return false;
+	}
+	const BaseMaterial3D *const pBase = Object::cast_to<BaseMaterial3D>( pMaterial.ptr() );
+	return pBase != NULL && pBase->get_cull_mode() == BaseMaterial3D::CULL_DISABLED;
 }
 
 Terrain3DRenderWorldGodotConverter::Terrain3DRenderWorldGodotConverter() :
@@ -204,6 +217,17 @@ bool Terrain3DRenderWorldGodotConverter::buildCandidateCold( MeshInstance3D *pMe
 		}
 	}
 
+	if ( rExplicitMaterial.is_valid() ) {
+		const int32_t material_tier = rExplicitMaterial->getRenderTier();
+		if ( material_tier == ( int32_t )T3D_RW_IMPORT_WORLD ) {
+			rCandidate.nTier = T3D_RW_TIER_WORLD;
+		} else if ( material_tier == ( int32_t )T3D_RW_IMPORT_CLUTTER ) {
+			rCandidate.nTier = T3D_RW_TIER_CLUTTER;
+		} else if ( material_tier == ( int32_t )T3D_RW_IMPORT_FOLIAGE ) {
+			rCandidate.nTier = T3D_RW_TIER_FOLIAGE;
+		}
+	}
+
 	if ( rProfile.is_valid() ) {
 		if ( !rProfile->isEnabled() ) {
 			rCandidate.bExplicitExclude = true;
@@ -263,7 +287,13 @@ bool Terrain3DRenderWorldGodotConverter::flattenMeshCold( MeshInstance3D *pMeshI
 		rReason = T3D_RW_CONVERSION_UNSUPPORTED_KIND;
 		return false;
 	}
+	if ( Mesh->get_surface_count() > 256 ) {
+		rReason = T3D_RW_CONVERSION_CAPACITY_EXCEEDED;
+		return false;
+	}
 
+	bool aSurfaceTwoSided[256];
+	memset( aSurfaceTwoSided, 0, sizeof( aSurfaceTwoSided ) );
 	uint32_t nVertexTotal = 0u;
 	uint32_t nIndexTotal = 0u;
 	uint32_t nTriangleTotal = 0u;
@@ -275,19 +305,33 @@ bool Terrain3DRenderWorldGodotConverter::flattenMeshCold( MeshInstance3D *pMeshI
 		Array Arrays = Mesh->surface_get_arrays( s );
 		PackedVector3Array Positions = Arrays[Mesh::ARRAY_VERTEX];
 		PackedInt32Array Indices = Arrays[Mesh::ARRAY_INDEX];
+		Ref<Material> Material = pMeshInstance->get_surface_override_material( s );
+		if ( Material.is_null() ) {
+			Material = Mesh->surface_get_material( s );
+		}
+		aSurfaceTwoSided[s] = t3d_rw_godot_is_two_sided_material( Material, pExplicitMaterial );
+
 		const uint32_t nSurfaceVertices = ( uint32_t )Positions.size();
 		const uint32_t nSurfaceIndices = Indices.is_empty() ? nSurfaceVertices : ( uint32_t )Indices.size();
 		if ( nSurfaceIndices == 0u || ( nSurfaceIndices % 3u ) != 0u ) {
 			rReason = T3D_RW_CONVERSION_UNSUPPORTED_PRIMITIVE;
 			return false;
 		}
-		if ( UINT32_MAX - nVertexTotal < nSurfaceVertices || UINT32_MAX - nIndexTotal < nSurfaceIndices ) {
+		const uint32_t nWindingCount = aSurfaceTwoSided[s] ? 2u : 1u;
+		if ( nSurfaceIndices > UINT32_MAX / nWindingCount ) {
+			rReason = T3D_RW_CONVERSION_CAPACITY_EXCEEDED;
+			return false;
+		}
+		const uint32_t nCookedIndices = nSurfaceIndices * nWindingCount;
+		const uint32_t nCookedTriangles = nCookedIndices / 3u;
+		if ( UINT32_MAX - nVertexTotal < nSurfaceVertices || UINT32_MAX - nIndexTotal < nCookedIndices
+		        || UINT32_MAX - nTriangleTotal < nCookedTriangles ) {
 			rReason = T3D_RW_CONVERSION_CAPACITY_EXCEEDED;
 			return false;
 		}
 		nVertexTotal += nSurfaceVertices;
-		nIndexTotal += nSurfaceIndices;
-		nTriangleTotal += nSurfaceIndices / 3u;
+		nIndexTotal += nCookedIndices;
+		nTriangleTotal += nCookedTriangles;
 	}
 	if ( nVertexTotal > m_pBuffers->Scratch.nVertexCapacity || nIndexTotal > m_pBuffers->Scratch.nIndexCapacity
 	        || nTriangleTotal > m_pBuffers->Scratch.nTriangleCapacity ) {
@@ -300,11 +344,6 @@ bool Terrain3DRenderWorldGodotConverter::flattenMeshCold( MeshInstance3D *pMeshI
 	uint32_t nTriangleCursor = 0u;
 	uint32_t nMaterialBase = T3D_RW_INVALID_ID;
 	uint32_t aSurfaceMaterialIds[256];
-	if ( Mesh->get_surface_count() > 256 ) {
-		rReason = T3D_RW_CONVERSION_CAPACITY_EXCEEDED;
-		return false;
-	}
-
 	for ( int32_t s = 0; s < Mesh->get_surface_count(); ++s ) {
 		Ref<Material> Material = pMeshInstance->get_surface_override_material( s );
 		if ( Material.is_null() ) {
@@ -338,34 +377,42 @@ bool Terrain3DRenderWorldGodotConverter::flattenMeshCold( MeshInstance3D *pMeshI
 			const Vector3 N = v < ( uint32_t )Normals.size() ? Normals[( int64_t )v] : Vector3( 0.0f, 1.0f, 0.0f );
 			const Vector2 UV = v < ( uint32_t )Uvs.size() ? Uvs[( int64_t )v] : Vector2( 0.0f, 0.0f );
 			const Color C = v < ( uint32_t )Colors.size() ? Colors[( int64_t )v] : Color( 1.0f, 1.0f, 1.0f, 1.0f );
-			Out.vPosition[0] = P.x;
-			Out.vPosition[1] = P.y;
-			Out.vPosition[2] = P.z;
-			Out.nPackedNormal = t3d_rw_godot_pack_normal( N );
+			Out.m_fPosition[0] = P.x;
+			Out.m_fPosition[1] = P.y;
+			Out.m_fPosition[2] = P.z;
+			Out.m_nPackedNormal = t3d_rw_godot_pack_normal( N );
 			if ( ( uint64_t )v * 4u + 3u < ( uint64_t )Tangents.size() ) {
 				const uint32_t t = v * 4u;
-				Out.nPackedTangent = t3d_rw_godot_pack_tangent( Tangents[t], Tangents[t + 1u], Tangents[t + 2u], Tangents[t + 3u] );
+				Out.m_nPackedTangent = t3d_rw_godot_pack_tangent( Tangents[t], Tangents[t + 1u], Tangents[t + 2u], Tangents[t + 3u] );
 			} else {
-				Out.nPackedTangent = t3d_rw_godot_pack_tangent( 1.0f, 0.0f, 0.0f, 1.0f );
+				Out.m_nPackedTangent = t3d_rw_godot_pack_tangent( 1.0f, 0.0f, 0.0f, 1.0f );
 			}
-			Out.vUv[0] = UV.x;
-			Out.vUv[1] = UV.y;
-			Out.nPackedColor = t3d_rw_godot_pack_color( C );
+			Out.m_nPackedUv0 = ( uint32_t )t3dHalfEncode( ( float )UV.x ) | ( ( uint32_t )t3dHalfEncode( ( float )UV.y ) << 16u );
+			Out.m_nPackedUv1 = 0u;
+			Out.m_nColorRgba8 = t3d_rw_godot_pack_color( C );
 		}
 
-		for ( uint32_t i = 0u; i < nSurfaceIndices; ++i ) {
-			const uint32_t nLocalIndex = Indices.is_empty() ? i : ( uint32_t )Indices[( int64_t )i];
-			if ( nLocalIndex >= nSurfaceVertices ) {
-				rReason = T3D_RW_CONVERSION_COOK_FAILED;
-				return false;
-			}
-			m_pBuffers->Scratch.pIndices[nIndexCursor++] = nBaseVertex + nLocalIndex;
-		}
 		const uint32_t nSurfaceTriangles = nSurfaceIndices / 3u;
+		const uint32_t nWindingCount = aSurfaceTwoSided[s] ? 2u : 1u;
 		for ( uint32_t t = 0u; t < nSurfaceTriangles; ++t ) {
-			m_pBuffers->Scratch.pTriangleMaterialOffsets[nTriangleCursor] = aSurfaceMaterialIds[s] - nMaterialBase;
-			m_pBuffers->Scratch.pTriangleTiers[nTriangleCursor] = ( uint8_t )pTier;
-			++nTriangleCursor;
+			uint32_t v[3];
+			for ( uint32_t lane = 0u; lane < 3u; ++lane ) {
+				const uint32_t nSourceIndex = t * 3u + lane;
+				const uint32_t nLocalIndex = Indices.is_empty() ? nSourceIndex : ( uint32_t )Indices[( int64_t )nSourceIndex];
+				if ( nLocalIndex >= nSurfaceVertices ) {
+					rReason = T3D_RW_CONVERSION_COOK_FAILED;
+					return false;
+				}
+				v[lane] = nBaseVertex + nLocalIndex;
+			}
+			for ( uint32_t winding = 0u; winding < nWindingCount; ++winding ) {
+				m_pBuffers->Scratch.pIndices[nIndexCursor++] = v[0];
+				m_pBuffers->Scratch.pIndices[nIndexCursor++] = winding == 0u ? v[1] : v[2];
+				m_pBuffers->Scratch.pIndices[nIndexCursor++] = winding == 0u ? v[2] : v[1];
+				m_pBuffers->Scratch.pTriangleMaterialOffsets[nTriangleCursor] = aSurfaceMaterialIds[s] - nMaterialBase;
+				m_pBuffers->Scratch.pTriangleTiers[nTriangleCursor] = ( uint8_t )pTier;
+				++nTriangleCursor;
+			}
 		}
 	}
 

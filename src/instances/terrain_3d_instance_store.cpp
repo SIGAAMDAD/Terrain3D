@@ -4,7 +4,71 @@
 
 #include <EASTL/utility.h>
 #include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+
+static bool t3dInstanceStoreValidateRawSlabRange( const void *const pData,
+        const size_t nCount,
+        const size_t nCapacity,
+        const void *const pSlabData,
+        const size_t nSlabUsed,
+        const size_t nSlabCapacity,
+        const size_t nElementBytes ) {
+	if ( nCount > nCapacity || nSlabUsed > nSlabCapacity || nElementBytes == 0u ) {
+		return false;
+	}
+	if ( nCapacity == 0u ) {
+		return pData == NULL;
+	}
+	if ( !pData || !pSlabData || nCapacity > SIZE_MAX / nElementBytes ) {
+		return false;
+	}
+	const uintptr_t base = ( uintptr_t )( pSlabData );
+	const uintptr_t data = ( uintptr_t )( pData );
+	if ( data < base ) {
+		return false;
+	}
+	const uintptr_t byte_offset = data - base;
+	if ( byte_offset % nElementBytes != 0u || byte_offset / nElementBytes > SIZE_MAX ) {
+		return false;
+	}
+	const size_t offset = ( size_t )( byte_offset / nElementBytes );
+	if ( offset > nSlabUsed || offset > nSlabCapacity ) {
+		return false;
+	}
+	return nCapacity <= nSlabUsed - offset && nCapacity <= nSlabCapacity - offset;
+}
+
+static bool t3dInstanceStoreReserveTarget(
+        const size_t nCurrentCapacity, const size_t nRequired, const bool bExact, size_t &rTargetCapacity ) {
+	rTargetCapacity = nCurrentCapacity;
+	if ( nRequired <= nCurrentCapacity ) {
+		return true;
+	}
+	if ( bExact ) {
+		rTargetCapacity = nRequired;
+		return true;
+	}
+	const size_t growth = MAX( ( size_t )32u, nCurrentCapacity / 2u );
+	if ( nCurrentCapacity > SIZE_MAX - growth ) {
+		return false;
+	}
+	rTargetCapacity = MAX( nRequired, nCurrentCapacity + growth );
+	return true;
+}
+
+template <typename T>
+static bool t3dInstanceStorePreflightSlabSegment(
+        Terrain3DHighWaterSlab<T> &rSlab, const size_t nCurrentCapacity, const size_t nTargetCapacity ) {
+	if ( nTargetCapacity <= nCurrentCapacity ) {
+		return true;
+	}
+	if ( nTargetCapacity > SIZE_MAX - rSlab.used() ) {
+		return false;
+	}
+	return rSlab.reserveCold( rSlab.used() + nTargetCapacity );
+}
 
 Terrain3DInstanceStore::Terrain3DInstanceStore( const t3dInstanceStoreAllocationClass_t eAllocationClass ) :
         m_eAllocationClass( eAllocationClass ) {
@@ -267,19 +331,33 @@ t3dInstanceMesh_t *Terrain3DInstanceStore::findMesh( const int nMeshId ) {
 	return nMeshId >= 0 && nMeshId < s_nMaxMeshAssets && m_szMeshes[nMeshId].m_nId == nMeshId ? &m_szMeshes[nMeshId] : NULL;
 }
 
-t3dInstanceMesh_t &Terrain3DInstanceStore::getOrCreateMesh( const int nMeshId, const size_t nReserveCells ) {
-	assert( nMeshId >= 0 && nMeshId < s_nMaxMeshAssets );
-	const int mesh_id = CLAMP( nMeshId, 0, s_nMaxMeshAssets - 1 );
-	t3dInstanceMesh_t &mesh = m_szMeshes[mesh_id];
-	const bool bWasInactive = mesh.m_nId != mesh_id;
-	if ( nReserveCells > mesh.m_cells.capacity() && !t3dContainerReserveCold( mesh.m_cells, nReserveCells ) ) {
-		return mesh;
+bool Terrain3DInstanceStore::canGrowCellVector( void ) const {
+	return m_eAllocationClass != TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED
+	        || ( m_pRuntimeAllocatorZone && m_pRuntimeAllocatorZone->state() == T3D_MEMORY_ZONE_ACTIVE );
+}
+
+t3dInstanceMesh_t *Terrain3DInstanceStore::tryGetOrCreateMesh( const int nMeshId, const size_t nReserveCells ) {
+	if ( nMeshId < 0 || nMeshId >= s_nMaxMeshAssets || !runtimeAllocatorReady() ) {
+		return NULL;
 	}
-	if ( bWasInactive ) {
-		mesh.m_nId = mesh_id;
+	t3dInstanceMesh_t &mesh = m_szMeshes[nMeshId];
+	if ( mesh.m_nId >= 0 && mesh.m_nId != nMeshId ) {
+		return NULL;
+	}
+	if ( nReserveCells > mesh.m_cells.capacity() ) {
+		if ( nReserveCells > SIZE_MAX / sizeof( t3dInstanceCell_t ) || !canGrowCellVector()
+		        || !t3dContainerReserveCold( mesh.m_cells, nReserveCells ) ) {
+			return NULL;
+		}
+	}
+	if ( mesh.m_nId < 0 ) {
+		if ( !mesh.m_cells.empty() ) {
+			return NULL;
+		}
+		mesh.m_nId = nMeshId;
 		rebuildActiveMeshIds();
 	}
-	return mesh;
+	return &mesh;
 }
 
 bool Terrain3DInstanceStore::eraseMesh( const int nMeshId ) {
@@ -325,57 +403,104 @@ t3dInstanceCell_t *Terrain3DInstanceStore::findCell( const int nMeshId, const Ve
 	return cell_index < pMesh->m_cells.size() ? &pMesh->m_cells[cell_index] : NULL;
 }
 
-t3dInstanceCell_t &Terrain3DInstanceStore::getOrCreateCell(
-        const int nMeshId, const Vector2i &cell, const size_t reserve_instances, const bool bColorData, const bool bOwnerData ) {
-	t3dInstanceMesh_t &mesh = getOrCreateMesh( nMeshId, 4u );
-	size_t cell_index = findCellIndex( mesh, cell );
-	if ( cell_index >= mesh.m_cells.size() ) {
-		cell_index = cellLowerBound( mesh.m_cells, cell );
-		if ( mesh.m_cells.size() >= mesh.m_cells.capacity() ) {
-			const size_t required = mesh.m_cells.size() + 1u;
-			const size_t growth = MAX( 4u, mesh.m_cells.capacity() / 2u );
-			if ( !t3dContainerReserveCold( mesh.m_cells, MAX( required, mesh.m_cells.capacity() + growth ) ) ) {
-				assert( false && "Terrain3D instance cell capacity exhausted" );
-				return mesh.m_cells[0];
-			}
-		}
-		t3dInstanceCell_t value;
-		value.bindStorage( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
-		value.m_location = cell;
-		value.reserve( reserve_instances, bColorData, bOwnerData );
-		if ( !t3dVectorInsertWithinCapacity( mesh.m_cells, cell_index, eastl::move( value ) ) ) {
-			assert( false && "Terrain3D instance cell insertion failed" );
-		}
-	} else {
-		mesh.m_cells[cell_index].reserve( reserve_instances, bColorData, bOwnerData );
+t3dInstanceCell_t *Terrain3DInstanceStore::tryGetOrCreateCellInternal( const int nMeshId,
+        const Vector2i &cell,
+        const size_t nReserveInstances,
+        const bool bColorData,
+        const bool bOwnerData,
+        const bool bExact ) {
+	if ( nMeshId < 0 || nMeshId >= s_nMaxMeshAssets || !runtimeAllocatorReady() ) {
+		return NULL;
 	}
-	return mesh.m_cells[cell_index];
+
+	t3dInstanceMesh_t &mesh = m_szMeshes[nMeshId];
+	const bool bInactiveMesh = mesh.m_nId < 0;
+	if ( !bInactiveMesh && mesh.m_nId != nMeshId ) {
+		return NULL;
+	}
+	if ( bInactiveMesh && !mesh.m_cells.empty() ) {
+		return NULL;
+	}
+
+	if ( !bInactiveMesh ) {
+		const size_t existing_index = findCellIndex( mesh, cell );
+		if ( existing_index < mesh.m_cells.size() ) {
+			t3dInstanceCell_t &existing = mesh.m_cells[existing_index];
+			size_t transform_capacity = existing.m_transforms.capacity();
+			size_t color_capacity = existing.m_colors.capacity();
+			size_t owner_capacity = existing.m_owners.capacity();
+			if ( !t3dInstanceStoreReserveTarget( transform_capacity, nReserveInstances, bExact, transform_capacity )
+			        || ( bColorData && !t3dInstanceStoreReserveTarget( color_capacity, nReserveInstances, bExact, color_capacity ) )
+			        || ( bOwnerData && !t3dInstanceStoreReserveTarget( owner_capacity, nReserveInstances, bExact, owner_capacity ) )
+			        || !t3dInstanceStorePreflightSlabSegment( m_transformSlab, existing.m_transforms.capacity(), transform_capacity )
+			        || ( bColorData && !t3dInstanceStorePreflightSlabSegment( m_colorSlab, existing.m_colors.capacity(), color_capacity ) )
+			        || ( bOwnerData
+			                && !t3dInstanceStorePreflightSlabSegment( m_ownerSlab, existing.m_owners.capacity(), owner_capacity ) ) ) {
+				return NULL;
+			}
+			const bool bReserved = bExact ? existing.reserveExact( nReserveInstances, bColorData, bOwnerData )
+			                              : existing.reserve( nReserveInstances, bColorData, bOwnerData );
+			return bReserved ? &existing : NULL;
+		}
+	}
+
+	const size_t cell_index = cellLowerBound( mesh.m_cells, cell );
+	const size_t required = mesh.m_cells.size() + 1u;
+	if ( required == 0u ) {
+		return NULL;
+	}
+	if ( required > mesh.m_cells.capacity() || mesh.m_cells.capacity() < 4u ) {
+		size_t target_capacity = MAX( ( size_t )4u, required );
+		if ( !bExact && mesh.m_cells.capacity() >= 4u ) {
+			const size_t growth = MAX( ( size_t )4u, mesh.m_cells.capacity() / 2u );
+			if ( mesh.m_cells.capacity() > SIZE_MAX - growth ) {
+				return NULL;
+			}
+			target_capacity = MAX( target_capacity, mesh.m_cells.capacity() + growth );
+		}
+		if ( target_capacity > SIZE_MAX / sizeof( t3dInstanceCell_t ) || !canGrowCellVector()
+		        || !t3dContainerReserveCold( mesh.m_cells, target_capacity ) ) {
+			return NULL;
+		}
+	}
+
+	t3dInstanceCell_t value;
+	value.bindStorage( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
+	value.m_location = cell;
+	size_t transform_capacity = 0u;
+	size_t color_capacity = 0u;
+	size_t owner_capacity = 0u;
+	if ( !t3dInstanceStoreReserveTarget( 0u, nReserveInstances, bExact, transform_capacity )
+	        || ( bColorData && !t3dInstanceStoreReserveTarget( 0u, nReserveInstances, bExact, color_capacity ) )
+	        || ( bOwnerData && !t3dInstanceStoreReserveTarget( 0u, nReserveInstances, bExact, owner_capacity ) )
+	        || !t3dInstanceStorePreflightSlabSegment( m_transformSlab, 0u, transform_capacity )
+	        || ( bColorData && !t3dInstanceStorePreflightSlabSegment( m_colorSlab, 0u, color_capacity ) )
+	        || ( bOwnerData && !t3dInstanceStorePreflightSlabSegment( m_ownerSlab, 0u, owner_capacity ) ) ) {
+		return NULL;
+	}
+	const bool bReserved = bExact ? value.reserveExact( nReserveInstances, bColorData, bOwnerData )
+	                              : value.reserve( nReserveInstances, bColorData, bOwnerData );
+	if ( !bReserved ) {
+		return NULL;
+	}
+	if ( !t3dVectorInsertWithinCapacity( mesh.m_cells, cell_index, eastl::move( value ) ) ) {
+		return NULL;
+	}
+	if ( bInactiveMesh ) {
+		mesh.m_nId = nMeshId;
+		rebuildActiveMeshIds();
+	}
+	return &mesh.m_cells[cell_index];
 }
 
-t3dInstanceCell_t &Terrain3DInstanceStore::getOrCreateCellExact(
-        const int nMeshId, const Vector2i &cell, const size_t reserve_instances, const bool bColorData, const bool bOwnerData ) {
-	t3dInstanceMesh_t &mesh = getOrCreateMesh( nMeshId, 4u );
-	size_t cell_index = findCellIndex( mesh, cell );
-	if ( cell_index >= mesh.m_cells.size() ) {
-		cell_index = cellLowerBound( mesh.m_cells, cell );
-		if ( mesh.m_cells.size() >= mesh.m_cells.capacity() ) {
-			const size_t required = mesh.m_cells.size() + 1u;
-			if ( !t3dContainerReserveCold( mesh.m_cells, required ) ) {
-				assert( false && "Terrain3D exact instance cell capacity exhausted" );
-				return mesh.m_cells[0];
-			}
-		}
-		t3dInstanceCell_t value;
-		value.bindStorage( &m_transformSlab, &m_colorSlab, &m_ownerSlab );
-		value.m_location = cell;
-		value.reserveExact( reserve_instances, bColorData, bOwnerData );
-		if ( !t3dVectorInsertWithinCapacity( mesh.m_cells, cell_index, eastl::move( value ) ) ) {
-			assert( false && "Terrain3D exact instance cell insertion failed" );
-		}
-	} else {
-		mesh.m_cells[cell_index].reserveExact( reserve_instances, bColorData, bOwnerData );
-	}
-	return mesh.m_cells[cell_index];
+t3dInstanceCell_t *Terrain3DInstanceStore::tryGetOrCreateCell(
+        const int nMeshId, const Vector2i &cell, const size_t nReserveInstances, const bool bColorData, const bool bOwnerData ) {
+	return tryGetOrCreateCellInternal( nMeshId, cell, nReserveInstances, bColorData, bOwnerData, false );
+}
+
+t3dInstanceCell_t *Terrain3DInstanceStore::tryGetOrCreateCellExact(
+        const int nMeshId, const Vector2i &cell, const size_t nReserveInstances, const bool bColorData, const bool bOwnerData ) {
+	return tryGetOrCreateCellInternal( nMeshId, cell, nReserveInstances, bColorData, bOwnerData, true );
 }
 
 bool Terrain3DInstanceStore::eraseCell( const int nMeshId, const Vector2i &cell ) {
@@ -405,7 +530,10 @@ void Terrain3DInstanceStore::importDictionary( const Dictionary &instances ) {
 		}
 		const Dictionary cell_dict = instances[mesh_variant];
 		const Array cell_keys = cell_dict.keys();
-		getOrCreateMesh( mesh_id, ( size_t )( cell_keys.size() ) );
+		if ( !tryGetOrCreateMesh( mesh_id, ( size_t )( cell_keys.size() ) ) ) {
+			clearRetainCapacity();
+			return;
+		}
 		for ( int cell_index = 0; cell_index < cell_keys.size(); ++cell_index ) {
 			const Variant cell_variant = cell_keys[cell_index];
 			const Vector2i location = cell_variant;
@@ -419,8 +547,12 @@ void Terrain3DInstanceStore::importDictionary( const Dictionary &instances ) {
 			const TypedArray<Transform3D> xforms = triple[0];
 			const PackedColorArray source_colors = triple[1];
 			PackedInt32Array source_owners;
+			PackedInt32Array source_behavior_flags;
 			if ( triple.size() > 3 && Variant( triple[3] ).get_type() == Variant::PACKED_INT32_ARRAY ) {
 				source_owners = triple[3];
+			}
+			if ( triple.size() > 4 && Variant( triple[4] ).get_type() == Variant::PACKED_INT32_ARRAY ) {
+				source_behavior_flags = triple[4];
 			}
 			bool bHasNonwhite = false;
 			for ( int color_index = 0; color_index < source_colors.size(); ++color_index ) {
@@ -436,13 +568,22 @@ void Terrain3DInstanceStore::importDictionary( const Dictionary &instances ) {
 					break;
 				}
 			}
-			t3dInstanceCell_t &target_cell = getOrCreateCell( mesh_id, location, ( size_t )( xforms.size() ), bHasNonwhite, bHasOwnerData );
+			t3dInstanceCell_t *const pTargetCell =
+			        tryGetOrCreateCell( mesh_id, location, ( size_t )( xforms.size() ), bHasNonwhite, bHasOwnerData );
+			if ( !pTargetCell ) {
+				clearRetainCapacity();
+				return;
+			}
+			t3dInstanceCell_t &target_cell = *pTargetCell;
 			if ( !target_cell.m_transforms.resize( ( size_t )( xforms.size() ) ) ) {
 				clearRetainCapacity();
 				return;
 			}
 			for ( int transform_index = 0; transform_index < xforms.size(); ++transform_index ) {
-				target_cell.setTransform( ( size_t )( transform_index ), xforms[transform_index] );
+				const uint16_t nBehaviorFlags = transform_index < source_behavior_flags.size()
+				        ? ( uint16_t )( source_behavior_flags[transform_index] )
+				        : T3D_INSTANCE_LEGACY_BEHAVIOR;
+				target_cell.setTransformAndBehaviorFlags( ( size_t )( transform_index ), xforms[transform_index], nBehaviorFlags );
 			}
 			if ( bHasNonwhite ) {
 				if ( !target_cell.m_colors.resize( ( size_t )( xforms.size() ) ) ) {
@@ -500,11 +641,15 @@ bool Terrain3DInstanceStore::equalsDictionary( const Dictionary &instances ) con
 			const TypedArray<Transform3D> transforms = triple[0];
 			const PackedColorArray colors = triple[1];
 			PackedInt32Array owners;
+			PackedInt32Array behavior_flags;
 			if ( triple.size() > 3 && Variant( triple[3] ).get_type() == Variant::PACKED_INT32_ARRAY ) {
 				owners = triple[3];
 			}
+			if ( triple.size() > 4 && Variant( triple[4] ).get_type() == Variant::PACKED_INT32_ARRAY ) {
+				behavior_flags = triple[4];
+			}
 			if ( transforms.size() != ( int )( instance_cell.m_transforms.size() ) || colors.size() > transforms.size()
-			        || owners.size() > transforms.size() ) {
+			        || owners.size() > transforms.size() || behavior_flags.size() > transforms.size() ) {
 				return false;
 			}
 			for ( int transform_index = 0; transform_index < transforms.size(); ++transform_index ) {
@@ -520,6 +665,13 @@ bool Terrain3DInstanceStore::equalsDictionary( const Dictionary &instances ) con
 				const uint32_t expected_owner = instance_cell.getOwner( index );
 				const uint32_t actual_owner = transform_index < owners.size() ? ( uint32_t )( MAX( owners[transform_index], 0 ) ) : 0u;
 				if ( actual_owner != expected_owner ) {
+					return false;
+				}
+				const uint16_t expected_behavior = instance_cell.getTransformBehaviorFlags( index );
+				const uint16_t actual_behavior = transform_index < behavior_flags.size()
+				        ? ( uint16_t )( behavior_flags[transform_index] ) & T3D_INSTANCE_BEHAVIOR_MASK
+				        : T3D_INSTANCE_LEGACY_BEHAVIOR;
+				if ( actual_behavior != expected_behavior ) {
 					return false;
 				}
 			}
@@ -550,7 +702,7 @@ Dictionary Terrain3DInstanceStore::exportDictionary( void ) const {
 				colors.fill( Color( 1, 1, 1, 1 ) );
 			}
 			Array triple;
-			triple.resize( cell.usesOwners() ? 4 : 3 );
+			triple.resize( 5 );
 			triple[0] = xforms;
 			triple[1] = colors;
 			triple[2] = cell.m_bModified;
@@ -562,6 +714,12 @@ Dictionary Terrain3DInstanceStore::exportDictionary( void ) const {
 				}
 				triple[3] = owners;
 			}
+			PackedInt32Array behavior_flags;
+			behavior_flags.resize( ( int )( cell.m_transforms.size() ) );
+			for ( size_t behavior_index = 0u; behavior_index < cell.m_transforms.size(); ++behavior_index ) {
+				behavior_flags.set( ( int )( behavior_index ), ( int32_t )( cell.getTransformBehaviorFlags( behavior_index ) ) );
+			}
+			triple[4] = behavior_flags;
 			cells[cell.m_location] = triple;
 		}
 		result[mesh.m_nId] = cells;
@@ -590,6 +748,72 @@ size_t Terrain3DInstanceStore::instanceCount( const int nMeshId ) const {
 		}
 	}
 	return count;
+}
+
+bool Terrain3DInstanceStore::validateDeep( void ) const {
+	if ( m_nActiveMeshCount > s_nMaxMeshAssets || m_transformSlab.used() > m_transformSlab.capacity()
+	        || m_colorSlab.used() > m_colorSlab.capacity() || m_ownerSlab.used() > m_ownerSlab.capacity() ) {
+		return false;
+	}
+	if ( ( m_transformSlab.capacity() > 0u && !m_transformSlab.data() ) || ( m_colorSlab.capacity() > 0u && !m_colorSlab.data() )
+	        || ( m_ownerSlab.capacity() > 0u && !m_ownerSlab.data() ) || !m_transformSlab.runtimeBindingSatisfied()
+	        || !m_colorSlab.runtimeBindingSatisfied() || !m_ownerSlab.runtimeBindingSatisfied() ) {
+		return false;
+	}
+
+	int previous_id = -1;
+	for ( size_t iActive = 0u; iActive < m_nActiveMeshCount; ++iActive ) {
+		const int mesh_id = ( int )( m_szActiveMeshIds[iActive] );
+		if ( mesh_id < 0 || mesh_id >= s_nMaxMeshAssets || mesh_id <= previous_id || m_szMeshes[mesh_id].m_nId != mesh_id ) {
+			return false;
+		}
+		previous_id = mesh_id;
+	}
+
+	size_t active_cursor = 0u;
+	for ( int mesh_id = 0; mesh_id < s_nMaxMeshAssets; ++mesh_id ) {
+		const t3dInstanceMesh_t &mesh = m_szMeshes[mesh_id];
+		if ( mesh.m_nId < 0 ) {
+			if ( !mesh.m_cells.empty() ) {
+				return false;
+			}
+			continue;
+		}
+		if ( mesh.m_nId != mesh_id || active_cursor >= m_nActiveMeshCount || m_szActiveMeshIds[active_cursor] != ( uint16_t )( mesh_id ) ) {
+			return false;
+		}
+		++active_cursor;
+
+		for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
+			const t3dInstanceCell_t &cell = mesh.m_cells[iCell];
+			if ( iCell > 0u && !cellLess( mesh.m_cells[iCell - 1u], cell.m_location ) ) {
+				return false;
+			}
+			if ( cell.m_nRevision == 0u
+			        || ( cell.m_bCachedAabbValid
+			                && ( cell.m_nCachedAabbRevision != cell.m_nRevision || cell.m_nCachedAabbGeneration == 0u ) ) ) {
+				return false;
+			}
+			if ( !t3dInstanceStoreValidateRawSlabRange( cell.m_transforms.data(),
+			             cell.m_transforms.size(),
+			             cell.m_transforms.capacity(),
+			             m_transformSlab.data(),
+			             m_transformSlab.used(),
+			             m_transformSlab.capacity(),
+			             sizeof( t3dPackedTransform_t ) ) ) {
+				return false;
+			}
+			if ( !cell.m_colors.validateBinding( &m_colorSlab ) || !cell.m_owners.validateBinding( &m_ownerSlab ) ) {
+				return false;
+			}
+			const size_t transform_count = cell.m_transforms.size();
+			if ( ( !cell.m_colors.empty() && cell.m_colors.size() != transform_count )
+			        || ( !cell.m_owners.empty() && cell.m_owners.size() != transform_count ) ) {
+				return false;
+			}
+		}
+	}
+	return active_cursor == m_nActiveMeshCount;
 }
 
 size_t Terrain3DInstanceStore::residentBytes( void ) const {

@@ -222,6 +222,16 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method(
 	        D_METHOD( "set_runtime_adaptive_min_node_unload_regions", "regions" ), &Terrain3D::setRuntimeAdaptiveMinNodeUnloadRegions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_node_unload_regions" ), &Terrain3D::getRuntimeAdaptiveMinNodeUnloadRegions );
+	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_world_upload_kb", "kb" ), &Terrain3D::setRuntimeAdaptiveMinWorldUploadKb );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_world_upload_kb" ), &Terrain3D::getRuntimeAdaptiveMinWorldUploadKb );
+	ClassDB::bind_method(
+	        D_METHOD( "set_runtime_adaptive_min_world_clusters", "clusters" ), &Terrain3D::setRuntimeAdaptiveMinWorldClusters );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_world_clusters" ), &Terrain3D::getRuntimeAdaptiveMinWorldClusters );
+	ClassDB::bind_method( D_METHOD( "set_runtime_adaptive_min_vt_requests", "requests" ), &Terrain3D::setRuntimeAdaptiveMinVtRequests );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_vt_requests" ), &Terrain3D::getRuntimeAdaptiveMinVtRequests );
+	ClassDB::bind_method(
+	        D_METHOD( "set_runtime_adaptive_min_vt_admissions", "admissions" ), &Terrain3D::setRuntimeAdaptiveMinVtAdmissions );
+	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_min_vt_admissions" ), &Terrain3D::getRuntimeAdaptiveMinVtAdmissions );
 	ClassDB::bind_method( D_METHOD( "get_runtime_adaptive_budget_stats" ), &Terrain3D::getRuntimeAdaptiveBudgetStats );
 	ClassDB::bind_method(
 	        D_METHOD( "set_runtime_boundary_work_phasing_enabled", "enabled" ), &Terrain3D::setRuntimeBoundaryWorkPhasingEnabled );
@@ -231,7 +241,33 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method(
 	        D_METHOD( "set_runtime_boundary_instancer_delay_frames", "frames" ), &Terrain3D::setRuntimeBoundaryInstancerDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_instancer_delay_frames" ), &Terrain3D::getRuntimeBoundaryInstancerDelayFrames );
+	ClassDB::bind_method( D_METHOD( "set_runtime_boundary_world_delay_frames", "frames" ), &Terrain3D::setRuntimeBoundaryWorldDelayFrames );
+	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_world_delay_frames" ), &Terrain3D::getRuntimeBoundaryWorldDelayFrames );
 	ClassDB::bind_method( D_METHOD( "get_runtime_boundary_phasing_stats" ), &Terrain3D::getRuntimeBoundaryPhasingStats );
+	ClassDB::bind_method( D_METHOD( "set_world_max_source_vertices", "value" ), &Terrain3D::setWorldMaxSourceVertices );
+	ClassDB::bind_method( D_METHOD( "get_world_max_source_vertices" ), &Terrain3D::getWorldMaxSourceVertices );
+	ClassDB::bind_method( D_METHOD( "set_world_max_clusters", "value" ), &Terrain3D::setWorldMaxClusters );
+	ClassDB::bind_method( D_METHOD( "get_world_max_clusters" ), &Terrain3D::getWorldMaxClusters );
+	ClassDB::bind_method( D_METHOD( "set_world_max_terrain_clusters", "value" ), &Terrain3D::setWorldMaxTerrainClusters );
+	ClassDB::bind_method( D_METHOD( "get_world_max_terrain_clusters" ), &Terrain3D::getWorldMaxTerrainClusters );
+	ClassDB::bind_method( D_METHOD( "set_world_max_transforms", "value" ), &Terrain3D::setWorldMaxTransforms );
+	ClassDB::bind_method( D_METHOD( "get_world_max_transforms" ), &Terrain3D::getWorldMaxTransforms );
+	ClassDB::bind_method( D_METHOD( "set_world_max_visible_items", "value" ), &Terrain3D::setWorldMaxVisibleItems );
+	ClassDB::bind_method( D_METHOD( "get_world_max_visible_items" ), &Terrain3D::getWorldMaxVisibleItems );
+	ClassDB::bind_method( D_METHOD( "set_world_max_materials", "value" ), &Terrain3D::setWorldMaxMaterials );
+	ClassDB::bind_method( D_METHOD( "get_world_max_materials" ), &Terrain3D::getWorldMaxMaterials );
+	ClassDB::bind_method( D_METHOD( "set_world_upload_budget_kb", "value" ), &Terrain3D::setWorldUploadBudgetKb );
+	ClassDB::bind_method( D_METHOD( "get_world_upload_budget_kb" ), &Terrain3D::getWorldUploadBudgetKb );
+	ClassDB::bind_method( D_METHOD( "set_world_cluster_upload_budget", "value" ), &Terrain3D::setWorldClusterUploadBudget );
+	ClassDB::bind_method( D_METHOD( "get_world_cluster_upload_budget" ), &Terrain3D::getWorldClusterUploadBudget );
+	ClassDB::bind_method( D_METHOD( "set_world_hiz_max_dimension", "value" ), &Terrain3D::setWorldHiZMaxDimension );
+	ClassDB::bind_method( D_METHOD( "get_world_hiz_max_dimension" ), &Terrain3D::getWorldHiZMaxDimension );
+	ClassDB::bind_method( D_METHOD( "set_world_hiz_max_mip_count", "value" ), &Terrain3D::setWorldHiZMaxMipCount );
+	ClassDB::bind_method( D_METHOD( "get_world_hiz_max_mip_count" ), &Terrain3D::getWorldHiZMaxMipCount );
+	ClassDB::bind_method( D_METHOD( "set_vt_request_budget", "value" ), &Terrain3D::setVtRequestBudget );
+	ClassDB::bind_method( D_METHOD( "get_vt_request_budget" ), &Terrain3D::getVtRequestBudget );
+	ClassDB::bind_method( D_METHOD( "set_vt_admission_budget", "value" ), &Terrain3D::setVtAdmissionBudget );
+	ClassDB::bind_method( D_METHOD( "get_vt_admission_budget" ), &Terrain3D::getVtAdmissionBudget );
 	ClassDB::bind_method( D_METHOD( "is_editor_authoring_mode" ), &Terrain3D::isEditorAuthoringMode );
 	ClassDB::bind_method( D_METHOD( "is_authoring_residency_readback_safe" ), &Terrain3D::isAuthoringResidencyReadbackSafe );
 	ClassDB::bind_method( D_METHOD( "is_gpu_region_cache_effective" ), &Terrain3D::isGpuRegionCacheEffective );
@@ -242,6 +278,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_performance_target", "target" ), &Terrain3D::setPerformanceTarget );
 	ClassDB::bind_method( D_METHOD( "_set_performance_target_storage", "target" ), &Terrain3D::setPerformanceTargetStorage );
 	ClassDB::bind_method( D_METHOD( "get_performance_target" ), &Terrain3D::getPerformanceTarget );
+	ClassDB::bind_method( D_METHOD( "set_virtual_texture_quality_profile", "profile" ), &Terrain3D::setVirtualTextureQualityProfile );
+	ClassDB::bind_method( D_METHOD( "get_virtual_texture_quality_profile" ), &Terrain3D::getVirtualTextureQualityProfile );
 	ClassDB::bind_method( D_METHOD( "get_performance_profile_status" ), &Terrain3D::getPerformanceProfileStatus );
 	ClassDB::bind_method( D_METHOD( "get_performance_profile_status_name" ), &Terrain3D::getPerformanceProfileStatusName );
 	ClassDB::bind_method( D_METHOD( "get_performance_profile_version" ), &Terrain3D::getPerformanceProfileVersion );
@@ -309,16 +347,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_gpu_middle_height_resolution_divisor" ), &Terrain3D::getGpuMiddleHeightResolutionDivisor );
 	ClassDB::bind_method( D_METHOD( "set_editor_gpu_region_cache_pages", "pages" ), &Terrain3D::setEditorGpuRegionCachePages );
 	ClassDB::bind_method( D_METHOD( "get_editor_gpu_region_cache_pages" ), &Terrain3D::getEditorGpuRegionCachePages );
-	ClassDB::bind_method( D_METHOD( "set_runtime_material_streaming_enabled", "enabled" ), &Terrain3D::setRuntimeMaterialStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_runtime_material_streaming_enabled" ), &Terrain3D::isRuntimeMaterialStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_runtime_material_cache_layers", "layers" ), &Terrain3D::setRuntimeMaterialCacheLayers );
-	ClassDB::bind_method( D_METHOD( "get_runtime_material_cache_layers" ), &Terrain3D::getRuntimeMaterialCacheLayers );
-	ClassDB::bind_method(
-	        D_METHOD( "set_runtime_material_upload_budget_layers", "layers" ), &Terrain3D::setRuntimeMaterialUploadBudgetLayers );
-	ClassDB::bind_method( D_METHOD( "get_runtime_material_upload_budget_layers" ), &Terrain3D::getRuntimeMaterialUploadBudgetLayers );
-	ClassDB::bind_method(
-	        D_METHOD( "set_runtime_release_source_material_textures", "enabled" ), &Terrain3D::setRuntimeReleaseSourceMaterialTextures );
-	ClassDB::bind_method( D_METHOD( "is_runtime_release_source_material_textures" ), &Terrain3D::isRuntimeReleaseSourceMaterialTextures );
 	ClassDB::bind_method( D_METHOD( "set_gpu_far_quality_divisor", "divisor" ), &Terrain3D::setGpuFarQualityDivisor );
 	ClassDB::bind_method( D_METHOD( "get_gpu_far_quality_divisor" ), &Terrain3D::getGpuFarQualityDivisor );
 	ClassDB::bind_method( D_METHOD( "set_far_material_resolution", "resolution" ), &Terrain3D::setFarMaterialResolution );
@@ -409,6 +437,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_hlod_forced_debug_level" ), &Terrain3D::getHlodForcedDebugLevel );
 	ClassDB::bind_method( D_METHOD( "reload_hlod_manifest" ), &Terrain3D::reloadHlodManifest );
 	ClassDB::bind_method( D_METHOD( "get_hlod_streaming_stats" ), &Terrain3D::getHlodStreamingStats );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_stats" ), &Terrain3D::getInstanceOcclusionStats );
+	ClassDB::bind_method( D_METHOD( "get_instance_physics_stats" ), &Terrain3D::getInstancePhysicsStats );
 	ClassDB::bind_method( D_METHOD( "get_hlod_debug_entries" ), &Terrain3D::getHlodDebugEntries );
 	ClassDB::bind_method( D_METHOD( "set_dynamic_node_stream_radius", "radius" ), &Terrain3D::setDynamicNodeStreamRadius );
 	ClassDB::bind_method( D_METHOD( "get_dynamic_node_stream_radius" ), &Terrain3D::getDynamicNodeStreamRadius );
@@ -501,6 +531,7 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &Terrain3D::getPhysicsMaterial );
 
 	ClassDB::bind_method( D_METHOD( "get_rd_renderer_diagnostics" ), &Terrain3D::getRdRendererDiagnostics );
+	ClassDB::bind_method( D_METHOD( "bake_virtual_textures" ), &Terrain3D::bakeVirtualTextures );
 
 	// Terrain Mesh
 	ClassDB::bind_method( D_METHOD( "set_mesh_lods", "count" ), &Terrain3D::setMeshLods );
@@ -532,6 +563,8 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &Terrain3D::getCastShadows );
 	ClassDB::bind_method( D_METHOD( "set_shadow_lod_count", "lod_count" ), &Terrain3D::setShadowLodCount );
 	ClassDB::bind_method( D_METHOD( "get_shadow_lod_count" ), &Terrain3D::getShadowLodCount );
+	ClassDB::bind_method( D_METHOD( "set_dominant_sun_only", "enabled" ), &Terrain3D::setDominantSunOnly );
+	ClassDB::bind_method( D_METHOD( "is_dominant_sun_only" ), &Terrain3D::isDominantSunOnly );
 	ClassDB::bind_method( D_METHOD( "set_near_shadow_enabled", "enabled" ), &Terrain3D::setNearShadowEnabled );
 	ClassDB::bind_method( D_METHOD( "get_near_shadow_enabled" ), &Terrain3D::getNearShadowEnabled );
 	ClassDB::bind_method( D_METHOD( "set_middle_shadow_enabled", "enabled" ), &Terrain3D::setMiddleShadowEnabled );
@@ -544,8 +577,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_middle_shadow_lod_count" ), &Terrain3D::getMiddleShadowLodCount );
 	ClassDB::bind_method( D_METHOD( "set_far_shadow_lod_count", "lod_count" ), &Terrain3D::setFarShadowLodCount );
 	ClassDB::bind_method( D_METHOD( "get_far_shadow_lod_count" ), &Terrain3D::getFarShadowLodCount );
-	ClassDB::bind_method( D_METHOD( "set_gi_mode", "gi_mode" ), &Terrain3D::setGiMode );
-	ClassDB::bind_method( D_METHOD( "get_gi_mode" ), &Terrain3D::getGiMode );
 	ClassDB::bind_method( D_METHOD( "set_render_layers", "layers" ), &Terrain3D::setRenderLayers );
 	ClassDB::bind_method( D_METHOD( "get_render_layers" ), &Terrain3D::getRenderLayers );
 
@@ -588,8 +619,6 @@ void Terrain3D::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_ocean_cull_margin" ), &Terrain3D::getOceanCullMargin );
 	ClassDB::bind_method( D_METHOD( "set_ocean_cast_shadows", "shadow_casting_setting" ), &Terrain3D::setOceanCastShadows );
 	ClassDB::bind_method( D_METHOD( "get_ocean_cast_shadows" ), &Terrain3D::getOceanCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_ocean_gi_mode", "gi_mode" ), &Terrain3D::setOceanGiMode );
-	ClassDB::bind_method( D_METHOD( "get_ocean_gi_mode" ), &Terrain3D::getOceanGiMode );
 	ClassDB::bind_method( D_METHOD( "set_ocean_render_layers", "layers" ), &Terrain3D::setOceanRenderLayers );
 	ClassDB::bind_method( D_METHOD( "get_ocean_render_layers" ), &Terrain3D::getOceanRenderLayers );
 	ClassDB::bind_method( D_METHOD( "set_ocean_material", "material" ), &Terrain3D::setOceanMaterial );
@@ -684,10 +713,11 @@ void Terrain3D::_bind_methods( void ) {
 	        "set_debug_level",
 	        "get_debug_level" );
 	ADD_PROPERTY( PropertyInfo( Variant::STRING, "data_directory", PROPERTY_HINT_DIR ), "set_data_directory", "get_data_directory" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "editor_execution_mode", PROPERTY_HINT_ENUM, "Authoring,Runtime Profile" ),
+	ADD_PROPERTY(
+	        PropertyInfo( Variant::INT, "editor_execution_mode", PROPERTY_HINT_ENUM, "Authoring,Runtime Profile", PROPERTY_USAGE_EDITOR ),
 	        "set_editor_execution_mode",
 	        "get_editor_execution_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "editor_runtime_streaming_preview", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "editor_runtime_streaming_preview", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR ),
 	        "set_editor_runtime_streaming_preview",
 	        "is_editor_runtime_streaming_preview" );
 	ADD_PROPERTY(
@@ -752,6 +782,13 @@ void Terrain3D::_bind_methods( void ) {
 	        "set_performance_target",
 	        "get_performance_target" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT,
+	                      "virtual_texture_quality_profile",
+	                      PROPERTY_HINT_ENUM,
+	                      "Just Make It Run,Low,Normal,High,Very High,Make My GPU SCREAM",
+	                      PROPERTY_USAGE_DEFAULT ),
+	        "set_virtual_texture_quality_profile",
+	        "get_virtual_texture_quality_profile" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT,
 	                      "performance_profile_status",
 	                      PROPERTY_HINT_ENUM,
 	                      "Custom,Exact,Modified",
@@ -807,6 +844,9 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY(
 	        PropertyInfo( Variant::BOOL, "runtime_sync_detail_lods" ), "set_runtime_sync_detail_lods", "is_runtime_sync_detail_lods" );
 
+	ADD_SUBGROUP( "Lighting Specialization", "" );
+	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "dominant_sun_only" ), "set_dominant_sun_only", "is_dominant_sun_only" );
+
 	ADD_SUBGROUP( "Shadows & GI", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ),
 	        "set_cast_shadows",
@@ -826,7 +866,6 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_shadow_lod_count", PROPERTY_HINT_RANGE, "-1,16,1" ),
 	        "set_far_shadow_lod_count",
 	        "get_far_shadow_lod_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "gi_mode", PROPERTY_HINT_ENUM, "Disabled,Static,Dynamic" ), "set_gi_mode", "get_gi_mode" );
 
 	ADD_SUBGROUP( "Displacement / Tessellation", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "tessellation_level", PROPERTY_HINT_RANGE, "0,6,1" ),
@@ -994,20 +1033,6 @@ void Terrain3D::_bind_methods( void ) {
 	        "set_gpu_region_cooked_pages_enabled",
 	        "is_gpu_region_cooked_pages_enabled" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "gpu_region_cook_on_save" ), "set_gpu_region_cook_on_save", "is_gpu_region_cook_on_save" );
-
-	ADD_SUBGROUP( "Runtime Material Streaming", "runtime_material_" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "runtime_material_streaming_enabled" ),
-	        "set_runtime_material_streaming_enabled",
-	        "is_runtime_material_streaming_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_material_cache_layers", PROPERTY_HINT_RANGE, "4,32,1,suffix: layers" ),
-	        "set_runtime_material_cache_layers",
-	        "get_runtime_material_cache_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_material_upload_budget_layers", PROPERTY_HINT_RANGE, "1,32,1,suffix: layers/frame" ),
-	        "set_runtime_material_upload_budget_layers",
-	        "get_runtime_material_upload_budget_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "runtime_material_release_source_textures" ),
-	        "set_runtime_release_source_material_textures",
-	        "is_runtime_release_source_material_textures" );
 
 	ADD_SUBGROUP( "CPU Terrain Pages", "" );
 	ADD_PROPERTY(
@@ -1199,6 +1224,18 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_adaptive_min_node_unload_regions", PROPERTY_HINT_RANGE, "0,64,1" ),
 	        "set_runtime_adaptive_min_node_unload_regions",
 	        "get_runtime_adaptive_min_node_unload_regions" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_adaptive_min_world_upload_kb", PROPERTY_HINT_RANGE, "1,65536,1,suffix:KiB" ),
+	        "set_runtime_adaptive_min_world_upload_kb",
+	        "get_runtime_adaptive_min_world_upload_kb" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_adaptive_min_world_clusters", PROPERTY_HINT_RANGE, "1,1048576,1" ),
+	        "set_runtime_adaptive_min_world_clusters",
+	        "get_runtime_adaptive_min_world_clusters" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_adaptive_min_vt_requests", PROPERTY_HINT_RANGE, "1,65536,1" ),
+	        "set_runtime_adaptive_min_vt_requests",
+	        "get_runtime_adaptive_min_vt_requests" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_adaptive_min_vt_admissions", PROPERTY_HINT_RANGE, "1,4096,1" ),
+	        "set_runtime_adaptive_min_vt_admissions",
+	        "get_runtime_adaptive_min_vt_admissions" );
 
 	ADD_SUBGROUP( "Boundary Phasing", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "runtime_boundary_work_phasing_enabled" ),
@@ -1210,6 +1247,47 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_boundary_instancer_delay_frames", PROPERTY_HINT_RANGE, "0,8,1,suffix:frames" ),
 	        "set_runtime_boundary_instancer_delay_frames",
 	        "get_runtime_boundary_instancer_delay_frames" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "runtime_boundary_world_delay_frames", PROPERTY_HINT_RANGE, "0,8,1,suffix:frames" ),
+	        "set_runtime_boundary_world_delay_frames",
+	        "get_runtime_boundary_world_delay_frames" );
+
+	ADD_GROUP( "Unified World Runtime", "world_" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_source_vertices", PROPERTY_HINT_RANGE, "1024,16777216,1024" ),
+	        "set_world_max_source_vertices",
+	        "get_world_max_source_vertices" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_clusters", PROPERTY_HINT_RANGE, "256,1048576,256" ),
+	        "set_world_max_clusters",
+	        "get_world_max_clusters" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_terrain_clusters", PROPERTY_HINT_RANGE, "64,1048576,64" ),
+	        "set_world_max_terrain_clusters",
+	        "get_world_max_terrain_clusters" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_transforms", PROPERTY_HINT_RANGE, "256,1048576,256" ),
+	        "set_world_max_transforms",
+	        "get_world_max_transforms" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_visible_items", PROPERTY_HINT_RANGE, "256,1048576,256" ),
+	        "set_world_max_visible_items",
+	        "get_world_max_visible_items" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_max_materials", PROPERTY_HINT_RANGE, "16,65536,16" ),
+	        "set_world_max_materials",
+	        "get_world_max_materials" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_upload_budget_kb", PROPERTY_HINT_RANGE, "64,65536,64,suffix:KiB" ),
+	        "set_world_upload_budget_kb",
+	        "get_world_upload_budget_kb" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_cluster_upload_budget", PROPERTY_HINT_RANGE, "64,1048576,64,suffix:clusters/frame" ),
+	        "set_world_cluster_upload_budget",
+	        "get_world_cluster_upload_budget" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_hiz_max_dimension", PROPERTY_HINT_RANGE, "64,8192,64" ),
+	        "set_world_hiz_max_dimension",
+	        "get_world_hiz_max_dimension" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_hiz_max_mip_count", PROPERTY_HINT_RANGE, "1,16,1" ),
+	        "set_world_hiz_max_mip_count",
+	        "get_world_hiz_max_mip_count" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_request_budget", PROPERTY_HINT_RANGE, "1,65536,1,suffix:requests/frame" ),
+	        "set_vt_request_budget",
+	        "get_vt_request_budget" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_admission_budget", PROPERTY_HINT_RANGE, "1,4096,1,suffix:requests/frame" ),
+	        "set_vt_admission_budget",
+	        "get_vt_admission_budget" );
 
 	ADD_GROUP( "Memory", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "total_memory_budget_mb", PROPERTY_HINT_RANGE, "32,4096,1,suffix: MiB" ),
@@ -1319,9 +1397,6 @@ void Terrain3D::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "ocean_cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ),
 	        "set_ocean_cast_shadows",
 	        "get_ocean_cast_shadows" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "ocean_gi_mode", PROPERTY_HINT_ENUM, "Disabled,Static,Dynamic" ),
-	        "set_ocean_gi_mode",
-	        "get_ocean_gi_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "ocean_render_layers", PROPERTY_HINT_LAYERS_3D_RENDER ),
 	        "set_ocean_render_layers",
 	        "get_ocean_render_layers" );

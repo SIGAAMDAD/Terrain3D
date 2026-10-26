@@ -33,6 +33,17 @@
 #define EASTL_NAME( x ) x
 #define EASTL_NAME_VAL( x ) x
 
+// EASTL assumes the plain allocator entry point satisfies
+// EASTL_ALLOCATOR_MIN_ALIGNMENT. MSVC's max_align_t is not a reliable proxy
+// for that contract across toolchain/runtime combinations, especially when a
+// zone allocation spills to the editor heap. Keep the allocator's plain-path
+// guarantee identical to EASTL's configured platform minimum.
+#if INTPTR_MAX == INT64_MAX
+static constexpr size_t s_nTerrain3DEastlDefaultAlignment = 16u;
+#else
+static constexpr size_t s_nTerrain3DEastlDefaultAlignment = 8u;
+#endif
+
 typedef struct t3dEastlAllocationStats_s {
 	size_t m_nLiveBytes = 0u;
 	size_t m_nPeakBytes = 0u;
@@ -93,8 +104,8 @@ public:
 	EA_FORCE_INLINE static Terrain3DEastlAllocator bootstrapAllocator( void ) {
 		return Terrain3DEastlAllocator();
 	}
-	EA_FORCE_INLINE static Terrain3DEastlAllocator zoneAllocator( Terrain3DMemoryZone *const pZone,
-	        const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
+	EA_FORCE_INLINE static Terrain3DEastlAllocator zoneAllocator(
+	        Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
 		Terrain3DEastlAllocator allocator;
 		allocator.m_pZone = pZone;
 		allocator.m_eOverflowPolicy = eOverflowPolicy;
@@ -113,7 +124,28 @@ public:
 	}
 
 	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) {
-		return allocate( n, alignof( max_align_t ), 0, 0 );
+		return allocate( n, s_nTerrain3DEastlDefaultAlignment, 0, 0 );
+	}
+	bool canAllocate( const size_t n, size_t alignment = s_nTerrain3DEastlDefaultAlignment, const size_t alignment_offset = 0u ) const {
+		if ( alignment < alignof( void * ) ) {
+			alignment = alignof( void * );
+		}
+		if ( n == 0u || ( alignment & ( alignment - 1u ) ) != 0u ) {
+			return false;
+		}
+		const size_t header_size = s_nEastlAllocationHeaderSize;
+		const size_t alignment_slack = alignment - 1u;
+		if ( n > SIZE_MAX - header_size - alignment_slack ) {
+			return false;
+		}
+		if ( !m_pZone ) {
+			return true;
+		}
+		const size_t total = n + header_size + alignment_slack;
+		if ( m_pZone->canAllocate( total, alignment ) ) {
+			return true;
+		}
+		return m_eOverflowPolicy == TERRAIN3D_ALLOCATOR_OVERFLOW_HEAP;
 	}
 	void *allocate( const size_t n, size_t alignment, const size_t alignment_offset, int = 0 ) {
 		if ( alignment < alignof( void * ) ) {

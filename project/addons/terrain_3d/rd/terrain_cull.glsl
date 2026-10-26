@@ -52,13 +52,27 @@ layout(set = 0, binding = 11, std430) buffer IndirectBuffer {
     IndexedIndirectCommand commands[];
 };
 
+struct DrawIndirectCommand {
+    uint vertex_count;
+    uint instance_count;
+    uint first_vertex;
+    uint first_instance;
+};
+layout(set = 0, binding = 12, std430) buffer StripIndirectBuffer {
+    DrawIndirectCommand strip_commands[];
+};
+
 layout(push_constant, std430) uniform CullData {
     uint patch_count;
-    uint lod0_index_count;
-    uint outer_index_count;
+    uint lod0_part_count;
+    uint outer_part_count;
     uint max_patches;
+    uint strip_command_base;
+    uint indexed_command_base;
 }
 cull_data;
+
+const uint T3D_CLIPMAP_STRIP_PART_CAPACITY = 24u;
 
 uint draw_group(PatchData patch_data) {
     if (patch_data.lod == 0u)
@@ -102,7 +116,11 @@ void main() {
     if (!patch_visible(patch_data))
         return;
     uint group = draw_group(patch_data);
-    uint slot = atomicAdd(commands[group].instance_count, 1u);
+    uint slot = atomicAdd(commands[cull_data.indexed_command_base + group].instance_count, 1u);
+    uint part_count = group == 0u ? cull_data.lod0_part_count : cull_data.outer_part_count;
+    uint command_base = group * T3D_CLIPMAP_STRIP_PART_CAPACITY;
+    for (uint part = 0u; part < part_count; ++part)
+        atomicAdd(strip_commands[cull_data.strip_command_base + command_base + part].instance_count, 1u);
     if (slot < cull_data.max_patches)
         visible_indices[group * cull_data.max_patches + slot] = id;
 }

@@ -24,20 +24,21 @@ static_assert( s_nWorldTexels / s_nRegionSize == s_nRegionMapSize, "Terrain3D wo
 static_assert( s_nRegionMapSize * s_nRegionMapSize == s_nRegionSlots, "Terrain3D logical region capacity is inconsistent" );
 static_assert( ( s_nRegionGeometrySignature & 0xffu ) == s_nRegionMapSize, "Geometry signature must encode the 32-wide region map" );
 static_assert( ( ( s_nRegionGeometrySignature >> 8u ) & 0xffu ) == s_nRegionVertexSpacingMeters,
-		"Geometry signature must encode 1 metre vertex spacing" );
-static_assert( ( ( s_nRegionGeometrySignature >> 16u ) & 0xffu ) == s_nRegionSize,
-		"Geometry signature must encode 128 samples per region" );
+        "Geometry signature must encode 1 metre vertex spacing" );
+static_assert(
+        ( ( s_nRegionGeometrySignature >> 16u ) & 0xffu ) == s_nRegionSize, "Geometry signature must encode 128 samples per region" );
 static_assert( s_nMaxCollisionShapeRecords == 4096, "Dynamic collision must retain its independent 4096-shape ceiling" );
 
 static_assert( s_nResidentWorldSize == s_nRegionMapSize, "Resident world map must use the specialized 32-wide domain" );
 static_assert( s_nResidentWorldSlotCount == s_nRegionSlots, "Resident world slot capacity must use 1024 logical regions" );
 static_assert( s_nInstanceRegionTableCapacity == ( size_t )( s_nRegionSlots ), "Instance region table must use 1024 logical regions" );
-static_assert( s_nInstanceMinRegionSize == s_nRegionSize && s_nInstanceMaxRegionSize == s_nRegionSize, "Instance layout must remain specialized to 128-sample regions" );
+static_assert( s_nInstanceMinRegionSize == s_nRegionSize && s_nInstanceMaxRegionSize == s_nRegionSize,
+        "Instance layout must remain specialized to 128-sample regions" );
 static_assert( s_nMaxCollisionAxisSamples == s_nRegionSize + 1, "Collision blend scratch must retain exactly 129 axis samples" );
 static_assert( s_nMaxRegionBlendSamples == s_nRegionSize, "Collision blend curve must retain exactly 128 region samples" );
-static_assert( s_nCollisionBakedCacheAxis == 8 && s_nBakedCacheCapacity == 64, "Collision baked-region cache must remain 8x8 / 64 entries" );
+static_assert(
+        s_nCollisionBakedCacheAxis == 8 && s_nBakedCacheCapacity == 64, "Collision baked-region cache must remain 8x8 / 64 entries" );
 static_assert( s_nRegionSlots <= UINT16_MAX, "Region slot indices must fit in uint16_t" );
-
 
 
 #endif // TERRAIN3D_LIMITS_H

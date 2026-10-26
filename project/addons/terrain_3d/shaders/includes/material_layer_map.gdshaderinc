@@ -1,11 +1,9 @@
-// Logical Terrain3D material IDs are stable authored values. Runtime material
-// streaming remaps them onto a smaller physical Texture2DArray working set.
-uniform int _texture_layer_map[32];
-
+// Logical Terrain3D material IDs map directly to static editor/legacy arrays.
+// Cooked runtime material residency is owned exclusively by sparse VT V3.
 int t3d_mat_layer(const int logical_id) {
-	return max(_texture_layer_map[clamp(logical_id, 0, 31)], 0);
+	return clamp(logical_id, 0, 31);
 }
 
 bool t3d_mat_resident(const int logical_id) {
-	return _texture_layer_map[clamp(logical_id, 0, 31)] >= 0;
+	return logical_id >= 0 && logical_id < 32;
 }

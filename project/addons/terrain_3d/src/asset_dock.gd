@@ -410,7 +410,6 @@ class ListContainer extends Container:
 	var width: float = 90.
 	var focus_style: StyleBox
 	var _clear_request_pending: bool = false
-	var _thumbnail_retry_pending: bool = false
 	var search_text: String = ""
 
 
@@ -522,30 +521,10 @@ class ListContainer extends Container:
 		var terrain: Terrain3D = plugin.get_terrain() if is_instance_valid(plugin) else null
 		if not is_instance_valid(terrain) or not is_instance_valid(terrain.assets):
 			return
-		if terrain.is_authoring_residency_readback_safe():
-			terrain.assets.create_mesh_thumbnails(p_id, Vector2i(256, 256), false)
-			return
-		if _thumbnail_retry_pending:
-			return
-		_thumbnail_retry_pending = true
-		_retry_mesh_thumbnails_when_safe.call_deferred(p_id)
+		# Preview targets/readback are independent from terrain-region residency.
+		# C++ owns preview-slot backpressure and typed transient deferral.
+		terrain.assets.create_mesh_thumbnails(p_id, Vector2i(256, 256), false)
 
-
-	func _retry_mesh_thumbnails_when_safe(p_id: int) -> void:
-		while is_instance_valid(plugin):
-			var terrain: Terrain3D = plugin.get_terrain()
-			if not is_instance_valid(terrain) or not is_instance_valid(terrain.assets):
-				break
-			if terrain.is_authoring_residency_readback_safe():
-				# Keep synchronous texture readback off the frame that completed residency publication.
-				await get_tree().process_frame
-				terrain = plugin.get_terrain() if is_instance_valid(plugin) else null
-				if is_instance_valid(terrain) and is_instance_valid(terrain.assets) and \
-						terrain.is_authoring_residency_readback_safe():
-					terrain.assets.create_mesh_thumbnails(p_id, Vector2i(256, 256), false)
-				break
-			await get_tree().process_frame
-		_thumbnail_retry_pending = false
 
 
 	func set_selected_after_swap(p_type: int, p_old_id: int, p_new_id: int) -> void:

@@ -5,18 +5,12 @@
 
 #include "authoring/render_world/terrain_3d_render_world_authoring.h"
 #include "core/terrain_3d_compiler.h"
+#include "rendering/rd/vt/terrain_3d_vt_contract.h"
 
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/vector2.hpp>
-
-typedef struct t3dRenderWorldMaterialVtBindings_s {
-	uint32_t m_nAlbedoVt = T3D_RW_INVALID_ID;
-	uint32_t m_nNormalVt = T3D_RW_INVALID_ID;
-	uint32_t m_nSurfaceVt = T3D_RW_INVALID_ID;
-	uint32_t m_nHeightVt = T3D_RW_INVALID_ID;
-} t3dRenderWorldMaterialVtBindings_t;
 
 class Terrain3DRenderWorldMaterial : public godot::Resource {
 	GDCLASS( Terrain3DRenderWorldMaterial, godot::Resource );
@@ -41,12 +35,18 @@ private:
 	bool m_bCastShadows = true;
 	bool m_bReceiveShadows = true;
 
+	void onTextureChanged( void );
+	bool referencesTexture( const godot::Ref<godot::Texture2D> &rTexture ) const;
+	void disconnectTextureSignalIfUnused( const godot::Ref<godot::Texture2D> &rTexture );
+	void connectTextureSignal( const godot::Ref<godot::Texture2D> &rTexture );
+	void disconnectAllTextureSignals( void );
+
 protected:
 	static void _bind_methods( void );
 
 public:
 	Terrain3DRenderWorldMaterial( void ) = default;
-	~Terrain3DRenderWorldMaterial( void ) = default;
+	~Terrain3DRenderWorldMaterial( void );
 
 	void setAlbedoTexture( const godot::Ref<godot::Texture2D> &rTexture );
 	EA_FORCE_INLINE godot::Ref<godot::Texture2D> getAlbedoTexture( void ) const {
@@ -123,7 +123,7 @@ public:
 		return m_iRenderTier;
 	}
 
-	bool compileRecordCold( const t3dRenderWorldMaterialVtBindings_t &rVt, T3DMaterialRecord &rRecord ) const;
+	virtual bool compileVtRecordCold( const t3dRenderingMaterialVtBindings_t &rVt, t3dRenderingMaterialGpu_t &rRecord ) const;
 	uint32_t getMaterialFlags( void ) const;
 };
 

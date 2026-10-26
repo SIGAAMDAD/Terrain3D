@@ -1,6 +1,6 @@
 {
   "metadata_version": 1,
-  "profile_manifest_version": 5,
+  "profile_manifest_version": 6,
   "properties": {
     "Terrain3D._performance_target_storage": {
       "class_name": "Terrain3D",
@@ -2176,58 +2176,6 @@
       "subsystem": "terrain_rendering",
       "tier": "global",
       "tooltip": "Purpose: Maximum number of deferred coarse clipmap-level transform updates submitted during one movement tick. Near levels and the first middle continuity ring remain synchronized.\nVisual: Follows the selected resource or policy described by Purpose; this metadata layer adds no separate visual effect.\nGPU: No direct steady-state GPU work is owned by the setting; GPU effects occur only through the selected downstream resource/policy.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: May change managed cache/residency capacity.\nChange cost: Streaming policy or capacity update; managed residency is adjusted through the owning subsystem.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
-      "visibility": "advanced"
-    },
-    "Terrain3D.runtime_material_cache_layers": {
-      "class_name": "Terrain3D",
-      "display_name": "Runtime Material Cache Layers",
-      "group_path": "Streaming & Residency / Runtime Material Streaming",
-      "key": "Terrain3D.runtime_material_cache_layers",
-      "profile_ownership": "xbox360_experimental",
-      "property_name": "runtime_material_cache_layers",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Sets the physical layer count of the cooked runtime terrain-material cache, including fallback and retirement/staging capacity.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: Directly controls physical terrain-material texture-array residency.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
-      "visibility": "advanced"
-    },
-    "Terrain3D.runtime_material_release_source_textures": {
-      "class_name": "Terrain3D",
-      "display_name": "Runtime Material Release Source Textures",
-      "group_path": "Streaming & Residency / Runtime Material Streaming",
-      "key": "Terrain3D.runtime_material_release_source_textures",
-      "profile_ownership": "xbox360_experimental",
-      "property_name": "runtime_material_release_source_textures",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Releases individual source terrain Texture2D references after a validated cooked runtime material cache has been created, avoiding duplicate source-plus-array residency in exported runtime.\nVisual: No visual change when the cooked material cache is valid; the generated physical arrays remain authoritative.\nGPU: Can reduce duplicate texture residency without changing rendered material content.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: Can release the duplicate runtime source texture residency after cooked arrays are established.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
-      "visibility": "advanced"
-    },
-    "Terrain3D.runtime_material_streaming_enabled": {
-      "class_name": "Terrain3D",
-      "display_name": "Runtime Material Streaming Enabled",
-      "group_path": "Streaming & Residency / Runtime Material Streaming",
-      "key": "Terrain3D.runtime_material_streaming_enabled",
-      "profile_ownership": "xbox360_experimental",
-      "property_name": "runtime_material_streaming_enabled",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Uses the cooked logical-to-physical terrain material cache in runtime so detailed material texture residency is bounded independently of the total authored material set.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: May change submitted geometry, render state, or GPU residency according to Purpose.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: Can replace full logical terrain material arrays with a bounded physical working set.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
-      "visibility": "advanced"
-    },
-    "Terrain3D.runtime_material_upload_budget_layers": {
-      "class_name": "Terrain3D",
-      "display_name": "Runtime Material Upload Budget Layers",
-      "group_path": "Streaming & Residency / Runtime Material Streaming",
-      "key": "Terrain3D.runtime_material_upload_budget_layers",
-      "profile_ownership": "xbox360_experimental",
-      "property_name": "runtime_material_upload_budget_layers",
-      "state": "editable",
-      "subsystem": "terrain_rendering",
-      "tier": "global",
-      "tooltip": "Purpose: Limits cooked terrain-material layers published into the physical texture arrays during one residency update.\nVisual: Changes terrain geometry, render participation, or editor visualization as described by Purpose.\nGPU: Controls per-update GPU texture publication work for streamed terrain materials.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: Does not change steady-state cache capacity; it bounds transient material upload work.\nChange cost: Configuration update in the owning subsystem; no unrelated rebuild is implied.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: Owned by Xbox 360 Experimental. Changing this value marks that selected base profile Modified until the profile value is restored.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
       "visibility": "advanced"
     },
     "Terrain3D.runtime_middle_range_end_m": {
@@ -5165,7 +5113,7 @@
       "state": "editable",
       "subsystem": "instancing",
       "tier": "global",
-      "tooltip": "Purpose: Width and depth, in terrain samples, of one region→mesh→cell storage and culling bucket. The value must divide the owning terrain region size.\nVisual: Changes static-instance geometry, LOD, visibility, or residency behavior.\nGPU: May change instance draw work or GPU instance-buffer residency.\nCPU: May change instance streaming, LOD evaluation, or buffer rebuild work.\nMemory: May change resident instance buffers or instance-page capacity.\nChange cost: Instance streaming, LOD, or buffer-policy rebuild at change time.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
+      "tooltip": "Purpose: Width and depth, in terrain samples, of one region\u2192mesh\u2192cell storage and culling bucket. The value must divide the owning terrain region size.\nVisual: Changes static-instance geometry, LOD, visibility, or residency behavior.\nGPU: May change instance draw work or GPU instance-buffer residency.\nCPU: May change instance streaming, LOD evaluation, or buffer rebuild work.\nMemory: May change resident instance buffers or instance-page capacity.\nChange cost: Instance streaming, LOD, or buffer-policy rebuild at change time.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
     "Terrain3DInstancer.cell_streaming_enabled": {
@@ -6858,6 +6806,32 @@
       "tooltip": "Purpose: Offset applied to height.\nVisual: Changes static-instance geometry, LOD, visibility, or residency behavior.\nGPU: May change instance draw work or GPU instance-buffer residency.\nCPU: May change instance streaming, LOD evaluation, or buffer rebuild work.\nMemory: May change resident instance buffers or instance-page capacity.\nChange cost: Instance streaming, LOD, or buffer-policy rebuild at change time.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
       "visibility": "basic"
     },
+    "Terrain3DMeshAsset.terrain_alignment": {
+      "class_name": "Terrain3DMeshAsset",
+      "display_name": "Terrain Alignment",
+      "group_path": "Source / Placement",
+      "key": "Terrain3DMeshAsset.terrain_alignment",
+      "profile_ownership": "none",
+      "property_name": "terrain_alignment",
+      "state": "editable",
+      "subsystem": "instancing",
+      "tier": "global",
+      "tooltip": "Purpose: Supplies the persistent placement default for keeping instances upright or aligning their up axis to the sampled terrain normal. Brush align_to_normal remains an authoring override.\nVisual: Affects orientation of newly painted instances and the stored follow policy used by terrain resnapping.\nGPU: No new GPU record bytes or renderer resources; P4 remains authoritative-store only.\nCPU: Terrain edits resample only instances carrying FOLLOW_TERRAIN_HEIGHT and/or FOLLOW_TERRAIN_NORMAL within the affected AABB.\nMemory: Uses the existing 16-bit reserved field in the 32-byte packed transform; no transform-size increase.\nChange cost: Asset default update only; existing instances retain their stored per-instance follow flags until explicitly changed.\nRuntime: Live/editor-safe through the bound setter.\nDependencies/conflicts: MANUAL_ORIENTATION preserves authored basis during terrain deformation; FOLLOW_TERRAIN_NORMAL rebuilds a stable tangent frame when manual orientation is not set.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
+      "visibility": "basic"
+    },
+    "Terrain3DMeshAsset.instance_category": {
+      "class_name": "Terrain3DMeshAsset",
+      "display_name": "Instance Category",
+      "group_path": "Instance Policy",
+      "key": "Terrain3DMeshAsset.instance_category",
+      "profile_ownership": "none",
+      "property_name": "instance_category",
+      "state": "editable",
+      "subsystem": "instancing",
+      "tier": "global",
+      "tooltip": "Purpose: Selects the asset-level instancing policy root: Clutter, Ground Cover, or Occluder. Clutter is HLOD-excluded and limited to two active visual LODs; Ground Cover and Occluder are HLOD-capable and reserve future per-instance physics/occlusion/editor policy without enlarging the 32-byte GPU instance record.\nVisual: Changes category-derived LOD/HLOD participation and future representation policy.\nGPU: Category is published once per RD cell in reserved instance-cell flag bits; no per-instance GPU record bytes are added.\nCPU: Category changes invalidate instancer settings and HLOD source signatures.\nMemory: No per-instance allocation is added by P3.\nChange cost: Mesh policy republish and any dependent HLOD dirty-package invalidation.\nRuntime: Live/editor-safe through the bound setter.\nDependencies/conflicts: Clutter hard-disables HLOD and clamps the active LOD ceiling to LOD1.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
+      "visibility": "basic"
+    },
     "Terrain3DMeshAsset.hlod_contribution": {
       "class_name": "Terrain3DMeshAsset",
       "display_name": "HLOD Contribution",
@@ -6865,11 +6839,11 @@
       "key": "Terrain3DMeshAsset.hlod_contribution",
       "profile_ownership": "none",
       "property_name": "hlod_contribution",
-      "state": "editable",
+      "state": "compatibility_storage",
       "subsystem": "instancing",
       "tier": "global",
-      "tooltip": "Purpose: Controls whether this static mesh asset contributes geometry to HLOD proxy baking. Auto includes ordinary authored mesh assets and excludes generated texture cards.\nVisual: Changes which static representation is rendered; source detail remains authoritative and is restored when proxy representation is unavailable.\nGPU: May change proxy rendering/residency according to the HLOD representation policy.\nCPU: Change-time/runtime CPU work is limited to the owning subsystem described by Purpose; no metadata polling is added.\nMemory: May change managed HLOD proxy residency or derived authoring data.\nChange cost: Streaming policy or capacity update; managed residency is adjusted through the owning subsystem.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Editable; visibility=basic",
-      "visibility": "basic"
+      "tooltip": "Purpose: Serialized compatibility mirror for pre-P6 resources. Instance Category is authoritative: Clutter maps to Exclude; Ground Cover and Occluder map to Include.\nVisual: No independent policy; HLOD participation follows Instance Category.\nGPU: No independent runtime GPU state.\nCPU: Setter normalizes the stored compatibility value to the category-derived policy.\nMemory: No independent allocation or residency authority.\nChange cost: None beyond category-owned invalidation.\nRuntime: Compatibility storage only.\nDependencies/conflicts: Instance Category owns HLOD eligibility.\nProfile ownership: None\nSubsystem/tier: Instancing / Global\nState: Compatibility storage; visibility=hidden",
+      "visibility": "hidden"
     },
     "Terrain3DMeshAsset.hlod_min_level": {
       "class_name": "Terrain3DMeshAsset",
@@ -7479,7 +7453,7 @@
       "state": "generated_read_only",
       "subsystem": "region_repository",
       "tier": "global",
-      "tooltip": "Purpose: Versioned compact static-instance payload. Version 2 records the region's cell size and cells-per-axis layout; version 1 pages are read as the legacy 4×4 layout.\nVisual: Reports live/generated state only; no visual state is authored.\nGPU: None.\nCPU: On-demand read-only query only.\nMemory: None.\nChange cost: Read-only query; no mutation or rebuild occurs.\nRuntime: Generated/read-only; cannot be authored.\nDependencies/conflicts: Generated from live resource/runtime state. Read-only and not an authoring input.\nProfile ownership: None\nSubsystem/tier: Region Repository / Global\nState: Generated/read-only; visibility=basic",
+      "tooltip": "Purpose: Versioned compact static-instance payload. Version 2 records the region's cell size and cells-per-axis layout; version 1 pages are read as the legacy 4\u00d74 layout.\nVisual: Reports live/generated state only; no visual state is authored.\nGPU: None.\nCPU: On-demand read-only query only.\nMemory: None.\nChange cost: Read-only query; no mutation or rebuild occurs.\nRuntime: Generated/read-only; cannot be authored.\nDependencies/conflicts: Generated from live resource/runtime state. Read-only and not an authoring input.\nProfile ownership: None\nSubsystem/tier: Region Repository / Global\nState: Generated/read-only; visibility=basic",
       "visibility": "basic"
     },
     "Terrain3DRegion.instances": {
@@ -8378,6 +8352,19 @@
       "tier": "global",
       "tooltip": "Purpose: Scale applied to uv.\nVisual: Changes terrain surface appearance or generated texture/asset output as described by Purpose.\nGPU: May change terrain texture sampling, texture upload, or texture residency according to Purpose.\nCPU: Change-time CPU work may rebuild, convert, or bind the affected asset/resource.\nMemory: May change retained texture/resource bytes or generated output storage.\nChange cost: Resource/texture rebuild or rebinding at change time.\nRuntime: Live/editor-safe through the bound setter; downstream work follows Change cost.\nDependencies/conflicts: None declared beyond the owning subsystem and Purpose above.\nProfile ownership: None\nSubsystem/tier: Texture Assets / Global\nState: Editable; visibility=basic",
       "visibility": "basic"
+    },
+    "Terrain3D.dominant_sun_only": {
+      "class_name": "Terrain3D",
+      "display_name": "Dominant Sun Only",
+      "group_path": "Terrain Rendering / Lighting Specialization",
+      "key": "Terrain3D.dominant_sun_only",
+      "profile_ownership": "xbox360_experimental",
+      "property_name": "dominant_sun_only",
+      "state": "editable",
+      "subsystem": "terrain_rendering",
+      "tier": "global",
+      "tooltip": "Purpose: Selects the GPU-P06 terrain-only Forward+ specialization that evaluates at most the first directional sun and compiles local omni/spot/area lights, clustered decals, and reflection probes out of terrain color variants. Ambient/sky radiance and directional shadows remain available.\nVisual: Terrain ignores local lights, clustered decals, and reflection probes while enabled; the dominant directional sun, directional shadows, ambient light, and environment radiance remain.\nGPU: Removes local-light cluster traversal, local shadow-atlas sampling paths, decal traversal, and reflection-probe traversal from terrain color shaders and uses a reduced set-2 descriptor layout.\nCPU: Avoids terrain descriptor dependence on local-light/cluster/decal/reflection-probe resources; pipeline selection is a cached boolean branch per Forward+ prepare.\nMemory: Adds eight terrain-only color shader variants per terrain tier and corresponding cached pipelines on demand.\nChange cost: Live pipeline/descriptor specialization switch; already-created shader RIDs remain cached.\nRuntime: Live-safe; applies on the next terrain Forward+ PREPARE.\nDependencies/conflicts: Enable only when terrain is intended to be lit by the dominant directional sun rather than local Forward+ lights/decals/reflection probes. Owned by Xbox 360 Experimental.\nProfile ownership: Xbox 360 Experimental\nSubsystem/tier: Terrain Rendering / Global\nState: Editable; visibility=advanced",
+      "visibility": "advanced"
     }
   },
   "schema_version": 2

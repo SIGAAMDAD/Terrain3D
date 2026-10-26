@@ -5,12 +5,17 @@
 
 #include "core/terrain_3d_eastl_helpers.h"
 #include "core/terrain_3d_sync.h"
+#include "core/terrain_3d_startup_state.h"
+#include "core/terrain_3d_runtime_frame_scheduler.h"
 #include "Terrain3DConstants.h"
+#include "rendering/rd/terrain_3d_rd_preview_result.h"
+#include "rendering/rd/world/terrain_3d_world_contract.h"
 #include "assets/terrain_3d_assets.h"
 #include "core/target_node_3d.h"
 #include "core/terrain_3d_diagnostics.h"
 #include "data/terrain_3d_data.h"
 #include "eastl_config.h"
+#include "instances/terrain_3d_instance_mutation.h"
 #include "instances/terrain_3d_instancer.h"
 #include "memory/terrain_3d_memory_arena.h"
 #include "memory/terrain_3d_memory_budget.h"
@@ -34,19 +39,23 @@
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/classes/sub_viewport.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
+
 class Terrain3DEditor;
 class Terrain3DNodeStreamer;
 class Terrain3DLightmapStreamer;
 class Terrain3DHLODStreamer;
+class Terrain3DInstanceOcclusion;
+class Terrain3DInstancePhysics;
 class Terrain3DRenderCoordinator;
 
-
-EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String &rDataDirectory ) {
+EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String& rDataDirectory )
+{
 	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
 	return directory.is_empty() ? String() : directory.path_join( "lighting" );
 }
 
-typedef enum t3dDebugLevel_e {
+typedef enum t3dDebugLevel_e
+{
 	MESG = -2,   // Always print except in release builds
 	WARN = -1,   // Always print except in release builds
 	ERROR = 0,   // Always print except in release builds
@@ -55,7 +64,8 @@ typedef enum t3dDebugLevel_e {
 	EXTREME = 3, // Continuous operations like snapping
 } t3dDebugLevel_t;
 
-typedef enum t3dRuntimeLifecycleState_e : uint8_t {
+typedef enum t3dRuntimeLifecycleState_e : uint8_t
+{
 	TERRAIN3D_RUNTIME_COLD = 0u,
 	TERRAIN3D_RUNTIME_INITIALIZING,
 	TERRAIN3D_RUNTIME_ACTIVE,
@@ -65,29 +75,34 @@ typedef enum t3dRuntimeLifecycleState_e : uint8_t {
 	TERRAIN3D_RUNTIME_DRAIN_FAILED,
 } t3dRuntimeLifecycleState_t;
 
-typedef enum t3dPerformanceTarget_e {
+typedef enum t3dPerformanceTarget_e
+{
 	PERFORMANCE_TARGET_CUSTOM,
 	PERFORMANCE_TARGET_XBOX360_EXPERIMENTAL,
 } t3dPerformanceTarget_t;
 
-typedef enum t3dPerformanceProfileStatus_e {
+typedef enum t3dPerformanceProfileStatus_e
+{
 	PERFORMANCE_PROFILE_CUSTOM,
 	PERFORMANCE_PROFILE_EXACT,
 	PERFORMANCE_PROFILE_MODIFIED,
 } t3dPerformanceProfileStatus_t;
 
-typedef enum t3dEnvironmentShadowQuality_e {
+typedef enum t3dEnvironmentShadowQuality_e
+{
 	ENVIRONMENT_SHADOW_LOW,
 	ENVIRONMENT_SHADOW_NORMAL,
 	ENVIRONMENT_SHADOW_HIGH,
 	ENVIRONMENT_SHADOW_ULTRA,
 } t3dEnvironmentShadowQuality_t;
 
-typedef enum t3dRegionSize_e {
+typedef enum t3dRegionSize_e
+{
 	SIZE_128 = 128,
 } t3dRegionSize_t;
 
-typedef enum t3dOceanPerformancePreset_e {
+typedef enum t3dOceanPerformancePreset_e
+{
 	OCEAN_PRESET_CUSTOM,
 	OCEAN_PRESET_BORDER_MINIMUM,
 	OCEAN_PRESET_BORDER_BALANCED,
@@ -95,25 +110,29 @@ typedef enum t3dOceanPerformancePreset_e {
 	OCEAN_PRESET_CINEMATIC,
 } t3dOceanPerformancePreset_t;
 
-typedef enum t3dOceanRefractionMode_e {
+typedef enum t3dOceanRefractionMode_e
+{
 	OCEAN_REFRACTION_OFF,
 	OCEAN_REFRACTION_DEPTH_TINT,
 	OCEAN_REFRACTION_FULL
 } t3dOceanRefractionMode_t;
 
-typedef enum t3dOceanFoamMode_e {
+typedef enum t3dOceanFoamMode_e
+{
 	OCEAN_FOAM_OFF,
 	OCEAN_FOAM_SHORE,
 	OCEAN_FOAM_FULL
 } t3dOceanFoamMode_t;
 
-typedef enum t3dOceanScatteringMode_e {
+typedef enum t3dOceanScatteringMode_e
+{
 	OCEAN_SCATTERING_OFF,
 	OCEAN_SCATTERING_APPROXIMATE,
 	OCEAN_SCATTERING_FULL
 } t3dOceanScatteringMode_t;
 
-typedef enum t3dOceanShadingMode_e {
+typedef enum t3dOceanShadingMode_e
+{
 	OCEAN_SHADING_LAMBERT_DIFFUSE,
 	OCEAN_SHADING_LAMBERT_GGX,
 	OCEAN_SHADING_BURLEY_GGX,
@@ -121,7 +140,8 @@ typedef enum t3dOceanShadingMode_e {
 	OCEAN_SHADING_LAMBERT_VERTEX
 } t3dOceanShadingMode_t;
 
-typedef struct t3dTriangleBuffer_s {
+typedef struct t3dTriangleBuffer_s
+{
 	eastl::vector<Vector3, Terrain3DEastlAllocator> m_ownedVertices;
 	eastl::vector<Vector2, Terrain3DEastlAllocator> m_ownedUvs;
 	Vector3 *m_pExternalVertices = NULL;
@@ -130,7 +150,8 @@ typedef struct t3dTriangleBuffer_s {
 	size_t m_nExternalSize = 0u;
 	bool m_bOverflowed = false;
 
-	EA_FORCE_INLINE void bindExternal( Vector3 *const pVertices, Vector2 *const pUvs, const size_t nCapacity ) {
+	EA_FORCE_INLINE void bindExternal( Vector3 *const pVertices, Vector2 *const pUvs, const size_t nCapacity )
+	{
 		m_pExternalVertices = pVertices;
 		m_pExternalUvs = pUvs;
 		m_nExternalCapacity = nCapacity;
@@ -138,26 +159,28 @@ typedef struct t3dTriangleBuffer_s {
 		m_bOverflowed = false;
 	}
 
-	void reserve( const size_t nCapacity, const bool bUvs ) {
+	void reserve( const size_t nCapacity, const bool bUvs )
+	{
 		m_ownedVertices.reserve( nCapacity );
 		if ( bUvs ) {
 			m_ownedUvs.reserve( nCapacity );
 		}
 	}
 
-	void appendTriangle( const Vector3 &rA, const Vector3 &rB, const Vector3 &rC, const bool bUvs ) {
+	void appendTriangle( const Vector3& rA, const Vector3& rB, const Vector3& rC, const bool bUvs )
+	{
 		if ( m_pExternalVertices ) {
 			if ( m_nExternalSize + 3u > m_nExternalCapacity ) {
 				m_bOverflowed = true;
 				return;
 			}
-			m_pExternalVertices[m_nExternalSize] = rA;
-			m_pExternalVertices[m_nExternalSize + 1u] = rB;
-			m_pExternalVertices[m_nExternalSize + 2u] = rC;
+			m_pExternalVertices[ m_nExternalSize ] = rA;
+			m_pExternalVertices[ m_nExternalSize + 1u ] = rB;
+			m_pExternalVertices[ m_nExternalSize + 2u ] = rC;
 			if ( bUvs && m_pExternalUvs ) {
-				m_pExternalUvs[m_nExternalSize] = Vector2( rA.x, rA.z );
-				m_pExternalUvs[m_nExternalSize + 1u] = Vector2( rB.x, rB.z );
-				m_pExternalUvs[m_nExternalSize + 2u] = Vector2( rC.x, rC.z );
+				m_pExternalUvs[ m_nExternalSize ] = Vector2( rA.x, rA.z );
+				m_pExternalUvs[ m_nExternalSize + 1u ] = Vector2( rB.x, rB.z );
+				m_pExternalUvs[ m_nExternalSize + 2u ] = Vector2( rC.x, rC.z );
 			}
 			m_nExternalSize += 3u;
 			return;
@@ -173,24 +196,29 @@ typedef struct t3dTriangleBuffer_s {
 		}
 	}
 
-	EA_FORCE_INLINE size_t size( void ) const {
+	EA_FORCE_INLINE size_t size( void ) const
+	{
 		return m_pExternalVertices ? m_nExternalSize : m_ownedVertices.size();
 	}
 
-	EA_FORCE_INLINE size_t uvSize( void ) const {
+	EA_FORCE_INLINE size_t uvSize( void ) const
+	{
 		return m_pExternalVertices ? ( m_pExternalUvs ? m_nExternalSize : 0u ) : m_ownedUvs.size();
 	}
 
-	EA_FORCE_INLINE const Vector3 *vertexData( void ) const {
+	EA_FORCE_INLINE const Vector3 *vertexData( void ) const
+	{
 		return m_pExternalVertices ? m_pExternalVertices : m_ownedVertices.data();
 	}
 
-	EA_FORCE_INLINE const Vector2 *uvData( void ) const {
+	EA_FORCE_INLINE const Vector2 *uvData( void ) const
+	{
 		return m_pExternalVertices ? m_pExternalUvs : m_ownedUvs.data();
 	}
 } t3dTriangleBuffer_t;
 
-typedef struct t3dBakeRowTask_s {
+typedef struct t3dBakeRowTask_s
+{
 	int32_t m_nXStart = 0;
 	int32_t m_nXEnd = 0;
 	int32_t m_nZStart = 0;
@@ -199,7 +227,8 @@ typedef struct t3dBakeRowTask_s {
 	size_t m_nOutputCapacity = 0u;
 } t3dBakeRowTask_t;
 
-typedef struct t3dBakeRegionSnapshot_s {
+typedef struct t3dBakeRegionSnapshot_s
+{
 	Vector2i m_location;
 	PackedByteArray m_heightData;
 	PackedByteArray m_controlData;
@@ -207,19 +236,21 @@ typedef struct t3dBakeRegionSnapshot_s {
 	const uint8_t *m_pControlBytes = NULL;
 } t3dBakeRegionSnapshot_t;
 
-typedef struct t3dBakeSnapshot_s {
+typedef struct t3dBakeSnapshot_s
+{
 	real_t m_fVertexSpacing = 1.f;
-	int32_t m_szRegionLookup[s_nRegionMapSize * s_nRegionMapSize] = {};
+	int32_t m_szRegionLookup[ s_nRegionMapSize * s_nRegionMapSize ] = {};
 	eastl::vector<t3dBakeRegionSnapshot_t, Terrain3DEastlAllocator> m_regions;
 
 	const t3dBakeRegionSnapshot_t *getRegion( const int32_t iX, const int32_t iZ ) const;
-	void getSample( const int32_t iX, const int32_t iZ, uint32_t &nControl, real_t &fHeight ) const;
-	bool getMinimumRect( int32_t iX, int32_t iZ, int32_t nWidth, int32_t nHeight, real_t &fHeight ) const;
+	void getSample( const int32_t iX, const int32_t iZ, uint32_t& nControl, real_t& fHeight ) const;
+	bool getMinimumRect( int32_t iX, int32_t iZ, int32_t nWidth, int32_t nHeight, real_t& fHeight ) const;
 	Vector3 getMeshVertex(
-	        const int32_t nLod, const t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ, uint32_t &nControl ) const;
+	    const int32_t nLod, const t3dHeightFilter_t filter, const int32_t iX, const int32_t iZ, uint32_t& nControl ) const;
 } t3dBakeSnapshot_t;
 
-typedef struct t3dBakeTaskContext_s {
+typedef struct t3dBakeTaskContext_s
+{
 	const Terrain3D *m_pTerrain = NULL;
 	const t3dBakeSnapshot_t *m_pSnapshot = NULL;
 	const eastl::vector<t3dBakeRowTask_t, Terrain3DEastlAllocator> *m_pTasks = NULL;
@@ -231,9 +262,11 @@ typedef struct t3dBakeTaskContext_s {
 	bool m_bRequireNav = false;
 } t3dBakeTaskContext_t;
 
-class Terrain3D : public Node3D {
+class Terrain3D : public Node3D
+{
 	GDCLASS( Terrain3D, Node3D );
 	CLASS_NAME();
+	friend class Terrain3DRuntimeFrameScheduler;
 	friend class Terrain3DData;
 
 public: // Constants
@@ -243,6 +276,20 @@ private:
 	bool m_bIsInsideWorld = false;
 	bool m_bInitialized = false;
 	t3dRuntimeLifecycleState_t m_runtimeLifecycleState = TERRAIN3D_RUNTIME_COLD;
+	t3dAtomicU32_t m_nStartupGeneration { 0u };
+	t3dStartupDomainState_t m_startupFinalizationState;
+	uint64_t m_nStartupAttemptCount = 0u;
+	uint64_t m_nStartupCancellationCount = 0u;
+	uint64_t m_nStartupGenerationInvalidationCount = 0u;
+	uint64_t m_nStartupStartUsec = 0u;
+	uint64_t m_nStartupEndUsec = 0u;
+	uint64_t m_nStartupTotalUsecLast = 0u;
+	uint64_t m_nStartupDataInitializeUsecLast = 0u;
+	uint64_t m_nStartupOwnerPrepareUsecLast = 0u;
+	uint64_t m_nStartupCoordinatorInitializeUsecLast = 0u;
+	uint64_t m_nStartupOwnerFinalizeUsecLast = 0u;
+	Vector3 m_startupInitialTarget = s_v3Max;
+	bool m_bStartupSucceededLast = false;
 	uint8_t m_nWarnings = 0u;
 	// Runtime memory ownership. Declaration order is intentional: allocator-backed
 	// containers are destroyed before the zone and its arena backing store.
@@ -252,12 +299,16 @@ private:
 	t3dMemoryArenaSlice_t m_runtimeZoneSlice;
 	bool m_bRuntimeMemoryReady = false;
 
+	Terrain3DRuntimeFrameScheduler m_runtimeFrameScheduler;
+
 	// Object references
 	Terrain3DData *m_pData = NULL;
 	Ref<Terrain3DAssets> m_assets;
 	Ref<Resource> m_autoShaderProfile;
 	Terrain3DCollision *m_pCollision = NULL;
 	Terrain3DInstancer *m_pInstancer = NULL;
+	Terrain3DInstanceOcclusion *m_pInstanceOcclusion = NULL;
+	Terrain3DInstancePhysics *m_pInstancePhysics = NULL;
 	Terrain3DNodeStreamer *m_pNodeStreamer = NULL;
 	Terrain3DLightmapStreamer *m_pLightmapStreamer = NULL;
 	Terrain3DHLODStreamer *m_pHlodStreamer = NULL;
@@ -268,6 +319,7 @@ private:
 	bool m_bSave16Bit = false;
 	t3dPerformanceTarget_t m_performanceTarget = PERFORMANCE_TARGET_CUSTOM;
 	t3dPerformanceProfileStatus_t m_performanceProfileStatus = PERFORMANCE_PROFILE_CUSTOM;
+	uint32_t m_nVirtualTextureQualityProfile = 2u; // Normal
 	bool m_bApplyingPerformanceTarget = false;
 	bool m_bPerformanceProfileMaterialPendingApply = false;
 	// Runtime settings remain stored in every mode. Authoring changes only the
@@ -281,10 +333,10 @@ private:
 
 	// Unified logical region-streaming policy. Every subsystem consumes this map;
 	// no renderer/object cache is allowed to invent a separate world footprint.
-	t3dRegionStreamingConfig_t m_regionStreamingConfig{};
+	t3dRegionStreamingConfig_t m_regionStreamingConfig {};
 	t3dRuntimeStreamingConfig_t m_runtimeStreamingConfig = t3dStreamingCompileConfig( m_regionStreamingConfig );
-	uint8_t m_szRegionStreamingStates[s_nRegionSlots] = {};
-	uint8_t m_szRegionStreamingPrefetch[s_nRegionSlots] = {};
+	uint8_t m_szRegionStreamingStates[ s_nRegionSlots ] = {};
+	uint8_t m_szRegionStreamingPrefetch[ s_nRegionSlots ] = {};
 	Vector2i m_regionStreamingCenter = s_v2iMax;
 	Vector2i m_regionStreamingPredictedCenter = s_v2iMax;
 	Vector3 m_regionStreamingPreviousWorldPosition = s_v3Max;
@@ -314,21 +366,43 @@ private:
 	int m_nRuntimeAdaptiveMinInstancerCells = 4;
 	int m_nRuntimeAdaptiveMinNodeLoadRegions = 1;
 	int m_nRuntimeAdaptiveMinNodeUnloadRegions = 1;
+	int m_nRuntimeAdaptiveMinWorldUploadKb = 512;
+	int m_nRuntimeAdaptiveMinWorldClusters = 1024;
+	int m_nRuntimeAdaptiveMinVtRequests = 256;
+	int m_nRuntimeAdaptiveMinVtAdmissions = 8;
 	uint64_t m_nRuntimeAdaptiveLastMeasuredUsec = 0u;
 	uint64_t m_nRuntimeAdaptiveControllerUsecLast = 0u;
+	uint64_t m_nRuntimeAdaptiveWorldDeferralsSeen = 0u;
+	uint64_t m_nRuntimeAdaptiveVtDeferralsSeen = 0u;
 	t3dAdaptiveBudgetState_t m_nRuntimeAdaptiveBudgetState;
 	bool m_bRuntimeBoundaryWorkPhasingEnabled = true;
 	int m_nRuntimeBoundaryNodeDelayFrames = 1;
 	int m_nRuntimeBoundaryInstancerDelayFrames = 2;
+	int m_nRuntimeBoundaryWorldDelayFrames = 1;
 	uint64_t m_iRuntimePhysicsFrameIndex = 0u;
 	uint64_t m_nRuntimeBoundaryTransitionFrame = 0u;
 	uint64_t m_nRuntimeBoundaryNodeDeferralsTotal = 0u;
 	uint64_t m_nRuntimeBoundaryInstancerDeferralsTotal = 0u;
+	uint64_t m_nRuntimeBoundaryWorldDeferralsTotal = 0u;
 	int m_nRuntimeBoundaryNodeDeferralStreak = 0;
 	int m_nRuntimeBoundaryInstancerDeferralStreak = 0;
+	int m_nRuntimeBoundaryWorldDeferralStreak = 0;
 	Vector2i m_runtimeBoundaryTargetRegion = s_v2iMax;
 	bool m_bRuntimeBoundaryNodeDeferredLastTick = false;
 	bool m_bRuntimeBoundaryInstancerDeferredLastTick = false;
+	bool m_bRuntimeBoundaryWorldDeferredLastTick = false;
+	uint32_t m_nWorldMaxSourceVertices = 2097152u;
+	uint32_t m_nWorldMaxClusters = 131072u;
+	uint32_t m_nWorldMaxTerrainClusters = 32768u;
+	uint32_t m_nWorldMaxTransforms = 32768u;
+	uint32_t m_nWorldMaxVisibleItems = 65536u;
+	uint32_t m_nWorldMaxMaterials = 4096u;
+	uint32_t m_nWorldUploadBudgetKb = 4096u;
+	uint32_t m_nWorldClusterUploadBudget = 8192u;
+	uint32_t m_nWorldHiZMaxDimension = 2048u;
+	uint32_t m_nWorldHiZMaxMipCount = 12u;
+	uint32_t m_nVtRequestBudget = 2048u;
+	uint32_t m_nVtAdmissionBudget = 64u;
 	bool m_bGpuRegionCacheEnabled = false;
 	bool m_bGpuRegionCapacityWarningActive = false;
 	bool m_bDeferGpuRegionCacheReconfigure = false;
@@ -352,10 +426,6 @@ private:
 	int m_nFarControlResolution = 128;
 	bool m_bGpuRegionCookedPagesEnabled = false;
 	bool m_bGpuRegionCookOnSave = false;
-	bool m_bRuntimeMaterialStreamingEnabled = false;
-	int m_nRuntimeMaterialCacheLayers = 12;
-	int m_nRuntimeMaterialUploadBudgetLayers = 2;
-	bool m_bRuntimeReleaseSourceMaterialTextures = false;
 	bool m_bCpuRegionCacheEnabled = false;
 	int m_nCpuRegionCacheBudgetMb = 32;
 	int m_nCpuRegionLoadBudgetLayers = 4;
@@ -423,10 +493,10 @@ private:
 	mutable uint64_t m_nDiagnosticsCollectionUsecTotal = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionUsecPeak = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionCount = 0u;
-	mutable eastl::array<uint64_t, 7> m_szDiagnosticCachePeakBytes{};
+	mutable eastl::array<uint64_t, 7> m_szDiagnosticCachePeakBytes {};
 	bool m_bMemoryPressureEventState = false;
 	bool m_bMemoryOvercommitEventState = false;
-	eastl::array<bool, 3> m_bCacheThrashEventState{};
+	eastl::array<bool, 3> m_bCacheThrashEventState {};
 	int m_nNextStreamOwnerId = 0x40000000;
 	real_t m_fLabelDistance = 0.f;
 	int m_nLabelSize = 48;
@@ -464,6 +534,9 @@ private:
 	bool m_bNearShadowEnabled = true;
 	bool m_bMiddleShadowEnabled = true;
 	bool m_bFarShadowEnabled = true;
+	// GPU-P06: explicit contract for terrain-only Forward+ lighting specialization.
+	// When enabled, terrain ignores local lights, clustered decals, and reflection probes.
+	bool m_bDominantSunOnly = false;
 	bool m_bRuntimeShaderTieringEnabled = false;
 	int m_nRuntimeNearShaderLods = 2;
 	int m_nRuntimeMiddleShaderLods = 3;
@@ -475,13 +548,13 @@ private:
 
 	// Displacement Buffer
 	Vector2 m_lastBufferPosition = s_v2Max;
-	t3dAtomicBool_t m_bComputeDisplacementEnabled{ false };
-	t3dAtomicBool_t m_bComputeDisplacementActive{ false };
-	t3dAtomicBool_t m_bComputeDisplacementDispatchPending{ false };
-	t3dAtomicBool_t m_bComputeDisplacementFailed{ false };
-	t3dAtomicBool_t m_bComputeDisplacementFallbackRequested{ false };
-	t3dAtomicBool_t m_bComputeDisplacementTearingDown{ false };
-	t3dAtomicBool_t m_bComputeDisplacementDirty{ true };
+	t3dAtomicBool_t m_bComputeDisplacementEnabled { false };
+	t3dAtomicBool_t m_bComputeDisplacementActive { false };
+	t3dAtomicBool_t m_bComputeDisplacementDispatchPending { false };
+	t3dAtomicBool_t m_bComputeDisplacementFailed { false };
+	t3dAtomicBool_t m_bComputeDisplacementFallbackRequested { false };
+	t3dAtomicBool_t m_bComputeDisplacementTearingDown { false };
+	t3dAtomicBool_t m_bComputeDisplacementDirty { true };
 	uint64_t m_nComputeDisplacementPageTableGeneration = UINT64_MAX;
 	real_t m_fDisplacementUpdateDistance = 0.25f;
 	mutable t3dMutex_t m_computeDisplacementMutex;
@@ -527,11 +600,14 @@ private:
 	Node3D *m_pLabelParent = NULL;
 
 	void initializeInternal( void );
+	void serviceStartup( void );
+	bool prepareStartupOwnerCold( void );
+	bool finalizeStartupOwnerCold( void );
 	bool initializeRuntimeMemory( void );
 	bool beginRuntimeMemoryDrain( void );
 	bool releaseRuntimeMemory( void );
 	bool shutdownRuntimeMemoryImage( void );
-	void deactivateRuntime( void );
+	void deactivateRuntime( bool bStartupFailure = false );
 	bool isEditorAuthoringModeInternal( void ) const;
 	bool effectiveGpuRegionCacheEnabled( void ) const;
 	bool effectiveCpuRegionCacheEnabled( void ) const;
@@ -539,7 +615,7 @@ private:
 	bool effectiveInstancerCellStreamingEnabled( void ) const;
 	bool effectiveDynamicNodeStreamingEnabled( void ) const;
 	void applyStreamingPolicy( bool bForceResidency = false );
-	void updateRegionStreamingPolicy( const Vector3 &rWorldPosition, double fDelta, bool bForce = false );
+	void updateRegionStreamingPolicy( const Vector3& rWorldPosition, double fDelta, bool bForce = false );
 	void invalidateRegionStreamingPolicy( void );
 	void compileRuntimePageNumericConfig( void );
 	void validateRegionStreamingConfiguration( bool bReport = true ) const;
@@ -550,16 +626,16 @@ private:
 	uint64_t calculateAllocatorContainedFixedMemoryBytes( void ) const;
 	uint64_t calculateTransientMemoryBytes( void ) const;
 	size_t calculateRuntimeAllocatorZoneBytes( void ) const;
-	void applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult, bool bForce );
+	void applyMemoryBudgetResult( const t3dMemoryBudgetResult_t& rResult, bool bForce );
 	static const char *memoryLimitReasonName( t3dMemoryLimitReason_t reason );
-	void sampleRuntimeProfile( const t3dRuntimeProfileSample_t &rSample );
-	void updateCacheThrashEvents( const t3dRuntimeProfileSample_t &rSample );
+	void sampleRuntimeProfile( const t3dRuntimeProfileSample_t& rSample );
+	void updateCacheThrashEvents( const t3dRuntimeProfileSample_t& rSample );
 	Dictionary getRuntimeMemoryStatsFast( void ) const;
 	Array getShaderTierStatsDictionaries( void ) const;
 	Array getCacheInventory( bool bDeep ) const;
 	Dictionary getCpuProfileStats( void ) const;
 	Dictionary getGpuInformationStats( void ) const;
-	Dictionary runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t &rSample ) const;
+	Dictionary runtimeProfileSampleToDictionary( const t3dRuntimeProfileSample_t& rSample ) const;
 	Array getRuntimeProfileEventNames( uint32_t nFlags ) const;
 	Array getRuntimeProfileStallNames( uint32_t nFlags ) const;
 	Array getRuntimeProfileProblems( void ) const;
@@ -579,10 +655,10 @@ private:
 	int getTotalClipmapLevels( void ) const;
 	int rangeToLodCount( real_t fRangeM ) const;
 	real_t lodCountToRange( int nLodCount ) const;
-	void connectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
-	void disconnectResourceSignals( const Ref<Terrain3DAssets> &rAssets, const Ref<Terrain3DMaterial> &rMaterial );
-	void connectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
-	void disconnectAutoShaderProfileSignal( const Ref<Resource> &rProfile );
+	void connectResourceSignals( const Ref<Terrain3DAssets>& rAssets, const Ref<Terrain3DMaterial>& rMaterial );
+	void disconnectResourceSignals( const Ref<Terrain3DAssets>& rAssets, const Ref<Terrain3DMaterial>& rMaterial );
+	void connectAutoShaderProfileSignal( const Ref<Resource>& rProfile );
+	void disconnectAutoShaderProfileSignal( const Ref<Resource>& rProfile );
 	void applyAutoShaderProfileMode( void );
 	void onAutoShaderProfileChanged( void );
 	void onDataMapsChanged( void );
@@ -590,30 +666,32 @@ private:
 	void onAssetsTexturesChanged( void );
 	void physicsProcess( const double fDelta );
 	void grabCamera( void );
-	void synchronizeClipmapNow( const Vector3 &rTargetPosition );
+	void synchronizeClipmapNow( const Vector3& rTargetPosition );
 	void syncLightShaderParameters( void );
 
 	void destroyCollision( const bool bFinal = false );
 
 	void setupTerrainMesher( void );
-	void setupTerrainMesher( const Vector3 &rInitialTarget );
+	void setupTerrainMesher( const Vector3& rInitialTarget );
 	void setupRenderCoordinator( void );
 	void destroyRenderCoordinator( bool bFinal = false );
-	EA_FORCE_INLINE void updateMesherAabbs( void ) {
-		m_pTerrainMesher ? m_pTerrainMesher->updateAabbs() : ( void )0;
+	EA_FORCE_INLINE void updateMesherAabbs( void )
+	{
+		m_pTerrainMesher ? m_pTerrainMesher->updateAabbs() : (void)0;
 	}
 	void destroyTerrainMesher( const bool bFinal = false );
 	void setupOceanMesher( void );
-	void setupOceanMesher( const Vector3 &rInitialTarget );
+	void setupOceanMesher( const Vector3& rInitialTarget );
 	void updateOceanShaderVariant( void );
-	EA_FORCE_INLINE void updateOceanAabbs( void ) {
-		m_pOceanMesher ? m_pOceanMesher->updateAabbs() : ( void )0;
+	EA_FORCE_INLINE void updateOceanAabbs( void )
+	{
+		m_pOceanMesher ? m_pOceanMesher->updateAabbs() : (void)0;
 	}
 	void destroyOceanMesher( const bool bFinal = false );
 
 	void setupDisplacementBuffer( void );
 	void updateDisplacementBuffer( void );
-	bool tryUpdateComputeDisplacement( const Vector3 &rTargetPosition );
+	bool tryUpdateComputeDisplacement( const Vector3& rTargetPosition );
 	void invalidateComputeDisplacementRequest( void );
 	void queueComputeDisplacementRender( void );
 	void renderUpdateComputeDisplacement( void );
@@ -629,123 +707,172 @@ private:
 	void setupMousePicking( void );
 	void destroyMousePicking( void );
 	void destroyInstancer( void );
+	void destroyInstanceOcclusion( void );
+	void destroyInstancePhysics( void );
 	void destroyNodeStreamer( bool bCaptureState = true );
 	void destroyLightmapStreamer( void );
 	void destroyHlodStreamer( void );
 
-	static bool bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t &rA, const t3dBakeRegionSnapshot_t &rB );
+	static bool bakeRegionSnapshotLess( const t3dBakeRegionSnapshot_t& rA, const t3dBakeRegionSnapshot_t& rB );
 	static void runBakeTaskRange( void *pContext, size_t nBegin, size_t nEnd );
 	Vector3 getTriangleVertex( const t3dBakeSnapshot_t *pSnapshot,
-	        int32_t nLod,
-	        t3dHeightFilter_t filter,
-	        int32_t iX,
-	        int32_t iZ,
-	        const Vector3 &rPosition,
-	        uint32_t &nControl ) const;
+	                           int32_t nLod,
+	                           t3dHeightFilter_t filter,
+	                           int32_t iX,
+	                           int32_t iZ,
+	                           const Vector3& rPosition,
+	                           uint32_t& nControl ) const;
 
 	t3dBakeSnapshot_t createBakeSnapshot( void ) const;
-	void generateTriangles( PackedVector3Array &arrVertices,
-	        PackedVector2Array *pUvs,
-	        const int32_t nLod,
-	        const t3dHeightFilter_t filter,
-	        const bool require_nav,
-	        const AABB &rGlobalAabb ) const;
-	void generateTrianglePair( t3dTriangleBuffer_t &rBuffer,
-	        const bool bGenerateUvs,
-	        const int32_t nLod,
-	        const t3dHeightFilter_t filter,
-	        const bool require_nav,
-	        const int32_t x,
-	        const int32_t z,
-	        const t3dBakeSnapshot_t *pSnapshot = NULL ) const;
+	void generateTriangles( PackedVector3Array& arrVertices,
+	                        PackedVector2Array *pUvs,
+	                        const int32_t nLod,
+	                        const t3dHeightFilter_t filter,
+	                        const bool require_nav,
+	                        const AABB& rGlobalAabb ) const;
+	void generateTrianglePair( t3dTriangleBuffer_t& rBuffer,
+	                           const bool bGenerateUvs,
+	                           const int32_t nLod,
+	                           const t3dHeightFilter_t filter,
+	                           const bool require_nav,
+	                           const int32_t x,
+	                           const int32_t z,
+	                           const t3dBakeSnapshot_t *pSnapshot = NULL ) const;
 
 public:
 	static t3dDebugLevel_t s_debugLevel; // Initialized in terrain_3d.cpp
 
 	Terrain3D( void );
 	~Terrain3D( void );
-	EA_FORCE_INLINE bool isInsideWorld( void ) const {
+	EA_FORCE_INLINE bool isInsideWorld( void ) const
+	{
 		return m_bIsInsideWorld;
 	}
-	EA_FORCE_INLINE bool isInitialized( void ) const {
+	EA_FORCE_INLINE bool isInitialized( void ) const
+	{
 		return m_bInitialized;
 	}
 
 	// Terrain
-	EA_FORCE_INLINE String getVersion( void ) const {
+	EA_FORCE_INLINE String getVersion( void ) const
+	{
 		return m_version;
 	}
-	EA_FORCE_INLINE int64_t getNativeApiRevision( void ) const {
+	EA_FORCE_INLINE int64_t getNativeApiRevision( void ) const
+	{
 		return s_nNativeApiRevision;
 	}
-	EA_FORCE_INLINE String getNativeBuildId( void ) const {
+	EA_FORCE_INLINE String getNativeBuildId( void ) const
+	{
 		return String( s_pszNativeBuildId );
 	}
 	void setDebugLevel( const t3dDebugLevel_t level );
-	EA_FORCE_INLINE t3dDebugLevel_t getDebugLevel( void ) const {
+	EA_FORCE_INLINE t3dDebugLevel_t getDebugLevel( void ) const
+	{
 		return s_debugLevel;
 	}
 	void setDataDirectory( String dir );
-	EA_FORCE_INLINE String getDataDirectory( void ) const {
+	EA_FORCE_INLINE String getDataDirectory( void ) const
+	{
 		return m_pData ? m_dataDirectory : "";
 	}
-	bool cookRuntimeClipmapGeometryPack( void ) const;
 
 	// Object references
-	EA_FORCE_INLINE Terrain3DData *getData( void ) const {
+	EA_FORCE_INLINE Terrain3DData *getData( void ) const
+	{
 		return m_pData;
 	}
-	EA_FORCE_INLINE Terrain3DMemoryZone *getRuntimeMemoryZoneInternal( void ) { return &m_runtimeMemoryZone; }
+	EA_FORCE_INLINE Terrain3DMemoryZone *getRuntimeMemoryZoneInternal( void )
+	{
+		return &m_runtimeMemoryZone;
+	}
 	t3dAllocatorOverflowPolicy_t getRuntimeAllocatorOverflowPolicyInternal( void ) const;
-	void setAssets( const Ref<Terrain3DAssets> &rAssets );
-	EA_FORCE_INLINE Ref<Terrain3DAssets> getAssets( void ) const {
+	void setAssets( const Ref<Terrain3DAssets>& rAssets );
+	EA_FORCE_INLINE Ref<Terrain3DAssets> getAssets( void ) const
+	{
 		return m_assets;
 	}
-	void setAutoShaderProfile( const Ref<Resource> &rProfile );
-	EA_FORCE_INLINE Ref<Resource> getAutoShaderProfile( void ) const {
+	void setAutoShaderProfile( const Ref<Resource>& rProfile );
+	EA_FORCE_INLINE Ref<Resource> getAutoShaderProfile( void ) const
+	{
 		return m_autoShaderProfile;
 	}
-	EA_FORCE_INLINE Terrain3DCollision *getCollision( void ) const {
+	EA_FORCE_INLINE Terrain3DCollision *getCollision( void ) const
+	{
 		return m_pCollision;
 	}
-	EA_FORCE_INLINE Terrain3DInstancer *getInstancer( void ) const {
+	EA_FORCE_INLINE Terrain3DInstancer *getInstancer( void ) const
+	{
 		return m_pInstancer;
 	}
-	EA_FORCE_INLINE Terrain3DNodeStreamer *getNodeStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DInstanceOcclusion *getInstanceOcclusion( void ) const
+	{
+		return m_pInstanceOcclusion;
+	}
+	EA_FORCE_INLINE Terrain3DInstancePhysics *getInstancePhysics( void ) const
+	{
+		return m_pInstancePhysics;
+	}
+	EA_FORCE_INLINE Terrain3DNodeStreamer *getNodeStreamer( void ) const
+	{
 		return m_pNodeStreamer;
 	}
-	EA_FORCE_INLINE Terrain3DLightmapStreamer *getLightmapStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DLightmapStreamer *getLightmapStreamer( void ) const
+	{
 		return m_pLightmapStreamer;
 	}
-	EA_FORCE_INLINE Terrain3DHLODStreamer *getHlodStreamer( void ) const {
+	EA_FORCE_INLINE Terrain3DHLODStreamer *getHlodStreamer( void ) const
+	{
 		return m_pHlodStreamer;
 	}
 	// Native integration boundary for editor/runtime companion nodes. Not bound to scripting.
-	EA_FORCE_INLINE Terrain3DRenderCoordinator *getRenderCoordinatorInternal( void ) const {
+	EA_FORCE_INLINE Terrain3DRenderCoordinator *getRenderCoordinatorInternal( void ) const
+	{
 		return m_pRenderCoordinator;
 	}
+	// Native startup orchestration boundary. P01 keeps execution synchronous, but
+	// generation and domain readiness are now explicit contracts for later lanes.
+	EA_FORCE_INLINE uint32_t getStartupGenerationInternal( void ) const
+	{
+		return m_nStartupGeneration;
+	}
+	EA_FORCE_INLINE t3dStartupDomainSnapshot_t getStartupFinalizationSnapshotInternal( void ) const
+	{
+		return t3dStartupDomainSnapshot( m_startupFinalizationState );
+	}
 	void setEditor( Terrain3DEditor *pEditor );
-	EA_FORCE_INLINE Terrain3DEditor *getEditor( void ) const {
+	EA_FORCE_INLINE Terrain3DEditor *getEditor( void ) const
+	{
 		return m_pEditor;
 	}
 	void setPlugin( Object *pPlugin );
-	EA_FORCE_INLINE Object *getPlugin( void ) const {
+	EA_FORCE_INLINE Object *getPlugin( void ) const
+	{
 		return m_pEditorPlugin;
 	}
 
 	// Regions
-	EA_FORCE_INLINE t3dRegionSize_t getRegionSize( void ) const {
+	EA_FORCE_INLINE t3dRegionSize_t getRegionSize( void ) const
+	{
 		return SIZE_128;
 	}
 	void setSave16Bit( const bool bEnabled );
-	EA_FORCE_INLINE bool getSave16Bit( void ) const {
+	EA_FORCE_INLINE bool getSave16Bit( void ) const
+	{
 		return m_bSave16Bit;
 	}
 	void setPerformanceTarget( const t3dPerformanceTarget_t target );
-	EA_FORCE_INLINE t3dPerformanceTarget_t getPerformanceTarget( void ) const {
+	void setVirtualTextureQualityProfile( int nProfile );
+	EA_FORCE_INLINE int getVirtualTextureQualityProfile( void ) const
+	{
+		return (int)m_nVirtualTextureQualityProfile;
+	}
+	EA_FORCE_INLINE t3dPerformanceTarget_t getPerformanceTarget( void ) const
+	{
 		return m_performanceTarget;
 	}
-	EA_FORCE_INLINE t3dPerformanceProfileStatus_t getPerformanceProfileStatus( void ) const {
+	EA_FORCE_INLINE t3dPerformanceProfileStatus_t getPerformanceProfileStatus( void ) const
+	{
 		return m_performanceProfileStatus;
 	}
 	String getPerformanceProfileStatusName( void ) const;
@@ -755,95 +882,120 @@ public:
 	Array getPerformanceProfileDiff( void ) const;
 	void resetPerformanceProfile( void );
 	void setEditorExecutionMode( t3dEditorExecutionMode_t mode );
-	EA_FORCE_INLINE t3dEditorExecutionMode_t getEditorExecutionMode( void ) const {
+	EA_FORCE_INLINE t3dEditorExecutionMode_t getEditorExecutionMode( void ) const
+	{
 		return m_editorExecutionMode;
 	}
 	void setEditorRuntimeStreamingPreview( bool bEnabled );
-	EA_FORCE_INLINE bool isEditorRuntimeStreamingPreview( void ) const {
+	EA_FORCE_INLINE bool isEditorRuntimeStreamingPreview( void ) const
+	{
 		return m_editorExecutionMode == EDITOR_EXECUTION_RUNTIME_PROFILE;
 	}
 	void setEditorNodeStreamingPreview( bool bEnabled );
-	EA_FORCE_INLINE bool isEditorNodeStreamingPreviewEnabled( void ) const {
+	EA_FORCE_INLINE bool isEditorNodeStreamingPreviewEnabled( void ) const
+	{
 		return m_bEditorNodeStreamingPreview;
 	}
-	EA_FORCE_INLINE bool isEditorNodeStreamingPreviewActive( void ) const {
+	EA_FORCE_INLINE bool isEditorNodeStreamingPreviewActive( void ) const
+	{
 		return isEditorAuthoringModeInternal() && m_bEditorNodeStreamingPreview;
 	}
-	EA_FORCE_INLINE bool isEditorAuthoringMode( void ) const {
+	EA_FORCE_INLINE bool isEditorAuthoringMode( void ) const
+	{
 		return isEditorAuthoringModeInternal();
 	}
 	bool isAuthoringResidencyReadbackSafe( void ) const;
-	EA_FORCE_INLINE bool isGpuRegionCacheEffective( void ) const {
+	EA_FORCE_INLINE bool isGpuRegionCacheEffective( void ) const
+	{
 		return effectiveGpuRegionCacheEnabled();
 	}
-	EA_FORCE_INLINE bool isCpuRegionCacheEffective( void ) const {
+	EA_FORCE_INLINE bool isCpuRegionCacheEffective( void ) const
+	{
 		return effectiveCpuRegionCacheEnabled();
 	}
-	EA_FORCE_INLINE bool isInstanceRegionCacheEffective( void ) const {
+	EA_FORCE_INLINE bool isInstanceRegionCacheEffective( void ) const
+	{
 		return effectiveInstanceRegionCacheEnabled();
 	}
-	EA_FORCE_INLINE bool isInstancerCellStreamingEffective( void ) const {
+	EA_FORCE_INLINE bool isInstancerCellStreamingEffective( void ) const
+	{
 		return effectiveInstancerCellStreamingEnabled();
 	}
-	EA_FORCE_INLINE bool isDynamicNodeStreamingEffective( void ) const {
+	EA_FORCE_INLINE bool isDynamicNodeStreamingEffective( void ) const
+	{
 		return effectiveDynamicNodeStreamingEnabled();
 	}
 	void setStreamingActiveRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingActiveRadius( void ) const {
+	EA_FORCE_INLINE int getStreamingActiveRadius( void ) const
+	{
 		return m_regionStreamingConfig.m_nActiveRadius;
 	}
 	void setStreamingHotRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingHotRadius( void ) const {
+	EA_FORCE_INLINE int getStreamingHotRadius( void ) const
+	{
 		return m_regionStreamingConfig.m_nHotRadius;
 	}
 	void setStreamingColdRadius( int nRadius );
-	EA_FORCE_INLINE int getStreamingColdRadius( void ) const {
+	EA_FORCE_INLINE int getStreamingColdRadius( void ) const
+	{
 		return m_regionStreamingConfig.m_nColdRadius;
 	}
 	void setStreamingUnloadGuard( int nRegions );
-	EA_FORCE_INLINE int getStreamingUnloadGuard( void ) const {
+	EA_FORCE_INLINE int getStreamingUnloadGuard( void ) const
+	{
 		return m_regionStreamingConfig.m_nUnloadGuard;
 	}
 	void setStreamingPredictionEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isStreamingPredictionEnabled( void ) const {
+	EA_FORCE_INLINE bool isStreamingPredictionEnabled( void ) const
+	{
 		return m_regionStreamingConfig.m_bPredictionEnabled;
 	}
 	void setStreamingPredictionLookahead( real_t fSeconds );
-	EA_FORCE_INLINE real_t getStreamingPredictionLookahead( void ) const {
-		return ( real_t )( m_regionStreamingConfig.m_fPredictionLookaheadSeconds );
+	EA_FORCE_INLINE real_t getStreamingPredictionLookahead( void ) const
+	{
+		return (real_t)( m_regionStreamingConfig.m_fPredictionLookaheadSeconds );
 	}
 	void setStreamingPredictionMaximumRegions( int nRegions );
-	EA_FORCE_INLINE int getStreamingPredictionMaximumRegions( void ) const {
+	EA_FORCE_INLINE int getStreamingPredictionMaximumRegions( void ) const
+	{
 		return m_regionStreamingConfig.m_nPredictionMaximumRegions;
 	}
-	t3dRegionStreamingState_t getRegionStreamingStateInternal( const Vector2i &vLocation ) const;
-	bool isRegionStreamingPrefetchInternal( const Vector2i &vLocation ) const;
-	EA_FORCE_INLINE const uint8_t *getRegionStreamingStatesInternal( void ) const {
+	t3dRegionStreamingState_t getRegionStreamingStateInternal( const Vector2i& vLocation ) const;
+	bool isRegionStreamingPrefetchInternal( const Vector2i& vLocation ) const;
+	EA_FORCE_INLINE const uint8_t *getRegionStreamingStatesInternal( void ) const
+	{
 		return m_szRegionStreamingStates;
 	}
-	EA_FORCE_INLINE const uint8_t *getRegionStreamingPrefetchInternal( void ) const {
+	EA_FORCE_INLINE const uint8_t *getRegionStreamingPrefetchInternal( void ) const
+	{
 		return m_szRegionStreamingPrefetch;
 	}
-	EA_FORCE_INLINE int getRegionStreamingState( const Vector2i &vLocation ) const {
-		return ( int )( getRegionStreamingStateInternal( vLocation ) );
+	EA_FORCE_INLINE int getRegionStreamingState( const Vector2i& vLocation ) const
+	{
+		return (int)( getRegionStreamingStateInternal( vLocation ) );
 	}
-	EA_FORCE_INLINE bool isRegionStreamingPrefetch( const Vector2i &vLocation ) const {
+	EA_FORCE_INLINE bool isRegionStreamingPrefetch( const Vector2i& vLocation ) const
+	{
 		return isRegionStreamingPrefetchInternal( vLocation );
 	}
 	Dictionary getRegionStreamingStats( void ) const;
 	Dictionary getRegionStreamingConfigurationStatus( void ) const;
-	Dictionary getHeightSourceDiagnostics( const Vector3 &rWorldPosition ) const;
-	EA_FORCE_INLINE uint64_t getRegionStreamingGeneration( void ) const {
+	Dictionary getHeightSourceDiagnostics( const Vector3& rWorldPosition ) const;
+	EA_FORCE_INLINE uint64_t getRegionStreamingGeneration( void ) const
+	{
 		return m_nRegionStreamingGeneration;
 	}
-	EA_FORCE_INLINE Vector2i getRegionStreamingCenterInternal( void ) const {
+	EA_FORCE_INLINE Vector2i getRegionStreamingCenterInternal( void ) const
+	{
 		return m_regionStreamingCenter;
 	}
-	EA_FORCE_INLINE Vector2i getRegionStreamingPredictedCenterInternal( void ) const {
+	EA_FORCE_INLINE Vector2i getRegionStreamingPredictedCenterInternal( void ) const
+	{
 		return m_regionStreamingPredictedCenter;
 	}
 
-	bool isRuntimeShaderTieringActive( void ) const {
+	bool isRuntimeShaderTieringActive( void ) const
+	{
 		// Authoring deliberately keeps the complete Near shader on every clipmap level.
 		// Runtime Profile and exported runtime exercise the compact Near/Middle/Far layout.
 		return m_bRuntimeShaderTieringEnabled && !isEditorAuthoringModeInternal();
@@ -852,70 +1004,89 @@ public:
 	Dictionary getTrackedCurrentResidency( void ) const;
 	Dictionary getMemoryBudgetStats( void ) const;
 	void setTotalMemoryBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getTotalMemoryBudgetMb( void ) const {
+	EA_FORCE_INLINE int getTotalMemoryBudgetMb( void ) const
+	{
 		return m_nTotalMemoryBudgetMb;
 	}
 	void setMemoryTransientReserveMb( int nReserveMb );
-	EA_FORCE_INLINE int getMemoryTransientReserveMb( void ) const {
+	EA_FORCE_INLINE int getMemoryTransientReserveMb( void ) const
+	{
 		return m_nMemoryTransientReserveMb;
 	}
 	void setGpuRegionCacheBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isGpuRegionCacheBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isGpuRegionCacheBudgetAuto( void ) const
+	{
 		return m_bGpuRegionCacheBudgetAuto;
 	}
 	void setCpuRegionCacheBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isCpuRegionCacheBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isCpuRegionCacheBudgetAuto( void ) const
+	{
 		return m_bCpuRegionCacheBudgetAuto;
 	}
 	void setInstanceRegionCacheBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isInstanceRegionCacheBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isInstanceRegionCacheBudgetAuto( void ) const
+	{
 		return m_bInstanceRegionCacheBudgetAuto;
 	}
 	void setLightmapResidencyBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isLightmapResidencyBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isLightmapResidencyBudgetAuto( void ) const
+	{
 		return m_bLightmapResidencyBudgetAuto;
 	}
 	void setLightmapResidencyBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getLightmapResidencyBudgetMb( void ) const {
+	EA_FORCE_INLINE int getLightmapResidencyBudgetMb( void ) const
+	{
 		return m_nLightmapResidencyBudgetMb;
 	}
 	void setHlodMemoryBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isHlodMemoryBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isHlodMemoryBudgetAuto( void ) const
+	{
 		return m_bHlodMemoryBudgetAuto;
 	}
 	void setShaderCacheBudgetAuto( bool bEnabled );
-	EA_FORCE_INLINE bool isShaderCacheBudgetAuto( void ) const {
+	EA_FORCE_INLINE bool isShaderCacheBudgetAuto( void ) const
+	{
 		return m_bShaderCacheBudgetAuto;
 	}
-	EA_FORCE_INLINE int getEffectiveGpuRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveGpuRegionCacheBudgetMb( void ) const
+	{
 		return effectiveGpuRegionCacheEnabled() ? m_nEffectiveGpuRegionCacheBudgetMb : 0;
 	}
-	EA_FORCE_INLINE uint64_t getEffectiveGpuRegionCacheBudgetBytes( void ) const {
+	EA_FORCE_INLINE uint64_t getEffectiveGpuRegionCacheBudgetBytes( void ) const
+	{
 		return effectiveGpuRegionCacheEnabled() ? m_nEffectiveGpuRegionCacheBudgetBytes : 0u;
 	}
-	EA_FORCE_INLINE int getEffectiveCpuRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveCpuRegionCacheBudgetMb( void ) const
+	{
 		return effectiveCpuRegionCacheEnabled() ? m_nEffectiveCpuRegionCacheBudgetMb : 0;
 	}
-	EA_FORCE_INLINE int getEffectiveInstanceRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveInstanceRegionCacheBudgetMb( void ) const
+	{
 		return effectiveInstanceRegionCacheEnabled() ? m_nEffectiveInstanceRegionCacheBudgetMb : 0;
 	}
-	EA_FORCE_INLINE int getEffectiveLightmapResidencyBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveLightmapResidencyBudgetMb( void ) const
+	{
 		return m_bLightmapStreamingEnabled ? m_nEffectiveLightmapResidencyBudgetMb : 0;
 	}
-	EA_FORCE_INLINE int getEffectiveHlodMemoryBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveHlodMemoryBudgetMb( void ) const
+	{
 		return m_bHlodEnabled ? m_nEffectiveHlodMemoryBudgetMb : 0;
 	}
-	EA_FORCE_INLINE int getEffectiveShaderCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getEffectiveShaderCacheBudgetMb( void ) const
+	{
 		return m_nEffectiveShaderCacheBudgetMb;
 	}
-	EA_FORCE_INLINE int64_t getMemoryBudgetPolicyGeneration( void ) const {
-		return ( int64_t )( m_nMemoryBudgetPolicyGeneration );
+	EA_FORCE_INLINE int64_t getMemoryBudgetPolicyGeneration( void ) const
+	{
+		return (int64_t)( m_nMemoryBudgetPolicyGeneration );
 	}
-	EA_FORCE_INLINE bool isMemoryBudgetOvercommitted( void ) const {
+	EA_FORCE_INLINE bool isMemoryBudgetOvercommitted( void ) const
+	{
 		return m_nMemoryBudgetResult.m_bHardOvercommit;
 	}
-	EA_FORCE_INLINE int64_t getMemoryBudgetHeadroomBytes( void ) const {
-		return ( int64_t )( m_nMemoryBudgetResult.m_nHeadroomBytes );
+	EA_FORCE_INLINE int64_t getMemoryBudgetHeadroomBytes( void ) const
+	{
+		return (int64_t)( m_nMemoryBudgetResult.m_nHeadroomBytes );
 	}
 	void forceMemoryBudgetRebalance( void );
 	Dictionary getRuntimeDiagnostics( bool bDeep = false ) const;
@@ -928,93 +1099,202 @@ public:
 	Array getRuntimeProfileHistorySince( int64_t nAfterSequence, int nMaxSamples = 600 ) const;
 	void resetRuntimeDiagnostics( void );
 	void setRuntimeProfilingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeProfilingEnabled( void ) const {
+	EA_FORCE_INLINE bool isRuntimeProfilingEnabled( void ) const
+	{
 		return m_bRuntimeProfilingEnabled;
 	}
 	void setRuntimeAdaptiveWorkBudgetsEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeAdaptiveWorkBudgetsEnabled( void ) const {
+	EA_FORCE_INLINE bool isRuntimeAdaptiveWorkBudgetsEnabled( void ) const
+	{
 		return m_bRuntimeAdaptiveWorkBudgetsEnabled;
 	}
 	void setRuntimeAdaptiveTargetMs( real_t fTargetMs );
-	EA_FORCE_INLINE real_t getRuntimeAdaptiveTargetMs( void ) const {
-		return ( real_t )( m_nRuntimeAdaptiveTargetUsec ) / 1000.0f;
+	EA_FORCE_INLINE real_t getRuntimeAdaptiveTargetMs( void ) const
+	{
+		return (real_t)( m_nRuntimeAdaptiveTargetUsec ) / 1000.0f;
 	}
 	void setRuntimeAdaptiveHardMaxMs( real_t fHardMaxMs );
-	EA_FORCE_INLINE real_t getRuntimeAdaptiveHardMaxMs( void ) const {
-		return ( real_t )( m_nRuntimeAdaptiveHardMaxUsec ) / 1000.0f;
+	EA_FORCE_INLINE real_t getRuntimeAdaptiveHardMaxMs( void ) const
+	{
+		return (real_t)( m_nRuntimeAdaptiveHardMaxUsec ) / 1000.0f;
 	}
 	void setRuntimeAdaptiveAdjustmentWindowFrames( int nFrames );
-	EA_FORCE_INLINE int getRuntimeAdaptiveAdjustmentWindowFrames( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveAdjustmentWindowFrames( void ) const
+	{
 		return m_nRuntimeAdaptiveAdjustmentWindowFrames;
 	}
 	void setRuntimeAdaptiveMinGpuPages( int nPages );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinGpuPages( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinGpuPages( void ) const
+	{
 		return m_nRuntimeAdaptiveMinGpuPages;
 	}
 	void setRuntimeAdaptiveMinCpuPages( int nPages );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinCpuPages( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinCpuPages( void ) const
+	{
 		return m_nRuntimeAdaptiveMinCpuPages;
 	}
 	void setRuntimeAdaptiveMinInstancePages( int nPages );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinInstancePages( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinInstancePages( void ) const
+	{
 		return m_nRuntimeAdaptiveMinInstancePages;
 	}
 	void setRuntimeAdaptiveMinInstancerCells( int nCells );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinInstancerCells( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinInstancerCells( void ) const
+	{
 		return m_nRuntimeAdaptiveMinInstancerCells;
 	}
 	void setRuntimeAdaptiveMinNodeLoadRegions( int nRegions );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinNodeLoadRegions( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinNodeLoadRegions( void ) const
+	{
 		return m_nRuntimeAdaptiveMinNodeLoadRegions;
 	}
 	void setRuntimeAdaptiveMinNodeUnloadRegions( int nRegions );
-	EA_FORCE_INLINE int getRuntimeAdaptiveMinNodeUnloadRegions( void ) const {
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinNodeUnloadRegions( void ) const
+	{
 		return m_nRuntimeAdaptiveMinNodeUnloadRegions;
+	}
+	void setRuntimeAdaptiveMinWorldUploadKb( int nKb );
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinWorldUploadKb( void ) const
+	{
+		return m_nRuntimeAdaptiveMinWorldUploadKb;
+	}
+	void setRuntimeAdaptiveMinWorldClusters( int nClusters );
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinWorldClusters( void ) const
+	{
+		return m_nRuntimeAdaptiveMinWorldClusters;
+	}
+	void setRuntimeAdaptiveMinVtRequests( int nRequests );
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinVtRequests( void ) const
+	{
+		return m_nRuntimeAdaptiveMinVtRequests;
+	}
+	void setRuntimeAdaptiveMinVtAdmissions( int nAdmissions );
+	EA_FORCE_INLINE int getRuntimeAdaptiveMinVtAdmissions( void ) const
+	{
+		return m_nRuntimeAdaptiveMinVtAdmissions;
 	}
 	Dictionary getRuntimeAdaptiveBudgetStats( void ) const;
 	void setRuntimeBoundaryWorkPhasingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeBoundaryWorkPhasingEnabled( void ) const {
+	EA_FORCE_INLINE bool isRuntimeBoundaryWorkPhasingEnabled( void ) const
+	{
 		return m_bRuntimeBoundaryWorkPhasingEnabled;
 	}
 	void setRuntimeBoundaryNodeDelayFrames( int nFrames );
-	EA_FORCE_INLINE int getRuntimeBoundaryNodeDelayFrames( void ) const {
+	EA_FORCE_INLINE int getRuntimeBoundaryNodeDelayFrames( void ) const
+	{
 		return m_nRuntimeBoundaryNodeDelayFrames;
 	}
 	void setRuntimeBoundaryInstancerDelayFrames( int nFrames );
-	EA_FORCE_INLINE int getRuntimeBoundaryInstancerDelayFrames( void ) const {
+	EA_FORCE_INLINE int getRuntimeBoundaryInstancerDelayFrames( void ) const
+	{
 		return m_nRuntimeBoundaryInstancerDelayFrames;
 	}
+	void setRuntimeBoundaryWorldDelayFrames( int nFrames );
+	EA_FORCE_INLINE int getRuntimeBoundaryWorldDelayFrames( void ) const
+	{
+		return m_nRuntimeBoundaryWorldDelayFrames;
+	}
 	Dictionary getRuntimeBoundaryPhasingStats( void ) const;
+
+	void setWorldMaxSourceVertices( int nValue );
+	EA_FORCE_INLINE int getWorldMaxSourceVertices( void ) const
+	{
+		return (int)m_nWorldMaxSourceVertices;
+	}
+	void setWorldMaxClusters( int nValue );
+	EA_FORCE_INLINE int getWorldMaxClusters( void ) const
+	{
+		return (int)m_nWorldMaxClusters;
+	}
+	void setWorldMaxTerrainClusters( int nValue );
+	EA_FORCE_INLINE int getWorldMaxTerrainClusters( void ) const
+	{
+		return (int)m_nWorldMaxTerrainClusters;
+	}
+	void setWorldMaxTransforms( int nValue );
+	EA_FORCE_INLINE int getWorldMaxTransforms( void ) const
+	{
+		return (int)m_nWorldMaxTransforms;
+	}
+	void setWorldMaxVisibleItems( int nValue );
+	EA_FORCE_INLINE int getWorldMaxVisibleItems( void ) const
+	{
+		return (int)m_nWorldMaxVisibleItems;
+	}
+	void setWorldMaxMaterials( int nValue );
+	EA_FORCE_INLINE int getWorldMaxMaterials( void ) const
+	{
+		return (int)m_nWorldMaxMaterials;
+	}
+	void setWorldUploadBudgetKb( int nValue );
+	EA_FORCE_INLINE int getWorldUploadBudgetKb( void ) const
+	{
+		return (int)m_nWorldUploadBudgetKb;
+	}
+	void setWorldClusterUploadBudget( int nValue );
+	EA_FORCE_INLINE int getWorldClusterUploadBudget( void ) const
+	{
+		return (int)m_nWorldClusterUploadBudget;
+	}
+	void setWorldHiZMaxDimension( int nValue );
+	EA_FORCE_INLINE int getWorldHiZMaxDimension( void ) const
+	{
+		return (int)m_nWorldHiZMaxDimension;
+	}
+	void setWorldHiZMaxMipCount( int nValue );
+	EA_FORCE_INLINE int getWorldHiZMaxMipCount( void ) const
+	{
+		return (int)m_nWorldHiZMaxMipCount;
+	}
+	void setVtRequestBudget( int nValue );
+	EA_FORCE_INLINE int getVtRequestBudget( void ) const
+	{
+		return (int)m_nVtRequestBudget;
+	}
+	void setVtAdmissionBudget( int nValue );
+	EA_FORCE_INLINE int getVtAdmissionBudget( void ) const
+	{
+		return (int)m_nVtAdmissionBudget;
+	}
+	t3dWorldResourceLimits_t getWorldResourceLimitsInternal( void ) const;
 	void setGpuRegionCacheEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isGpuRegionCacheEnabled( void ) const {
+	EA_FORCE_INLINE bool isGpuRegionCacheEnabled( void ) const
+	{
 		return m_bGpuRegionCacheEnabled;
 	}
 	void setGpuRegionCacheBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getGpuRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getGpuRegionCacheBudgetMb( void ) const
+	{
 		return m_nGpuRegionCacheBudgetMb;
 	}
 	void setGpuRegionCachePageLimit( int nPages );
-	EA_FORCE_INLINE int getGpuRegionCachePageLimit( void ) const {
+	EA_FORCE_INLINE int getGpuRegionCachePageLimit( void ) const
+	{
 		return m_nGpuRegionCachePageLimit;
 	}
 	void setGpuRegionUploadBudgetLayers( int nLayers );
-	EA_FORCE_INLINE int getGpuRegionUploadBudgetLayers( void ) const {
+	EA_FORCE_INLINE int getGpuRegionUploadBudgetLayers( void ) const
+	{
 		return m_nGpuRegionUploadBudgetLayers;
 	}
 	void setGpuRegionUploadBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getGpuRegionUploadBudgetMb( void ) const {
+	EA_FORCE_INLINE int getGpuRegionUploadBudgetMb( void ) const
+	{
 		return m_nGpuRegionUploadBudgetMb;
 	}
 	void setGpuRegionSparePages( int nPages );
-	EA_FORCE_INLINE int getGpuRegionSparePages( void ) const {
+	EA_FORCE_INLINE int getGpuRegionSparePages( void ) const
+	{
 		return m_nGpuRegionSparePages;
 	}
 	void setGpuRegionRetireFrames( int nFrames );
-	EA_FORCE_INLINE int getGpuRegionRetireFrames( void ) const {
+	EA_FORCE_INLINE int getGpuRegionRetireFrames( void ) const
+	{
 		return m_nGpuRegionRetireFrames;
 	}
 	void setGpuRegionDetailLods( int nLods );
-	EA_FORCE_INLINE int getGpuRegionDetailLods( void ) const {
+	EA_FORCE_INLINE int getGpuRegionDetailLods( void ) const
+	{
 		return m_nGpuRegionDetailLods;
 	}
 	void setGpuRegionDetailRangeEndM( real_t fRangeM );
@@ -1025,59 +1305,53 @@ public:
 	int getGpuRegionMappedCapacity( void ) const;
 	bool isGpuRegionDetailRangeValid( void ) const;
 	void setGpuRegionGuardRegions( int nRegions );
-	EA_FORCE_INLINE int getGpuRegionGuardRegions( void ) const {
+	EA_FORCE_INLINE int getGpuRegionGuardRegions( void ) const
+	{
 		return m_nGpuRegionGuardRegions;
 	}
 	void setGpuRegionPrefetchRows( int nRows );
-	EA_FORCE_INLINE int getGpuRegionPrefetchRows( void ) const {
+	EA_FORCE_INLINE int getGpuRegionPrefetchRows( void ) const
+	{
 		return m_nGpuRegionPrefetchRows;
 	}
 	void setGpuRegionHysteresisTicks( int nTicks );
-	EA_FORCE_INLINE int getGpuRegionHysteresisTicks( void ) const {
+	EA_FORCE_INLINE int getGpuRegionHysteresisTicks( void ) const
+	{
 		return m_nGpuRegionHysteresisTicks;
 	}
 	void setGpuRegionColorResolutionDivisor( int nDivisor );
-	EA_FORCE_INLINE int getGpuRegionColorResolutionDivisor( void ) const {
+	EA_FORCE_INLINE int getGpuRegionColorResolutionDivisor( void ) const
+	{
 		return m_runtimePageNumericConfig.m_nColorDivisor;
 	}
 	void setGpuRegionDerivedResolutionDivisor( int nDivisor );
-	EA_FORCE_INLINE int getGpuRegionDerivedResolutionDivisor( void ) const {
+	EA_FORCE_INLINE int getGpuRegionDerivedResolutionDivisor( void ) const
+	{
 		return m_runtimePageNumericConfig.m_nDerivedDivisor;
 	}
 	void setGpuMiddleHeightResolutionDivisor( int nDivisor );
-	EA_FORCE_INLINE int getGpuMiddleHeightResolutionDivisor( void ) const {
+	EA_FORCE_INLINE int getGpuMiddleHeightResolutionDivisor( void ) const
+	{
 		return m_runtimePageNumericConfig.m_nMiddleHeightDivisor;
 	}
 	void setEditorGpuRegionCachePages( int nPages );
-	EA_FORCE_INLINE int getEditorGpuRegionCachePages( void ) const {
+	EA_FORCE_INLINE int getEditorGpuRegionCachePages( void ) const
+	{
 		return m_nEditorGpuRegionCachePages;
 	}
-	void setRuntimeMaterialStreamingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeMaterialStreamingEnabled( void ) const {
-		return m_bRuntimeMaterialStreamingEnabled;
-	}
-	void setRuntimeMaterialCacheLayers( int nLayers );
-	EA_FORCE_INLINE int getRuntimeMaterialCacheLayers( void ) const {
-		return m_nRuntimeMaterialCacheLayers;
-	}
-	void setRuntimeMaterialUploadBudgetLayers( int nLayers );
-	EA_FORCE_INLINE int getRuntimeMaterialUploadBudgetLayers( void ) const {
-		return m_nRuntimeMaterialUploadBudgetLayers;
-	}
-	void setRuntimeReleaseSourceMaterialTextures( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeReleaseSourceMaterialTextures( void ) const {
-		return m_bRuntimeReleaseSourceMaterialTextures;
-	}
 	void setGpuFarQualityDivisor( int nDivisor );
-	EA_FORCE_INLINE int getGpuFarQualityDivisor( void ) const {
+	EA_FORCE_INLINE int getGpuFarQualityDivisor( void ) const
+	{
 		return m_nGpuFarQualityDivisor;
 	}
 	void setFarMaterialResolution( int nResolution );
-	EA_FORCE_INLINE int getFarMaterialResolution( void ) const {
+	EA_FORCE_INLINE int getFarMaterialResolution( void ) const
+	{
 		return m_nFarMaterialResolution;
 	}
 	void setFarControlResolution( int nResolution );
-	EA_FORCE_INLINE int getFarControlResolution( void ) const {
+	EA_FORCE_INLINE int getFarControlResolution( void ) const
+	{
 		return m_nFarControlResolution;
 	}
 	// Live region-map side used to tile both far atlases. Falls back to the maximum
@@ -1085,713 +1359,905 @@ public:
 	int getFarAtlasRegionMapSide( void ) const;
 	int getGpuFarHeightAtlasSide( void ) const;
 	int getGpuFarSurfaceAtlasSide( void ) const;
-	EA_FORCE_INLINE int getGpuFarAtlasSide( void ) const {
+	EA_FORCE_INLINE int getGpuFarAtlasSide( void ) const
+	{
 		return getGpuFarHeightAtlasSide();
 	}
 	uint64_t getGpuFarAtlasBytes( void ) const;
 	void setGpuRegionCookedPagesEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isGpuRegionCookedPagesEnabled( void ) const {
+	EA_FORCE_INLINE bool isGpuRegionCookedPagesEnabled( void ) const
+	{
 		return m_bGpuRegionCookedPagesEnabled;
 	}
 	void setGpuRegionCookOnSave( bool bEnabled );
-	EA_FORCE_INLINE bool isGpuRegionCookOnSave( void ) const {
+	EA_FORCE_INLINE bool isGpuRegionCookOnSave( void ) const
+	{
 		return m_bGpuRegionCookOnSave;
 	}
-	EA_FORCE_INLINE Dictionary getGpuRegionCacheStats( void ) const {
+	EA_FORCE_INLINE Dictionary getGpuRegionCacheStats( void ) const
+	{
 		return m_pData ? m_pData->getGpuRegionCacheStats() : Dictionary();
 	}
 	void setCpuRegionCacheEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isCpuRegionCacheEnabled( void ) const {
+	EA_FORCE_INLINE bool isCpuRegionCacheEnabled( void ) const
+	{
 		return m_bCpuRegionCacheEnabled;
 	}
 	void setCpuRegionCacheBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getCpuRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getCpuRegionCacheBudgetMb( void ) const
+	{
 		return m_nCpuRegionCacheBudgetMb;
 	}
 	void setCpuRegionLoadBudgetLayers( int nLayers );
-	EA_FORCE_INLINE int getCpuRegionLoadBudgetLayers( void ) const {
+	EA_FORCE_INLINE int getCpuRegionLoadBudgetLayers( void ) const
+	{
 		return m_nCpuRegionLoadBudgetLayers;
 	}
 	void setCpuRegionLoadBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getCpuRegionLoadBudgetMb( void ) const {
+	EA_FORCE_INLINE int getCpuRegionLoadBudgetMb( void ) const
+	{
 		return m_nCpuRegionLoadBudgetMb;
 	}
-	EA_FORCE_INLINE Dictionary getCpuRegionCacheStats( void ) const {
+	EA_FORCE_INLINE Dictionary getCpuRegionCacheStats( void ) const
+	{
 		return m_pData ? m_pData->getCpuRegionCacheStats() : Dictionary();
 	}
 	void setInstanceRegionCacheEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isInstanceRegionCacheEnabled( void ) const {
+	EA_FORCE_INLINE bool isInstanceRegionCacheEnabled( void ) const
+	{
 		return m_bInstanceRegionCacheEnabled;
 	}
 	void setInstanceRegionCacheBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getInstanceRegionCacheBudgetMb( void ) const {
+	EA_FORCE_INLINE int getInstanceRegionCacheBudgetMb( void ) const
+	{
 		return m_nInstanceRegionCacheBudgetMb;
 	}
 	void setInstanceRegionLoadBudgetPages( int nPages );
-	EA_FORCE_INLINE int getInstanceRegionLoadBudgetPages( void ) const {
+	EA_FORCE_INLINE int getInstanceRegionLoadBudgetPages( void ) const
+	{
 		return m_nInstanceRegionLoadBudgetPages;
 	}
 	void setInstanceRegionLoadBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getInstanceRegionLoadBudgetMb( void ) const {
+	EA_FORCE_INLINE int getInstanceRegionLoadBudgetMb( void ) const
+	{
 		return m_nInstanceRegionLoadBudgetMb;
 	}
-	EA_FORCE_INLINE Dictionary getInstanceRegionCacheStats( void ) const {
+	EA_FORCE_INLINE Dictionary getInstanceRegionCacheStats( void ) const
+	{
 		return m_pData ? m_pData->getInstanceRegionCacheStats() : Dictionary();
 	}
 	void setInstancerCellSize( int nCellSize );
-	EA_FORCE_INLINE int getInstancerCellSize( void ) const {
+	EA_FORCE_INLINE int getInstancerCellSize( void ) const
+	{
 		return m_nInstancerCellSize;
 	}
 	void setInstancerCellStreamingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isInstancerCellStreamingEnabled( void ) const {
+	EA_FORCE_INLINE bool isInstancerCellStreamingEnabled( void ) const
+	{
 		return m_bInstancerCellStreamingEnabled;
 	}
 	void setInstancerSingleLodBuffers( bool bEnabled );
-	EA_FORCE_INLINE bool isInstancerSingleLodBuffers( void ) const {
+	EA_FORCE_INLINE bool isInstancerSingleLodBuffers( void ) const
+	{
 		return m_bInstancerSingleLodBuffers;
 	}
 	void setInstancerCellStreamingMargin( real_t fMargin );
-	EA_FORCE_INLINE real_t getInstancerCellStreamingMargin( void ) const {
+	EA_FORCE_INLINE real_t getInstancerCellStreamingMargin( void ) const
+	{
 		return m_fInstancerCellStreamingMargin;
 	}
 	void setInstancerCellStreamingUpdateDistance( real_t fDistance );
-	EA_FORCE_INLINE real_t getInstancerCellStreamingUpdateDistance( void ) const {
+	EA_FORCE_INLINE real_t getInstancerCellStreamingUpdateDistance( void ) const
+	{
 		return m_fInstancerCellStreamingUpdateDistance;
 	}
 	void setInstancerUpdateCellBudget( int nBudget );
-	EA_FORCE_INLINE int getInstancerUpdateCellBudget( void ) const {
+	EA_FORCE_INLINE int getInstancerUpdateCellBudget( void ) const
+	{
 		return m_nInstancerUpdateCellBudget;
 	}
 	void setDynamicNodeStreamingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isDynamicNodeStreamingEnabled( void ) const {
+	EA_FORCE_INLINE bool isDynamicNodeStreamingEnabled( void ) const
+	{
 		return m_bDynamicNodeStreamingEnabled;
 	}
 	void setDynamicNodeStreamRadius( int nRadius );
-	EA_FORCE_INLINE int getDynamicNodeStreamRadius( void ) const {
+	EA_FORCE_INLINE int getDynamicNodeStreamRadius( void ) const
+	{
 		return m_nDynamicNodeStreamRadius;
 	}
 	void setDynamicNodeLoadRegionBudget( int nBudget );
-	EA_FORCE_INLINE int getDynamicNodeLoadRegionBudget( void ) const {
+	EA_FORCE_INLINE int getDynamicNodeLoadRegionBudget( void ) const
+	{
 		return m_nDynamicNodeLoadRegionBudget;
 	}
 	void setDynamicNodeLoadNodeBudget( int nBudget );
-	EA_FORCE_INLINE int getDynamicNodeLoadNodeBudget( void ) const {
+	EA_FORCE_INLINE int getDynamicNodeLoadNodeBudget( void ) const
+	{
 		return m_nDynamicNodeLoadNodeBudget;
 	}
 	void setDynamicNodeUnloadRegionBudget( int nBudget );
-	EA_FORCE_INLINE int getDynamicNodeUnloadRegionBudget( void ) const {
+	EA_FORCE_INLINE int getDynamicNodeUnloadRegionBudget( void ) const
+	{
 		return m_nDynamicNodeUnloadRegionBudget;
 	}
 	void setLightmapStreamingEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isLightmapStreamingEnabled( void ) const {
+	EA_FORCE_INLINE bool isLightmapStreamingEnabled( void ) const
+	{
 		return m_bLightmapStreamingEnabled;
 	}
 	void setLightmapStreamRadius( int nRadius );
-	EA_FORCE_INLINE int getLightmapStreamRadius( void ) const {
+	EA_FORCE_INLINE int getLightmapStreamRadius( void ) const
+	{
 		return m_nLightmapStreamRadius;
 	}
 	void setLightmapLoadBudget( int nBudget );
-	EA_FORCE_INLINE int getLightmapLoadBudget( void ) const {
+	EA_FORCE_INLINE int getLightmapLoadBudget( void ) const
+	{
 		return m_nLightmapLoadBudget;
 	}
 	void setLightmapUnloadBudget( int nBudget );
-	EA_FORCE_INLINE int getLightmapUnloadBudget( void ) const {
+	EA_FORCE_INLINE int getLightmapUnloadBudget( void ) const
+	{
 		return m_nLightmapUnloadBudget;
 	}
 	Dictionary getLightmapStreamingStats( void ) const;
-	void setRegionLightmapOutputDirectory( const String &rDirectory );
-	EA_FORCE_INLINE String getRegionLightmapOutputDirectory( void ) const {
+	void setRegionLightmapOutputDirectory( const String& rDirectory );
+	EA_FORCE_INLINE String getRegionLightmapOutputDirectory( void ) const
+	{
 		return m_regionLightmapOutputDirectory;
 	}
 	void setRegionLightmapProxyLod( int nLod );
-	EA_FORCE_INLINE int getRegionLightmapProxyLod( void ) const {
+	EA_FORCE_INLINE int getRegionLightmapProxyLod( void ) const
+	{
 		return m_nRegionLightmapProxyLod;
 	}
 	void setRegionLightmapContextRadius( int nRadius );
-	EA_FORCE_INLINE int getRegionLightmapContextRadius( void ) const {
+	EA_FORCE_INLINE int getRegionLightmapContextRadius( void ) const
+	{
 		return m_nRegionLightmapContextRadius;
 	}
 	void setRegionLightmapTexelSize( real_t fTexelSize );
-	EA_FORCE_INLINE real_t getRegionLightmapTexelSize( void ) const {
+	EA_FORCE_INLINE real_t getRegionLightmapTexelSize( void ) const
+	{
 		return m_fRegionLightmapTexelSize;
 	}
 	void setRegionLightmapBakeQuality( int nQuality );
-	EA_FORCE_INLINE int getRegionLightmapBakeQuality( void ) const {
+	EA_FORCE_INLINE int getRegionLightmapBakeQuality( void ) const
+	{
 		return m_nRegionLightmapBakeQuality;
 	}
 	void setRegionLightmapShadowmaskMode( int nMode );
-	EA_FORCE_INLINE int getRegionLightmapShadowmaskMode( void ) const {
+	EA_FORCE_INLINE int getRegionLightmapShadowmaskMode( void ) const
+	{
 		return m_nRegionLightmapShadowmaskMode;
 	}
 	void setHlodEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isHlodEnabled( void ) const {
+	EA_FORCE_INLINE bool isHlodEnabled( void ) const
+	{
 		return m_bHlodEnabled;
 	}
-	void setHlodManifestPath( const String &rPath );
-	EA_FORCE_INLINE String getHlodManifestPath( void ) const {
+	void setHlodManifestPath( const String& rPath );
+	EA_FORCE_INLINE String getHlodManifestPath( void ) const
+	{
 		return m_hlodManifestPath;
 	}
 	void setHlodTargetErrorPixels( real_t fPixels );
-	EA_FORCE_INLINE real_t getHlodTargetErrorPixels( void ) const {
+	EA_FORCE_INLINE real_t getHlodTargetErrorPixels( void ) const
+	{
 		return m_fHlodTargetErrorPixels;
 	}
 	void setHlodHysteresis( real_t fRatio );
-	EA_FORCE_INLINE real_t getHlodHysteresis( void ) const {
+	EA_FORCE_INLINE real_t getHlodHysteresis( void ) const
+	{
 		return m_fHlodHysteresis;
 	}
 	void setHlodMaxLevel( int nLevel );
-	EA_FORCE_INLINE int getHlodMaxLevel( void ) const {
+	EA_FORCE_INLINE int getHlodMaxLevel( void ) const
+	{
 		return m_nHlodMaxLevel;
 	}
 	void setHlodLoadBudget( int nBudget );
-	EA_FORCE_INLINE int getHlodLoadBudget( void ) const {
+	EA_FORCE_INLINE int getHlodLoadBudget( void ) const
+	{
 		return m_nHlodLoadBudget;
 	}
 	void setHlodUnloadBudget( int nBudget );
-	EA_FORCE_INLINE int getHlodUnloadBudget( void ) const {
+	EA_FORCE_INLINE int getHlodUnloadBudget( void ) const
+	{
 		return m_nHlodUnloadBudget;
 	}
 	void setHlodMemoryBudgetMb( int nBudgetMb );
-	EA_FORCE_INLINE int getHlodMemoryBudgetMb( void ) const {
+	EA_FORCE_INLINE int getHlodMemoryBudgetMb( void ) const
+	{
 		return m_nHlodMemoryBudgetMb;
 	}
 	void setHlodMaxShadowLevel( int nLevel );
-	EA_FORCE_INLINE int getHlodMaxShadowLevel( void ) const {
+	EA_FORCE_INLINE int getHlodMaxShadowLevel( void ) const
+	{
 		return m_nHlodMaxShadowLevel;
 	}
 	void setHlodForcedDebugLevel( int nLevel );
-	EA_FORCE_INLINE int getHlodForcedDebugLevel( void ) const {
+	EA_FORCE_INLINE int getHlodForcedDebugLevel( void ) const
+	{
 		return m_nHlodForcedDebugLevel;
 	}
 	void setEditorHlodPreview( bool bEnabled );
-	EA_FORCE_INLINE bool isEditorHlodPreviewEnabled( void ) const {
+	EA_FORCE_INLINE bool isEditorHlodPreviewEnabled( void ) const
+	{
 		return m_bEditorHlodPreview;
 	}
-	EA_FORCE_INLINE bool isEditorHlodPreviewActive( void ) const {
+	EA_FORCE_INLINE bool isEditorHlodPreviewActive( void ) const
+	{
 		return isEditorAuthoringModeInternal() && m_bEditorHlodPreview;
 	}
 	bool reloadHlodManifest( void );
 	Dictionary getHlodStreamingStats( void ) const;
+	Dictionary getInstanceOcclusionStats( void ) const;
+	Dictionary getInstancePhysicsStats( void ) const;
 	Array getHlodDebugEntries( void ) const;
-	bool isHlodRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const;
-	bool isHlodRegionDetailRequired( const Vector2i &rRegion ) const;
-	bool isHlodRegionManaged( const Vector2i &rRegion ) const;
-	uint8_t getHlodInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const;
-	uint8_t getHlodNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
-	void onHlodRegionRepresentationChanged( const Vector2i &rRegion );
-	bool isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const;
-	int64_t addStreamedScene( const Ref<PackedScene> &rScene,
-	        const Transform3D &rGlobalTransform,
-	        const Dictionary &rState = Dictionary(),
-	        int nFlags = 0,
-	        int nHlodMinLevel = 1 );
-	int64_t addStreamedScenePath( const String &rScenePath,
-	        const Transform3D &rGlobalTransform,
-	        const Dictionary &rState = Dictionary(),
-	        int nFlags = 0,
-	        int nHlodMinLevel = 1 );
+	bool isHlodRegionSuppressed( const Vector2i& rRegion, int nMinimumLevel = 1 ) const;
+	bool isHlodRegionDetailRequired( const Vector2i& rRegion ) const;
+	bool isHlodRegionManaged( const Vector2i& rRegion ) const;
+	uint8_t getHlodInstancerMinimumLevel( const Vector2i& rRegion, int nMeshId ) const;
+	uint8_t getHlodNodeMinimumLevel( const Vector2i& rRegion, int64_t nSpawnId ) const;
+	void onHlodRegionRepresentationChanged( const Vector2i& rRegion );
+	void onInstanceDerivedMutation( const t3dInstanceMutationEvent_t& rEvent );
+	void onInstanceAssetPolicyChanged( int nMeshId );
+	bool isHlodDetailReady( const Vector2i& rRegionMin, const Vector2i& rRegionMax ) const;
+	int64_t addStreamedScene( const Ref<PackedScene>& rScene,
+	                          const Transform3D& rGlobalTransform,
+	                          const Dictionary& rState = Dictionary(),
+	                          int nFlags = 0,
+	                          int nHlodMinLevel = 1 );
+	int64_t addStreamedScenePath( const String& rScenePath,
+	                              const Transform3D& rGlobalTransform,
+	                              const Dictionary& rState = Dictionary(),
+	                              int nFlags = 0,
+	                              int nHlodMinLevel = 1 );
 	bool removeStreamedScene( int64_t nSpawnId );
 	int allocateStreamOwnerId( void );
 	void setNextStreamOwnerId( int nOwnerId );
-	EA_FORCE_INLINE int getNextStreamOwnerId( void ) const {
+	EA_FORCE_INLINE int getNextStreamOwnerId( void ) const
+	{
 		return m_nNextStreamOwnerId;
 	}
 	Dictionary getNodeStreamingStats( void ) const;
 	void setLabelDistance( const real_t fDistance );
-	EA_FORCE_INLINE real_t getLabelDistance( void ) const {
+	EA_FORCE_INLINE real_t getLabelDistance( void ) const
+	{
 		return m_fLabelDistance;
 	}
 	void setLabelSize( const int nSize );
-	EA_FORCE_INLINE int getLabelSize( void ) const {
+	EA_FORCE_INLINE int getLabelSize( void ) const
+	{
 		return m_nLabelSize;
 	}
 	void updateRegionLabels( void );
 
 	// Target Tracking
 	void setCamera( Camera3D *pCamera );
-	EA_FORCE_INLINE Camera3D *getCamera( void ) const {
+	EA_FORCE_INLINE Camera3D *getCamera( void ) const
+	{
 		return cast_to<Camera3D>( m_hCamera.ptr() );
 	}
 	void setClipmapTarget( Node3D *pNode );
-	EA_FORCE_INLINE Node3D *getClipmapTarget( void ) const {
+	EA_FORCE_INLINE Node3D *getClipmapTarget( void ) const
+	{
 		return m_clipmapTarget.ptr();
 	}
 	Vector3 getClipmapTargetPosition( void ) const;
 	void setCollisionTarget( Node3D *pNode );
-	EA_FORCE_INLINE Node3D *getCollisionTarget( void ) const {
+	EA_FORCE_INLINE Node3D *getCollisionTarget( void ) const
+	{
 		return m_collisionTarget.ptr();
 	}
 	Vector3 getCollisionTargetPosition( void ) const;
 	void setLightTarget( Node3D *pNode );
 	void setSemanticShadowPolicyEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isSemanticShadowPolicyEnabled( void ) const {
+	EA_FORCE_INLINE bool isSemanticShadowPolicyEnabled( void ) const
+	{
 		return m_bSemanticShadowPolicyEnabled;
 	}
 	void setEnvironmentShadowQuality( t3dEnvironmentShadowQuality_t eQuality );
-	EA_FORCE_INLINE t3dEnvironmentShadowQuality_t getEnvironmentShadowQuality( void ) const {
+	EA_FORCE_INLINE t3dEnvironmentShadowQuality_t getEnvironmentShadowQuality( void ) const
+	{
 		return m_environmentShadowQuality;
 	}
 	void setEnvironmentShadowExternalMask( uint32_t nMask );
-	EA_FORCE_INLINE uint32_t getEnvironmentShadowExternalMask( void ) const {
+	EA_FORCE_INLINE uint32_t getEnvironmentShadowExternalMask( void ) const
+	{
 		return m_nEnvironmentShadowExternalMask;
 	}
 	void setSemanticDirectionalReceptionEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isSemanticDirectionalReceptionEnabled( void ) const {
+	EA_FORCE_INLINE bool isSemanticDirectionalReceptionEnabled( void ) const
+	{
 		return m_bSemanticDirectionalReceptionEnabled;
 	}
 	void setEnvironmentDirectionalExternalMask( uint32_t nMask );
-	EA_FORCE_INLINE uint32_t getEnvironmentDirectionalExternalMask( void ) const {
+	EA_FORCE_INLINE uint32_t getEnvironmentDirectionalExternalMask( void ) const
+	{
 		return m_nEnvironmentDirectionalExternalMask;
 	}
-	EA_FORCE_INLINE Node3D *getLightTarget( void ) const {
+	EA_FORCE_INLINE Node3D *getLightTarget( void ) const
+	{
 		return m_lightTarget.ptr();
 	}
 	void snap( void );
 
 	// Collision Aliases
-	EA_FORCE_INLINE void setCollisionMode( const t3dCollisionMode_t mode ) {
-		m_pCollision ? m_pCollision->setMode( mode ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionMode( const t3dCollisionMode_t mode )
+	{
+		m_pCollision ? m_pCollision->setMode( mode ) : (void)0;
 	}
-	EA_FORCE_INLINE t3dCollisionMode_t getCollisionMode( void ) const {
+	EA_FORCE_INLINE t3dCollisionMode_t getCollisionMode( void ) const
+	{
 		return m_pCollision ? m_pCollision->getMode() : t3dCollisionMode_t::DYNAMIC_GAME;
 	}
-	EA_FORCE_INLINE void setCollisionShapeSize( const uint16_t nSize ) {
-		m_pCollision ? m_pCollision->setShapeSize( nSize ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionShapeSize( const uint16_t nSize )
+	{
+		m_pCollision ? m_pCollision->setShapeSize( nSize ) : (void)0;
 	}
-	EA_FORCE_INLINE uint16_t getCollisionShapeSize( void ) const {
+	EA_FORCE_INLINE uint16_t getCollisionShapeSize( void ) const
+	{
 		return m_pCollision ? m_pCollision->getShapeSize() : 16;
 	}
-	EA_FORCE_INLINE void setCollisionRadius( const uint16_t nRadius ) {
-		m_pCollision ? m_pCollision->setRadius( nRadius ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionRadius( const uint16_t nRadius )
+	{
+		m_pCollision ? m_pCollision->setRadius( nRadius ) : (void)0;
 	}
-	EA_FORCE_INLINE uint16_t getCollisionRadius( void ) const {
+	EA_FORCE_INLINE uint16_t getCollisionRadius( void ) const
+	{
 		return m_pCollision ? m_pCollision->getRadius() : 64;
 	}
-	EA_FORCE_INLINE void setCollisionLayer( const uint32_t nLayers ) {
-		m_pCollision ? m_pCollision->setLayer( nLayers ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionLayer( const uint32_t nLayers )
+	{
+		m_pCollision ? m_pCollision->setLayer( nLayers ) : (void)0;
 	}
-	EA_FORCE_INLINE uint32_t getCollisionLayer( void ) const {
+	EA_FORCE_INLINE uint32_t getCollisionLayer( void ) const
+	{
 		return m_pCollision ? m_pCollision->getLayer() : 1;
 	}
-	EA_FORCE_INLINE void setCollisionMask( const uint32_t nMask ) {
-		m_pCollision ? m_pCollision->setMask( nMask ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionMask( const uint32_t nMask )
+	{
+		m_pCollision ? m_pCollision->setMask( nMask ) : (void)0;
 	}
-	EA_FORCE_INLINE uint32_t getCollisionMask( void ) const {
+	EA_FORCE_INLINE uint32_t getCollisionMask( void ) const
+	{
 		return m_pCollision ? m_pCollision->getMask() : 1;
 	}
-	EA_FORCE_INLINE void setCollisionPriority( const real_t fPriority ) {
-		m_pCollision ? m_pCollision->setPriority( fPriority ) : ( void )0;
+	EA_FORCE_INLINE void setCollisionPriority( const real_t fPriority )
+	{
+		m_pCollision ? m_pCollision->setPriority( fPriority ) : (void)0;
 	}
-	EA_FORCE_INLINE real_t getCollisionPriority( void ) const {
+	EA_FORCE_INLINE real_t getCollisionPriority( void ) const
+	{
 		return m_pCollision ? m_pCollision->getPriority() : 1.f;
 	}
-	EA_FORCE_INLINE void setPhysicsMaterial( const Ref<PhysicsMaterial> &rMat ) {
-		m_pCollision ? m_pCollision->setPhysicsMaterial( rMat ) : ( void )0;
+	EA_FORCE_INLINE void setPhysicsMaterial( const Ref<PhysicsMaterial>& rMat )
+	{
+		m_pCollision ? m_pCollision->setPhysicsMaterial( rMat ) : (void)0;
 	}
-	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const {
+	EA_FORCE_INLINE Ref<PhysicsMaterial> getPhysicsMaterial( void ) const
+	{
 		return m_pCollision ? m_pCollision->getPhysicsMaterial() : Ref<PhysicsMaterial>();
 	}
 
 	// Terrain Mesh
-	EA_FORCE_INLINE Terrain3DMesher *getMesher( void ) const {
+	EA_FORCE_INLINE Terrain3DMesher *getMesher( void ) const
+	{
 		return m_pTerrainMesher;
 	}
-	void setMaterial( const Ref<Terrain3DMaterial> &rMaterial );
-	EA_FORCE_INLINE Ref<Terrain3DMaterial> getMaterial( void ) const {
+	void setMaterial( const Ref<Terrain3DMaterial>& rMaterial );
+	EA_FORCE_INLINE Ref<Terrain3DMaterial> getMaterial( void ) const
+	{
 		return m_material;
 	}
 	void setMeshLods( const int nCount );
-	EA_FORCE_INLINE int getMeshLods( void ) const {
+	EA_FORCE_INLINE int getMeshLods( void ) const
+	{
 		return m_nMeshLods;
 	}
 	void setRuntimeShaderTieringEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeShaderTieringEnabled( void ) const {
+	EA_FORCE_INLINE bool isRuntimeShaderTieringEnabled( void ) const
+	{
 		return m_bRuntimeShaderTieringEnabled;
 	}
 	void setRuntimeNearShaderLods( int nCount );
-	EA_FORCE_INLINE int getRuntimeNearShaderLods( void ) const {
+	EA_FORCE_INLINE int getRuntimeNearShaderLods( void ) const
+	{
 		return m_nRuntimeNearShaderLods;
 	}
 	void setRuntimeMiddleShaderLods( int nCount );
-	EA_FORCE_INLINE int getRuntimeMiddleShaderLods( void ) const {
+	EA_FORCE_INLINE int getRuntimeMiddleShaderLods( void ) const
+	{
 		return m_nRuntimeMiddleShaderLods;
 	}
 	void setRuntimeNearRangeEndM( real_t fRangeM );
 	real_t getRuntimeNearRangeEndM( void ) const;
 	void setRuntimeMiddleRangeEndM( real_t fRangeM );
 	real_t getRuntimeMiddleRangeEndM( void ) const;
-	EA_FORCE_INLINE real_t getRuntimeShadowRangeEndM( void ) const {
+	EA_FORCE_INLINE real_t getRuntimeShadowRangeEndM( void ) const
+	{
 		return lodCountToRange( m_nShadowLodCount );
 	}
 	void setRuntimeSyncDetailLods( bool bEnabled );
-	EA_FORCE_INLINE bool isRuntimeSyncDetailLods( void ) const {
+	EA_FORCE_INLINE bool isRuntimeSyncDetailLods( void ) const
+	{
 		return m_bRuntimeSyncDetailLods;
 	}
 	void setRuntimeClipmapUpdateBudget( int nCount );
-	EA_FORCE_INLINE int getRuntimeClipmapUpdateBudget( void ) const {
+	EA_FORCE_INLINE int getRuntimeClipmapUpdateBudget( void ) const
+	{
 		return m_nRuntimeClipmapUpdateBudget;
 	}
 	void setRuntimePagePrepareThreads( int nCount );
-	EA_FORCE_INLINE int getRuntimePagePrepareThreads( void ) const {
+	EA_FORCE_INLINE int getRuntimePagePrepareThreads( void ) const
+	{
 		return m_runtimePageNumericConfig.m_nPrepareThreads;
 	}
 	void setTessellationLevel( const int nLevel );
-	EA_FORCE_INLINE int getTessellationLevel( void ) const {
+	EA_FORCE_INLINE int getTessellationLevel( void ) const
+	{
 		return m_nTessellationLevel;
 	}
 	void setMeshSize( const int nSize );
-	EA_FORCE_INLINE int getMeshSize( void ) const {
+	EA_FORCE_INLINE int getMeshSize( void ) const
+	{
 		return m_nMeshSize;
 	}
-	EA_FORCE_INLINE real_t getVertexSpacing( void ) const {
-		return ( real_t )( s_fRegionVertexSpacing );
+	EA_FORCE_INLINE real_t getVertexSpacing( void ) const
+	{
+		return (real_t)( s_fRegionVertexSpacing );
 	}
 	void setCullMargin( const real_t fMargin );
-	EA_FORCE_INLINE real_t getCullMargin( void ) const {
+	EA_FORCE_INLINE real_t getCullMargin( void ) const
+	{
 		return m_fCullMargin;
 	}
 	void setCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows );
-	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getCastShadows( void ) const {
+	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getCastShadows( void ) const
+	{
 		return m_castShadows;
 	}
 	void setShadowLodCount( const int nCount );
-	EA_FORCE_INLINE int getShadowLodCount( void ) const {
+	EA_FORCE_INLINE int getShadowLodCount( void ) const
+	{
 		return m_nShadowLodCount;
 	}
+	void setDominantSunOnly( bool bEnabled );
+	EA_FORCE_INLINE bool isDominantSunOnly( void ) const
+	{
+		return m_bDominantSunOnly;
+	}
 	void setNearShadowEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool getNearShadowEnabled( void ) const {
+	EA_FORCE_INLINE bool getNearShadowEnabled( void ) const
+	{
 		return m_bNearShadowEnabled;
 	}
 	void setMiddleShadowEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool getMiddleShadowEnabled( void ) const {
+	EA_FORCE_INLINE bool getMiddleShadowEnabled( void ) const
+	{
 		return m_bMiddleShadowEnabled;
 	}
 	void setFarShadowEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool getFarShadowEnabled( void ) const {
+	EA_FORCE_INLINE bool getFarShadowEnabled( void ) const
+	{
 		return m_bFarShadowEnabled;
 	}
 	void setNearShadowLodCount( int nCount );
-	EA_FORCE_INLINE int getNearShadowLodCount( void ) const {
+	EA_FORCE_INLINE int getNearShadowLodCount( void ) const
+	{
 		return m_nNearShadowLodCount;
 	}
 	void setMiddleShadowLodCount( int nCount );
-	EA_FORCE_INLINE int getMiddleShadowLodCount( void ) const {
+	EA_FORCE_INLINE int getMiddleShadowLodCount( void ) const
+	{
 		return m_nMiddleShadowLodCount;
 	}
 	void setFarShadowLodCount( int nCount );
-	EA_FORCE_INLINE int getFarShadowLodCount( void ) const {
+	EA_FORCE_INLINE int getFarShadowLodCount( void ) const
+	{
 		return m_nFarShadowLodCount;
 	}
 	void setGiMode( const GeometryInstance3D::GIMode giMode );
-	EA_FORCE_INLINE GeometryInstance3D::GIMode getGiMode( void ) const {
+	EA_FORCE_INLINE GeometryInstance3D::GIMode getGiMode( void ) const
+	{
 		return m_giMode;
 	}
 	void setRenderLayers( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const {
+	EA_FORCE_INLINE uint32_t getRenderLayers( void ) const
+	{
 		return m_nRenderLayers;
 	}
 
 	Dictionary getRdRendererDiagnostics( void ) const;
-	Ref<Image> createRdMeshPreview( uint16_t nAssetId, const Vector2i &rSize );
+	Dictionary bakeVirtualTextures( void );
+	Ref<Image> createRdMeshPreview( uint16_t nAssetId, const Vector2i& rSize, t3dRdPreviewFailure_t *pFailure = NULL );
+	bool requestRdMeshPreviewAsync( uint16_t nAssetId,
+	                                const Vector2i& rSize,
+	                                uint64_t nCompletionOwnerId,
+	                                uint64_t nCompletionGeneration,
+	                                t3dRdPreviewFailure_t *pFailure = NULL );
 
 	// Material Displacement Aliases
-	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale ) {
-		m_material.is_valid() ? m_material->setDisplacementScale( fDisplacementScale ) : ( void )0;
+	EA_FORCE_INLINE void setDisplacementScale( const real_t fDisplacementScale )
+	{
+		m_material.is_valid() ? m_material->setDisplacementScale( fDisplacementScale ) : (void)0;
 	}
-	EA_FORCE_INLINE real_t getDisplacementScale( void ) const {
+	EA_FORCE_INLINE real_t getDisplacementScale( void ) const
+	{
 		return m_material.is_valid() ? m_material->getDisplacementScale() : 1.f;
 	}
-	EA_FORCE_INLINE void setDisplacementSharpness( const real_t fDisplacementSharpness ) {
-		m_material.is_valid() ? m_material->setDisplacementSharpness( fDisplacementSharpness ) : ( void )0;
+	EA_FORCE_INLINE void setDisplacementSharpness( const real_t fDisplacementSharpness )
+	{
+		m_material.is_valid() ? m_material->setDisplacementSharpness( fDisplacementSharpness ) : (void)0;
 	}
-	EA_FORCE_INLINE real_t getDisplacementSharpness( void ) const {
+	EA_FORCE_INLINE real_t getDisplacementSharpness( void ) const
+	{
 		return m_material.is_valid() ? m_material->getDisplacementSharpness() : 0.25f;
 	}
-	EA_FORCE_INLINE void setBufferShaderOverrideEnabled( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setBufferShaderOverrideEnabled( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setBufferShaderOverrideEnabled( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setBufferShaderOverrideEnabled( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool isBufferShaderOverrideEnabled( void ) const {
+	EA_FORCE_INLINE bool isBufferShaderOverrideEnabled( void ) const
+	{
 		return m_material.is_valid() ? m_material->isBufferShaderOverrideEnabled() : false;
 	}
-	EA_FORCE_INLINE void setBufferShaderOverride( const Ref<Shader> &rShader ) {
-		return m_material.is_valid() ? m_material->setBufferShaderOverride( rShader ) : ( void )0;
+	EA_FORCE_INLINE void setBufferShaderOverride( const Ref<Shader>& rShader )
+	{
+		return m_material.is_valid() ? m_material->setBufferShaderOverride( rShader ) : (void)0;
 	}
-	EA_FORCE_INLINE Ref<Shader> getBufferShaderOverride( void ) const {
+	EA_FORCE_INLINE Ref<Shader> getBufferShaderOverride( void ) const
+	{
 		return m_material.is_valid() ? m_material->getBufferShaderOverride() : Ref<Shader>();
 	}
 
 	// Ocean Mesh
-	EA_FORCE_INLINE Terrain3DMesher *getOceanMesher( void ) const {
+	EA_FORCE_INLINE Terrain3DMesher *getOceanMesher( void ) const
+	{
 		return m_pOceanMesher;
 	}
 	void setOceanEnabled( const bool bEnabled );
-	EA_FORCE_INLINE bool isOceanEnabled( void ) const {
+	EA_FORCE_INLINE bool isOceanEnabled( void ) const
+	{
 		return m_bOceanEnabled;
 	}
 	void setOceanMeshLods( const int nCount );
-	EA_FORCE_INLINE int getOceanMeshLods( void ) const {
+	EA_FORCE_INLINE int getOceanMeshLods( void ) const
+	{
 		return m_nOceanMeshLods;
 	}
 	void setOceanTessellationLevel( const int nLevel );
-	EA_FORCE_INLINE int getOceanTessellationLevel( void ) const {
+	EA_FORCE_INLINE int getOceanTessellationLevel( void ) const
+	{
 		return m_nOceanTessellationLevel;
 	}
 	void setOceanMeshSize( const int nSize );
-	EA_FORCE_INLINE int getOceanMeshSize( void ) const {
+	EA_FORCE_INLINE int getOceanMeshSize( void ) const
+	{
 		return m_nOceanMeshSize;
 	}
 	void setOceanVertexSpacing( const real_t fSpacing );
-	EA_FORCE_INLINE real_t getOceanVertexSpacing( void ) const {
+	EA_FORCE_INLINE real_t getOceanVertexSpacing( void ) const
+	{
 		return m_fOceanVertexSpacing;
 	}
 	void setOceanCullMargin( const real_t fMargin );
-	EA_FORCE_INLINE real_t getOceanCullMargin( void ) const {
+	EA_FORCE_INLINE real_t getOceanCullMargin( void ) const
+	{
 		return m_fOceanCullMargin;
 	}
 	void setOceanCastShadows( const GeometryInstance3D::ShadowCastingSetting castShadows );
-	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getOceanCastShadows( void ) const {
+	EA_FORCE_INLINE GeometryInstance3D::ShadowCastingSetting getOceanCastShadows( void ) const
+	{
 		return m_oceanCastShadows;
 	}
 	void setOceanGiMode( const GeometryInstance3D::GIMode giMode );
-	EA_FORCE_INLINE GeometryInstance3D::GIMode getOceanGiMode( void ) const {
+	EA_FORCE_INLINE GeometryInstance3D::GIMode getOceanGiMode( void ) const
+	{
 		return m_oceanGiMode;
 	}
 	void setOceanRenderLayers( const uint32_t nLayers );
-	EA_FORCE_INLINE uint32_t getOceanRenderLayers( void ) const {
+	EA_FORCE_INLINE uint32_t getOceanRenderLayers( void ) const
+	{
 		return m_nOceanRenderLayers;
 	}
 	void setOceanPerformancePreset( const t3dOceanPerformancePreset_t preset );
-	EA_FORCE_INLINE t3dOceanPerformancePreset_t getOceanPerformancePreset( void ) const {
+	EA_FORCE_INLINE t3dOceanPerformancePreset_t getOceanPerformancePreset( void ) const
+	{
 		return m_oceanPerformancePreset;
 	}
 	void setOceanVertexWaveIterations( const int nIterations );
-	EA_FORCE_INLINE int getOceanVertexWaveIterations( void ) const {
+	EA_FORCE_INLINE int getOceanVertexWaveIterations( void ) const
+	{
 		return m_nOceanVertexWaveIterations;
 	}
 	void setOceanFragmentWaveIterations( const int nIterations );
-	EA_FORCE_INLINE int getOceanFragmentWaveIterations( void ) const {
+	EA_FORCE_INLINE int getOceanFragmentWaveIterations( void ) const
+	{
 		return m_nOceanFragmentWaveIterations;
 	}
 	void setOceanRefractionMode( const t3dOceanRefractionMode_t mode );
-	EA_FORCE_INLINE t3dOceanRefractionMode_t getOceanRefractionMode( void ) const {
+	EA_FORCE_INLINE t3dOceanRefractionMode_t getOceanRefractionMode( void ) const
+	{
 		return m_oceanRefractionMode;
 	}
 	void setOceanFoamMode( const t3dOceanFoamMode_t mode );
-	EA_FORCE_INLINE t3dOceanFoamMode_t getOceanFoamMode( void ) const {
+	EA_FORCE_INLINE t3dOceanFoamMode_t getOceanFoamMode( void ) const
+	{
 		return m_oceanFoamMode;
 	}
 	void setOceanScatteringMode( const t3dOceanScatteringMode_t mode );
-	EA_FORCE_INLINE t3dOceanScatteringMode_t getOceanScatteringMode( void ) const {
+	EA_FORCE_INLINE t3dOceanScatteringMode_t getOceanScatteringMode( void ) const
+	{
 		return m_oceanScatteringMode;
 	}
 	void setOceanShadingMode( const t3dOceanShadingMode_t mode );
-	EA_FORCE_INLINE t3dOceanShadingMode_t getOceanShadingMode( void ) const {
+	EA_FORCE_INLINE t3dOceanShadingMode_t getOceanShadingMode( void ) const
+	{
 		return m_oceanShadingMode;
 	}
-	void setOceanMaterial( const Ref<Material> &rMaterial );
-	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const {
+	void setOceanMaterial( const Ref<Material>& rMaterial );
+	EA_FORCE_INLINE Ref<Material> getOceanMaterial( void ) const
+	{
 		return m_oceanMaterial;
 	}
-	EA_FORCE_INLINE uint64_t getOceanPublicationGeneration( void ) const {
+	EA_FORCE_INLINE uint64_t getOceanPublicationGeneration( void ) const
+	{
 		return m_nOceanPublicationGeneration;
 	}
 
 	// Rendering
 	void setMouseLayer( const uint32_t nLayer );
-	EA_FORCE_INLINE uint32_t getMouseLayer( void ) const {
+	EA_FORCE_INLINE uint32_t getMouseLayer( void ) const
+	{
 		return m_nMouseLayer;
 	}
-	EA_FORCE_INLINE void setFreeEditorTextures( const bool bFreeTextures ) {
+	EA_FORCE_INLINE void setFreeEditorTextures( const bool bFreeTextures )
+	{
 		m_bFreeEditorTextures = bFreeTextures;
 	}
-	EA_FORCE_INLINE bool getFreeEditorTextures( void ) const {
+	EA_FORCE_INLINE bool getFreeEditorTextures( void ) const
+	{
 		return m_bFreeEditorTextures;
 	}
-	EA_FORCE_INLINE void setInstancerMode( const t3dInstancerMode_t mode ) {
-		m_pInstancer ? m_pInstancer->setMode( mode ) : ( void )0;
+	EA_FORCE_INLINE void setInstancerMode( const t3dInstancerMode_t mode )
+	{
+		m_pInstancer ? m_pInstancer->setMode( mode ) : (void)0;
 	}
-	EA_FORCE_INLINE t3dInstancerMode_t getInstancerMode( void ) const {
+	EA_FORCE_INLINE t3dInstancerMode_t getInstancerMode( void ) const
+	{
 		return m_pInstancer ? m_pInstancer->getMode() : t3dInstancerMode_t::NORMAL;
 	}
 
 	// Utility
-	Vector3 getIntersection( const Vector3 &rSrcPos, const Vector3 &rDirection, const bool bGpuMode = false );
-	Dictionary getRaycastResult( const Vector3 &rSrcPos,
-	        const Vector3 &rDirection,
-	        const uint32_t nColMask = 0xFFFFFFFF,
-	        const bool bExcludeSelf = false ) const;
+	Vector3 getIntersection( const Vector3& rSrcPos, const Vector3& rDirection, const bool bGpuMode = false );
+	Dictionary getRaycastResult( const Vector3& rSrcPos,
+	                             const Vector3& rDirection,
+	                             const uint32_t nColMask = 0xFFFFFFFF,
+	                             const bool bExcludeSelf = false ) const;
 	Ref<Mesh> bakeMesh( const int nLod, const t3dHeightFilter_t filter = HEIGHT_FILTER_NEAREST ) const;
 	Ref<Mesh> bakeRegionLightmapMesh(
-	        const Vector2i &rRegionLocation, int nLod = 2, int nContextRadiusRegions = 1, real_t fTexelSize = 1.0f ) const;
-	Ref<Mesh> bakeLightmapClusterMesh( const Vector2i &rRegionMin,
-	        const Vector2i &rRegionMax,
-	        int nLod = 2,
-	        int nContextRadiusRegions = 1,
-	        real_t fTexelSize = 1.0f ) const;
+	    const Vector2i& rRegionLocation, int nLod = 2, int nContextRadiusRegions = 1, real_t fTexelSize = 1.0f ) const;
+	Ref<Mesh> bakeLightmapClusterMesh( const Vector2i& rRegionMin,
+	                                   const Vector2i& rRegionMax,
+	                                   int nLod = 2,
+	                                   int nContextRadiusRegions = 1,
+	                                   real_t fTexelSize = 1.0f ) const;
 	Ref<ArrayOccluder3D> bakeOccluder( const int nLod ) const;
-	PackedVector3Array generateNavMeshSourceGeometry( const AABB &rGlobalAabb, const bool bRequireNav = true ) const;
+	PackedVector3Array generateNavMeshSourceGeometry( const AABB& rGlobalAabb, const bool bRequireNav = true ) const;
 
 	// Warnings
 	void setWarning( const uint8_t nWarning, const bool bEnabled );
-	EA_FORCE_INLINE uint8_t getWarnings( void ) const {
+	EA_FORCE_INLINE uint8_t getWarnings( void ) const
+	{
 		return m_nWarnings;
 	}
 	PackedStringArray _get_configuration_warnings( void ) const override;
 
 	// Overlay Aliases
-	EA_FORCE_INLINE void setShowRegionGrid( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowRegionGrid( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowRegionGrid( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowRegionGrid( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowRegionGrid( void ) const {
+	EA_FORCE_INLINE bool getShowRegionGrid( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowRegionGrid() : false;
 	}
-	EA_FORCE_INLINE void setShowInstancerGrid( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowInstancerGrid( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowInstancerGrid( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowInstancerGrid( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowInstancerGrid( void ) const {
+	EA_FORCE_INLINE bool getShowInstancerGrid( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowInstancerGrid() : false;
 	}
-	EA_FORCE_INLINE void setShowVertexGrid( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowVertexGrid( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowVertexGrid( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowVertexGrid( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowVertexGrid( void ) const {
+	EA_FORCE_INLINE bool getShowVertexGrid( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowVertexGrid() : false;
 	}
-	EA_FORCE_INLINE void setShowContours( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowContours( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowContours( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowContours( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowContours( void ) const {
+	EA_FORCE_INLINE bool getShowContours( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowContours() : false;
 	}
-	EA_FORCE_INLINE void setShowNavigation( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowNavigation( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowNavigation( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowNavigation( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowNavigation( void ) const {
+	EA_FORCE_INLINE bool getShowNavigation( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowNavigation() : false;
 	}
 
 	void setComputeDisplacementEnabled( bool bEnabled );
-	EA_FORCE_INLINE bool getComputeDisplacementEnabled( void ) const {
+	EA_FORCE_INLINE bool getComputeDisplacementEnabled( void ) const
+	{
 		return m_bComputeDisplacementEnabled.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	void setDisplacementUpdateDistance( const real_t fDistance );
-	EA_FORCE_INLINE real_t getDisplacementUpdateDistance( void ) const {
+	EA_FORCE_INLINE real_t getDisplacementUpdateDistance( void ) const
+	{
 		return m_fDisplacementUpdateDistance;
 	}
-	EA_FORCE_INLINE bool isComputeDisplacementActive( void ) const {
+	EA_FORCE_INLINE bool isComputeDisplacementActive( void ) const
+	{
 		return m_bComputeDisplacementActive.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 	RID getComputeDisplacementTextureRid( void ) const;
 
 	// Debug View Aliases
-	EA_FORCE_INLINE void setShowCheckered( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowCheckered( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowCheckered( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowCheckered( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowCheckered( void ) const {
+	EA_FORCE_INLINE bool getShowCheckered( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowCheckered() : false;
 	}
-	EA_FORCE_INLINE void setShowGrey( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowGrey( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowGrey( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowGrey( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowGrey( void ) const {
+	EA_FORCE_INLINE bool getShowGrey( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowGrey() : false;
 	}
-	EA_FORCE_INLINE void setShowHeightmap( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowHeightmap( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowHeightmap( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowHeightmap( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowHeightmap( void ) const {
+	EA_FORCE_INLINE bool getShowHeightmap( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowHeightmap() : false;
 	}
-	EA_FORCE_INLINE void setShowJaggedness( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowJaggedness( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowJaggedness( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowJaggedness( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowJaggedness( void ) const {
+	EA_FORCE_INLINE bool getShowJaggedness( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowJaggedness() : false;
 	}
-	EA_FORCE_INLINE void setShowAutoshader( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowAutoshader( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowAutoshader( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowAutoshader( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowAutoshader( void ) const {
+	EA_FORCE_INLINE bool getShowAutoshader( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowAutoshader() : false;
 	}
-	EA_FORCE_INLINE void setShowControlTexture( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowControlTexture( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowControlTexture( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowControlTexture( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowControlTexture( void ) const {
+	EA_FORCE_INLINE bool getShowControlTexture( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowControlTexture() : false;
 	}
-	EA_FORCE_INLINE void setShowControlBlend( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowControlBlend( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowControlBlend( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowControlBlend( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowControlBlend( void ) const {
+	EA_FORCE_INLINE bool getShowControlBlend( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowControlBlend() : false;
 	}
-	EA_FORCE_INLINE void setShowControlAngle( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowControlAngle( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowControlAngle( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowControlAngle( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowControlAngle( void ) const {
+	EA_FORCE_INLINE bool getShowControlAngle( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowControlAngle() : false;
 	}
-	EA_FORCE_INLINE void setShowControlScale( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowControlScale( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowControlScale( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowControlScale( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowControlScale( void ) const {
+	EA_FORCE_INLINE bool getShowControlScale( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowControlScale() : false;
 	}
-	EA_FORCE_INLINE void setShowColormap( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowColormap( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowColormap( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowColormap( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowColormap( void ) const {
+	EA_FORCE_INLINE bool getShowColormap( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowColormap() : false;
 	}
-	EA_FORCE_INLINE void setShowRoughmap( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowRoughmap( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowRoughmap( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowRoughmap( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowRoughmap( void ) const {
+	EA_FORCE_INLINE bool getShowRoughmap( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowRoughmap() : false;
 	}
-	EA_FORCE_INLINE void setShowDisplacementBuffer( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowDisplacementBuffer( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowDisplacementBuffer( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowDisplacementBuffer( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowDisplacementBuffer( void ) const {
+	EA_FORCE_INLINE bool getShowDisplacementBuffer( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowDisplacementBuffer() : false;
 	}
 
 	// PBR View Aliases
-	EA_FORCE_INLINE void setShowTextureAlbedo( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowTextureAlbedo( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowTextureAlbedo( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowTextureAlbedo( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowTextureAlbedo( void ) const {
+	EA_FORCE_INLINE bool getShowTextureAlbedo( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowTextureAlbedo() : false;
 	}
-	EA_FORCE_INLINE void setShowTextureHeight( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowTextureHeight( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowTextureHeight( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowTextureHeight( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowTextureHeight( void ) const {
+	EA_FORCE_INLINE bool getShowTextureHeight( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowTextureHeight() : false;
 	}
-	EA_FORCE_INLINE void setShowTextureNormal( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowTextureNormal( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowTextureNormal( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowTextureNormal( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowTextureNormal( void ) const {
+	EA_FORCE_INLINE bool getShowTextureNormal( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowTextureNormal() : false;
 	}
-	EA_FORCE_INLINE void setShowTextureRough( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowTextureRough( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowTextureRough( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowTextureRough( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowTextureRough( void ) const {
+	EA_FORCE_INLINE bool getShowTextureRough( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowTextureRough() : false;
 	}
-	EA_FORCE_INLINE void setShowTextureAo( const bool bEnabled ) {
-		m_material.is_valid() ? m_material->setShowTextureAo( bEnabled ) : ( void )0;
+	EA_FORCE_INLINE void setShowTextureAo( const bool bEnabled )
+	{
+		m_material.is_valid() ? m_material->setShowTextureAo( bEnabled ) : (void)0;
 	}
-	EA_FORCE_INLINE bool getShowTextureAo( void ) const {
+	EA_FORCE_INLINE bool getShowTextureAo( void ) const
+	{
 		return m_material.is_valid() ? m_material->getShowTextureAo() : false;
 	}
 
 protected:
 	void _notification( const int nWhat );
-	void _validate_property( PropertyInfo &rProperty ) const;
+	void _validate_property( PropertyInfo& rProperty ) const;
 	static void _bind_methods( void );
 };
 

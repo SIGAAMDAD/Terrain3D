@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "scene": "res://demo/components/DemoBenchmark.tscn",
+  "workloads": [
+    {"id":"stationary_warm","warmup_frames":360,"sample_frames":600,"movement":"stationary","speed_mps":0.0},
+    {"id":"slow_traversal","warmup_frames":240,"sample_frames":900,"movement":"linear","speed_mps":4.0},
+    {"id":"maximum_speed_traversal","warmup_frames":240,"sample_frames":900,"movement":"linear","speed_mps":80.0},
+    {"id":"region_boundary_crossing","warmup_frames":240,"sample_frames":900,"movement":"boundary_pingpong","speed_mps":28.0},
+    {"id":"dense_instance_scene","warmup_frames":360,"sample_frames":900,"movement":"orbit","speed_mps":12.0,"fixture":"dense_instances"},
+    {"id":"hlod_transition_route","warmup_frames":300,"sample_frames":900,"movement":"hlod_sweep","speed_mps":35.0,"fixture":"hlod_transition"},
+    {"id":"vt_cold_start_burst","warmup_frames":0,"sample_frames":480,"movement":"linear","speed_mps":45.0,"fresh_process_required":true},
+    {"id":"edit_megavt_recook","warmup_frames":300,"sample_frames":600,"movement":"stationary","speed_mps":0.0,"edit_interval_frames":60,"restore_edits":true},
+    {"id":"visibility_occlusion_churn","warmup_frames":300,"sample_frames":900,"movement":"zigzag","speed_mps":55.0,"fixture":"occlusion_churn"},
+    {"id":"long_warmed_traversal","warmup_frames":900,"sample_frames":3600,"movement":"loop","speed_mps":18.0,"plateau_workload":true}
+  ]
+}

@@ -1,0 +1,129 @@
+#ifndef TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL
+#define TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL
+
+// Mirrored by src/rendering/terrain_3d_clipmap_strip_contract.h. P02's
+// verifier rejects any numeric drift between the C++ and GLSL contracts.
+#define T3D_CLIPMAP_PART_STATIC 0u
+#define T3D_CLIPMAP_PART_EDGE_X0 1u
+#define T3D_CLIPMAP_PART_EDGE_X1 2u
+#define T3D_CLIPMAP_PART_EDGE_Z0 3u
+#define T3D_CLIPMAP_PART_EDGE_Z1 4u
+#define T3D_CLIPMAP_PART_CODE_COUNT 5u
+
+#define T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS 0x0001u
+#define T3D_CLIPMAP_STRIP_FLAG_LAYOUT_LOD0 0x0002u
+#define T3D_CLIPMAP_STRIP_FLAG_LAYOUT_OUTER_RING 0x0004u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_TILE 0x0008u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_TRIM_A 0x0010u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_TRIM_B 0x0020u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_FILL_A 0x0040u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_FILL_B 0x0080u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_X 0x0100u
+#define T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_Z 0x0200u
+#define T3D_CLIPMAP_STRIP_ROLE_MASK 0x03f8u
+#define T3D_CLIPMAP_STRIP_LAYOUT_MASK 0x0006u
+#define T3D_CLIPMAP_STRIP_KNOWN_FLAG_MASK 0x03ffu
+#define T3D_CLIPMAP_STRIP_PART_WORD_COUNT 3u
+#define T3D_CLIPMAP_STRIP_VERTEX_ID_SHIFT 18u
+#define T3D_CLIPMAP_STRIP_VERTEX_ID_STRIDE (1u << T3D_CLIPMAP_STRIP_VERTEX_ID_SHIFT)
+#define T3D_CLIPMAP_STRIP_VERTEX_ID_MASK (T3D_CLIPMAP_STRIP_VERTEX_ID_STRIDE - 1u)
+
+struct T3DClipmapStripPart {
+    ivec2 origin;
+    uint cell_width;
+    uint cell_height;
+    uint part_code;
+    uint flags;
+};
+
+T3DClipmapStripPart t3d_clipmap_strip_part_decode(uint word0, uint word1, uint word2) {
+    T3DClipmapStripPart result;
+    result.origin = ivec2(bitfieldExtract(int(word0), 0, 16), bitfieldExtract(int(word0), 16, 16));
+    result.cell_width = word1 & 0xffffu;
+    result.cell_height = word1 >> 16u;
+    result.part_code = word2 & 0xffffu;
+    result.flags = word2 >> 16u;
+    return result;
+}
+
+// P01 compatibility spelling. New code uses the canonical clipmap contract name.
+#define T3D_TERRAIN_STRIP_FLAG_SERPENTINE_ROWS T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS
+
+struct T3DTerrainStripVertex {
+    ivec2 grid;
+    uint part_code;
+};
+
+uint t3d_terrain_strip_vertices_per_run(uint cell_width) {
+    return cell_width * 2u + 4u;
+}
+
+uint t3d_terrain_strip_actual_vertex_count(uint cell_width, uint row_count) {
+    return t3d_terrain_strip_vertices_per_run(cell_width) * row_count;
+}
+
+T3DTerrainStripVertex t3d_terrain_strip_vertex_hot(
+        uint vertex_id,
+        uint cell_width,
+        uint actual_vertex_count,
+        uint part_code,
+        uint serpentine_rows,
+        uint base_row_parity) {
+    T3DTerrainStripVertex result;
+    result.part_code = part_code;
+
+    uint vertices_per_run = t3d_terrain_strip_vertices_per_run(cell_width);
+    uint safe_vertex = min(vertex_id, actual_vertex_count - 1u);
+    uint run = safe_vertex / vertices_per_run;
+    uint run_index = safe_vertex - run * vertices_per_run;
+
+    // P10: published strip clusters guarantee non-zero dimensions, so the
+    // production path can consume the prepacked actual count directly. Keep
+    // row reversal arithmetic scalar/branchless; serpentine_rows and
+    // base_row_parity are canonical 0/1 values.
+    uint reverse_row = serpentine_rows & ((run ^ base_row_parity) & 1u);
+    uint strip_lead = 1u + (serpentine_rows & (1u - reverse_row));
+    uint strip_index_unclamped = run_index - min(run_index, strip_lead);
+    uint strip_index = min(strip_index_unclamped, vertices_per_run - 3u);
+
+    uint x = strip_index >> 1u;
+    uint row_side = (strip_index & 1u) ^ (1u - serpentine_rows);
+    x += reverse_row * (cell_width - (x << 1u));
+    uint z = run + row_side;
+
+    result.grid = ivec2(int(x), int(z));
+    return result;
+}
+
+T3DTerrainStripVertex t3d_terrain_strip_vertex_with_base_parity(
+        uint vertex_id,
+        uint cell_width,
+        uint row_count,
+        uint part_code,
+        uint flags,
+        bool base_row_odd) {
+    T3DTerrainStripVertex result;
+    result.grid = ivec2(0);
+    result.part_code = part_code;
+
+    if (cell_width == 0u || row_count == 0u) {
+        return result;
+    }
+
+    uint actual_vertex_count = t3d_terrain_strip_actual_vertex_count(cell_width, row_count);
+    uint serpentine_rows = flags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS;
+    uint base_row_parity = base_row_odd ? 1u : 0u;
+    return t3d_terrain_strip_vertex_hot(
+        vertex_id, cell_width, actual_vertex_count, part_code, serpentine_rows, base_row_parity);
+}
+
+T3DTerrainStripVertex t3d_terrain_strip_vertex(
+        uint vertex_id,
+        uint cell_width,
+        uint row_count,
+        uint part_code,
+        uint flags) {
+    return t3d_terrain_strip_vertex_with_base_parity(vertex_id, cell_width, row_count, part_code, flags, false);
+}
+
+#endif // TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL

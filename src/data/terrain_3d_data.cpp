@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "data/terrain_3d_data.h"
+#include "streaming/terrain_3d_scope_timer.h"
 
 #include "Terrain3DConstants.h"
 #include "assets/terrain_3d_assets.h"
@@ -8,6 +9,7 @@
 #include "authoring/terrain_3d_editor.h"
 #include "authoring/terrain_3d_erosion_job.h"
 #include "authoring/terrain_3d_erosion_settings.h"
+#include "authoring/vt/terrain_3d_vt_godot_cooker.h"
 #include "core/logger.h"
 #include "core/terrain_3d_eastl_helpers.h"
 #include "data/terrain_3d_region_codec.h"
@@ -22,6 +24,7 @@
 #include "physics/terrain_3d_collision_surface_builder.h"
 #include "rendering/terrain_3d_compute.h"
 #include "rendering/terrain_3d_material.h"
+#include "rendering/rd/terrain_3d_render_coordinator.h"
 
 #include <math.h>
 #include <string.h>
@@ -153,55 +156,7 @@ EA_FORCE_INLINE static void t3dDataFnv1a64AppendF32( uint64_t &nHash, const floa
 	t3dDataFnv1a64AppendU32( nHash, bits );
 }
 
-class Terrain3DDataLastScopeTimer {
-	uint64_t m_nStartedUsec = 0u;
-	uint64_t *m_pElapsedUsec = NULL;
 
-public:
-	Terrain3DDataLastScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
-		nElapsedUsec = 0u;
-		if ( !bEnabled ) {
-			return;
-		}
-		m_pElapsedUsec = &nElapsedUsec;
-		Time *pTime = Time::get_singleton();
-		m_nStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-	}
-	~Terrain3DDataLastScopeTimer( void ) {
-		if ( !m_pElapsedUsec ) {
-			return;
-		}
-		Time *pTime = Time::get_singleton();
-		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_nStartedUsec;
-		*m_pElapsedUsec = finishedUsec >= m_nStartedUsec ? finishedUsec - m_nStartedUsec : 0u;
-	}
-};
-
-class Terrain3DDataProfileScopeTimer {
-	uint64_t m_nStartedUsec = 0u;
-	uint64_t *m_pElapsedUsec = NULL;
-	const uint64_t *m_pRequestUsec = NULL;
-	uint64_t *m_pEndToEndUsec = NULL;
-
-public:
-	EA_FORCE_INLINE
-	Terrain3DDataProfileScopeTimer( uint64_t &nElapsedUsec, const uint64_t &nRequestUsec, uint64_t &nEndToEndUsec ) :
-	        m_pElapsedUsec( &nElapsedUsec ), m_pRequestUsec( &nRequestUsec ), m_pEndToEndUsec( &nEndToEndUsec ) {
-		Time *pTime = Time::get_singleton();
-		m_nStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-	}
-
-	~Terrain3DDataProfileScopeTimer( void ) {
-		Time *pTime = Time::get_singleton();
-		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_nStartedUsec;
-		if ( m_pElapsedUsec ) {
-			*m_pElapsedUsec = MAX( *m_pElapsedUsec, finishedUsec - m_nStartedUsec );
-		}
-		if ( m_pEndToEndUsec && m_pRequestUsec && *m_pRequestUsec > 0u && finishedUsec >= *m_pRequestUsec ) {
-			*m_pEndToEndUsec = MAX( *m_pEndToEndUsec, finishedUsec - *m_pRequestUsec );
-		}
-	}
-};
 
 static uint32_t t3dDataReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	uint32_t value = 0u;
@@ -238,7 +193,7 @@ bool Terrain3DData::setRegionSizeInternal( void ) {
 		LOG( ERROR, "Unable to initialize instance-local active terrain storage." );
 		return false;
 	}
-	m_activeHeightResidency.markDirty();
+	m_residency.activeHeightResidency().markDirty();
 	return true;
 }
 
@@ -255,7 +210,7 @@ Error Terrain3DData::rehydrateActiveStorage( void ) {
 		return ERR_CANT_ACQUIRE_RESOURCE;
 	}
 	m_samplingStorage.refreshActiveGeneration();
-	m_activeHeightResidency.markDirty();
+	m_residency.activeHeightResidency().markDirty();
 	return OK;
 }
 
@@ -264,15 +219,15 @@ bool Terrain3DData::syncActiveRegion( const Vector2i &vLocation, const Terrain3D
 }
 
 void Terrain3DData::clear( void ) {
-	m_regionResidency.reset();
-	m_runtimePageStore.reset();
+	m_residency.resetRegionResidency();
+	m_runtimeArtifacts.reset();
 	m_samplingStorage.resetActive();
 	m_samplingStorage.resetResidentPool();
 	resetCpuRegionCache( false );
 	resetInstanceRegionCache( false );
 	resetMiddleHeightCache();
 	resetGpuRegionCache( true );
-	m_farSurfaceAtlasCache.reset();
+	m_residency.resetFarSurface();
 	LOG( INFO, "Clearing data" );
 	m_regionRepository.clear();
 	m_mapEditService.reset();
@@ -373,10 +328,10 @@ bool Terrain3DData::refreshImplicitMapState( void ) {
 }
 
 void Terrain3DData::syncCacheDefaultMaps( void ) {
-	m_gpuRegionCache.setTerrain( m_pTerrain );
-	m_gpuRegionCache.setDefaultMaps(
+	m_residency.gpuRegionCache().setTerrain( m_pTerrain );
+	m_residency.gpuRegionCache().setDefaultMaps(
 	        m_defaultHeightMap, m_defaultControlMap, m_defaultColorMap, m_defaultDerivedMap, m_bControlMapsImplicit, m_bColorMapsImplicit );
-	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
 }
 
 t3dFarSurfaceAtlasConfig_t Terrain3DData::getFarSurfaceAtlasConfig( void ) const {
@@ -601,7 +556,7 @@ Ref<Image> Terrain3DData::makeGpuRenderControlImage( const Vector2i &vLocation )
 			Ref<Terrain3DRegion> pLoadedSource;
 			const bool bNeedsSourceLoad =
 			        !pRegion || pRegion->isDeleted() || ( pRegion->hasChannel( TYPE_CONTROL ) && pRegion->getControlMap().is_null() );
-			if ( bNeedsSourceLoad && m_cpuRegionCache.loadSource( location, pLoadedSource ) ) {
+			if ( bNeedsSourceLoad && m_residency.cpuRegionCache().loadSource( location, pLoadedSource ) ) {
 				pRegion = pLoadedSource.ptr();
 			}
 			if ( !pRegion || pRegion->isDeleted() ) {
@@ -740,7 +695,7 @@ t3dResidencyFrameState_t Terrain3DData::makeResidencyFrameState( const Vector3 &
 		const t3dGpuCacheCoord_t clampedCenter = t3dGpuCacheClampCenter( { rawCenter.x, rawCenter.y } );
 		frame.m_residencyCenter = Vector2i( clampedCenter.m_nX, clampedCenter.m_nY );
 	}
-	frame.m_bCpuRegionCacheEnabled = m_cpuRegionCache.isEnabled();
+	frame.m_bCpuRegionCacheEnabled = m_residency.cpuRegionCache().isEnabled();
 	if ( !m_pTerrain ) {
 		return frame;
 	}
@@ -769,27 +724,27 @@ bool Terrain3DData::isRuntimePageWanted( void *const pContext, const Vector2i &r
 }
 
 uint64_t Terrain3DData::computeGpuRuntimePageSourceSignature( const Terrain3DRegion *const pRegion ) const {
-	return m_runtimePageStore.computeSourceSignature( pRegion, getRuntimePageConfig() );
+	return m_runtimeArtifacts.computeSourceSignature( pRegion, getRuntimePageConfig() );
 }
 
 bool Terrain3DData::readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const {
-	return m_runtimePageStore.readSourceSignature( rPagePath, nSignature );
+	return m_runtimeArtifacts.readSourceSignature( rPagePath, nSignature );
 }
 
 String Terrain3DData::getGpuRuntimePagePath( const Terrain3DRegion *const pRegion ) const {
-	return m_runtimePageStore.getPagePath( pRegion, m_pTerrain ? m_pTerrain->getDataDirectory() : String() );
+	return m_runtimeArtifacts.getPagePath( pRegion, m_pTerrain ? m_pTerrain->getDataDirectory() : String() );
 }
 
 void Terrain3DData::pollGpuRuntimePagePrepare( const bool bWait ) {
-	m_runtimePageStore.poll( bWait );
+	m_runtimeArtifacts.poll( bWait );
 }
 
 bool Terrain3DData::isGpuRuntimePagePreparePending( const Vector2i &vLocation ) const {
-	return m_runtimePageStore.isPending( vLocation );
+	return m_runtimeArtifacts.isPending( vLocation );
 }
 
 void Terrain3DData::requestGpuRuntimePage( const Vector2i &vLocation, const uint16_t nConsumers, const uint8_t nPriority ) {
-	m_runtimePageStore.request( vLocation, nConsumers, nPriority, m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() );
+	m_runtimeArtifacts.request( vLocation, nConsumers, nPriority, m_pTerrain && m_pTerrain->isGpuRegionCookedPagesEnabled() );
 }
 
 void Terrain3DData::serviceGpuRuntimePagePrepare( const t3dResidencyFrameState_t &rFrame ) {
@@ -799,7 +754,7 @@ void Terrain3DData::serviceGpuRuntimePagePrepare( const t3dResidencyFrameState_t
 	state.m_nStreamingGeneration = rFrame.m_nStreamingGeneration;
 	state.m_isWanted = &Terrain3DData::isRuntimePageWanted;
 	state.m_pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
-	m_runtimePageStore.service( state );
+	m_runtimeArtifacts.service( state );
 }
 
 bool Terrain3DData::takePreparedRuntimeHeight( const Vector2i &vLocation,
@@ -807,11 +762,11 @@ bool Terrain3DData::takePreparedRuntimeHeight( const Vector2i &vLocation,
         Ref<Image> &rHeight,
         const bool bMiddle,
         PackedByteArray *const pNativeHeightBytes ) {
-	return m_runtimePageStore.takeHeight( vLocation, nConsumer, rHeight, bMiddle, pNativeHeightBytes );
+	return m_runtimeArtifacts.takeHeight( vLocation, nConsumer, rHeight, bMiddle, pNativeHeightBytes );
 }
 
 bool Terrain3DData::takePreparedRuntimeInstance( const Vector2i &vLocation, Terrain3DInstanceStore &rStore ) {
-	return m_runtimePageStore.takeInstance( vLocation, rStore );
+	return m_runtimeArtifacts.takeInstance( vLocation, rStore );
 }
 
 bool Terrain3DData::takePreparedGpuRuntimePage( const Vector2i &vLocation,
@@ -823,7 +778,7 @@ bool Terrain3DData::takePreparedGpuRuntimePage( const Vector2i &vLocation,
         uint32_t &rMaterialMask,
         bool &bAttempted,
         uint64_t *const pRequestedUsec ) {
-	return m_runtimePageStore.takeGpuPage(
+	return m_runtimeArtifacts.takeGpuPage(
 	        vLocation, rHeight, rControl, rColor, rDerived, rMiddleComposite, rMaterialMask, bAttempted, pRequestedUsec );
 }
 
@@ -837,17 +792,17 @@ bool Terrain3DData::ensureCookedNodeDescriptors( const Vector2i &vLocation ) {
 	}
 	requestGpuRuntimePage( vLocation, RUNTIME_PAGE_CONSUMER_NODE_DESCRIPTORS, 0u );
 	PackedByteArray descriptors;
-	if ( !m_runtimePageStore.takeNodeDescriptors( vLocation, descriptors ) ) {
+	if ( !m_runtimeArtifacts.takeNodeDescriptors( vLocation, descriptors ) ) {
 		return false;
 	}
 	if ( descriptors.is_empty() ) {
 		return pRegion->getStreamedNodeCount() == 0;
 	}
-	return Terrain3DRuntimeBakeCodec::decodeNodeDescriptors( descriptors, m_runtimeWorldManifest, *pRegion );
+	return Terrain3DRuntimeBakeCodec::decodeNodeDescriptors( descriptors, m_runtimeArtifacts.worldManifest(), *pRegion );
 }
 
 int Terrain3DData::getStreamedNodeCapacityHint( const Vector2i &vLocation ) const {
-	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeArtifacts.worldManifest().findRegion( vLocation );
 	if ( pRecord ) {
 		return ( int )( pRecord->m_nStreamedNodeCount );
 	}
@@ -859,11 +814,11 @@ bool Terrain3DData::getCookedSceneDependencySpan(
         const Vector2i &vLocation, const uint16_t *&pDependencies, uint16_t &nDependencyCount ) const {
 	pDependencies = NULL;
 	nDependencyCount = 0u;
-	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeArtifacts.worldManifest().findRegion( vLocation );
 	if ( !pRecord || pRecord->m_nSceneDependencyCount == 0u ) {
 		return false;
 	}
-	const eastl::vector<uint16_t, Terrain3DEastlAllocator> &ids = m_runtimeWorldManifest.getRegionSceneDependencies();
+	const eastl::vector<uint16_t, Terrain3DEastlAllocator> &ids = m_runtimeArtifacts.worldManifest().getRegionSceneDependencies();
 	const uint32_t first = pRecord->m_nSceneDependencyFirst;
 	const uint32_t count = pRecord->m_nSceneDependencyCount;
 	if ( first > ids.size() || count > ids.size() - first ) {
@@ -875,19 +830,19 @@ bool Terrain3DData::getCookedSceneDependencySpan(
 }
 
 const String &Terrain3DData::getCookedSceneDependencyPath( const uint16_t nDependency ) const {
-	return m_runtimeWorldManifest.getSceneDependency( nDependency );
+	return m_runtimeArtifacts.worldManifest().getSceneDependency( nDependency );
 }
 
 PackedStringArray Terrain3DData::getCookedSceneDependencies( const Vector2i &vLocation ) const {
 	PackedStringArray dependencies;
-	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeWorldManifest.findRegion( vLocation );
+	const t3dRuntimeWorldRegionRecord_t *const pRecord = m_runtimeArtifacts.worldManifest().findRegion( vLocation );
 	if ( !pRecord ) {
 		return dependencies;
 	}
-	const eastl::vector<uint16_t, Terrain3DEastlAllocator> &ids = m_runtimeWorldManifest.getRegionSceneDependencies();
+	const eastl::vector<uint16_t, Terrain3DEastlAllocator> &ids = m_runtimeArtifacts.worldManifest().getRegionSceneDependencies();
 	const uint32_t end = pRecord->m_nSceneDependencyFirst + pRecord->m_nSceneDependencyCount;
 	for ( uint32_t index = pRecord->m_nSceneDependencyFirst; index < end && index < ids.size(); ++index ) {
-		const String &path = m_runtimeWorldManifest.getSceneDependency( ids[index] );
+		const String &path = m_runtimeArtifacts.worldManifest().getSceneDependency( ids[index] );
 		if ( !path.is_empty() ) {
 			dependencies.push_back( path );
 		}
@@ -901,7 +856,7 @@ void Terrain3DData::requestCookedCollisionTile( const Vector2i &vLocation, const
 
 bool Terrain3DData::takeCookedCollisionTile(
         const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask ) {
-	return m_runtimePageStore.takeCollision( vLocation, rHeight, rBounds, rHoleMask );
+	return m_runtimeArtifacts.takeCollision( vLocation, rHeight, rBounds, rHoleMask );
 }
 
 void Terrain3DData::requestCookedNavigationTile( const Vector2i &vLocation, const uint8_t nPriority ) {
@@ -909,7 +864,7 @@ void Terrain3DData::requestCookedNavigationTile( const Vector2i &vLocation, cons
 }
 
 bool Terrain3DData::takeCookedNavigationTile( const Vector2i &vLocation, PackedByteArray &rNavigation ) {
-	return m_runtimePageStore.takeNavigation( vLocation, rNavigation );
+	return m_runtimeArtifacts.takeNavigation( vLocation, rNavigation );
 }
 
 void Terrain3DData::requestCookedTerrainShadowMask( const Vector2i &vLocation, const uint8_t nPriority ) {
@@ -917,23 +872,23 @@ void Terrain3DData::requestCookedTerrainShadowMask( const Vector2i &vLocation, c
 }
 
 bool Terrain3DData::takeCookedTerrainShadowMask( const Vector2i &vLocation, Ref<Image> &rShadowMask ) {
-	return m_runtimePageStore.takeTerrainShadowMask( vLocation, rShadowMask );
+	return m_runtimeArtifacts.takeTerrainShadowMask( vLocation, rShadowMask );
 }
 
 bool Terrain3DData::loadCookedCollisionTileNow(
         const Vector2i &vLocation, PackedByteArray &rHeight, PackedByteArray &rBounds, PackedByteArray &rHoleMask ) const {
-	return m_runtimePageStore.loadCollisionNow( vLocation, getRuntimePageConfig(), rHeight, rBounds, rHoleMask );
+	return m_runtimeArtifacts.loadCollisionNow( vLocation, getRuntimePageConfig(), rHeight, rBounds, rHoleMask );
 }
 
 bool Terrain3DData::loadCookedNavigationTileNow( const Vector2i &vLocation,
         PackedByteArray &rNavigation,
         PackedByteArray *const pCollisionHeight,
         PackedByteArray *const pMinMaxHeight ) const {
-	return m_runtimePageStore.loadNavigationNow( vLocation, getRuntimePageConfig(), rNavigation, pCollisionHeight, pMinMaxHeight );
+	return m_runtimeArtifacts.loadNavigationNow( vLocation, getRuntimePageConfig(), rNavigation, pCollisionHeight, pMinMaxHeight );
 }
 
 bool Terrain3DData::loadCookedLightingReceiversNow( const Vector2i &vLocation, PackedByteArray &rReceivers ) const {
-	return m_runtimePageStore.loadLightingReceiversNow( vLocation, getRuntimePageConfig(), rReceivers );
+	return m_runtimeArtifacts.loadLightingReceiversNow( vLocation, getRuntimePageConfig(), rReceivers );
 }
 
 bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String *const pError ) {
@@ -949,7 +904,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 	const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig();
 	// Collision and edge-derived cook data can touch the positive X/Z neighbor
 	// border. Keep only that 2x2 source footprint resident while the page is built.
-	if ( m_cpuRegionCache.isEnabled() ) {
+	if ( m_residency.cpuRegionCache().isEnabled() ) {
 		for ( int dz = 0; dz <= 1; ++dz ) {
 			for ( int dx = 0; dx <= 1; ++dx ) {
 				const Vector2i neighbor = location + Vector2i( dx, dz );
@@ -974,7 +929,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 		payload.m_color = makeGpuColorImage( pRegion->getColorMap() );
 	}
 	payload.m_middleHeight =
-	        m_middleHeightRegionCache.makeHeightImageForDivisor( location, runtime_page_config.m_nMiddleHeightDivisor );
+	        m_residency.middleHeightRegionCache().makeHeightImageForDivisor( location, runtime_page_config.m_nMiddleHeightDivisor );
 	payload.m_derived = pRegion->getDerivedNormalSlopeMap();
 	if ( payload.m_derived.is_null() ) {
 		regenerateDerivedMaps( { location } );
@@ -1056,7 +1011,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 	payload.m_collisionBounds = Terrain3DRuntimeBakeCodec::encodeCollisionBounds( collision_min, collision_max );
 
 	if ( pRegion->getStreamedNodeCount() > 0 ) {
-		payload.m_nodeDescriptors = Terrain3DRuntimeBakeCodec::encodeNodeDescriptors( *pRegion, m_runtimeWorldManifest );
+		payload.m_nodeDescriptors = Terrain3DRuntimeBakeCodec::encodeNodeDescriptors( *pRegion, m_runtimeArtifacts.worldManifest() );
 		if ( payload.m_nodeDescriptors.is_empty() ) {
 			if ( pError ) {
 				*pError = "streamed-node descriptor bake failed";
@@ -1077,7 +1032,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 		}
 		return false;
 	}
-	return m_runtimePageStore.writePage( pRegion, runtime_page_config, payload, pError );
+	return m_runtimeArtifacts.writePage( pRegion, runtime_page_config, payload, pError );
 }
 
 int Terrain3DData::getRegionSlotReserve( void ) const {
@@ -1085,7 +1040,7 @@ int Terrain3DData::getRegionSlotReserve( void ) const {
 }
 
 bool Terrain3DData::canUpdateRegionSlotsIncrementally( void ) const {
-	if ( m_gpuRegionCache.isEnabled() ) {
+	if ( m_residency.gpuRegionCache().isEnabled() ) {
 		return false;
 	}
 	const int slotCount = m_regionRepository.getSlotCount();
@@ -1097,32 +1052,32 @@ bool Terrain3DData::canUpdateRegionSlotsIncrementally( void ) const {
 }
 
 int Terrain3DData::calculateGpuRegionRequiredCorePagesForLods( const int nDetailLods ) const {
-	return m_gpuRegionCache.calculateRequiredCorePagesForLods( nDetailLods );
+	return m_residency.gpuRegionCache().calculateRequiredCorePagesForLods( nDetailLods );
 }
 
 int Terrain3DData::calculateGpuRegionCapacityForLods( const int nDetailLods ) const {
-	return m_gpuRegionCache.calculateCapacityForLods( nDetailLods );
+	return m_residency.gpuRegionCache().calculateCapacityForLods( nDetailLods );
 }
 
 bool Terrain3DData::isGpuRegionColorChannelEnabled( void ) const {
-	return m_gpuRegionCache.isColorChannelEnabled();
+	return m_residency.gpuRegionCache().isColorChannelEnabled();
 }
 
 bool Terrain3DData::isGpuRegionDerivedChannelEnabled( void ) const {
-	return m_gpuRegionCache.isDerivedChannelEnabled();
+	return m_residency.gpuRegionCache().isDerivedChannelEnabled();
 }
 
 void Terrain3DData::resetGpuRegionCache( const bool bClearTextures ) {
-	m_gpuRegionCache.reset( bClearTextures );
+	m_residency.resetGpu( bClearTextures );
 }
 
 bool Terrain3DData::isFarAtlasRequired( void ) const {
-	return m_gpuRegionCache.isEnabled() || ( m_pTerrain && m_pTerrain->isRuntimeShaderTieringActive() );
+	return m_residency.gpuRegionCache().isEnabled() || ( m_pTerrain && m_pTerrain->isRuntimeShaderTieringActive() );
 }
 
 bool Terrain3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
 	const t3dFarSurfaceAtlasConfig_t config = getFarSurfaceAtlasConfig();
-	m_farSurfaceAtlasCache.setConfig( config );
+	m_residency.farSurfaceAtlasCache().setConfig( config );
 	const int mapSize = s_nRegionMapSize;
 	LOG( INFO,
 	        "Cooking far atlases: height ",
@@ -1135,31 +1090,31 @@ bool Terrain3DData::writeCookedGpuFarAtlases( const String &rDirectory ) {
 	        mapSize > 0 ? config.m_nSurfaceAtlasSide / mapSize : 0,
 	        " samples/region), region map ",
 	        mapSize );
-	return m_farSurfaceAtlasCache.writeCooked( rDirectory );
+	return m_residency.farSurfaceAtlasCache().writeCooked( rDirectory );
 }
 
 void Terrain3DData::markAllGpuFarRegionsDirty( const t3dMapType_t eMapType ) {
-	m_farSurfaceAtlasCache.markAllDirty( eMapType );
+	m_residency.farSurfaceAtlasCache().markAllDirty( eMapType );
 }
 
 void Terrain3DData::markGpuFarRegionDirty( const Vector2i &vLocation, const t3dMapType_t eMapType ) {
-	m_farSurfaceAtlasCache.markRegionDirty( vLocation, eMapType );
+	m_residency.farSurfaceAtlasCache().markRegionDirty( vLocation, eMapType );
 }
 
 void Terrain3DData::armPendingGpuRegionRetirements( void ) {
-	m_gpuRegionCache.armPendingRetirements();
+	m_residency.gpuRegionCache().armPendingRetirements();
 }
 
 void Terrain3DData::invalidateGpuRegionLocation( const Vector2i &vLocation ) {
-	m_gpuRegionCache.invalidate( vLocation );
+	m_residency.gpuRegionCache().invalidate( vLocation );
 }
 
 void Terrain3DData::queueGpuRegionRepublish( const Vector2i &vLocation ) {
-	m_gpuRegionCache.queueRepublish( vLocation );
+	m_residency.gpuRegionCache().queueRepublish( vLocation );
 }
 
 bool Terrain3DData::republishGpuRegionLocation( const Vector2i &vLocation ) {
-	const bool bChanged = m_gpuRegionCache.republish( vLocation, getComputeBackendIfCreated() );
+	const bool bChanged = m_residency.gpuRegionCache().republish( vLocation, getComputeBackendIfCreated() );
 	if ( bChanged ) {
 		emitGpuRegionMapChanged();
 	}
@@ -1167,120 +1122,120 @@ bool Terrain3DData::republishGpuRegionLocation( const Vector2i &vLocation ) {
 }
 
 void Terrain3DData::resetMiddleHeightCache( void ) {
-	m_middleHeightRegionCache.reset();
+	m_residency.resetMiddleHeight();
 }
 
 bool Terrain3DData::configureMiddleHeightCache( void ) {
-	return m_middleHeightRegionCache.configure( getMiddleHeightCacheConfig() );
+	return m_residency.middleHeightRegionCache().configure( getMiddleHeightCacheConfig() );
 }
 
 void Terrain3DData::updateMiddleHeightResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
-	m_middleHeightRegionCache.update( rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getMiddleHeightCacheConfig() );
+	m_residency.middleHeightRegionCache().update( rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getMiddleHeightCacheConfig() );
 }
 
 Dictionary Terrain3DData::getMiddleHeightCacheStats( void ) const {
-	return m_middleHeightRegionCache.getStatsDictionary();
+	return m_residency.middleHeightRegionCache().getStatsDictionary();
 }
 
 int Terrain3DData::fillGpuMaterialPriorityIds( uint8_t *const pIds, const int nCapacity ) const {
-	return m_gpuRegionCache.fillMaterialPriorityIds( pIds, nCapacity );
+	return m_residency.gpuRegionCache().fillMaterialPriorityIds( pIds, nCapacity );
 }
 
 size_t Terrain3DData::getMiddleHeightCacheReservedBytes( void ) const {
-	return m_middleHeightRegionCache.getReservedBytes();
+	return m_residency.middleHeightRegionCache().getReservedBytes();
 }
 
 void Terrain3DData::resetCpuRegionCache( const bool bReleaseCleanMaps ) {
-	m_cpuRegionCache.reset( bReleaseCleanMaps );
+	m_residency.resetCpu( bReleaseCleanMaps );
 }
 
 void Terrain3DData::invalidateCpuRegionLocation( const Vector2i &vLocation ) {
-	m_cpuRegionCache.invalidate( vLocation );
+	m_residency.cpuRegionCache().invalidate( vLocation );
 }
 
 bool Terrain3DData::requestCpuRegionSourceAsync( const Vector2i &vLocation ) {
-	return m_cpuRegionCache.requestSourceAsync( vLocation );
+	return m_residency.cpuRegionCache().requestSourceAsync( vLocation );
 }
 
 bool Terrain3DData::ensureCpuRegionResidentInternal( const Vector2i &vLocation, const bool bDemandLoad ) {
-	return m_cpuRegionCache.ensureResident( vLocation, bDemandLoad );
+	return m_residency.cpuRegionCache().ensureResident( vLocation, bDemandLoad );
 }
 
 void Terrain3DData::setRuntimePageBudgetOverrides( const int nGpuUploadLayers, const int nCpuLoadLayers, const int nInstanceLoadPages ) {
-	m_regionResidency.setBudgetOverrides( nGpuUploadLayers, nCpuLoadLayers, nInstanceLoadPages );
+	m_residency.setBudgetOverrides( nGpuUploadLayers, nCpuLoadLayers, nInstanceLoadPages );
 }
 
 void Terrain3DData::clearRuntimePageBudgetOverrides( void ) {
-	m_regionResidency.clearBudgetOverrides();
+	m_residency.clearBudgetOverrides();
 }
 
 int Terrain3DData::getEffectiveGpuRegionUploadBudgetLayers( void ) const {
-	return m_regionResidency.effectiveGpuUploadLayers( m_gpuRegionCache.getUploadBudgetLayers() );
+	return m_residency.effectiveGpuUploadLayers();
 }
 
 int Terrain3DData::getEffectiveCpuRegionLoadBudgetLayers( void ) const {
-	return m_regionResidency.effectiveCpuLoadLayers( m_cpuRegionCache.getLoadBudgetLayers() );
+	return m_residency.effectiveCpuLoadLayers();
 }
 
 int Terrain3DData::getEffectiveInstanceRegionLoadBudgetPages( void ) const {
-	return m_regionResidency.effectiveInstanceLoadPages( m_instanceRegionCache.getLoadBudgetPages() );
+	return m_residency.effectiveInstanceLoadPages();
 }
 
 void Terrain3DData::configureCpuRegionCache( const bool bEnabled, const int nBudgetMb, const int nLoadLayers, const int nLoadBudgetMb ) {
-	m_cpuRegionCache.configure( bEnabled, nBudgetMb, nLoadLayers, nLoadBudgetMb );
+	m_residency.cpuRegionCache().configure( bEnabled, nBudgetMb, nLoadLayers, nLoadBudgetMb );
 }
 
 bool Terrain3DData::ensureCpuRegionResident( const Vector2i &vLocation ) {
-	return m_cpuRegionCache.ensureResident( vLocation, true );
+	return m_residency.cpuRegionCache().ensureResident( vLocation, true );
 }
 
 bool Terrain3DData::ensureCpuSampleArea( const Vector3 &rWorldPosition, const int nRadiusTexels ) {
-	return m_cpuRegionCache.ensureSampleArea( rWorldPosition, nRadiusTexels );
+	return m_residency.cpuRegionCache().ensureSampleArea( rWorldPosition, nRadiusTexels );
 }
 
 void Terrain3DData::updateCpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
-	m_cpuRegionCache.update( rFrame, bForce, getEffectiveCpuRegionLoadBudgetLayers() );
+	m_residency.cpuRegionCache().update( rFrame, bForce, getEffectiveCpuRegionLoadBudgetLayers() );
 }
 
 Dictionary Terrain3DData::getCpuRegionCacheStatsFast( void ) const {
-	return m_cpuRegionCache.getStatsDictionary( false, getEffectiveCpuRegionLoadBudgetLayers() );
+	return m_residency.cpuRegionCache().getStatsDictionary( false, getEffectiveCpuRegionLoadBudgetLayers() );
 }
 
 Dictionary Terrain3DData::getCpuRegionCacheStats( void ) const {
-	return m_cpuRegionCache.getStatsDictionary( true, getEffectiveCpuRegionLoadBudgetLayers() );
+	return m_residency.cpuRegionCache().getStatsDictionary( true, getEffectiveCpuRegionLoadBudgetLayers() );
 }
 
 void Terrain3DData::emitGpuRegionMapChanged( void ) {
 	if ( m_bStartupBulkLoad ) {
 		return;
 	}
-	m_gpuRegionCache.recordPageTableUpdate();
+	m_residency.gpuRegionCache().recordPageTableUpdate();
 	emit_signal( "gpu_region_page_table_changed" );
 	armPendingGpuRegionRetirements();
 }
 
 void Terrain3DData::resetInstanceRegionCache( const bool bRestoreAll ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	m_instanceRegionCache.reset( bRestoreAll, &changes );
+	m_residency.instanceRegionCache().reset( bRestoreAll, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
 
 void Terrain3DData::invalidateInstanceRegionLocation( const Vector2i &vLocation ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	m_instanceRegionCache.invalidate( vLocation, &changes );
+	m_residency.instanceRegionCache().invalidate( vLocation, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
 
 bool Terrain3DData::ensureInstanceRegionResidentInternal( const Vector2i &vLocation, const bool bDemandLoad ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	const bool bReady = m_instanceRegionCache.ensureResident( vLocation, bDemandLoad, &changes );
+	const bool bReady = m_residency.instanceRegionCache().ensureResident( vLocation, bDemandLoad, &changes );
 	applyInstanceRegionCacheChanges( changes );
 	return bReady;
 }
 
 bool Terrain3DData::evictInstanceRegion( const Vector2i &vLocation ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	const bool bEvicted = m_instanceRegionCache.evict( vLocation, &changes );
+	const bool bEvicted = m_residency.instanceRegionCache().evict( vLocation, &changes );
 	applyInstanceRegionCacheChanges( changes );
 	return bEvicted;
 }
@@ -1288,13 +1243,13 @@ bool Terrain3DData::evictInstanceRegion( const Vector2i &vLocation ) {
 void Terrain3DData::configureInstanceRegionCache(
         const bool bEnabled, const int nBudgetMb, const int nLoadPages, const int nLoadBudgetMb ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	m_instanceRegionCache.configure( bEnabled, nBudgetMb, nLoadPages, nLoadBudgetMb, &changes );
+	m_residency.instanceRegionCache().configure( bEnabled, nBudgetMb, nLoadPages, nLoadBudgetMb, &changes );
 	applyInstanceRegionCacheChanges( changes );
 }
 
 void Terrain3DData::updateInstanceRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
 	t3dInstanceRegionCacheChanges_t changes;
-	m_instanceRegionCache.update( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages(), changes );
+	m_residency.instanceRegionCache().update( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages(), changes );
 	applyInstanceRegionCacheChanges( changes );
 }
 
@@ -1303,7 +1258,7 @@ void Terrain3DData::serviceColdInstanceResidencyInternal( const t3dResidencyFram
 	// owner-controlled cold service, then service again so emitted requests can
 	// launch the next fixed-capacity prepare batch.
 	serviceGpuRuntimePagePrepare( rFrame );
-	m_instanceRegionCache.serviceColdMaterialization( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages() );
+	m_residency.instanceRegionCache().serviceColdMaterialization( rFrame, bForce, getEffectiveInstanceRegionLoadBudgetPages() );
 	serviceGpuRuntimePagePrepare( rFrame );
 }
 
@@ -1324,23 +1279,23 @@ void Terrain3DData::updateGpuRegionResidency( const Vector3 &rWorldPosition, con
 }
 
 void Terrain3DData::updateRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
-	m_regionResidency.update( *this, makeResidencyFrameState( rWorldPosition ), bForce );
+	m_residency.updateRegionResidency( *this, makeResidencyFrameState( rWorldPosition ), bForce );
 }
 
 void Terrain3DData::resetRuntimeStreamingCaches( void ) {
-	m_regionResidency.resetRuntimeCaches( *this );
+	m_residency.resetRuntimeCaches( *this );
 }
 
 void Terrain3DData::appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const {
-	m_regionResidency.appendRuntimeProfileSample( *this, rSample );
+	m_residency.appendRuntimeProfileSample( *this, rSample );
 }
 
 Dictionary Terrain3DData::getInstanceRegionCacheStatsFast( void ) const {
-	return m_instanceRegionCache.getStatsDictionary( false, getEffectiveInstanceRegionLoadBudgetPages() );
+	return m_residency.instanceRegionCache().getStatsDictionary( false, getEffectiveInstanceRegionLoadBudgetPages() );
 }
 
 Dictionary Terrain3DData::getInstanceRegionCacheStats( void ) const {
-	return m_instanceRegionCache.getStatsDictionary( true, getEffectiveInstanceRegionLoadBudgetPages() );
+	return m_residency.instanceRegionCache().getStatsDictionary( true, getEffectiveInstanceRegionLoadBudgetPages() );
 }
 
 void Terrain3DData::updateMapsBounded( const t3dMapType_t eMapType, const bool bAllRegions ) {
@@ -1349,7 +1304,7 @@ void Terrain3DData::updateMapsBounded( const t3dMapType_t eMapType, const bool b
 	if ( m_regionRepository.isRegionMapDirty() ) {
 		m_regionRepository.rebuildRegionMapFromSlots();
 		bTopologyChanged = true;
-		m_gpuRegionCache.markSelectionDirty();
+		m_residency.gpuRegionCache().markSelectionDirty();
 		if ( !m_bStartupBulkLoad ) {
 			emit_signal( "region_map_changed" );
 		}
@@ -1357,16 +1312,16 @@ void Terrain3DData::updateMapsBounded( const t3dMapType_t eMapType, const bool b
 
 	ensureDefaultMaps();
 	bool bPhysicalMappingChanged = false;
-	if ( bAllRegions && m_gpuRegionCache.isTexturesReady() ) {
-		bPhysicalMappingChanged = m_gpuRegionCache.republishAllResidents( getComputeBackendIfCreated() );
+	if ( bAllRegions && m_residency.gpuRegionCache().isTexturesReady() ) {
+		bPhysicalMappingChanged = m_residency.gpuRegionCache().republishAllResidents( getComputeBackendIfCreated() );
 	}
 
 	if ( eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX ) {
 		calcHeightRange();
 	}
 
-	if ( bImplicitStateChanged || bTopologyChanged || !m_gpuRegionCache.isTexturesReady() ) {
-		m_gpuRegionCache.markSelectionDirty();
+	if ( bImplicitStateChanged || bTopologyChanged || !m_residency.gpuRegionCache().isTexturesReady() ) {
+		m_residency.gpuRegionCache().markSelectionDirty();
 		const Vector3 center = m_pTerrain ? m_pTerrain->getClipmapTargetPosition() : Vector3();
 		updateGpuRegionResidency( center, false );
 	}
@@ -1418,7 +1373,7 @@ TypedArray<Vector2i> Terrain3DData::getRegionLocations( void ) const {
 
 TypedArray<Image> Terrain3DData::getActiveMaps( const t3dMapType_t eMapType ) const {
 	TypedArray<Image> maps;
-	if ( m_cpuRegionCache.isEnabled() ) {
+	if ( m_residency.cpuRegionCache().isEnabled() ) {
 		LOG( ERROR,
 		        "Whole-world map arrays are unavailable while bounded CPU residency is enabled. "
 		        "Page one region with ensure_cpu_region_resident() and read that Terrain3DRegion, or disable the CPU "
@@ -1471,22 +1426,8 @@ void Terrain3DData::copyPasteDfr(
 Terrain3DData::Terrain3DData( void ) :
         m_mapEditService( &m_regionRepository, &m_samplingStorage ),
         m_regionPersistence( &m_regionRepository ),
-        m_runtimePageStore( &m_regionRepository, &m_regionPersistence ),
-        m_cpuRegionCache( &m_regionRepository, &m_regionPersistence, &m_samplingStorage, &m_runtimePageStore ),
-        m_instanceRegionCache( &m_regionRepository, &m_runtimePageStore ),
-        m_middleHeightRegionCache( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore ),
-        m_gpuRegionCache( m_regionRepository, m_samplingStorage, m_mapEditService, m_runtimePageStore, m_cpuRegionCache ),
-        m_farSurfaceAtlasCache( &m_regionRepository, &m_samplingStorage, &m_cpuRegionCache ),
-        m_activeHeightResidency( &m_regionRepository, &m_samplingStorage, &m_runtimePageStore ),
-        m_regionResidency( &m_regionRepository,
-                &m_samplingStorage,
-                &m_runtimePageStore,
-                &m_activeHeightResidency,
-                &m_cpuRegionCache,
-                &m_instanceRegionCache,
-                &m_middleHeightRegionCache,
-                &m_gpuRegionCache,
-                &m_farSurfaceAtlasCache ) {
+        m_runtimeArtifacts( &m_regionRepository, &m_regionPersistence ),
+        m_residency( m_regionRepository, m_samplingStorage, m_mapEditService, m_regionPersistence, m_runtimeArtifacts ) {
 }
 
 
@@ -1503,7 +1444,7 @@ bool Terrain3DData::bindRuntimeAllocatorInternal( Terrain3DMemoryZone *const pZo
 	// bootstrap allocation deliberately because those objects can outlive the
 	// Terrain3D runtime memory image. Runtime-only owners bind explicitly in their
 	// own initialization paths.
-	if ( !m_samplingStorage.bindRuntimeAllocator( pZone ) || !m_runtimePageStore.bindRuntimeAllocator( pZone, ePolicy ) ) {
+	if ( !m_samplingStorage.bindRuntimeAllocator( pZone ) || !m_runtimeArtifacts.bindRuntimeAllocator( pZone, ePolicy ) ) {
 		return false;
 	}
 	return true;
@@ -1540,39 +1481,39 @@ void Terrain3DData::configureGpuRegionCache( const bool bEnabled,
         const int nSparePages,
         const int nRetireFrames ) {
 	ensureDefaultMaps();
-	m_gpuRegionCache.setTerrain( m_pTerrain );
+	m_residency.gpuRegionCache().setTerrain( m_pTerrain );
 	syncCacheDefaultMaps();
 	const bool bStorageChanged =
-	        m_gpuRegionCache.configure( bEnabled, nBudgetBytes, nUploadLayers, nUploadBudgetMb, nSparePages, nRetireFrames );
-	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
+	        m_residency.gpuRegionCache().configure( bEnabled, nBudgetBytes, nUploadLayers, nUploadBudgetMb, nSparePages, nRetireFrames );
+	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
 	if ( bStorageChanged && m_pTerrain && s_nRegionSize > 0 ) {
 		updateMaps( REGION_TYPE_MAX, true, false );
 	}
 }
 
 void Terrain3DData::updateGpuRegionResidencyInternal( const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
-	m_farSurfaceAtlasCache.resetFrameStats();
+	m_residency.farSurfaceAtlasCache().resetFrameStats();
 	if ( isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
 	const t3dGpuRegionCacheUpdateResult_t result =
-	        m_gpuRegionCache.update( rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getComputeBackendIfCreated() );
+	        m_residency.gpuRegionCache().update( rFrame, bForce, getEffectiveGpuRegionUploadBudgetLayers(), getComputeBackendIfCreated() );
 	if ( result.m_bPageTableChanged ) {
 		emitGpuRegionMapChanged();
 	}
 }
 
 void Terrain3DData::invalidateGpuFarSurface( void ) {
-	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
-	m_farSurfaceAtlasCache.invalidateSurface();
-	if ( isFarAtlasRequired() && !m_gpuRegionCache.isEnabled() ) {
+	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
+	m_residency.farSurfaceAtlasCache().invalidateSurface();
+	if ( isFarAtlasRequired() && !m_residency.gpuRegionCache().isEnabled() ) {
 		ensureFarAtlases();
 	}
 }
 
 void Terrain3DData::invalidateGpuFarAtlasLayout( void ) {
-	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
-	m_farSurfaceAtlasCache.invalidateLayout();
+	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
+	m_residency.farSurfaceAtlasCache().invalidateLayout();
 	if ( isFarAtlasRequired() && m_samplingStorage.isActiveOwner() && s_nRegionSize > 0 && s_nRegionMapSize > 0 ) {
 		ensureFarAtlases();
 	}
@@ -1582,8 +1523,8 @@ bool Terrain3DData::ensureFarAtlases( void ) {
 	if ( !isFarAtlasRequired() || !m_samplingStorage.isActiveOwner() || s_nRegionSize <= 0 || s_nRegionMapSize <= 0 ) {
 		return false;
 	}
-	m_farSurfaceAtlasCache.setConfig( getFarSurfaceAtlasConfig() );
-	const bool bReady = m_farSurfaceAtlasCache.ensure();
+	m_residency.farSurfaceAtlasCache().setConfig( getFarSurfaceAtlasConfig() );
+	const bool bReady = m_residency.farSurfaceAtlasCache().ensure();
 	if ( bReady && m_pTerrain ) {
 		const Ref<Terrain3DMaterial> pMaterial = m_pTerrain->getMaterial();
 		if ( pMaterial.is_valid() && pMaterial->isInitializedFor( m_pTerrain ) ) {
@@ -1632,17 +1573,17 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 			cell["desired_class"] = state == TERRAIN3D_REGION_STREAMING_ACTIVE
 			        ? 1
 			        : ( state == TERRAIN3D_REGION_STREAMING_HOT ? 2 : ( predicted ? 3 : 0 ) );
-			const int gpu_slot = m_gpuRegionCache.getLayerForLocation( location );
+			const int gpu_slot = m_residency.gpuRegionCache().getLayerForLocation( location );
 			cell["gpu_resident"] = gpu_slot >= 0;
 			cell["gpu_layer"] = gpu_slot;
-			cell["middle_height_resident"] = m_middleHeightRegionCache.isResident( location );
-			cell["cpu_resident"] = m_cpuRegionCache.isResident( location );
-			cell["instance_resident"] = m_instanceRegionCache.isResident( location );
-			cell["prepared"] = m_runtimePageStore.isPrepared( location );
+			cell["middle_height_resident"] = m_residency.middleHeightRegionCache().isResident( location );
+			cell["cpu_resident"] = m_residency.cpuRegionCache().isResident( location );
+			cell["instance_resident"] = m_residency.instanceRegionCache().isResident( location );
+			cell["prepared"] = m_runtimeArtifacts.isPrepared( location );
 			cell["prepare_pending"] = isGpuRuntimePagePreparePending( location );
-			cell["gpu_slot_state"] = m_gpuRegionCache.getSlotStateForLocation( location );
-			cell["far_height_dirty"] = m_farSurfaceAtlasCache.isRegionHeightDirty( location );
-			cell["far_color_dirty"] = m_farSurfaceAtlasCache.isRegionColorDirty( location );
+			cell["gpu_slot_state"] = m_residency.gpuRegionCache().getSlotStateForLocation( location );
+			cell["far_height_dirty"] = m_residency.farSurfaceAtlasCache().isRegionHeightDirty( location );
+			cell["far_color_dirty"] = m_residency.farSurfaceAtlasCache().isRegionColorDirty( location );
 			cells[write_index++] = cell;
 		}
 	}
@@ -1659,8 +1600,8 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid( const int nRadius ) const {
 }
 
 Dictionary Terrain3DData::getGpuRegionCacheStatsFast( void ) const {
-	Dictionary stats = m_gpuRegionCache.getStatsDictionary( false );
-	const Dictionary farStats = m_farSurfaceAtlasCache.getStatsDictionary();
+	Dictionary stats = m_residency.gpuRegionCache().getStatsDictionary( false );
+	const Dictionary farStats = m_residency.farSurfaceAtlasCache().getStatsDictionary();
 	const Array keys = farStats.keys();
 	for ( int index = 0; index < keys.size(); ++index ) {
 		stats[keys[index]] = farStats[keys[index]];
@@ -1669,20 +1610,42 @@ Dictionary Terrain3DData::getGpuRegionCacheStatsFast( void ) const {
 }
 
 bool Terrain3DData::isAuthoringGpuFullResidencyPossible( void ) const {
-	return m_gpuRegionCache.isAuthoringFullResidencyPossible();
+	return m_residency.gpuRegionCache().isAuthoringFullResidencyPossible();
 }
 
 bool Terrain3DData::isAuthoringGpuReadbackSafe( void ) const {
-	return m_gpuRegionCache.isAuthoringReadbackSafe();
+	return m_residency.gpuRegionCache().isAuthoringReadbackSafe();
 }
 
 Dictionary Terrain3DData::getStartupLoadStats( void ) const {
-	return m_regionPersistence.getStartupLoadStatsDictionary();
+	Dictionary stats = m_regionPersistence.getStartupLoadStatsDictionary();
+	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
+	stats["startup_generation"] = ( int64_t )( m_nStartupGenerationLast );
+	const t3dStartupStage_t eStartupStage = startup.m_eStage;
+	stats["startup_stage"] = ( int64_t )( eStartupStage );
+	stats["startup_stage_name"] = String( t3dStartupStageName( eStartupStage ) );
+	stats["startup_state_generation"] = ( int64_t )( startup.m_nGeneration );
+	stats["startup_completed_units"] = ( int64_t )( startup.m_nCompletedUnits );
+	stats["startup_total_units"] = ( int64_t )( startup.m_nTotalUnits );
+	stats["startup_start_usec"] = ( int64_t )( startup.m_nStartUsec );
+	stats["startup_end_usec"] = ( int64_t )( startup.m_nEndUsec );
+	stats["initialize_count"] = ( int64_t )( m_nStartupInitializeCount );
+	stats["initialize_usec_last"] = ( int64_t )( m_nStartupInitializeUsecLast );
+	stats["directory_load_count"] = ( int64_t )( m_nStartupDirectoryLoadCount );
+	stats["directory_load_usec_last"] = ( int64_t )( m_nStartupDirectoryLoadUsecLast );
+	stats["rehydrate_count"] = ( int64_t )( m_nStartupRehydrateCount );
+	stats["rehydrate_usec_last"] = ( int64_t )( m_nStartupRehydrateUsecLast );
+	stats["startup_region_count"] = ( int64_t )( m_nStartupRegionCountLast );
+	stats["startup_bytes_read"] = ( int64_t )( m_nStartupBytesReadLast );
+	const uint64_t nNowUsec = Time::get_singleton() ? Time::get_singleton()->get_ticks_usec() : 0u;
+	stats["startup_elapsed_ms"] = ( double )( t3dStartupDomainElapsedUsec( startup, nNowUsec ) ) / 1000.0;
+	stats["startup_ready"] = eStartupStage == T3D_STARTUP_COMMITTED;
+	return stats;
 }
 
 Dictionary Terrain3DData::getGpuRegionCacheStats( void ) const {
-	Dictionary stats = m_gpuRegionCache.getStatsDictionary( true );
-	const Dictionary farStats = m_farSurfaceAtlasCache.getStatsDictionary();
+	Dictionary stats = m_residency.gpuRegionCache().getStatsDictionary( true );
+	const Dictionary farStats = m_residency.farSurfaceAtlasCache().getStatsDictionary();
 	const Array keys = farStats.keys();
 	for ( int index = 0; index < keys.size(); ++index ) {
 		stats[keys[index]] = farStats[keys[index]];
@@ -1698,35 +1661,35 @@ Dictionary Terrain3DData::getGpuRegionCacheStats( void ) const {
 }
 
 size_t Terrain3DData::getGpuRegionCacheReservedBytes( void ) const {
-	return m_gpuRegionCache.getReservedBytes();
+	return m_residency.gpuRegionCache().getReservedBytes();
 }
 
 size_t Terrain3DData::getGpuRegionCacheMinimumBytes( void ) const {
-	return m_gpuRegionCache.getMinimumBytes();
+	return m_residency.gpuRegionCache().getMinimumBytes();
 }
 
 size_t Terrain3DData::getGpuRegionCacheHardCapBytes( void ) const {
-	return m_gpuRegionCache.getHardCapBytes();
+	return m_residency.gpuRegionCache().getHardCapBytes();
 }
 
 size_t Terrain3DData::getCpuRegionCacheReservedBytes( void ) const {
-	return m_cpuRegionCache.getReservedBytes();
+	return m_residency.cpuRegionCache().getReservedBytes();
 }
 
 size_t Terrain3DData::getCpuRegionCacheMinimumBytes( void ) const {
-	return m_cpuRegionCache.getMinimumBytes();
+	return m_residency.cpuRegionCache().getMinimumBytes();
 }
 
 size_t Terrain3DData::getCpuRegionCacheHardCapBytes( void ) const {
-	return m_cpuRegionCache.getHardCapBytes();
+	return m_residency.cpuRegionCache().getHardCapBytes();
 }
 
 void Terrain3DData::setRuntimePagePreparedByteBudget( const uint64_t nBytes ) {
-	m_runtimePageStore.setPreparedByteBudget( nBytes );
+	m_runtimeArtifacts.setPreparedByteBudget( nBytes );
 }
 
 size_t Terrain3DData::getMemoryRuntimePagePreparedBytes( void ) const {
-	const uint64_t bytes = m_runtimePageStore.getPreparedReservedBytes();
+	const uint64_t bytes = m_runtimeArtifacts.getPreparedReservedBytes();
 	return bytes > SIZE_MAX ? SIZE_MAX : ( size_t )bytes;
 }
 
@@ -1757,11 +1720,55 @@ uint64_t Terrain3DData::getMemoryComputeLocalGpuBytes( void ) const {
 	return m_pCompute ? m_pCompute->getRetainedLocalGpuBufferBytes() : 0u;
 }
 
-Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
-	if ( !pTerrain ) {
-		LOG( ERROR, "Initialization failed, p_terrain is null" );
+Dictionary Terrain3DData::getComputeLocalGpuTelemetry( void ) const {
+	Dictionary result;
+	if ( !m_pCompute ) {
+		return result;
+	}
+	const Terrain3DLocalComputeBufferService::Stats stats = m_pCompute->getLocalBufferStats();
+	result["buffer_creates"] = ( int64_t )stats.bufferCreates;
+	result["uniform_set_creates"] = ( int64_t )stats.uniformSetCreates;
+	result["pipeline_creates"] = ( int64_t )stats.pipelineCreates;
+	result["resource_failures"] = ( int64_t )stats.resourceFailures;
+	result["upload_calls"] = ( int64_t )stats.uploadCalls;
+	result["bytes_uploaded"] = ( int64_t )stats.bytesUploaded;
+	result["readback_calls"] = ( int64_t )stats.readbackCalls;
+	result["bytes_read_back"] = ( int64_t )stats.bytesReadBack;
+	return result;
+}
+
+void Terrain3DData::resetStartupPreparationCold( void ) {
+	m_startupPreparedRepository.reset();
+	m_startupPreparedWorldManifest.reset();
+	m_startupPreparedDirectory = String();
+	m_bStartupPreparationValid = false;
+	m_bStartupInitialDirectoryLoad = false;
+	m_bStartupPreparedDirectory = false;
+	m_bStartupPreparedBoundedCpuLoad = false;
+	m_bStartupPreparedCookedManifest = false;
+	m_bStartupNeedsRehydrate = false;
+	m_bStartupDerivedPending = false;
+}
+
+Error Terrain3DData::beginStartupCold( Terrain3D *const pTerrain, const uint32_t nStartupGeneration ) {
+	if ( !pTerrain || nStartupGeneration == 0u ) {
+		LOG( ERROR, "Initialization failed, invalid Terrain3D owner/startup generation" );
 		return ERR_INVALID_PARAMETER;
 	}
+
+	const uint64_t initialize_started_usec = Time::get_singleton()->get_ticks_usec();
+	m_nStartupGenerationLast = nStartupGeneration;
+	t3dStartupDomainRequest( m_startupState, nStartupGeneration, initialize_started_usec, 3u );
+	t3dStartupDomainSetStage( m_startupState, T3D_STARTUP_PREPARING );
+	resetStartupPreparationCold();
+	++m_nStartupInitializeCount;
+	m_nStartupInitializeUsecLast = 0u;
+	m_nStartupDirectoryLoadUsecLast = 0u;
+	m_nStartupRehydrateUsecLast = 0u;
+	m_nStartupBytesReadLast = 0u;
+	m_nStartupRegionCountLast = 0u;
+	LOG( INFO, "[Terrain3D][Startup][Data] REQUESTED generation=", nStartupGeneration );
+
 	if ( m_bRuntimeActive && m_pTerrain == pTerrain && m_samplingStorage.isActiveOwner() ) {
 		const uint32_t previous_generation = m_samplingStorage.getActiveGeneration();
 		const uint32_t current_generation = m_samplingStorage.refreshActiveGeneration();
@@ -1769,18 +1776,25 @@ Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
 			resetMiddleHeightCache();
 			resetGpuRegionCache( true );
 		}
+		const uint64_t initialize_finished_usec = Time::get_singleton()->get_ticks_usec();
+		m_nStartupInitializeUsecLast = initialize_finished_usec - initialize_started_usec;
+		t3dStartupDomainSetCompletedUnits( m_startupState, 3u );
+		t3dStartupDomainFinish( m_startupState, T3D_STARTUP_COMMITTED, initialize_finished_usec );
 		return OK;
 	}
+
 	LOG( INFO, "Initializing data runtime" );
 	m_pTerrain = pTerrain;
 	const uint32_t previous_generation = m_samplingStorage.getActiveGeneration();
 	if ( !setRegionSizeInternal() ) {
 		m_bRuntimeActive = false;
+		t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
 		return ERR_ALREADY_IN_USE;
 	}
 	const uint32_t active_generation = m_samplingStorage.refreshActiveGeneration();
 	if ( active_generation == 0u ) {
 		deactivateRuntimeStorage( pTerrain );
+		t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
 		return ERR_CANT_ACQUIRE_RESOURCE;
 	}
 	if ( previous_generation != active_generation ) {
@@ -1789,8 +1803,9 @@ Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
 	}
 
 	ensureDefaultMaps();
-	const bool bLoadInitialDirectory = !m_regionRepository.isLoaded() && !m_pTerrain->getDataDirectory().is_empty();
-	if ( bLoadInitialDirectory ) {
+	m_startupPreparedDirectory = m_pTerrain->getDataDirectory();
+	m_bStartupInitialDirectoryLoad = !m_regionRepository.isLoaded() && !m_startupPreparedDirectory.is_empty();
+	if ( m_bStartupInitialDirectoryLoad ) {
 		m_bStartupBulkLoad = true;
 		m_bSkipSlotReserveOnce = true;
 	}
@@ -1810,27 +1825,94 @@ Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
 	        m_pTerrain->getGpuRegionSparePages(),
 	        m_pTerrain->getGpuRegionRetireFrames() );
 
-	bool bLoadedDirectoryThisActivation = false;
-	if ( bLoadInitialDirectory ) {
-		const Error load_error = loadDirectory( m_pTerrain->getDataDirectory() );
-		m_bStartupBulkLoad = false;
-		m_bSkipSlotReserveOnce = false;
-		if ( load_error != OK && load_error != ERR_FILE_NOT_FOUND ) {
-			LOG( ERROR, "Failed to load terrain directory: ", m_pTerrain->getDataDirectory(), " error: ", load_error );
-			deactivateRuntimeStorage( pTerrain );
-			return load_error;
-		}
-		bLoadedDirectoryThisActivation = load_error == OK;
-	}
-	m_regionRepository.setLoaded( true );
+	t3dStartupDomainSetCompletedUnits( m_startupState, 1u );
+	return OK;
+}
 
-	// A returning scene owns a complete repository but its instance-local height pages
-	// were deliberately released while inactive. Rebuild the logical map from the
-	// retained slot table and repopulate active storage before any renderer sees it.
-	if ( !bLoadedDirectoryThisActivation && ( m_regionRepository.getActiveRegionCount() > 0 || m_regionRepository.getSlotCount() > 0 ) ) {
+Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
+	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
+	if ( startup.m_nGeneration != nStartupGeneration ) {
+		return ERR_INVALID_DATA;
+	}
+	if ( startup.m_eStage == T3D_STARTUP_COMMITTED ) {
+		return OK;
+	}
+	if ( startup.m_eStage != T3D_STARTUP_PREPARING ) {
+		return ERR_BUSY;
+	}
+
+	if ( m_bStartupInitialDirectoryLoad ) {
+		const uint64_t directory_load_started_usec = Time::get_singleton()->get_ticks_usec();
+		++m_nStartupDirectoryLoadCount;
+		bool bBoundedCpuLoad = false;
+		bool bCookedRuntimeManifest = false;
+		const Error prepare_error = prepareDirectoryCandidateCold(
+		        m_startupPreparedDirectory, m_startupPreparedRepository, bBoundedCpuLoad, bCookedRuntimeManifest );
+		m_nStartupDirectoryLoadUsecLast = Time::get_singleton()->get_ticks_usec() - directory_load_started_usec;
+		if ( prepare_error != OK && prepare_error != ERR_FILE_NOT_FOUND ) {
+			m_bStartupBulkLoad = false;
+			m_bSkipSlotReserveOnce = false;
+			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
+			return prepare_error;
+		}
+		m_bStartupPreparedDirectory = prepare_error == OK;
+		m_bStartupPreparedBoundedCpuLoad = bBoundedCpuLoad;
+		m_bStartupPreparedCookedManifest = bCookedRuntimeManifest;
+		if ( prepare_error == OK ) {
+			m_nStartupRegionCountLast = ( uint32_t )( m_startupPreparedRepository.getRegionCount() );
+			if ( bCookedRuntimeManifest ) {
+				const Ref<FileAccess> pManifestFile = FileAccess::open( m_startupPreparedWorldManifest.getPath( m_startupPreparedDirectory ), FileAccess::READ );
+				m_nStartupBytesReadLast = pManifestFile.is_valid() ? pManifestFile->get_length() : 0u;
+			} else {
+				m_nStartupBytesReadLast = m_regionPersistence.getStartupLoadStats().m_nBytesReadLast;
+			}
+		}
+	}
+
+	m_bStartupNeedsRehydrate = !m_bStartupPreparedDirectory
+	        && ( m_regionRepository.getActiveRegionCount() > 0 || m_regionRepository.getSlotCount() > 0 );
+	m_bStartupPreparationValid = true;
+	t3dStartupDomainSetCompletedUnits( m_startupState, 2u );
+	t3dStartupDomainSetStage( m_startupState, T3D_STARTUP_CPU_READY );
+	return OK;
+}
+
+Error Terrain3DData::commitStartupCold( const uint32_t nStartupGeneration ) {
+	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
+	if ( startup.m_nGeneration != nStartupGeneration || !m_bStartupPreparationValid ) {
+		return ERR_INVALID_DATA;
+	}
+	if ( startup.m_eStage == T3D_STARTUP_COMMITTED ) {
+		return OK;
+	}
+	if ( startup.m_eStage != T3D_STARTUP_CPU_READY ) {
+		return ERR_BUSY;
+	}
+
+	if ( m_bStartupPreparedDirectory ) {
+		const Error commit_error = commitDirectoryCandidateCold( m_startupPreparedDirectory,
+		        m_startupPreparedRepository,
+		        m_bStartupPreparedBoundedCpuLoad,
+		        m_bStartupPreparedCookedManifest,
+		        false );
+		if ( commit_error != OK ) {
+			m_bStartupBulkLoad = false;
+			m_bSkipSlotReserveOnce = false;
+			deactivateRuntimeStorage( m_pTerrain );
+			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
+			return commit_error;
+		}
+		m_startupPreparedRepository.reset();
+		m_startupPreparedWorldManifest.reset();
+		m_bStartupDerivedPending = true;
+	} else if ( m_bStartupNeedsRehydrate ) {
+		const uint64_t rehydrate_started_usec = Time::get_singleton()->get_ticks_usec();
+		++m_nStartupRehydrateCount;
 		const Error rehydrate_error = rehydrateActiveStorage();
+		m_nStartupRehydrateUsecLast = Time::get_singleton()->get_ticks_usec() - rehydrate_started_usec;
 		if ( rehydrate_error != OK ) {
-			deactivateRuntimeStorage( pTerrain );
+			deactivateRuntimeStorage( m_pTerrain );
+			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
 			return rehydrate_error;
 		}
 	} else {
@@ -1838,10 +1920,51 @@ Error Terrain3DData::initialize( Terrain3D *const pTerrain ) {
 		m_samplingStorage.refreshActiveGeneration();
 	}
 
+	m_regionRepository.setLoaded( true );
 	configureResidentPool( 64 );
 	m_bRuntimeActive = true;
+	t3dStartupDomainSetCompletedUnits( m_startupState, 3u );
+	const uint64_t commit_finished_usec = Time::get_singleton()->get_ticks_usec();
+	if ( startup.m_nStartUsec != 0u ) {
+		m_nStartupInitializeUsecLast = commit_finished_usec - startup.m_nStartUsec;
+	}
+	t3dStartupDomainFinish( m_startupState, T3D_STARTUP_COMMITTED, commit_finished_usec );
 	return OK;
 }
+
+void Terrain3DData::finalizeStartupDerivedCold( const uint32_t nStartupGeneration ) {
+	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
+	if ( startup.m_nGeneration != nStartupGeneration || startup.m_eStage != T3D_STARTUP_COMMITTED ) {
+		return;
+	}
+	if ( m_bStartupDerivedPending ) {
+		finalizeDirectoryCandidateCold( m_bStartupPreparedCookedManifest );
+		m_bStartupDerivedPending = false;
+	}
+	m_bStartupBulkLoad = false;
+	m_bSkipSlotReserveOnce = false;
+	m_bStartupPreparationValid = false;
+	m_bStartupInitialDirectoryLoad = false;
+	m_bStartupPreparedDirectory = false;
+	m_bStartupPreparedBoundedCpuLoad = false;
+	m_bStartupNeedsRehydrate = false;
+	m_startupPreparedDirectory = String();
+}
+
+void Terrain3DData::cancelStartupCold( const uint32_t nStartupGeneration ) {
+	if ( !t3dStartupDomainMatches( m_startupState, nStartupGeneration ) ) {
+		return;
+	}
+	const t3dStartupStage_t eStage = t3dStartupDomainGetStage( m_startupState );
+	if ( eStage == T3D_STARTUP_FAILED || eStage == T3D_STARTUP_CANCELLED ) {
+		return;
+	}
+	m_bStartupBulkLoad = false;
+	m_bSkipSlotReserveOnce = false;
+	resetStartupPreparationCold();
+	( void )t3dStartupDomainCancel( m_startupState, nStartupGeneration, Time::get_singleton()->get_ticks_usec() );
+}
+
 
 void Terrain3DData::deactivateRuntimeStorage( Terrain3D *const pTerrain ) {
 	if ( pTerrain && m_pTerrain && pTerrain != m_pTerrain ) {
@@ -1851,7 +1974,7 @@ void Terrain3DData::deactivateRuntimeStorage( Terrain3D *const pTerrain ) {
 		return;
 	}
 	m_bRuntimeActive = false;
-	m_regionResidency.reset();
+	m_residency.resetRegionResidency();
 	resetMiddleHeightCache();
 	resetGpuRegionCache( true );
 	resetCpuRegionCache( false );
@@ -1861,9 +1984,8 @@ void Terrain3DData::deactivateRuntimeStorage( Terrain3D *const pTerrain ) {
 }
 
 bool Terrain3DData::releaseRuntimeAllocatorStorageInternal( void ) {
-	m_runtimePageStore.reset();
+	m_runtimeArtifacts.releaseRuntimeAllocatorStorage();
 	m_mapEditService.releaseRuntimeAllocatorStorage();
-	m_runtimeWorldManifest.releaseRuntimeAllocatorStorage();
 	return m_regionRepository.releaseRuntimeAllocatorStorage();
 }
 
@@ -1877,9 +1999,9 @@ Dictionary Terrain3DData::getRuntimeState( void ) const {
 	state["active_storage_generation"] = ( int64_t )( getActiveStorageGeneration() );
 	state["region_map_size"] = s_nRegionMapSize;
 	state["logical_region_count"] = m_regionRepository.getActiveRegionCount();
-	state["gpu_resident_page_count"] = m_gpuRegionCache.getResidentCount();
-	state["middle_height_resident_page_count"] = m_middleHeightRegionCache.getResidentCount();
-	state["middle_height_page_table_valid"] = m_middleHeightRegionCache.getRegionMapRid().is_valid();
+	state["gpu_resident_page_count"] = m_residency.gpuRegionCache().getResidentCount();
+	state["middle_height_resident_page_count"] = m_residency.middleHeightRegionCache().getResidentCount();
+	state["middle_height_page_table_valid"] = m_residency.middleHeightRegionCache().getRegionMapRid().is_valid();
 	return state;
 }
 
@@ -1991,7 +2113,7 @@ TypedArray<Vector2i> Terrain3DData::getRegionSlots( void ) const {
 }
 
 TypedArray<Vector2i> Terrain3DData::getRenderRegionSlots( void ) const {
-	return m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRenderRegionSlots() : getRegionSlots();
+	return m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getRenderRegionSlots() : getRegionSlots();
 }
 
 PackedInt32Array Terrain3DData::getRegionMap( void ) const {
@@ -2002,8 +2124,8 @@ PackedInt32Array Terrain3DData::getRegionMap( void ) const {
 	region_map.resize( s_nRegionMapSize * s_nRegionMapSize );
 	int32_t *pWrite = region_map.ptrw();
 	const int half = s_nRegionMapSize / 2;
-	const uint16_t *pSourceMap =
-	        m_gpuRegionCache.isEnabled() ? m_gpuRegionCache.getRegionMapData() : m_regionRepository.getLogicalRegionMapData();
+	const uint16_t *pSourceMap = m_residency.gpuRegionCache().isEnabled() ? m_residency.gpuRegionCache().getRegionMapData()
+	                                                                      : m_regionRepository.getLogicalRegionMapData();
 	for ( int y = 0; y < s_nRegionMapSize; ++y ) {
 		for ( int x = 0; x < s_nRegionMapSize; ++x ) {
 			const Vector2i location( x - half, y - half );
@@ -2020,7 +2142,7 @@ PackedInt32Array Terrain3DData::getLogicalRegionMap( void ) const {
 
 TypedArray<Terrain3DRegion> Terrain3DData::getRegionsActive( const bool bCopy, const bool bDeep ) const {
 	TypedArray<Terrain3DRegion> region_arr;
-	if ( bCopy && m_cpuRegionCache.isEnabled() ) {
+	if ( bCopy && m_residency.cpuRegionCache().isEnabled() ) {
 		LOG( ERROR,
 		        "Whole-repository region copies are unavailable while bounded CPU residency is enabled. "
 		        "Disable the CPU cache before requesting copied Terrain3DRegion resources." );
@@ -2050,7 +2172,7 @@ void Terrain3DData::doForRegions( const Rect2i &rArea, const Callable &rCallback
 			current_region_loc.x = x;
 			const Terrain3DRegion *pRegion = getRegionPtr( current_region_loc );
 			if ( pRegion && !pRegion->isDeleted() ) {
-				if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResident( current_region_loc ) ) {
+				if ( m_residency.cpuRegionCache().isEnabled() && !ensureCpuRegionResident( current_region_loc ) ) {
 					LOG( ERROR, "Unable to page CPU terrain maps for region callback: ", current_region_loc );
 					continue;
 				}
@@ -2386,7 +2508,7 @@ bool Terrain3DData::ensurePersistenceRegionResident( void *const pContext, const
 }
 
 void Terrain3DData::processRegionSaveResult( const t3dRegionSaveResult_t &rResult ) {
-	if ( rResult.m_bDeleted && !m_runtimePageStore.removePageForSource( rResult.m_path ) ) {
+	if ( rResult.m_bDeleted && !m_runtimeArtifacts.removePageForSource( rResult.m_path ) ) {
 		LOG( WARN, "Region deleted, but cooked runtime page could not be removed: ", rResult.m_path );
 	}
 	if ( !rResult.m_bSourceChanged || !m_pTerrain || !m_pTerrain->isGpuRegionCookOnSave() ) {
@@ -2406,7 +2528,7 @@ void Terrain3DData::processRegionSaveResult( const t3dRegionSaveResult_t &rResul
 			if ( !pCookRegion || pCookRegion->isDeleted() ) {
 				continue;
 			}
-			if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( cookLocation, true ) ) {
+			if ( m_residency.cpuRegionCache().isEnabled() && !ensureCpuRegionResidentInternal( cookLocation, true ) ) {
 				LOG( ERROR,
 				        rResult.m_bDeleted ? "Region deleted, but neighboring runtime page source could not be loaded: "
 				                           : "Region saved, but neighboring runtime page source could not be loaded: ",
@@ -2426,7 +2548,7 @@ void Terrain3DData::processRegionSaveResult( const t3dRegionSaveResult_t &rResul
 void Terrain3DData::saveDirectory( const String &rDir ) {
 	LOG( INFO, "Saving data files to ", rDir );
 	const bool cook_on_save = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
-	if ( cook_on_save && !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
+	if ( cook_on_save && !m_runtimeArtifacts.buildAuthoringIndex() ) {
 		LOG( ERROR, "Failed to build runtime-world dependency index before save-time cooking" );
 	}
 	const t3dDirectorySaveResult_t saveResult =
@@ -2441,7 +2563,7 @@ void Terrain3DData::saveDirectory( const String &rDir ) {
 	if ( cook_on_save ) {
 		PackedStringArray manifest_errors;
 		// write() rebuilds the authoring index itself; do not build it a second time.
-		if ( !m_runtimeWorldManifest.write( rDir, m_regionRepository, m_runtimePageStore, getRuntimePageConfig(), &manifest_errors ) ) {
+		if ( !m_runtimeArtifacts.writeWorldManifest( rDir, getRuntimePageConfig(), &manifest_errors ) ) {
 			LOG( ERROR, "Terrain regions saved, but runtime-world manifest publication failed: ", manifest_errors );
 		}
 	}
@@ -2452,7 +2574,7 @@ void Terrain3DData::saveDirectory( const String &rDir ) {
 void Terrain3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, const bool b16Bit ) {
 	const bool cook_on_save = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
 	if ( cook_on_save ) {
-		m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository );
+		m_runtimeArtifacts.buildAuthoringIndex();
 	}
 	const t3dRegionSaveResult_t result =
 	        m_regionPersistence.saveRegion( rRegionLoc, rDir, b16Bit, &Terrain3DData::ensurePersistenceRegionResident, this );
@@ -2460,7 +2582,7 @@ void Terrain3DData::saveRegion( const Vector2i &rRegionLoc, const String &rDir, 
 	if ( cook_on_save ) {
 		PackedStringArray manifest_errors;
 		// write() rebuilds the authoring index itself; do not build it a second time.
-		if ( !m_runtimeWorldManifest.write( rDir, m_regionRepository, m_runtimePageStore, getRuntimePageConfig(), &manifest_errors ) ) {
+		if ( !m_runtimeArtifacts.writeWorldManifest( rDir, getRuntimePageConfig(), &manifest_errors ) ) {
 			LOG( ERROR, "Region saved, but runtime-world manifest publication failed: ", manifest_errors );
 		}
 	}
@@ -2478,7 +2600,7 @@ bool Terrain3DData::collectGpuRegionPageSources( String &rDataDirectory,
 		rErrors.push_back( "Terrain3D owner is unavailable" );
 		return false;
 	}
-	return m_runtimePageStore.collectPageSources( rDataDirectory, rSourceFiles, rLocations, rErrors );
+	return m_runtimeArtifacts.collectPageSources( rDataDirectory, rSourceFiles, rLocations, rErrors );
 }
 
 Dictionary Terrain3DData::inspectGpuRegionPageMigration( void ) const {
@@ -2511,7 +2633,7 @@ Dictionary Terrain3DData::inspectGpuRegionPageMigration( void ) const {
 			const Terrain3DRegion *const pRegion = getRegionPtr( location );
 			const String page_path = getGpuRuntimePagePath( pRegion );
 			t3dRuntimePageProbe_t probe;
-			m_runtimePageStore.probePage( page_path, probe );
+			m_runtimeArtifacts.probePage( page_path, probe );
 			switch ( probe.m_state ) {
 				case RUNTIME_PAGE_PROBE_CURRENT:
 					++current;
@@ -2605,7 +2727,7 @@ Dictionary Terrain3DData::migrateGpuRegionPages( const bool bRepair ) {
 		const Vector2i location = ( locations )[iLocation];
 		const Terrain3DRegion *const pRegion = getRegionPtr( location );
 		t3dRuntimePageProbe_t probe;
-		m_runtimePageStore.probePage( getGpuRuntimePagePath( pRegion ), probe );
+		m_runtimeArtifacts.probePage( getGpuRuntimePagePath( pRegion ), probe );
 		probes.push_back( probe );
 		if ( probe.m_state == RUNTIME_PAGE_PROBE_LEGACY ) {
 			++legacy_candidates;
@@ -2639,7 +2761,7 @@ Dictionary Terrain3DData::migrateGpuRegionPages( const bool bRepair ) {
 	// Page migration regenerates from the authoritative region resources instead
 	// of trying to decode historical payload layouts. This makes every format bump
 	// forward-migratable without retaining a growing stack of legacy codecs.
-	if ( !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
+	if ( !m_runtimeArtifacts.buildAuthoringIndex() ) {
 		errors.push_back( "World manifest dependency index could not be built before runtime-page migration" );
 		result["migrated"] = 0;
 		result["repaired"] = 0;
@@ -2684,7 +2806,7 @@ Dictionary Terrain3DData::migrateGpuRegionPages( const bool bRepair ) {
 			missing_skipped += bMissing ? 1 : 0;
 			continue;
 		}
-		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
+		if ( m_residency.cpuRegionCache().isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++failed;
 			errors.push_back( String( "Region " ) + String( location ) + String( ": unable to materialize source maps" ) );
 			continue;
@@ -2698,8 +2820,8 @@ Dictionary Terrain3DData::migrateGpuRegionPages( const bool bRepair ) {
 			continue;
 		}
 		t3dRuntimePageProbe_t published_probe;
-		if ( !m_runtimePageStore.probePage( page_path, published_probe ) || published_probe.m_state != RUNTIME_PAGE_PROBE_CURRENT
-		        || !m_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config ) ) {
+		if ( !m_runtimeArtifacts.probePage( page_path, published_probe ) || published_probe.m_state != RUNTIME_PAGE_PROBE_CURRENT
+		        || !m_runtimeArtifacts.validatePageForRegion( pRegion, runtime_page_config ) ) {
 			++failed;
 			errors.push_back(
 			        String( "Region " ) + String( location ) + String( ": migrated page failed current-format reload validation" ) );
@@ -2714,13 +2836,12 @@ Dictionary Terrain3DData::migrateGpuRegionPages( const bool bRepair ) {
 		}
 	}
 
-	m_cpuRegionCache.releaseUntrackedMaps();
+	m_residency.cpuRegionCache().releaseUntrackedMaps();
 	const bool migration_complete = failed == 0 && migrated == legacy_candidates;
 	bool manifest_published = false;
 	if ( migration_complete && skipped == 0 ) {
 		PackedStringArray manifest_errors;
-		manifest_published =
-		        m_runtimeWorldManifest.write( data_dir, m_regionRepository, m_runtimePageStore, runtime_page_config, &manifest_errors );
+		manifest_published = m_runtimeArtifacts.writeWorldManifest( data_dir, runtime_page_config, &manifest_errors );
 		if ( !manifest_published ) {
 			++failed;
 			for ( size_t iError = 0u; iError < ( size_t )( ( manifest_errors ).size() ); iError++ ) {
@@ -2793,7 +2914,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 		Terrain3DRegion *const pRegion = getRegionPtr( location );
 		const String source_path = data_dir.path_join( Terrain3DUtil::locationToFilename( location ) );
 		const String page_path = getGpuRuntimePagePath( pRegion );
-		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
+		if ( m_residency.cpuRegionCache().isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++source_unavailable;
 			needs_cook_regions.push_back( String( location ) );
 			errors.push_back( String( "Region " ) + String( location ) + String( ": unable to materialize source maps" ) );
@@ -2814,7 +2935,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 		}
 
 		t3dRuntimePageProbe_t probe;
-		m_runtimePageStore.probePage( page_path, probe );
+		m_runtimeArtifacts.probePage( page_path, probe );
 		if ( probe.m_state == RUNTIME_PAGE_PROBE_LEGACY ) {
 			++legacy;
 			needs_cook_regions.push_back( String( location ) );
@@ -2847,7 +2968,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 			continue;
 		}
 
-		if ( !m_runtimePageStore.validatePageForRegion( pRegion, getRuntimePageConfig() ) ) {
+		if ( !m_runtimeArtifacts.validatePageForRegion( pRegion, getRuntimePageConfig() ) ) {
 			++incompatible;
 			needs_cook_regions.push_back( String( location ) );
 			continue;
@@ -2866,7 +2987,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 		}
 	}
 
-	m_cpuRegionCache.releaseUntrackedMaps();
+	m_residency.cpuRegionCache().releaseUntrackedMaps();
 	const int needs_cook = missing + legacy + stale + incompatible + invalid + source_unavailable;
 	result["current"] = current;
 	result["missing"] = missing;
@@ -2882,8 +3003,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 	result["orphan_pages"] = orphan_pages;
 	result["needs_cook_regions"] = needs_cook_regions;
 	result["errors"] = errors;
-	result["complete"] =
-	        source_unavailable == 0 && current + missing + legacy + future + stale + incompatible + invalid == discovered;
+	result["complete"] = source_unavailable == 0 && current + missing + legacy + future + stale + incompatible + invalid == discovered;
 	result["safe_to_cook"] = future == 0;
 	return result;
 }
@@ -2898,11 +3018,9 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	const int discovered = source_files.size();
 	const int valid = ( int )( locations.size() );
 	if ( !preflight_ok ) {
-		m_cpuRegionCache.releaseUntrackedMaps();
+		m_residency.cpuRegionCache().releaseUntrackedMaps();
 		result["data_directory"] = data_dir;
 		result["far_atlas_cooked"] = false;
-		result["material_cache"] = Dictionary();
-		result["material_cache_cooked"] = false;
 		result["preflight_failed"] = true;
 		result["discovered"] = discovered;
 		result["valid"] = valid;
@@ -2919,9 +3037,9 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 		return result;
 	}
 
-	if ( !m_runtimeWorldManifest.buildAuthoringIndex( m_regionRepository ) ) {
+	if ( !m_runtimeArtifacts.buildAuthoringIndex() ) {
 		errors.push_back( "World manifest dependency index could not be built before page cooking" );
-		m_cpuRegionCache.releaseUntrackedMaps();
+		m_residency.cpuRegionCache().releaseUntrackedMaps();
 		result["complete"] = false;
 		result["errors"] = errors;
 		return result;
@@ -2944,7 +3062,7 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( locations ).size() ); iLocation++ ) {
 		const Vector2i location = ( locations )[iLocation];
 		Terrain3DRegion *const pRegion = getRegionPtr( location );
-		if ( m_cpuRegionCache.isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
+		if ( m_residency.cpuRegionCache().isEnabled() && !ensureCpuRegionResidentInternal( location, true ) ) {
 			++failed;
 			errors.push_back( String( "Region " ) + String( location ) + String( ": unable to materialize source maps" ) );
 			continue;
@@ -2958,14 +3076,14 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 		}
 		const String page_path = getGpuRuntimePagePath( pRegion );
 		t3dRuntimePageProbe_t page_probe;
-		m_runtimePageStore.probePage( page_path, page_probe );
+		m_runtimeArtifacts.probePage( page_path, page_probe );
 		if ( page_probe.m_state == RUNTIME_PAGE_PROBE_FUTURE ) {
 			cook_database.clearRegion( location );
 			++future_blocked;
 			++failed;
 			errors.push_back( String( "Region " ) + String( location ) + String( ": refusing cook over newer runtime page version " )
-			        + String::num_int64( page_probe.m_nVersion ) + String( " (supported " )
-			        + String::num_int64( s_nRuntimePageVersion ) + String( ")" ) );
+			        + String::num_int64( page_probe.m_nVersion ) + String( " (supported " ) + String::num_int64( s_nRuntimePageVersion )
+			        + String( ")" ) );
 			continue;
 		}
 
@@ -2983,7 +3101,7 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 				bInvalidArtifact = true;
 			} else if ( existing_signature != expected_signature ) {
 				bStaleArtifact = true;
-			} else if ( !m_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config ) ) {
+			} else if ( !m_runtimeArtifacts.validatePageForRegion( pRegion, runtime_page_config ) ) {
 				bIncompatibleArtifact = true;
 			} else {
 				bCurrent = true;
@@ -3024,7 +3142,7 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			continue;
 		}
 		const String orphan_path = data_dir.path_join( fname );
-		if ( m_runtimePageStore.removePage( orphan_path ) ) {
+		if ( m_runtimeArtifacts.removePage( orphan_path ) ) {
 			cook_database.clearRegion( page_location );
 			++orphan_removed;
 		} else {
@@ -3037,18 +3155,15 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	if ( !bFarAtlasCooked ) {
 		errors.push_back( "Far atlas cook failed" );
 	}
-	Dictionary material_cache_result;
-	bool bMaterialCacheCooked = true;
-	if ( m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled() ) {
-		const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();
-		if ( pAssets.is_valid() ) {
-			material_cache_result = pAssets->cookRuntimeMaterialCache();
-			bMaterialCacheCooked = ( bool )( material_cache_result.get( "complete", false ) );
-			if ( !bMaterialCacheCooked ) {
-				errors.push_back( String( "Runtime material cache cook failed: " )
-				        + String( material_cache_result.get( "error", "unknown error" ) ) );
-			}
-		}
+	// P11: V3 is the sole cooked terrain-material residency authority. Remove
+	// stale legacy bundles so exported data cannot accidentally select them.
+	const String legacy_material_cache = data_dir.path_join( "terrain3d_materials.t3dmat" );
+	const String legacy_material_manifest = data_dir.path_join( "terrain3d_materials.t3dmatcache" );
+	if ( FileAccess::file_exists( legacy_material_cache ) ) {
+		DirAccess::remove_absolute( legacy_material_cache );
+	}
+	if ( FileAccess::file_exists( legacy_material_manifest ) ) {
+		DirAccess::remove_absolute( legacy_material_manifest );
 	}
 	Dictionary shader_pack_result;
 	bool bShaderPackCooked = true;
@@ -3063,15 +3178,49 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			}
 		}
 	}
-	const bool bClipmapPackCooked = m_pTerrain && m_pTerrain->cookRuntimeClipmapGeometryPack();
-	if ( !bClipmapPackCooked ) {
-		errors.push_back( "Runtime clipmap geometry pack cook failed" );
+	bool bInstanceVtPackageCooked = true;
+	uint32_t nInstanceVtPackageGeneration = 0u;
+	uint32_t nInstanceVtMaterialCount = 0u;
+	const String instance_vt_package_path = data_dir.path_join( "terrain3d_instances.t3dvt" );
+	if ( m_pTerrain ) {
+		const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();
+		if ( pAssets.is_valid() ) {
+			PackedByteArray package_bytes;
+			String vt_error;
+			if ( !t3d_vt_godot_cook_runtime_assets_package(
+			             pAssets, package_bytes, nInstanceVtPackageGeneration, nInstanceVtMaterialCount, &vt_error ) ) {
+				bInstanceVtPackageCooked = false;
+				errors.push_back( String( "Runtime instance VT package cook failed: " )
+				        + ( vt_error.is_empty() ? String( "unknown error" ) : vt_error ) );
+			} else if ( nInstanceVtMaterialCount == 0u ) {
+				if ( FileAccess::file_exists( instance_vt_package_path ) ) {
+					DirAccess::remove_absolute( instance_vt_package_path );
+				}
+			} else if ( package_bytes.is_empty() ) {
+				bInstanceVtPackageCooked = false;
+				errors.push_back( "Runtime instance VT package cooker returned empty bytes for authored materials" );
+			} else {
+				Ref<FileAccess> pVtFile = FileAccess::open( instance_vt_package_path, FileAccess::WRITE );
+				if ( pVtFile.is_null() ) {
+					bInstanceVtPackageCooked = false;
+					errors.push_back( String( "Runtime instance VT package open failed: " ) + instance_vt_package_path );
+				} else {
+					pVtFile->store_buffer( package_bytes );
+					pVtFile->flush();
+					bInstanceVtPackageCooked = FileAccess::file_exists( instance_vt_package_path )
+					        && FileAccess::get_file_as_bytes( instance_vt_package_path ).size() == package_bytes.size();
+					if ( !bInstanceVtPackageCooked ) {
+						errors.push_back( "Runtime instance VT package publication verification failed" );
+					}
+				}
+			}
+		}
 	}
 	const bool bWorldManifestCooked =
-	        failed == 0 && m_runtimeWorldManifest.write( data_dir, m_regionRepository, m_runtimePageStore, runtime_page_config, &errors );
+	        failed == 0 && bInstanceVtPackageCooked && m_runtimeArtifacts.writeWorldManifest( data_dir, runtime_page_config, &errors );
 	if ( !bWorldManifestCooked ) {
 		errors.push_back( failed == 0 ? String( "Cooked world manifest generation failed" )
-		                                : String( "Cooked world manifest publication withheld because region-page cooking failed" ) );
+		                              : String( "Cooked world manifest publication withheld because region-page cooking failed" ) );
 	}
 	PackedStringArray strip_safe_sources;
 	PackedStringArray region_strip_sources;
@@ -3082,9 +3231,9 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 		t3dDataAppendUniquePath( strip_safe_sources, path );
 	}
 	PackedStringArray material_strip_sources;
-	if ( bMaterialCacheCooked && m_pTerrain && m_pTerrain->isRuntimeMaterialStreamingEnabled() ) {
+	if ( bInstanceVtPackageCooked && m_pTerrain ) {
 		const Ref<Terrain3DAssets> pAssets = m_pTerrain->getAssets();
-		if ( pAssets.is_valid() ) {
+		if ( pAssets.is_valid() && pAssets->usesPackedPbr() ) {
 			const TypedArray<Terrain3DTextureAsset> textures = pAssets->getTextureList();
 			for ( int index = 0; index < textures.size(); ++index ) {
 				const Ref<Terrain3DTextureAsset> asset = textures[index];
@@ -3117,6 +3266,12 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			}
 		}
 	}
+	const String legacy_clipmap_pack_path = data_dir.path_join( "terrain3d_clipmap.t3dmeshpack" );
+	if ( FileAccess::file_exists( legacy_clipmap_pack_path ) ) {
+		DirAccess::remove_absolute( legacy_clipmap_pack_path );
+	}
+	DirAccess::remove_absolute( legacy_clipmap_pack_path + String( ".tmp" ) );
+	DirAccess::remove_absolute( legacy_clipmap_pack_path + String( ".bak" ) );
 	const String strip_manifest_path = data_dir.path_join( "terrain3d_runtime_sources.txt" );
 	if ( bWorldManifestCooked ) {
 		Ref<FileAccess> pStripFile = FileAccess::open( strip_manifest_path, FileAccess::WRITE );
@@ -3137,33 +3292,32 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			}
 			pStripFile->store_line( "[runtime_artifact_authority]" );
 			pStripFile->store_line( "shader_source=terrain3d_shaders.t3dshaderpack" );
-			pStripFile->store_line( "clipmap_geometry=terrain3d_clipmap.t3dmeshpack" );
+			pStripFile->store_line( "instance_virtual_texture=terrain3d_instances.t3dvt" );
 			pStripFile->store_line( "far_surface=terrain3d_far.t3dfar" );
-			if ( bMaterialCacheCooked ) {
-				pStripFile->store_line( "material_images=terrain3d_materials.t3dmatcache" );
-			}
 		}
 	}
-	const bool bCookDatabaseWritten = failed == 0 && orphan_failed == 0 && bFarAtlasCooked && bMaterialCacheCooked && bShaderPackCooked
-	        && bClipmapPackCooked && bWorldManifestCooked
+	const bool bCookDatabaseWritten = failed == 0 && orphan_failed == 0 && bFarAtlasCooked && bShaderPackCooked
+	        && bInstanceVtPackageCooked && bWorldManifestCooked
 	        && cook_database.write( data_dir, runtime_page_config.m_nMaterialSourceSignature );
 	if ( !bCookDatabaseWritten ) {
 		errors.push_back( "Persistent cook database publish failed or was withheld because another cooked artifact failed" );
 	}
-	m_cpuRegionCache.releaseUntrackedMaps();
+	m_residency.cpuRegionCache().releaseUntrackedMaps();
 	const int usable = cooked + unchanged;
 	result["data_directory"] = data_dir;
 	result["far_atlas_cooked"] = bFarAtlasCooked;
-	result["material_cache"] = material_cache_result;
-	result["material_cache_cooked"] = bMaterialCacheCooked;
 	result["shader_pack"] = shader_pack_result;
 	result["shader_pack_cooked"] = bShaderPackCooked;
-	result["clipmap_pack_cooked"] = bClipmapPackCooked;
+	result["clipmap_topology"] = "procedural_strip";
+	result["instance_vt_package_cooked"] = bInstanceVtPackageCooked;
+	result["instance_vt_package_path"] = instance_vt_package_path;
+	result["instance_vt_package_generation"] = ( int64_t )nInstanceVtPackageGeneration;
+	result["instance_vt_material_count"] = ( int64_t )nInstanceVtMaterialCount;
 	result["cook_database_loaded"] = bCookDatabaseLoaded;
 	result["cook_database_written"] = bCookDatabaseWritten;
 	result["cook_database_path"] = cook_database.getPath( data_dir );
 	result["world_manifest_cooked"] = bWorldManifestCooked;
-	result["world_manifest_path"] = m_runtimeWorldManifest.getPath( data_dir );
+	result["world_manifest_path"] = m_runtimeArtifacts.worldManifest().getPath( data_dir );
 	result["strip_safe_sources"] = strip_safe_sources;
 	result["strip_manifest_path"] = strip_manifest_path;
 	result["preflight_failed"] = false;
@@ -3183,63 +3337,64 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 	result["orphan_failed"] = orphan_failed;
 	result["region_count"] = m_regionRepository.getActiveRegionCount();
 	result["complete"] = failed == 0 && usable == valid && valid == discovered && orphan_failed == 0 && bFarAtlasCooked
-	        && bMaterialCacheCooked && bShaderPackCooked && bClipmapPackCooked && bWorldManifestCooked && bCookDatabaseWritten;
+	        && bShaderPackCooked && bInstanceVtPackageCooked && bWorldManifestCooked
+	        && bCookDatabaseWritten;
 	result["errors"] = errors;
 	return result;
 }
 
-Error Terrain3DData::loadDirectory( const String &rDir ) {
-	// This method is script-bound and can be called without Terrain3D's outer
-	// directory setter. Staging/deserialization/publication are explicit cold
-	// owner transitions; the phase marker is diagnostic only.
+Error Terrain3DData::prepareDirectoryCandidateCold( const String &rDir,
+        t3dStagedRepository_t &rStaged,
+        bool &rBoundedCpuLoad,
+        bool &rCookedRuntimeManifest ) {
 	Terrain3DColdPhaseScope cold_scope;
-	t3dStagedRepository_t staged;
-	const bool bBoundedCpuLoad = m_cpuRegionCache.isEnabled();
+	rStaged.reset();
+	rBoundedCpuLoad = m_residency.cpuRegionCache().isEnabled();
 	LOG( INFO,
-	        "[terrain-data] Candidate repository load; CPU cache ",
-	        bBoundedCpuLoad ? "bounded" : "authoring/unbounded",
+	        "[terrain-data] Candidate repository prepare; CPU cache ",
+	        rBoundedCpuLoad ? "bounded" : "authoring/unbounded",
 	        "; GPU cache ",
-	        m_gpuRegionCache.isEnabled() ? "enabled" : "disabled" );
+	        m_residency.gpuRegionCache().isEnabled() ? "enabled" : "disabled" );
 	const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig();
-	m_cpuRegionCache.setRuntimePageConfig( runtime_page_config );
-	const bool bCookedRuntimeManifest =
-	        bBoundedCpuLoad && runtime_page_config.m_bCookedPagesEnabled && !runtime_page_config.m_bEditorAuthoring;
-	Error stageError = OK;
-	if ( bCookedRuntimeManifest ) {
+	m_residency.cpuRegionCache().setRuntimePageConfig( runtime_page_config );
+	rCookedRuntimeManifest =
+	        rBoundedCpuLoad && runtime_page_config.m_bCookedPagesEnabled && !runtime_page_config.m_bEditorAuthoring;
+	if ( rCookedRuntimeManifest ) {
 		PackedStringArray manifest_errors;
-		if ( !m_runtimeWorldManifest.load( rDir, &manifest_errors ) || !m_runtimeWorldManifest.stageRepository( rDir, staged ) ) {
+		m_startupPreparedWorldManifest.reset();
+		if ( !m_startupPreparedWorldManifest.load( rDir, &manifest_errors )
+		        || !m_startupPreparedWorldManifest.stageRepository( rDir, rStaged ) ) {
 			for ( size_t iError = 0u; iError < ( size_t )( ( manifest_errors ).size() ); iError++ ) {
-				const String &error = ( manifest_errors )[iError];
-				LOG( ERROR, error );
+				LOG( ERROR, ( manifest_errors )[iError] );
 			}
 			LOG( ERROR, "Cooked runtime profile requires a valid terrain3d_world.t3dmanifest." );
 			return ERR_FILE_CORRUPT;
 		}
 		LOG( INFO,
-		        "Loaded cooked world manifest with ",
-		        staged.getRegionCount(),
-		        " regions; authored Terrain3DRegion resources were not deserialized." );
-	} else {
-		m_runtimeWorldManifest.reset();
-		stageError = m_regionPersistence.stageDirectory( rDir, bBoundedCpuLoad, staged );
+		        "Prepared cooked world manifest with ",
+		        rStaged.getRegionCount(),
+		        " regions; live repository remains untouched." );
+		return OK;
 	}
-	if ( stageError != OK ) {
-		return stageError;
-	}
+	return m_regionPersistence.stageDirectory( rDir, rBoundedCpuLoad, rStaged );
+}
 
-	LOG( DEBUG, "[terrain-data] Phase 3/4: publishing active storage and region ownership" );
+Error Terrain3DData::commitDirectoryCandidateCold( const String &rDir,
+        t3dStagedRepository_t &rStaged,
+        const bool bBoundedCpuLoad,
+        const bool bCookedRuntimeManifest,
+        const bool bFinalizeDerived ) {
+	Terrain3DColdPhaseScope cold_scope;
+	LOG( DEBUG, "[terrain-data] Phase 3/4: committing active storage and region ownership" );
 	m_regionPersistence.beginPublication();
-
-	// Publish the complete validated repository in one state transition. Generated
-	// textures and cache mirrors are rebuilt from this complete state afterward.
 	m_samplingStorage.resetResidentPool();
 	bool activeStorageReady = false;
 	if ( bBoundedCpuLoad ) {
 		eastl::fixed_vector<const uint8_t *, s_nRegionSlots, false> staged_height_pages;
 		eastl::fixed_vector<int, s_nRegionSlots, false> staged_height_slots;
 		if ( !bCookedRuntimeManifest ) {
-			for ( size_t iRegion = 0u; iRegion < ( size_t )( ( staged.m_regions ).size() ); iRegion++ ) {
-				const t3dStagedRegion_t &entry = ( staged.m_regions )[iRegion];
+			for ( size_t iRegion = 0u; iRegion < ( size_t )( ( rStaged.m_regions ).size() ); iRegion++ ) {
+				const t3dStagedRegion_t &entry = ( rStaged.m_regions )[iRegion];
 				if ( entry.m_nActiveSlot < 0 || entry.m_stagedHeight.is_empty() ) {
 					LOG( ERROR, "Missing staged height payload for region ", entry.m_location );
 					m_regionPersistence.finishPublication( 0 );
@@ -3261,12 +3416,10 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 			m_regionPersistence.finishDirectoryLoad( false );
 			return ERR_ALREADY_IN_USE;
 		}
-		// Same-size repository replacement does not pass through the reconfigure
-		// clear path. Reset old slots before publishing the staged candidate.
 		m_samplingStorage.resetActive();
 		activeStorageReady = true;
-		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( staged.m_regions ).size() ); iRegion++ ) {
-			const t3dStagedRegion_t &entry = ( staged.m_regions )[iRegion];
+		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( rStaged.m_regions ).size() ); iRegion++ ) {
+			const t3dStagedRegion_t &entry = ( rStaged.m_regions )[iRegion];
 			if ( !syncActiveRegion( entry.m_location, entry.m_region.ptr() ) ) {
 				activeStorageReady = false;
 				break;
@@ -3289,11 +3442,19 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 		return ERR_INVALID_DATA;
 	}
 
-	m_regionRepository.replaceAll( staged.m_resources,
-	        staged.m_pRegionPtrs.data(),
-	        staged.m_regionLocations.data(),
-	        staged.getRegionCount(),
-	        staged.m_logicalRegionMap.data() );
+	if ( bCookedRuntimeManifest ) {
+		m_runtimeArtifacts.worldManifest() = m_startupPreparedWorldManifest;
+	} else {
+		m_runtimeArtifacts.worldManifest().reset();
+	}
+	m_regionRepository.replaceAll( rStaged.m_resources,
+	        rStaged.m_pRegionPtrs.data(),
+	        rStaged.m_regionLocations.data(),
+	        rStaged.getRegionCount(),
+	        rStaged.m_logicalRegionMap.data() );
+	m_regionRepository.rebuildRegionMapFromSlots();
+	m_regionRepository.setLoaded( true );
+	m_samplingStorage.refreshActiveGeneration();
 #ifdef DEBUG_ENABLED
 	if ( !m_regionRepository.validateInvariants() ) {
 		LOG( ERROR, "Region repository invariant failure after loadDirectory publication" );
@@ -3315,19 +3476,23 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 	m_generatedControlMaps.clear();
 	m_generatedColorMaps.clear();
 	m_generatedDerivedMaps.clear();
-
-	// Path takeover happens only after the repository owns every staged resource.
-	// Validation therefore cannot steal paths from the active repository.
 	if ( !bCookedRuntimeManifest ) {
-		m_regionPersistence.publishStagedPaths( staged );
+		m_regionPersistence.publishStagedPaths( rStaged );
 	}
 	m_regionPersistence.finishPublication( m_regionRepository.getActiveRegionCount() );
 	LOG( DEBUG,
 	        "[terrain-data] Phase 3/4 complete: ",
 	        m_regionRepository.getActiveRegionCount(),
-	        " active regions published; rebuilding residency and renderer resources" );
+	        " active regions committed; render-derived publication remains separate" );
+	if ( bFinalizeDerived ) {
+		finalizeDirectoryCandidateCold( bCookedRuntimeManifest );
+	}
+	( void )rDir;
+	return OK;
+}
 
-	LOG( DEBUG, "[terrain-data] Phase 4/4: cache policy, GPU textures, and sampling state" );
+void Terrain3DData::finalizeDirectoryCandidateCold( const bool bCookedRuntimeManifest ) {
+	LOG( DEBUG, "[terrain-data] Phase 4/4: cache policy and render-derived map publication" );
 	m_regionPersistence.beginFinalize();
 	configureResidentPool( 64 );
 	configureCpuRegionCache( m_pTerrain->isCpuRegionCacheEffective(),
@@ -3338,12 +3503,11 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 	        m_pTerrain->getEffectiveInstanceRegionCacheBudgetMb(),
 	        m_pTerrain->getInstanceRegionLoadBudgetPages(),
 	        m_pTerrain->getInstanceRegionLoadBudgetMb() );
-	if ( m_cpuRegionCache.isEnabled() ) {
+	if ( m_residency.cpuRegionCache().isEnabled() ) {
 		updateCpuRegionResidency( Vector3(), true );
 	}
 	updateMaps( REGION_TYPE_MAX, true, false );
 	invalidateSamplingCache();
-	LOG( DEBUG, "[terrain-data] Phase 4/4 complete: terrain repository is ready for consumers" );
 	if ( m_pTerrain->isInitialized() && m_pTerrain->getInstancer() ) {
 		m_pTerrain->getInstancer()->updateMmis( -1, s_v2iMax, true );
 	}
@@ -3361,7 +3525,18 @@ Error Terrain3DData::loadDirectory( const String &rDir ) {
 	        vformat( "%.2f", ( double )( loadStats.m_nDeserializeUsecLast ) / 1000.0 ),
 	        " ms",
 	        bCookedRuntimeManifest ? "; cooked manifest startup" : "" );
-	return OK;
+}
+
+Error Terrain3DData::loadDirectory( const String &rDir ) {
+	Terrain3DColdPhaseScope cold_scope;
+	t3dStagedRepository_t staged;
+	bool bBoundedCpuLoad = false;
+	bool bCookedRuntimeManifest = false;
+	const Error prepare_error = prepareDirectoryCandidateCold( rDir, staged, bBoundedCpuLoad, bCookedRuntimeManifest );
+	if ( prepare_error != OK ) {
+		return prepare_error;
+	}
+	return commitDirectoryCandidateCold( rDir, staged, bBoundedCpuLoad, bCookedRuntimeManifest, true );
 }
 
 // Loads a region from an explicit directory through the persistence layer.
@@ -3375,13 +3550,13 @@ void Terrain3DData::loadRegion( const Vector2i &rRegionLoc, const String &rDir, 
 		m_regionPersistence.publishLoadedRegionPath( result );
 		pRegion->setModified( result.m_bStorageUpgrade || pRegion->isModified() );
 		pRegion->setEdited( false );
-		m_cpuRegionCache.markSelectionDirty();
+		m_residency.cpuRegionCache().markSelectionDirty();
 	}
 }
 
 bool Terrain3DData::refreshTerrainShadowMasksInternal( void ) {
-	if ( m_gpuRegionCache.isEnabled() ) {
-		return m_gpuRegionCache.refreshTerrainShadowMasks();
+	if ( m_residency.gpuRegionCache().isEnabled() ) {
+		return m_residency.gpuRegionCache().refreshTerrainShadowMasks();
 	}
 	const int slot_count = m_regionRepository.getSlotCount();
 	if ( slot_count <= 0 ) {
@@ -3436,7 +3611,7 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 	if ( isFarAtlasRequired() ) {
 		markAllGpuFarRegionsDirty( eMapType );
 	}
-	if ( m_gpuRegionCache.isEnabled() ) {
+	if ( m_residency.gpuRegionCache().isEnabled() ) {
 		updateMapsBounded( eMapType, bAllRegions );
 		return;
 	}
@@ -3665,7 +3840,7 @@ void Terrain3DData::updateMaps( const t3dMapType_t eMapType, const bool bAllRegi
 		}
 	}
 
-	if ( !m_gpuRegionCache.isEnabled() && isFarAtlasRequired() ) {
+	if ( !m_residency.gpuRegionCache().isEnabled() && isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
 
@@ -3737,15 +3912,16 @@ void Terrain3DData::updateMapRegions(
 		if ( repository_slot < 0 ) {
 			continue;
 		}
-		if ( m_gpuRegionCache.isEnabled() ) {
-			if ( !m_gpuRegionCache.isResident( region_loc ) ) {
-				m_gpuRegionCache.markSelectionDirty();
+		if ( m_residency.gpuRegionCache().isEnabled() ) {
+			if ( !m_residency.gpuRegionCache().isResident( region_loc ) ) {
+				m_residency.gpuRegionCache().markSelectionDirty();
 				continue;
 			}
 			bHeightChanged = bHeightChanged || eMapType == TYPE_HEIGHT || eMapType == REGION_TYPE_MAX;
 			bControlChanged = bControlChanged || eMapType == TYPE_CONTROL || eMapType == REGION_TYPE_MAX;
 			bColorChanged = bColorChanged || eMapType == TYPE_COLOR || eMapType == REGION_TYPE_MAX;
-			bPhysicalMappingChanged = m_gpuRegionCache.republish( region_loc, getComputeBackendIfCreated() ) || bPhysicalMappingChanged;
+			bPhysicalMappingChanged =
+			        m_residency.gpuRegionCache().republish( region_loc, getComputeBackendIfCreated() ) || bPhysicalMappingChanged;
 			continue;
 		}
 
@@ -3801,7 +3977,7 @@ void Terrain3DData::updateMapRegions(
 	if ( bColorChanged ) {
 		emit_signal( "color_maps_changed" );
 	}
-	if ( !m_gpuRegionCache.isEnabled() && isFarAtlasRequired() ) {
+	if ( !m_residency.gpuRegionCache().isEnabled() && isFarAtlasRequired() ) {
 		ensureFarAtlases();
 	}
 }
@@ -3816,11 +3992,11 @@ void Terrain3DData::publishDerivedMapUpdates( const eastl::vector<t3dDerivedMapU
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		if ( m_gpuRegionCache.isEnabled() ) {
-			if ( m_gpuRegionCache.isResident( update.m_location ) ) {
-				m_gpuRegionCache.updateResidentLocation( update.m_location, TYPE_HEIGHT, getComputeBackendIfCreated() );
+		if ( m_residency.gpuRegionCache().isEnabled() ) {
+			if ( m_residency.gpuRegionCache().isResident( update.m_location ) ) {
+				m_residency.gpuRegionCache().updateResidentLocation( update.m_location, TYPE_HEIGHT, getComputeBackendIfCreated() );
 			} else {
-				m_gpuRegionCache.markSelectionDirty();
+				m_residency.gpuRegionCache().markSelectionDirty();
 			}
 			continue;
 		}
@@ -3864,7 +4040,7 @@ void Terrain3DData::commitMapEdits( const t3dMapType_t eMapType,
 	const eastl::vector<Vector2i, Terrain3DEastlAllocator> &derivedLocations = mutation.m_derivedLocations;
 	publishDerivedMapUpdates( mutation.m_derivedUpdates );
 
-	if ( m_gpuRegionCache.isEnabled() ) {
+	if ( m_residency.gpuRegionCache().isEnabled() ) {
 		for ( size_t iLocation = 0u; iLocation < ( size_t )( ( activeLocations ).size() ); iLocation++ ) {
 			const Vector2i &location = ( activeLocations )[iLocation];
 			markGpuFarRegionDirty( location, eMapType );
@@ -3884,6 +4060,9 @@ void Terrain3DData::commitMapEdits( const t3dMapType_t eMapType,
 	m_mapEditService.finalizeMapEdits( mutation, bKeepEdited );
 
 	if ( mutation.m_editedArea.size.x > 0.0f && mutation.m_editedArea.size.z > 0.0f ) {
+		if ( IS_EDITOR && m_pTerrain && m_pTerrain->getRenderCoordinatorInternal() ) {
+			m_pTerrain->getRenderCoordinatorInternal()->onTerrainMapsEdited( mutation.m_editedArea );
+		}
 		LOG( DEBUG, "Emitting maps_edited" );
 		emit_signal( "maps_edited", mutation.m_editedArea );
 	}
@@ -3965,7 +4144,7 @@ Color Terrain3DData::getPixel( const t3dMapType_t eMapType, const Vector3 &rGlob
 		return s_colorNan;
 	}
 	const Vector2i region_loc = getRegionLocation( rGlobalPosition );
-	if ( eMapType != TYPE_HEIGHT && m_cpuRegionCache.isEnabled()
+	if ( eMapType != TYPE_HEIGHT && m_residency.cpuRegionCache().isEnabled()
 	        && !const_cast<Terrain3DData *>( this )->ensureCpuRegionResident( region_loc ) ) {
 		return s_colorNan;
 	}
@@ -4031,7 +4210,7 @@ PackedFloat32Array Terrain3DData::getHeights( const PackedVector3Array &rGlobalP
 	}
 
 	Terrain3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_cpuRegionCache.isEnabled() ) {
+	if ( !m_residency.cpuRegionCache().isEnabled() ) {
 		sampler.sampleHeights( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}
@@ -4051,7 +4230,7 @@ PackedInt32Array Terrain3DData::getControls( const PackedVector3Array &rGlobalPo
 	}
 
 	Terrain3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_cpuRegionCache.isEnabled() ) {
+	if ( !m_residency.cpuRegionCache().isEnabled() ) {
 		sampler.sampleControls( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}
@@ -4073,7 +4252,7 @@ PackedVector3Array Terrain3DData::getNormals( const PackedVector3Array &rGlobalP
 	}
 
 	Terrain3DSampler sampler( getSamplingSourceInternal() );
-	if ( !m_cpuRegionCache.isEnabled() ) {
+	if ( !m_residency.cpuRegionCache().isEnabled() ) {
 		sampler.sampleNormals( rGlobalPositions.ptr(), result.ptrw(), rGlobalPositions.size() );
 		return result;
 	}

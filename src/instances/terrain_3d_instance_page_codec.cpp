@@ -67,6 +67,34 @@ static void t3dInstancePageCodecClearMeshCounts( uint32_t *pMeshCounts ) {
 	}
 }
 
+#if defined( TERRAIN3D_INSTANCE_PAGE_CODEC_TEST_ACCESS )
+static int s_nInstancePageCodecDecodeFailureCountdown = -1;
+
+static bool t3dInstancePageCodecInjectDecodeFailure( void ) {
+	if ( s_nInstancePageCodecDecodeFailureCountdown < 0 ) {
+		return false;
+	}
+	if ( s_nInstancePageCodecDecodeFailureCountdown == 0 ) {
+		s_nInstancePageCodecDecodeFailureCountdown = -1;
+		return true;
+	}
+	--s_nInstancePageCodecDecodeFailureCountdown;
+	return false;
+}
+
+void Terrain3DInstancePageCodec::testSetDecodeFailureCountdown( const int nCountdown ) {
+	s_nInstancePageCodecDecodeFailureCountdown = nCountdown;
+}
+
+void Terrain3DInstancePageCodec::testClearDecodeFailure( void ) {
+	s_nInstancePageCodecDecodeFailureCountdown = -1;
+}
+#else
+EA_FORCE_INLINE static bool t3dInstancePageCodecInjectDecodeFailure( void ) {
+	return false;
+}
+#endif
+
 static bool t3dInstancePageCodecMeasurePage(
         const Terrain3DInstanceStore &rStore, size_t &nBytes, uint32_t *pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount ) {
 	nBytes = s_nInstancePageHeaderBytes;
@@ -188,6 +216,7 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 	} else {
 		layout.m_nCellSize = t3dInstancePageCodecReadU16( pBytes + 12u );
 		layout.m_nCellsPerAxis = t3dInstancePageCodecReadU16( pBytes + 14u );
+		layout.m_nCellShift = t3dInstanceCellShift( layout.m_nCellSize );
 	}
 	if ( mesh_count > s_nMaxMeshAssets || !layout.isValid() ) {
 		return false;
@@ -227,7 +256,13 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 		uint32_t decoded_mesh_total = 0u;
 		t3dInstanceMesh_t *pDecodedMesh = NULL;
 		if ( bDecode && pStore ) {
-			pDecodedMesh = &pStore->getOrCreateMesh( mesh_id, cell_count );
+			if ( t3dInstancePageCodecInjectDecodeFailure() ) {
+				return false;
+			}
+			pDecodedMesh = pStore->tryGetOrCreateMesh( mesh_id, cell_count );
+			if ( !pDecodedMesh ) {
+				return false;
+			}
 		}
 		for ( uint32_t cell_index = 0u; cell_index < cell_count; ++cell_index ) {
 			if ( !t3dInstancePageCodecPageHas( nOffset, s_nInstancePageCellHeaderBytes, page_size ) ) {
@@ -256,12 +291,15 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 			}
 			t3dInstanceCell_t *pDecodedCell = NULL;
 			if ( bDecode && pDecodedMesh && pStore ) {
-				pDecodedCell = &pStore->getOrCreateCellExact( mesh_id,
+				if ( t3dInstancePageCodecInjectDecodeFailure() ) {
+					return false;
+				}
+				pDecodedCell = pStore->tryGetOrCreateCellExact( mesh_id,
 				        Vector2i( cell_x, cell_y ),
 				        count,
 				        ( flags & s_nInstancePageCellColors ) != 0u,
 				        ( flags & s_nInstancePageCellOwners ) != 0u );
-				if ( !pDecodedCell->m_transforms.resize( count ) ) {
+				if ( !pDecodedCell || t3dInstancePageCodecInjectDecodeFailure() || !pDecodedCell->m_transforms.resize( count ) ) {
 					return false;
 				}
 				t3dPackedTransform_t *pTransforms = pDecodedCell->m_transforms.data();
@@ -290,7 +328,7 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 					return false;
 				}
 				if ( pDecodedCell ) {
-					if ( !pDecodedCell->m_colors.resize( count ) ) {
+					if ( t3dInstancePageCodecInjectDecodeFailure() || !pDecodedCell->m_colors.resize( count ) ) {
 						return false;
 					}
 					for ( uint32_t index = 0u; index < count; ++index ) {
@@ -311,7 +349,7 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 					return false;
 				}
 				if ( pDecodedCell ) {
-					if ( !pDecodedCell->m_owners.resize( count ) ) {
+					if ( t3dInstancePageCodecInjectDecodeFailure() || !pDecodedCell->m_owners.resize( count ) ) {
 						return false;
 					}
 					for ( uint32_t index = 0u; index < count; ++index ) {
@@ -344,6 +382,47 @@ static bool t3dInstancePageCodecReadPageHeaders( const PackedByteArray &arrPage,
 	return true;
 }
 
+static bool t3dInstancePageCodecStoresEquivalent( const Terrain3DInstanceStore &rA, const Terrain3DInstanceStore &rB ) {
+	const t3dInstanceLayout_t &layout_a = rA.getLayout();
+	const t3dInstanceLayout_t &layout_b = rB.getLayout();
+	if ( layout_a.m_nCellSize != layout_b.m_nCellSize || layout_a.m_nCellsPerAxis != layout_b.m_nCellsPerAxis
+	        || layout_a.m_nCellShift != layout_b.m_nCellShift || rA.meshCount() != rB.meshCount() ) {
+		return false;
+	}
+	const Terrain3DConstInstanceMeshRange meshes_a = rA.meshes();
+	const Terrain3DConstInstanceMeshRange meshes_b = rB.meshes();
+	for ( size_t iMesh = 0u; iMesh < meshes_a.size(); ++iMesh ) {
+		const t3dInstanceMesh_t &mesh_a = meshes_a[iMesh];
+		const t3dInstanceMesh_t &mesh_b = meshes_b[iMesh];
+		if ( mesh_a.m_nId != mesh_b.m_nId || mesh_a.m_cells.size() != mesh_b.m_cells.size() ) {
+			return false;
+		}
+		for ( size_t iCell = 0u; iCell < mesh_a.m_cells.size(); ++iCell ) {
+			const t3dInstanceCell_t &cell_a = mesh_a.m_cells[iCell];
+			const t3dInstanceCell_t &cell_b = mesh_b.m_cells[iCell];
+			const size_t count = cell_a.m_transforms.size();
+			if ( cell_a.m_location != cell_b.m_location || count != cell_b.m_transforms.size()
+			        || cell_a.m_colors.size() != cell_b.m_colors.size() || cell_a.m_owners.size() != cell_b.m_owners.size()
+			        || cell_a.m_nRevision != cell_b.m_nRevision ) {
+				return false;
+			}
+			if ( count > 0u
+			        && memcmp( cell_a.m_transforms.data(), cell_b.m_transforms.data(), count * sizeof( t3dPackedTransform_t ) ) != 0 ) {
+				return false;
+			}
+			if ( !cell_a.m_colors.empty()
+			        && memcmp( cell_a.m_colors.data(), cell_b.m_colors.data(), cell_a.m_colors.size() * sizeof( uint32_t ) ) != 0 ) {
+				return false;
+			}
+			if ( !cell_a.m_owners.empty()
+			        && memcmp( cell_a.m_owners.data(), cell_b.m_owners.data(), cell_a.m_owners.size() * sizeof( uint32_t ) ) != 0 ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 bool Terrain3DInstancePageCodec::encode( const Terrain3DInstanceStore &rStore,
         PackedByteArray &rPage,
         uint32_t *const pMeshCounts,
@@ -353,8 +432,16 @@ bool Terrain3DInstancePageCodec::encode( const Terrain3DInstanceStore &rStore,
 	if ( !t3dInstancePageCodecMeasurePage( rStore, page_bytes, pMeshCounts, nInstanceCount, nMeshCount ) ) {
 		return false;
 	}
-	rPage.resize( ( int )( page_bytes ) );
+	if ( page_bytes > ( size_t )( INT32_MAX ) || rPage.resize( ( int64_t )( page_bytes ) ) != 0
+	        || rPage.size() != ( int64_t )( page_bytes ) ) {
+		rPage.clear();
+		return false;
+	}
 	uint8_t *const pBytes = rPage.ptrw();
+	if ( page_bytes > 0u && !pBytes ) {
+		rPage.clear();
+		return false;
+	}
 	t3dInstancePageCodecWriteU32( pBytes, s_nInstancePageMagic );
 	t3dInstancePageCodecWriteU16( pBytes + 4u, s_nInstancePageVersion );
 	t3dInstancePageCodecWriteU16( pBytes + 6u, nMeshCount );
@@ -435,44 +522,61 @@ bool Terrain3DInstancePageCodec::decode( const PackedByteArray &arrPage,
         uint32_t *const pMeshCounts,
         uint32_t &nInstanceCount,
         uint16_t &nMeshCount ) {
+	uint32_t decoded_mesh_counts[s_nMaxMeshAssets] = {};
+	uint32_t decoded_instance_count = 0u;
+	uint16_t decoded_mesh_count = 0u;
+	Terrain3DInstanceStore decoded;
+
 	if ( nPageBytes == 0u ) {
-		rStore.clearRetainCapacity();
-		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
-		nInstanceCount = 0u;
-		nMeshCount = 0u;
-		return true;
+		decoded.setLayout( rStore.getLayout() );
+	} else {
+		uint32_t inspected_instances = 0u;
+		uint16_t inspected_meshes = 0u;
+		size_t inspect_offset = 0u;
+		size_t color_count = 0u;
+		size_t owner_count = 0u;
+		if ( !t3dInstancePageCodecReadPageHeaders( arrPage,
+		             nPageBytes,
+		             inspect_offset,
+		             NULL,
+		             inspected_instances,
+		             inspected_meshes,
+		             false,
+		             NULL,
+		             &color_count,
+		             &owner_count ) ) {
+			return false;
+		}
+
+		size_t decode_offset = 0u;
+		if ( !t3dInstancePageCodecReadPageHeaders(
+		             arrPage, nPageBytes, decode_offset, decoded_mesh_counts, decoded_instance_count, decoded_mesh_count, true, &decoded )
+		        || decode_offset != nPageBytes || decoded_instance_count != inspected_instances || decoded_mesh_count != inspected_meshes
+		        || !decoded.validateDeep() || decoded.instanceCount() != ( size_t )( decoded_instance_count )
+		        || decoded.meshCount() != ( size_t )( decoded_mesh_count ) ) {
+			return false;
+		}
 	}
-	uint32_t inspected_instances = 0u;
-	uint16_t inspected_meshes = 0u;
-	size_t inspect_offset = 0u;
-	size_t color_count = 0u;
-	size_t owner_count = 0u;
-	if ( !t3dInstancePageCodecReadPageHeaders( arrPage,
-	             nPageBytes,
-	             inspect_offset,
-	             NULL,
-	             inspected_instances,
-	             inspected_meshes,
-	             false,
-	             NULL,
-	             &color_count,
-	             &owner_count ) ) {
-		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
-		nInstanceCount = 0u;
-		nMeshCount = 0u;
+
+	if ( t3dInstancePageCodecInjectDecodeFailure() ) {
 		return false;
 	}
-	rStore.clearRetainCapacity();
-	rStore.reserveMeshCapacity( ( size_t )inspected_meshes );
-	size_t decode_offset = 0u;
-	if ( !t3dInstancePageCodecReadPageHeaders(
-	             arrPage, nPageBytes, decode_offset, pMeshCounts, nInstanceCount, nMeshCount, true, &rStore ) ) {
-		t3dInstancePageCodecClearMeshCounts( pMeshCounts );
-		nInstanceCount = 0u;
-		nMeshCount = 0u;
-		return false;
+
+	if ( rStore.allocationClass() == TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE ) {
+		rStore = eastl::move( decoded );
+	} else {
+		rStore = decoded;
+		if ( !rStore.validateDeep() || !t3dInstancePageCodecStoresEquivalent( rStore, decoded ) ) {
+			return false;
+		}
 	}
-	return nInstanceCount == inspected_instances && nMeshCount == inspected_meshes;
+
+	if ( pMeshCounts ) {
+		memcpy( pMeshCounts, decoded_mesh_counts, sizeof( decoded_mesh_counts ) );
+	}
+	nInstanceCount = decoded_instance_count;
+	nMeshCount = decoded_mesh_count;
+	return true;
 }
 
 bool Terrain3DInstancePageCodec::inspect(

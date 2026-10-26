@@ -5,6 +5,7 @@
 
 #include <godot_cpp/classes/compositor_effect.hpp>
 #include <godot_cpp/classes/render_data.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 
 class Terrain3DRenderCoordinator;
 
@@ -22,8 +23,15 @@ public:
 	Terrain3DRdCompositorEffect( void );
 	void setCoordinator( Terrain3DRenderCoordinator *pCoordinator );
 	void shutdownRendererOnRenderThread( void );
+	void shutdownRendererLifecycleOnRenderThread( int64_t nShutdownGeneration );
 	void renderPreviewOnRenderThread( void );
-	void serviceRenderWorldPublicationOnRenderThread( void );
+	void renderPreviewAsyncOnRenderThread( void );
+	void servicePreviewVtRepublishOnRenderThread( void );
+	void serviceShaderStartupOnRenderThread( int64_t nStartupGeneration );
+	void recoverRendererLifecycleOnRenderThread( int64_t nStartupGeneration, int64_t nRecoveryRevision );
+	void acknowledgeStartupCancellationOnRenderThread( int64_t nStartupGeneration );
+	void serviceStartupWorldPublicationOnRenderThread( int64_t nStartupGeneration, int64_t nSnapshotGeneration );
+	void consumePreviewReadbackOnRenderThread( const godot::PackedByteArray &rReadbackBytes, int32_t nSlot, int64_t nRequestGeneration );
 	void _render_callback( int32_t nEffectCallbackType, godot::RenderData *pRenderData ) override;
 };
 

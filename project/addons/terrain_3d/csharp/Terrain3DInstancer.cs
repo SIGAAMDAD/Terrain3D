@@ -184,10 +184,20 @@ public partial class Terrain3DInstancer : GodotObject
 		/// Cached name for the 'update_transforms' member.
 		/// </summary>
 		public new static readonly StringName UpdateTransforms = "update_transforms";
+		/// <summary>Cached name for explicit terrain resnapping.</summary>
+		public new static readonly StringName SnapInstancesToTerrain = "snap_instances_to_terrain";
+		/// <summary>Cached name for persistent instance terrain-follow policy.</summary>
+		public new static readonly StringName SetInstanceFollowPolicy = "set_instance_follow_policy";
 		/// <summary>
 		/// Cached name for the 'get_closest_mesh_id' member.
 		/// </summary>
 		public new static readonly StringName GetClosestMeshId = "get_closest_mesh_id";
+		/// <summary>Cached name for editor-only individual-instance ray selection.</summary>
+		public new static readonly StringName PickEditableInstance = "pick_editable_instance";
+		/// <summary>Cached name for editor-only individual-instance handle refresh.</summary>
+		public new static readonly StringName GetEditableInstance = "get_editable_instance";
+		/// <summary>Cached name for editor-only individual-instance transform mutation.</summary>
+		public new static readonly StringName SetEditableInstanceTransform = "set_editable_instance_transform";
 		/// <summary>
 		/// Cached name for the 'update_mmis' member.
 		/// </summary>
@@ -233,8 +243,25 @@ public partial class Terrain3DInstancer : GodotObject
 	public new void UpdateTransforms(Aabb aabb) =>
 		Call(GDExtensionMethodName.UpdateTransforms, [aabb]);
 
+	public new long SnapInstancesToTerrain(Aabb aabb) =>
+		Call(GDExtensionMethodName.SnapInstancesToTerrain, [aabb]).As<long>();
+
+	public new long SetInstanceFollowPolicy(
+		Aabb aabb, bool followHeight, bool followNormal, bool manualOrientation, long meshId = -1) =>
+		Call(GDExtensionMethodName.SetInstanceFollowPolicy, [aabb, followHeight, followNormal, manualOrientation, meshId]).As<long>();
+
 	public new long GetClosestMeshId(Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetClosestMeshId, [globalPosition]).As<long>();
+
+	public new Godot.Collections.Dictionary PickEditableInstance(Vector3 rayOrigin, Vector3 rayDirection, double maxDistance = 4096.0) =>
+		Call(GDExtensionMethodName.PickEditableInstance, [rayOrigin, rayDirection, maxDistance]).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary GetEditableInstance(Godot.Collections.Dictionary handle) =>
+		Call(GDExtensionMethodName.GetEditableInstance, [handle]).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary SetEditableInstanceTransform(
+		Godot.Collections.Dictionary handle, Transform3D globalTransform, bool manualize = false) =>
+		Call(GDExtensionMethodName.SetEditableInstanceTransform, [handle, globalTransform, manualize]).As<Godot.Collections.Dictionary>();
 
 	public new void UpdateMmis(long meshId = -1, Vector2I regionLocation = default, bool rebuildAll = false) =>
 		Call(GDExtensionMethodName.UpdateMmis, [meshId, regionLocation, rebuildAll]);

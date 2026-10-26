@@ -39,14 +39,14 @@ uint64_t t3d_render_world_geometry_compute_signature_reference_debug( const T3DG
 
 	for ( uint32_t i = 0u; i < pDatabase.nVertexCount; ++i ) {
 		const T3DPrototypeVertex &V = pDatabase.Buffers.pVertexHeap[i];
-		nHash = t3d_rw_geometry_hash_float( nHash, V.vPosition[0] );
-		nHash = t3d_rw_geometry_hash_float( nHash, V.vPosition[1] );
-		nHash = t3d_rw_geometry_hash_float( nHash, V.vPosition[2] );
-		nHash = t3d_rw_geometry_hash_u32( nHash, V.nPackedNormal );
-		nHash = t3d_rw_geometry_hash_u32( nHash, V.nPackedTangent );
-		nHash = t3d_rw_geometry_hash_float( nHash, V.vUv[0] );
-		nHash = t3d_rw_geometry_hash_float( nHash, V.vUv[1] );
-		nHash = t3d_rw_geometry_hash_u32( nHash, V.nPackedColor );
+		nHash = t3d_rw_geometry_hash_float( nHash, V.m_fPosition[0] );
+		nHash = t3d_rw_geometry_hash_float( nHash, V.m_fPosition[1] );
+		nHash = t3d_rw_geometry_hash_float( nHash, V.m_fPosition[2] );
+		nHash = t3d_rw_geometry_hash_u32( nHash, V.m_nPackedNormal );
+		nHash = t3d_rw_geometry_hash_u32( nHash, V.m_nPackedTangent );
+		nHash = t3d_rw_geometry_hash_u32( nHash, V.m_nPackedUv0 );
+		nHash = t3d_rw_geometry_hash_u32( nHash, V.m_nPackedUv1 );
+		nHash = t3d_rw_geometry_hash_u32( nHash, V.m_nColorRgba8 );
 	}
 
 	for ( uint32_t i = 0u; i < pDatabase.nClusterVertexIndexCount; ++i ) {
@@ -331,9 +331,9 @@ bool t3d_render_world_geometry_validate_database_reference_debug( const T3DGeome
 				return false;
 			}
 			const T3DPrototypeVertex &Vertex = pDatabase.Buffers.pVertexHeap[nGlobal];
-			const float fDx = Vertex.vPosition[0] - Cluster.vCenter[0];
-			const float fDy = Vertex.vPosition[1] - Cluster.vCenter[1];
-			const float fDz = Vertex.vPosition[2] - Cluster.vCenter[2];
+			const float fDx = Vertex.m_fPosition[0] - Cluster.vCenter[0];
+			const float fDy = Vertex.m_fPosition[1] - Cluster.vCenter[1];
+			const float fDz = Vertex.m_fPosition[2] - Cluster.vCenter[2];
 			if ( t3d_rw_geometry_length3( fDx, fDy, fDz ) > Cluster.fRadius + fRadiusTolerance ) {
 				return false;
 			}

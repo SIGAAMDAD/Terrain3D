@@ -17,18 +17,10 @@ static const uint32_t T3D_RW_GODOT_SOURCE_FLAG_EXPLICIT = 1u << 1u;
 static const uint32_t T3D_RW_GODOT_SOURCE_FLAG_EXCLUDED = 1u << 2u;
 static const uint32_t T3D_RW_GODOT_SOURCE_FLAG_DYNAMIC = 1u << 3u;
 
-enum T3DRenderWorldVTMaterialChannel : uint32_t {
-	T3D_RW_VT_MATERIAL_ALBEDO = 0,
-	T3D_RW_VT_MATERIAL_NORMAL,
-	T3D_RW_VT_MATERIAL_SURFACE,
-	T3D_RW_VT_MATERIAL_HEIGHT
-};
-
-typedef uint32_t ( *T3DRenderWorldResolveTextureVTColdFn )(
-        void *pUser, const godot::Ref<godot::Texture2D> &pTexture, T3DRenderWorldVTMaterialChannel pChannel );
+typedef bool ( *T3DRenderWorldResolveMaterialVTColdFn )( void *pUser, uint64_t nStableMaterialKey, uint32_t &rAllocationId );
 
 struct T3DRenderWorldGodotMaterialResolver {
-	T3DRenderWorldResolveTextureVTColdFn pResolveTextureVT;
+	T3DRenderWorldResolveMaterialVTColdFn pResolveMaterialVT;
 	void *pUser;
 };
 
@@ -63,7 +55,7 @@ static_assert( eastl::is_trivially_destructible<T3DRenderWorldNativeVisualEntry>
 
 struct T3DRenderWorldSceneBuildBuffers {
 	T3DGeometryDatabase *pGeometry;
-	T3DMaterialRecord *pMaterials;
+	t3dRenderingMaterialGpu_t *pMaterials;
 	uint32_t nMaterialCapacity;
 	uint32_t nMaterialCount;
 	T3DSceneCell *pCells;
@@ -148,7 +140,7 @@ private:
 	        T3DRenderWorldConversionReason &rReason );
 	bool compileStandardMaterialCold( const godot::Ref<godot::Material> &pMaterial,
 	        uint32_t pTier,
-	        T3DMaterialRecord &rRecord,
+	        t3dRenderingMaterialGpu_t &rRecord,
 	        bool &rSortedTransparency,
 	        bool &rTwoSided ) const;
 	uint64_t computePrototypeKeyCold(

@@ -30,7 +30,7 @@ using namespace godot;
 #endif
 
 // Centralized project constants. Kept as #define values for the target-era style.
-#define s_nProfileVersion ( 5u )
+#define s_nProfileVersion ( 6u )
 #define s_nProfileFnvOffset ( 1469598103934665603ull )
 #define s_nProfileFnvPrime ( 1099511628211ull )
 #define s_nHashGoldenRatio32 ( 0x9e3779b9u )
@@ -208,8 +208,8 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nRegionMapHalf ( 16 )
 #define s_nRegionTexels ( 16384 )
 #define s_nRegionHeightBytes ( 32768 )
-#define s_nRegionGeometrySignature                                                                                                        \
-	( 0x80000000u | ( ( uint32_t )( s_nRegionSize ) << 16u ) | ( ( uint32_t )( s_nRegionVertexSpacingMeters ) << 8u )                    \
+#define s_nRegionGeometrySignature                                                                                                         \
+	( 0x80000000u | ( ( uint32_t )( s_nRegionSize ) << 16u ) | ( ( uint32_t )( s_nRegionVertexSpacingMeters ) << 8u )                      \
 	        | ( uint32_t )( s_nRegionMapSize ) )
 #define s_nXbox360CpuMapCeilingBytes ( 64u * 1024u * 1024u )
 #define s_nActiveWorldTexels ( s_nWorldTexels )
@@ -231,17 +231,6 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nResidentWorldSlotCount ( s_nRegionSlots )
 #define s_nInstanceRegionUpdateCapacity ( s_nInstanceRegionTableCapacity )
 #define s_fControlAutoFloat ( FLT_TRUE_MIN )
-#define s_nRuntimeMaterialMagic ( 0x5433444D41543031ull ) // T3DMAT01
-#define s_nRuntimeMaterialVersion ( 4u )
-#define s_nRuntimeMaterialSpareLayers ( 2 )
-#define s_nRuntimeMaterialHeaderBytes ( 32u )
-#define s_nRuntimeMaterialImageDescriptorBytes ( 32u )
-#define s_nRuntimeMaterialCookedChannels ( 5u )
-#define s_nRuntimeMaterialFixedSettingsBytes ( 60u )
-#define s_nRuntimeMaterialLayerDescriptorBytes                                                                                             \
-	( s_nRuntimeMaterialCookedChannels * s_nRuntimeMaterialImageDescriptorBytes + 16u + s_nRuntimeMaterialFixedSettingsBytes )
-#define s_nRuntimeMaterialDescriptorTableBytes ( s_nMaxTextureAssets * s_nRuntimeMaterialLayerDescriptorBytes )
-#define s_nRuntimeMaterialDataOffset ( s_nRuntimeMaterialHeaderBytes + s_nRuntimeMaterialDescriptorTableBytes )
 #define MAX_TEXTURE_ASSETS ( s_nMaxTextureAssets )
 #define MAX_MESH_ASSETS ( s_nMaxMeshAssets )
 #define s_nCookDatabaseMagic ( 0x3142444b43443354ull ) // T3DCKDB1
@@ -323,13 +312,13 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define T3D_TERRAIN_3D_RD_CULLING_COMMAND_BYTES ( sizeof( t3dRdIndexedIndirectCommand_t ) )
 #define T3D_TERRAIN_3D_RD_CULLING_BUFFER_BYTES ( sizeof( t3dRdIndexedIndirectCommand_t ) * s_nRdDrawGroupCount )
 #define s_nMaxSets ( 32u )
-#define s_nT3dForwardBridgeAbi ( 11u )
+#define s_nT3dForwardBridgeAbi ( 12u )
 #define s_nT3dForwardBridgeMaxViews ( 2u )
 #define s_nT3dForwardBridgeRequiredCapabilities                                                                                            \
 	( T3D_RD_FORWARD_CAP_DIRECT_POD | T3D_RD_FORWARD_CAP_DEPTH | T3D_RD_FORWARD_CAP_OPAQUE | T3D_RD_FORWARD_CAP_SHADOW                     \
 	        | T3D_RD_FORWARD_CAP_MOTION | T3D_RD_FORWARD_CAP_TRANSPARENT | T3D_RD_FORWARD_CAP_CLUSTERED_LIGHTING                           \
 	        | T3D_RD_FORWARD_CAP_DECALS | T3D_RD_FORWARD_CAP_REFLECTIONS | T3D_RD_FORWARD_CAP_RESOURCE_GENERATIONS                         \
-	        | T3D_RD_FORWARD_CAP_SPLIT_SHADOW_PACKET | T3D_RD_FORWARD_CAP_ENVIRONMENT_LIGHTING )
+	        | T3D_RD_FORWARD_CAP_SPLIT_SHADOW_PACKET | T3D_RD_FORWARD_CAP_ENVIRONMENT_LIGHTING | T3D_RD_FORWARD_CAP_PREVIOUS_DEPTH_HIZ )
 #define s_nBridgeAbiVersion ( s_nT3dForwardBridgeAbi )
 #define s_nMaxCoordinators ( 64u )
 #define s_nDirtyChunkRecords ( 64u )
@@ -353,16 +342,13 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nRdFrameSnapshotTokenIndexMask ( 0x3u )
 #define s_nRdFrameSnapshotTokenPublishedMask ( uint64_t( 1u ) << 63u )
 #define s_nRdFrameSnapshotGenerationMax ( ( uint64_t( 1u ) << 61u ) - 1u )
-#define s_nRdForwardBridgeAbiVersion ( 10u )
+#define s_nRdForwardBridgeAbiVersion ( 12u )
 #define s_nRdForwardMaxViews ( 2u )
 #define s_nEditorBrushTextureSize ( 256 )
 #define s_nForwardViewportSlotCount ( 8u )
 #define s_nDerivedReadbackSlotCount ( 3u )
 #define s_nShaderPackMagic ( 0x314b504853443354ull ) // T3DSHPK1
 #define s_nShaderPackVersion ( 1u )
-#define s_nClipmapPackMagic ( 0x314b504d504c4333ull ) // 3CLMPPK1
-#define s_nClipmapPackVersion ( 1u )
-#define s_nClipmapWeldPartCount ( 5u )
 #define s_nCpuRequestCapacity ( 25 )
 #define s_nActiveRadius ( 2 )
 #define s_nGpuCacheDefaultGuardRegions ( 1 )
@@ -382,7 +368,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define s_nDiscoveryBytes ( 12u )
 #define s_nRuntimeWorkerLimit ( 32 )
 #define T3D_TERRAIN_3D_STREAMING_INTEGRATION_BOUNDARY_FRACTION ( 0.25 )
-#define s_nNativeApiRevision ( 2026090601LL )
+#define s_nNativeApiRevision ( 2026091003LL )
 
 // File Paths (e.g. extras)
 #define OCEAN_MATERIAL_PATH "res://addons/terrain_3d/extras/shaders/M_ocean.tres"
@@ -605,7 +591,7 @@ static const Vector3 s_v3Up{ 0.f, 1.f, 0.f };
 
 
 // Additional migrated constants.
-#define s_pszNativeBuildId ( "instancer-authoritative-visible-index-fix-2026-09-09" )
+#define s_pszNativeBuildId ( "mesh-derived-instance-physics-occlusion-p13-2-rd-capacity-align-2026-09-16" )
 #define s_pszEngineSingletonName ( "Terrain3DForwardPlusBridge" )
 #define s_pszProfileKey ( "xbox360_experimental" )
 #define s_pszProfileDisplayName ( "Xbox 360 Experimental" )

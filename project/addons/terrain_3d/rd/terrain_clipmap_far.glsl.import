@@ -2,6 +2,7 @@
 
 importer="glsl"
 type="RDShaderFile"
+uid="uid://cn5bgsfcrvr8v"
 path="res://.godot/imported/terrain_clipmap_far.glsl-337ae0687d9694b9a075caffcf2a2c32.res"
 
 [deps]
@@ -10,3 +11,4 @@ source_file="res://addons/terrain_3d/rd/terrain_clipmap_far.glsl"
 dest_files=["res://.godot/imported/terrain_clipmap_far.glsl-337ae0687d9694b9a075caffcf2a2c32.res"]
 
 [params]
+

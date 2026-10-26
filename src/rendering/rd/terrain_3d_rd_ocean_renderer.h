@@ -3,8 +3,11 @@
 #define TERRAIN3D_RD_OCEAN_RENDERER_H
 
 #include "Terrain3DConstants.h"
+#include "rendering/terrain_3d_mesher.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
-#include "rendering/rd/terrain_3d_rd_topology.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_pipeline_cache.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
+#include "rendering/terrain_3d_clipmap_strip_contract.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include "eastl_config.h"
@@ -12,10 +15,11 @@
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 
-typedef struct t3dRdOceanTopologySnapshot_s {
+typedef struct t3dRdOceanStripSnapshot_s {
 	uint64_t m_nGeneration = 0u;
-	t3dClipmapGeometry_t m_szGeometry[MESH_TYPE_COUNT];
-} t3dRdOceanTopologySnapshot_t;
+	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
+	uint16_t m_szStripPartCounts[MESH_TYPE_COUNT]{};
+} t3dRdOceanStripSnapshot_t;
 
 class Terrain3DRdOceanRenderer {
 private:
@@ -49,25 +53,33 @@ private:
 		}
 	} t3dRdOceanPipelineKey_t;
 
-	typedef struct t3dRdOceanPipelineEntry_s {
-		t3dRdOceanPipelineKey_t m_key;
-		RID m_hPipeline;
-	} t3dRdOceanPipelineEntry_t;
+	typedef Terrain3DRdPipelineCache<t3dRdOceanPipelineKey_t, s_nPipelineCapacity> t3dRdOceanPipelineCache_t;
+	typedef t3dRdOceanPipelineCache_t::Entry t3dRdOceanPipelineEntry_t;
+	typedef struct t3dRdOceanSetKey_s {
+		RID shader;
+		RID frame;
+		RID patches;
+		RID stripParts;
+		bool operator==( const t3dRdOceanSetKey_s &rOther ) const {
+			return shader == rOther.shader && frame == rOther.frame && patches == rOther.patches && stripParts == rOther.stripParts;
+		}
+	} t3dRdOceanSetKey_t;
+	typedef Terrain3DRdDescriptorCache<t3dRdOceanSetKey_t, 2u> t3dRdOceanDescriptorCache_t;
 
 	Terrain3DRdContext &m_context;
-	Terrain3DRdTopology m_szTopology[MESH_TYPE_COUNT];
 	RID m_hColorShader;
 	RID m_hShadowShader;
 	RID m_hFrameBuffer;
 	RID m_hPatchBuffer;
-	RID m_hColorUniformSet;
-	RID m_hShadowUniformSet;
+	RID m_hStripPartBuffer;
+	RID m_hStripIndirectBuffer;
+	uint32_t m_nStripIndirectOffsetBytes = 0u;
 
-	t3dRdOceanPipelineEntry_t m_szPipelines[s_nPipelineCapacity]{};
-	uint32_t m_nPipelineCount = 0u;
-	uint32_t m_nPipelineEvictCursor = 0u;
-	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
-	uint64_t m_nTopologyGeneration = 0u;
+	t3dRdOceanPipelineCache_t m_pipelines;
+	t3dRdOceanDescriptorCache_t m_descriptors;
+	uint64_t m_nStripGeneration = 0u;
+	uint16_t m_szStripPartCounts[MESH_TYPE_COUNT]{};
+	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
 	uint64_t m_nStateGeneration = 0u;
 	uint64_t m_nPreparedScenePass = 0u;
 	uint64_t m_nPreparedViewportKey = 0u;
@@ -77,17 +89,19 @@ private:
 	PackedByteArray m_frameBytes;
 	PackedByteArray m_patchBytes;
 	PackedByteArray m_pushBytes;
+	PackedByteArray m_stripPartBytes;
+	PackedByteArray m_stripIndirectBytes;
 	uint64_t m_nFramesPrepared = 0u;
 	uint64_t m_nDraws = 0u;
-	uint64_t m_nTopologyUploads = 0u;
-	uint64_t m_nPipelineBuilds = 0u;
+	uint64_t m_nStripDescriptorUploads = 0u;
 	String m_lastError;
 
 	void setError( const String &rError );
 	bool ensureShaders( const Ref<RDShaderSPIRV> &rColor, const Ref<RDShaderSPIRV> &rShadow );
 	bool ensureBuffers( void );
 	bool ensureUniformSets( void );
-	bool ensureTopology( const t3dRdOceanTopologySnapshot_t *pTopology );
+	bool ensureStripParts( const t3dRdOceanStripSnapshot_t *pStrip );
+	bool updateStripIndirect( uint32_t nPatchCount );
 	bool updateFrame( const t3dRdForwardPassContext_t &rContext, const t3dRdFrameSnapshot_t &rSnapshot );
 	bool ensurePipeline( const t3dRdForwardPassContext_t &rContext );
 	const t3dRdOceanPipelineEntry_t *findPipeline( const t3dRdOceanPipelineKey_t &rKey ) const;
@@ -101,10 +115,13 @@ public:
 	void shutdown( void );
 	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
 	        const t3dRdFrameSnapshot_t &rSnapshot,
-	        const t3dRdOceanTopologySnapshot_t *pTopology,
+	        const t3dRdOceanStripSnapshot_t *pStrip,
 	        uint32_t nVisibilityMask );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	Dictionary getDiagnostics( void ) const;
+	EA_FORCE_INLINE uint64_t getDrawsRendered( void ) const {
+		return m_nDraws;
+	}
 	String getLastError( void ) const {
 		return m_lastError;
 	}

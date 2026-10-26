@@ -5,7 +5,7 @@
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "instances/terrain_3d_instancer_bringup.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
-#include "rendering/rd/terrain_3d_rd_texture_manager.h"
+#include "rendering/rd/world/terrain_3d_world_cluster_cooker.h"
 
 #include "eastl_config.h"
 #include <godot_cpp/classes/mesh.hpp>
@@ -13,6 +13,13 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
 class Terrain3DAssets;
+class Terrain3DRenderingMaterial;
+
+typedef const Terrain3DRenderingMaterial *( *t3dRdExternalRenderingMaterialResolver_t )( const void *pContext, uint32_t nSurface );
+
+enum t3dRdExternalMeshSourceFlags_t : uint32_t {
+	T3D_RD_EXTERNAL_MESH_REQUIRE_RENDERING_MATERIAL = 1u << 0u,
+};
 
 typedef struct t3dRdMeshSourceSurface_s {
 	uint64_t m_nSourceKey = 0u;
@@ -26,19 +33,18 @@ typedef struct t3dRdMeshSourceSurface_s {
 	uint32_t m_nVertexCount = 0u;
 	uint32_t m_nIndexOffset = 0u;
 	uint32_t m_nIndexCount = 0u;
-	uint32_t m_nIndexFormat = ( uint32_t )( RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 );
+	uint32_t m_nWorldVertexOffset = 0u;
+	uint32_t m_nWorldVertexCount = 0u;
+	uint32_t m_nWorldClusterOffset = 0u;
+	uint32_t m_nWorldClusterCount = 0u;
 	AABB m_bounds;
 } t3dRdMeshSourceSurface_t;
 
 
-typedef struct t3dRdDirectSurfaceGpu_s {
-	RID m_hVertexBuffer;
+typedef struct t3dRdArenaSurfaceView_s {
 	RID m_hVertexArray;
-	RID m_hIndexBuffer;
 	RID m_hIndexArray;
-	uint32_t m_nVertexBytes = 0u;
-	uint32_t m_nIndexBytes = 0u;
-} t3dRdDirectSurfaceGpu_t;
+} t3dRdArenaSurfaceView_t;
 
 typedef struct t3dRdMeshSourceLod_s {
 	uint64_t m_nSourceKey = 0u;
@@ -53,64 +59,73 @@ typedef struct t3dRdMeshSourceLod_s {
 typedef struct t3dRdExternalMeshSource_s {
 	uint64_t m_nSourceKey = 0u;
 	Ref<Mesh> m_mesh;
+	const void *m_pMaterialContext = NULL;
+	t3dRdExternalRenderingMaterialResolver_t m_pResolveRenderingMaterial = NULL;
+	uint32_t m_nFlags = 0u;
 } t3dRdExternalMeshSource_t;
-
-typedef struct t3dRdImportedTextureSource_s {
-	uint64_t m_nSourceId = 0u;
-	uint64_t m_nFingerprint = 0u;
-	t3dRdTextureLayout_t m_layout;
-	PackedByteArray m_bytes;
-} t3dRdImportedTextureSource_t;
-
-typedef struct t3dRdImportedTextureGpu_s {
-	uint64_t m_nSourceId = 0u;
-	uint64_t m_nFingerprint = 0u;
-	RID m_hTexture;
-	uint64_t m_nBytes = 0u;
-} t3dRdImportedTextureGpu_t;
 
 typedef struct t3dRdMeshSourceSnapshot_s {
 	uint64_t m_nFingerprint = 0u;
 	uint64_t m_nGeneration = 0u;
 	PackedByteArray m_vertexBytes;
-	PackedByteArray m_index16Bytes;
 	PackedByteArray m_index32Bytes;
 	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_vertexChunkHashes;
-	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_index16ChunkHashes;
 	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_index32ChunkHashes;
 	eastl::vector<t3dRdMeshSourceSurface_t, Terrain3DEastlAllocator> m_surfaces;
 	eastl::vector<t3dRdMeshSourceLod_t, Terrain3DEastlAllocator> m_lods;
 	eastl::vector<t3dRdInstanceMaterial_t, Terrain3DEastlAllocator> m_materials;
-	eastl::vector<t3dRdImportedTextureSource_t, Terrain3DEastlAllocator> m_textures;
+	eastl::vector<t3dRenderingMaterialGpu_t, Terrain3DEastlAllocator> m_vtMaterials;
+	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_materialKeys;
+	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_vtStableKeys;
+	eastl::vector<t3dWorldVertex_t, Terrain3DEastlAllocator> m_worldVertices;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_worldClusterVertexIndices;
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_worldTriangleWords;
+	eastl::vector<t3dWorldCluster_t, Terrain3DEastlAllocator> m_worldClusters;
+	eastl::vector<t3dWorldClusterVtMetadata_t, Terrain3DEastlAllocator> m_worldClusterVtMetadata;
 	EA_FORCE_INLINE void bindRuntimeAllocator( const Terrain3DEastlAllocator &rAllocator ) {
 		m_vertexChunkHashes.set_allocator( rAllocator );
-		m_index16ChunkHashes.set_allocator( rAllocator );
 		m_index32ChunkHashes.set_allocator( rAllocator );
 		m_surfaces.set_allocator( rAllocator );
 		m_lods.set_allocator( rAllocator );
 		m_materials.set_allocator( rAllocator );
-		m_textures.set_allocator( rAllocator );
+		m_vtMaterials.set_allocator( rAllocator );
+		m_materialKeys.set_allocator( rAllocator );
+		m_vtStableKeys.set_allocator( rAllocator );
+		m_worldVertices.set_allocator( rAllocator );
+		m_worldClusterVertexIndices.set_allocator( rAllocator );
+		m_worldTriangleWords.set_allocator( rAllocator );
+		m_worldClusters.set_allocator( rAllocator );
+		m_worldClusterVtMetadata.set_allocator( rAllocator );
 	}
 	bool copyFrom( const t3dRdMeshSourceSnapshot_s &rOther ) {
 		if ( rOther.m_vertexChunkHashes.size() > m_vertexChunkHashes.capacity()
-		        || rOther.m_index16ChunkHashes.size() > m_index16ChunkHashes.capacity()
 		        || rOther.m_index32ChunkHashes.size() > m_index32ChunkHashes.capacity() || rOther.m_surfaces.size() > m_surfaces.capacity()
 		        || rOther.m_lods.size() > m_lods.capacity() || rOther.m_materials.size() > m_materials.capacity()
-		        || rOther.m_textures.size() > m_textures.capacity() ) {
+		        || rOther.m_vtMaterials.size() > m_vtMaterials.capacity() || rOther.m_materialKeys.size() > m_materialKeys.capacity()
+		        || rOther.m_vtStableKeys.size() > m_vtStableKeys.capacity() || rOther.m_worldVertices.size() > m_worldVertices.capacity()
+		        || rOther.m_worldClusterVertexIndices.size() > m_worldClusterVertexIndices.capacity()
+		        || rOther.m_worldTriangleWords.size() > m_worldTriangleWords.capacity()
+		        || rOther.m_worldClusters.size() > m_worldClusters.capacity()
+		        || rOther.m_worldClusterVtMetadata.size() > m_worldClusterVtMetadata.capacity() ) {
 			return false;
 		}
 		if ( !t3dVectorCopyWithinCapacity( m_vertexChunkHashes, rOther.m_vertexChunkHashes )
-		        || !t3dVectorCopyWithinCapacity( m_index16ChunkHashes, rOther.m_index16ChunkHashes )
 		        || !t3dVectorCopyWithinCapacity( m_index32ChunkHashes, rOther.m_index32ChunkHashes )
 		        || !t3dVectorCopyWithinCapacity( m_surfaces, rOther.m_surfaces ) || !t3dVectorCopyWithinCapacity( m_lods, rOther.m_lods )
 		        || !t3dVectorCopyWithinCapacity( m_materials, rOther.m_materials )
-		        || !t3dVectorCopyWithinCapacity( m_textures, rOther.m_textures ) ) {
+		        || !t3dVectorCopyWithinCapacity( m_vtMaterials, rOther.m_vtMaterials )
+		        || !t3dVectorCopyWithinCapacity( m_materialKeys, rOther.m_materialKeys )
+		        || !t3dVectorCopyWithinCapacity( m_vtStableKeys, rOther.m_vtStableKeys )
+		        || !t3dVectorCopyWithinCapacity( m_worldVertices, rOther.m_worldVertices )
+		        || !t3dVectorCopyWithinCapacity( m_worldClusterVertexIndices, rOther.m_worldClusterVertexIndices )
+		        || !t3dVectorCopyWithinCapacity( m_worldTriangleWords, rOther.m_worldTriangleWords )
+		        || !t3dVectorCopyWithinCapacity( m_worldClusters, rOther.m_worldClusters )
+		        || !t3dVectorCopyWithinCapacity( m_worldClusterVtMetadata, rOther.m_worldClusterVtMetadata ) ) {
 			return false;
 		}
 		m_nFingerprint = rOther.m_nFingerprint;
 		m_nGeneration = rOther.m_nGeneration;
 		m_vertexBytes = rOther.m_vertexBytes;
-		m_index16Bytes = rOther.m_index16Bytes;
 		m_index32Bytes = rOther.m_index32Bytes;
 		return true;
 	}
@@ -123,16 +138,12 @@ private:
 	Terrain3DRdContext &m_context;
 	RID m_hVertexArena;
 	RID m_hVertexArray;
-	RID m_hIndex16Arena;
-	RID m_hIndex16Array;
 	RID m_hIndex32Arena;
 	RID m_hIndex32Array;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
 	uint32_t m_nVertexCapacityBytes = 0u;
-	uint32_t m_nIndex16CapacityBytes = 0u;
 	uint32_t m_nIndex32CapacityBytes = 0u;
 	uint32_t m_nVertexUsedBytes = 0u;
-	uint32_t m_nIndex16UsedBytes = 0u;
 	uint32_t m_nIndex32UsedBytes = 0u;
 	uint32_t m_nGeneration = 0u;
 	uint64_t m_nSourceGeneration = 0u;
@@ -142,20 +153,17 @@ private:
 	uint64_t m_nArenaRebuildFailureCount = 0u;
 	uint64_t m_nUploadAttemptCount = 0u;
 	uint64_t m_nUploadFailureCount = 0u;
-	uint64_t m_nTextureFallbackCount = 0u;
 	String m_lastError;
 	eastl::vector<t3dRdMeshSourceSurface_t, Terrain3DEastlAllocator> m_surfaces;
 	eastl::vector<t3dRdMeshSourceLod_t, Terrain3DEastlAllocator> m_lods;
 	eastl::vector<t3dRdInstanceMaterial_t, Terrain3DEastlAllocator> m_materials;
-	eastl::vector<t3dRdImportedTextureGpu_t, Terrain3DEastlAllocator> m_textures;
+	eastl::vector<t3dRenderingMaterialGpu_t, Terrain3DEastlAllocator> m_vtMaterials;
+	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_vtStableKeys;
 	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_vertexChunkHashes;
-	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_index16ChunkHashes;
 	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_index32ChunkHashes;
 	PackedByteArray m_dirtyUploadScratch;
-	eastl::vector<t3dRdImportedTextureGpu_t, Terrain3DEastlAllocator> m_textureSyncNext;
-	eastl::vector<uint8_t, Terrain3DEastlAllocator> m_textureSyncReused;
-#if T3D_INSTANCER_RD_PORT
-	eastl::vector<t3dRdDirectSurfaceGpu_t, Terrain3DEastlAllocator> m_directSurfaces;
+#if T3D_INSTANCER_SHARED_MESH_ARENA
+	eastl::vector<t3dRdArenaSurfaceView_t, Terrain3DEastlAllocator> m_surfaceViews;
 #endif
 
 	bool ensureVertexFormat( void );
@@ -166,11 +174,10 @@ private:
 	        Terrain3DRdContext::ResourceType resourceType,
 	        Terrain3DRdContext::MemoryCategory memoryCategory );
 	bool rebuildArrays( void );
-#if T3D_INSTANCER_RD_PORT
-	bool rebuildDirectSurfaces( const t3dRdMeshSourceSnapshot_t *pSnapshot );
-	void discardDirectSurfaces( void );
+#if T3D_INSTANCER_SHARED_MESH_ARENA
+	bool rebuildSurfaceViews( const t3dRdMeshSourceSnapshot_t *pSnapshot );
+	void discardSurfaceViews( void );
 #endif
-	bool syncTextures( const t3dRdMeshSourceSnapshot_t *pSnapshot );
 	bool uploadChangedChunks( const RID &rBuffer,
 	        const PackedByteArray &rCurrent,
 	        const eastl::vector<uint64_t, Terrain3DEastlAllocator> &rCurrentHashes,
@@ -178,7 +185,6 @@ private:
 	        bool bForceFull,
 	        uint64_t &nUploadedBytes );
 	void discardArrays( void );
-	void discardTextures( void );
 	void setError( const String &rError );
 
 public:
@@ -187,6 +193,13 @@ public:
 	~Terrain3DRdMeshCache( void );
 
 	static uint32_t nextArenaCapacity( uint32_t nRequiredBytes, uint32_t nMinimumBytes );
+	static uint64_t computeSourceFingerprintForAsset( const Ref<Terrain3DAssets> &rAssets, uint16_t nAssetId );
+	static bool buildSourceSnapshotForAsset( const Ref<Terrain3DAssets> &rAssets,
+	        uint16_t nAssetId,
+	        t3dRdMeshSourceSnapshot_t &rResult,
+	        uint64_t nFingerprint,
+	        uint64_t nGeneration,
+	        String *pError = NULL );
 	static uint64_t computeSourceFingerprint( const Ref<Terrain3DAssets> &rAssets );
 	static uint64_t computeSourceFingerprint(
 	        const Ref<Terrain3DAssets> &rAssets, const t3dRdExternalMeshSource_t *pExternalMeshes, size_t nExternalMeshCount );
@@ -209,6 +222,7 @@ public:
 	void shutdown( void );
 
 	t3dRdMeshHandle_t getMeshHandle( uint16_t nAssetId, int nLod ) const;
+	t3dRdMeshHandle_t getOcclusionProxyMeshHandle( uint16_t nAssetId ) const;
 	t3dRdMeshHandle_t getMeshHandleBySourceKey( uint64_t nSourceKey ) const;
 	const t3dRdMeshSourceLod_t *resolveMesh( const t3dRdMeshHandle_t &rHandle ) const;
 	t3dRdSurfaceHandle_t getSurfaceHandle( const t3dRdMeshHandle_t &rMesh, uint32_t nSurface ) const;
@@ -220,6 +234,18 @@ public:
 	EA_FORCE_INLINE size_t getMaterialCount( void ) const {
 		return m_materials.size();
 	}
+	EA_FORCE_INLINE const t3dRenderingMaterialGpu_t *getVtMaterials( void ) const {
+		return m_vtMaterials.data();
+	}
+	EA_FORCE_INLINE size_t getVtMaterialCount( void ) const {
+		return m_vtMaterials.size();
+	}
+	EA_FORCE_INLINE const uint64_t *getVtStableMaterialKeys( void ) const {
+		return m_vtStableKeys.data();
+	}
+	EA_FORCE_INLINE size_t getVtStableMaterialKeyCount( void ) const {
+		return m_vtStableKeys.size();
+	}
 	EA_FORCE_INLINE const t3dRdMeshSourceSurface_t *getSurfaces( void ) const {
 		return m_surfaces.data();
 	}
@@ -229,25 +255,24 @@ public:
 	EA_FORCE_INLINE size_t getLodCount( void ) const {
 		return m_lods.size();
 	}
-	RID getTextureRid( uint64_t nSourceId ) const;
 	EA_FORCE_INLINE RID getVertexArray( void ) const {
 		return m_hVertexArray;
 	}
 	EA_FORCE_INLINE int64_t getVertexFormat( void ) const {
 		return m_nVertexFormat;
 	}
-	EA_FORCE_INLINE RID getIndexArray( const RenderingDevice::IndexBufferFormat format ) const {
-		return format == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16 ? m_hIndex16Array : m_hIndex32Array;
+	EA_FORCE_INLINE RID getIndexArray( void ) const {
+		return m_hIndex32Array;
 	}
-#if T3D_INSTANCER_RD_PORT
-	EA_FORCE_INLINE RID getDirectSurfaceVertexArray( const uint32_t nSurfaceSlot ) const {
-		return nSurfaceSlot < m_directSurfaces.size() ? m_directSurfaces[nSurfaceSlot].m_hVertexArray : RID();
+#if T3D_INSTANCER_SHARED_MESH_ARENA
+	EA_FORCE_INLINE RID getSurfaceVertexArray( const uint32_t nSurfaceSlot ) const {
+		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_hVertexArray : RID();
 	}
-	EA_FORCE_INLINE RID getDirectSurfaceIndexArray( const uint32_t nSurfaceSlot ) const {
-		return nSurfaceSlot < m_directSurfaces.size() ? m_directSurfaces[nSurfaceSlot].m_hIndexArray : RID();
+	EA_FORCE_INLINE RID getSurfaceIndexArray( const uint32_t nSurfaceSlot ) const {
+		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_hIndexArray : RID();
 	}
-	EA_FORCE_INLINE uint32_t getDirectSurfaceCount( void ) const {
-		return ( uint32_t )( m_directSurfaces.size() );
+	EA_FORCE_INLINE uint32_t getSurfaceViewCount( void ) const {
+		return ( uint32_t )( m_surfaceViews.size() );
 	}
 #endif
 	EA_FORCE_INLINE uint32_t getGeneration( void ) const {
@@ -257,43 +282,48 @@ public:
 		return m_nSourceGeneration;
 	}
 	EA_FORCE_INLINE uint64_t getGpuBytes( void ) const {
-		uint64_t bytes =
-		        ( uint64_t )( m_nVertexCapacityBytes ) + ( uint64_t )( m_nIndex16CapacityBytes ) + ( uint64_t )( m_nIndex32CapacityBytes );
-		for ( size_t iTexture = 0u; iTexture < ( size_t )( ( m_textures ).size() ); iTexture++ ) {
-			const t3dRdImportedTextureGpu_t &texture = ( m_textures )[iTexture];
-			bytes += texture.m_nBytes;
-		}
-#if T3D_INSTANCER_RD_PORT
-		for ( size_t iSurface = 0u; iSurface < m_directSurfaces.size(); ++iSurface ) {
-			bytes += m_directSurfaces[iSurface].m_nVertexBytes + m_directSurfaces[iSurface].m_nIndexBytes;
-		}
-#endif
-		return bytes;
-	}
-	EA_FORCE_INLINE uint32_t getTextureCount( void ) const {
-		return ( uint32_t )( m_textures.size() );
+		return ( uint64_t )( m_nVertexCapacityBytes ) + ( uint64_t )( m_nIndex32CapacityBytes );
 	}
 	EA_FORCE_INLINE bool isReady( void ) const {
-#if T3D_INSTANCER_RD_PORT
-		return !m_directSurfaces.empty() && m_nGeneration != 0u;
+#if T3D_INSTANCER_SHARED_MESH_ARENA
+		return m_hVertexArray.is_valid() && !m_surfaceViews.empty() && m_nGeneration != 0u;
 #else
 		return m_hVertexArray.is_valid() && m_nGeneration != 0u;
 #endif
 	}
-	EA_FORCE_INLINE uint64_t getArenaCapacityMissCount( void ) const { return m_nArenaCapacityMissCount; }
-	EA_FORCE_INLINE uint64_t getArenaGrowthRequestCount( void ) const { return m_nArenaGrowthRequestCount; }
-	EA_FORCE_INLINE uint64_t getArenaRebuildCount( void ) const { return m_nArenaRebuildCount; }
-	EA_FORCE_INLINE uint64_t getArenaRebuildFailureCount( void ) const { return m_nArenaRebuildFailureCount; }
-	EA_FORCE_INLINE uint64_t getUploadAttemptCount( void ) const { return m_nUploadAttemptCount; }
-	EA_FORCE_INLINE uint64_t getUploadFailureCount( void ) const { return m_nUploadFailureCount; }
-	EA_FORCE_INLINE uint64_t getTextureFallbackCount( void ) const { return m_nTextureFallbackCount; }
-	EA_FORCE_INLINE String getLastError( void ) const { return m_lastError; }
-	EA_FORCE_INLINE uint32_t getVertexCapacityBytes( void ) const { return m_nVertexCapacityBytes; }
-	EA_FORCE_INLINE uint32_t getIndex16CapacityBytes( void ) const { return m_nIndex16CapacityBytes; }
-	EA_FORCE_INLINE uint32_t getIndex32CapacityBytes( void ) const { return m_nIndex32CapacityBytes; }
-	EA_FORCE_INLINE uint32_t getVertexUsedBytes( void ) const { return m_nVertexUsedBytes; }
-	EA_FORCE_INLINE uint32_t getIndex16UsedBytes( void ) const { return m_nIndex16UsedBytes; }
-	EA_FORCE_INLINE uint32_t getIndex32UsedBytes( void ) const { return m_nIndex32UsedBytes; }
+	EA_FORCE_INLINE uint64_t getArenaCapacityMissCount( void ) const {
+		return m_nArenaCapacityMissCount;
+	}
+	EA_FORCE_INLINE uint64_t getArenaGrowthRequestCount( void ) const {
+		return m_nArenaGrowthRequestCount;
+	}
+	EA_FORCE_INLINE uint64_t getArenaRebuildCount( void ) const {
+		return m_nArenaRebuildCount;
+	}
+	EA_FORCE_INLINE uint64_t getArenaRebuildFailureCount( void ) const {
+		return m_nArenaRebuildFailureCount;
+	}
+	EA_FORCE_INLINE uint64_t getUploadAttemptCount( void ) const {
+		return m_nUploadAttemptCount;
+	}
+	EA_FORCE_INLINE uint64_t getUploadFailureCount( void ) const {
+		return m_nUploadFailureCount;
+	}
+	EA_FORCE_INLINE String getLastError( void ) const {
+		return m_lastError;
+	}
+	EA_FORCE_INLINE uint32_t getVertexCapacityBytes( void ) const {
+		return m_nVertexCapacityBytes;
+	}
+	EA_FORCE_INLINE uint32_t getIndex32CapacityBytes( void ) const {
+		return m_nIndex32CapacityBytes;
+	}
+	EA_FORCE_INLINE uint32_t getVertexUsedBytes( void ) const {
+		return m_nVertexUsedBytes;
+	}
+	EA_FORCE_INLINE uint32_t getIndex32UsedBytes( void ) const {
+		return m_nIndex32UsedBytes;
+	}
 };
 
 #endif // TERRAIN3D_RD_MESH_CACHE_H

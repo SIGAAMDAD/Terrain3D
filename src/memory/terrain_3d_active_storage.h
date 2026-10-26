@@ -21,32 +21,37 @@ using namespace godot;
 // Height hot storage is a fixed 32-page, cache-aligned R16 bank. Every
 // Terrain3DSamplingStorage owns one independent bank, logical map, publication
 // generation, and writer lock. There is no process-global active terrain owner.
-typedef struct t3dActiveMapView_s {
+typedef struct t3dActiveMapView_s
+{
 	const uint16_t *m_pHeight = NULL;
 	uint32_t m_nOwnerGeneration = 0u;
 	uint32_t m_nRegionGeneration = 0u;
 	int m_iSlot = -1;
 
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid( void ) const
+	{
 		return m_pHeight != NULL && m_iSlot >= 0;
 	}
 } t3dActiveMapView_t;
 
 class Terrain3DActiveStorage;
 
-class Terrain3DActiveMapLease {
+class Terrain3DActiveMapLease
+{
 public:
 	Terrain3DActiveMapLease( void ) = default;
 	~Terrain3DActiveMapLease( void );
-	Terrain3DActiveMapLease( const Terrain3DActiveMapLease & ) = delete;
-	Terrain3DActiveMapLease &operator=( const Terrain3DActiveMapLease & ) = delete;
-	Terrain3DActiveMapLease( Terrain3DActiveMapLease &&rOther ) noexcept;
-	Terrain3DActiveMapLease &operator=( Terrain3DActiveMapLease &&rOther ) noexcept;
+	Terrain3DActiveMapLease( const Terrain3DActiveMapLease& ) = delete;
+	Terrain3DActiveMapLease& operator=( const Terrain3DActiveMapLease& ) = delete;
+	Terrain3DActiveMapLease( Terrain3DActiveMapLease&& rOther ) noexcept;
+	Terrain3DActiveMapLease& operator=( Terrain3DActiveMapLease&& rOther ) noexcept;
 
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid( void ) const
+	{
 		return m_view.valid();
 	}
-	EA_FORCE_INLINE const t3dActiveMapView_t &view( void ) const {
+	EA_FORCE_INLINE const t3dActiveMapView_t& view( void ) const
+	{
 		return m_view;
 	}
 	void reset( void );
@@ -57,15 +62,16 @@ private:
 	int m_iPage = -1;
 	t3dActiveMapView_t m_view;
 
-	Terrain3DActiveMapLease( Terrain3DActiveStorage *pStorage, int iPage, const t3dActiveMapView_t &rView );
+	Terrain3DActiveMapLease( Terrain3DActiveStorage *pStorage, int iPage, const t3dActiveMapView_t& rView );
 };
 
-class Terrain3DActiveStorage {
+class Terrain3DActiveStorage
+{
 public:
 	Terrain3DActiveStorage( void );
 	~Terrain3DActiveStorage( void );
-	Terrain3DActiveStorage( const Terrain3DActiveStorage & ) = delete;
-	Terrain3DActiveStorage &operator=( const Terrain3DActiveStorage & ) = delete;
+	Terrain3DActiveStorage( const Terrain3DActiveStorage& ) = delete;
+	Terrain3DActiveStorage& operator=( const Terrain3DActiveStorage& ) = delete;
 
 	static size_t requiredBytes( void );
 
@@ -75,82 +81,94 @@ public:
 	void release( void );
 	void reset( void );
 
-	EA_FORCE_INLINE bool isActive( void ) const {
+	EA_FORCE_INLINE bool isActive( void ) const
+	{
 		return m_nState.load( T3D_MEMORY_ORDER_ACQUIRE ) == TERRAIN3D_ACTIVE_STORAGE_ACTIVE;
 	}
-	EA_FORCE_INLINE int getRegionMapSize( void ) const {
+	EA_FORCE_INLINE int getRegionMapSize( void ) const
+	{
 		return isActive() ? s_nRegionMapSize : 0;
 	}
-	EA_FORCE_INLINE uint32_t getGeneration( void ) const {
+	EA_FORCE_INLINE uint32_t getGeneration( void ) const
+	{
 		return isActive() ? m_nGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ) : 0u;
 	}
-	EA_FORCE_INLINE size_t getReservedBytes( void ) const {
+	EA_FORCE_INLINE size_t getReservedBytes( void ) const
+	{
 		return m_nHeightBytes.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
-	EA_FORCE_INLINE int getPhysicalCapacity( void ) const {
+	EA_FORCE_INLINE int getPhysicalCapacity( void ) const
+	{
 		return s_nActivePhysicalPageCount;
 	}
-	EA_FORCE_INLINE uint64_t getReaderRetryCount( void ) const {
+	EA_FORCE_INLINE uint64_t getReaderRetryCount( void ) const
+	{
 		return m_nReaderRetries.load( T3D_MEMORY_ORDER_RELAXED );
 	}
-	EA_FORCE_INLINE uint64_t getReaderMutexCount( void ) const {
+	EA_FORCE_INLINE uint64_t getReaderMutexCount( void ) const
+	{
 		return 0u;
 	}
-	EA_FORCE_INLINE uint64_t getPublicationCount( void ) const {
+	EA_FORCE_INLINE uint64_t getPublicationCount( void ) const
+	{
 		return m_nPublications.load( T3D_MEMORY_ORDER_RELAXED );
 	}
 
-	bool contains( const Vector2i &rLocation ) const;
-	Terrain3DActiveMapLease acquire( const Vector2i &rLocation );
-	bool syncRegion( const Vector2i &rLocation, const Terrain3DRegion *pRegion );
-	bool syncHeightPage( const Vector2i &rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
+	bool contains( const Vector2i& rLocation ) const;
+	Terrain3DActiveMapLease acquire( const Vector2i& rLocation );
+	bool syncRegion( const Vector2i& rLocation, const Terrain3DRegion *pRegion );
+	bool syncHeightPage( const Vector2i& rLocation, const uint8_t *pHeightBytes, size_t nHeightBytes );
 	bool replaceHeightPages( const uint8_t *const *pHeightPages, const int *pSlots, size_t nPageCount );
-	bool syncMap( const Vector2i &rLocation, const Terrain3DRegion *pRegion, t3dMapType_t type, const Rect2i &rDirtyRect = Rect2i() );
-	bool syncDerived( const Vector2i &rLocation, const Terrain3DRegion *pRegion, const Rect2i &rDirtyRect = Rect2i() );
-	void invalidate( const Vector2i &rLocation );
+	bool syncMap( const Vector2i& rLocation, const Terrain3DRegion *pRegion, t3dMapType_t type, const Rect2i& rDirtyRect = Rect2i() );
+	bool syncDerived( const Vector2i& rLocation, const Terrain3DRegion *pRegion, const Rect2i& rDirtyRect = Rect2i() );
+	void invalidate( const Vector2i& rLocation );
 
 private:
 	friend class Terrain3DActiveMapLease;
 
-	typedef enum t3dActiveStorageState_e : uint32_t {
+	typedef enum t3dActiveStorageState_e : uint32_t
+	{
 		TERRAIN3D_ACTIVE_STORAGE_FREE = 0u,
 		TERRAIN3D_ACTIVE_STORAGE_ACTIVE = 1u,
 		TERRAIN3D_ACTIVE_STORAGE_DRAINING = 2u,
 	} t3dActiveStorageState_t;
 
-	typedef enum t3dActivePageState_e : uint32_t {
+	typedef enum t3dActivePageState_e : uint32_t
+	{
 		TERRAIN3D_ACTIVE_PAGE_FREE = 0u,
 		TERRAIN3D_ACTIVE_PAGE_STAGING = 1u,
 		TERRAIN3D_ACTIVE_PAGE_PUBLISHED = 2u,
 		TERRAIN3D_ACTIVE_PAGE_RETIRING = 3u,
 	} t3dActivePageState_t;
 
-	typedef struct t3dActivePhysicalPage_s {
+	typedef struct t3dActivePhysicalPage_s
+	{
 		uint16_t *m_pHeight = NULL;
-		t3dAtomic_t<uint32_t> m_nPins{ 0u };
-		t3dAtomic_t<uint32_t> m_nGeneration{ 1u };
-		t3dAtomic_t<int> m_iLogicalSlot{ s_nActiveInvalidPage };
-		t3dAtomic_t<uint32_t> m_nState{ TERRAIN3D_ACTIVE_PAGE_FREE };
+		t3dAtomic_t<uint32_t> m_nPins { 0u };
+		t3dAtomic_t<uint32_t> m_nGeneration { 1u };
+		t3dAtomic_t<int> m_iLogicalSlot { s_nActiveInvalidPage };
+		t3dAtomic_t<uint32_t> m_nState { TERRAIN3D_ACTIVE_PAGE_FREE };
 	} t3dActivePhysicalPage_t;
 
-	t3dActivePhysicalPage_t m_szPhysicalPages[s_nActivePhysicalPageCount];
-	t3dAtomic_t<int> m_szLogicalToPhysical[s_nRegionSlots];
+	t3dActivePhysicalPage_t m_szPhysicalPages[ s_nActivePhysicalPageCount ];
+	t3dAtomic_t<int> m_szLogicalToPhysical[ s_nRegionSlots ];
 	void *m_pHeightBackingRaw = NULL;
 	uint8_t *m_pHeightBacking = NULL;
 	bool m_bHeightBackingOwned = false;
-	t3dAtomic_t<size_t> m_nHeightBytes{ 0u };
-	t3dAtomic_t<uint32_t> m_nState{ TERRAIN3D_ACTIVE_STORAGE_FREE };
-	t3dAtomic_t<uint32_t> m_nGeneration{ 1u };
-	t3dAtomic_t<uint64_t> m_nReaderRetries{ 0u };
-	t3dAtomic_t<uint64_t> m_nPublications{ 0u };
+	t3dAtomic_t<size_t> m_nHeightBytes { 0u };
+	t3dAtomic_t<uint32_t> m_nState { TERRAIN3D_ACTIVE_STORAGE_FREE };
+	t3dAtomic_t<uint32_t> m_nGeneration { 1u };
+	t3dAtomic_t<uint64_t> m_nReaderRetries { 0u };
+	t3dAtomic_t<uint64_t> m_nPublications { 0u };
 	uint32_t m_nClockHand = 0u;
 	t3dMutex_t m_writerMutex;
 
-	EA_FORCE_INLINE static size_t activePageBytes( void ) {
-		return ( size_t )( s_nRegionHeightBytes );
+	EA_FORCE_INLINE static size_t activePageBytes( void )
+	{
+		return (size_t)( s_nRegionHeightBytes );
 	}
-	static int locationToSlot( const Vector2i &rLocation );
-	static void bumpGeneration( t3dAtomic_t<uint32_t> &rGeneration );
+	static int locationToSlot( const Vector2i& rLocation );
+	static void bumpGeneration( t3dAtomic_t<uint32_t>& rGeneration );
 
 	void clearMappingsUnsafe( void );
 	void waitForReadersUnsafe( void );
@@ -163,7 +181,8 @@ private:
 	void releaseReader( int iPhysicalPage );
 };
 
-EA_FORCE_INLINE size_t t3dActiveStorageRequiredBytes( void ) {
+EA_FORCE_INLINE size_t t3dActiveStorageRequiredBytes( void )
+{
 	return Terrain3DActiveStorage::requiredBytes();
 }
 

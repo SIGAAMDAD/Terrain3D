@@ -6,6 +6,7 @@
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
+#include "rendering/terrain_3d_clipmap_strip_contract.h"
 
 #include <EASTL/array.h>
 
@@ -21,12 +22,6 @@ typedef enum t3dMeshType_e {
 	MESH_TYPE_COUNT,
 } t3dMeshType_t;
 
-typedef struct t3dClipmapGeometry_s {
-	PackedVector3Array m_vertices;
-	PackedVector2Array m_metadata;
-	PackedInt32Array m_indices;
-	AABB m_aabb;
-} t3dClipmapGeometry_t;
 
 typedef struct t3dMesherRuntimeConfig_s {
 	int m_nNearShaderLodCount = s_nMaxClipmapLevels;
@@ -38,9 +33,8 @@ typedef struct t3dMesherRuntimeConfig_s {
 	bool m_szTierShadowEnabled[3] = { true, true, true };
 } t3dMesherRuntimeConfig_t;
 
-// Terrain3DMesher is now a CPU topology/snap-state producer only. RenderingDevice
-// owns every GPU resource and every draw. Keeping the clipmap math here avoids
-// duplicating the mature topology/stitch rules in the renderer.
+// Terrain3DMesher owns clipmap placement/snap truth and the canonical procedural
+// strip-part descriptors. It owns no terrain vertex/index topology.
 class Terrain3DMesher {
 	CLASS_NAME_STATIC( "Terrain3DMesher" );
 
@@ -52,7 +46,8 @@ private:
 	real_t m_fLodScales[s_nMaxClipmapLevels];
 	real_t m_fLodSnapSteps[s_nMaxClipmapLevels];
 	real_t m_fLodNextSnapSteps[s_nMaxClipmapLevels];
-	t3dClipmapGeometry_t m_szMeshGeometry[MESH_TYPE_COUNT]{};
+	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
+	uint16_t m_szStripPartCounts[MESH_TYPE_COUNT]{};
 
 	Vector3 m_szTrimAPos[s_nPairInstances];
 	Vector3 m_szTrimBPos[s_nPairInstances];
@@ -68,7 +63,6 @@ private:
 	t3dMesherRuntimeConfig_t m_runtimeConfig;
 	int m_iDeferredLodCursor = 0;
 	bool m_bForceFullSnap = true;
-	bool m_bRequireCookedGeometryPack = false;
 	uint32_t m_nNearUpdatesLastSnap = 0u;
 	uint32_t m_nMiddleUpdatesLastSnap = 0u;
 	uint32_t m_nFarUpdatesLastSnap = 0u;
@@ -83,23 +77,13 @@ private:
 	real_t m_fClipmapAabbSizeY = 0.2f;
 	GeometryInstance3D::ShadowCastingSetting m_castShadows = GeometryInstance3D::SHADOW_CASTING_SETTING_OFF;
 
-	void generateMeshTypes( void );
-	bool loadRuntimeGeometryPack( const String &rDataDirectory );
-	t3dClipmapGeometry_t generateCombinedGeometry( bool bLod0 );
-	void appendGrid( PackedVector3Array &rVertices,
-	        PackedVector2Array &rMetadata,
-	        PackedInt32Array &rIndices,
-	        int &nVertexWrite,
-	        int &nIndexWrite,
-	        const Vector2i &vSize,
-	        const Vector3 &rOrigin,
-	        float fPartId,
-	        bool bStandardGrid );
 	void generateClipmap( void );
+	bool generateStripParts( void );
+	bool appendStripPart( t3dMeshType_t type, const Vector2i &rSize, const Vector3 &rOrigin, uint16_t nPartCode, uint16_t nFlags );
+	void clearStripParts( void );
 	void generateOffsetData( void );
 	void generateLodCache( void );
 	void clearClipmap( void );
-	void clearMeshTypes( void );
 	void compileTierRuntimeConfig( int nNearShaderLodCount, int nMiddleShaderLodCount, int nClipmapUpdateBudget );
 	void compileShadowRuntimeConfig(
 	        int nShadowLodCount, const eastl::array<bool, 3> &bTierShadowEnabled, const eastl::array<int, 3> &nTierShadowLodCounts );
@@ -108,7 +92,6 @@ private:
 	int getLodTier( int nLod ) const;
 	bool lodCastsShadows( int nLod ) const;
 	bool snapLevel( int nLod, const Vector3 &rSnappedTarget );
-	size_t estimateGeometryPayloadBytes( int nFirstLod, int nLastLod ) const;
 
 public:
 	EA_FORCE_INLINE Terrain3DMesher( void ) {
@@ -129,10 +112,8 @@ public:
 	        int nShadowLodCount,
 	        const eastl::array<bool, 3> &bTierShadowEnabled,
 	        const eastl::array<int, 3> &nTierShadowLodCounts,
-	        bool bRequireCookedGeometryPack,
 	        const Vector3 &rInitialTarget );
 	void destroy( void );
-	bool writeRuntimeGeometryPack( const String &rDataDirectory ) const;
 
 	void snap( void );
 	void snap( const Vector3 &rTargetPosition );
@@ -165,7 +146,9 @@ public:
 	EA_FORCE_INLINE int getBaseMeshCount( void ) const {
 		return MESH_TYPE_COUNT;
 	}
-	size_t getVisibleGeometryPayloadBytes( void ) const;
+	EA_FORCE_INLINE size_t getVisibleGeometryPayloadBytes( void ) const {
+		return 0u;
+	}
 	EA_FORCE_INLINE size_t getShadowGeometryPayloadBytes( void ) const {
 		return 0u;
 	}
@@ -197,8 +180,11 @@ public:
 	}
 
 	void setCastShadows( GeometryInstance3D::ShadowCastingSetting castShadows );
-	EA_FORCE_INLINE const t3dClipmapGeometry_t &getClipmapGeometry( const t3dMeshType_t type ) const {
-		return m_szMeshGeometry[( size_t )( type )];
+	EA_FORCE_INLINE const t3dClipmapStripPart_t *getClipmapStripParts( const t3dMeshType_t type ) const {
+		return m_szStripParts[( size_t )( type )];
+	}
+	EA_FORCE_INLINE uint16_t getClipmapStripPartCount( const t3dMeshType_t type ) const {
+		return m_szStripPartCounts[( size_t )( type )];
 	}
 	int fillRdPatches( t3dRdPatch_t *pPatches, int nCapacity ) const;
 	void setShadowLodCount( int nCount );

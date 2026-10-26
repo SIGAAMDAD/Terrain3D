@@ -3,22 +3,34 @@
 #ifndef TERRAIN3D_INSTANCER_BRINGUP_H
 #define TERRAIN3D_INSTANCER_BRINGUP_H
 
-// RenderingDevice instancer port.
+// RenderingDevice instancer geometry backend.
 //
-// The full fork keeps its authoritative Terrain3DInstanceStore/editor/streaming
-// state, but the presentation backend is the direct-RD instancer port:
-// exact per-surface GPU geometry, CPU packet/visibility construction, and
-// ordinary indexed instanced draws. This deliberately does not use the old
-// MultiMesh/RenderingServer presentation path or the experimental GPU-cull /
-// shared-arena / indexed-indirect instance backend.
+// RenderingDevice instance/HLOD integration remains active. P11 promotes the
+// retained shared static-mesh arenas to the production geometry backend while
+// preserving the CPU reference path through surface-local array views.
 #define T3D_INSTANCER_RD_PORT 1
 
-// Diagnostic/production isolation: publish the RD instance scene directly
-// from resident authoritative Terrain3DInstanceStore data instead of the
-// derived m_renderCells cache. This deliberately bypasses render-cell
-// materialization, instance-cell streaming/HLOD suppression, cached render
-// cell AABBs, and CPU LOD transition state while retaining the production RD
-// mesh/material/shader/depth/Forward+ renderer.
+// P11 geometry backend. One vertex arena plus uint16/uint32 index arenas own
+// imported regular-instance and HLOD geometry. Per-surface CPU-reference views
+// reference those arenas without duplicating vertex/index buffers.
+#define T3D_INSTANCER_SHARED_MESH_ARENA 1
+
+// P10 production visibility backend. This promotes the P9 compute path to the
+// normal Forward+ instance/HLOD visibility path without changing geometry
+// ownership. The CPU packet/frustum builder remains available as an explicit
+// direct-draw/debug reference and as the parity oracle.
+#define T3D_INSTANCER_GPU_CULL_PRODUCTION 1
+
+// UWR-P08: instance/HLOD occlusion consumes Terrain3DWorldHiZ through the
+// unified world visibility path. Keep the legacy instance pyramid compiled out
+// while its reference culler remains available through the P11 migration.
+#define T3D_INSTANCER_HIZ_OCCLUSION 0
+
+// Production publication: compile an immutable RD instance scene directly
+// from resident authoritative Terrain3DInstanceStore data and asset policy.
+// P5 selects one authored visual LOD per source cell, P6 owns HLOD handoff,
+// P7 owns independent occlusion metadata, and P8 incrementally republishes
+// unchanged transform records.
 #define T3D_INSTANCER_AUTHORITATIVE_RD_SNAPSHOT 1
 
 // The old correctness bring-up switch forced LOD0, disabled streaming and

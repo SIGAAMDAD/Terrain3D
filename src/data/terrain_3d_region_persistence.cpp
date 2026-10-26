@@ -125,6 +125,10 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 	for ( int fileIndex = 0; fileIndex < files.size(); ++fileIndex ) {
 		const String &fname = files[fileIndex];
 		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( fileIndex )];
+		const Ref<FileAccess> pSourceFile = FileAccess::open( entry.m_path, FileAccess::READ );
+		if ( pSourceFile.is_valid() ) {
+			m_startupLoadStats.m_nBytesReadLast += pSourceFile->get_length();
+		}
 		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			LOG( ERROR, "Invalid or out-of-bounds region file name: ", fname );
@@ -191,11 +195,7 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 	}
 
 	m_startupLoadStats.m_nDeserializeUsecLast = Time::get_singleton()->get_ticks_usec() - deserializeStartedUsec;
-	LOG( DEBUG,
-	        "[terrain-data] Phase 1/4 complete: validated ",
-	        rStaged.m_regions.size(),
-	        " regions at size ",
-	        s_nRegionSize );
+	LOG( DEBUG, "[terrain-data] Phase 1/4 complete: validated ", rStaged.m_regions.size(), " regions at size ", s_nRegionSize );
 	LOG( DEBUG, "[terrain-data] Phase 2/4: staging replacement repository tables" );
 	const uint64_t stagingStartedUsec = Time::get_singleton()->get_ticks_usec();
 
@@ -314,8 +314,7 @@ t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rL
 	return result;
 }
 
-bool Terrain3DRegionPersistence::prepareRuntimeRegionSource(
-        const Ref<Terrain3DRegion> &rCandidate, Ref<Terrain3DRegion> &rSource ) const {
+bool Terrain3DRegionPersistence::prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate, Ref<Terrain3DRegion> &rSource ) const {
 	rSource.unref();
 	if ( rCandidate.is_null() || !rCandidate->hasValidGeometryContractInternal() || rCandidate->getRegionSize() != s_nRegionSize ) {
 		return false;
@@ -485,6 +484,7 @@ Dictionary Terrain3DRegionPersistence::getStartupLoadStatsDictionary( void ) con
 	stats["finalize_usec_last"] = ( int64_t )( m_startupLoadStats.m_nFinalizeUsecLast );
 	stats["region_files_last"] = m_startupLoadStats.m_nRegionFilesLast;
 	stats["regions_published_last"] = m_startupLoadStats.m_nRegionsPublishedLast;
+	stats["bytes_read_last"] = ( int64_t )( m_startupLoadStats.m_nBytesReadLast );
 	stats["succeeded_last"] = m_startupLoadStats.m_bSucceededLast;
 	stats["format"] = "legacy_godot_resources";
 	stats["world_manifest_used"] = false;

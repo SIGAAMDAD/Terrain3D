@@ -78,6 +78,7 @@ const SETTING_TOOLTIPS: Dictionary = {
 	"landform_module_min_scale": "Minimum allowed longitudinal scale for modular cliff pieces when fitting them to the stroke.",
 	"landform_module_max_scale": "Maximum allowed longitudinal scale for modular cliff pieces when fitting them to the stroke.",
 	"landform_generate_collision": "Generate collision for procedural cliff geometry or enable collision ownership for placed modular cliff assets.",
+	"instance_edit_mode": "Select and transform individual Ground Cover or Occluder instances with Godot's native 3D transform gizmo. Click once to select; Shift-click switches the active instance while a gizmo is selected.",
 	"mesh_picker": "Pick an existing Terrain3D mesh instance from the viewport and select its mesh asset.",
 	"height_offset": "World-space vertical offset applied to newly painted mesh instances.",
 	"random_height": "Random vertical offset range added independently to each newly painted instance.",
@@ -379,6 +380,8 @@ func _ready() -> void:
 							"list":landform_mesh_list, "default":true })
 
 	## Instancer
+	add_setting({ "name":"instance_edit_mode", "label":"Edit Instances", "type":SettingType.CHECKBOX, "list":main_list,
+							"default":false, "flags":ADD_SEPARATOR })
 	add_setting({ "name":"mesh_picker", "type":SettingType.PICKER, "list":main_list,
 							"default":Terrain3DEditor.INSTANCER, "flags":NO_LABEL|ADD_SEPARATOR,
 							"tooltip":"Pick a Mesh asset from the terrain, within an instancer cell. (See overlays.)" })

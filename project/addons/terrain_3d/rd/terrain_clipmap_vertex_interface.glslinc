@@ -1,0 +1,181 @@
+// Terrain clipmap vertex pipeline interface.
+// Stage roots include this explicitly so reusable vertex evaluation code cannot silently add descriptors, push constants, or stage I/O.
+
+
+#ifndef T3D_WORLD_RASTER_EMBEDDED
+layout(set = 0, binding = 38, std430) readonly buffer ClipmapStripPartBuffer {
+    uint clipmap_strip_part_words[];
+};
+#endif
+
+layout(set = 0, binding = 0, std140) uniform FrameData {
+    mat4 view_projection[2];
+    mat4 view_matrix;
+    mat4 previous_view_projection[2];
+    vec4 motion_jitter;
+    vec4 motion_params;
+    vec4 light_direction_ambient;
+    vec4 light_color;
+    vec4 terrain_params;
+    vec4 mesh_params;
+    vec4 target_params;
+    vec4 camera_params[2];
+    vec4 fog_params;
+    vec4 fog_depth_params;
+    vec4 displacement_params;
+}
+frame_data;
+
+uint t3d_view_index() {
+    return min(uint(gl_ViewIndex), 1u);
+}
+
+#ifndef T3D_WORLD_RASTER_MESH
+struct TerrainRegionRecord {
+    uint packed_physical_flags;
+    uint megavt_allocation;
+    uint megavt_generation;
+    uint megavt_flags;
+    vec4 megavt_world_to_uv;
+};
+layout(set = 0, binding = 1, std430) readonly buffer RegionMapData {
+    TerrainRegionRecord region_map[];
+};
+layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
+layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
+layout(set = 0, binding = 14) uniform sampler2DArray derived_maps;
+layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
+layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
+layout(set = 0, binding = 18) uniform sampler2D far_height_map;
+layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
+
+struct TierMaterialConfig {
+    uint sampling_mode;
+    uint normal_mode;
+    uint color_mode;
+    uint surface_response;
+    uint texture_surface_mode;
+    uint lighting_model;
+    uint detiling_mode;
+    uint filtering;
+    float authored_color_contribution;
+    float wetness_contribution;
+    float material_lod_bias;
+    float quality_lod_offset;
+};
+
+struct MaterialConfig {
+    uint feature_flags;
+    uint debug_flags;
+    uint output_flags;
+    uint background_mode;
+    uint projection_mode;
+    uint tessellation_material_mode;
+    uint world_noise_mode;
+    uint texture_layer_counts;
+    float displacement_sharpness;
+    float blend_sharpness;
+    float distant_normal_scale;
+    float ground_level;
+    float region_blend;
+    float bias_distance;
+    float mipmap_bias;
+    float depth_blur;
+    float auto_slope;
+    float auto_height_reduction;
+    uint auto_base_texture;
+    uint auto_overlay_texture;
+    uint dual_scale_texture;
+    uint far_albedo_layer_count;
+    float dual_scale_reduction;
+    float tri_scale_reduction;
+    float dual_scale_far;
+    float dual_scale_near;
+    float noise1_scale;
+    float noise2_scale;
+    float noise1_rotation_x;
+    float noise1_rotation_y;
+    float macro_variation1_r;
+    float macro_variation1_g;
+    float macro_variation1_b;
+    float macro_variation_slope;
+    float macro_variation2_r;
+    float macro_variation2_g;
+    float macro_variation2_b;
+    float macro_variation_padding;
+    float noise1_offset_x;
+    float noise1_offset_y;
+    float world_noise_cache_period;
+    float world_noise_lod_distance;
+    float world_noise_scale;
+    float world_noise_height;
+    uint world_noise_max_octaves;
+    uint world_noise_min_octaves;
+    uint world_noise_cache_enabled;
+    uint world_noise_fragment_normals;
+    float world_noise_offset_x;
+    float world_noise_offset_y;
+    float world_noise_offset_z;
+    float world_noise_cache_max_lod;
+    float silhouette_r;
+    float silhouette_g;
+    float silhouette_b;
+    float silhouette_a;
+    float contour_step;
+    float editor_overlay_opacity;
+    float reserved_2;
+    float reserved_3;
+    TierMaterialConfig tier[3];
+};
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer {
+    MaterialConfig material_config;
+};
+
+struct PatchData {
+    vec2 origin;
+    float scale;
+    uint lod;
+    uint tier;
+    uint stitch_x;
+    uint stitch_z;
+    uint flags;
+    float bounds_min_y;
+    float bounds_max_y;
+    float bounds_half_extent;
+    float previous_origin_x;
+    float previous_origin_z;
+    float previous_scale;
+    float padding_0;
+    float padding_1;
+};
+layout(set = 0, binding = 9, std430) readonly buffer PatchBuffer {
+    PatchData patches[];
+};
+layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer {
+    uint visible_indices[];
+};
+#ifndef T3D_WORLD_RASTER_EMBEDDED
+layout(push_constant, std430) uniform DrawData {
+    uint direct_patch_index;
+    uint direct_mode;
+    uint padding_0;
+    uint padding_1;
+}
+draw_data;
+#endif
+#endif // !T3D_WORLD_RASTER_MESH
+
+layout(location = 0) out vec3 world_position;
+layout(location = 1) out vec3 world_normal;
+#ifndef T3D_WORLD_RASTER_MESH
+layout(location = 2) flat out uint patch_tier;
+layout(location = 3) flat out int terrain_region_layer;
+layout(location = 4) out vec2 terrain_world_texel;
+#endif
+#ifdef T3D_FORWARD_MOTION
+layout(location = 5) out vec4 current_screen_position;
+layout(location = 6) out vec4 previous_screen_position;
+#endif
+#ifdef T3D_RUNTIME_TIER
+uint t3d_runtime_patch_tier = 0u;
+#endif

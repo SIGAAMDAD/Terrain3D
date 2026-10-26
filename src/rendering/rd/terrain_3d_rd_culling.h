@@ -28,19 +28,19 @@ public:
 	        uint32_t nGroup, uint32_t nBufferBytes, uint32_t nStride = sizeof( t3dRdIndexedIndirectCommand_t ), uint32_t nDrawCount = 1u );
 	static bool build( const t3dRdFrameSnapshot_t &rSnapshot,
 	        const Projection &rViewProjection,
-	        uint32_t nLod0IndexCount,
-	        uint32_t nOuterIndexCount,
+	        uint32_t nLod0PartCount,
+	        uint32_t nOuterPartCount,
 	        t3dRdCpuCullResult_t &rResult );
 	static bool buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot,
 	        const Projection *pViewProjections,
 	        uint32_t nViewCount,
-	        uint32_t nLod0IndexCount,
-	        uint32_t nOuterIndexCount,
+	        uint32_t nLod0PartCount,
+	        uint32_t nOuterPartCount,
 	        t3dRdCpuCullResult_t &rResult );
 	static bool validate( const t3dRdFrameSnapshot_t &rSnapshot,
 	        const Projection &rViewProjection,
-	        uint32_t nLod0IndexCount,
-	        uint32_t nOuterIndexCount,
+	        uint32_t nLod0PartCount,
+	        uint32_t nOuterPartCount,
 	        const t3dRdCpuCullResult_t &rResult );
 };
 

@@ -4,6 +4,7 @@
 #define TERRAIN3D_RENDER_WORLD_IMPORT_PROFILE_H
 
 #include "authoring/render_world/terrain_3d_render_world_authoring.h"
+#include "authoring/vt/terrain_3d_vt_cooker.h"
 #include "core/terrain_3d_compiler.h"
 
 #include <godot_cpp/classes/resource.hpp>
@@ -16,6 +17,11 @@ private:
 	int32_t m_iMaterialPolicy = ( int32_t )( T3D_RW_MATERIAL_AUTO_CONVERT );
 	int32_t m_iTransparencyPolicy = ( int32_t )( T3D_RW_TRANSPARENCY_NATIVE_SORTED );
 	float m_fMaxDistance = 0.0f;
+	int32_t m_iVtOuterCompression = ( int32_t )( T3D_VT_OUTER_COMPRESSION_NONE );
+	int32_t m_iVtClusterTargetPages = 64;
+	int32_t m_iVtClusterTargetBytes = 4 * 1024 * 1024;
+	int32_t m_iVtMipQuality = 1;
+	int32_t m_iVtCompressionQuality = 2;
 	bool m_bEnabled = true;
 	bool m_bStaticOnly = true;
 	bool m_bCastShadows = true;
@@ -60,6 +66,35 @@ public:
 	EA_FORCE_INLINE float getMaxDistance( void ) const {
 		return m_fMaxDistance;
 	}
+
+
+	void setVtClusterTargetPages( int32_t iPages );
+	EA_FORCE_INLINE int32_t getVtClusterTargetPages( void ) const {
+		return m_iVtClusterTargetPages;
+	}
+	void setVtClusterTargetBytes( int32_t iBytes );
+	EA_FORCE_INLINE int32_t getVtClusterTargetBytes( void ) const {
+		return m_iVtClusterTargetBytes;
+	}
+	void setVtOuterCompression( int32_t iCompression );
+	EA_FORCE_INLINE int32_t getVtOuterCompression( void ) const {
+		return m_iVtOuterCompression;
+	}
+	void setVtMipQuality( int32_t iQuality );
+	EA_FORCE_INLINE int32_t getVtMipQuality( void ) const {
+		return m_iVtMipQuality;
+	}
+	void setVtCompressionQuality( int32_t iQuality );
+	EA_FORCE_INLINE int32_t getVtCompressionQuality( void ) const {
+		return m_iVtCompressionQuality;
+	}
+	EA_FORCE_INLINE int32_t getVtPageInterior( void ) const {
+		return ( int32_t )T3D_VT_PAGE_INTERIOR;
+	}
+	EA_FORCE_INLINE int32_t getVtPageGutter( void ) const {
+		return ( int32_t )T3D_VT_PAGE_GUTTER;
+	}
+	void resolveVtCookerSettings( t3dVTCookerSettings_t &rSettings ) const;
 
 	uint32_t resolveTier( uint32_t nDefaultTier ) const;
 };

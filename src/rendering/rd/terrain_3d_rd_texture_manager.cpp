@@ -5,6 +5,7 @@
 
 #include "core/logger.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
 
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
@@ -274,13 +275,8 @@ RID Terrain3DRdTextureManager::createTexture( const t3dRdTextureLayout_t &rLayou
 	if ( !rLayout.valid() || rInitialData.size() != ( int64_t )( rLayout.m_nLayers ) ) {
 		return RID();
 	}
-	if ( !rInitialData.is_empty()
-	        && ( rLayout.m_nUsageBits & ( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT ) ) == 0u ) {
-		LOG( ERROR,
-		        "Rejected RD texture initial upload without TEXTURE_USAGE_CAN_UPDATE_BIT: ",
-		        rName,
-		        " usage=",
-		        rLayout.m_nUsageBits );
+	if ( !rInitialData.is_empty() && ( rLayout.m_nUsageBits & ( uint64_t )( RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT ) ) == 0u ) {
+		LOG( ERROR, "Rejected RD texture initial upload without TEXTURE_USAGE_CAN_UPDATE_BIT: ", rName, " usage=", rLayout.m_nUsageBits );
 		return RID();
 	}
 	const uint32_t maximum_mipmaps = t3dRdMaximumMipCount( rLayout.m_nWidth, rLayout.m_nHeight );
@@ -461,13 +457,15 @@ void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> 
 	RenderingDevice *const pRd = context.getDevice();
 	if ( !pRd ) {
 		if ( bFailureFatal ) {
-			context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "RenderingDevice unavailable for texture creation" );
+			context.recordResourceCreationFailure(
+			        rName, Terrain3DRdContext::RESOURCE_TEXTURE, "RenderingDevice unavailable for texture creation" );
 		}
 		return;
 	}
 	if ( !pRd->texture_is_format_supported_for_usage( rFormat->get_format(), rFormat->get_usage_bits() ) ) {
 		if ( bFailureFatal ) {
-			context.recordResourceCreationFailure( rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
+			context.recordResourceCreationFailure(
+			        rName, Terrain3DRdContext::RESOURCE_TEXTURE, "Unsupported generated texture format/usage" );
 		}
 		return;
 	}
@@ -483,9 +481,8 @@ void Terrain3DRdTextureManager::renderCreateTexture( const Ref<RDTextureFormat> 
 	const Terrain3DRdContext::MemoryCategory category = nMemoryCategory >= 0 && nMemoryCategory < Terrain3DRdContext::MEMORY_CATEGORY_COUNT
 	        ? ( Terrain3DRdContext::MemoryCategory )( nMemoryCategory )
 	        : Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE;
-	if ( !context.registerResource(
-	             texture, rName, Terrain3DRdContext::RESOURCE_TEXTURE, category, nBytes, Terrain3DRdContext::OWNER_UNSPECIFIED ) ) {
-		pRd->free_rid( texture );
+	if ( !Terrain3DRdResourceService( context, Terrain3DRdContext::OWNER_UNSPECIFIED )
+	                    .adopt( pRd, texture, rName, Terrain3DRdContext::RESOURCE_TEXTURE, category, nBytes ) ) {
 		return;
 	}
 	{
@@ -561,7 +558,7 @@ bool Terrain3DRdTextureManager::renderUpdateTextureRegion( const RID hTexture,
 		context.recordFailure( Terrain3DRdContext::FAILURE_RESOURCE_CREATION, "Failed Terrain3D generated texture subregion update" );
 		return false;
 	}
-	pRd->barrier( RenderingDevice::BARRIER_MASK_TRANSFER, RenderingDevice::BARRIER_MASK_RASTER | RenderingDevice::BARRIER_MASK_COMPUTE );
+	// Godot 4.7.2 automatically synchronizes the staging upload/copy before later raster or compute consumers.
 	m_nRegionUpdateCount.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	m_nUploadedBytes.fetch_add( ( uint64_t )( rData.size() ), T3D_MEMORY_ORDER_RELAXED );
 	return true;

@@ -8,6 +8,7 @@
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
 #include "hlod/terrain_3d_hlod_runtime_codec.h"
+#include "instances/terrain_3d_instance_mutation.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
 
 #include <godot_cpp/classes/object.hpp>
@@ -27,12 +28,24 @@ typedef struct t3dEntry_s {
 	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
 	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
 	t3dRegionCoord_t m_regionMax = t3dPackRegionCoord( s_v2iZero );
-	EA_FORCE_INLINE Vector2i getCluster( void ) const { return t3dUnpackRegionCoord( m_cluster ); }
-	EA_FORCE_INLINE Vector2i getRegionMin( void ) const { return t3dUnpackRegionCoord( m_regionMin ); }
-	EA_FORCE_INLINE Vector2i getRegionMax( void ) const { return t3dUnpackRegionCoord( m_regionMax ); }
-	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) { m_cluster = t3dPackRegionCoord( rValue ); }
-	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) { m_regionMin = t3dPackRegionCoord( rValue ); }
-	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) { m_regionMax = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE Vector2i getCluster( void ) const {
+		return t3dUnpackRegionCoord( m_cluster );
+	}
+	EA_FORCE_INLINE Vector2i getRegionMin( void ) const {
+		return t3dUnpackRegionCoord( m_regionMin );
+	}
+	EA_FORCE_INLINE Vector2i getRegionMax( void ) const {
+		return t3dUnpackRegionCoord( m_regionMax );
+	}
+	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) {
+		m_cluster = t3dPackRegionCoord( rValue );
+	}
+	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) {
+		m_regionMin = t3dPackRegionCoord( rValue );
+	}
+	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) {
+		m_regionMax = t3dPackRegionCoord( rValue );
+	}
 	AABB m_localBounds;
 	String m_packagePath;
 	real_t m_fGeometricError = 1.0f;
@@ -58,6 +71,13 @@ typedef struct t3dNodePolicy_s {
 	uint8_t m_nMinLevel = 0;
 } t3dNodePolicy_t;
 
+typedef struct t3dHlodInstancerRepresentationState_s {
+	uint8_t m_nMinimumLevel = 0;
+	uint8_t m_nActiveLevel = 0;
+	uint8_t m_nResidentLevel = 0;
+	uint8_t m_nRetiringLevel = 0;
+} t3dHlodInstancerRepresentationState_t;
+
 class Terrain3DHLODStreamer : public Object {
 	GDCLASS( Terrain3DHLODStreamer, Object );
 	CLASS_NAME();
@@ -74,6 +94,8 @@ class Terrain3DHLODStreamer : public Object {
 	eastl::vector<t3dNodePolicy_t, Terrain3DEastlAllocator> m_nodePolicies;
 	uint32_t m_nodePolicyOffsets[s_nRegionSlots + 1]{};
 	uint8_t m_szRegionRepresentationLevel[s_nRegionSlots] = {};
+	uint8_t m_szRegionResidentRepresentationLevel[s_nRegionSlots] = {};
+	uint8_t m_szRegionRetiringRepresentationLevel[s_nRegionSlots] = {};
 	eastl::bitset<s_nRegionSlots> m_managedRegions;
 	eastl::bitset<s_nRegionSlots> m_detailRequiredRegions;
 	bool m_bEnabled = true;
@@ -100,10 +122,12 @@ class Terrain3DHLODStreamer : public Object {
 	bool m_bHasSelectionContext = false;
 	bool m_bSelectionDirty = true;
 	uint64_t m_nRdPublicationGeneration = 1u;
+	uint64_t m_nRepresentationGeneration = 1u;
 	uint32_t m_nDesiredGeneration = 1u;
 	uint32_t m_nTransitionEntriesExaminedLastTick = 0u;
 	mutable uint64_t m_nCapacityMissCount = 0u;
 	uint64_t m_nColdRebuildCount = 0u;
+	uint64_t m_nInstanceMutationInvalidations = 0u;
 
 	static int floorDiv( int value, int divisor );
 	static int regionIndex( const Vector2i &rRegion );
@@ -151,6 +175,7 @@ public:
 	void suspend( void );
 	bool reloadManifest( void );
 	void updateResidency( const Vector3 &rTargetPosition, bool bForce = false );
+	void onInstanceMutation( const t3dInstanceMutationEvent_t &rEvent );
 
 	EA_FORCE_INLINE void setEnabled( bool bEnabled ) {
 		if ( m_bEnabled == bEnabled ) {
@@ -272,6 +297,20 @@ public:
 		const size_t offset = ( size_t )region * s_nMaxMeshAssets + ( size_t )nMeshId;
 		return offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0;
 	}
+	EA_FORCE_INLINE t3dHlodInstancerRepresentationState_t getInstancerRepresentationState(
+	        const Vector2i &rRegion, const int nMeshId ) const {
+		t3dHlodInstancerRepresentationState_t state;
+		const int region = regionIndex( rRegion );
+		if ( region < 0 || nMeshId < 0 || nMeshId >= s_nMaxMeshAssets ) {
+			return state;
+		}
+		const size_t offset = ( size_t )region * s_nMaxMeshAssets + ( size_t )nMeshId;
+		state.m_nMinimumLevel = offset < m_instancerMinLevels.size() ? m_instancerMinLevels[offset] : 0;
+		state.m_nActiveLevel = m_szRegionRepresentationLevel[region];
+		state.m_nResidentLevel = m_szRegionResidentRepresentationLevel[region];
+		state.m_nRetiringLevel = m_szRegionRetiringRepresentationLevel[region];
+		return state;
+	}
 	uint8_t getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
 	EA_FORCE_INLINE uint8_t getRegionRepresentationLevel( const Vector2i &rRegion ) const {
 		const int index = regionIndex( rRegion );
@@ -286,7 +325,10 @@ public:
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration( void ) const {
 		return m_nRdPublicationGeneration;
 	}
-	bool fillRdMeshSources( eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> &rSources ) const;
+	EA_FORCE_INLINE uint64_t getRepresentationGeneration( void ) const {
+		return m_nRepresentationGeneration;
+	}
+	bool fillRdMeshSources( eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> &rSources );
 	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
 	EA_FORCE_INLINE size_t getRdPublicationCapacity( void ) const {
 		return m_entries.size();

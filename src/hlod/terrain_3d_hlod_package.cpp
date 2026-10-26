@@ -1,5 +1,7 @@
 #include "hlod/terrain_3d_hlod_package.h"
 
+#include "rendering/rd/vt/terrain_3d_vt_material_identity.h"
+
 #include <godot_cpp/core/class_db.hpp>
 
 #define HLOD_SET_VALUE( method, field, type, normalize )                                                                                   \
@@ -33,6 +35,85 @@ void Terrain3DHLODPackage::setMesh( const Ref<ArrayMesh> &rMesh ) {
 	emit_changed();
 }
 
+String Terrain3DHLODPackage::getVtMaterialOwnerIdentityCold( void ) const {
+	const String package_path = get_path();
+	if ( !package_path.is_empty() ) {
+		return String( "hlod-package:" ) + package_path;
+	}
+	return String( "hlod-level:" ) + String::num_int64( m_nLevel ) + String( ":cluster:" ) + String::num_int64( m_clusterLocation.x )
+	        + String( "," ) + String::num_int64( m_clusterLocation.y ) + String( ":source:" ) + String::num_int64( m_nSourceSignature );
+}
+
+bool Terrain3DHLODPackage::ensureRenderingMaterialStableKeysCold( void ) {
+	const String owner = getVtMaterialOwnerIdentityCold();
+	for ( int64_t iMaterial = 0; iMaterial < m_renderingMaterials.size(); ++iMaterial ) {
+		const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[iMaterial];
+		if ( material.is_null() ) {
+			continue;
+		}
+		const String role = String( "surface:" ) + String::num_int64( iMaterial );
+		if ( !material->ensureVtStableKeyCold( owner, role ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void Terrain3DHLODPackage::setRenderingMaterials( const TypedArray<Terrain3DRenderingMaterial> &rMaterials ) {
+	if ( m_renderingMaterials == rMaterials ) {
+		return;
+	}
+	m_renderingMaterials = rMaterials;
+	ensureRenderingMaterialStableKeysCold();
+	emit_changed();
+}
+
+bool Terrain3DHLODPackage::captureRenderingMaterialsCold( void ) {
+	if ( m_mesh.is_null() ) {
+		return false;
+	}
+	TypedArray<Terrain3DRenderingMaterial> materials;
+	materials.resize( m_mesh->get_surface_count() );
+	for ( int surface = 0; surface < m_mesh->get_surface_count(); ++surface ) {
+		Ref<Terrain3DRenderingMaterial> renderingMaterial;
+		renderingMaterial.instantiate();
+		const Ref<Material> sourceMaterial = m_mesh->surface_get_material( surface );
+		if ( sourceMaterial.is_valid() && !renderingMaterial->importBaseMaterialCold( sourceMaterial ) ) {
+			return false;
+		}
+		if ( sourceMaterial.is_valid() && !sourceMaterial->get_path().is_empty() && !sourceMaterial->get_path().contains( "::" ) ) {
+			renderingMaterial->setVtStableKey( t3d_vt_material_stable_key_from_resource_path( sourceMaterial->get_path() ) );
+		} else if ( !renderingMaterial->ensureVtStableKeyCold(
+		                    getVtMaterialOwnerIdentityCold(), String( "surface:" ) + String::num_int64( surface ) ) ) {
+			return false;
+		}
+		materials[surface] = renderingMaterial;
+	}
+	setRenderingMaterials( materials );
+	return true;
+}
+
+bool Terrain3DHLODPackage::hasCanonicalRenderingMaterials( void ) const {
+	if ( m_mesh.is_null() || m_renderingMaterials.size() != m_mesh->get_surface_count() ) {
+		return false;
+	}
+	for ( int surface = 0; surface < m_renderingMaterials.size(); ++surface ) {
+		const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[surface];
+		if ( material.is_null() || !material->isOneSubmitCompatible() ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+const Terrain3DRenderingMaterial *Terrain3DHLODPackage::getRenderingMaterialPtr( const uint32_t nSurface ) const {
+	if ( nSurface >= ( uint32_t )( m_renderingMaterials.size() ) ) {
+		return NULL;
+	}
+	const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[( int64_t )( nSurface )];
+	return material.ptr();
+}
+
 void Terrain3DHLODPackage::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_level", "level" ), &Terrain3DHLODPackage::setLevel );
 	ClassDB::bind_method( D_METHOD( "get_level" ), &Terrain3DHLODPackage::getLevel );
@@ -46,6 +127,10 @@ void Terrain3DHLODPackage::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_local_bounds" ), &Terrain3DHLODPackage::getLocalBounds );
 	ClassDB::bind_method( D_METHOD( "set_mesh", "mesh" ), &Terrain3DHLODPackage::setMesh );
 	ClassDB::bind_method( D_METHOD( "get_mesh" ), &Terrain3DHLODPackage::getMesh );
+	ClassDB::bind_method( D_METHOD( "set_rendering_materials", "materials" ), &Terrain3DHLODPackage::setRenderingMaterials );
+	ClassDB::bind_method( D_METHOD( "get_rendering_materials" ), &Terrain3DHLODPackage::getRenderingMaterials );
+	ClassDB::bind_method( D_METHOD( "capture_rendering_materials" ), &Terrain3DHLODPackage::captureRenderingMaterialsCold );
+	ClassDB::bind_method( D_METHOD( "has_canonical_rendering_materials" ), &Terrain3DHLODPackage::hasCanonicalRenderingMaterials );
 	ClassDB::bind_method( D_METHOD( "set_geometric_error", "error" ), &Terrain3DHLODPackage::setGeometricError );
 	ClassDB::bind_method( D_METHOD( "get_geometric_error" ), &Terrain3DHLODPackage::getGeometricError );
 	ClassDB::bind_method( D_METHOD( "set_source_signature", "signature" ), &Terrain3DHLODPackage::setSourceSignature );
@@ -66,6 +151,9 @@ void Terrain3DHLODPackage::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "region_max" ), "set_region_max", "get_region_max" );
 	ADD_PROPERTY( PropertyInfo( Variant::AABB, "local_bounds" ), "set_local_bounds", "get_local_bounds" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ), "set_mesh", "get_mesh" );
+	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "rendering_materials", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DRenderingMaterial" ),
+	        "set_rendering_materials",
+	        "get_rendering_materials" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "geometric_error" ), "set_geometric_error", "get_geometric_error" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "source_signature" ), "set_source_signature", "get_source_signature" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "build_signature" ), "set_build_signature", "get_build_signature" );

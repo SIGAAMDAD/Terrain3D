@@ -9,532 +9,163 @@
 #include "rendering/terrain_3d_clipmap_bounds.h"
 #include "terrain_3d.h"
 
-#include <EASTL/vector.h>
 #include <limits.h>
+#include <math.h>
 #include <string.h>
-#include <godot_cpp/classes/dir_access.hpp>
-#include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/core/version.hpp>
 
-
-EA_FORCE_INLINE static int t3dMesherGridVertexCount( const Vector2i &rSize ) {
-	return ( rSize.x + 1 ) * ( rSize.y + 1 );
-}
-EA_FORCE_INLINE static int t3dMesherGridIndexCount( const Vector2i &rSize ) {
-	return rSize.x * rSize.y * 6;
-}
-EA_FORCE_INLINE static void t3dMesherMeasureGrid( const Vector2i &rSize, int &nVertices, int &nIndices ) {
-	nVertices += t3dMesherGridVertexCount( rSize );
-	nIndices += t3dMesherGridIndexCount( rSize );
-}
-
-void t3dWeldClipmapGeometry( PackedVector3Array &rVertices, PackedVector2Array &rMetadata, PackedInt32Array &rIndices ) {
-	const int source_vertex_count = rVertices.size();
-	if ( source_vertex_count <= 0 ) {
-		return;
-	}
-	const Vector3 *const pSourceVertices = rVertices.ptr();
-	const Vector2 *const pSourceMetadata = rMetadata.ptr();
-	int32_t min_x = INT32_MAX;
-	int32_t min_z = INT32_MAX;
-	int32_t max_x = INT32_MIN;
-	int32_t max_z = INT32_MIN;
-	for ( int vertex_index = 0; vertex_index < source_vertex_count; ++vertex_index ) {
-		const int32_t x = ( int32_t )( Math::round( pSourceVertices[vertex_index].x ) );
-		const int32_t z = ( int32_t )( Math::round( pSourceVertices[vertex_index].z ) );
-		min_x = MIN( min_x, x );
-		min_z = MIN( min_z, z );
-		max_x = MAX( max_x, x );
-		max_z = MAX( max_z, z );
-	}
-	const uint64_t width = ( uint64_t )( ( int64_t )( max_x ) - ( int64_t )( min_x ) + 1ll );
-	const uint64_t height = ( uint64_t )( ( int64_t )( max_z ) - ( int64_t )( min_z ) + 1ll );
-	const uint64_t plane = width * height;
-	const uint64_t lookup_count = plane * s_nClipmapWeldPartCount;
-	if ( width == 0u || height == 0u || lookup_count > ( uint64_t )( INT32_MAX ) ) {
-		return;
-	}
-	eastl::vector<int32_t, Terrain3DEastlAllocator> lookup;
-	lookup.resize( ( size_t )( lookup_count ), -1 );
-	PackedVector3Array welded_vertices;
-	PackedVector2Array welded_metadata;
-	PackedInt32Array remap;
-	welded_vertices.resize( source_vertex_count );
-	welded_metadata.resize( source_vertex_count );
-	remap.resize( source_vertex_count );
-	Vector3 *const pWeldedVertices = welded_vertices.ptrw();
-	Vector2 *const pWeldedMetadata = welded_metadata.ptrw();
-	int32_t *const pRemap = remap.ptrw();
-	int welded_count = 0;
-	for ( int vertex_index = 0; vertex_index < source_vertex_count; ++vertex_index ) {
-		const Vector3 &vertex = pSourceVertices[vertex_index];
-		const Vector2 &metadata = pSourceMetadata[vertex_index];
-		const int32_t x = ( int32_t )( Math::round( vertex.x ) );
-		const int32_t z = ( int32_t )( Math::round( vertex.z ) );
-		const int32_t rounded_part = ( int32_t )( Math::round( metadata.x ) );
-		if ( rounded_part < 0 || rounded_part >= ( int32_t )s_nClipmapWeldPartCount ) {
-			return;
-		}
-		const uint32_t part = ( uint32_t )rounded_part;
-		const uint64_t lookup_index = ( uint64_t )part * plane + ( uint64_t )( ( int64_t )( z ) - ( int64_t )( min_z ) ) * width
-		        + ( uint64_t )( ( int64_t )( x ) - ( int64_t )( min_x ) );
-		int32_t &welded_index = lookup[( size_t )( lookup_index )];
-		if ( welded_index >= 0 ) {
-			pRemap[vertex_index] = welded_index;
-			continue;
-		}
-		welded_index = welded_count++;
-		pWeldedVertices[welded_index] = vertex;
-		pWeldedMetadata[welded_index] = metadata;
-		pRemap[vertex_index] = welded_index;
-	}
-	int32_t *const pIndices = rIndices.ptrw();
-	for ( int index = 0; index < rIndices.size(); ++index ) {
-		pIndices[index] = pRemap[pIndices[index]];
-	}
-	welded_vertices.resize( welded_count );
-	welded_metadata.resize( welded_count );
-	rVertices = welded_vertices;
-	rMetadata = welded_metadata;
-}
 
 // -----------------------------------------------------------------------------
 // Private functions
 
-void Terrain3DMesher::appendGrid( PackedVector3Array &rVertices,
-        PackedVector2Array &rMetadata,
-        PackedInt32Array &rIndices,
-        int &nVertexWrite,
-        int &nIndexWrite,
-        const Vector2i &rSize,
-        const Vector3 &rOrigin,
-        const float fPartId,
-        const bool bStandardGrid ) {
-	const int vertex_base = nVertexWrite;
-	Vector3 *const pVertices = rVertices.ptrw();
-	Vector2 *const pMetadata = rMetadata.ptrw();
-	int32_t *const pIndices = rIndices.ptrw();
-	int vertex_write = nVertexWrite;
-	for ( int y = 0; y <= rSize.y; ++y ) {
-		for ( int x = 0; x <= rSize.x; ++x ) {
-			pVertices[vertex_write] = rOrigin + Vector3( x, 0.0f, y );
-			pMetadata[vertex_write++] = Vector2( fPartId, 0.0f );
-		}
+static bool t3dMesherPackStripCoordinate( const real_t fValue, int16_t &rPacked ) {
+	const double value = ( double )( fValue );
+	if ( !isfinite( value ) || value < ( double )( INT16_MIN ) || value > ( double )( INT16_MAX ) ) {
+		return false;
 	}
-
-	int index_write = nIndexWrite;
-	for ( int y = 0; y < rSize.y; ++y ) {
-		for ( int x = 0; x < rSize.x; ++x ) {
-			const int bottom_left = vertex_base + y * ( rSize.x + 1 ) + x;
-			const int bottom_right = bottom_left + 1;
-			const int top_left = vertex_base + ( y + 1 ) * ( rSize.x + 1 ) + x;
-			const int top_right = top_left + 1;
-
-			if ( ( x + y ) % 2 == 0 || bStandardGrid ) {
-				pIndices[index_write++] = bottom_left;
-				pIndices[index_write++] = top_right;
-				pIndices[index_write++] = top_left;
-				pIndices[index_write++] = bottom_left;
-				pIndices[index_write++] = bottom_right;
-				pIndices[index_write++] = top_right;
-			} else {
-				pIndices[index_write++] = bottom_left;
-				pIndices[index_write++] = bottom_right;
-				pIndices[index_write++] = top_left;
-				pIndices[index_write++] = top_left;
-				pIndices[index_write++] = bottom_right;
-				pIndices[index_write++] = top_right;
-			}
-		}
+	const double rounded = round( value );
+	if ( fabs( value - rounded ) > 0.0001 ) {
+		return false;
 	}
-	nVertexWrite = vertex_write;
-	nIndexWrite = index_write;
+	rPacked = ( int16_t )( ( int64_t )( rounded ) );
+	return true;
 }
 
-t3dClipmapGeometry_t Terrain3DMesher::generateCombinedGeometry( const bool bLod0 ) {
-	t3dClipmapGeometry_t geometry;
-	PackedVector3Array &vertices = geometry.m_vertices;
-	PackedVector2Array &metadata = geometry.m_metadata;
-	PackedInt32Array &indices = geometry.m_indices;
+bool Terrain3DMesher::appendStripPart( const t3dMeshType_t type,
+        const Vector2i &rSize,
+        const Vector3 &rOrigin,
+        const uint16_t nPartCode,
+        const uint16_t nFlags ) {
+	if ( type < LOD0_MESH || type >= MESH_TYPE_COUNT || rSize.x <= 0 || rSize.y <= 0 || rSize.x > ( int )( UINT16_MAX )
+	        || rSize.y > ( int )( UINT16_MAX ) || nPartCode >= ( uint16_t )( T3D_CLIPMAP_PART_CODE_COUNT ) ) {
+		return false;
+	}
+	const size_t type_index = ( size_t )( type );
+	uint16_t &count = m_szStripPartCounts[type_index];
+	if ( count >= ( uint16_t )( T3D_CLIPMAP_STRIP_PART_CAPACITY ) ) {
+		return false;
+	}
+	const uint16_t layout_bits = nFlags & T3D_CLIPMAP_STRIP_LAYOUT_MASK;
+	const uint16_t role_bits = nFlags & T3D_CLIPMAP_STRIP_ROLE_MASK;
+	if ( layout_bits == 0u || ( layout_bits & ( layout_bits - 1u ) ) != 0u || role_bits == 0u || ( role_bits & ( role_bits - 1u ) ) != 0u
+	        || ( nFlags & ( uint16_t )( ~T3D_CLIPMAP_STRIP_KNOWN_FLAG_MASK ) ) != 0u
+	        || ( ( nFlags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS ) != 0u && layout_bits != T3D_CLIPMAP_STRIP_FLAG_LAYOUT_OUTER_RING ) ) {
+		return false;
+	}
+	t3dClipmapStripPart_t part;
+	memset( &part, 0, sizeof( part ) );
+	if ( !t3dMesherPackStripCoordinate( rOrigin.x, part.m_nOriginX ) || !t3dMesherPackStripCoordinate( rOrigin.z, part.m_nOriginZ ) ) {
+		return false;
+	}
+	part.m_nCellWidth = ( uint16_t )( rSize.x );
+	part.m_nCellHeight = ( uint16_t )( rSize.y );
+	part.m_nPartCode = nPartCode;
+	part.m_nFlags = nFlags;
+	m_szStripParts[type_index][count++] = part;
+	return true;
+}
 
-	int total_vertices = 0;
-	int total_indices = 0;
-	if ( bLod0 ) {
-		for ( size_t iTile = 0u; iTile < ( size_t )( s_nMaxTileInstances ); iTile++ ) {
-			const Vector3 &position = ( m_szTilePosLod0 )[iTile];
-			( void )position;
-			t3dMesherMeasureGrid( V2I( m_nMeshSize ), total_vertices, total_indices );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szTrimAPos )[iPair];
-			( void )position;
-			t3dMesherMeasureGrid( Vector2i( 2, m_nMeshSize * 4 + 2 ), total_vertices, total_indices );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szTrimBPos )[iPair];
-			( void )position;
-			t3dMesherMeasureGrid( Vector2i( m_nMeshSize * 4 + 2, 2 ), total_vertices, total_indices );
-		}
-	} else {
-		for ( size_t iRingTile = 0u; iRingTile < ( size_t )( s_nRingTileInstances ); iRingTile++ ) {
-			const Vector3 &position = ( m_szTilePos )[iRingTile];
-			( void )position;
-			t3dMesherMeasureGrid( V2I( m_nMeshSize ), total_vertices, total_indices );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szFillAPos )[iPair];
-			( void )position;
-			t3dMesherMeasureGrid( Vector2i( 4, m_nMeshSize ), total_vertices, total_indices );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szFillBPos )[iPair];
-			( void )position;
-			t3dMesherMeasureGrid( Vector2i( m_nMeshSize, 4 ), total_vertices, total_indices );
+void Terrain3DMesher::clearStripParts( void ) {
+	memset( m_szStripParts, 0, sizeof( m_szStripParts ) );
+	memset( m_szStripPartCounts, 0, sizeof( m_szStripPartCounts ) );
+}
+
+bool Terrain3DMesher::generateStripParts( void ) {
+	clearStripParts();
+	const uint16_t lod0_layout = T3D_CLIPMAP_STRIP_FLAG_LAYOUT_LOD0;
+	const uint16_t outer_layout = T3D_CLIPMAP_STRIP_FLAG_LAYOUT_OUTER_RING | T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS;
+
+	for ( size_t iTile = 0u; iTile < ( size_t )( s_nMaxTileInstances ); ++iTile ) {
+		if ( !appendStripPart( LOD0_MESH,
+		             V2I( m_nMeshSize ),
+		             m_szTilePosLod0[iTile],
+		             T3D_CLIPMAP_PART_STATIC,
+		             lod0_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_TILE ) ) {
+			return false;
 		}
 	}
-	for ( int i = 0; i < s_nPairInstances; ++i ) {
-		( void )i;
-		t3dMesherMeasureGrid( Vector2i( 2, m_nMeshSize * 4 + 8 ), total_vertices, total_indices );
-		t3dMesherMeasureGrid( Vector2i( m_nMeshSize * 4 + 4, 2 ), total_vertices, total_indices );
-	}
-	vertices.resize( total_vertices );
-	metadata.resize( total_vertices );
-	indices.resize( total_indices );
-	int vertex_write = 0;
-	int index_write = 0;
-
-	if ( bLod0 ) {
-		for ( size_t iTile = 0u; iTile < ( size_t )( s_nMaxTileInstances ); iTile++ ) {
-			const Vector3 &position = ( m_szTilePosLod0 )[iTile];
-			appendGrid( vertices, metadata, indices, vertex_write, index_write, V2I( m_nMeshSize ), position, s_fClipmapPartStatic, true );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szTrimAPos )[iPair];
-			appendGrid( vertices,
-			        metadata,
-			        indices,
-			        vertex_write,
-			        index_write,
-			        Vector2i( 2, m_nMeshSize * 4 + 2 ),
-			        position,
-			        s_fClipmapPartStatic,
-			        true );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szTrimBPos )[iPair];
-			appendGrid( vertices,
-			        metadata,
-			        indices,
-			        vertex_write,
-			        index_write,
-			        Vector2i( m_nMeshSize * 4 + 2, 2 ),
-			        position,
-			        s_fClipmapPartStatic,
-			        true );
-		}
-	} else {
-		for ( size_t iRingTile = 0u; iRingTile < ( size_t )( s_nRingTileInstances ); iRingTile++ ) {
-			const Vector3 &position = ( m_szTilePos )[iRingTile];
-			appendGrid( vertices, metadata, indices, vertex_write, index_write, V2I( m_nMeshSize ), position, s_fClipmapPartStatic, false );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szFillAPos )[iPair];
-			appendGrid( vertices,
-			        metadata,
-			        indices,
-			        vertex_write,
-			        index_write,
-			        Vector2i( 4, m_nMeshSize ),
-			        position,
-			        s_fClipmapPartStatic,
-			        false );
-		}
-		for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); iPair++ ) {
-			const Vector3 &position = ( m_szFillBPos )[iPair];
-			appendGrid( vertices,
-			        metadata,
-			        indices,
-			        vertex_write,
-			        index_write,
-			        Vector2i( m_nMeshSize, 4 ),
-			        position,
-			        s_fClipmapPartStatic,
-			        false );
+	for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); ++iPair ) {
+		if ( !appendStripPart( LOD0_MESH,
+		             Vector2i( 2, m_nMeshSize * 4 + 2 ),
+		             m_szTrimAPos[iPair],
+		             T3D_CLIPMAP_PART_STATIC,
+		             lod0_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_TRIM_A )
+		        || !appendStripPart( LOD0_MESH,
+		                Vector2i( m_nMeshSize * 4 + 2, 2 ),
+		                m_szTrimBPos[iPair],
+		                T3D_CLIPMAP_PART_STATIC,
+		                lod0_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_TRIM_B ) ) {
+			return false;
 		}
 	}
 
-	// Edge placement is baked for stitch state (1, 1). INSTANCE_CUSTOM.rg
-	// carries the live 3x3 stitch state and the vertex shader applies only the
-	// small edge translation delta. This keeps one immutable complete-ring mesh
-	// reusable by every LOD in a shader tier.
+	for ( size_t iTile = 0u; iTile < ( size_t )( s_nRingTileInstances ); ++iTile ) {
+		if ( !appendStripPart( OUTER_RING_MESH,
+		             V2I( m_nMeshSize ),
+		             m_szTilePos[iTile],
+		             T3D_CLIPMAP_PART_STATIC,
+		             outer_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_TILE ) ) {
+			return false;
+		}
+	}
+	for ( size_t iPair = 0u; iPair < ( size_t )( s_nPairInstances ); ++iPair ) {
+		if ( !appendStripPart( OUTER_RING_MESH,
+		             Vector2i( 4, m_nMeshSize ),
+		             m_szFillAPos[iPair],
+		             T3D_CLIPMAP_PART_STATIC,
+		             outer_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_FILL_A )
+		        || !appendStripPart( OUTER_RING_MESH,
+		                Vector2i( m_nMeshSize, 4 ),
+		                m_szFillBPos[iPair],
+		                T3D_CLIPMAP_PART_STATIC,
+		                outer_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_FILL_B ) ) {
+			return false;
+		}
+	}
+
 	for ( int i = 0; i < s_nPairInstances; ++i ) {
 		Vector3 edge_a;
 		edge_a.z = -m_fOffsetA - 2.0f;
 		edge_a.x = m_szEdgePos[( size_t )i][1];
-		appendGrid( vertices,
-		        metadata,
-		        indices,
-		        vertex_write,
-		        index_write,
-		        Vector2i( 2, m_nMeshSize * 4 + 8 ),
-		        edge_a,
-		        i == 0 ? s_fClipmapPartEdgeA0 : s_fClipmapPartEdgeA1,
-		        bLod0 );
-
 		Vector3 edge_b;
 		edge_b.z = m_szEdgePos[( size_t )i][1];
 		edge_b.x = -m_fOffsetA;
-		appendGrid( vertices,
-		        metadata,
-		        indices,
-		        vertex_write,
-		        index_write,
-		        Vector2i( m_nMeshSize * 4 + 4, 2 ),
-		        edge_b,
-		        i == 0 ? s_fClipmapPartEdgeB0 : s_fClipmapPartEdgeB1,
-		        bLod0 );
-	}
-	if ( vertex_write != total_vertices || index_write != total_indices ) {
-		LOG( ERROR, "Clipmap geometry preallocation count mismatch" );
-		return t3dClipmapGeometry_t{};
-	}
-
-	const int source_vertex_count = vertices.size();
-	t3dWeldClipmapGeometry( vertices, metadata, indices );
-	const real_t fRadius = m_fOffsetC + 2.0f;
-	geometry.m_aabb = AABB( Vector3( -fRadius, -0.1f, -fRadius ), Vector3( fRadius * 2.0f, 0.2f, fRadius * 2.0f ) );
-	LOG( INFO,
-	        "Generated ",
-	        bLod0 ? "LOD0" : "outer-ring",
-	        " clipmap geometry: ",
-	        vertices.size(),
-	        " welded vertices from ",
-	        source_vertex_count,
-	        " source vertices, ",
-	        indices.size() / 3,
-	        " triangles" );
-	return geometry;
-}
-
-bool Terrain3DMesher::loadRuntimeGeometryPack( const String &rDataDirectory ) {
-	if ( rDataDirectory.is_empty() ) {
-		return false;
-	}
-	const String path = rDataDirectory.path_join( "terrain3d_clipmap.t3dmeshpack" );
-	Ref<FileAccess> file = FileAccess::open( path, FileAccess::READ );
-	if ( file.is_null() || file->get_length() < 24 ) {
-		return false;
-	}
-	if ( file->get_64() != s_nClipmapPackMagic || file->get_32() != s_nClipmapPackVersion || ( int )file->get_32() != m_nMeshSize
-	        || file->get_32() != MESH_TYPE_COUNT ) {
-		return false;
-	}
-	file->get_32();
-	for ( int type = 0; type < MESH_TYPE_COUNT; ++type ) {
-		t3dClipmapGeometry_t geometry;
-		const uint32_t vertex_count = file->get_32();
-		const uint32_t metadata_count = file->get_32();
-		const uint32_t index_count = file->get_32();
-		file->get_32();
-		if ( vertex_count == 0u || metadata_count != vertex_count || index_count == 0u || vertex_count > 4000000u
-		        || index_count > 12000000u ) {
-			return false;
-		}
-		geometry.m_aabb.position = Vector3( file->get_float(), file->get_float(), file->get_float() );
-		geometry.m_aabb.size = Vector3( file->get_float(), file->get_float(), file->get_float() );
-		geometry.m_vertices.resize( ( int )vertex_count );
-		geometry.m_metadata.resize( ( int )metadata_count );
-		geometry.m_indices.resize( ( int )index_count );
-		Vector3 *const pVertices = geometry.m_vertices.ptrw();
-		Vector2 *const pMetadata = geometry.m_metadata.ptrw();
-		int32_t *const pIndices = geometry.m_indices.ptrw();
-		for ( uint32_t i = 0; i < vertex_count; ++i ) {
-			pVertices[i] = Vector3( file->get_float(), file->get_float(), file->get_float() );
-		}
-		for ( uint32_t i = 0; i < metadata_count; ++i ) {
-			pMetadata[i] = Vector2( file->get_float(), file->get_float() );
-		}
-		for ( uint32_t i = 0; i < index_count; ++i ) {
-			const int32_t index = ( int32_t )file->get_32();
-			if ( index < 0 || ( uint32_t )index >= vertex_count ) {
-				return false;
-			}
-			pIndices[i] = index;
-		}
-		if ( file->get_error() != OK ) {
-			return false;
-		}
-		m_szMeshGeometry[( size_t )type] = geometry;
-	}
-	if ( file->get_position() != file->get_length() ) {
-		return false;
-	}
-	LOG( INFO, "Loaded cooked clipmap geometry pack for mesh size ", m_nMeshSize );
-	return true;
-}
-
-bool Terrain3DMesher::writeRuntimeGeometryPack( const String &rDataDirectory ) const {
-	if ( rDataDirectory.is_empty() || m_nMeshSize <= 0 ) {
-		return false;
-	}
-	for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( m_szMeshGeometry ); iMesh++ ) {
-		const t3dClipmapGeometry_t &geometry = ( m_szMeshGeometry )[iMesh];
-		if ( geometry.m_vertices.is_empty() || geometry.m_metadata.size() != geometry.m_vertices.size() || geometry.m_indices.is_empty() ) {
+		const uint16_t edge_x_code = i == 0 ? T3D_CLIPMAP_PART_EDGE_X0 : T3D_CLIPMAP_PART_EDGE_X1;
+		const uint16_t edge_z_code = i == 0 ? T3D_CLIPMAP_PART_EDGE_Z0 : T3D_CLIPMAP_PART_EDGE_Z1;
+		if ( !appendStripPart( LOD0_MESH,
+		             Vector2i( 2, m_nMeshSize * 4 + 8 ),
+		             edge_a,
+		             edge_x_code,
+		             lod0_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_X )
+		        || !appendStripPart( LOD0_MESH,
+		                Vector2i( m_nMeshSize * 4 + 4, 2 ),
+		                edge_b,
+		                edge_z_code,
+		                lod0_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_Z )
+		        || !appendStripPart( OUTER_RING_MESH,
+		                Vector2i( 2, m_nMeshSize * 4 + 8 ),
+		                edge_a,
+		                edge_x_code,
+		                outer_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_X )
+		        || !appendStripPart( OUTER_RING_MESH,
+		                Vector2i( m_nMeshSize * 4 + 4, 2 ),
+		                edge_b,
+		                edge_z_code,
+		                outer_layout | T3D_CLIPMAP_STRIP_FLAG_ROLE_EDGE_Z ) ) {
 			return false;
 		}
 	}
-	const String path = rDataDirectory.path_join( "terrain3d_clipmap.t3dmeshpack" );
-	const String temporary = path + String( ".tmp" );
-	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
-	if ( file.is_null() ) {
-		return false;
-	}
-	file->store_64( s_nClipmapPackMagic );
-	file->store_32( s_nClipmapPackVersion );
-	file->store_32( ( uint32_t )m_nMeshSize );
-	file->store_32( MESH_TYPE_COUNT );
-	file->store_32( 0u );
-	for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( m_szMeshGeometry ); iMesh++ ) {
-		const t3dClipmapGeometry_t &geometry = ( m_szMeshGeometry )[iMesh];
-		file->store_32( ( uint32_t )geometry.m_vertices.size() );
-		file->store_32( ( uint32_t )geometry.m_metadata.size() );
-		file->store_32( ( uint32_t )geometry.m_indices.size() );
-		file->store_32( 0u );
-		file->store_float( geometry.m_aabb.position.x );
-		file->store_float( geometry.m_aabb.position.y );
-		file->store_float( geometry.m_aabb.position.z );
-		file->store_float( geometry.m_aabb.size.x );
-		file->store_float( geometry.m_aabb.size.y );
-		file->store_float( geometry.m_aabb.size.z );
-		for ( size_t iVertex = 0u; iVertex < ( size_t )( ( geometry.m_vertices ).size() ); iVertex++ ) {
-			const Vector3 &vertex = ( geometry.m_vertices )[iVertex];
-			file->store_float( vertex.x );
-			file->store_float( vertex.y );
-			file->store_float( vertex.z );
-		}
-		for ( size_t iMetadata = 0u; iMetadata < ( size_t )( ( geometry.m_metadata ).size() ); iMetadata++ ) {
-			const Vector2 &metadata = ( geometry.m_metadata )[iMetadata];
-			file->store_float( metadata.x );
-			file->store_float( metadata.y );
-		}
-		for ( size_t iIndex = 0u; iIndex < ( size_t )( ( geometry.m_indices ).size() ); iIndex++ ) {
-			const int32_t index = ( geometry.m_indices )[iIndex];
-			file->store_32( ( uint32_t )index );
-		}
-	}
-	const Error error = file->get_error();
-	file->close();
-	if ( error != OK ) {
-		DirAccess::remove_absolute( temporary );
-		return false;
-	}
-	const String backup = path + String( ".bak" );
-	DirAccess::remove_absolute( backup );
-	if ( FileAccess::file_exists( path ) && DirAccess::rename_absolute( path, backup ) != OK ) {
-		DirAccess::remove_absolute( temporary );
-		return false;
-	}
-	if ( DirAccess::rename_absolute( temporary, path ) != OK ) {
-		if ( FileAccess::file_exists( backup ) ) {
-			DirAccess::rename_absolute( backup, path );
-		}
-		return false;
-	}
-	DirAccess::remove_absolute( backup );
-	return true;
-}
 
-
-void Terrain3DMesher::generateMeshTypes( void ) {
-	clearMeshTypes();
-	LOG( INFO, "Generating two immutable CPU clipmap geometry templates for size ", m_nMeshSize );
-	m_szMeshGeometry[LOD0_MESH] = generateCombinedGeometry( true );
-	m_szMeshGeometry[OUTER_RING_MESH] = generateCombinedGeometry( false );
-}
-
-size_t Terrain3DMesher::estimateGeometryPayloadBytes( const int nFirstLod, const int nLastLod ) const {
-	size_t bytes = 0u;
-	for ( int lod = nFirstLod; lod <= nLastLod; ++lod ) {
-		const t3dClipmapGeometry_t &geometry = m_szMeshGeometry[( size_t )( lod == 0 ? LOD0_MESH : OUTER_RING_MESH )];
-		bytes += ( size_t )( geometry.m_vertices.size() ) * sizeof( Vector3 );
-		bytes += ( size_t )( geometry.m_metadata.size() ) * sizeof( Vector2 );
-		bytes += ( size_t )( geometry.m_indices.size() ) * sizeof( int32_t );
-	}
-	return bytes;
-}
-
-size_t Terrain3DMesher::getVisibleGeometryPayloadBytes( void ) const {
-	return estimateGeometryPayloadBytes( 0, MESH_TYPE_COUNT - 1 );
-}
-
-size_t Terrain3DMesher::getStreamingBufferBytes( void ) const {
-	return sizeof( m_szLastLodPositions ) + sizeof( m_szLastLodTestX ) + sizeof( m_szLastLodTestZ ) + sizeof( m_fLodScales )
-	        + sizeof( m_fLodSnapSteps ) + sizeof( m_fLodNextSnapSteps );
-}
-
-int Terrain3DMesher::getLodTier( const int nLod ) const {
-	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount ) {
-		return 0;
-	}
-	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount + m_runtimeConfig.m_nMiddleShaderLodCount ) {
-		return 1;
-	}
-	return 2;
-}
-
-bool Terrain3DMesher::lodCastsShadows( const int nLod ) const {
-	if ( m_castShadows == GeometryInstance3D::SHADOW_CASTING_SETTING_OFF ) {
-		return false;
-	}
-	const int tier = getLodTier( nLod );
-	if ( tier < 0 || tier >= 3 || !m_runtimeConfig.m_szTierShadowEnabled[( size_t )( tier )] ) {
-		return false;
-	}
-	int limit = m_runtimeConfig.m_nShadowLodCount;
-	if ( m_runtimeConfig.m_szTierShadowLodCounts[( size_t )( tier )] >= 0 ) {
-		limit = m_runtimeConfig.m_szTierShadowLodCounts[( size_t )( tier )];
-	}
-	return limit > 0 && nLod < limit;
-}
-
-int Terrain3DMesher::getRenderBatchCountForTier( const int nTier ) const {
-	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
-		if ( getLodTier( lod ) == nTier ) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
-int Terrain3DMesher::getRenderBatchCount( void ) const {
-	return getRenderBatchCountForTier( 0 ) + getRenderBatchCountForTier( 1 ) + getRenderBatchCountForTier( 2 );
-}
-
-int Terrain3DMesher::getShadowBatchCountForTier( const int nTier ) const {
-	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
-		if ( getLodTier( lod ) == nTier && lodCastsShadows( lod ) ) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
-int Terrain3DMesher::getShadowBatchCount( void ) const {
-	return getShadowBatchCountForTier( 0 ) + getShadowBatchCountForTier( 1 ) + getShadowBatchCountForTier( 2 );
+	return m_szStripPartCounts[LOD0_MESH] == ( uint16_t )( T3D_CLIPMAP_STRIP_LOD0_PART_COUNT )
+	        && m_szStripPartCounts[OUTER_RING_MESH] == ( uint16_t )( T3D_CLIPMAP_STRIP_OUTER_RING_PART_COUNT );
 }
 
 void Terrain3DMesher::generateClipmap( void ) {
 	clearClipmap();
 	generateOffsetData();
-	clearMeshTypes();
-	if ( m_bRequireCookedGeometryPack ) {
-		if ( !m_pTerrain || !loadRuntimeGeometryPack( m_pTerrain->getDataDirectory() ) ) {
-			ERR_PRINT( "Terrain3D strict cooked runtime requires a valid terrain3d_clipmap.t3dmeshpack." );
-			m_nClipmapLevelCount = 0;
-			return;
-		}
-	} else {
-		generateMeshTypes();
+	if ( !generateStripParts() ) {
+		ERR_PRINT( "Terrain3D failed to build canonical procedural clipmap strip descriptors." );
+		clearStripParts();
+		return;
 	}
 	m_nClipmapLevelCount = CLAMP( m_nLods + m_nTessellationLevel, 0, s_nMaxClipmapLevels );
 }
@@ -645,12 +276,74 @@ void Terrain3DMesher::compileShadowRuntimeConfig(
 	}
 }
 
-void Terrain3DMesher::clearMeshTypes( void ) {
-	for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( m_szMeshGeometry ); iMesh++ ) {
-		t3dClipmapGeometry_t &geometry = ( m_szMeshGeometry )[iMesh];
-		geometry = t3dClipmapGeometry_t{};
+int Terrain3DMesher::getLodTier( const int nLod ) const {
+	if ( nLod < 0 || nLod >= m_nClipmapLevelCount ) {
+		return 2;
 	}
+	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount ) {
+		return 0;
+	}
+	if ( nLod < m_runtimeConfig.m_nNearShaderLodCount + m_runtimeConfig.m_nMiddleShaderLodCount ) {
+		return 1;
+	}
+	return 2;
 }
+
+bool Terrain3DMesher::lodCastsShadows( const int nLod ) const {
+	if ( m_castShadows == GeometryInstance3D::SHADOW_CASTING_SETTING_OFF || nLod < 0 || nLod >= m_nClipmapLevelCount ) {
+		return false;
+	}
+	const int tier = getLodTier( nLod );
+	if ( tier < 0 || tier >= 3 || !m_runtimeConfig.m_szTierShadowEnabled[tier] ) {
+		return false;
+	}
+	int lod_limit = m_runtimeConfig.m_nShadowLodCount;
+	if ( m_runtimeConfig.m_szTierShadowLodCounts[tier] >= 0 ) {
+		lod_limit = m_runtimeConfig.m_szTierShadowLodCounts[tier];
+	}
+	return lod_limit > 0 && nLod < lod_limit;
+}
+
+int Terrain3DMesher::getRenderBatchCountForTier( const int nTier ) const {
+	if ( nTier < 0 || nTier >= 3 ) {
+		return 0;
+	}
+	int count = 0;
+	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
+		count += getLodTier( lod ) == nTier ? 1 : 0;
+	}
+	return count;
+}
+
+int Terrain3DMesher::getRenderBatchCount( void ) const {
+	return m_nClipmapLevelCount;
+}
+
+int Terrain3DMesher::getShadowBatchCountForTier( const int nTier ) const {
+	if ( nTier < 0 || nTier >= 3 ) {
+		return 0;
+	}
+	int count = 0;
+	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
+		count += getLodTier( lod ) == nTier && lodCastsShadows( lod ) ? 1 : 0;
+	}
+	return count;
+}
+
+int Terrain3DMesher::getShadowBatchCount( void ) const {
+	int count = 0;
+	for ( int lod = 0; lod < m_nClipmapLevelCount; ++lod ) {
+		count += lodCastsShadows( lod ) ? 1 : 0;
+	}
+	return count;
+}
+
+size_t Terrain3DMesher::getStreamingBufferBytes( void ) const {
+	// Procedural clipmap topology owns no transient vertex/index streaming
+	// payload. Live RD patch/visibility buffers are accounted by the renderer.
+	return 0u;
+}
+
 
 void Terrain3DMesher::initialize( Terrain3D *const pTerrain,
         const int nMeshSize,
@@ -664,13 +357,11 @@ void Terrain3DMesher::initialize( Terrain3D *const pTerrain,
         const int nShadowLodCount,
         const eastl::array<bool, 3> &bTierShadowEnabled,
         const eastl::array<int, 3> &nTierShadowLodCounts,
-        const bool bRequireCookedGeometryPack,
         const Vector3 &rInitialTarget ) {
 	if ( !pTerrain ) {
 		return;
 	}
 	m_pTerrain = pTerrain;
-	m_bRequireCookedGeometryPack = bRequireCookedGeometryPack;
 	m_nLods = nLods;
 	m_nTessellationLevel = nTessellationLevel;
 	m_nMeshSize = nMeshSize;
@@ -691,7 +382,7 @@ void Terrain3DMesher::initialize( Terrain3D *const pTerrain,
 
 void Terrain3DMesher::destroy( void ) {
 	clearClipmap();
-	clearMeshTypes();
+	clearStripParts();
 	m_pTerrain = NULL;
 	for ( int lod = 0; lod < s_nMaxClipmapLevels; ++lod ) {
 		m_szLastLodPositions[( size_t )( lod )] = s_v2Max;

@@ -17,8 +17,8 @@ RD_TYPES="$ROOT/rendering/rd/terrain_3d_rd_types.h"
 RD_COORD="$ROOT/rendering/rd/terrain_3d_render_coordinator.cpp"
 COMPUTE_H="$ROOT/rendering/terrain_3d_compute.h"
 COMPUTE_CPP="$ROOT/rendering/terrain_3d_compute.cpp"
-VERTEX="$PROJECT/project/addons/terrain_3d/rd/terrain_clipmap_vertex_inc.glsl"
-FRAGMENT="$PROJECT/project/addons/terrain_3d/rd/terrain_clipmap_fragment_inc.glsl"
+VERTEX="$PROJECT/project/addons/terrain_3d/rd/terrain_clipmap_vertex_inc.glslinc"
+FRAGMENT="$PROJECT/project/addons/terrain_3d/rd/terrain_clipmap_fragment_inc.glslinc"
 DISPLACEMENT="$PROJECT/project/addons/terrain_3d/compute/terrain_displacement.glsl"
 
 # Phase 4: runtime geometry no longer owns mutable region dimensions.

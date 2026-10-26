@@ -53,6 +53,9 @@ class Terrain3DHighWaterSlab {
 		if ( m_pData && !m_bOwnsData ) {
 			return false;
 		}
+		if ( !m_allocator.canAllocate( nCapacity * sizeof( T ), alignof( T ), 0u ) ) {
+			return false;
+		}
 		T *const pReplacement = ( T * )m_allocator.allocate( nCapacity * sizeof( T ), alignof( T ), 0u );
 		if ( !pReplacement ) {
 			return false;
@@ -486,6 +489,21 @@ public:
 	}
 	EA_FORCE_INLINE size_t offset( void ) const {
 		return m_iOffset;
+	}
+	EA_FORCE_INLINE bool isBoundTo( const Terrain3DHighWaterSlab<T> *const pSlab ) const {
+		return m_pSlab == pSlab;
+	}
+	EA_FORCE_INLINE bool validateBinding( const Terrain3DHighWaterSlab<T> *const pSlab ) const {
+		if ( m_pSlab != pSlab || m_nCount > m_nCapacity ) {
+			return false;
+		}
+		if ( m_nCapacity == 0u ) {
+			return m_iOffset == 0u;
+		}
+		if ( !m_pSlab || !m_pSlab->data() || m_iOffset > m_pSlab->used() || m_iOffset > m_pSlab->capacity() ) {
+			return false;
+		}
+		return m_nCapacity <= m_pSlab->used() - m_iOffset && m_nCapacity <= m_pSlab->capacity() - m_iOffset;
 	}
 
 	bool relocateExact( Terrain3DHighWaterSlab<T> *const pDestination ) {

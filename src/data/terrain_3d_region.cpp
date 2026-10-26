@@ -133,6 +133,8 @@ void Terrain3DRegion::clear( void ) {
 	m_bInstanceStoreResident = true;
 	m_bInstanceStoreModified = false;
 	m_nCookedPageSourceSignature = 0u;
+	m_nMegaVTSourceGeneration = 1u;
+	m_nMegaVTDirtyMip0Mask = 0u;
 	clearInstanceMetadata();
 	m_streamedNodes.clear();
 	m_streamedNodeRuntime.clear();
@@ -457,7 +459,10 @@ void Terrain3DRegion::markMapEdited( const t3dMapType_t mapType, const bool bRec
 Ref<Image> Terrain3DRegion::sanitizeMap( const t3dMapType_t mapType, const Ref<Image> &rMap ) const {
 	LOG( DEBUG, "Sanitizing map type: ", mapType, ", map: ", rMap );
 	if ( !t3dIsValidRegionSize( s_nRegionSize ) ) {
-		LOG( ERROR, "Invalid region size: ", s_nRegionSize, ". Set it or set a map first. This fork requires exactly 128 samples per region" );
+		LOG( ERROR,
+		        "Invalid region size: ",
+		        s_nRegionSize,
+		        ". Set it or set a map first. This fork requires exactly 128 samples per region" );
 		return Ref<Image>();
 	}
 	if ( mapType != TYPE_HEIGHT && rMap.is_null() ) {
@@ -550,6 +555,36 @@ bool Terrain3DRegion::validateMapSize( const Ref<Image> &rMap ) const {
 		return false;
 	}
 	return true;
+}
+
+void Terrain3DRegion::setMegaVTSourceGeneration( const int64_t nGeneration ) {
+	const uint32_t nSanitized =
+	        nGeneration <= 0 ? 1u : ( nGeneration > ( int64_t )( UINT32_MAX ) ? UINT32_MAX : ( uint32_t )( nGeneration ) );
+	if ( m_nMegaVTSourceGeneration == nSanitized ) {
+		return;
+	}
+	m_nMegaVTSourceGeneration = nSanitized;
+	m_bModified = true;
+}
+
+void Terrain3DRegion::setMegaVTDirtyMip0Mask( const int64_t nMask ) {
+	const uint32_t nSanitized = nMask <= 0 ? 0u : ( ( uint32_t )( nMask ) & 0xffffu );
+	if ( m_nMegaVTDirtyMip0Mask == nSanitized ) {
+		return;
+	}
+	m_nMegaVTDirtyMip0Mask = nSanitized;
+	m_bModified = true;
+}
+
+void Terrain3DRegion::setMegaVTEditorStateInternal( const uint32_t nGeneration, const uint32_t nDirtyMip0Mask ) {
+	const uint32_t nSanitizedGeneration = nGeneration == 0u ? 1u : nGeneration;
+	const uint32_t nSanitizedMask = nDirtyMip0Mask & 0xffffu;
+	if ( m_nMegaVTSourceGeneration == nSanitizedGeneration && m_nMegaVTDirtyMip0Mask == nSanitizedMask ) {
+		return;
+	}
+	m_nMegaVTSourceGeneration = nSanitizedGeneration;
+	m_nMegaVTDirtyMip0Mask = nSanitizedMask;
+	m_bModified = true;
 }
 
 void Terrain3DRegion::setHeightRange( const Vector2 &rRange ) {
@@ -707,7 +742,10 @@ void Terrain3DRegion::importInstancesUnmodified( const Dictionary &rInstances ) 
 }
 
 void Terrain3DRegion::setInstances( const Dictionary &rInstances ) {
-	ensureInstanceStoreResident();
+	if ( !ensureInstanceStoreResident() ) {
+		LOG( ERROR, "Failed materializing instance store before setInstances for region ", m_location );
+		return;
+	}
 	if ( m_instanceStore.equalsDictionary( rInstances ) ) {
 		return;
 	}
@@ -1180,13 +1218,7 @@ void Terrain3DRegion::setLighting( const Ref<Terrain3DRegionLighting> &rLighting
 void Terrain3DRegion::setLocation( const Vector2i &rLocation ) {
 	// Locations are bounded by the fixed logical region map.
 	if ( Terrain3DData::getRegionMapIndex( rLocation ) < 0 ) {
-		LOG( ERROR,
-		        "Location ",
-		        rLocation,
-		        " out of bounds. Max: ",
-		        -s_nRegionMapSize / 2,
-		        " to ",
-		        s_nRegionMapSize / 2 - 1 );
+		LOG( ERROR, "Location ", rLocation, " out of bounds. Max: ", -s_nRegionMapSize / 2, " to ", s_nRegionMapSize / 2 - 1 );
 		return;
 	}
 	// Marked modified if setting after initialized
@@ -1281,6 +1313,12 @@ void Terrain3DRegion::setData( const Dictionary &rData ) {
 	if ( rData.has( "channel_flags" ) ) {
 		setChannelFlags( ( int )( rData["channel_flags"] ) );
 	}
+	if ( rData.has( "megavt_source_generation" ) ) {
+		setMegaVTSourceGeneration( ( int64_t )( rData["megavt_source_generation"] ) );
+	}
+	if ( rData.has( "megavt_dirty_mip0_mask" ) ) {
+		setMegaVTDirtyMip0Mask( ( int64_t )( rData["megavt_dirty_mip0_mask"] ) );
+	}
 	if ( rData.has( "instances" ) ) {
 		setInstances( rData["instances"] );
 	}
@@ -1314,6 +1352,8 @@ Dictionary Terrain3DRegion::getData( void ) const {
 	dict["control_map"] = m_controlMap;
 	dict["color_map"] = m_colorMap;
 	dict["channel_flags"] = ( int )( m_nChannelFlags );
+	dict["megavt_source_generation"] = ( int64_t )( m_nMegaVTSourceGeneration );
+	dict["megavt_dirty_mip0_mask"] = ( int64_t )( m_nMegaVTDirtyMip0Mask );
 	dict["instances"] = Dictionary();
 	dict["instance_page"] = getInstancePage();
 	dict["streamed_nodes"] = m_streamedNodes.duplicate( true );
@@ -1328,6 +1368,8 @@ Ref<Terrain3DRegion> Terrain3DRegion::duplicate( const bool bDeep ) {
 	pRegion->m_bGeometryContractValid = m_bGeometryContractValid;
 	pRegion->m_heightRange = m_heightRange;
 	pRegion->m_nChannelFlags = m_nChannelFlags;
+	pRegion->m_nMegaVTSourceGeneration = m_nMegaVTSourceGeneration;
+	pRegion->m_nMegaVTDirtyMip0Mask = m_nMegaVTDirtyMip0Mask;
 	pRegion->m_bModified = m_bModified;
 	pRegion->m_bDeleted = m_bDeleted;
 	pRegion->m_location = m_location;
@@ -1421,8 +1463,7 @@ bool Terrain3DRegion::_set( const StringName &rName, const Variant &rProperty ) 
 		return true;
 	}
 	if ( rName == StringName( "vertex_spacing" ) ) {
-		m_bGeometryContractValid =
-		        m_bGeometryContractValid && ( real_t )( rProperty ) == ( real_t )( s_fRegionVertexSpacing );
+		m_bGeometryContractValid = m_bGeometryContractValid && ( real_t )( rProperty ) == ( real_t )( s_fRegionVertexSpacing );
 		if ( !m_bGeometryContractValid ) {
 			LOG( ERROR, "Rejected legacy Terrain3DRegion resource: vertex_spacing must be exactly 1.0 metre" );
 		}
@@ -1470,6 +1511,10 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_color_map" ), &Terrain3DRegion::getColorMap );
 	ClassDB::bind_method( D_METHOD( "set_channel_flags", "flags" ), &Terrain3DRegion::setChannelFlags );
 	ClassDB::bind_method( D_METHOD( "get_channel_flags" ), &Terrain3DRegion::getChannelFlags );
+	ClassDB::bind_method( D_METHOD( "set_megavt_source_generation", "generation" ), &Terrain3DRegion::setMegaVTSourceGeneration );
+	ClassDB::bind_method( D_METHOD( "get_megavt_source_generation" ), &Terrain3DRegion::getMegaVTSourceGeneration );
+	ClassDB::bind_method( D_METHOD( "set_megavt_dirty_mip0_mask", "mask" ), &Terrain3DRegion::setMegaVTDirtyMip0Mask );
+	ClassDB::bind_method( D_METHOD( "get_megavt_dirty_mip0_mask" ), &Terrain3DRegion::getMegaVTDirtyMip0Mask );
 	ClassDB::bind_method( D_METHOD( "has_channel", "map_type" ), &Terrain3DRegion::hasChannel );
 	ClassDB::bind_method( D_METHOD( "sanitize_maps" ), &Terrain3DRegion::sanitizeMaps );
 	ClassDB::bind_method( D_METHOD( "is_map_default", "map_type" ), &Terrain3DRegion::isMapDefault );
@@ -1567,6 +1612,12 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "channel_flags", PROPERTY_HINT_FLAGS, "Control,Color,Derived", ro_flags ),
 	        "set_channel_flags",
 	        "get_channel_flags" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "megavt_source_generation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+	        "set_megavt_source_generation",
+	        "get_megavt_source_generation" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "megavt_dirty_mip0_mask", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+	        "set_megavt_dirty_mip0_mask",
+	        "get_megavt_dirty_mip0_mask" );
 	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 	        "set_location",
 	        "get_location" );

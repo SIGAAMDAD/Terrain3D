@@ -29,6 +29,11 @@ EA_FORCE_INLINE bool t3dContainerReserveCold( C &rContainer, const size_t nCapac
 	if ( nCapacity <= rContainer.capacity() ) {
 		return true;
 	}
+	if ( nCapacity > SIZE_MAX / sizeof( typename C::value_type )
+	        || !rContainer.get_allocator().canAllocate(
+	                nCapacity * sizeof( typename C::value_type ), alignof( typename C::value_type ) ) ) {
+		return false;
+	}
 	rContainer.reserve( nCapacity );
 	return rContainer.capacity() >= nCapacity;
 }

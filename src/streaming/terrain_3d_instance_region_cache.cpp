@@ -9,34 +9,12 @@
 #include "memory/terrain_3d_memory.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
 #include "streaming/terrain_3d_runtime_profile.h"
+#include "streaming/terrain_3d_scope_timer.h"
 
 #include <godot_cpp/classes/time.hpp>
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
-class Terrain3DInstanceRegionCacheScopeTimer {
-	uint64_t m_nStartedUsec = 0u;
-	uint64_t *m_pElapsedUsec = NULL;
-
-public:
-	Terrain3DInstanceRegionCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
-		nElapsedUsec = 0u;
-		if ( !bEnabled ) {
-			return;
-		}
-		m_pElapsedUsec = &nElapsedUsec;
-		Time *const pTime = Time::get_singleton();
-		m_nStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-	}
-	~Terrain3DInstanceRegionCacheScopeTimer( void ) {
-		if ( !m_pElapsedUsec ) {
-			return;
-		}
-		Time *const pTime = Time::get_singleton();
-		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_nStartedUsec;
-		*m_pElapsedUsec = finishedUsec >= m_nStartedUsec ? finishedUsec - m_nStartedUsec : 0u;
-	}
-};
 
 typedef bool ( *t3dInstanceRegionRingFn )( void *pContext, const Vector2i &rLocation );
 
@@ -79,6 +57,7 @@ Terrain3DInstanceRegionCache::Terrain3DInstanceRegionCache(
         Terrain3DRegionRepository *const pRepository, Terrain3DRuntimePageStore *const pRuntimePageStore ) :
         m_pRepository( pRepository ), m_pRuntimePageStore( pRuntimePageStore ) {
 	eastl::fill_n( m_szLocations, s_nInstanceCacheMaxPages, t3dInvalidRegionCoord() );
+	eastl::fill_n( m_szResidentBytes, s_nInstanceCacheMaxPages, ( size_t )( 0u ) );
 }
 
 void Terrain3DInstanceRegionCache::reset( const bool bRestoreAll, t3dInstanceRegionCacheChanges_t *const pChanges ) {
@@ -94,11 +73,12 @@ void Terrain3DInstanceRegionCache::reset( const bool bRestoreAll, t3dInstanceReg
 		}
 	} else {
 		for ( int slot = 0; slot < m_nCapacity; ++slot ) {
-			evictSlot( slot, pChanges );
+			evictSlot( slot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_RESET, s_v2iMax );
 		}
 	}
 	eastl::fill_n( m_szRegionMap, s_nRegionSlots, ( uint8_t )( 0 ) );
 	eastl::fill_n( m_szLocations, s_nInstanceCacheMaxPages, t3dInvalidRegionCoord() );
+	eastl::fill_n( m_szResidentBytes, s_nInstanceCacheMaxPages, ( size_t )( 0u ) );
 	m_nCapacity = s_nInstanceCacheMaxPages;
 	m_nResidentCount = 0;
 	m_nDesiredLastTick = 0;
@@ -123,16 +103,123 @@ int Terrain3DInstanceRegionCache::findSlot( const Vector2i &vLocation ) const {
 	return slot;
 }
 
+size_t Terrain3DInstanceRegionCache::getTrackedResidentBytes( const Vector2i &vLocation ) const {
+	const int slot = findSlot( vLocation );
+	return slot >= 0 ? m_szResidentBytes[slot] : 0u;
+}
+
+size_t Terrain3DInstanceRegionCache::getTrackedResidentBytesSum( void ) const {
+	size_t trackedBytes = 0u;
+	for ( int slot = 0; slot < m_nCapacity; ++slot ) {
+		trackedBytes += m_szResidentBytes[slot];
+	}
+	return trackedBytes;
+}
+
+void Terrain3DInstanceRegionCache::updateTrackedResidentBytes( const int iSlot, const size_t nCurrentBytes ) {
+	if ( !t3dInstanceCacheIndexValid( iSlot, m_nCapacity ) ) {
+		return;
+	}
+	const size_t trackedBytes = m_szResidentBytes[iSlot];
+	if ( trackedBytes == nCurrentBytes ) {
+		return;
+	}
+	m_szResidentBytes[iSlot] = nCurrentBytes;
+	if ( nCurrentBytes > trackedBytes ) {
+		const size_t growthBytes = nCurrentBytes - trackedBytes;
+		if ( growthBytes <= SIZE_MAX - m_nResidentBytes ) {
+			m_nResidentBytes += growthBytes;
+		} else {
+			m_nResidentBytes = getTrackedResidentBytesSum();
+		}
+		return;
+	}
+	const size_t shrinkBytes = trackedBytes - nCurrentBytes;
+	if ( shrinkBytes <= m_nResidentBytes ) {
+		m_nResidentBytes -= shrinkBytes;
+	} else {
+		// A prior stale/corrupt aggregate must not zero unrelated resident slots.
+		m_nResidentBytes = getTrackedResidentBytesSum();
+	}
+}
+
+bool Terrain3DInstanceRegionCache::refreshResidentBytes( const Vector2i &vLocation ) {
+	const int slot = findSlot( vLocation );
+	if ( slot < 0 || !m_pRepository ) {
+		return false;
+	}
+	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( vLocation );
+	if ( !pRegion || pRegion->isDeleted() || !pRegion->isInstanceStoreResident() ) {
+		return false;
+	}
+	const size_t currentBytes = pRegion->getInstanceResidentBytes();
+	if ( currentBytes != m_szResidentBytes[slot] ) {
+		updateTrackedResidentBytes( slot, currentBytes );
+		m_bSelectionDirty = true;
+	}
+	return true;
+}
+
+size_t Terrain3DInstanceRegionCache::reconcileResidentBytes( void ) {
+	if ( !m_pRepository ) {
+		return m_nResidentBytes;
+	}
+	bool bChanged = false;
+	for ( int slot = 0; slot < m_nCapacity; ++slot ) {
+		const Vector2i location = t3dUnpackRegionCoord( m_szLocations[slot] );
+		if ( location == s_v2iMax ) {
+			if ( m_szResidentBytes[slot] != 0u ) {
+				updateTrackedResidentBytes( slot, 0u );
+				bChanged = true;
+			}
+			continue;
+		}
+		Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
+		const size_t currentBytes =
+		        pRegion && !pRegion->isDeleted() && pRegion->isInstanceStoreResident() ? pRegion->getInstanceResidentBytes() : 0u;
+		if ( currentBytes != m_szResidentBytes[slot] ) {
+			updateTrackedResidentBytes( slot, currentBytes );
+			bChanged = true;
+		}
+	}
+	if ( bChanged ) {
+		m_bSelectionDirty = true;
+	}
+	return m_nResidentBytes;
+}
+
+void Terrain3DInstanceRegionCache::recordEvictionDiagnostic( const int iSlot,
+        const Vector2i &rLocation,
+        const Vector2i &rAdmittedLocation,
+        const size_t nCurrentBytes,
+        const t3dInstanceRegionCacheEvictionReason_t eReason ) {
+	m_lastEviction.m_evictedLocation = t3dPackRegionCoord( rLocation );
+	m_lastEviction.m_admittedLocation = t3dPackRegionCoord( rAdmittedLocation );
+	m_lastEviction.m_nTrackedBytes = t3dInstanceCacheIndexValid( iSlot, m_nCapacity ) ? m_szResidentBytes[iSlot] : 0u;
+	m_lastEviction.m_nCurrentBytes = nCurrentBytes;
+	m_lastEviction.m_nBudgetBytes = ( size_t )( m_nBudgetMb )*s_nInstanceCacheMib;
+	m_lastEviction.m_eReason = eReason;
+	++m_nEvictionsTotal;
+	if ( eReason == TERRAIN3D_INSTANCE_REGION_EVICTION_SLOT_PRESSURE || eReason == TERRAIN3D_INSTANCE_REGION_EVICTION_DEMAND_BUDGET
+	        || eReason == TERRAIN3D_INSTANCE_REGION_EVICTION_BUDGET_RECOVERY
+	        || eReason == TERRAIN3D_INSTANCE_REGION_EVICTION_SELECTION_CHANGE ) {
+		++m_nCachePolicyEvictions;
+	}
+}
+
 void Terrain3DInstanceRegionCache::invalidate( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *const pChanges ) {
 	const int slot = findSlot( vLocation );
 	if ( slot < 0 ) {
 		return;
 	}
-	evictSlot( slot, pChanges );
+	evictSlot( slot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_INVALIDATE, s_v2iMax );
 	m_bSelectionDirty = true;
 }
 
-bool Terrain3DInstanceRegionCache::evictSlot( const int iSlot, t3dInstanceRegionCacheChanges_t *const pChanges ) {
+bool Terrain3DInstanceRegionCache::evictSlot( const int iSlot,
+        t3dInstanceRegionCacheChanges_t *const pChanges,
+        const t3dInstanceRegionCacheEvictionReason_t eReason,
+        const Vector2i &rAdmittedLocation ) {
 	if ( !t3dInstanceCacheIndexValid( iSlot, m_nCapacity ) || !m_pRepository ) {
 		return false;
 	}
@@ -141,20 +228,19 @@ bool Terrain3DInstanceRegionCache::evictSlot( const int iSlot, t3dInstanceRegion
 		return true;
 	}
 	Terrain3DRegion *const pRegion = m_pRepository->getRegionPtr( location );
-	size_t residentBytes = 0u;
+	size_t currentBytes = 0u;
 	if ( pRegion && pRegion->isInstanceStoreResident() ) {
-		residentBytes = pRegion->getInstanceResidentBytes();
+		currentBytes = pRegion->getInstanceResidentBytes();
 		const PackedByteArray page = pRegion->getInstancePage();
 		if ( page.is_empty() && pRegion->hasInstances() ) {
 			return false;
 		}
-	}
-	if ( pRegion && pRegion->isInstanceStoreResident() ) {
 		if ( !pRegion->evictInstanceStore() ) {
 			return false;
 		}
-		m_nResidentBytes = residentBytes <= m_nResidentBytes ? m_nResidentBytes - residentBytes : 0u;
 	}
+	recordEvictionDiagnostic( iSlot, location, rAdmittedLocation, currentBytes, eReason );
+	updateTrackedResidentBytes( iSlot, 0u );
 	const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( location );
 	if ( mapIndex >= 0 ) {
 		m_szRegionMap[mapIndex] = 0u;
@@ -170,15 +256,19 @@ bool Terrain3DInstanceRegionCache::evictSlot( const int iSlot, t3dInstanceRegion
 bool Terrain3DInstanceRegionCache::evict( const Vector2i &vLocation, t3dInstanceRegionCacheChanges_t *const pChanges ) {
 	const int slot = findSlot( vLocation );
 	if ( slot >= 0 ) {
-		return evictSlot( slot, pChanges );
+		return evictSlot( slot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_EXPLICIT, s_v2iMax );
 	}
 	Terrain3DRegion *const pRegion = m_pRepository ? m_pRepository->getRegionPtr( vLocation ) : NULL;
 	if ( !pRegion || !pRegion->isInstanceStoreResident() ) {
 		return true;
 	}
+	const size_t currentBytes = pRegion->getInstanceResidentBytes();
 	const bool bEvicted = pRegion->evictInstanceStore();
-	if ( bEvicted && pChanges ) {
-		pChanges->recordEvicted( vLocation );
+	if ( bEvicted ) {
+		recordEvictionDiagnostic( -1, vLocation, s_v2iMax, currentBytes, TERRAIN3D_INSTANCE_REGION_EVICTION_EXPLICIT );
+		if ( pChanges ) {
+			pChanges->recordEvicted( vLocation );
+		}
 	}
 	return bEvicted;
 }
@@ -195,7 +285,12 @@ bool Terrain3DInstanceRegionCache::attachResidentStore(
 		}
 		return true;
 	}
-	if ( findSlot( vLocation ) >= 0 || !pRegion->hasInstances() ) {
+	const int residentSlot = findSlot( vLocation );
+	if ( residentSlot >= 0 ) {
+		refreshResidentBytes( vLocation );
+		return true;
+	}
+	if ( !pRegion->hasInstances() ) {
 		return true;
 	}
 	int targetSlot = -1;
@@ -220,7 +315,8 @@ bool Terrain3DInstanceRegionCache::attachResidentStore(
 	if ( targetSlot < 0 ) {
 		return false;
 	}
-	if ( t3dRegionCoordValid( m_szLocations[targetSlot] ) && !evictSlot( targetSlot, pChanges ) ) {
+	if ( t3dRegionCoordValid( m_szLocations[targetSlot] )
+	        && !evictSlot( targetSlot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_SLOT_PRESSURE, vLocation ) ) {
 		return false;
 	}
 	const size_t bytes = pRegion->getInstanceResidentBytes();
@@ -240,7 +336,7 @@ bool Terrain3DInstanceRegionCache::attachResidentStore(
 				farthestSlot = slot;
 			}
 		}
-		if ( farthestSlot < 0 || !evictSlot( farthestSlot, pChanges ) ) {
+		if ( farthestSlot < 0 || !evictSlot( farthestSlot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_DEMAND_BUDGET, vLocation ) ) {
 			break;
 		}
 		++m_nEvictionsLastTick;
@@ -254,7 +350,7 @@ bool Terrain3DInstanceRegionCache::attachResidentStore(
 		m_szRegionMap[mapIndex] = ( uint8_t )( targetSlot + 1 );
 	}
 	++m_nResidentCount;
-	m_nResidentBytes += bytes;
+	updateTrackedResidentBytes( targetSlot, bytes );
 	if ( bDemandLoad ) {
 		++m_nDemandLoads;
 	}
@@ -439,7 +535,7 @@ void Terrain3DInstanceRegionCache::update( const t3dResidencyFrameState_t &rFram
         const bool bForce,
         const int nEffectiveLoadPages,
         t3dInstanceRegionCacheChanges_t &rChanges ) {
-	const Terrain3DInstanceRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.m_bProfilingEnabled );
+	const Terrain3DLastScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.m_bProfilingEnabled );
 	m_nLoadsLastTick = 0;
 	m_nStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
 	m_nEvictionsLastTick = 0;
@@ -490,7 +586,7 @@ void Terrain3DInstanceRegionCache::update( const t3dResidencyFrameState_t &rFram
 				farthestSlot = slot;
 			}
 		}
-		if ( farthestSlot < 0 || !evictSlot( farthestSlot, &rChanges ) ) {
+		if ( farthestSlot < 0 || !evictSlot( farthestSlot, &rChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_BUDGET_RECOVERY, s_v2iMax ) ) {
 			break;
 		}
 		++m_nEvictionsLastTick;
@@ -499,7 +595,7 @@ void Terrain3DInstanceRegionCache::update( const t3dResidencyFrameState_t &rFram
 		const Vector2i location = t3dUnpackRegionCoord( m_szLocations[slot] );
 		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( location );
 		if ( location != s_v2iMax && ( mapIndex < 0 || desiredMap[mapIndex] == 0u ) ) {
-			if ( evictSlot( slot, &rChanges ) ) {
+			if ( evictSlot( slot, &rChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_SELECTION_CHANGE, s_v2iMax ) ) {
 				++m_nEvictionsLastTick;
 			}
 		}
@@ -566,6 +662,10 @@ t3dInstanceRegionCacheStats_t Terrain3DInstanceRegionCache::getStats( void ) con
 	stats.m_bMaterializationServiceActive = m_bMaterializationServiceActive;
 	stats.m_nColdMaterializations = m_nColdMaterializations;
 	stats.m_nMaterializationMisses = m_nMaterializationMisses;
+	stats.m_nEvictionsTotal = m_nEvictionsTotal;
+	stats.m_nCachePolicyEvictions = m_nCachePolicyEvictions;
+	stats.m_nTrackedResidentBytes = getTrackedResidentBytesSum();
+	stats.m_lastEviction = m_lastEviction;
 	return stats;
 }
 
@@ -587,6 +687,10 @@ Dictionary Terrain3DInstanceRegionCache::getStatsDictionary( const bool bDetaile
 	stats["materialization_service_active"] = m_bMaterializationServiceActive;
 	stats["cold_materializations"] = ( int64_t )( m_nColdMaterializations );
 	stats["materialization_misses"] = ( int64_t )( m_nMaterializationMisses );
+	stats["evictions_total"] = ( int64_t )( m_nEvictionsTotal );
+	stats["cache_policy_evictions"] = ( int64_t )( m_nCachePolicyEvictions );
+	stats["tracked_resident_bytes"] = ( int64_t )( getTrackedResidentBytesSum() );
+	stats["resident_byte_accounting_consistent"] = m_nResidentBytes == getTrackedResidentBytesSum();
 	if ( !bDetailed ) {
 		return stats;
 	}
@@ -596,5 +700,11 @@ Dictionary Terrain3DInstanceRegionCache::getStatsDictionary( const bool bDetaile
 	stats["stall_flags_last_tick"] = ( int64_t )( m_nStallFlagsLastTick );
 	stats["center"] = m_center;
 	stats["budget_overcommitted"] = m_nResidentBytes > ( size_t )( m_nBudgetMb )*s_nInstanceCacheMib;
+	stats["last_eviction_reason"] = ( int64_t )( m_lastEviction.m_eReason );
+	stats["last_eviction_region"] = t3dUnpackRegionCoord( m_lastEviction.m_evictedLocation );
+	stats["last_eviction_admitted_region"] = t3dUnpackRegionCoord( m_lastEviction.m_admittedLocation );
+	stats["last_eviction_tracked_bytes"] = ( int64_t )( m_lastEviction.m_nTrackedBytes );
+	stats["last_eviction_current_bytes"] = ( int64_t )( m_lastEviction.m_nCurrentBytes );
+	stats["last_eviction_budget_bytes"] = ( int64_t )( m_lastEviction.m_nBudgetBytes );
 	return stats;
 }

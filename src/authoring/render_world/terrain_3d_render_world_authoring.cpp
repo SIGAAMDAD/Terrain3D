@@ -94,12 +94,6 @@ T3DRenderWorldClassification t3d_render_world_authoring_classify_reference_debug
 		Result.eReason = T3D_RW_CONVERSION_UNSUPPORTED_MATERIAL;
 		return Result;
 	}
-	if ( pCandidate.bTwoSided && Result.nTier != T3D_RW_TIER_FOLIAGE ) {
-		Result.eOwnership = T3D_RW_OWNERSHIP_COMPATIBILITY;
-		Result.eReason = T3D_RW_CONVERSION_TWO_SIDED_NON_FOLIAGE;
-		return Result;
-	}
-
 	Result.eOwnership = T3D_RW_OWNERSHIP_RENDERWORLD;
 	Result.eReason = T3D_RW_CONVERSION_OK;
 	return Result;

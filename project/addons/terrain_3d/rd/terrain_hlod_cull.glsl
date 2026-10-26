@@ -36,7 +36,7 @@ layout(push_constant, std430) uniform CullData {
     uint descriptor_count;
     uint visibility_mask;
     uint command_count;
-    uint reserved_0;
+    uint main_command_base;
 }
 cull_data;
 
@@ -78,5 +78,5 @@ void main() {
     if (descriptor.command_index >= cull_data.command_count)
         return;
     bool layer_visible = (descriptor.visibility_layers & cull_data.visibility_mask) != 0u;
-    commands[descriptor.command_index].instance_count = layer_visible && bounds_visible(descriptor) ? 1u : 0u;
+    commands[cull_data.main_command_base + descriptor.command_index].instance_count = layer_visible && bounds_visible(descriptor) ? 1u : 0u;
 }

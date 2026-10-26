@@ -23,6 +23,8 @@ typedef struct t3dMemoryZoneStats_s {
 	size_t m_nSizeClassWasteBytes = 0u;
 	size_t m_nInternalFragmentationBytes = 0u;
 	size_t m_nFailedAllocations = 0u;
+	size_t m_nExtentTableSaturationEvents = 0u;
+	size_t m_nLostFreePreventionEvents = 0u;
 	uint32_t m_nActiveSmallPages = 0u;
 	uint32_t m_nPeakActiveSmallPages = 0u;
 	uint32_t m_nFreeExtentCount = 0u;
@@ -75,7 +77,13 @@ public:
 
 	bool initialize( void *pBacking, size_t nBytes );
 	void *allocate( size_t nBytes, size_t nAlignment = alignof( max_align_t ) );
+	bool canAllocate( size_t nBytes, size_t nAlignment = alignof( max_align_t ) ) const;
 	void deallocate( void *pMemory );
+#if defined( TERRAIN3D_STORAGE_FAULT_TEST )
+	void testFailAllocationAt( size_t nCall );
+	void testClearAllocationFailure( void );
+	size_t testAllocationCallCount( void ) const;
+#endif
 	EA_FORCE_INLINE bool beginDraining() {
 		t3dScopedLock_t lock( m_mutex );
 		if ( m_state != T3D_MEMORY_ZONE_ACTIVE ) {
@@ -127,6 +135,12 @@ private:
 	size_t m_nLiveAlignmentWasteBytes = 0u;
 	size_t m_nLiveSizeClassWasteBytes = 0u;
 	size_t m_nFailedAllocations = 0u;
+#if defined( TERRAIN3D_STORAGE_FAULT_TEST )
+	size_t m_nTestAllocationCallCount = 0u;
+	size_t m_nTestFailAllocationAt = 0u;
+#endif
+	size_t m_nExtentTableSaturationEvents = 0u;
+	size_t m_nLostFreePreventionEvents = 0u;
 	uint32_t m_nActiveSmallPages = 0u;
 	uint32_t m_nPeakActiveSmallPages = 0u;
 	uint32_t m_nPeakFreeExtentCount = 0u;
@@ -139,11 +153,12 @@ private:
 	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rValue );
 	int classIndexFor( size_t nBytes, size_t nAlignment ) const;
 	bool insertFreeExtentUnlocked( size_t nOffset, size_t nBytes );
+	bool canTakeExtentUnlocked( size_t nBytes, size_t nAlignment, size_t nPrefixBytes ) const;
 	bool takeExtentUnlocked( size_t nBytes, size_t nAlignment, size_t nPrefixBytes, size_t &rExtentOffset, size_t &rUserOffset );
 	void *allocateUnlocked( size_t nBytes, size_t nAlignment );
 	void *allocateSmallUnlocked( int iClass, size_t nBytes );
 	void *allocateLargeUnlocked( size_t nBytes, size_t nAlignment );
-	void freeUnlocked( void *pMemory );
+	bool freeUnlocked( void *pMemory );
 	t3dMemoryZoneAllocationHeader_t *headerFor( void *pMemory ) const;
 	const t3dMemoryZoneAllocationHeader_t *headerFor( const void *pMemory ) const;
 };

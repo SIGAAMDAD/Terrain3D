@@ -27,12 +27,12 @@ typedef struct t3dRenderWorldAuthoringBackend_s {
 // Optional compatibility ingress for static Godot scene geometry; editor-facing and self-binding by default.
 //
 // Normal ownership model:
-//   Terrain3D -> Terrain3DRenderCoordinator -> Terrain3DRenderWorldRuntime
+//   Terrain3D -> Terrain3DRenderCoordinator -> Unified World publication
 //       ^
 //       `-- Terrain3DRenderWorldController (child/descendant authoring boundary)
 //
 // The controller owns one fixed cold authoring image. It converts supported
-// static MeshInstance3D data into compact RenderWorld records, publishes those
+// static MeshInstance3D data into compact geometry records, publishes those
 // records through the nearest Terrain3D coordinator, then hands visibility
 // ownership to RenderWorld only after the render-thread upload completes.
 class Terrain3DRenderWorldController : public godot::Node3D {
@@ -73,6 +73,7 @@ private:
 	static bool publishAutoSceneCold(
 	        void *pUser, const T3DRenderWorldSceneBuildBuffers &rBuffers, const T3DRenderWorldSceneBuildStats &rStats );
 	static void releaseAutoSceneCold( void *pUser );
+	static bool resolveAutoMaterialVtCold( void *pUser, uint64_t nStableMaterialKey, uint32_t &rAllocationId );
 
 protected:
 	static void _bind_methods( void );

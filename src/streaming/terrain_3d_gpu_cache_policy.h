@@ -177,8 +177,8 @@ inline int t3dGpuCacheCalculateBudgetPhysicalLayers( const uint64_t nBudgetBytes
 	if ( nBudgetBytes == 0u || nMaxLayers <= 0 || nBudgetBytes > ( uint64_t )( SIZE_MAX ) ) {
 		return 0;
 	}
-	const size_t layer_bytes = t3dGpuCacheEstimateResidentLayerBytes(
-	        bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
+	const size_t layer_bytes =
+	        t3dGpuCacheEstimateResidentLayerBytes( bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
 	const size_t shared_bytes = t3dGpuCacheEstimateSharedBytes( bControlImplicit, bColorImplicit, nColorDivisor );
 	const size_t budget_bytes = ( size_t )( nBudgetBytes );
 	if ( layer_bytes == 0u || budget_bytes <= shared_bytes ) {
@@ -253,8 +253,8 @@ inline int t3dGpuCacheCalculateCapacity( const uint64_t nBudgetBytes,
 	if ( s_nRegionMapSize <= 0 || nBudgetBytes == 0u || nMaxLayers <= 0 || nRequestedPages <= 0 ) {
 		return 0;
 	}
-	const size_t layer_bytes = t3dGpuCacheEstimateResidentLayerBytes(
-	        bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
+	const size_t layer_bytes =
+	        t3dGpuCacheEstimateResidentLayerBytes( bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
 	const size_t shared_bytes = t3dGpuCacheEstimateSharedBytes( bControlImplicit, bColorImplicit, nColorDivisor );
 	if ( layer_bytes == 0u || nBudgetBytes > ( uint64_t )( SIZE_MAX ) ) {
 		return 0;
@@ -298,8 +298,8 @@ inline int t3dGpuCacheCalculatePinnedCapacity( const uint64_t nBudgetBytes,
 	if ( s_nRegionMapSize <= 0 || nBudgetBytes == 0u || nMaxLayers <= 0 || nRequestedPages <= 0 ) {
 		return 0;
 	}
-	const size_t layer_bytes = t3dGpuCacheEstimateResidentLayerBytes(
-	        bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
+	const size_t layer_bytes =
+	        t3dGpuCacheEstimateResidentLayerBytes( bControlImplicit, bColorImplicit, bDerivedEnabled, nColorDivisor, nDerivedDivisor );
 	const size_t shared_bytes = t3dGpuCacheEstimateSharedBytes( bControlImplicit, bColorImplicit, nColorDivisor );
 	if ( layer_bytes == 0u || nBudgetBytes > ( uint64_t )( SIZE_MAX ) ) {
 		return 0;

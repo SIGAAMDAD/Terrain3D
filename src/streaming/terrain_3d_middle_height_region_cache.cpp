@@ -143,8 +143,7 @@ Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vL
 	return makeHeightImageForDivisor( vLocation, divisor );
 }
 
-Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImageForDivisor(
-        const Vector2i &vLocation, const int nResolutionDivisor ) const {
+Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImageForDivisor( const Vector2i &vLocation, const int nResolutionDivisor ) const {
 	if ( !m_pRepository || !m_pSamplingStorage ) {
 		return Ref<Image>();
 	}

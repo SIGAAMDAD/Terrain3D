@@ -7,8 +7,7 @@ shadow = "#define T3D_OCEAN_SHADOW";
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 
-layout(location = 0) in ivec2 in_grid;
-layout(location = 1) in uvec2 in_meta;
+#include "terrain_strip_topology_inc.glslinc"
 
 layout(set = 0, binding = 0, std140) uniform OceanFrame {
     mat4 view_projection[2];
@@ -48,6 +47,9 @@ struct PatchData {
 };
 layout(set = 0, binding = 1, std430) readonly buffer PatchBuffer {
     PatchData patches[];
+};
+layout(set = 0, binding = 2, std430) readonly buffer OceanStripPartBuffer {
+    uint ocean_strip_part_words[];
 };
 layout(push_constant, std430) uniform OceanPush {
     uint patch_base;
@@ -136,9 +138,26 @@ vec3 clipmap_morph(vec2 world_xz, vec2 grid_xz, float scale) {
 }
 
 void main() {
+    uint encoded_vertex = uint(gl_VertexIndex);
+    uint part_slot = encoded_vertex >> T3D_CLIPMAP_STRIP_VERTEX_ID_SHIFT;
+    uint local_vertex = encoded_vertex & T3D_CLIPMAP_STRIP_VERTEX_ID_MASK;
+    uint descriptor_index = push_data.reserved1 + part_slot;
+    uint word_base = descriptor_index * T3D_CLIPMAP_STRIP_PART_WORD_COUNT;
+    T3DClipmapStripPart part = t3d_clipmap_strip_part_decode(
+        ocean_strip_part_words[word_base + 0u],
+        ocean_strip_part_words[word_base + 1u],
+        ocean_strip_part_words[word_base + 2u]);
+    uint actual_vertex_count = t3d_terrain_strip_actual_vertex_count(part.cell_width, part.cell_height);
+    T3DTerrainStripVertex strip_vertex = t3d_terrain_strip_vertex_hot(
+        local_vertex,
+        part.cell_width,
+        actual_vertex_count,
+        part.part_code,
+        part.flags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS,
+        0u);
     uint patch_index = push_data.patch_base + uint(gl_InstanceIndex);
     PatchData patch_data = patches[patch_index];
-    vec2 grid = vec2(in_grid) + edge_offset(in_meta.x, patch_data);
+    vec2 grid = vec2(strip_vertex.grid + part.origin) + edge_offset(part.part_code, patch_data);
     vec2 start_xz = grid * patch_data.scale + patch_data.origin;
     vec3 morph = clipmap_morph(start_xz, grid, patch_data.scale);
     vec2 world_xz = mix(start_xz, start_xz - morph.xy * patch_data.scale, morph.z);

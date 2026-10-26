@@ -5,6 +5,7 @@
 
 #include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <stddef.h>
@@ -13,6 +14,29 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
 using namespace godot;
+
+// SH-B frozen shared Forward+ descriptor ABI. The shader keeps literal
+// set/binding numbers so SH-A descriptor reflection remains capable of catching
+// drift; C++ construction uses these names instead of parallel magic numbers.
+#define T3D_RD_FORWARD_LIGHTING_SHARED_CONTRACT_VERSION 1u
+#define T3D_RD_FORWARD_LIGHTING_DESCRIPTOR_SET 2u
+#define T3D_RD_FORWARD_LIGHTING_FRAME_BINDING 0u
+#define T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_BINDING 1u
+#define T3D_RD_FORWARD_LIGHTING_OMNI_BINDING 2u
+#define T3D_RD_FORWARD_LIGHTING_SPOT_BINDING 3u
+#define T3D_RD_FORWARD_LIGHTING_AREA_BINDING 4u
+#define T3D_RD_FORWARD_LIGHTING_CLUSTER_BINDING 5u
+#define T3D_RD_FORWARD_LIGHTING_SHADOW_SAMPLER_BINDING 6u
+#define T3D_RD_FORWARD_LIGHTING_SHADOW_ATLAS_BINDING 7u
+#define T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_SHADOW_BINDING 8u
+#define T3D_RD_FORWARD_LIGHTING_REFLECTION_BUFFER_BINDING 9u
+#define T3D_RD_FORWARD_LIGHTING_REFLECTION_ATLAS_BINDING 10u
+#define T3D_RD_FORWARD_LIGHTING_DECAL_BUFFER_BINDING 11u
+#define T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_BINDING 12u
+#define T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_SRGB_BINDING 13u
+#define T3D_RD_FORWARD_LIGHTING_SCENE_SAMPLER_BINDING 14u
+#define T3D_RD_FORWARD_LIGHTING_RADIANCE_BINDING 15u
+#define T3D_RD_FORWARD_LIGHTING_BINDING_COUNT 16u
 
 // Terrain3D-owned descriptor adapter for borrowed Godot Forward+ lighting state.
 // Borrowed engine RIDs are never registered or freed here. Only the small frame
@@ -44,7 +68,11 @@ private:
 	static_assert( sizeof( t3dRdForwardLightFrame_t ) == 160u, "Forward lighting UBO ABI changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szAmbientLightColorEnergy ) == 64u, "Forward ambient UBO offset changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szEnvironmentParams0 ) == 80u, "Forward Environment UBO offset changed" );
+	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szEnvironmentParams1 ) == 96u, "Forward environment tail UBO offset changed" );
 	static_assert( offsetof( t3dRdForwardLightFrame_t, m_szRadianceInverseXform ) == 112u, "Forward radiance matrix UBO offset changed" );
+	static_assert( T3D_RD_FORWARD_LIGHTING_DESCRIPTOR_SET == 2u, "Forward lighting descriptor set changed" );
+	static_assert( T3D_RD_FORWARD_LIGHTING_RADIANCE_BINDING == 15u, "Forward lighting descriptor layout changed" );
+	static_assert( T3D_RD_FORWARD_LIGHTING_BINDING_COUNT == 16u, "Forward lighting descriptor count changed" );
 	EA_FORCE_INLINE static void initFrame( t3dRdForwardLightFrame_t *pFrame ) {
 		memset( pFrame, 0, sizeof( *pFrame ) );
 		pFrame->m_nDefaultSurfaceMask = UINT32_MAX;
@@ -65,6 +93,8 @@ private:
 		RID m_hDecalAtlas;
 		RID m_hDecalAtlasSrgb;
 		RID m_hRadiance;
+		bool m_bOneSun = false;
+		uint32_t m_nBorrowedGeneration = 0u;
 
 		bool operator==( const t3dRdForwardLightKey_s &rOther ) const {
 			return m_hDirectional == rOther.m_hDirectional && m_hOmni == rOther.m_hOmni && m_hSpot == rOther.m_hSpot
@@ -72,14 +102,23 @@ private:
 			        && m_hDirectionalShadowAtlas == rOther.m_hDirectionalShadowAtlas && m_hShadowSampler == rOther.m_hShadowSampler
 			        && m_hReflectionProbeBuffer == rOther.m_hReflectionProbeBuffer && m_hReflectionAtlas == rOther.m_hReflectionAtlas
 			        && m_hDecalBuffer == rOther.m_hDecalBuffer && m_hDecalAtlas == rOther.m_hDecalAtlas
-			        && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb && m_hRadiance == rOther.m_hRadiance;
+		        && m_hDecalAtlasSrgb == rOther.m_hDecalAtlasSrgb && m_hRadiance == rOther.m_hRadiance && m_bOneSun == rOther.m_bOneSun
+		        && m_nBorrowedGeneration == rOther.m_nBorrowedGeneration;
 		}
 	} t3dRdForwardLightKey_t;
 
-	typedef struct t3dRdForwardLightSet_s {
-		RID m_hShader;
-		RID m_hSet;
-	} t3dRdForwardLightSet_t;
+	typedef struct t3dRdForwardDescriptorKey_s {
+		RID shader;
+		RID frame;
+		RID sampler;
+		t3dRdForwardLightKey_t resources;
+		uint64_t deviceGeneration = 0u;
+		bool operator==( const t3dRdForwardDescriptorKey_s &rOther ) const {
+			return shader == rOther.shader && frame == rOther.frame && sampler == rOther.sampler && resources == rOther.resources
+			        && deviceGeneration == rOther.deviceGeneration;
+		}
+	} t3dRdForwardDescriptorKey_t;
+	typedef Terrain3DRdDescriptorCache<t3dRdForwardDescriptorKey_t, s_nMaxSets> t3dRdForwardDescriptorCache_t;
 
 	Terrain3DRdContext &m_context;
 	RID m_hFrameBuffer;
@@ -94,11 +133,8 @@ private:
 	t3dRdForwardLightKey_t m_key{};
 	bool m_bKeyValid = false;
 	uint64_t m_nDeviceGeneration = 0u;
-	uint32_t m_nBorrowedResourceGeneration = 0u;
 	uint64_t m_nFrameGeneration = 0u;
 	uint32_t m_nFrameSurfaceMask = 0u;
-	uint64_t m_nSetRebuilds = 0u;
-	uint64_t m_nFrameUpdates = 0u;
 	uint64_t m_nSceneResourceChanges = 0u;
 	uint64_t m_nEnvironmentFrameUpdates = 0u;
 	uint64_t m_nEnvironmentResourceChanges = 0u;
@@ -112,14 +148,14 @@ private:
 	bool m_bLastRadianceValid = false;
 	bool m_bPersistentFrameBuffer = false;
 
-	t3dRdForwardLightSet_t m_szSets[s_nMaxSets]{};
-	uint32_t m_nSetCount = 0u;
+	t3dRdForwardDescriptorCache_t m_descriptors;
 	PackedByteArray m_frameBytes;
 	String m_lastError;
 
 	void setError( const String &rError );
 	bool ensureOwnedResources( void );
 	void freeSets( void );
+	t3dRdForwardDescriptorKey_t descriptorKey( const RID &rShader ) const;
 	RID resolveShadowTexture( const RID &rNative ) const;
 	RID resolveShadowSampler( const RID &rNative ) const;
 	RID resolveStorageBuffer( const RID &rNative ) const;
@@ -134,7 +170,7 @@ public:
 	EA_FORCE_INLINE void setPersistentFrameBufferEnabled( const bool bEnabled ) {
 		m_bPersistentFrameBuffer = bEnabled;
 	}
-	bool prepare( const t3dRdForwardPassContext_t &rContext, uint32_t nDefaultSurfaceMask );
+	bool prepare( const t3dRdForwardPassContext_t &rContext, uint32_t nDefaultSurfaceMask, bool bOneSun = false );
 	RID ensureSet( const RID &rShader );
 	RID getSet( const RID &rShader ) const;
 	void invalidateBorrowedState( void );

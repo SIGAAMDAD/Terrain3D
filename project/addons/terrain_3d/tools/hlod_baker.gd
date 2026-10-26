@@ -11,12 +11,13 @@ const REGION_MAP_MIN: int = -REGION_MAP_SIZE / 2
 const DEFAULT_REDUCTION: float = 0.42
 const HLOD_DIR: String = "_hlod"
 const MANIFEST_NAME: String = "terrain3d_hlod_manifest.tres"
-const BUILDER_VERSION: int = 6
+const BUILDER_VERSION: int = 7
 
 class GeometryPart extends RefCounted:
 	var mesh: Mesh
 	var transform: Transform3D = Transform3D.IDENTITY
 	var materials: Array[Material] = []
+	var rendering_materials: Array[Terrain3DRenderingMaterial] = []
 
 class Source extends RefCounted:
 	var owner_region: Vector2i = Vector2i.ZERO
@@ -298,7 +299,9 @@ func _collect_instancer_sources(terrain: Terrain3D, region: Terrain3DRegion,
 	# geometry instead of rebuilding it merely to discover that it is unchanged.
 	for mesh_id: int in _native_builder.get_instancer_mesh_ids(region):
 		var asset := terrain.assets.get_mesh_asset(mesh_id) as Terrain3DMeshAsset
-		if not is_instance_valid(asset) or not asset.is_enabled() or not asset.is_hlod_eligible():
+		if not is_instance_valid(asset) or not asset.is_enabled():
+			continue
+		if asset.instance_category == Terrain3DMeshAsset.INSTANCE_CATEGORY_CLUTTER:
 			continue
 		var analyzed: Dictionary = _native_builder.analyze_instancer_source(terrain, region, mesh_id)
 		if not bool(analyzed.get("ok", false)):
@@ -318,11 +321,15 @@ func _collect_instancer_sources(terrain: Terrain3D, region: Terrain3DRegion,
 		source.deferred_region = region
 		var signature_parts: PackedStringArray = PackedStringArray([
 			source.source_key,
+			"category:%d" % int(asset.instance_category),
+			"hlod_min:%d" % source.requested_min_level,
 			str(analyzed.get("instance_signature", 0)),
 			_mesh_content_signature(mesh),
 		])
 		for material: Material in _mesh_asset_materials(asset, mesh):
 			signature_parts.append(_material_signature(material))
+		if is_instance_valid(asset.rendering_material_override):
+			signature_parts.append(_resource_content_signature(asset.rendering_material_override))
 		source.source_signature_token = "|".join(signature_parts).md5_text()
 		var region_transform := Transform3D(Basis.IDENTITY,
 			Vector3(float(location.x) * world_region_size, 0.0, float(location.y) * world_region_size))
@@ -392,6 +399,8 @@ func _collect_node_geometry(node: Node3D, parent_transform: Transform3D,
 			part.mesh = mesh_node.mesh
 			part.transform = base_transform * local
 			part.materials = _mesh_instance_materials(mesh_node)
+			for material: Material in part.materials:
+				part.rendering_materials.append(_canonical_rendering_material(material))
 			source.parts.append(part)
 			var bounds: AABB = part.transform * part.mesh.get_aabb()
 			if source.parts.size() == 1:
@@ -439,7 +448,8 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 			if is_instance_valid(loaded) and is_instance_valid(loaded.mesh) and \
 					loaded.level == level and loaded.cluster_location == cluster_key and \
 					loaded.region_min == region_min and loaded.region_max == region_max and \
-					loaded.source_signature == source_signature and loaded.build_signature == build_signature:
+					loaded.source_signature == source_signature and loaded.build_signature == build_signature and \
+					loaded.has_canonical_rendering_materials():
 				var reused := BuiltCluster.new()
 				reused.level = level; reused.cluster = cluster_key; reused.region_min = region_min; reused.region_max = region_max
 				reused.package_path = old_path; reused.package = loaded; reused.source_signature = source_signature
@@ -448,7 +458,11 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 	var materialized: Dictionary = _materialize_deferred_instancer_sources(terrain, inputs)
 	if not bool(materialized.get("ok", false)):
 		return materialized
-	var exact_mesh: ArrayMesh = _merge_cluster_geometry(inputs, cluster_origin, world_region_size)
+	var merged_geometry: Dictionary = _merge_cluster_geometry(inputs, cluster_origin, world_region_size)
+	if not bool(merged_geometry.get("ok", false)):
+		return merged_geometry
+	var exact_mesh: ArrayMesh = merged_geometry.get("mesh") as ArrayMesh
+	var exact_rendering_materials: Array[Terrain3DRenderingMaterial] = merged_geometry.get("rendering_materials", [])
 	if not is_instance_valid(exact_mesh) or exact_mesh.get_surface_count() == 0:
 		return _failure("HLOD cluster L%d %s produced no geometry" % [level, cluster_key])
 	var simplified: Dictionary = _native_builder.simplify_mesh(exact_mesh, reduction_ratio)
@@ -464,6 +478,9 @@ func _build_cluster(terrain: Terrain3D, level: int, cluster_key: Vector2i, input
 	package.region_min = region_min
 	package.region_max = region_max
 	package.mesh = proxy_mesh
+	package.rendering_materials = exact_rendering_materials
+	if not package.has_canonical_rendering_materials():
+		return _failure("HLOD cluster L%d %s produced an invalid canonical Terrain3DRenderingMaterial table" % [level, cluster_key])
 	package.local_bounds = proxy_mesh.get_aabb()
 	package.geometric_error = _inherited_geometric_error(inputs) + float(simplified.get("geometric_error", 0.0))
 	package.source_signature = source_signature
@@ -505,6 +522,9 @@ func _materialize_deferred_instancer_sources(terrain: Terrain3D, inputs: Array) 
 			return _failure("HLOD instancer source %s produced no bounded chunks" % source.source_key)
 		var region_transform := Transform3D(Basis.IDENTITY,
 			Vector3(float(source.owner_region.x) * float(REGION_SIZE), 0.0, float(source.owner_region.y) * float(REGION_SIZE)))
+		var asset := terrain.assets.get_mesh_asset(source.mesh_id) as Terrain3DMeshAsset
+		if not is_instance_valid(asset):
+			return _failure("HLOD instancer source %s lost its mesh asset during bake" % source.source_key)
 		for chunk_value: Variant in chunks:
 			if not chunk_value is Dictionary:
 				continue
@@ -516,7 +536,12 @@ func _materialize_deferred_instancer_sources(terrain: Terrain3D, inputs: Array) 
 			part.mesh = mesh
 			part.transform = region_transform
 			for surface: int in range(mesh.get_surface_count()):
-				part.materials.append(mesh.surface_get_material(surface))
+				var material: Material = mesh.surface_get_material(surface)
+				part.materials.append(material)
+				var rendering_material: Terrain3DRenderingMaterial = asset.rendering_material_override
+				if not is_instance_valid(rendering_material):
+					rendering_material = _canonical_rendering_material(material)
+				part.rendering_materials.append(rendering_material)
 			source.parts.append(part)
 		if source.parts.is_empty():
 			return _failure("HLOD instancer source %s produced no usable chunk geometry" % source.source_key)
@@ -527,34 +552,45 @@ func _materialize_deferred_instancer_sources(terrain: Terrain3D, inputs: Array) 
 	return {"ok": true}
 
 
-func _merge_cluster_geometry(inputs: Array, cluster_origin: Vector3, world_region_size: float) -> ArrayMesh:
+func _merge_cluster_geometry(inputs: Array, cluster_origin: Vector3, world_region_size: float) -> Dictionary:
 	var tools: Dictionary[String, SurfaceTool] = {}
 	var materials: Dictionary[String, Material] = {}
+	var rendering_materials: Dictionary[String, Terrain3DRenderingMaterial] = {}
 	for input: Variant in inputs:
 		if input is Source:
 			var source: Source = input
 			for part: GeometryPart in source.parts:
-				_append_part(tools, materials, part.mesh, _cluster_local_transform(part.transform, cluster_origin), part.materials)
+				if not _append_part(tools, materials, rendering_materials, part.mesh,
+						_cluster_local_transform(part.transform, cluster_origin), part.materials, part.rendering_materials):
+					return _failure("HLOD source %s contains a material that cannot be converted to Terrain3DRenderingMaterial" % source.source_key)
 		elif input is BuiltCluster:
 			var child: BuiltCluster = input
 			if not is_instance_valid(child.package) or not is_instance_valid(child.package.mesh):
 				continue
+			if not child.package.has_canonical_rendering_materials():
+				return _failure("HLOD child package L%d %s is missing canonical rendering materials" % [child.level, child.cluster])
 			var package_mesh: Mesh = child.package.mesh
 			var child_origin := Vector3(float(child.region_min.x) * world_region_size, 0.0,
 				float(child.region_min.y) * world_region_size)
 			var child_transform := Transform3D(Basis.IDENTITY, child_origin - cluster_origin)
 			var child_materials: Array[Material] = []
+			var child_rendering_materials: Array[Terrain3DRenderingMaterial] = []
 			for surface: int in range(package_mesh.get_surface_count()):
 				child_materials.append(package_mesh.surface_get_material(surface))
-			_append_part(tools, materials, package_mesh, child_transform, child_materials)
+				child_rendering_materials.append(child.package.rendering_materials[surface])
+			if not _append_part(tools, materials, rendering_materials, package_mesh, child_transform,
+					child_materials, child_rendering_materials):
+				return _failure("HLOD child package L%d %s is missing canonical rendering materials" % [child.level, child.cluster])
 	var merged := ArrayMesh.new()
+	var merged_rendering_materials: Array[Terrain3DRenderingMaterial] = []
 	for key: String in tools:
 		var tool: SurfaceTool = tools[key]
 		if tools.size() > 0:
 			tool.index()
 		tool.set_material(materials.get(key))
 		merged = tool.commit(merged)
-	return merged
+		merged_rendering_materials.append(rendering_materials.get(key))
+	return {"ok": true, "mesh": merged, "rendering_materials": merged_rendering_materials}
 
 
 
@@ -567,21 +603,27 @@ func _mesh_surface_primitive(mesh: Mesh, surface: int) -> int:
 
 
 func _append_part(tools: Dictionary[String, SurfaceTool], materials: Dictionary[String, Material],
-		mesh: Mesh, transform: Transform3D, effective_materials: Array[Material]) -> void:
+		rendering_materials: Dictionary[String, Terrain3DRenderingMaterial], mesh: Mesh, transform: Transform3D,
+		effective_materials: Array[Material], effective_rendering_materials: Array[Terrain3DRenderingMaterial]) -> bool:
 	if not is_instance_valid(mesh):
-		return
+		return true
 	for surface: int in range(mesh.get_surface_count()):
 		if _mesh_surface_primitive(mesh, surface) != Mesh.PRIMITIVE_TRIANGLES:
 			continue
 		var material: Material = effective_materials[surface] if surface < effective_materials.size() else mesh.surface_get_material(surface)
-		var key: String = _resource_key(material)
+		var rendering_material: Terrain3DRenderingMaterial = effective_rendering_materials[surface] if surface < effective_rendering_materials.size() else _canonical_rendering_material(material)
+		if not is_instance_valid(rendering_material) or not rendering_material.is_one_submit_compatible():
+			return false
+		var key: String = _resource_key(material) + "|t3drm:" + _resource_content_signature(rendering_material)
 		if not tools.has(key):
 			var tool := SurfaceTool.new()
 			tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 			tools[key] = tool
 			materials[key] = material
+			rendering_materials[key] = rendering_material
 		var tool: SurfaceTool = tools[key]
 		tool.append_from(mesh, surface, transform)
+	return true
 
 
 
@@ -751,6 +793,13 @@ func _mesh_asset_materials(asset: Terrain3DMeshAsset, mesh: Mesh) -> Array[Mater
 			material = mesh.surface_get_material(surface)
 		result.append(material)
 	return result
+
+
+func _canonical_rendering_material(material: Material) -> Terrain3DRenderingMaterial:
+	var rendering_material := Terrain3DRenderingMaterial.new()
+	if is_instance_valid(material) and not rendering_material.import_base_material(material):
+		return null
+	return rendering_material
 
 
 func _mesh_instance_materials(node: MeshInstance3D) -> Array[Material]:

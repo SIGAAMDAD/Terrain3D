@@ -25,6 +25,11 @@ static bool t3dIndexedNodePolicyLess( const t3dIndexedNodePolicy_t &rA, const t3
 	return rA.m_nRegion < rB.m_nRegion || ( rA.m_nRegion == rB.m_nRegion && rA.m_policy.m_nSpawnId < rB.m_policy.m_nSpawnId );
 }
 
+static const Terrain3DRenderingMaterial *t3dResolveHlodRenderingMaterial( const void *const pContext, const uint32_t nSurface ) {
+	const Terrain3DHLODPackage *const pPackage = ( const Terrain3DHLODPackage *const )( pContext );
+	return pPackage ? pPackage->getRenderingMaterialPtr( nSurface ) : NULL;
+}
+
 int Terrain3DHLODStreamer::floorDiv( const int value, const int divisor ) {
 	if ( divisor <= 0 ) {
 		return 0;
@@ -140,6 +145,8 @@ void Terrain3DHLODStreamer::suspend( void ) {
 	m_loadCandidates.clear();
 	beginSelectionGeneration();
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
+	memset( m_szRegionResidentRepresentationLevel, 0, sizeof( m_szRegionResidentRepresentationLevel ) );
+	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
 	if ( m_pTerrain ) {
 		notifyRepresentationChanges( old );
@@ -172,6 +179,8 @@ void Terrain3DHLODStreamer::clearRuntime( const bool bNotify, const bool bReleas
 	}
 	eastl::fill_n( m_nodePolicyOffsets, s_nRegionSlots + 1u, 0u );
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
+	memset( m_szRegionResidentRepresentationLevel, 0, sizeof( m_szRegionResidentRepresentationLevel ) );
+	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
 	m_nResidentEstimatedBytes = 0;
@@ -623,10 +632,11 @@ bool Terrain3DHLODStreamer::replacementReady( const t3dEntry_t &rEntry ) const {
 			if ( region_index < 0 ) {
 				continue;
 			}
-			// publishRepresentationMap contains only active, desired, non-retiring
-			// replacements. A proxy at any level is therefore sufficient for this
-			// region; otherwise the detailed publishers must acknowledge readiness.
-			if ( m_szRegionRepresentationLevel[region_index] > 0 ) {
+			// A retiring level may contain sources whose minimum HLOD level is above
+			// a finer replacement. Only an equal/coarser active level is guaranteed
+			// to contain every source represented by this entry. Otherwise detailed
+			// publishers must acknowledge restoration before the proxy disappears.
+			if ( m_szRegionRepresentationLevel[region_index] >= ( uint8_t )( rEntry.m_nLevel ) ) {
 				continue;
 			}
 			if ( !m_pTerrain->isHlodDetailReady( region, region ) ) {
@@ -756,19 +766,25 @@ void Terrain3DHLODStreamer::publishRepresentationMap( void ) {
 	uint8_t old[s_nRegionSlots];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
+	memset( m_szRegionResidentRepresentationLevel, 0, sizeof( m_szRegionResidentRepresentationLevel ) );
+	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
 	m_detailRequiredRegions = m_managedRegions;
 	for ( size_t iActive = 0u; iActive < m_activeEntries.size(); ++iActive ) {
 		const t3dEntry_t &entry = m_entries[( size_t )m_activeEntries[iActive]];
-		if ( entry.m_bRetiring || !isDesired( entry ) ) {
-			continue;
-		}
 		for ( int z = entry.getRegionMin().y; z <= entry.getRegionMax().y; ++z ) {
 			for ( int x = entry.getRegionMin().x; x <= entry.getRegionMax().x; ++x ) {
 				const int region = regionIndex( Vector2i( x, z ) );
 				if ( region >= 0 ) {
-					m_szRegionRepresentationLevel[region] =
-					        MAX<uint8_t>( m_szRegionRepresentationLevel[region], ( uint8_t )entry.m_nLevel );
-					m_detailRequiredRegions.reset( ( size_t )region );
+					m_szRegionResidentRepresentationLevel[region] =
+					        MAX<uint8_t>( m_szRegionResidentRepresentationLevel[region], ( uint8_t )entry.m_nLevel );
+					if ( entry.m_bRetiring || !isDesired( entry ) ) {
+						m_szRegionRetiringRepresentationLevel[region] =
+						        MAX<uint8_t>( m_szRegionRetiringRepresentationLevel[region], ( uint8_t )entry.m_nLevel );
+					} else {
+						m_szRegionRepresentationLevel[region] =
+						        MAX<uint8_t>( m_szRegionRepresentationLevel[region], ( uint8_t )entry.m_nLevel );
+						m_detailRequiredRegions.reset( ( size_t )region );
+					}
 				}
 			}
 		}
@@ -778,6 +794,16 @@ void Terrain3DHLODStreamer::publishRepresentationMap( void ) {
 void Terrain3DHLODStreamer::notifyRepresentationChanges( const uint8_t *pOldLevels ) {
 	if ( !m_pTerrain ) {
 		return;
+	}
+	bool changed = false;
+	for ( int i = 0; i < s_nRegionSlots; ++i ) {
+		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ) {
+			changed = true;
+			break;
+		}
+	}
+	if ( changed && ++m_nRepresentationGeneration == 0u ) {
+		m_nRepresentationGeneration = 1u;
 	}
 	for ( int i = 0; i < s_nRegionSlots; ++i ) {
 		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ) {
@@ -874,6 +900,7 @@ void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, con
 
 	int unloadBudget = m_nUnloadBudget;
 	int position = 0;
+	bool retirement_representation_dirty = false;
 	while ( position < ( int )m_retiringEntries.size() && unloadBudget > 0 ) {
 		const int index = m_retiringEntries[( size_t )position];
 		++m_nTransitionEntriesExaminedLastTick;
@@ -886,6 +913,7 @@ void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, con
 			entry.m_nRetireReadyFrames = MIN<uint8_t>( ( uint8_t )( entry.m_nRetireReadyFrames + 1 ), 3 );
 			if ( entry.m_nRetireReadyFrames >= 2 ) {
 				deactivate( index );
+				retirement_representation_dirty = true;
 				--unloadBudget;
 				continue;
 			}
@@ -893,6 +921,9 @@ void Terrain3DHLODStreamer::updateResidency( const Vector3 &rTargetPosition, con
 			entry.m_nRetireReadyFrames = 0;
 		}
 		++position;
+	}
+	if ( retirement_representation_dirty ) {
+		publishRepresentationMap();
 	}
 }
 
@@ -911,7 +942,7 @@ uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel( const Vector2i &rRegion, con
 	}
 	return 0;
 }
-bool Terrain3DHLODStreamer::fillRdMeshSources( eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> &rSources ) const {
+bool Terrain3DHLODStreamer::fillRdMeshSources( eastl::vector<t3dRdExternalMeshSource_t, Terrain3DEastlAllocator> &rSources ) {
 	rSources.clear();
 	if ( rSources.capacity() < m_entries.size() ) {
 		++m_nCapacityMissCount;
@@ -922,9 +953,15 @@ bool Terrain3DHLODStreamer::fillRdMeshSources( eastl::vector<t3dRdExternalMeshSo
 		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
 			continue;
 		}
+		if ( !entry.m_ackage->hasCanonicalRenderingMaterials() || !entry.m_ackage->ensureRenderingMaterialStableKeysCold() ) {
+			return false;
+		}
 		t3dRdExternalMeshSource_t source;
 		source.m_nSourceKey = rdMeshSourceKey( i );
 		source.m_mesh = entry.m_ackage->getMesh();
+		source.m_pMaterialContext = entry.m_ackage.ptr();
+		source.m_pResolveRenderingMaterial = &t3dResolveHlodRenderingMaterial;
+		source.m_nFlags = T3D_RD_EXTERNAL_MESH_REQUIRE_RENDERING_MATERIAL;
 		if ( !t3dVectorPushBackWithinCapacity( rSources, source ) ) {
 			return false;
 		}
@@ -937,6 +974,7 @@ bool Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_
 	rSnapshot.m_cells.reset();
 	rSnapshot.m_dirtyRanges.reset();
 	rSnapshot.m_dirtyCells.reset();
+	rSnapshot.m_bInstanceLayoutChanged = true;
 	rSnapshot.m_bTopologyChanged = true;
 	rSnapshot.m_nGeneration = m_nRdPublicationGeneration;
 	if ( !m_pTerrain ) {
@@ -992,6 +1030,12 @@ bool Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_
 	return true;
 }
 
+void Terrain3DHLODStreamer::onInstanceMutation( const t3dInstanceMutationEvent_t &rEvent ) {
+	( void )( rEvent );
+	++m_nInstanceMutationInvalidations;
+	m_bSelectionDirty = true;
+}
+
 Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	Dictionary d;
 	int active = 0, desired = 0, failed = 0, retiring = 0;
@@ -1025,6 +1069,7 @@ Dictionary Terrain3DHLODStreamer::getStats( void ) const {
 	d["rd_publication_generation"] = ( int64_t )( m_nRdPublicationGeneration );
 	d["owner_capacity_misses"] = ( int64_t )( m_nCapacityMissCount );
 	d["owner_cold_rebuilds"] = ( int64_t )( m_nColdRebuildCount );
+	d["instance_mutation_invalidations"] = ( int64_t )( m_nInstanceMutationInvalidations );
 	return d;
 }
 Array Terrain3DHLODStreamer::getDebugEntries( void ) const {

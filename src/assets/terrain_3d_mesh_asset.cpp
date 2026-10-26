@@ -2,6 +2,8 @@
 
 #include "assets/terrain_3d_mesh_asset.h"
 
+#include "rendering/rd/vt/terrain_3d_vt_material_identity.h"
+
 #include "core/logger.h"
 
 #include <godot_cpp/classes/editor_interface.hpp>
@@ -9,9 +11,13 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/material.hpp>
+#include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/occluder3d.hpp>
+#include <godot_cpp/classes/occluder_instance3d.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/quad_mesh.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/classes/surface_tool.hpp>
 
 // -----------------------------------------------------------------------------
 // Private functions
@@ -27,6 +33,125 @@ void Terrain3DMeshAsset::clearLodRanges( void ) {
 bool Terrain3DMeshAsset::sortLodNodes( const Node *pA, const Node *pB ) {
 	ASSERT( pA && pB, false );
 	return pA->get_name().right( 1 ) < pB->get_name().right( 1 );
+}
+
+static bool t3dMeshAssetRelativeTransformToRoot( const Node *const pRoot, const Node3D *const pNode, Transform3D &rTransform ) {
+	if ( !pRoot || !pNode ) {
+		return false;
+	}
+	rTransform = Transform3D();
+	const Node *pCursor = pNode;
+	while ( pCursor && pCursor != pRoot ) {
+		const Node3D *const pNode3D = Object::cast_to<Node3D>( pCursor );
+		if ( pNode3D ) {
+			rTransform = pNode3D->get_transform() * rTransform;
+		}
+		pCursor = pCursor->get_parent();
+	}
+	return pCursor == pRoot;
+}
+
+static bool t3dMeshAssetAppendCompoundOccluder( const Node *const pRoot,
+        const OccluderInstance3D *const pOccluderInstance,
+        PackedVector3Array &rVertices,
+        PackedInt32Array &rIndices ) {
+	if ( !pRoot || !pOccluderInstance || pOccluderInstance->get_occluder().is_null() ) {
+		return false;
+	}
+	const PackedVector3Array source_vertices = pOccluderInstance->get_occluder()->get_vertices();
+	const PackedInt32Array source_indices = pOccluderInstance->get_occluder()->get_indices();
+	if ( source_vertices.size() < 3 || source_indices.size() < 3 || ( source_indices.size() % 3 ) != 0 ) {
+		return false;
+	}
+	for ( int iIndex = 0; iIndex < source_indices.size(); ++iIndex ) {
+		if ( source_indices[iIndex] < 0 || source_indices[iIndex] >= source_vertices.size() ) {
+			return false;
+		}
+	}
+	Transform3D relative;
+	if ( !t3dMeshAssetRelativeTransformToRoot( pRoot, pOccluderInstance, relative ) ) {
+		return false;
+	}
+
+	const int vertex_base = rVertices.size();
+	const int index_base = rIndices.size();
+	rVertices.resize( vertex_base + source_vertices.size() );
+	rIndices.resize( index_base + source_indices.size() );
+	for ( int iVertex = 0; iVertex < source_vertices.size(); ++iVertex ) {
+		rVertices.set( vertex_base + iVertex, relative.xform( source_vertices[iVertex] ) );
+	}
+	const bool mirrored = relative.basis.determinant() < 0.0f;
+	for ( int iIndex = 0; iIndex < source_indices.size(); iIndex += 3 ) {
+		const int32_t i0 = source_indices[iIndex];
+		const int32_t i1 = source_indices[iIndex + 1];
+		const int32_t i2 = source_indices[iIndex + 2];
+		rIndices.set( index_base + iIndex, vertex_base + i0 );
+		rIndices.set( index_base + iIndex + 1, vertex_base + ( mirrored ? i2 : i1 ) );
+		rIndices.set( index_base + iIndex + 2, vertex_base + ( mirrored ? i1 : i2 ) );
+	}
+	return true;
+}
+
+static int t3dMeshAssetBuildCompoundOccluderProxy( const Node *const pRoot, PackedVector3Array &rVertices, PackedInt32Array &rIndices ) {
+	rVertices.clear();
+	rIndices.clear();
+	if ( !pRoot ) {
+		return 0;
+	}
+	int appended_occluders = 0;
+	const OccluderInstance3D *const pRootOccluder = Object::cast_to<OccluderInstance3D>( pRoot );
+	if ( pRootOccluder && t3dMeshAssetAppendCompoundOccluder( pRoot, pRootOccluder, rVertices, rIndices ) ) {
+		++appended_occluders;
+	}
+	const TypedArray<Node> occluder_instances = pRoot->find_children( "*", "OccluderInstance3D" );
+	for ( int iOccluder = 0; iOccluder < occluder_instances.size(); ++iOccluder ) {
+		const OccluderInstance3D *const pOccluder = Object::cast_to<OccluderInstance3D>( occluder_instances[iOccluder] );
+		if ( pOccluder && t3dMeshAssetAppendCompoundOccluder( pRoot, pOccluder, rVertices, rIndices ) ) {
+			++appended_occluders;
+		}
+	}
+	return appended_occluders;
+}
+
+static Ref<ArrayMesh> t3dMeshAssetBuildCompoundMesh( const Node *const pRoot, const TypedArray<Node> &rMeshInstances ) {
+	Ref<ArrayMesh> pCompound;
+	pCompound.instantiate();
+	uint32_t appended_surfaces = 0u;
+	for ( int iMesh = 0; iMesh < rMeshInstances.size(); ++iMesh ) {
+		MeshInstance3D *const pMeshInstance = Object::cast_to<MeshInstance3D>( rMeshInstances[iMesh] );
+		if ( !pMeshInstance ) {
+			continue;
+		}
+		const Ref<Mesh> pMesh = pMeshInstance->get_mesh();
+		if ( pMesh.is_null() ) {
+			continue;
+		}
+		Transform3D relative;
+		if ( !t3dMeshAssetRelativeTransformToRoot( pRoot, pMeshInstance, relative ) ) {
+			return Ref<ArrayMesh>();
+		}
+		ArrayMesh *const pArrayMesh = Object::cast_to<ArrayMesh>( pMesh.ptr() );
+		if ( !pArrayMesh ) {
+			return Ref<ArrayMesh>();
+		}
+		for ( int iSurface = 0; iSurface < pArrayMesh->get_surface_count(); ++iSurface ) {
+			if ( pArrayMesh->surface_get_primitive_type( iSurface ) != Mesh::PRIMITIVE_TRIANGLES ) {
+				continue;
+			}
+			Ref<SurfaceTool> pTool;
+			pTool.instantiate();
+			pTool->begin( Mesh::PRIMITIVE_TRIANGLES );
+			pTool->append_from( pMesh, iSurface, relative );
+			pTool->index();
+			pTool->set_material( pMeshInstance->get_active_material( iSurface ) );
+			pCompound = pTool->commit( pCompound );
+			if ( pCompound.is_null() ) {
+				return Ref<ArrayMesh>();
+			}
+			++appended_surfaces;
+		}
+	}
+	return appended_surfaces > 0u ? pCompound : Ref<ArrayMesh>();
 }
 
 Ref<ArrayMesh> Terrain3DMeshAsset::createGeneratedMesh( const t3dGenType_t type ) const {
@@ -104,8 +229,16 @@ void Terrain3DMeshAsset::assignGeneratedMesh( void ) {
 	m_iLastLod = 0;
 	m_iLastShadowLod = 0;
 	m_nShadowImpostor = 0;
-	if ( m_materialOverride.is_null() ) {
-		m_materialOverride = getMaterial();
+	if ( m_renderingMaterialOverride.is_null() ) {
+		Ref<Terrain3DRenderingMaterial> pMat;
+		pMat.instantiate();
+		pMat->setAlphaScissor( true );
+		pMat->setAlphaScissorThreshold( 0.5f );
+		pMat->setTwoSided( true );
+		pMat->setVertexColor( true );
+		pMat->setFoliage( true );
+		pMat->set_meta( "terrain3d_generated_material", true );
+		setRenderingMaterialOverride( pMat );
 	}
 	// If no existing meshes, commit immediately. Otherwise, will trigger on an instancer update
 	if ( m_meshes.is_empty() ) {
@@ -134,6 +267,166 @@ Ref<Material> Terrain3DMeshAsset::getMaterial( void ) {
 	}
 }
 
+
+static bool t3dMeshAssetBuildIndexedTriangles( const Ref<Mesh> &rSource, PackedVector3Array &rVertices, PackedInt32Array &rIndices ) {
+	rVertices.clear();
+	rIndices.clear();
+	if ( rSource.is_null() ) {
+		return false;
+	}
+	const PackedVector3Array faces = rSource->get_faces();
+	if ( faces.size() < 3 || ( faces.size() % 3 ) != 0 ) {
+		return false;
+	}
+	Ref<SurfaceTool> surface_tool;
+	surface_tool.instantiate();
+	surface_tool->begin( Mesh::PRIMITIVE_TRIANGLES );
+	for ( int i = 0; i < faces.size(); ++i ) {
+		surface_tool->add_vertex( faces[i] );
+	}
+	surface_tool->index();
+	surface_tool->optimize_indices_for_cache();
+	const Array generated_arrays = surface_tool->commit_to_arrays();
+	if ( generated_arrays.size() <= Mesh::ARRAY_INDEX ) {
+		return false;
+	}
+	rVertices = generated_arrays[Mesh::ARRAY_VERTEX];
+	rIndices = generated_arrays[Mesh::ARRAY_INDEX];
+	return !rVertices.is_empty() && rIndices.size() >= 3 && ( rIndices.size() % 3 ) == 0;
+}
+
+static Ref<ArrayMesh> t3dMeshAssetBuildProxyMesh( const PackedVector3Array &rVertices, const PackedInt32Array &rIndices ) {
+	if ( rVertices.is_empty() || rIndices.size() < 3 || ( rIndices.size() % 3 ) != 0 ) {
+		return Ref<ArrayMesh>();
+	}
+	Array proxy_arrays;
+	proxy_arrays.resize( Mesh::ARRAY_MAX );
+	proxy_arrays[Mesh::ARRAY_VERTEX] = rVertices;
+	proxy_arrays[Mesh::ARRAY_INDEX] = rIndices;
+	Ref<ArrayMesh> proxy_mesh;
+	proxy_mesh.instantiate();
+	proxy_mesh->add_surface_from_arrays( Mesh::PRIMITIVE_TRIANGLES, proxy_arrays );
+	return proxy_mesh;
+}
+
+void Terrain3DMeshAsset::clearInstanceCollisionGeometry( void ) {
+	m_instanceCollisionShape.unref();
+	m_nInstanceCollisionVertexCount = 0u;
+	m_nInstanceCollisionTriangleCount = 0u;
+	m_bInstanceCollisionDerived = false;
+}
+
+void Terrain3DMeshAsset::clearInstanceOcclusionGeometry( void ) {
+	m_instanceOcclusionProxyMesh.unref();
+	m_instanceOccluder.unref();
+	m_nInstanceOcclusionProxyVertexCount = 0u;
+	m_nInstanceOcclusionProxyTriangleCount = 0u;
+	m_bInstanceOcclusionProxyDerived = false;
+	m_bInstanceProxyImportedOccluder = false;
+}
+
+void Terrain3DMeshAsset::clearInstanceDerivedGeometry( void ) {
+	clearInstanceCollisionGeometry();
+	clearInstanceOcclusionGeometry();
+}
+
+bool Terrain3DMeshAsset::rebuildInstanceCollisionGeometry( void ) {
+	clearInstanceCollisionGeometry();
+	if ( !requiresInstancePhysics() || m_meshes.is_empty() ) {
+		return false;
+	}
+	const Ref<Mesh> source = m_meshes[0];
+	PackedVector3Array vertices;
+	PackedInt32Array indices;
+	if ( !t3dMeshAssetBuildIndexedTriangles( source, vertices, indices ) ) {
+		LOG( WARN, "ID ", m_nId, ", ", m_name, ": imported LOD0 has no triangle faces for instance physics" );
+		return false;
+	}
+	const Ref<ArrayMesh> collision_mesh = t3dMeshAssetBuildProxyMesh( vertices, indices );
+	if ( collision_mesh.is_null() ) {
+		return false;
+	}
+	const Ref<ConcavePolygonShape3D> collision_shape = collision_mesh->create_trimesh_shape();
+	if ( collision_shape.is_null() ) {
+		LOG( WARN, "ID ", m_nId, ", ", m_name, ": failed generating LOD0-derived instance collision shape" );
+		return false;
+	}
+	m_instanceCollisionShape = collision_shape;
+	m_nInstanceCollisionVertexCount = ( uint32_t )( vertices.size() );
+	m_nInstanceCollisionTriangleCount = ( uint32_t )( indices.size() / 3 );
+	m_bInstanceCollisionDerived = true;
+	if ( ++m_nInstanceCollisionGeneration == 0u ) {
+		m_nInstanceCollisionGeneration = 1u;
+	}
+	return true;
+}
+
+bool Terrain3DMeshAsset::rebuildInstanceOcclusionGeometry( void ) {
+	PackedVector3Array retained_imported_vertices;
+	PackedInt32Array retained_imported_indices;
+	if ( m_bInstanceProxyImportedOccluder && m_instanceOccluder.is_valid() ) {
+		retained_imported_vertices = m_instanceOccluder->get_vertices();
+		retained_imported_indices = m_instanceOccluder->get_indices();
+	}
+	clearInstanceOcclusionGeometry();
+	if ( m_instanceCategory != INSTANCE_CATEGORY_OCCLUDER || m_meshes.is_empty() ) {
+		return false;
+	}
+
+	PackedVector3Array vertices;
+	PackedInt32Array indices;
+	bool imported_occluder = false;
+	if ( m_bPendingImportedOccluder && m_pendingInstanceOccluderVertices.size() >= 3 && m_pendingInstanceOccluderIndices.size() >= 3 ) {
+		vertices = m_pendingInstanceOccluderVertices;
+		indices = m_pendingInstanceOccluderIndices;
+		imported_occluder = true;
+	} else if ( retained_imported_vertices.size() >= 3 && retained_imported_indices.size() >= 3 ) {
+		vertices = retained_imported_vertices;
+		indices = retained_imported_indices;
+		imported_occluder = true;
+	} else if ( !t3dMeshAssetBuildIndexedTriangles( m_meshes[0], vertices, indices ) ) {
+		LOG( WARN, "ID ", m_nId, ", ", m_name, ": imported LOD0 has no triangle faces for instance occlusion fallback" );
+		return false;
+	}
+
+	const Ref<ArrayMesh> proxy_mesh = t3dMeshAssetBuildProxyMesh( vertices, indices );
+	if ( proxy_mesh.is_null() ) {
+		return false;
+	}
+	Ref<ArrayOccluder3D> occluder;
+	occluder.instantiate();
+	occluder->set_arrays( vertices, indices );
+
+	m_instanceOcclusionProxyMesh = proxy_mesh;
+	m_instanceOccluder = occluder;
+	m_instanceOcclusionBox = proxy_mesh->get_aabb();
+	m_nInstanceOcclusionProxyVertexCount = ( uint32_t )( vertices.size() );
+	m_nInstanceOcclusionProxyTriangleCount = ( uint32_t )( indices.size() / 3 );
+	m_bInstanceOcclusionProxyDerived = true;
+	m_bInstanceProxyImportedOccluder = imported_occluder;
+	LOG( DEBUG,
+	        "ID ",
+	        m_nId,
+	        ", ",
+	        m_name,
+	        ": instance occlusion proxy source=",
+	        imported_occluder ? "imported Occluder3D" : "LOD0 triangles",
+	        "; vertices=",
+	        m_nInstanceOcclusionProxyVertexCount,
+	        "; triangles=",
+	        m_nInstanceOcclusionProxyTriangleCount );
+	if ( ++m_nInstanceOcclusionProxyGeneration == 0u ) {
+		m_nInstanceOcclusionProxyGeneration = 1u;
+	}
+	return true;
+}
+
+bool Terrain3DMeshAsset::rebuildInstanceDerivedGeometry( void ) {
+	const bool collision_valid = rebuildInstanceCollisionGeometry();
+	const bool occlusion_valid = rebuildInstanceOcclusionGeometry();
+	return collision_valid || occlusion_valid;
+}
+
 // -----------------------------------------------------------------------------
 // Public functions
 
@@ -142,9 +435,30 @@ void Terrain3DMeshAsset::initialize( void ) {
 	LOG( INFO, m_nId, ": ", m_name, ": initializing asset" );
 	if ( m_packedScene.is_null() && m_generatedType == TYPE_NONE ) {
 		LOG( DEBUG, "Blank mesh, setting up default texture card" );
+		// Newly-created generated cards are overwhelmingly foliage/debris style
+		// assets, so start them in the lean category. Existing serialized assets
+		// without an instance_category property retain the compatibility default.
+		m_instanceCategory = INSTANCE_CATEGORY_CLUTTER;
+		m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_NONE;
+		m_hlodContribution = HLOD_EXCLUDE;
 		setGeneratedType( TYPE_TEXTURE_CARD );
 		m_fHeightOffset = 0.5f;
 		clearLodRanges();
+		m_fFadeMargin = CLAMP( m_fLodRanges[1] - m_fLodRanges[0], 0.f, 64.f );
+	} else {
+		// Category is the authoritative capability gate. Older Ground Cover
+		// resources may have serialized the former EXPLICIT_MESH default; migrate
+		// them (and any stale Clutter policy) to NONE on load. Occluders may be
+		// explicitly disabled, but every non-NONE occluder policy normalizes to
+		// the one supported explicit-mesh representation.
+		if ( m_instanceCategory != INSTANCE_CATEGORY_OCCLUDER ) {
+			m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_NONE;
+		} else if ( m_instanceOcclusionPolicy != INSTANCE_OCCLUSION_NONE ) {
+			m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_EXPLICIT_MESH;
+		}
+		if ( m_instanceCategory != INSTANCE_CATEGORY_CLUTTER && !m_meshes.is_empty() ) {
+			rebuildInstanceDerivedGeometry();
+		}
 	}
 }
 
@@ -158,7 +472,20 @@ void Terrain3DMeshAsset::clear( void ) {
 	m_packedScene.unref();
 	m_meshes.clear();
 	m_pendingMeshes.clear();
+	m_pendingInstanceOccluderVertices.clear();
+	m_pendingInstanceOccluderIndices.clear();
+	m_bPendingImportedOccluder = false;
 	m_generatedType = TYPE_NONE;
+	m_instanceCategory = INSTANCE_CATEGORY_GROUND_COVER;
+	m_terrainAlignment = TERRAIN_ALIGNMENT_UPRIGHT;
+	m_hlodContribution = HLOD_AUTO;
+	m_nHlodMinLevel = 1;
+	m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_NONE;
+	m_instanceOcclusionBox = AABB( Vector3( -0.5f, 0.0f, -0.5f ), Vector3( 1.0f, 1.0f, 1.0f ) );
+	clearInstanceDerivedGeometry();
+	m_nInstanceCollisionGeneration = 1u;
+	m_nInstanceOcclusionProxyGeneration = 1u;
+	m_fInstanceOcclusionRange = 256.0f;
 	m_nGeneratedFaces = 2;
 	m_generatedSize = V2( 1.f );
 	m_fHeightOffset = 0.f;
@@ -167,6 +494,11 @@ void Terrain3DMeshAsset::clear( void ) {
 	m_nVisibilityLayers = 1;
 	m_materialOverride.unref();
 	m_materialOverlay.unref();
+	disconnectRenderingMaterialSignals();
+	m_renderingMaterialOverride.unref();
+	m_renderingMaterialOverlay.unref();
+	m_surfaceRenderingMaterials.clear();
+	m_pendingSurfaceRenderingMaterials.clear();
 	m_iLastLod = s_nMeshMaxLodCount - 1;
 	m_iLastShadowLod = s_nMeshMaxLodCount - 1;
 	m_nShadowImpostor = 0;
@@ -222,6 +554,7 @@ void Terrain3DMeshAsset::setEnabled( const bool bEnabled ) {
 	SET_IF_DIFF( m_bEnabled, bEnabled );
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting enabled: ", m_bEnabled );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	emit_signal( "vt_material_changed" );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
@@ -246,6 +579,10 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 	SET_IF_DIFF( m_packedScene, rSceneFile );
 	invalidateThumbnail();
 	m_pendingMeshes.clear();
+	m_pendingSurfaceRenderingMaterials.clear();
+	m_pendingInstanceOccluderVertices.clear();
+	m_pendingInstanceOccluderIndices.clear();
+	m_bPendingImportedOccluder = false;
 	if ( m_packedScene.is_valid() ) {
 		Node *pNode = m_packedScene->instantiate();
 		if ( !pNode ) {
@@ -259,61 +596,154 @@ void Terrain3DMeshAsset::setSceneFile( const Ref<PackedScene> &rSceneFile ) {
 		if ( m_materialOverride.is_valid() && m_materialOverride->has_meta( "terrain3d_generated_material" ) ) {
 			m_materialOverride.unref();
 		}
+		if ( m_renderingMaterialOverride.is_valid() && m_renderingMaterialOverride->has_meta( "terrain3d_generated_material" ) ) {
+			setRenderingMaterialOverride( Ref<Terrain3DRenderingMaterial>() );
+		}
 
-		// Look for MeshInstance3D nodes
+		// Look for MeshInstance3D nodes. Explicit LOD naming keeps the historical
+		// LOD-chain contract. A scene with multiple ordinary mesh nodes is a single
+		// compound object and must be merged into one LOD0 mesh; treating its
+		// components as successive LODs corrupts scene identity for GLBs such as
+		// buildings assembled from several meshes.
 		LOG( DEBUG, "Loaded scene with parent node: ", pNode );
-		TypedArray<Node> mesh_instances;
-
-		// First look for XXXXLOD# meshes, sorted by last digit
-		mesh_instances = pNode->find_children( "*LOD?", "MeshInstance3D" );
-		if ( mesh_instances.size() > 0 ) {
+		TypedArray<Node> mesh_instances = pNode->find_children( "*LOD?", "MeshInstance3D" );
+		const bool explicit_lod_chain = mesh_instances.size() > 0;
+		if ( explicit_lod_chain ) {
 			LOG( INFO, "Found ", mesh_instances.size(), " meshes using LOD# naming convention, using the first ", s_nMeshMaxLodCount );
 			mesh_instances.sort_custom( callable_mp_static( &Terrain3DMeshAsset::sortLodNodes ) );
-		}
-
-		// Fallback to using all the meshes in provided order
-		if ( mesh_instances.size() == 0 ) {
-			mesh_instances = pNode->find_children( "*", "MeshInstance3D" );
-			if ( mesh_instances.size() > 0 ) {
-				LOG( INFO, "No meshes with LOD# suffixes found, using the first ", s_nMeshMaxLodCount, " meshes as LOD0-LOD3" );
-			}
-		}
-
-		// Fallback to the scene root mesh
-		if ( mesh_instances.size() == 0 ) {
+		} else {
+			mesh_instances.clear();
 			if ( pNode->is_class( "MeshInstance3D" ) ) {
-				LOG( INFO, "No LOD# meshes found, assuming the root mesh is LOD0" );
 				mesh_instances.push_back( pNode );
 			}
-		}
-		if ( mesh_instances.size() == 0 ) {
-			LOG( ERROR, "No MeshInstance3D found in scene file" );
+			const TypedArray<Node> child_meshes = pNode->find_children( "*", "MeshInstance3D" );
+			for ( int iChild = 0; iChild < child_meshes.size(); ++iChild ) {
+				mesh_instances.push_back( child_meshes[iChild] );
+			}
 		}
 
-		// Now process the meshes
-		for ( int i = 0, count = MIN( mesh_instances.size(), s_nMeshMaxLodCount ); i < count; i++ ) {
-			MeshInstance3D *const pMi = cast_to<MeshInstance3D>( mesh_instances[i] );
-			LOG( DEBUG, "Found mesh: ", pMi->get_name() );
+		if ( mesh_instances.size() == 0 ) {
+			LOG( ERROR, "No MeshInstance3D found in scene file" );
+		} else {
 			const String filename = m_packedScene->get_path().get_file().get_basename();
 			if ( m_name == "New Mesh" && !m_packedScene->get_path().contains( "::" ) ) {
 				m_name = filename;
 				LOG( INFO, "Setting name based on filename: ", m_name );
 			}
-			Ref<Mesh> pMesh = pMi->get_mesh();
-			if ( pMesh.is_null() ) {
-				LOG( WARN, "MeshInstance3D ", pMi->get_name(), " has no mesh, skipping" );
-				continue;
+		}
+
+		if ( !explicit_lod_chain && mesh_instances.size() > 1 ) {
+			LOG( INFO, "No LOD# meshes found; merging ", mesh_instances.size(), " MeshInstance3D components into one compound LOD0 mesh" );
+			const Ref<ArrayMesh> pCompound = t3dMeshAssetBuildCompoundMesh( pNode, mesh_instances );
+			if ( pCompound.is_valid() && pCompound->get_surface_count() > 0 ) {
+				m_pendingMeshes.push_back( pCompound );
+				PackedVector3Array compound_occluder_vertices;
+				PackedInt32Array compound_occluder_indices;
+				const int imported_occluder_count =
+				        t3dMeshAssetBuildCompoundOccluderProxy( pNode, compound_occluder_vertices, compound_occluder_indices );
+				if ( imported_occluder_count > 0 ) {
+					m_pendingInstanceOccluderVertices = compound_occluder_vertices;
+					m_pendingInstanceOccluderIndices = compound_occluder_indices;
+					m_bPendingImportedOccluder = true;
+					LOG( INFO,
+					        "ID ",
+					        m_nId,
+					        ", ",
+					        m_name,
+					        ": merged ",
+					        imported_occluder_count,
+					        " imported OccluderInstance3D nodes into compound explicit proxy; vertices=",
+					        compound_occluder_vertices.size(),
+					        "; triangles=",
+					        compound_occluder_indices.size() / 3 );
+				}
+			} else {
+				LOG( ERROR, "Unable to merge compound scene meshes into one LOD0 ArrayMesh" );
 			}
-			// Duplicate the mesh to make each Terrain3DMeshAsset unique
-			pMesh = pMesh->duplicate();
-			// Apply the active material from the scene to the mesh, including MI or Geom overrides
-			for ( int j = 0; j < pMi->get_surface_override_material_count(); j++ ) {
-				const Ref<Material> pMat = pMi->get_active_material( j );
-				pMesh->surface_set_material( j, pMat );
+		} else {
+			// Single-mesh scenes and explicit LOD chains preserve the existing import
+			// path, including an adjacent imported Occluder3D for LOD0.
+			for ( int i = 0, count = MIN( mesh_instances.size(), s_nMeshMaxLodCount ); i < count; i++ ) {
+				MeshInstance3D *const pMi = cast_to<MeshInstance3D>( mesh_instances[i] );
+				if ( !pMi ) {
+					continue;
+				}
+				LOG( DEBUG, "Found mesh: ", pMi->get_name() );
+				Ref<Mesh> pMesh = pMi->get_mesh();
+				if ( pMesh.is_null() ) {
+					LOG( WARN, "MeshInstance3D ", pMi->get_name(), " has no mesh, skipping" );
+					continue;
+				}
+				if ( i == 0 && pMi->get_parent() ) {
+					OccluderInstance3D *pNamedOccluder = NULL;
+					OccluderInstance3D *pOnlyOccluder = NULL;
+					int valid_occluder_count = 0;
+					Node *const pParent = pMi->get_parent();
+					for ( int iChild = 0; iChild < pParent->get_child_count(); ++iChild ) {
+						OccluderInstance3D *const pCandidate = cast_to<OccluderInstance3D>( pParent->get_child( iChild ) );
+						if ( !pCandidate || pCandidate->get_occluder().is_null() ) {
+							continue;
+						}
+						const PackedVector3Array candidate_vertices = pCandidate->get_occluder()->get_vertices();
+						const PackedInt32Array candidate_indices = pCandidate->get_occluder()->get_indices();
+						if ( candidate_vertices.size() < 3 || candidate_indices.size() < 3 || ( candidate_indices.size() % 3 ) != 0 ) {
+							continue;
+						}
+						pOnlyOccluder = pCandidate;
+						++valid_occluder_count;
+						const String mesh_name = String( pMi->get_name() ).to_lower();
+						const String occluder_name = String( pCandidate->get_name() ).to_lower();
+						if ( occluder_name.begins_with( mesh_name ) || occluder_name.contains( mesh_name ) ) {
+							pNamedOccluder = pCandidate;
+							break;
+						}
+					}
+					OccluderInstance3D *const pImportedOccluder =
+					        pNamedOccluder ? pNamedOccluder : ( valid_occluder_count == 1 ? pOnlyOccluder : NULL );
+					if ( pImportedOccluder ) {
+						PackedVector3Array imported_vertices = pImportedOccluder->get_occluder()->get_vertices();
+						PackedInt32Array imported_indices = pImportedOccluder->get_occluder()->get_indices();
+						const Transform3D relative = pMi->get_transform().affine_inverse() * pImportedOccluder->get_transform();
+						for ( int iVertex = 0; iVertex < imported_vertices.size(); ++iVertex ) {
+							imported_vertices.set( iVertex, relative.xform( imported_vertices[iVertex] ) );
+						}
+						if ( relative.basis.determinant() < 0.0f ) {
+							for ( int iIndex = 0; iIndex + 2 < imported_indices.size(); iIndex += 3 ) {
+								const int32_t swap_index = imported_indices[iIndex + 1];
+								imported_indices.set( iIndex + 1, imported_indices[iIndex + 2] );
+								imported_indices.set( iIndex + 2, swap_index );
+							}
+						}
+						m_pendingInstanceOccluderVertices = imported_vertices;
+						m_pendingInstanceOccluderIndices = imported_indices;
+						m_bPendingImportedOccluder = true;
+						LOG( INFO,
+						        "ID ",
+						        m_nId,
+						        ", ",
+						        m_name,
+						        ": using imported Occluder3D generated beside LOD0; vertices=",
+						        imported_vertices.size(),
+						        "; triangles=",
+						        imported_indices.size() / 3 );
+					}
+				}
+				pMesh = pMesh->duplicate();
+				for ( int j = 0; j < pMesh->get_surface_count(); j++ ) {
+					const Ref<Material> pMat = pMi->get_active_material( j );
+					if ( pMat.is_valid() ) {
+						pMesh->surface_set_material( j, pMat );
+					}
+				}
+				m_pendingMeshes.push_back( pMesh );
 			}
-			m_pendingMeshes.push_back( pMesh );
 		}
 		pNode->queue_free();
+	}
+	if ( m_pendingMeshes.size() > 0 && !capturePendingSurfaceRenderingMaterialsCold() ) {
+		LOG( ERROR, "Unable to build canonical Terrain3DRenderingMaterial table for imported mesh surfaces" );
+		m_pendingMeshes.clear();
+		m_pendingSurfaceRenderingMaterials.clear();
 	}
 	if ( m_pendingMeshes.size() > 0 ) {
 		const Ref<Mesh> pMesh = m_pendingMeshes[0];
@@ -347,6 +777,22 @@ void Terrain3DMeshAsset::commitMeshes( void ) {
 	m_meshes.clear();
 	m_meshes = m_pendingMeshes;
 	m_pendingMeshes = TypedArray<Mesh>();
+	disconnectRenderingMaterialSignals();
+	m_surfaceRenderingMaterials = m_pendingSurfaceRenderingMaterials;
+	m_pendingSurfaceRenderingMaterials = TypedArray<Terrain3DRenderingMaterial>();
+	connectRenderingMaterialSignals();
+	if ( m_instanceCategory != INSTANCE_CATEGORY_CLUTTER ) {
+		if ( m_instanceOcclusionPolicy != INSTANCE_OCCLUSION_NONE ) {
+			m_instanceOcclusionPolicy = INSTANCE_OCCLUSION_EXPLICIT_MESH;
+		}
+		rebuildInstanceDerivedGeometry();
+	} else {
+		clearInstanceDerivedGeometry();
+	}
+	m_pendingInstanceOccluderVertices.clear();
+	m_pendingInstanceOccluderIndices.clear();
+	m_bPendingImportedOccluder = false;
+	emit_signal( "vt_material_changed" );
 }
 
 void Terrain3DMeshAsset::setGeneratedType( const t3dGenType_t type ) {
@@ -428,17 +874,217 @@ inline void Terrain3DMeshAsset::setVisibilityLayers( const uint32_t nLayers ) {
 
 void Terrain3DMeshAsset::setMaterialOverride( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_materialOverride, rMaterial );
+	if ( rMaterial.is_valid() && m_renderingMaterialOverride.is_null() ) {
+		Ref<Terrain3DRenderingMaterial> converted;
+		converted.instantiate();
+		if ( converted->importBaseMaterialCold( rMaterial ) ) {
+			converted->set_meta( "terrain3d_legacy_material_conversion", true );
+			setRenderingMaterialOverride( converted );
+		}
+	}
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting material override: ", rMaterial );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting legacy material override: ", rMaterial );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
 void Terrain3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 	SET_IF_DIFF( m_materialOverlay, rMaterial );
+	if ( rMaterial.is_valid() && m_renderingMaterialOverlay.is_null() ) {
+		Ref<Terrain3DRenderingMaterial> converted;
+		converted.instantiate();
+		if ( converted->importBaseMaterialCold( rMaterial ) ) {
+			converted->set_meta( "terrain3d_legacy_material_conversion", true );
+			setRenderingMaterialOverlay( converted );
+		}
+	}
 	invalidateThumbnail();
-	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting material overlay: ", rMaterial );
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting legacy material overlay: ", rMaterial );
 	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	emit_signal( "instancer_setting_changed", m_nId );
+}
+
+void Terrain3DMeshAsset::onRenderingMaterialChanged( void ) {
+	invalidateThumbnail();
+	LOG( DEBUG, "Terrain3D rendering material changed; emitting instancer_setting_changed, ID: ", m_nId );
+	emit_signal( "vt_material_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+}
+
+void Terrain3DMeshAsset::disconnectRenderingMaterialSignals( void ) {
+	const Callable material_callback = callable_mp( this, &Terrain3DMeshAsset::onRenderingMaterialChanged );
+	if ( m_renderingMaterialOverride.is_valid() && m_renderingMaterialOverride->is_connected( "changed", material_callback ) ) {
+		m_renderingMaterialOverride->disconnect( "changed", material_callback );
+	}
+	if ( m_renderingMaterialOverlay.is_valid() && m_renderingMaterialOverlay->is_connected( "changed", material_callback ) ) {
+		m_renderingMaterialOverlay->disconnect( "changed", material_callback );
+	}
+	for ( int64_t iMaterial = 0; iMaterial < m_surfaceRenderingMaterials.size(); ++iMaterial ) {
+		const Ref<Terrain3DRenderingMaterial> material = m_surfaceRenderingMaterials[iMaterial];
+		if ( material.is_valid() && material->is_connected( "changed", material_callback ) ) {
+			material->disconnect( "changed", material_callback );
+		}
+	}
+}
+
+void Terrain3DMeshAsset::connectRenderingMaterialSignals( void ) {
+	const Callable material_callback = callable_mp( this, &Terrain3DMeshAsset::onRenderingMaterialChanged );
+	if ( m_renderingMaterialOverride.is_valid() && !m_renderingMaterialOverride->is_connected( "changed", material_callback ) ) {
+		m_renderingMaterialOverride->connect( "changed", material_callback );
+	}
+	if ( m_renderingMaterialOverlay.is_valid() && !m_renderingMaterialOverlay->is_connected( "changed", material_callback ) ) {
+		m_renderingMaterialOverlay->connect( "changed", material_callback );
+	}
+	for ( int64_t iMaterial = 0; iMaterial < m_surfaceRenderingMaterials.size(); ++iMaterial ) {
+		const Ref<Terrain3DRenderingMaterial> material = m_surfaceRenderingMaterials[iMaterial];
+		if ( material.is_valid() && !material->is_connected( "changed", material_callback ) ) {
+			material->connect( "changed", material_callback );
+		}
+	}
+}
+
+String Terrain3DMeshAsset::getVtMaterialOwnerIdentityCold( void ) const {
+	const String asset_path = get_path();
+	if ( !asset_path.is_empty() ) {
+		return String( "mesh-asset:" ) + asset_path;
+	}
+	if ( m_packedScene.is_valid() && !m_packedScene->get_path().is_empty() ) {
+		return String( "mesh-scene:" ) + m_packedScene->get_path() + String( ":name:" ) + m_name;
+	}
+	if ( !m_name.is_empty() ) {
+		return String( "mesh-name:" ) + m_name + String( ":generated:" ) + String::num_int64( ( int64_t )m_generatedType );
+	}
+	return String();
+}
+
+bool Terrain3DMeshAsset::ensureRenderingMaterialStableKeysCold( void ) {
+	const String owner = getVtMaterialOwnerIdentityCold();
+	if ( m_renderingMaterialOverride.is_valid() && !m_renderingMaterialOverride->ensureVtStableKeyCold( owner, String( "override" ) ) ) {
+		return false;
+	}
+	if ( m_renderingMaterialOverlay.is_valid() && !m_renderingMaterialOverlay->ensureVtStableKeyCold( owner, String( "overlay" ) ) ) {
+		return false;
+	}
+	for ( int64_t iMaterial = 0; iMaterial < m_surfaceRenderingMaterials.size(); ++iMaterial ) {
+		const Ref<Terrain3DRenderingMaterial> material = m_surfaceRenderingMaterials[iMaterial];
+		if ( material.is_null() ) {
+			continue;
+		}
+		const String role = String( "surface:" ) + String::num_int64( iMaterial );
+		if ( !material->ensureVtStableKeyCold( owner, role ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool Terrain3DMeshAsset::capturePendingSurfaceRenderingMaterialsCold( void ) {
+	TypedArray<Terrain3DRenderingMaterial> materials;
+	for ( int lod = 0; lod < m_pendingMeshes.size(); ++lod ) {
+		const Ref<Mesh> mesh = m_pendingMeshes[lod];
+		if ( mesh.is_null() ) {
+			continue;
+		}
+		for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
+			Ref<Terrain3DRenderingMaterial> canonical;
+			canonical.instantiate();
+			const Ref<Material> source = mesh->surface_get_material( surface );
+			if ( source.is_valid() && !canonical->importBaseMaterialCold( source ) ) {
+				LOG( ERROR, "LOD ", lod, " surface ", surface, " cannot be converted to Terrain3DRenderingMaterial" );
+				return false;
+			}
+			if ( source.is_valid() && !source->get_path().is_empty() && !source->get_path().contains( "::" ) ) {
+				canonical->setVtStableKey( t3d_vt_material_stable_key_from_resource_path( source->get_path() ) );
+			} else {
+				const String role = String( "pending-surface:" ) + String::num_int64( materials.size() );
+				if ( !canonical->ensureVtStableKeyCold( getVtMaterialOwnerIdentityCold(), role ) ) {
+					LOG( ERROR, "LOD ", lod, " surface ", surface, " has no deterministic VT material identity" );
+					return false;
+				}
+			}
+			canonical->set_meta( "terrain3d_surface_material_conversion", true );
+			materials.push_back( canonical );
+		}
+	}
+	m_pendingSurfaceRenderingMaterials = materials;
+	return true;
+}
+
+void Terrain3DMeshAsset::setSurfaceRenderingMaterials( const TypedArray<Terrain3DRenderingMaterial> &rMaterials ) {
+	disconnectRenderingMaterialSignals();
+	m_surfaceRenderingMaterials = rMaterials;
+	if ( !ensureRenderingMaterialStableKeysCold() ) {
+		LOG( ERROR, "ID ", m_nId, ", ", m_name, ": Unable to establish stable VT identities for surface materials" );
+	}
+	connectRenderingMaterialSignals();
+	invalidateThumbnail();
+	emit_signal( "vt_material_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+}
+
+Ref<Terrain3DRenderingMaterial> Terrain3DMeshAsset::getSurfaceRenderingMaterial( const int nLod, const uint32_t nSurface ) const {
+	if ( m_renderingMaterialOverride.is_valid() ) {
+		return m_renderingMaterialOverride;
+	}
+	if ( nLod < 0 || nLod >= m_meshes.size() ) {
+		return Ref<Terrain3DRenderingMaterial>();
+	}
+	uint64_t offset = 0u;
+	for ( int lod = 0; lod < nLod; ++lod ) {
+		const Ref<Mesh> mesh = m_meshes[lod];
+		if ( mesh.is_valid() ) {
+			offset += ( uint64_t )( MAX( mesh->get_surface_count(), 0 ) );
+		}
+	}
+	const Ref<Mesh> mesh = m_meshes[nLod];
+	if ( mesh.is_null() || nSurface >= ( uint32_t )( mesh->get_surface_count() ) ) {
+		return Ref<Terrain3DRenderingMaterial>();
+	}
+	const uint64_t index = offset + nSurface;
+	if ( index >= ( uint64_t )( m_surfaceRenderingMaterials.size() ) ) {
+		return Ref<Terrain3DRenderingMaterial>();
+	}
+	return m_surfaceRenderingMaterials[( int64_t )( index )];
+}
+
+const Terrain3DRenderingMaterial *Terrain3DMeshAsset::getSurfaceRenderingMaterialPtr( const int nLod, const uint32_t nSurface ) const {
+	const Ref<Terrain3DRenderingMaterial> material = getSurfaceRenderingMaterial( nLod, nSurface );
+	return material.ptr();
+}
+
+void Terrain3DMeshAsset::setRenderingMaterialOverride( const Ref<Terrain3DRenderingMaterial> &rMaterial ) {
+	if ( !t3dDiffers( m_renderingMaterialOverride, rMaterial ) ) {
+		return;
+	}
+	disconnectRenderingMaterialSignals();
+	m_renderingMaterialOverride = rMaterial;
+	if ( m_renderingMaterialOverride.is_valid()
+	        && !m_renderingMaterialOverride->ensureVtStableKeyCold( getVtMaterialOwnerIdentityCold(), String( "override" ) ) ) {
+		LOG( ERROR, "ID ", m_nId, ", ", m_name, ": Rendering-material override has no deterministic VT identity" );
+	}
+	connectRenderingMaterialSignals();
+	invalidateThumbnail();
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting Terrain3D rendering material override: ", rMaterial );
+	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	emit_signal( "vt_material_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+}
+
+void Terrain3DMeshAsset::setRenderingMaterialOverlay( const Ref<Terrain3DRenderingMaterial> &rMaterial ) {
+	if ( !t3dDiffers( m_renderingMaterialOverlay, rMaterial ) ) {
+		return;
+	}
+	disconnectRenderingMaterialSignals();
+	m_renderingMaterialOverlay = rMaterial;
+	if ( m_renderingMaterialOverlay.is_valid()
+	        && !m_renderingMaterialOverlay->ensureVtStableKeyCold( getVtMaterialOwnerIdentityCold(), String( "overlay" ) ) ) {
+		LOG( ERROR, "ID ", m_nId, ", ", m_name, ": Rendering-material overlay has no deterministic VT identity" );
+	}
+	connectRenderingMaterialSignals();
+	invalidateThumbnail();
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting Terrain3D rendering material overlay: ", rMaterial );
+	LOG( DEBUG, "Emitting instancer_setting_changed, ID: ", m_nId );
+	emit_signal( "vt_material_changed" );
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
@@ -467,7 +1113,8 @@ void Terrain3DMeshAsset::setGeneratedSize( const Vector2 &rSize ) {
 }
 
 void Terrain3DMeshAsset::setLastLod( const int nLod ) {
-	const int max_lod = m_generatedType != TYPE_NONE ? 0 : CLAMP( getMeshes().size(), 1, s_nMeshMaxLodCount ) - 1;
+	int max_lod = m_generatedType != TYPE_NONE ? 0 : CLAMP( getMeshes().size(), 1, s_nMeshMaxLodCount ) - 1;
+	max_lod = MIN( max_lod, getCategoryMaximumLodCount() - 1 );
 	SET_IF_DIFF( m_iLastLod, CLAMP( nLod, 0, max_lod ) );
 	if ( m_iLastShadowLod > m_iLastLod ) {
 		m_iLastShadowLod = m_iLastLod;
@@ -551,9 +1198,29 @@ void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 			rProperty.usage = PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY;
 		}
 		return;
+	} else if ( rProperty.name == StringName( "hlod_contribution" ) ) {
+		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+		return;
+	} else if ( m_instanceCategory == INSTANCE_CATEGORY_CLUTTER && rProperty.name == StringName( "hlod_min_level" ) ) {
+		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+		return;
+	} else if ( rProperty.name == StringName( "instance_occlusion_box" ) ) {
+		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+		return;
+	} else if ( rProperty.name == StringName( "instance_occlusion_proxy_mesh" ) ) {
+		if ( !usesInstanceOcclusion() ) {
+			rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+		} else if ( m_packedScene.is_valid() ) {
+			rProperty.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
+		}
+		return;
+	} else if ( rProperty.name == StringName( "instance_occlusion_range" ) && !usesInstanceOcclusion() ) {
+		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+		return;
 	} else if ( rProperty.name.match( "lod?_range" ) ) {
 		const int lod = rProperty.name.substr( 3, 1 ).to_int();
-		if ( m_iLastLod < lod ) {
+		const int effective_last_lod = MIN( m_iLastLod, getCategoryMaximumLodCount() - 1 );
+		if ( effective_last_lod < lod ) {
 			rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
 		} else {
 			rProperty.usage = PROPERTY_USAGE_DEFAULT;
@@ -562,16 +1229,30 @@ void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 }
 
 bool Terrain3DMeshAsset::_property_can_revert( const StringName &rName ) const {
-	return ( rName.match( "last_lod" ) || rName.match( "last_shadow_lod" ) || rName.match( "density" ) || rName.match( "generated_type" )
+	return ( rName.match( "instance_category" ) || rName.match( "instance_occlusion_policy" ) || rName.match( "instance_occlusion_range" )
+	        || rName.match( "terrain_alignment" ) || rName.match( "last_lod" ) || rName.match( "last_shadow_lod" )
+	        || rName.match( "density" ) || rName.match( "generated_type" )
 	        || ( m_generatedType > TYPE_NONE && ( rName.match( "height_offset" ) || rName.match( "lod0_range" ) ) ) );
 }
 
 bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProperty ) const {
-	if ( rName.match( "last_lod" ) ) {
-		rProperty = getLodCount() - 1;
+	if ( rName.match( "instance_category" ) ) {
+		rProperty = INSTANCE_CATEGORY_GROUND_COVER;
+		return true;
+	} else if ( rName.match( "instance_occlusion_policy" ) ) {
+		rProperty = m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER ? INSTANCE_OCCLUSION_EXPLICIT_MESH : INSTANCE_OCCLUSION_NONE;
+		return true;
+	} else if ( rName.match( "instance_occlusion_range" ) ) {
+		rProperty = 256.0f;
+		return true;
+	} else if ( rName.match( "terrain_alignment" ) ) {
+		rProperty = TERRAIN_ALIGNMENT_UPRIGHT;
+		return true;
+	} else if ( rName.match( "last_lod" ) ) {
+		rProperty = MIN( getLodCount() - 1, getCategoryMaximumLodCount() - 1 );
 		return true;
 	} else if ( rName.match( "last_shadow_lod" ) ) {
-		rProperty = getLodCount() - 1;
+		rProperty = MIN( getLodCount() - 1, getCategoryMaximumLodCount() - 1 );
 		return true;
 	} else if ( rName.match( "density" ) ) {
 		rProperty = 10.f;
@@ -591,8 +1272,132 @@ bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant 
 	return false;
 }
 
+void Terrain3DMeshAsset::setInstanceCategory( const t3dInstanceCategory_t eCategory ) {
+	const t3dInstanceCategory_t value = ( t3dInstanceCategory_t )CLAMP(
+	        ( int )( eCategory ), ( int )( INSTANCE_CATEGORY_CLUTTER ), ( int )( INSTANCE_CATEGORY_OCCLUDER ) );
+	const t3dHlodContribution_t desired_hlod = value == INSTANCE_CATEGORY_CLUTTER ? HLOD_EXCLUDE : HLOD_INCLUDE;
+	const t3dInstanceOcclusionPolicy_t desired_occlusion =
+	        value == INSTANCE_CATEGORY_OCCLUDER ? INSTANCE_OCCLUSION_EXPLICIT_MESH : INSTANCE_OCCLUSION_NONE;
+	const int desired_last_lod = value == INSTANCE_CATEGORY_CLUTTER ? MIN( m_iLastLod, 1 ) : m_iLastLod;
+	const int desired_last_shadow_lod = MIN( m_iLastShadowLod, desired_last_lod );
+	const int desired_shadow_impostor = MIN( m_nShadowImpostor, desired_last_lod );
+	const real_t desired_fade = value == INSTANCE_CATEGORY_CLUTTER && m_fFadeMargin <= 0.f
+	        ? CLAMP( m_fLodRanges[1] - m_fLodRanges[0], 0.f, 64.f )
+	        : m_fFadeMargin;
+	if ( m_instanceCategory == value && m_hlodContribution == desired_hlod && m_instanceOcclusionPolicy == desired_occlusion
+	        && m_iLastLod == desired_last_lod && m_iLastShadowLod == desired_last_shadow_lod && m_nShadowImpostor == desired_shadow_impostor
+	        && m_fFadeMargin == desired_fade ) {
+		return;
+	}
+
+	m_instanceCategory = value;
+	m_hlodContribution = desired_hlod;
+	m_instanceOcclusionPolicy = desired_occlusion;
+	m_iLastLod = desired_last_lod;
+	m_iLastShadowLod = desired_last_shadow_lod;
+	m_nShadowImpostor = desired_shadow_impostor;
+	m_fFadeMargin = desired_fade;
+	if ( m_instanceCategory == INSTANCE_CATEGORY_CLUTTER ) {
+		clearInstanceDerivedGeometry();
+	} else if ( !m_meshes.is_empty() ) {
+		rebuildInstanceDerivedGeometry();
+	}
+
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting instance category: ", ( int )( m_instanceCategory ) );
+	emit_signal( "setting_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+	emit_changed();
+	notify_property_list_changed();
+}
+
+void Terrain3DMeshAsset::setInstanceOcclusionPolicy( const t3dInstanceOcclusionPolicy_t ePolicy ) {
+	t3dInstanceOcclusionPolicy_t value = ( t3dInstanceOcclusionPolicy_t )CLAMP(
+	        ( int )( ePolicy ), ( int )( INSTANCE_OCCLUSION_NONE ), ( int )( INSTANCE_OCCLUSION_EXPLICIT_MESH ) );
+	if ( m_instanceCategory != INSTANCE_CATEGORY_OCCLUDER ) {
+		value = INSTANCE_OCCLUSION_NONE;
+	} else if ( value != INSTANCE_OCCLUSION_NONE ) {
+		value = INSTANCE_OCCLUSION_EXPLICIT_MESH;
+	}
+	if ( m_instanceOcclusionPolicy == value ) {
+		return;
+	}
+	m_instanceOcclusionPolicy = value;
+	emit_signal( "setting_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+	emit_changed();
+	notify_property_list_changed();
+}
+
+void Terrain3DMeshAsset::setInstanceOcclusionBox( const AABB &rBox ) {
+	if ( m_packedScene.is_valid() && m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER ) {
+		if ( !m_meshes.is_empty() ) {
+			rebuildInstanceOcclusionGeometry();
+		}
+		return;
+	}
+	AABB value = rBox;
+	value.size.x = MAX( Math::abs( value.size.x ), 0.01f );
+	value.size.y = MAX( Math::abs( value.size.y ), 0.01f );
+	value.size.z = MAX( Math::abs( value.size.z ), 0.01f );
+	if ( m_instanceOcclusionBox == value ) {
+		return;
+	}
+	m_instanceOcclusionBox = value;
+	emit_signal( "setting_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+	emit_changed();
+}
+
+void Terrain3DMeshAsset::setInstanceOcclusionProxyMesh( const Ref<ArrayMesh> &rMesh ) {
+	if ( m_packedScene.is_valid() && m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER ) {
+		if ( !m_meshes.is_empty() ) {
+			rebuildInstanceOcclusionGeometry();
+		}
+		return;
+	}
+	if ( m_instanceOcclusionProxyMesh == rMesh ) {
+		return;
+	}
+	m_instanceOcclusionProxyMesh = rMesh;
+	m_instanceOccluder.unref();
+	m_nInstanceOcclusionProxyVertexCount = 0u;
+	m_nInstanceOcclusionProxyTriangleCount = 0u;
+	m_bInstanceOcclusionProxyDerived = false;
+	m_bInstanceProxyImportedOccluder = false;
+	if ( ++m_nInstanceOcclusionProxyGeneration == 0u ) {
+		m_nInstanceOcclusionProxyGeneration = 1u;
+	}
+	emit_signal( "setting_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+	emit_changed();
+}
+
+void Terrain3DMeshAsset::setInstanceOcclusionRange( const real_t fRange ) {
+	const real_t value = CLAMP( fRange, 0.0f, 16384.0f );
+	if ( Math::is_equal_approx( m_fInstanceOcclusionRange, value ) ) {
+		return;
+	}
+	m_fInstanceOcclusionRange = value;
+	emit_signal( "setting_changed" );
+	emit_signal( "instancer_setting_changed", m_nId );
+	emit_changed();
+}
+
+void Terrain3DMeshAsset::setTerrainAlignment( const t3dTerrainAlignment_t eAlignment ) {
+	const t3dTerrainAlignment_t value = ( t3dTerrainAlignment_t )CLAMP(
+	        ( int )( eAlignment ), ( int )( TERRAIN_ALIGNMENT_UPRIGHT ), ( int )( TERRAIN_ALIGNMENT_NORMAL ) );
+	if ( m_terrainAlignment == value ) {
+		return;
+	}
+	m_terrainAlignment = value;
+	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting terrain alignment: ", ( int )( m_terrainAlignment ) );
+	emit_signal( "setting_changed" );
+	emit_changed();
+}
+
 void Terrain3DMeshAsset::setHlodContribution( const t3dHlodContribution_t mode ) {
-	const t3dHlodContribution_t value = ( t3dHlodContribution_t )CLAMP( ( int )mode, ( int )HLOD_AUTO, ( int )HLOD_EXCLUDE );
+	( void )( mode );
+	const t3dHlodContribution_t value = m_instanceCategory == INSTANCE_CATEGORY_CLUTTER ? HLOD_EXCLUDE : HLOD_INCLUDE;
 	if ( m_hlodContribution == value ) {
 		return;
 	}
@@ -612,9 +1417,51 @@ void Terrain3DMeshAsset::setHlodMinLevel( const int nLevel ) {
 }
 
 void Terrain3DMeshAsset::_bind_methods( void ) {
+	BIND_ENUM_CONSTANT( INSTANCE_CATEGORY_CLUTTER );
+	BIND_ENUM_CONSTANT( INSTANCE_CATEGORY_GROUND_COVER );
+	BIND_ENUM_CONSTANT( INSTANCE_CATEGORY_OCCLUDER );
+	BIND_ENUM_CONSTANT( TERRAIN_ALIGNMENT_UPRIGHT );
+	BIND_ENUM_CONSTANT( TERRAIN_ALIGNMENT_NORMAL );
 	BIND_ENUM_CONSTANT( HLOD_AUTO );
 	BIND_ENUM_CONSTANT( HLOD_INCLUDE );
 	BIND_ENUM_CONSTANT( HLOD_EXCLUDE );
+	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_NONE );
+	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_BOX );
+	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_EXPLICIT_MESH );
+	ClassDB::bind_method( D_METHOD( "set_instance_category", "category" ), &Terrain3DMeshAsset::setInstanceCategory );
+	ClassDB::bind_method( D_METHOD( "get_instance_category" ), &Terrain3DMeshAsset::getInstanceCategory );
+	ClassDB::bind_method( D_METHOD( "get_category_maximum_lod_count" ), &Terrain3DMeshAsset::getCategoryMaximumLodCount );
+	ClassDB::bind_method( D_METHOD( "is_individually_editable" ), &Terrain3DMeshAsset::isIndividuallyEditable );
+	ClassDB::bind_method( D_METHOD( "requires_instance_physics" ), &Terrain3DMeshAsset::requiresInstancePhysics );
+	ClassDB::bind_method( D_METHOD( "uses_instance_occlusion" ), &Terrain3DMeshAsset::usesInstanceOcclusion );
+	ClassDB::bind_method( D_METHOD( "uses_full_instance_occlusion" ), &Terrain3DMeshAsset::usesFullInstanceOcclusion );
+	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_policy", "policy" ), &Terrain3DMeshAsset::setInstanceOcclusionPolicy );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_policy" ), &Terrain3DMeshAsset::getInstanceOcclusionPolicy );
+	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_box", "box" ), &Terrain3DMeshAsset::setInstanceOcclusionBox );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_box" ), &Terrain3DMeshAsset::getInstanceOcclusionBox );
+	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_proxy_mesh", "mesh" ), &Terrain3DMeshAsset::setInstanceOcclusionProxyMesh );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_proxy_mesh" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyMesh );
+	ClassDB::bind_method( D_METHOD( "has_instance_collision_proxy" ), &Terrain3DMeshAsset::hasInstanceCollisionProxy );
+	ClassDB::bind_method( D_METHOD( "has_instance_occlusion_proxy" ), &Terrain3DMeshAsset::hasInstanceOcclusionProxy );
+	ClassDB::bind_method( D_METHOD( "has_mesh_derived_instance_proxy" ), &Terrain3DMeshAsset::hasMeshDerivedInstanceProxy );
+	ClassDB::bind_method( D_METHOD( "is_instance_proxy_imported_occluder" ), &Terrain3DMeshAsset::isInstanceProxyImportedOccluder );
+	ClassDB::bind_method( D_METHOD( "get_instance_occluder" ), &Terrain3DMeshAsset::getInstanceOccluder );
+	ClassDB::bind_method( D_METHOD( "get_instance_collision_shape" ), &Terrain3DMeshAsset::getInstanceCollisionShape );
+	ClassDB::bind_method( D_METHOD( "get_instance_collision_vertex_count" ), &Terrain3DMeshAsset::getInstanceCollisionVertexCount );
+	ClassDB::bind_method( D_METHOD( "get_instance_collision_triangle_count" ), &Terrain3DMeshAsset::getInstanceCollisionTriangleCount );
+	ClassDB::bind_method( D_METHOD( "get_instance_collision_generation" ), &Terrain3DMeshAsset::getInstanceCollisionGeneration );
+	ClassDB::bind_method(
+	        D_METHOD( "get_instance_occlusion_proxy_vertex_count" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyVertexCount );
+	ClassDB::bind_method(
+	        D_METHOD( "get_instance_occlusion_proxy_triangle_count" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyTriangleCount );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_proxy_generation" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyGeneration );
+	ClassDB::bind_method( D_METHOD( "get_instance_proxy_vertex_count" ), &Terrain3DMeshAsset::getInstanceProxyVertexCount );
+	ClassDB::bind_method( D_METHOD( "get_instance_proxy_triangle_count" ), &Terrain3DMeshAsset::getInstanceProxyTriangleCount );
+	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_range", "distance" ), &Terrain3DMeshAsset::setInstanceOcclusionRange );
+	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_range" ), &Terrain3DMeshAsset::getInstanceOcclusionRange );
+	ClassDB::bind_method( D_METHOD( "set_terrain_alignment", "alignment" ), &Terrain3DMeshAsset::setTerrainAlignment );
+	ClassDB::bind_method( D_METHOD( "get_terrain_alignment" ), &Terrain3DMeshAsset::getTerrainAlignment );
+	ClassDB::bind_method( D_METHOD( "aligns_to_terrain_normal" ), &Terrain3DMeshAsset::alignsToTerrainNormal );
 	ClassDB::bind_method( D_METHOD( "set_hlod_contribution", "mode" ), &Terrain3DMeshAsset::setHlodContribution );
 	ClassDB::bind_method( D_METHOD( "get_hlod_contribution" ), &Terrain3DMeshAsset::getHlodContribution );
 	ClassDB::bind_method( D_METHOD( "set_hlod_min_level", "level" ), &Terrain3DMeshAsset::setHlodMinLevel );
@@ -627,6 +1474,7 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "id_changed" ) );
 	ADD_SIGNAL( MethodInfo( "setting_changed" ) );
 	ADD_SIGNAL( MethodInfo( "instancer_setting_changed" ) );
+	ADD_SIGNAL( MethodInfo( "vt_material_changed" ) );
 	ADD_SIGNAL( MethodInfo( "preview_changed" ) );
 	ADD_SIGNAL( MethodInfo( "instance_count_changed" ) );
 
@@ -660,6 +1508,12 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_material_override" ), &Terrain3DMeshAsset::getMaterialOverride );
 	ClassDB::bind_method( D_METHOD( "set_material_overlay", "material" ), &Terrain3DMeshAsset::setMaterialOverlay );
 	ClassDB::bind_method( D_METHOD( "get_material_overlay" ), &Terrain3DMeshAsset::getMaterialOverlay );
+	ClassDB::bind_method( D_METHOD( "set_rendering_material_override", "material" ), &Terrain3DMeshAsset::setRenderingMaterialOverride );
+	ClassDB::bind_method( D_METHOD( "get_rendering_material_override" ), &Terrain3DMeshAsset::getRenderingMaterialOverride );
+	ClassDB::bind_method( D_METHOD( "set_rendering_material_overlay", "material" ), &Terrain3DMeshAsset::setRenderingMaterialOverlay );
+	ClassDB::bind_method( D_METHOD( "get_rendering_material_overlay" ), &Terrain3DMeshAsset::getRenderingMaterialOverlay );
+	ClassDB::bind_method( D_METHOD( "set_surface_rendering_materials", "materials" ), &Terrain3DMeshAsset::setSurfaceRenderingMaterials );
+	ClassDB::bind_method( D_METHOD( "get_surface_rendering_materials" ), &Terrain3DMeshAsset::getSurfaceRenderingMaterials );
 
 	ClassDB::bind_method( D_METHOD( "set_generated_faces", "count" ), &Terrain3DMeshAsset::setGeneratedFaces );
 	ClassDB::bind_method( D_METHOD( "get_generated_faces" ), &Terrain3DMeshAsset::getGeneratedFaces );
@@ -701,6 +1555,21 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 
 	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &Terrain3DMeshAsset::getInstanceCount );
 
+	ADD_GROUP( "Instance Policy", "instance_" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "instance_category", PROPERTY_HINT_ENUM, "Clutter,Ground Cover,Occluder" ),
+	        "set_instance_category",
+	        "get_instance_category" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "instance_occlusion_policy", PROPERTY_HINT_ENUM, "None,Box,Explicit Mesh" ),
+	        "set_instance_occlusion_policy",
+	        "get_instance_occlusion_policy" );
+	ADD_PROPERTY( PropertyInfo( Variant::AABB, "instance_occlusion_box" ), "set_instance_occlusion_box", "get_instance_occlusion_box" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "instance_occlusion_proxy_mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ),
+	        "set_instance_occlusion_proxy_mesh",
+	        "get_instance_occlusion_proxy_mesh" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "instance_occlusion_range", PROPERTY_HINT_RANGE, "0,16384,1,or_greater" ),
+	        "set_instance_occlusion_range",
+	        "get_instance_occlusion_range" );
+
 	ADD_GROUP( "HLOD", "hlod_" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ),
 	        "set_hlod_contribution",
@@ -719,6 +1588,9 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
 	        "set_generated_type",
 	        "get_generated_type" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_alignment", PROPERTY_HINT_ENUM, "Upright,Align To Terrain Normal" ),
+	        "set_terrain_alignment",
+	        "get_terrain_alignment" );
 	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "height_offset", PROPERTY_HINT_RANGE, "-20.0,20.0,.005" ),
 	        "set_height_offset",
 	        "get_height_offset" );
@@ -731,10 +1603,31 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "visibility_layers", PROPERTY_HINT_LAYERS_3D_RENDER ),
 	        "set_visibility_layers",
 	        "get_visibility_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "rendering_material_override", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ),
+	        "set_rendering_material_override",
+	        "get_rendering_material_override" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "rendering_material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ),
+	        "set_rendering_material_overlay",
+	        "get_rendering_material_overlay" );
+	ADD_PROPERTY( PropertyInfo( Variant::ARRAY,
+	                      "surface_rendering_materials",
+	                      PROPERTY_HINT_ARRAY_TYPE,
+	                      "Terrain3DRenderingMaterial",
+	                      PROPERTY_USAGE_STORAGE ),
+	        "set_surface_rendering_materials",
+	        "get_surface_rendering_materials" );
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
+	                      "material_override",
+	                      PROPERTY_HINT_RESOURCE_TYPE,
+	                      "BaseMaterial3D,ShaderMaterial",
+	                      PROPERTY_USAGE_STORAGE ),
 	        "set_material_override",
 	        "get_material_override" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial" ),
+	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
+	                      "material_overlay",
+	                      PROPERTY_HINT_RESOURCE_TYPE,
+	                      "BaseMaterial3D,ShaderMaterial",
+	                      PROPERTY_USAGE_STORAGE ),
 	        "set_material_overlay",
 	        "get_material_overlay" );
 

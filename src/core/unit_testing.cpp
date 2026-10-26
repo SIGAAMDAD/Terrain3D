@@ -6,11 +6,12 @@
 
 #include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_util.h"
+#include "hlod/terrain_3d_hlod_builder.h"
 #include "rendering/rd/terrain_3d_rd_culling.h"
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/terrain_3d_rd_texture_manager.h"
-#include "rendering/rd/terrain_3d_rd_topology.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
+#include "rendering/terrain_3d_clipmap_strip_contract.h"
 
 #include <EASTL/numeric_limits.h>
 #include <stddef.h>
@@ -47,115 +48,6 @@ static bool t3dRunEastlContainerOwnershipTests( t3dRdUnitTestState_t &rState ) {
 	rState.expect( values.size() == 3u && values[0] == 7u && values[1] == 9u && values[2] == 11u,
 	        "EASTL vector ordered insertion preserves contents" );
 	return true;
-}
-
-static t3dClipmapGeometry_t t3dRdMakePackingTestGeometry( void ) {
-	t3dClipmapGeometry_t geometry;
-	geometry.m_vertices.push_back( Vector3( -32768.0, 0.0, 32767.0 ) );
-	geometry.m_vertices.push_back( Vector3( 32767.0, 0.0, -32768.0 ) );
-	geometry.m_vertices.push_back( Vector3( 0.0, 0.0, 0.0 ) );
-	geometry.m_metadata.push_back( Vector2( 4.0, 9.0 ) );
-	geometry.m_metadata.push_back( Vector2( 0.0, 65535.0 ) );
-	geometry.m_metadata.push_back( Vector2( 1.0, 0.0 ) );
-	geometry.m_indices.push_back( 0 );
-	geometry.m_indices.push_back( 1 );
-	geometry.m_indices.push_back( 2 );
-	return geometry;
-}
-
-static bool t3dRunRdTopologyTests( t3dRdUnitTestState_t &rState ) {
-	Terrain3DRdTopology topology;
-	t3dClipmapGeometry_t geometry = t3dRdMakePackingTestGeometry();
-	rState.expect( topology.buildCpu( geometry, "CpuPackingTest" ), "RD topology accepts canonical triangle" );
-	rState.expect( topology.isCpuReady(), "RD topology publishes complete CPU state" );
-	rState.expect( topology.getVertexCount() == 3u && topology.getIndexCount() == 3u, "RD topology preserves vertex/index counts" );
-	rState.expect( topology.getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16,
-	        "RD topology selects U16 for a representable maximum index" );
-	rState.expect( topology.getGridMinimum() == Vector2i( -32768, -32768 ) && topology.getGridMaximum() == Vector2i( 32767, 32767 ),
-	        "RD topology records validated inclusive grid bounds" );
-
-	t3dRdClipmapVertex_t packed;
-	rState.expect( topology.getPackedVertex( 0u, packed ) && packed.m_nGridX == INT16_MIN && packed.m_nGridZ == INT16_MAX
-	                && packed.m_nPartCode == 4u && packed.m_nFlags == 9u,
-	        "RD topology packs X/Z/part/flags into the 8-byte vertex ABI" );
-	rState.expect( topology.getPackedVertex( 1u, packed ) && packed.m_nGridX == INT16_MAX && packed.m_nGridZ == INT16_MIN
-	                && packed.m_nPartCode == 0u && packed.m_nFlags == UINT16_MAX,
-	        "RD topology preserves signed and unsigned packing boundaries" );
-	rState.expect( !topology.getPackedVertex( 3u, packed ), "RD topology rejects an out-of-range vertex read" );
-	uint32_t unpacked_index = UINT32_MAX;
-	rState.expect( topology.getIndex( 1u, unpacked_index ) && unpacked_index == 1u,
-	        "RD topology reads packed U16 indices without widening errors" );
-	rState.expect( !topology.getIndex( 3u, unpacked_index ), "RD topology rejects an out-of-range index read" );
-	rState.expect( topology.getVertexChecksum() == 0x813f4c0c3d69ad4bull && topology.getIndexChecksum() == 0x37f11cf1d36d7afeull,
-	        "RD topology packing checksums pin the little-endian Windows ABI" );
-
-	Terrain3DRdTopology same_topology;
-	rState.expect( same_topology.buildCpu( geometry, "SamePackingTest" )
-	                && same_topology.getVertexChecksum() == topology.getVertexChecksum()
-	                && same_topology.getIndexChecksum() == topology.getIndexChecksum(),
-	        "RD topology checksums are deterministic" );
-	geometry.m_metadata.set( 0, Vector2( 4.0, 10.0 ) );
-	Terrain3DRdTopology changed_topology;
-	rState.expect( changed_topology.buildCpu( geometry, "ChangedPackingTest" )
-	                && changed_topology.getVertexChecksum() != topology.getVertexChecksum(),
-	        "RD topology checksum covers packed metadata" );
-
-	const uint64_t stable_vertex_checksum = topology.getVertexChecksum();
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_vertices.set( 0, Vector3( 32768.0, 0.0, 0.0 ) );
-	rState.expect( !topology.buildCpu( geometry, "OutOfRangeGrid", false ) && topology.getVertexChecksum() == stable_vertex_checksum
-	                && topology.isCpuReady(),
-	        "RD topology rejects out-of-range coordinates transactionally" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_vertices.set( 0, Vector3( 0.25, 0.0, 0.0 ) );
-	rState.expect( !topology.buildCpu( geometry, "FractionalGrid", false ), "RD topology rejects fractional grid coordinates" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_vertices.set( 0, Vector3( 0.0, 1.0, 0.0 ) );
-	rState.expect( !topology.buildCpu( geometry, "ExplicitY", false ), "RD topology enforces implicit terrain Y" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_vertices.set( 0, Vector3( eastl::numeric_limits<real_t>::quiet_NaN(), 0.0, 0.0 ) );
-	rState.expect( !topology.buildCpu( geometry, "NonFiniteGrid", false ), "RD topology rejects non-finite coordinates" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_metadata.set( 0, Vector2( 5.0, 0.0 ) );
-	rState.expect( !topology.buildCpu( geometry, "InvalidPart", false ), "RD topology rejects non-canonical part metadata" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_metadata.set( 0, Vector2( 0.0, 1.5 ) );
-	rState.expect( !topology.buildCpu( geometry, "FractionalFlags", false ), "RD topology rejects fractional flag metadata" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_indices.set( 0, -1 );
-	rState.expect( !topology.buildCpu( geometry, "NegativeIndex", false ), "RD topology rejects negative indices" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_indices.set( 2, 3 );
-	rState.expect( !topology.buildCpu( geometry, "LargeIndex", false ), "RD topology rejects indices at vertex count" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_indices.resize( 2 );
-	rState.expect( !topology.buildCpu( geometry, "IncompleteTriangle", false ), "RD topology rejects incomplete triangle lists" );
-	geometry = t3dRdMakePackingTestGeometry();
-	geometry.m_metadata.resize( 2 );
-	rState.expect( !topology.buildCpu( geometry, "MetadataMismatch", false ), "RD topology rejects vertex/metadata count mismatch" );
-
-	t3dClipmapGeometry_t boundary_geometry;
-	boundary_geometry.m_vertices.resize( 65537 );
-	boundary_geometry.m_metadata.resize( 65537 );
-	boundary_geometry.m_indices.resize( 3 );
-	boundary_geometry.m_indices.set( 0, 0 );
-	boundary_geometry.m_indices.set( 1, 65535 );
-	boundary_geometry.m_indices.set( 2, 1 );
-	Terrain3DRdTopology boundary_topology;
-	rState.expect( boundary_topology.buildCpu( boundary_geometry, "U16Boundary" )
-	                && boundary_topology.getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT16,
-	        "RD topology keeps index 65535 in U16 format" );
-	boundary_geometry.m_indices.set( 1, 65536 );
-	rState.expect( boundary_topology.buildCpu( boundary_geometry, "U32Boundary" )
-	                && boundary_topology.getIndexFormat() == RenderingDevice::INDEX_BUFFER_FORMAT_UINT32
-	                && boundary_topology.getIndex( 1u, unpacked_index ) && unpacked_index == 65536u,
-	        "RD topology falls back to U32 at index 65536" );
-
-	boundary_topology.clearCpu();
-	rState.expect(
-	        !boundary_topology.isCpuReady() && boundary_topology.getVertexCount() == 65537u && boundary_topology.getVertexChecksum() != 0u,
-	        "RD topology can release staging bytes without losing immutable draw metadata" );
-	return rState.m_nFailed == 0u;
 }
 
 typedef struct t3dRdPublicationExchangeState_s {
@@ -254,10 +146,10 @@ static void t3dRdPublicationConsumer( void *const pContext ) {
 }
 
 static bool t3dRunRdAbiAndPublicationTests( t3dRdUnitTestState_t &rState ) {
-	rState.expect( sizeof( t3dRdClipmapVertex_t ) == 8u, "RD packed clipmap vertex ABI is 8 bytes" );
-	rState.expect( offsetof( t3dRdClipmapVertex_t, m_nGridX ) == 0u && offsetof( t3dRdClipmapVertex_t, m_nGridZ ) == 2u
-	                && offsetof( t3dRdClipmapVertex_t, m_nPartCode ) == 4u && offsetof( t3dRdClipmapVertex_t, m_nFlags ) == 6u,
-	        "RD packed clipmap vertex member offsets match the vertex format" );
+	rState.expect( sizeof( t3dClipmapStripPart_t ) == 12u, "RD procedural strip descriptor ABI is 12 bytes" );
+	rState.expect( offsetof( t3dClipmapStripPart_t, m_nOriginX ) == 0u && offsetof( t3dClipmapStripPart_t, m_nCellWidth ) == 4u
+	                && offsetof( t3dClipmapStripPart_t, m_nPartCode ) == 8u && offsetof( t3dClipmapStripPart_t, m_nFlags ) == 10u,
+	        "RD procedural strip descriptor offsets match the shader packing contract" );
 	rState.expect( sizeof( t3dRdPatch_t ) == 64u, "RD patch descriptor ABI is 64 bytes" );
 	rState.expect( offsetof( t3dRdPatch_t, m_fOriginX ) == 0u && offsetof( t3dRdPatch_t, m_nFlags ) == 28u
 	                && offsetof( t3dRdPatch_t, m_fBoundsMinY ) == 32u && offsetof( t3dRdPatch_t, m_fBoundsMaxY ) == 36u
@@ -265,13 +157,14 @@ static bool t3dRunRdAbiAndPublicationTests( t3dRdUnitTestState_t &rState ) {
 	                && offsetof( t3dRdPatch_t, m_fPreviousOriginZ ) == 48u && offsetof( t3dRdPatch_t, m_fPreviousScale ) == 52u
 	                && offsetof( t3dRdPatch_t, m_fPadding1 ) == 60u,
 	        "RD patch bounds and previous-frame offsets match std430" );
-	rState.expect( sizeof( t3dRdMaterialLayer_t ) == 64u && offsetof( t3dRdMaterialLayer_t, m_nPhysicalLayer ) == 56u
-	                && offsetof( t3dRdMaterialLayer_t, m_nFlags ) == 60u,
+	rState.expect( sizeof( t3dRdMaterialLayer_t ) == 80u && offsetof( t3dRdMaterialLayer_t, m_nPhysicalLayer ) == 56u
+	                && offsetof( t3dRdMaterialLayer_t, m_nFlags ) == 60u && offsetof( t3dRdMaterialLayer_t, m_nMicroVTAllocation ) == 64u
+	                && offsetof( t3dRdMaterialLayer_t, m_nMicroVTGeneration ) == 68u,
 	        "RD material layer size and terminal offsets match std430" );
 	rState.expect( sizeof( t3dRdIndexedIndirectCommand_t ) == 20u && offsetof( t3dRdIndexedIndirectCommand_t, m_nIndexCount ) == 0u
 	                && offsetof( t3dRdIndexedIndirectCommand_t, m_nFirstInstance ) == 16u,
 	        "RD indexed indirect command matches VkDrawIndexedIndirectCommand" );
-	rState.expect( sizeof( t3dRdCullPushConstants_t ) == 16u, "RD culling push constants remain 16 bytes" );
+	rState.expect( sizeof( t3dRdCullPushConstants_t ) == 24u, "RD culling push constants include both indirect arena offsets" );
 	rState.expect( sizeof( t3dRdDrawPushConstants_t ) == 16u && offsetof( t3dRdDrawPushConstants_t, m_nDirectMode ) == 4u,
 	        "RD direct-draw push constants match raster shader layout" );
 
@@ -462,11 +355,13 @@ static bool t3dRunRdContextDiagnosticTests( t3dRdUnitTestState_t &rState ) {
 }
 
 static bool t3dRunRdMaterialAbiTests( t3dRdUnitTestState_t &rState ) {
-	rState.expect( sizeof( t3dRdMaterialLayer_t ) == 64u && offsetof( t3dRdMaterialLayer_t, m_fColorR ) == 0u
+	rState.expect( sizeof( t3dRdMaterialLayer_t ) == 80u && offsetof( t3dRdMaterialLayer_t, m_fColorR ) == 0u
 	                && offsetof( t3dRdMaterialLayer_t, m_fUvScale ) == 16u && offsetof( t3dRdMaterialLayer_t, m_fAoStrength ) == 32u
 	                && offsetof( t3dRdMaterialLayer_t, m_fDisplacementOffset ) == 48u
-	                && offsetof( t3dRdMaterialLayer_t, m_nPhysicalLayer ) == 56u && offsetof( t3dRdMaterialLayer_t, m_nFlags ) == 60u,
-	        "RD material layer ABI pins scalar, texture-index, and flag offsets" );
+	                && offsetof( t3dRdMaterialLayer_t, m_nPhysicalLayer ) == 56u && offsetof( t3dRdMaterialLayer_t, m_nFlags ) == 60u
+	                && offsetof( t3dRdMaterialLayer_t, m_nMicroVTAllocation ) == 64u
+	                && offsetof( t3dRdMaterialLayer_t, m_nMicroVTFlags ) == 72u,
+	        "RD material layer ABI pins scalar, legacy texture-index, and micro-VT offsets" );
 	rState.expect( sizeof( t3dRdTierMaterialConfig_t ) == 48u && offsetof( t3dRdTierMaterialConfig_t, m_nTextureSurfaceMode ) == 16u
 	                && offsetof( t3dRdTierMaterialConfig_t, m_fAuthoredColorContribution ) == 32u,
 	        "RD tier material ABI pins quality modes and scalar offsets" );
@@ -520,9 +415,9 @@ static bool t3dRunRdInstanceAbiTests( t3dRdUnitTestState_t &rState ) {
 	        "RD HLOD source and instance namespaces remain disjoint from regular LOD/fade state" );
 	rState.expect( t3dRdPackGodotRgba32ForGpu( 0x11223344u ) == 0x44332211u && t3dRdPackGodotRgba32ForGpu( 0xFFFFFFFFu ) == 0xFFFFFFFFu,
 	        "RD RGBA8 packing converts Godot numeric channel order to GPU byte order" );
-	rState.expect( sizeof( t3dRdInstanceMaterial_t ) == 80u && offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u
-	                && offsetof( t3dRdInstanceMaterial_t, m_nAlbedoTextureIdLow ) == 56u,
-	        "RD regular-instance material table remains std430-compatible with normal scale and texture keys" );
+	rState.expect( sizeof( t3dRdInstanceMaterial_t ) == 64u && offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u,
+	        "RD regular-instance material table remains std430-compatible with scalar/raster state; texture identity resides in VT "
+	        "material records" );
 	t3dRdInstanceMaterial_t material;
 	material.m_nFlags = T3D_RD_INSTANCE_MATERIAL_VERTEX_COLOR | T3D_RD_INSTANCE_MATERIAL_NORMAL_MAPPING
 	        | T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT | T3D_RD_INSTANCE_MATERIAL_CULL_FRONT | T3D_RD_INSTANCE_MATERIAL_ALPHA_BLEND
@@ -760,7 +655,6 @@ void t3dTestDiffers( void ) {
 bool t3dTestRdTopology( void ) {
 	t3dRdUnitTestState_t state;
 	UtilityFunctions::print( "=== Testing RD topology contracts ===" );
-	t3dRunRdTopologyTests( state );
 	UtilityFunctions::print( "=== RD topology tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
 	return state.m_nFailed == 0u;
 }
@@ -813,17 +707,45 @@ bool t3dTestRdInstanceAbi( void ) {
 	return state.m_nFailed == 0u;
 }
 
+static bool t3dRunHlodArrayMeshSurfaceTests( t3dRdUnitTestState_t &rState ) {
+	Ref<ArrayMesh> mesh;
+	mesh.instantiate();
+	Array arrays;
+	arrays.resize( Mesh::ARRAY_MAX );
+	PackedVector3Array vertices;
+	vertices.resize( 3 );
+	vertices.set( 0, Vector3( 0.0f, 0.0f, 0.0f ) );
+	vertices.set( 1, Vector3( 1.0f, 0.0f, 0.0f ) );
+	vertices.set( 2, Vector3( 0.0f, 0.0f, 1.0f ) );
+	PackedInt32Array indices;
+	indices.resize( 3 );
+	indices.set( 0, 0 );
+	indices.set( 1, 1 );
+	indices.set( 2, 2 );
+	arrays[Mesh::ARRAY_VERTEX] = vertices;
+	arrays[Mesh::ARRAY_INDEX] = indices;
+	mesh->add_surface_from_arrays( Mesh::PRIMITIVE_TRIANGLES, arrays );
+
+	Ref<Terrain3DHLODBuilder> builder;
+	builder.instantiate();
+	const Dictionary result = builder->simplifyMesh( mesh, 1.0f );
+	const bool valid_surface = mesh->get_surface_count() == 1 && mesh->surface_get_primitive_type( 0 ) == Mesh::PRIMITIVE_TRIANGLES;
+	const bool nonzero_triangles = ( bool )result.get( "ok", false ) && ( int64_t )result.get( "source_triangles", 0 ) > 0;
+	rState.expect( valid_surface && nonzero_triangles, "HLOD ArrayMesh surface inspection reports non-zero triangle geometry" );
+	return valid_surface && nonzero_triangles;
+}
+
 bool t3dRunRdCpuTests( void ) {
 	t3dRdUnitTestState_t state;
 	UtilityFunctions::print( "=== Running Terrain3D RD CPU tests ===" );
 	t3dRunEastlContainerOwnershipTests( state );
-	t3dRunRdTopologyTests( state );
 	t3dRunRdAbiAndPublicationTests( state );
 	t3dRunRdCullingAndIndirectTests( state );
 	t3dRunRdContextDiagnosticTests( state );
 	t3dRunRdTextureLayoutTests( state );
 	t3dRunRdMaterialAbiTests( state );
 	t3dRunRdInstanceAbiTests( state );
+	t3dRunHlodArrayMeshSurfaceTests( state );
 	UtilityFunctions::print( "=== Terrain3D RD CPU tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
 	return state.m_nFailed == 0u;
 }

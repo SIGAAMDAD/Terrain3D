@@ -1,8 +1,10 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
 #include "core/terrain_3d_sync.h"
 
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
@@ -20,6 +22,7 @@ static const char *const s_memory_keys[Terrain3DRdContext::MEMORY_CATEGORY_COUNT
 	"indirect",
 	"ubo",
 	"storage_buffer",
+	"history",
 	"scratch",
 	"terrain_texture",
 	"shadow",
@@ -29,16 +32,12 @@ static const char *const s_memory_keys[Terrain3DRdContext::MEMORY_CATEGORY_COUNT
 static const char *const s_owner_keys[Terrain3DRdContext::OWNER_COUNT] = {
 	"unspecified",
 	"terrain",
+	"world",
 	"instances",
 	"hlod",
 	"ocean",
 	"forward_lighting",
-	"render_world",
-	"render_world_visibility",
-	"render_world_vt",
-	"render_world_hiz",
-	"render_world_raster",
-	"render_world_aux_raster",
+	"vt",
 };
 
 static const char *const s_state_names[] = {
@@ -62,6 +61,8 @@ static const char *const s_failure_names[] = {
 	"render_pass",
 };
 
+static thread_local uint32_t s_nRecoverableFailureDepth = 0u;
+
 static const char *const s_pass_names[] = {
 	"none",
 	"terrain_clipmap",
@@ -83,6 +84,11 @@ RenderingDevice *Terrain3DRdContext::getGlobalDevice( void ) {
 RenderingDevice *Terrain3DRdContext::createLocalDevice( void ) {
 	RenderingServer *const pServer = RenderingServer::get_singleton();
 	return pServer ? pServer->create_local_rendering_device() : NULL;
+}
+
+bool Terrain3DRdContext::isOnOwnerThread( void ) {
+	OS *const pOs = OS::get_singleton();
+	return pOs && pOs->get_thread_caller_id() == pOs->get_main_thread_id();
 }
 
 bool Terrain3DRdContext::isOnRenderThread( void ) {
@@ -219,6 +225,9 @@ Terrain3DRdContext::MemoryCategory Terrain3DRdContext::inferMemoryCategory(
 	if ( rName.find( String( "HLOD" ) ) >= 0 || rName.find( String( "Hlod" ) ) >= 0 ) {
 		return MEMORY_HLOD;
 	}
+	if ( rName.find( String( "PreviousRecords" ) ) >= 0 ) {
+		return MEMORY_HISTORY;
+	}
 	if ( rName.find( String( "Instance" ) ) >= 0 ) {
 		return MEMORY_INSTANCE;
 	}
@@ -250,6 +259,9 @@ Terrain3DRdContext::MemoryCategory Terrain3DRdContext::inferMemoryCategory(
 }
 
 Terrain3DRdContext::ResourceOwner Terrain3DRdContext::inferResourceOwner( const String &rName ) {
+	if ( rName.find( String( "WorldRuntime" ) ) >= 0 ) {
+		return OWNER_WORLD;
+	}
 	if ( rName.find( String( "Instance" ) ) >= 0 ) {
 		return OWNER_INSTANCES;
 	}
@@ -262,23 +274,8 @@ Terrain3DRdContext::ResourceOwner Terrain3DRdContext::inferResourceOwner( const 
 	if ( rName.find( String( "ForwardLight" ) ) >= 0 || rName.find( String( "ForwardLighting" ) ) >= 0 ) {
 		return OWNER_FORWARD_LIGHTING;
 	}
-	if ( rName.find( String( "RenderWorld.Visibility" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD_VISIBILITY;
-	}
-	if ( rName.find( String( "RenderWorld.VT" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD_VT;
-	}
-	if ( rName.find( String( "RenderWorld.HiZ" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD_HIZ;
-	}
-	if ( rName.find( String( "RenderWorld.Aux" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD_AUX_RASTER;
-	}
-	if ( rName.find( String( "RenderWorld.Raster" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD_RASTER;
-	}
-	if ( rName.find( String( "RenderWorld" ) ) >= 0 ) {
-		return OWNER_RENDER_WORLD;
+	if ( rName.find( String( "VT " ) ) >= 0 ) {
+		return OWNER_VT;
 	}
 	return OWNER_TERRAIN;
 }
@@ -390,12 +387,32 @@ void Terrain3DRdContext::resetLiveAccounting( void ) {
 }
 
 void Terrain3DRdContext::setFailure( const FailureCode code, const String &rFailure ) {
+	if ( s_nRecoverableFailureDepth > 0u ) {
+		{
+			t3dScopedLock_t lock( m_resourceMutex );
+			m_lastRecoverableFailure = rFailure;
+		}
+		m_nRecoverableFailureCount.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		return;
+	}
 	{
 		t3dScopedLock_t lock( m_resourceMutex );
 		m_lastFailure = rFailure;
 	}
 	m_failureCode.store( code, T3D_MEMORY_ORDER_RELEASE );
 	m_state.store( STATE_FAILED, T3D_MEMORY_ORDER_RELEASE );
+}
+
+void Terrain3DRdContext::beginRecoverableFailureScope( void ) {
+	++s_nRecoverableFailureDepth;
+}
+
+void Terrain3DRdContext::endRecoverableFailureScope( void ) {
+	if ( s_nRecoverableFailureDepth == 0u ) {
+		m_nAccountingErrors.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+		return;
+	}
+	--s_nRecoverableFailureDepth;
 }
 
 bool Terrain3DRdContext::initialize( void ) {
@@ -426,6 +443,52 @@ bool Terrain3DRdContext::initialize( void ) {
 	m_failureCode.store( FAILURE_NONE, T3D_MEMORY_ORDER_RELEASE );
 	m_state.store( STATE_READY, T3D_MEMORY_ORDER_RELEASE );
 	return true;
+}
+
+bool Terrain3DRdContext::acquireFixedIndirect( const FixedIndirectSlot slot,
+        const uint32_t nRequiredBytes, RID &rBuffer, uint32_t &rOffsetBytes ) {
+	if ( slot >= FIXED_INDIRECT_SLOT_COUNT || nRequiredBytes == 0u || nRequiredBytes > fixedIndirectCapacity( slot )
+	        || rBuffer.is_valid() || fixedIndirectOffset( slot ) + fixedIndirectCapacity( slot ) > FIXED_INDIRECT_ARENA_BYTES ) {
+		return false;
+	}
+	RenderingDevice *const rd = getDevice();
+	if ( !rd ) {
+		return false;
+	}
+	if ( !m_hFixedIndirectArena.is_valid() ) {
+		RID created;
+		if ( !Terrain3DRdResourceService( *this, OWNER_UNSPECIFIED ).createIndirectBuffer( created,
+		             "T3D.FixedIndirectArena", FIXED_INDIRECT_ARENA_BYTES,
+		             RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT ) ) {
+			return false;
+		}
+		m_hFixedIndirectArena = created;
+	}
+	++m_nFixedIndirectReferences[slot];
+	const ResourceOwner owner = slot == FIXED_INDIRECT_WORLD ? OWNER_WORLD : slot == FIXED_INDIRECT_OCEAN ? OWNER_OCEAN : OWNER_TERRAIN;
+	recordRenderCapacity( owner, T3D_GPU_INDIRECT, fixedIndirectCapacity( slot ) );
+	rBuffer = m_hFixedIndirectArena;
+	rOffsetBytes = fixedIndirectOffset( slot );
+	return true;
+}
+
+void Terrain3DRdContext::releaseFixedIndirect( const FixedIndirectSlot slot, RID &rBuffer ) {
+	if ( slot >= FIXED_INDIRECT_SLOT_COUNT || !rBuffer.is_valid() ) {
+		rBuffer = RID();
+		return;
+	}
+	if ( rBuffer == m_hFixedIndirectArena && m_nFixedIndirectReferences[slot] > 0u ) {
+		--m_nFixedIndirectReferences[slot];
+	}
+	rBuffer = RID();
+	for ( uint32_t i = 0u; i < FIXED_INDIRECT_SLOT_COUNT; ++i ) {
+		if ( m_nFixedIndirectReferences[i] != 0u ) {
+			return;
+		}
+	}
+	if ( m_hFixedIndirectArena.is_valid() ) {
+		freeResource( m_hFixedIndirectArena, FIXED_INDIRECT_ARENA_BYTES );
+	}
 }
 
 bool Terrain3DRdContext::validateDevice( void ) {
@@ -463,6 +526,8 @@ void Terrain3DRdContext::shutdown( void ) {
 			}
 		}
 		m_resources.clear();
+		m_hFixedIndirectArena = RID();
+		memset( m_nFixedIndirectReferences, 0, sizeof( m_nFixedIndirectReferences ) );
 		m_vertexFormats.clear();
 		resetLiveAccounting();
 	}
@@ -479,6 +544,8 @@ void Terrain3DRdContext::invalidateDevice( const String &rReason ) {
 		m_nAbandonedResources.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	}
 	m_resources.clear();
+	m_hFixedIndirectArena = RID();
+	memset( m_nFixedIndirectReferences, 0, sizeof( m_nFixedIndirectReferences ) );
 	m_vertexFormats.clear();
 	resetLiveAccounting();
 	m_lastFailure = rReason.is_empty() ? String( "RenderingDevice resources were invalidated" ) : rReason;
@@ -794,11 +861,46 @@ void Terrain3DRdContext::beginFrame( const uint64_t nGpuFrameId, const uint64_t 
 	m_nFrameBytesUploaded.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 }
 
-void Terrain3DRdContext::recordBufferUpdate( const uint64_t nBytes ) {
+void Terrain3DRdContext::recordBufferUpdate( const uint64_t nBytes,
+        const ResourceOwner owner,
+        const Terrain3DGpuBufferPolicy policy ) {
 	m_nBufferUpdates.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	m_nBytesUploaded.fetch_add( nBytes, T3D_MEMORY_ORDER_RELAXED );
 	m_nFrameBufferUpdates.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	m_nFrameBytesUploaded.fetch_add( nBytes, T3D_MEMORY_ORDER_RELAXED );
+	m_renderTelemetry.recordUpload( owner, policy, nBytes );
+	if ( policy == T3D_GPU_DIRTY_UPLOAD && nBytes > 0u ) {
+		m_renderTelemetry.recordDirtyRangeUploaded( owner );
+	}
+}
+
+void Terrain3DRdContext::recordRenderEvent( const ResourceOwner owner, const RenderTelemetry::Event event ) {
+	m_renderTelemetry.recordEvent( owner, event );
+}
+
+void Terrain3DRdContext::recordRenderCapacity(
+        const ResourceOwner owner, const Terrain3DGpuBufferPolicy policy, const uint64_t nBytes ) {
+	m_renderTelemetry.recordCapacity( owner, policy, nBytes );
+}
+
+void Terrain3DRdContext::recordRenderIndirectCommandsSubmitted( const ResourceOwner owner, const uint64_t nCommands ) {
+	m_renderTelemetry.recordIndirectCommandsSubmitted( owner, nCommands );
+}
+
+uint64_t Terrain3DRdContext::getRenderEvent( const ResourceOwner owner, const RenderTelemetry::Event event ) const {
+	return m_renderTelemetry.getEvent( owner, event );
+}
+
+uint64_t Terrain3DRdContext::getRenderUploadCalls( const ResourceOwner owner, const Terrain3DGpuBufferPolicy policy ) const {
+	return m_renderTelemetry.getUploadCalls( owner, policy );
+}
+
+uint64_t Terrain3DRdContext::getRenderUploadBytes( const ResourceOwner owner, const Terrain3DGpuBufferPolicy policy ) const {
+	return m_renderTelemetry.getUploadBytes( owner, policy );
+}
+
+uint64_t Terrain3DRdContext::getRenderDirtyRangesUploaded( const ResourceOwner owner ) const {
+	return m_renderTelemetry.getDirtyRangesUploaded( owner );
 }
 
 void Terrain3DRdContext::recordSuccessfulPass( const SuccessfulPass pass, const uint64_t nGpuFrameId ) {
@@ -843,6 +945,7 @@ Dictionary Terrain3DRdContext::getDiagnostics( void ) const {
 	result["double_free_attempts"] = ( int64_t )( m_nDoubleFreeAttempts.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["untracked_free_attempts"] = ( int64_t )( m_nUntrackedFreeAttempts.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["accounting_errors"] = ( int64_t )( m_nAccountingErrors.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["recoverable_failure_count"] = ( int64_t )( m_nRecoverableFailureCount.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["live_buffer_bytes"] = ( int64_t )( m_nLiveBufferBytes.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["peak_buffer_bytes"] = ( int64_t )( m_nPeakBufferBytes.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["live_texture_bytes"] = ( int64_t )( m_nLiveTextureBytes.load( T3D_MEMORY_ORDER_ACQUIRE ) );
@@ -896,12 +999,56 @@ Dictionary Terrain3DRdContext::getDiagnostics( void ) const {
 		result[prefix + String( "_steady_state_violations" )] =
 		        ( int64_t )( m_szOwnerSteadyStateViolations[owner].load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	}
+	static const char *const policy_names[T3D_GPU_POLICY_COUNT] = {
+		"publication", "dirty_upload", "hot_frame", "scratch", "history", "indirect", "neutral"
+	};
+	static_assert( T3D_GPU_POLICY_COUNT == 7u, "Update render upload telemetry policy names" );
+	static const char *const event_names[RenderTelemetry::EVENT_COUNT] = {
+		"buffer_creates", "buffer_rebuilds", "descriptor_creates", "pipeline_creates", "descriptor_evictions",
+		"pipeline_evictions", "target_creates", "target_reuses", "hiz_builds", "hiz_rebinds", "resource_failures"
+	};
+	static_assert( RenderTelemetry::EVENT_COUNT == 11u, "Update render telemetry event names" );
+	Dictionary upload_telemetry;
+	Dictionary event_telemetry;
+	for ( uint32_t owner = 0u; owner < OWNER_COUNT; ++owner ) {
+		const uint64_t dirty_ranges = m_renderTelemetry.getDirtyRangesUploaded( owner );
+		if ( dirty_ranges > 0u ) {
+			upload_telemetry[String( s_owner_keys[owner] ) + String( "_dirty_ranges" )] = ( int64_t )dirty_ranges;
+		}
+		const uint64_t indirect_commands = m_renderTelemetry.getIndirectCommandsSubmitted( owner );
+		if ( indirect_commands > 0u ) {
+			event_telemetry[String( s_owner_keys[owner] ) + String( "_indirect_commands_submitted" )] = ( int64_t )indirect_commands;
+		}
+		for ( uint32_t policy = 0u; policy < T3D_GPU_POLICY_COUNT; ++policy ) {
+			const uint64_t capacity = m_renderTelemetry.getCapacityHighWater( owner, policy );
+			if ( capacity > 0u ) {
+				const String capacity_key = String( s_owner_keys[owner] ) + String( "_" ) + policy_names[policy];
+				upload_telemetry[capacity_key + String( "_capacity_high_water_bytes" )] = ( int64_t )capacity;
+			}
+			const uint64_t calls = m_renderTelemetry.getUploadCalls( owner, policy );
+			if ( calls == 0u ) {
+				continue;
+			}
+			const String prefix = String( s_owner_keys[owner] ) + String( "_" ) + policy_names[policy];
+			upload_telemetry[prefix + String( "_calls" )] = ( int64_t )calls;
+			upload_telemetry[prefix + String( "_bytes" )] = ( int64_t )m_renderTelemetry.getUploadBytes( owner, policy );
+		}
+		for ( uint32_t event = 0u; event < RenderTelemetry::EVENT_COUNT; ++event ) {
+			const uint64_t count = m_renderTelemetry.getEvent( owner, ( RenderTelemetry::Event )event );
+			if ( count > 0u ) {
+				event_telemetry[String( s_owner_keys[owner] ) + String( "_" ) + event_names[event]] = ( int64_t )count;
+			}
+		}
+	}
+	result["render_upload_telemetry"] = upload_telemetry;
+	result["render_event_telemetry"] = event_telemetry;
 
 	{
 		t3dScopedLock_t lock( m_resourceMutex );
 		result["live_resource_count"] = ( int64_t )( m_resources.size() );
 		result["vertex_format_count"] = ( int64_t )( m_vertexFormats.size() );
 		result["last_failure"] = m_lastFailure;
+		result["last_recoverable_failure"] = m_lastRecoverableFailure;
 	}
 	result["last_successful_pass"] = s_pass_names[m_lastSuccessfulPass.load( T3D_MEMORY_ORDER_ACQUIRE )];
 	RenderingDevice *const rd = m_pRd.load( T3D_MEMORY_ORDER_ACQUIRE );

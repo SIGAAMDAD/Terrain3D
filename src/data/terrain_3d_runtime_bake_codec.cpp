@@ -617,10 +617,11 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors(
 
 PackedByteArray Terrain3DRuntimeBakeCodec::encodeInstanceMetadata( const Terrain3DRegion &rRegion ) {
 	PackedByteArray bytes;
-	if ( !rRegion.ensureInstanceStoreResident() ) {
+	const Terrain3DInstanceStore *pStore = NULL;
+	if ( !rRegion.tryGetInstanceStore( pStore ) || !pStore ) {
 		return bytes;
 	}
-	const Terrain3DInstanceStore &store = rRegion.getInstanceStore();
+	const Terrain3DInstanceStore &store = *pStore;
 	uint32_t cell_count = 0u;
 	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( store.meshes() ).size() ); iMesh++ ) {
 		const t3dInstanceMesh_t &mesh = ( store.meshes() )[iMesh];
@@ -857,10 +858,11 @@ bool Terrain3DRuntimeBakeCodec::decodeLightingReceivers(
 
 PackedByteArray Terrain3DRuntimeBakeCodec::encodeMultimeshFastStart( const Terrain3DRegion &rRegion, const int nMinimumCellInstances ) {
 	PackedByteArray bytes;
-	if ( !rRegion.ensureInstanceStoreResident() ) {
+	const Terrain3DInstanceStore *pStore = NULL;
+	if ( !rRegion.tryGetInstanceStore( pStore ) || !pStore ) {
 		return bytes;
 	}
-	const Terrain3DInstanceStore &store = rRegion.getInstanceStore();
+	const Terrain3DInstanceStore &store = *pStore;
 	uint32_t eligible = 0u;
 	size_t total_bytes = 12u;
 	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( store.meshes() ).size() ); iMesh++ ) {

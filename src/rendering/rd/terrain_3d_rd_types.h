@@ -4,6 +4,8 @@
 #define TERRAIN3D_RD_TYPES_H
 
 #include "Terrain3DConstants.h"
+#include "rendering/rd/vt/terrain_3d_vt_contract.h"
+#include "rendering/rd/world/terrain_3d_world_contract.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -129,6 +131,8 @@ typedef enum t3dRdForwardShaderVariant_e {
 	T3D_RD_FORWARD_SHADER_VARIANT_MAX,
 } t3dRdForwardShaderVariant_t;
 
+static const uint32_t T3D_RD_FORWARD_COLOR_VARIANT_COUNT = 8u;
+
 typedef enum t3dRdForwardEnvironmentFlag_e : uint32_t {
 	T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT = 1u << 0u,
 	T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP = 1u << 1u,
@@ -233,6 +237,7 @@ typedef struct t3dRdForwardPassContext_s {
 	RID m_hReflectionProbeBuffer;
 	RID m_hReflectionAtlasTexture;
 	RID m_hRadianceTexture;
+	RID m_hPreviousDepthTexture;
 	RID m_hDecalBuffer;
 	RID m_hDecalAtlasTexture;
 	RID m_hDecalAtlasSrgbTexture;
@@ -248,13 +253,6 @@ typedef enum t3dRdDrawGroup_e {
 	T3D_RD_DRAW_GROUP_OUTER_FAR = 3,
 } t3dRdDrawGroup_t;
 
-typedef struct t3dRdClipmapVertex_s {
-	int16_t m_nGridX = 0;
-	int16_t m_nGridZ = 0;
-	uint16_t m_nPartCode = 0u;
-	uint16_t m_nFlags = 0u;
-} t3dRdClipmapVertex_t;
-static_assert( sizeof( t3dRdClipmapVertex_t ) == 8u, "RD clipmap vertex ABI changed" );
 
 typedef struct t3dRdPatch_s {
 	float m_fOriginX = 0.0f;
@@ -291,6 +289,8 @@ typedef enum t3dRdMaterialFeatureBits_e {
 	T3D_RD_MATERIAL_FEATURE_FAR_ALBEDO = 1u << 11u,
 	T3D_RD_MATERIAL_FEATURE_WORLD_NOISE_CACHE = 1u << 12u,
 	T3D_RD_MATERIAL_FEATURE_MACRO_NOISE = 1u << 13u,
+	T3D_RD_MATERIAL_FEATURE_MICRO_VT = 1u << 14u,
+	T3D_RD_MATERIAL_FEATURE_MEGAVT = 1u << 15u,
 } t3dRdMaterialFeatureBits_t;
 
 typedef enum t3dRdMaterialOutputBits_e {
@@ -329,6 +329,8 @@ typedef enum t3dRdMaterialDebugBits_e {
 typedef enum t3dRdMaterialLayerBits_e {
 	T3D_RD_MATERIAL_LAYER_PACKED_SURFACE = 1u << 0u,
 	T3D_RD_MATERIAL_LAYER_RESIDENT = 1u << 1u,
+	T3D_RD_MATERIAL_LAYER_MICRO_VT = 1u << 2u,
+	T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V3 = 1u << 3u,
 } t3dRdMaterialLayerBits_t;
 
 typedef struct t3dRdMaterialLayer_s {
@@ -348,14 +350,21 @@ typedef struct t3dRdMaterialLayer_s {
 	float m_fDisplacementScale = 0.0f;
 	uint32_t m_nPhysicalLayer = 0u;
 	uint32_t m_nFlags = 0u;
+	uint32_t m_nMicroVTAllocation = T3D_VT_INVALID_ALLOCATION;
+	uint32_t m_nMicroVTGeneration = 0u;
+	uint32_t m_nMicroVTFlags = 0u;
+	uint32_t m_nMicroVTReserved = 0u;
 } t3dRdMaterialLayer_t;
-static_assert( sizeof( t3dRdMaterialLayer_t ) == 64u, "RD material layer ABI changed" );
+static_assert( sizeof( t3dRdMaterialLayer_t ) == 80u, "RD material layer ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_fColorR ) == 0u, "RD material color ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_fUvScale ) == 16u, "RD material PBR0 ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_fAoStrength ) == 32u, "RD material PBR1 ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_fDisplacementOffset ) == 48u, "RD material displacement ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_nPhysicalLayer ) == 56u, "RD material physical-layer ABI changed" );
 static_assert( offsetof( t3dRdMaterialLayer_t, m_nFlags ) == 60u, "RD material flags ABI changed" );
+static_assert( offsetof( t3dRdMaterialLayer_t, m_nMicroVTAllocation ) == 64u, "RD material micro-VT allocation ABI changed" );
+static_assert( offsetof( t3dRdMaterialLayer_t, m_nMicroVTGeneration ) == 68u, "RD material micro-VT generation ABI changed" );
+static_assert( offsetof( t3dRdMaterialLayer_t, m_nMicroVTFlags ) == 72u, "RD material micro-VT flags ABI changed" );
 
 typedef struct alignas( 16 ) t3dRdTierMaterialConfig_s {
 	uint32_t m_nSamplingMode = 3u;
@@ -391,7 +400,7 @@ typedef struct alignas( 16 ) t3dRdMaterialConfig_s {
 	float m_fGroundLevel = 0.0f;
 	float m_fRegionBlend = 0.25f;
 	float m_fBiasDistance = 512.0f;
-	float m_fMipmapBias = 1.0f;
+	float m_fMipmapBias = 0.0f;
 	float m_fDepthBlur = 0.0f;
 	float m_fAutoSlope = 1.0f;
 	float m_fAutoHeightReduction = 0.1f;
@@ -515,8 +524,9 @@ typedef struct t3dRdSurfaceHandle_s {
 static_assert( sizeof( t3dRdSurfaceHandle_t ) == 8u, "RD surface handle ABI changed" );
 
 // One interleaved static-mesh vertex. Normals/tangents are signed normalized
-// 16-bit components and UVs are binary16. This keeps imported geometry at
-// 48 bytes/vertex while preserving the attributes used by Terrain3D assets.
+// 16-bit components and UVs are binary16. Normal W is reserved by P31: zero
+// marks the primary winding and +1 marks a cold-generated backside companion.
+// The marker does not alter the frozen 48-byte vertex layout.
 typedef struct alignas( 16 ) t3dRdMeshVertex_s {
 	float m_szPosition[3] = { 0.0f, 0.0f, 0.0f };
 	uint32_t m_nColorRgba8 = 0xFFFFFFFFu;
@@ -561,6 +571,14 @@ typedef enum t3dRdInstanceFlags_e : uint32_t {
 	T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS = 1u << 7u,
 	T3D_RD_INSTANCE_FADE_ACTIVE = 1u << 24u,
 	T3D_RD_INSTANCE_HLOD = 1u << 25u,
+	T3D_RD_INSTANCE_CATEGORY_SHIFT = 26u,
+	T3D_RD_INSTANCE_CATEGORY_MASK = 3u << T3D_RD_INSTANCE_CATEGORY_SHIFT,
+	T3D_RD_INSTANCE_CATEGORY_CLUTTER = 0u << T3D_RD_INSTANCE_CATEGORY_SHIFT,
+	T3D_RD_INSTANCE_CATEGORY_GROUND_COVER = 1u << T3D_RD_INSTANCE_CATEGORY_SHIFT,
+	T3D_RD_INSTANCE_CATEGORY_OCCLUDER = 2u << T3D_RD_INSTANCE_CATEGORY_SHIFT,
+	T3D_RD_INSTANCE_LOD_PRESELECTED = 1u << 28u,
+	T3D_RD_INSTANCE_HIZ_CELL = 1u << 29u,
+	T3D_RD_INSTANCE_HIZ_INSTANCE = 1u << 30u,
 	T3D_RD_INSTANCE_FADE_SHIFT = 8u,
 	T3D_RD_INSTANCE_FADE_MASK = 0x00FFFF00u,
 	T3D_RD_INSTANCE_DEPTH_PREPASS_PASS = 1u << 31u,
@@ -575,6 +593,14 @@ EA_FORCE_INLINE uint64_t t3dRdRegularMeshSourceKey( const uint16_t nAssetId, con
 
 EA_FORCE_INLINE uint64_t t3dRdHlodMeshSourceKey( const uint32_t nEntryIndex ) {
 	return 0x2000000000000000ull | ( uint64_t )( nEntryIndex + 1u );
+}
+
+EA_FORCE_INLINE uint64_t t3dRdOcclusionProxySourceKey( const uint16_t nAssetId ) {
+	return 0x3000000000000000ull | ( uint64_t )( nAssetId );
+}
+
+EA_FORCE_INLINE bool t3dRdIsOcclusionProxySourceKey( const uint64_t nSourceKey ) {
+	return ( nSourceKey & 0xF000000000000000ull ) == 0x3000000000000000ull;
 }
 
 typedef struct t3dRdInstanceCell_s {
@@ -596,6 +622,10 @@ typedef struct t3dRdInstanceCell_s {
 	float m_fFadeMargin = 0.0f;
 	float m_fPadding0 = 0.0f;
 	AABB m_bounds;
+	AABB m_occlusionBounds;
+	uint32_t m_nOcclusionSourceRevision = 0u;
+	uint32_t m_nOcclusionProxyGeneration = 0u;
+	uint32_t m_nOcclusionProxyPolicy = 0u;
 } t3dRdInstanceCell_t;
 
 
@@ -615,9 +645,19 @@ typedef struct alignas( 16 ) t3dRdHlodCullDescriptor_s {
 static_assert( sizeof( t3dRdHlodCullDescriptor_t ) == 48u, "RD HLOD descriptor ABI changed" );
 static_assert( offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u, "RD HLOD descriptor flags ABI changed" );
 
+typedef struct alignas( 16 ) t3dRdInstanceHiZRegionDescriptor_s {
+	float m_szBoundsCenter[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float m_szBoundsExtent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+} t3dRdInstanceHiZRegionDescriptor_t;
+static_assert( sizeof( t3dRdInstanceHiZRegionDescriptor_t ) == 32u, "RD instance Hi-Z region descriptor ABI changed" );
+
 typedef struct alignas( 16 ) t3dRdInstanceCullDescriptor_s {
 	float m_szBoundsCenter[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float m_szBoundsExtent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float m_szOcclusionCenter[3] = { 0.0f, 0.0f, 0.0f };
+	uint32_t m_nHiZRegionIndex = UINT32_MAX;
+	float m_szOcclusionExtent[3] = { 0.0f, 0.0f, 0.0f };
+	uint32_t m_nDrawSlot = UINT32_MAX;
 	uint32_t m_nCommandIndex = 0u;
 	uint32_t m_nFirstInstance = 0u;
 	uint32_t m_nInstanceCount = 0u;
@@ -627,12 +667,12 @@ typedef struct alignas( 16 ) t3dRdInstanceCullDescriptor_s {
 	float m_fLodBegin = 0.0f;
 	float m_fLodEnd = 0.0f;
 } t3dRdInstanceCullDescriptor_t;
-static_assert( sizeof( t3dRdInstanceCullDescriptor_t ) == 64u, "RD instance cull descriptor ABI changed" );
-static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nCommandIndex ) == 32u, "RD instance cull command ABI changed" );
+static_assert( sizeof( t3dRdInstanceCullDescriptor_t ) == 96u, "RD instance cull descriptor ABI changed" );
+static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nDrawSlot ) == 60u, "RD instance cull draw-slot ABI changed" );
+static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nCommandIndex ) == 64u, "RD instance cull command ABI changed" );
 
-// Material subset extracted from imported BaseMaterial3D resources. Texture
-// object IDs are immutable publication keys resolved by the direct-RD mesh
-// cache into Terrain3D-owned texture RIDs without native material proxies.
+// P33 retains only the compact CPU-side scalar/raster policy record. Texture
+// identity and residency are owned exclusively by the common VT material record.
 typedef enum t3dRdInstanceMaterialFlags_e : uint32_t {
 	T3D_RD_INSTANCE_MATERIAL_NONE = 0u,
 	T3D_RD_INSTANCE_MATERIAL_ALPHA_SCISSOR = 1u << 0u,
@@ -666,16 +706,9 @@ typedef struct alignas( 16 ) t3dRdInstanceMaterial_s {
 	uint32_t m_nFlags = 0u;
 	float m_fNormalScale = 1.0f;
 	uint32_t m_nReserved0 = 0u;
-	uint32_t m_nAlbedoTextureIdLow = 0u;
-	uint32_t m_nAlbedoTextureIdHigh = 0u;
-	uint32_t m_nNormalTextureIdLow = 0u;
-	uint32_t m_nNormalTextureIdHigh = 0u;
-	uint32_t m_nOrmTextureIdLow = 0u;
-	uint32_t m_nOrmTextureIdHigh = 0u;
 } t3dRdInstanceMaterial_t;
-static_assert( sizeof( t3dRdInstanceMaterial_t ) == 80u, "RD instance material ABI changed" );
+static_assert( sizeof( t3dRdInstanceMaterial_t ) == 64u, "RD instance material ABI changed" );
 static_assert( offsetof( t3dRdInstanceMaterial_t, m_fNormalScale ) == 48u, "RD instance normal-scale ABI changed" );
-static_assert( offsetof( t3dRdInstanceMaterial_t, m_nAlbedoTextureIdLow ) == 56u, "RD instance texture ABI changed" );
 
 
 typedef struct alignas( 16 ) t3dRdOceanState_s {
@@ -726,6 +759,16 @@ typedef struct alignas( 16 ) t3dRdOceanState_s {
 	t3dRdPatch_t m_szPatches[s_nMaxClipmapLevels]{};
 } t3dRdOceanState_t;
 
+// CPU-only control-plane generations captured by the same owner transaction as
+// the frame snapshot. These values are not part of a GPU ABI.
+typedef struct t3dRdTerrainGenerationTuple_s {
+	uint64_t m_nRegionTopologyGeneration = 0u;
+	uint64_t m_nPhysicalRegionMapGeneration = 0u;
+	uint64_t m_nPatchGeneration = 0u;
+	uint64_t m_nMaterialGeneration = 0u;
+	uint64_t m_nRegionLightingSignature = 0u;
+} t3dRdTerrainGenerationTuple_t;
+
 typedef struct t3dRdFrameSnapshot_s {
 	uint64_t m_nPublicationGeneration = 0u;
 	uint64_t m_nGeneration = 0u;
@@ -737,8 +780,15 @@ typedef struct t3dRdFrameSnapshot_s {
 	uint32_t m_nPatchCount = 0u;
 	uint32_t m_nMeshSize = 48u;
 	uint32_t m_nMaterialLayerCount = 1u;
+	// CPU-only WG-A publication classification; GPU material ABI is unchanged.
+	uint32_t m_nTerrainMaterialBackend = 1u;
 	uint32_t m_nCameraCullMask = UINT32_MAX;
 	uint32_t m_nRenderLayers = UINT32_MAX;
+	// OWNER-PUBLISHED RENDER POLICY. Render execution must not recover these
+	// values from the live Terrain3D node.
+	uint32_t m_nEditorExecutionMode = 0u;
+	bool m_bEditorAuthoringMode = false;
+	bool m_bDominantSunOnly = false;
 	int32_t m_nShadowLodCount = 2;
 	int32_t m_nNearShadowLodCount = -1;
 	int32_t m_nMiddleShadowLodCount = -1;
@@ -767,6 +817,7 @@ typedef struct t3dRdFrameSnapshot_s {
 	t3dRdMaterialLayer_t m_szMaterials[s_nRdMaterialLayerCount]{};
 	t3dRdMaterialConfig_t m_materialConfig{};
 	t3dRdEditorOverlayConfig_t m_editorOverlayConfig{};
+	t3dRdTerrainGenerationTuple_t m_generations{};
 	t3dRdOceanState_t m_ocean{};
 } t3dRdFrameSnapshot_t;
 
@@ -831,6 +882,14 @@ EA_FORCE_INLINE void t3dRdFrameUniformsInit( t3dRdFrameUniforms_t *pFrame ) {
 	pFrame->m_fDisplacementScale = 1.0f;
 }
 
+typedef struct t3dRdDrawIndirectCommand_s {
+	uint32_t m_nVertexCount = 0u;
+	uint32_t m_nInstanceCount = 0u;
+	uint32_t m_nFirstVertex = 0u;
+	uint32_t m_nFirstInstance = 0u;
+} t3dRdDrawIndirectCommand_t;
+static_assert( sizeof( t3dRdDrawIndirectCommand_t ) == 16u, "RD draw indirect command ABI changed" );
+
 typedef struct t3dRdIndexedIndirectCommand_s {
 	uint32_t m_nIndexCount = 0u;
 	uint32_t m_nInstanceCount = 0u;
@@ -840,13 +899,53 @@ typedef struct t3dRdIndexedIndirectCommand_s {
 } t3dRdIndexedIndirectCommand_t;
 static_assert( sizeof( t3dRdIndexedIndirectCommand_t ) == 20u, "RD indexed indirect command ABI changed" );
 
+// P29 freezes one backend-neutral metadata slot for each production mesh
+// surface/LOD draw unit. Draw slots are surface slots within a mesh-source
+// generation; material identity and immutable surface geometry state therefore
+// no longer need to be carried in per-draw push constants.
+#define T3D_RD_INSTANCE_DRAW_META_INVALID_MATERIAL 0x0000FFFFu
+#define T3D_RD_INSTANCE_DRAW_META_DYNAMIC_VISIBLE_BASE 0xFFFFFFFFu
+
+typedef struct alignas( 16 ) t3dInstanceDrawMeta_s {
+	uint32_t m_nMaterial = T3D_RD_INSTANCE_DRAW_META_INVALID_MATERIAL;
+	uint32_t m_nOverlayMaterial = T3D_RD_INSTANCE_DRAW_META_INVALID_MATERIAL;
+	uint32_t m_nFirstIndex = 0u;
+	uint32_t m_nIndexCount = 0u;
+	int32_t m_nVertexOffset = 0;
+	uint32_t m_nFlags = 0u;
+	uint32_t m_nVisibleBase = T3D_RD_INSTANCE_DRAW_META_DYNAMIC_VISIBLE_BASE;
+	uint32_t m_nReserved = 0u;
+} t3dInstanceDrawMeta_t;
+static_assert( sizeof( t3dInstanceDrawMeta_t ) == 32u, "RD instance draw metadata ABI changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nMaterial ) == 0u, "RD instance draw material offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nOverlayMaterial ) == 4u, "RD instance draw overlay offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nFirstIndex ) == 8u, "RD instance draw first-index offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nIndexCount ) == 12u, "RD instance draw index-count offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nVertexOffset ) == 16u, "RD instance draw vertex-offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nFlags ) == 20u, "RD instance draw flags offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nVisibleBase ) == 24u, "RD instance draw visible-base offset changed" );
+static_assert( offsetof( t3dInstanceDrawMeta_t, m_nReserved ) == 28u, "RD instance draw reserved offset changed" );
+
+// WG-E owns the eventual contents of this table. P29 reserves a separate
+// draw-slot-keyed ABI so VT prediction can evolve without revising the frozen
+// draw record above.
+typedef struct alignas( 16 ) t3dInstanceVtPredictMeta_s {
+	uint32_t m_nBasePrediction = UINT32_MAX;
+	uint32_t m_nOverlayPrediction = UINT32_MAX;
+	uint32_t m_nFlags = 0u;
+	uint32_t m_nReserved = 0u;
+} t3dInstanceVtPredictMeta_t;
+static_assert( sizeof( t3dInstanceVtPredictMeta_t ) == 16u, "RD instance VT prediction metadata ABI changed" );
+
 typedef struct t3dRdCullPushConstants_s {
 	uint32_t m_nPatchCount = 0u;
-	uint32_t m_nLod0IndexCount = 0u;
-	uint32_t m_nOuterIndexCount = 0u;
+	uint32_t m_nLod0PartCount = 0u;
+	uint32_t m_nOuterPartCount = 0u;
 	uint32_t m_nMaxPatches = s_nMaxClipmapLevels;
+	uint32_t m_nStripCommandBase = 0u;
+	uint32_t m_nIndexedCommandBase = 0u;
 } t3dRdCullPushConstants_t;
-static_assert( sizeof( t3dRdCullPushConstants_t ) == 16u, "RD cull push constants ABI changed" );
+static_assert( sizeof( t3dRdCullPushConstants_t ) == 24u, "RD cull push constants ABI changed" );
 
 EA_FORCE_INLINE void t3dRdCullPushConstantsInit( t3dRdCullPushConstants_t *pConstants ) {
 	memset( pConstants, 0, sizeof( *pConstants ) );

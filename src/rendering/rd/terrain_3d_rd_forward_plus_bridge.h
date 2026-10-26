@@ -37,6 +37,7 @@ typedef enum t3dRdForwardBridgeCapability_e : uint64_t {
 	T3D_RD_FORWARD_CAP_RESOURCE_GENERATIONS = uint64_t( 1u ) << 9u,
 	T3D_RD_FORWARD_CAP_SPLIT_SHADOW_PACKET = uint64_t( 1u ) << 10u,
 	T3D_RD_FORWARD_CAP_ENVIRONMENT_LIGHTING = uint64_t( 1u ) << 11u,
+	T3D_RD_FORWARD_CAP_PREVIOUS_DEPTH_HIZ = uint64_t( 1u ) << 12u,
 } t3dRdForwardBridgeCapability_t;
 
 
@@ -116,6 +117,7 @@ typedef struct alignas( 8 ) t3dRdForwardBridgeResourcePacket_s {
 	uint64_t m_hDecalAtlas;
 	uint64_t m_hDecalAtlasSrgb;
 	uint64_t m_hRadianceTexture;
+	uint64_t m_hPreviousDepthTexture;
 } t3dRdForwardBridgeResourcePacket_t;
 
 typedef struct alignas( 8 ) t3dRdForwardBridgePassPacket_s {
@@ -149,27 +151,29 @@ typedef struct alignas( 8 ) t3dRdForwardBridgeShadowPacket_s {
 	float m_vEyeOffset[4];
 } t3dRdForwardBridgeShadowPacket_t;
 
-static_assert( sizeof( void * ) == 8u, "Terrain3D ABI 11 requires 64-bit pointers" );
-static_assert( sizeof( RID ) == sizeof( uint64_t ), "Terrain3D ABI 11 requires 64-bit RID storage" );
+static_assert( sizeof( void * ) == 8u, "Terrain3D ABI 12 requires 64-bit pointers" );
+static_assert( sizeof( RID ) == sizeof( uint64_t ), "Terrain3D ABI 12 requires 64-bit RID storage" );
 static_assert(
         eastl::is_standard_layout_v<t3dRdForwardBridgeFramePacket_t> && eastl::is_trivially_copyable_v<t3dRdForwardBridgeFramePacket_t>,
-        "ABI 11 frame packet must remain POD" );
+        "ABI 12 frame packet must remain POD" );
 static_assert( eastl::is_standard_layout_v<t3dRdForwardBridgeResourcePacket_t>
                 && eastl::is_trivially_copyable_v<t3dRdForwardBridgeResourcePacket_t>,
-        "ABI 11 resource packet must remain POD" );
+        "ABI 12 resource packet must remain POD" );
 static_assert(
         eastl::is_standard_layout_v<t3dRdForwardBridgePassPacket_t> && eastl::is_trivially_copyable_v<t3dRdForwardBridgePassPacket_t>,
-        "ABI 11 pass packet must remain POD" );
+        "ABI 12 pass packet must remain POD" );
 static_assert(
         eastl::is_standard_layout_v<t3dRdForwardBridgeShadowPacket_t> && eastl::is_trivially_copyable_v<t3dRdForwardBridgeShadowPacket_t>,
-        "ABI 11 shadow packet must remain POD" );
+        "ABI 12 shadow packet must remain POD" );
 static_assert( alignof( t3dRdForwardBridgeFramePacket_t ) == 8u && sizeof( t3dRdForwardBridgeFramePacket_t ) == 568u,
         "ABI 11 frame packet layout changed" );
 static_assert( offsetof( t3dRdForwardBridgeFramePacket_t, m_nAbi10ReservedTail ) == 468u, "ABI 10 tail padding position changed" );
 static_assert( offsetof( t3dRdForwardBridgeFramePacket_t, m_nEnvironmentFlags ) == 472u, "ABI 11 Environment payload is not append-only" );
-static_assert( alignof( t3dRdForwardBridgeResourcePacket_t ) == 8u && sizeof( t3dRdForwardBridgeResourcePacket_t ) == 128u,
-        "ABI 11 resource packet layout changed" );
-static_assert( offsetof( t3dRdForwardBridgeResourcePacket_t, m_hRadianceTexture ) == 120u, "ABI 11 radiance RID is not append-only" );
+static_assert( alignof( t3dRdForwardBridgeResourcePacket_t ) == 8u && sizeof( t3dRdForwardBridgeResourcePacket_t ) == 136u,
+        "ABI 12 resource packet layout changed" );
+static_assert( offsetof( t3dRdForwardBridgeResourcePacket_t, m_hRadianceTexture ) == 120u, "ABI 12 inherited radiance RID moved" );
+static_assert(
+        offsetof( t3dRdForwardBridgeResourcePacket_t, m_hPreviousDepthTexture ) == 128u, "ABI 12 previous-depth RID is not append-only" );
 static_assert( alignof( t3dRdForwardBridgePassPacket_t ) == 8u && sizeof( t3dRdForwardBridgePassPacket_t ) == 48u,
         "ABI 11 pass packet layout changed" );
 static_assert( alignof( t3dRdForwardBridgeShadowPacket_t ) == 8u && sizeof( t3dRdForwardBridgeShadowPacket_t ) == 200u,

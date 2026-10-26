@@ -24,15 +24,66 @@ void Terrain3DRdCompositorEffect::shutdownRendererOnRenderThread( void ) {
 	}
 }
 
+void Terrain3DRdCompositorEffect::shutdownRendererLifecycleOnRenderThread( const int64_t nShutdownGeneration ) {
+	if ( m_pCoordinator && nShutdownGeneration >= 0 && nShutdownGeneration <= UINT32_MAX ) {
+		m_pCoordinator->shutdownRendererLifecycleOnRenderThread( ( uint32_t )nShutdownGeneration );
+	}
+}
+
 void Terrain3DRdCompositorEffect::renderPreviewOnRenderThread( void ) {
 	if ( m_pCoordinator ) {
 		m_pCoordinator->renderPreviewOnRenderThread();
 	}
 }
 
-void Terrain3DRdCompositorEffect::serviceRenderWorldPublicationOnRenderThread( void ) {
+void Terrain3DRdCompositorEffect::renderPreviewAsyncOnRenderThread( void ) {
 	if ( m_pCoordinator ) {
-		m_pCoordinator->serviceRenderWorldPublicationOnRenderThread();
+		m_pCoordinator->renderPreviewAsyncOnRenderThread();
+	}
+}
+
+void Terrain3DRdCompositorEffect::servicePreviewVtRepublishOnRenderThread( void ) {
+	if ( m_pCoordinator ) {
+		m_pCoordinator->servicePreviewVtRepublishOnRenderThread();
+	}
+}
+
+
+
+void Terrain3DRdCompositorEffect::serviceShaderStartupOnRenderThread( const int64_t nStartupGeneration ) {
+	if ( m_pCoordinator && nStartupGeneration > 0 && nStartupGeneration <= UINT32_MAX ) {
+		m_pCoordinator->serviceShaderStartupOnRenderThread( ( uint32_t )nStartupGeneration );
+	}
+}
+
+void Terrain3DRdCompositorEffect::recoverRendererLifecycleOnRenderThread(
+        const int64_t nStartupGeneration, const int64_t nRecoveryRevision ) {
+	if ( m_pCoordinator && nStartupGeneration > 0 && nStartupGeneration <= UINT32_MAX && nRecoveryRevision > 0 ) {
+		m_pCoordinator->recoverRendererLifecycleOnRenderThread(
+		        ( uint32_t )nStartupGeneration, ( uint64_t )nRecoveryRevision );
+	}
+}
+
+void Terrain3DRdCompositorEffect::acknowledgeStartupCancellationOnRenderThread( const int64_t nStartupGeneration ) {
+	if ( m_pCoordinator && nStartupGeneration > 0 && nStartupGeneration <= UINT32_MAX ) {
+		m_pCoordinator->acknowledgeStartupCancellationOnRenderThread( ( uint32_t )nStartupGeneration );
+	}
+}
+
+void Terrain3DRdCompositorEffect::serviceStartupWorldPublicationOnRenderThread(
+        const int64_t nStartupGeneration, const int64_t nSnapshotGeneration ) {
+	if ( m_pCoordinator && nStartupGeneration > 0 && nStartupGeneration <= UINT32_MAX && nSnapshotGeneration > 0 ) {
+		m_pCoordinator->serviceStartupWorldPublicationOnRenderThread(
+		        ( uint32_t )nStartupGeneration, ( uint64_t )nSnapshotGeneration );
+	}
+}
+
+
+
+void Terrain3DRdCompositorEffect::consumePreviewReadbackOnRenderThread(
+        const PackedByteArray &rReadbackBytes, const int32_t nSlot, const int64_t nRequestGeneration ) {
+	if ( m_pCoordinator != NULL && nSlot >= 0 ) {
+		m_pCoordinator->consumePreviewReadbackOnRenderThread( ( uint32_t )nSlot, ( uint64_t )nRequestGeneration, rReadbackBytes );
 	}
 }
 

@@ -41,8 +41,7 @@ bool Terrain3DRegionRepository::releaseRuntimeAllocatorStorage( void ) {
 
 int Terrain3DRegionRepository::getRegionMapIndex( const Vector2i &rRegionLoc ) {
 	const Vector2i loc = rRegionLoc + ( s_regionMapVSize / 2 );
-	if ( ( uint32_t )( loc.x ) >= ( uint32_t )( s_nRegionMapSize )
-	        || ( uint32_t )( loc.y ) >= ( uint32_t )( s_nRegionMapSize ) ) {
+	if ( ( uint32_t )( loc.x ) >= ( uint32_t )( s_nRegionMapSize ) || ( uint32_t )( loc.y ) >= ( uint32_t )( s_nRegionMapSize ) ) {
 		return -1;
 	}
 	return loc.y * s_nRegionMapSize + loc.x;
@@ -78,7 +77,8 @@ int Terrain3DRegionRepository::findSlot( const Vector2i &rRegionLoc ) const {
 	const int mapIndex = getRegionMapIndex( rRegionLoc );
 	if ( mapIndex >= 0 ) {
 		const int mappedSlot = ( int )( m_szRegionMap[mapIndex] ) - 1;
-		if ( mappedSlot >= 0 && mappedSlot < m_nRegionLocationCount && t3dRegionCoordEquals( m_szRegionLocations[mappedSlot], rRegionLoc ) ) {
+		if ( mappedSlot >= 0 && mappedSlot < m_nRegionLocationCount
+		        && t3dRegionCoordEquals( m_szRegionLocations[mappedSlot], rRegionLoc ) ) {
 			return mappedSlot;
 		}
 	}
@@ -490,7 +490,8 @@ bool Terrain3DRegionRepository::validateInvariants( void ) const {
 	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( m_freeRegionSlots ).size() ); iRegion++ ) {
 		const uint16_t free_slot = ( m_freeRegionSlots )[iRegion];
 		const int slot = ( int )( free_slot );
-		if ( slot < 0 || slot >= m_nRegionLocationCount || szFreeSeen[( size_t )( slot )] || t3dRegionCoordValid( m_szRegionLocations[slot] ) ) {
+		if ( slot < 0 || slot >= m_nRegionLocationCount || szFreeSeen[( size_t )( slot )]
+		        || t3dRegionCoordValid( m_szRegionLocations[slot] ) ) {
 			return false;
 		}
 		szFreeSeen[( size_t )( slot )] = true;

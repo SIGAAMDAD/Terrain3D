@@ -94,10 +94,18 @@ typedef struct t3dGpuRegionPendingUpload_s {
 	uint64_t m_nVictimLastUseTick = 0u;
 	t3dRegionCoord_t m_location = t3dInvalidRegionCoord();
 	t3dRegionCoord_t m_victimLocation = t3dInvalidRegionCoord();
-	EA_FORCE_INLINE Vector2i getLocation( void ) const { return t3dUnpackRegionCoord( m_location ); }
-	EA_FORCE_INLINE Vector2i getVictimLocation( void ) const { return t3dUnpackRegionCoord( m_victimLocation ); }
-	EA_FORCE_INLINE void setLocation( const Vector2i &rLocation ) { m_location = t3dPackRegionCoord( rLocation ); }
-	EA_FORCE_INLINE void setVictimLocation( const Vector2i &rLocation ) { m_victimLocation = t3dPackRegionCoord( rLocation ); }
+	EA_FORCE_INLINE Vector2i getLocation( void ) const {
+		return t3dUnpackRegionCoord( m_location );
+	}
+	EA_FORCE_INLINE Vector2i getVictimLocation( void ) const {
+		return t3dUnpackRegionCoord( m_victimLocation );
+	}
+	EA_FORCE_INLINE void setLocation( const Vector2i &rLocation ) {
+		m_location = t3dPackRegionCoord( rLocation );
+	}
+	EA_FORCE_INLINE void setVictimLocation( const Vector2i &rLocation ) {
+		m_victimLocation = t3dPackRegionCoord( rLocation );
+	}
 	int m_nVictimLayer = -1;
 	uint8_t m_nPublication = TERRAIN3D_GPU_PENDING_PUBLICATION_NONE;
 	uint8_t m_nPrefetchOrigin = 0u;
@@ -220,6 +228,32 @@ public:
 	}
 
 private:
+	struct t3dGpuRegionLayerUploadState_t {
+		int m_nLayer = -1;
+		Vector2i m_location;
+		t3dMapType_t m_eMapType = REGION_TYPE_MAX;
+		bool m_bAllowCookedPage = true;
+		Terrain3DRegion *m_pRegion = NULL;
+		uint8_t m_nSourceChannelFlags = 0u;
+		uint8_t m_nPreviousChannelFlags = 0u;
+		uint8_t m_nPreviousState = TERRAIN3D_GPU_SLOT_FREE;
+		uint8_t m_nPublishedFlags = 0u;
+		bool m_bUploadHeight = false;
+		bool m_bUploadControl = false;
+		bool m_bUploadColor = false;
+		bool m_bCookedPage = false;
+		bool m_bDerivedChannelEnabled = false;
+		bool m_bMiddleCompositeAllocated = false;
+		bool m_bTerrainShadowAllocated = false;
+		uint32_t m_nCookedMaterialMask = 1u;
+		uint32_t m_nMaterialMask = 1u;
+		Ref<Image> m_pHeight;
+		Ref<Image> m_pDerived;
+		Ref<Image> m_pControl;
+		Ref<Image> m_pColor;
+		Ref<Image> m_pMiddleComposite;
+		Ref<Image> m_pTerrainShadowMask;
+	};
 	Terrain3DRegionRepository &m_regionRepository;
 	Terrain3DSamplingStorage &m_samplingStorage;
 	Terrain3DMapEditService &m_mapEditService;
@@ -361,6 +395,11 @@ private:
 	void reclaimRetiredGpuRegionSlots( void );
 	void clearPendingGpuRegionUpload( int nLayer );
 	void finalizePendingGpuRegionUploads( void );
+	bool beginGpuRegionLayerUpload( t3dGpuRegionLayerUploadState_t &rState, uint64_t &rPreparedRequestUsec );
+	bool resolveGpuRegionLayerImages( t3dGpuRegionLayerUploadState_t &rState );
+	void resolveGpuRegionLayerMetadata( t3dGpuRegionLayerUploadState_t &rState ) const;
+	bool submitGpuRegionLayerTrackedBatch( t3dGpuRegionLayerUploadState_t &rState );
+	bool uploadGpuRegionLayerDirect( t3dGpuRegionLayerUploadState_t &rState );
 	bool uploadGpuRegionLayer( int nLayer, const Vector2i &vLocation, t3dMapType_t eMapType, bool bAllowCookedPage = true );
 	void refillGpuUploadTokens( int nCallBurst );
 	int processPendingGpuRegionRepublishes( int nLimit );

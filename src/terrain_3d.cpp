@@ -12,6 +12,8 @@
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "eastl_config.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
+#include "instances/terrain_3d_instance_occlusion.h"
+#include "instances/terrain_3d_instance_physics.h"
 #include "lighting/terrain_3d_lighting_policy.h"
 #include "lighting/terrain_3d_lightmap_streamer.h"
 #include "memory/terrain_3d_linear_arena.h"
@@ -115,6 +117,22 @@ void Terrain3D::initializeInternal( void ) {
 			return;
 		}
 	}
+	if ( !m_pInstanceOcclusion ) {
+		LOG( DEBUG, "Creating instance occlusion service" );
+		m_pInstanceOcclusion = memnew( Terrain3DInstanceOcclusion );
+		if ( !m_pInstanceOcclusion->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+			LOG( ERROR, "Failed binding instance occlusion runtime allocator ownership" );
+			return;
+		}
+	}
+	if ( !m_pInstancePhysics ) {
+		LOG( DEBUG, "Creating instance physics service" );
+		m_pInstancePhysics = memnew( Terrain3DInstancePhysics );
+		if ( !m_pInstancePhysics->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+			LOG( ERROR, "Failed binding instance physics runtime allocator ownership" );
+			return;
+		}
+	}
 	if ( !m_pNodeStreamer ) {
 		LOG( DEBUG, "Creating node streamer" );
 		m_pNodeStreamer = memnew( Terrain3DNodeStreamer );
@@ -154,141 +172,305 @@ void Terrain3D::initializeInternal( void ) {
 		LOG( DEBUG, "Connecting _data::height_maps_changed signal to update_aabbs()" );
 		m_pData->connect( "height_maps_changed", callable_mp( this, &Terrain3D::updateMesherAabbs ) );
 	}
-	// Initialize the system
-	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree() ) {
+	// Initialize the system. P05 begins the independent startup domains here and
+	// returns; serviceStartup() advances them from the owner physics tick.
+	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree()
+	        && m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING ) {
+		++m_nStartupGeneration;
+		if ( m_nStartupGeneration == 0u ) { ++m_nStartupGeneration; }
+		++m_nStartupAttemptCount;
+		m_nStartupStartUsec = Time::get_singleton()->get_ticks_usec();
+		m_nStartupEndUsec = 0u;
+		m_nStartupTotalUsecLast = 0u;
+		m_nStartupDataInitializeUsecLast = 0u;
+		m_nStartupOwnerPrepareUsecLast = 0u;
+		m_nStartupCoordinatorInitializeUsecLast = 0u;
+		m_nStartupOwnerFinalizeUsecLast = 0u;
+		m_bStartupSucceededLast = false;
+		t3dStartupDomainRequest( m_startupFinalizationState, m_nStartupGeneration, 0u, 3u );
 		m_runtimeLifecycleState = TERRAIN3D_RUNTIME_INITIALIZING;
-		LOG( INFO,
-		        "[lifecycle] Initializing main subsystems: gpu_cache=",
-		        effectiveGpuRegionCacheEnabled(),
-		        "; cpu_cache=",
-		        effectiveCpuRegionCacheEnabled(),
-		        "; instance_cache=",
-		        effectiveInstanceRegionCacheEnabled() );
-		// Resolve one authoritative startup target before residency selection, CPU
-		// clipmap placement, or RD snapshot publication. A Terrain3D node can enter
-		// the editor world before the editor plugin has handed it a Camera3D; without
-		// this acquisition the mesher silently initializes every LOD around world
-		// origin and the first GPU snapshot preserves that stale placement.
-		if ( !m_hCamera.isValid() && ( IS_EDITOR || !m_clipmapTarget.isValid() ) ) {
-			grabCamera();
-		}
-		const Vector3 initial_target = getClipmapTargetPosition();
-
-		const Error data_error = m_pData->initialize( this );
+		LOG( INFO, "[Terrain3D][Startup] BEGIN generation=", m_nStartupGeneration );
+		if ( !m_hCamera.isValid() && ( IS_EDITOR || !m_clipmapTarget.isValid() ) ) { grabCamera(); }
+		m_startupInitialTarget = getClipmapTargetPosition();
+		const Error data_error = m_pData->beginStartupCold( this, m_nStartupGeneration );
 		if ( data_error != OK ) {
-			LOG( ERROR,
-			        "[lifecycle] Terrain data activation failed; dependent runtime systems will remain inactive. "
-			        "Error: ",
-			        data_error,
-			        "; state=",
-			        m_pData->getRuntimeState() );
-			deactivateRuntime();
+			LOG( ERROR, "[Terrain3D][Startup][Data] BEGIN FAILED generation=", m_nStartupGeneration, " error=", data_error );
+			deactivateRuntime( true );
 			return;
 		}
-		// Finalize the aggregate owner-controlled memory grants after the terrain
-		// repository has been loaded and before tier normalization. GPU page minimums
-		// depend on the real 128 m footprint and active topology; normalizing against
-		// the constructor-time provisional grant can otherwise collapse Near before
-		// the memory coordinator has had a chance to establish functional capacity.
-		// Runtime-page validation includes the material source signature, and that
-		// signature includes owner-dependent Terrain3D settings. Bind/initialize the
-		// asset owner before the first cooked-page residency pass so startup never
-		// validates a freshly cooked page against a provisional ownerless signature.
-		m_assets->initialize( this );
-
-		serviceMemoryBudgetPolicy( true );
-		applyRuntimeAdaptiveWorkBudgets();
-		normalizeRuntimeTierLayout( true );
-
-		// Establish the authoritative residency map before the tier materials take
-		// their initial sampler bindings. Physical GPU publication remains bounded
-		// in authoring as well as runtime; CPU data and the far atlas remain the
-		// whole-world authority. Force the first reconciliation even when the actual
-		// center/generation equals the zero/default cached state.
-		updateRegionStreamingPolicy( initial_target, 0.0, true );
-		m_pData->serviceColdInstanceResidency( initial_target, true );
-		m_pData->updateRegionResidency( initial_target, true );
-
-		// Asset arrays are already initialized above so cooked-page source signatures
-		// are authoritative before residency. Build the whole-world far atlases before
-		// tier materials take their initial sampler bindings.
-		m_pData->ensureFarAtlases();
-		m_material->initialize( this );
-		if ( !m_material->isRenderShaderReady() ) {
-			LOG( ERROR,
-			        "[lifecycle] Terrain material failed to produce a valid render shader; "
-			        "aborting terrain activation before render meshes are created." );
-			deactivateRuntime();
+		if ( !m_pRenderCoordinator ) {
+			m_pRenderCoordinator = memnew( Terrain3DRenderCoordinator );
+			if ( !m_pRenderCoordinator->bindRuntimeAllocator( getRuntimeMemoryZoneInternal(), getRuntimeAllocatorOverflowPolicyInternal() ) ) {
+				LOG( ERROR, "Failed binding render coordinator runtime allocator ownership" );
+				deactivateRuntime( true );
+				return;
+			}
+		}
+		if ( !m_pRenderCoordinator->beginStartupCold( this, m_nStartupGeneration ) ) {
+			LOG( ERROR, "[Terrain3D][Startup][Coordinator] BEGIN FAILED generation=", m_nStartupGeneration );
+			deactivateRuntime( true );
 			return;
 		}
-		m_pCollision->initialize( this );
-		m_pInstancer->m_nCellSize = m_nInstancerCellSize;
-		m_pInstancer->m_bCellStreamingEnabled = effectiveInstancerCellStreamingEnabled();
-		m_pInstancer->m_bSingleLodInstanceBuffers = m_bInstancerSingleLodBuffers;
-		m_pInstancer->m_fCellStreamingMargin = m_fInstancerCellStreamingMargin;
-		m_pInstancer->m_fCellStreamingStep = m_fInstancerCellStreamingUpdateDistance;
-		m_pInstancer->m_nUpdateCellBudget = ( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) );
-		m_pInstancer->initialize( this );
-		m_pNodeStreamer->initialize( this );
-		m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
-		m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
-		m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
-		m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
-		m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
-		m_pLightmapStreamer->initialize( this );
-		m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
-		m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
-		m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
-		m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
-		m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
-		if ( m_hlodManifestPath.is_empty() && !m_dataDirectory.is_empty() ) {
-			m_hlodManifestPath = m_dataDirectory.path_join( "terrain3d_hlod_manifest.tres" );
-		}
-		m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
-		m_pHlodStreamer->setEnabled( m_bHlodEnabled );
-		m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
-		m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
-		m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
-		m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
-		m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
-		m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
-		m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
-		m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
-		m_pHlodStreamer->initialize( this );
-		// Construct all CPU clipmaps against the same target used for residency, then
-		// let the coordinator publish. This prevents its first snapshot from racing
-		// an origin-centered/default mesher state. Ocean topology is also ready before
-		// initializeOcean() runs.
-		setupTerrainMesher( initial_target );
-		setupOceanMesher( initial_target );
-		setupRenderCoordinator();
-		updateDisplacementBuffer();
-		m_bInitialized = true;
-		m_runtimeLifecycleState = TERRAIN3D_RUNTIME_ACTIVE;
-		updateRegionLabels();
-		// setupTerrainMesher() snaps during construction and setupRenderCoordinator()
-		// immediately publishes that state. Re-synchronize once after the complete
-		// activation sequence so a camera/target that became valid while the other
-		// subsystems were initializing cannot leave the GPU with a stale origin-
-		// centered snapshot. Do not merely invalidate the mesher here: that creates
-		// a window where the CPU patch state is empty until a later physics tick.
-		synchronizeClipmapNow( getClipmapTargetPosition() );
-		LOG( INFO,
-		        "[lifecycle] Main subsystems ready: regions=",
-		        m_pData->getRegionCount(),
-		        "; region_size=",
-		        ( int )( s_nRegionSize ),
-		        "; mesh_lods=",
-		        m_nMeshLods,
-		        "; tessellation=",
-		        m_nTessellationLevel );
 	}
-	serviceMemoryBudgetPolicy( true );
+
+	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING ) {
+		serviceMemoryBudgetPolicy( true );
+	}
 	update_configuration_warnings();
 }
 
-void Terrain3D::deactivateRuntime( void ) {
+bool Terrain3D::prepareStartupOwnerCold( void ) {
+	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING || m_pData == NULL
+	        || !m_pData->isStartupCommitted( m_nStartupGeneration ) ) {
+		return false;
+	}
+	const uint64_t owner_prepare_started_usec = Time::get_singleton()->get_ticks_usec();
+	t3dStartupDomainSetStartUsecIfZero( m_startupFinalizationState, owner_prepare_started_usec );
+	t3dStartupDomainSetStage( m_startupFinalizationState, T3D_STARTUP_PREPARING );
+	// Finalize the aggregate owner-controlled memory grants after the terrain
+	// repository has been loaded and before tier normalization. GPU page minimums
+	// depend on the real 128 m footprint and active topology; normalizing against
+	// the constructor-time provisional grant can otherwise collapse Near before
+	// the memory coordinator has had a chance to establish functional capacity.
+	// Runtime-page validation includes the material source signature, and that
+	// signature includes owner-dependent Terrain3D settings. Bind/initialize the
+	// asset owner before the first cooked-page residency pass so startup never
+	// validates a freshly cooked page against a provisional ownerless signature.
+	m_assets->initialize( this );
+
+	serviceMemoryBudgetPolicy( true );
+	applyRuntimeAdaptiveWorkBudgets();
+	normalizeRuntimeTierLayout( true );
+
+	// Establish the authoritative residency map before the tier materials take
+	// their initial sampler bindings. Physical GPU publication remains bounded
+	// in authoring as well as runtime; CPU data and the far atlas remain the
+	// whole-world authority. Force the first reconciliation even when the actual
+	// center/generation equals the zero/default cached state.
+	updateRegionStreamingPolicy( m_startupInitialTarget, 0.0, true );
+	m_pData->serviceColdInstanceResidency( m_startupInitialTarget, true );
+	m_pData->updateRegionResidency( m_startupInitialTarget, true );
+
+	// Asset arrays are already initialized above so cooked-page source signatures
+	// are authoritative before residency. Build the whole-world far atlases before
+	// tier materials take their initial sampler bindings.
+	m_pData->ensureFarAtlases();
+	m_material->initialize( this );
+	if ( !m_material->isRenderShaderReady() ) {
+		m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
+		LOG( ERROR,
+		        "[lifecycle] Terrain material failed to produce a valid render shader; "
+		        "aborting terrain activation before render meshes are created." );
+		return false;
+	}
+	m_pCollision->initialize( this );
+	m_pInstancer->m_runtimePolicy.m_nCellSize = m_nInstancerCellSize;
+	m_pInstancer->m_runtimePolicy.m_bCellStreamingEnabled = effectiveInstancerCellStreamingEnabled();
+	m_pInstancer->m_runtimePolicy.m_bSingleLodInstanceBuffers = m_bInstancerSingleLodBuffers;
+	m_pInstancer->m_runtimePolicy.m_fCellStreamingMargin = m_fInstancerCellStreamingMargin;
+	m_pInstancer->m_runtimePolicy.m_fCellStreamingStep = m_fInstancerCellStreamingUpdateDistance;
+	m_pInstancer->m_runtimePolicy.m_nUpdateCellBudget = ( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) );
+	m_pInstancer->initialize( this );
+	m_pInstanceOcclusion->initialize( this );
+	m_pInstancePhysics->initialize( this );
+	m_pNodeStreamer->initialize( this );
+	m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
+	m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
+	m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
+	m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
+	m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
+	m_pLightmapStreamer->initialize( this );
+	m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
+	m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
+	m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
+	m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
+	m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
+	if ( m_hlodManifestPath.is_empty() && !m_dataDirectory.is_empty() ) {
+		m_hlodManifestPath = m_dataDirectory.path_join( "terrain3d_hlod_manifest.tres" );
+	}
+	m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
+	m_pHlodStreamer->setEnabled( m_bHlodEnabled );
+	m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
+	m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
+	m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
+	m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
+	m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
+	m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
+	m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
+	m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
+	m_pHlodStreamer->initialize( this );
+	// Construct all CPU clipmaps against the same target used for residency, then
+	// let the coordinator publish. This prevents its first snapshot from racing
+	// an origin-centered/default mesher state. Ocean topology is also ready before
+	// initializeOcean() runs.
+	setupTerrainMesher( m_startupInitialTarget );
+	setupOceanMesher( m_startupInitialTarget );
+	m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
+	LOG( INFO,
+	        "[Terrain3D][Startup][OwnerPrepare] COMPLETE generation=",
+	        m_nStartupGeneration,
+	        " elapsed=",
+	        m_nStartupOwnerPrepareUsecLast,
+	        " us" );
+	return true;
+}
+
+bool Terrain3D::finalizeStartupOwnerCold( void ) {
+	const t3dStartupDomainSnapshot_t finalizationSnapshot = t3dStartupDomainSnapshot( m_startupFinalizationState );
+	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING || finalizationSnapshot.m_nCompletedUnits < 2u
+	        || m_pRenderCoordinator == NULL ) {
+		return false;
+	}
+	const uint64_t owner_finalize_started_usec = Time::get_singleton()->get_ticks_usec();
+	if ( !m_pRenderCoordinator->hasStartupActivationSnapshot( m_nStartupGeneration ) ) {
+		updateDisplacementBuffer();
+		// Freeze the final clipmap/ocean/streaming target exactly once while the owner
+		// is still non-rendering. The render thread may need later ticks to upload the
+		// resulting unified-world publication before activation can commit.
+		synchronizeClipmapNow( getClipmapTargetPosition() );
+	}
+	if ( !m_pRenderCoordinator->prepareStartupActivationCold( m_nStartupGeneration ) ) {
+		m_nStartupOwnerFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - owner_finalize_started_usec;
+		return false;
+	}
+	if ( !m_pRenderCoordinator->isStartupActivationPrepared( m_nStartupGeneration ) ) {
+		m_nStartupOwnerFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - owner_finalize_started_usec;
+		return true;
+	}
+
+	// Owner activation is the only point at which updateRenderRoute() may expose
+	// the prepared snapshot. The coordinator keeps its own activation gate closed
+	// until commitStartupActivationCold() immediately below.
+	m_bInitialized = true;
+	m_runtimeLifecycleState = TERRAIN3D_RUNTIME_ACTIVE;
+	if ( !m_pRenderCoordinator->commitStartupActivationCold( m_nStartupGeneration ) ) {
+		m_bInitialized = false;
+		m_runtimeLifecycleState = TERRAIN3D_RUNTIME_INITIALIZING;
+		m_nStartupOwnerFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - owner_finalize_started_usec;
+		return false;
+	}
+	updateRegionLabels();
+	m_nStartupOwnerFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - owner_finalize_started_usec;
+	m_nStartupEndUsec = Time::get_singleton()->get_ticks_usec();
+	m_nStartupTotalUsecLast = m_nStartupEndUsec - m_nStartupStartUsec;
+	m_bStartupSucceededLast = true;
+	t3dStartupDomainSetCompletedUnits( m_startupFinalizationState, 3u );
+	t3dStartupDomainFinish( m_startupFinalizationState, T3D_STARTUP_COMMITTED, m_nStartupEndUsec );
+	LOG( INFO,
+	        "[Terrain3D][Startup] ACTIVE generation=",
+	        m_nStartupGeneration,
+	        " elapsed=",
+	        m_nStartupTotalUsecLast,
+	        " us owner_finalize=",
+	        m_nStartupOwnerFinalizeUsecLast,
+	        " us" );
+	LOG( INFO,
+	        "[lifecycle] Main subsystems ready: regions=",
+	        m_pData->getRegionCount(),
+	        "; region_size=",
+	        ( int )( s_nRegionSize ),
+	        "; mesh_lods=",
+	        m_nMeshLods,
+	        "; tessellation=",
+	        m_nTessellationLevel );
+	return true;
+}
+
+void Terrain3D::serviceStartup( void ) {
+	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING || m_bInitialized || m_nStartupGeneration == 0u ) { return; }
+	const uint32_t nGeneration = m_nStartupGeneration;
+	if ( m_pRenderCoordinator ) {
+		m_pRenderCoordinator->serviceStartupCold( nGeneration );
+		if ( m_pRenderCoordinator->isStartupFailed( nGeneration ) ) { deactivateRuntime( true ); return; }
+	}
+	const t3dStartupDomainSnapshot_t rDataState = m_pData->getStartupSnapshot();
+	const t3dStartupStage_t eDataStage = t3dStartupDomainGetStage( rDataState );
+	if ( rDataState.m_nGeneration != nGeneration || eDataStage == T3D_STARTUP_CANCELLED ) {
+		deactivateRuntime( false );
+		return;
+	}
+	if ( eDataStage == T3D_STARTUP_FAILED ) {
+		deactivateRuntime( true );
+		return;
+	}
+	if ( eDataStage == T3D_STARTUP_PREPARING ) {
+		const Error error = m_pData->prepareStartupCold( nGeneration );
+		if ( error != OK ) { LOG( ERROR, "[Terrain3D][Startup][Data] PREPARE FAILED generation=", nGeneration, " error=", error ); deactivateRuntime( true ); }
+		return;
+	}
+	if ( eDataStage == T3D_STARTUP_CPU_READY ) {
+		const Error error = m_pData->commitStartupCold( nGeneration );
+		if ( error != OK ) { LOG( ERROR, "[Terrain3D][Startup][Data] COMMIT FAILED generation=", nGeneration, " error=", error ); deactivateRuntime( true ); return; }
+		m_pData->finalizeStartupDerivedCold( nGeneration );
+		m_nStartupDataInitializeUsecLast = Time::get_singleton()->get_ticks_usec() - m_nStartupStartUsec;
+		LOG( INFO, "[Terrain3D][Startup][Data] COMMITTED generation=", nGeneration, " elapsed=", m_nStartupDataInitializeUsecLast, " us" );
+		return;
+	}
+	if ( eDataStage != T3D_STARTUP_COMMITTED ) { return; }
+	const t3dStartupDomainSnapshot_t finalizationSnapshot = t3dStartupDomainSnapshot( m_startupFinalizationState );
+	if ( finalizationSnapshot.m_nCompletedUnits == 0u ) {
+		if ( !prepareStartupOwnerCold() ) { deactivateRuntime( true ); return; }
+		t3dStartupDomainSetCompletedUnits( m_startupFinalizationState, 1u );
+		return;
+	}
+	if ( finalizationSnapshot.m_nCompletedUnits == 1u ) {
+		const uint64_t coordinator_started_usec = Time::get_singleton()->get_ticks_usec();
+		setupRenderCoordinator();
+		m_nStartupCoordinatorInitializeUsecLast = Time::get_singleton()->get_ticks_usec() - coordinator_started_usec;
+		if ( !m_pRenderCoordinator || m_pRenderCoordinator->isStartupFailed( nGeneration ) || !m_pRenderCoordinator->isStartupPrepared( nGeneration ) ) { deactivateRuntime( true ); return; }
+		t3dStartupDomainSetCompletedUnits( m_startupFinalizationState, 2u );
+		t3dStartupDomainSetStage( m_startupFinalizationState, T3D_STARTUP_GPU_PENDING );
+		LOG( INFO, "[Terrain3D][Startup][Coordinator] PREPARED generation=", nGeneration, " elapsed=", m_nStartupCoordinatorInitializeUsecLast, " us" );
+		return;
+	}
+	if ( m_pRenderCoordinator ) {
+		m_pRenderCoordinator->serviceStartupCold( nGeneration );
+		const t3dStartupDomainSnapshot_t rShaderState = m_pRenderCoordinator->getShaderStartupState();
+		const t3dStartupDomainSnapshot_t rVtState = m_pRenderCoordinator->getVirtualTextureStartupState();
+		const t3dStartupStage_t eShaderStage = t3dStartupDomainGetStage( rShaderState );
+		const t3dStartupStage_t eVtStage = t3dStartupDomainGetStage( rVtState );
+		if ( rShaderState.m_nGeneration != nGeneration || rVtState.m_nGeneration != nGeneration
+		        || eShaderStage == T3D_STARTUP_CANCELLED || eVtStage == T3D_STARTUP_CANCELLED ) {
+			deactivateRuntime( false );
+			return;
+		}
+		if ( eShaderStage == T3D_STARTUP_FAILED || eVtStage == T3D_STARTUP_FAILED ) {
+			deactivateRuntime( true );
+			return;
+		}
+		const bool bShaderGpuReady = eShaderStage == T3D_STARTUP_GPU_READY || eShaderStage == T3D_STARTUP_COMMITTED;
+		if ( !bShaderGpuReady || eVtStage != T3D_STARTUP_COMMITTED ) { return; }
+	}
+	t3dStartupDomainSetStage( m_startupFinalizationState, T3D_STARTUP_GPU_READY );
+	if ( !finalizeStartupOwnerCold() ) { deactivateRuntime( true ); }
+}
+
+void Terrain3D::deactivateRuntime( const bool bStartupFailure ) {
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_SHUTDOWN );
+	const bool bWasInitializing = m_runtimeLifecycleState == TERRAIN3D_RUNTIME_INITIALIZING && !m_bStartupSucceededLast;
+	const uint32_t nShutdownGeneration = m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
+	if ( bWasInitializing && nShutdownGeneration != 0u ) {
+		if ( m_pData ) {
+			m_pData->cancelStartupCold( nShutdownGeneration );
+		}
+		if ( m_pRenderCoordinator ) {
+			m_pRenderCoordinator->cancelStartupCold( nShutdownGeneration );
+		}
+		m_nStartupEndUsec = Time::get_singleton()->get_ticks_usec();
+		m_nStartupTotalUsecLast = m_nStartupStartUsec != 0u ? m_nStartupEndUsec - m_nStartupStartUsec : 0u;
+		t3dStartupDomainFinish( m_startupFinalizationState,
+		        bStartupFailure ? T3D_STARTUP_FAILED : T3D_STARTUP_CANCELLED, m_nStartupEndUsec );
+		if ( !bStartupFailure ) {
+			++m_nStartupCancellationCount;
+		}
+		LOG( bStartupFailure ? ERROR : INFO,
+		        bStartupFailure ? "[Terrain3D][Startup] FAILED generation=" : "[Terrain3D][Startup] CANCELLED generation=",
+		        nShutdownGeneration, " elapsed=", m_nStartupTotalUsecLast, " us" );
+		uint32_t nInvalidatedGeneration = nShutdownGeneration + 1u;
+		if ( nInvalidatedGeneration == 0u ) { nInvalidatedGeneration = 1u; }
+		m_nStartupGeneration.store( nInvalidatedGeneration, T3D_MEMORY_ORDER_RELEASE );
+		++m_nStartupGenerationInvalidationCount;
+	}
 	if ( m_runtimeLifecycleState == TERRAIN3D_RUNTIME_DEACTIVATING || m_runtimeLifecycleState == TERRAIN3D_RUNTIME_DETACHED ) {
 		LOG( DEBUG, "[lifecycle] Ignoring duplicate runtime deactivation; state=", ( int )( m_runtimeLifecycleState ) );
 		return;
@@ -309,6 +491,8 @@ void Terrain3D::deactivateRuntime( void ) {
 	destroyTerrainMesher();
 	destroyOceanMesher();
 	destroyHlodStreamer();
+	destroyInstancePhysics();
+	destroyInstanceOcclusion();
 	destroyLightmapStreamer();
 	destroyNodeStreamer( true );
 	destroyInstancer();
@@ -336,232 +520,12 @@ void Terrain3D::deactivateRuntime( void ) {
 }
 
 /**
- * This is a proxy for _process(delta) called by _notification() due to
- * https://github.com/godotengine/godot-cpp/issues/1022
+ * Hot-frame work is owned by Terrain3DRuntimeFrameScheduler. Terrain3D remains
+ * the Node lifecycle/public facade and forwards the physics notification.
  */
 void Terrain3D::physicsProcess( const double fDelta ) {
-	if ( !m_bInitialized ) {
-		return;
-	}
-	serviceMemoryBudgetPolicy( false );
-	if ( !m_hCamera.isValid() ) {
-		LOG( DEBUG, "Camera is null, getting the current one" );
-		grabCamera();
-	}
-	// Resolve the frame target before sealing allocation. Cold services use this
-	// same position so materialized ownership and the following hot selection are
-	// guaranteed to describe one residency frame.
-	const Vector3 clipmap_target_position = getClipmapTargetPosition();
-	updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
-	if ( m_pData ) {
-		m_pData->serviceColdInstanceResidency( clipmap_target_position, false );
-	}
-	if ( m_pInstancer ) {
-		m_pInstancer->serviceColdCapacity();
-	}
-	if ( m_pNodeStreamer ) {
-		m_pNodeStreamer->serviceColdRebuild();
-	}
-	if ( m_pCollision ) {
-		m_pCollision->serviceColdRebuild();
-	}
-	if ( m_pRenderCoordinator ) {
-		m_pRenderCoordinator->serviceColdCapacity();
-	}
-	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME );
-	if ( m_bComputeDisplacementFallbackRequested.exchange( false, T3D_MEMORY_ORDER_ACQ_REL ) ) {
-		m_lastBufferPosition = s_v2Max;
-	}
-
-	t3dRuntimeProfileSample_t profile_sample;
-	const bool bProfileFrame = m_bRuntimeProfilingEnabled;
-	const bool bAdaptiveFrame = m_bRuntimeAdaptiveWorkBudgetsEnabled;
-	const bool bMeasureFrame = bProfileFrame || bAdaptiveFrame;
-	const uint64_t frame_started_usec = bMeasureFrame ? Time::get_singleton()->get_ticks_usec() : 0u;
-	uint64_t phase_started_usec = frame_started_usec;
-	m_nRuntimeAdaptiveControllerUsecLast = 0u;
-	if ( bAdaptiveFrame ) {
-		updateRuntimeAdaptiveWorkBudgets();
-		const uint64_t adaptive_completed_usec = Time::get_singleton()->get_ticks_usec();
-		m_nRuntimeAdaptiveControllerUsecLast = adaptive_completed_usec - frame_started_usec;
-		if ( bProfileFrame ) {
-			phase_started_usec = adaptive_completed_usec;
-		}
-	}
-
-	// Meshing, displacement, streaming, and ocean snapping use the target that
-	// was resolved for the cold residency phase above.
-	++m_iRuntimePhysicsFrameIndex;
-	const Vector2i target_region = m_pData ? m_pData->getRegionLocation( clipmap_target_position ) : s_v2iMax;
-	if ( target_region != m_runtimeBoundaryTargetRegion ) {
-		m_runtimeBoundaryTargetRegion = target_region;
-		m_nRuntimeBoundaryTransitionFrame = m_iRuntimePhysicsFrameIndex;
-	}
-	const uint64_t boundary_age_frames = m_iRuntimePhysicsFrameIndex - m_nRuntimeBoundaryTransitionFrame;
-	m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer( m_bRuntimeBoundaryWorkPhasingEnabled,
-	        effectiveDynamicNodeStreamingEnabled(),
-	        boundary_age_frames,
-	        m_nRuntimeBoundaryNodeDelayFrames,
-	        m_nRuntimeBoundaryNodeDeferralStreak );
-	m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer( m_bRuntimeBoundaryWorkPhasingEnabled,
-	        effectiveInstancerCellStreamingEnabled(),
-	        boundary_age_frames,
-	        m_nRuntimeBoundaryInstancerDelayFrames,
-	        m_nRuntimeBoundaryInstancerDeferralStreak );
-	m_nRuntimeBoundaryNodeDeferralStreak = m_bRuntimeBoundaryNodeDeferredLastTick ? m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
-	m_nRuntimeBoundaryInstancerDeferralStreak =
-	        m_bRuntimeBoundaryInstancerDeferredLastTick ? m_nRuntimeBoundaryInstancerDeferralStreak + 1 : 0;
-	if ( bProfileFrame ) {
-		profile_sample.m_fTargetX = ( float )( clipmap_target_position.x );
-		profile_sample.m_fTargetZ = ( float )( clipmap_target_position.z );
-		if ( m_nRuntimeProfileSampleCount > 0u ) {
-			profile_sample.m_fMovementX = profile_sample.m_fTargetX - m_runtimeProfileLastSample.m_fTargetX;
-			profile_sample.m_fMovementZ = profile_sample.m_fTargetZ - m_runtimeProfileLastSample.m_fTargetZ;
-		}
-		profile_sample.m_nTargetRegionX = target_region.x;
-		profile_sample.m_nTargetRegionZ = target_region.y;
-	}
-	if ( m_pData ) {
-		m_pData->updateRegionResidency( clipmap_target_position, false );
-		if ( m_assets.is_valid() && m_assets->isRuntimeMaterialCacheActive() ) {
-			uint8_t material_ids[s_nMaxTextureAssets];
-			memset( material_ids, 0, sizeof( material_ids ) );
-			const int material_count = m_pData->fillGpuMaterialPriorityIds( material_ids, s_nMaxTextureAssets );
-			m_assets->updateRuntimeMaterialResidency( material_ids, material_count );
-		}
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nDataResidencyUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	const bool hlod_active =
-	        m_bHlodEnabled && ( !Engine::get_singleton()->is_editor_hint() || !isEditorAuthoringModeInternal() || m_bEditorHlodPreview );
-	if ( m_pHlodStreamer ) {
-		if ( hlod_active ) {
-			m_pHlodStreamer->updateResidency( clipmap_target_position, false );
-		} else {
-			m_pHlodStreamer->suspend();
-		}
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nHlodStreamingUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	if ( m_pNodeStreamer && effectiveDynamicNodeStreamingEnabled() ) {
-		if ( m_bRuntimeBoundaryNodeDeferredLastTick ) {
-			m_pNodeStreamer->deferUpdateForFrame();
-			++m_nRuntimeBoundaryNodeDeferralsTotal;
-		} else {
-			m_pNodeStreamer->updateResidency( clipmap_target_position, false );
-		}
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nNodeStreamingUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	if ( m_pLightmapStreamer && m_bLightmapStreamingEnabled ) {
-		m_pLightmapStreamer->updateResidency( clipmap_target_position, false );
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nLightmapStreamingUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	if ( m_nTessellationLevel > 0 ) {
-		if ( m_pTerrainMesher && m_material.is_valid() ) {
-			const Vector2 target_position_2d = t3dVector3ToVector2( clipmap_target_position );
-			const real_t fTessellationDensity = 1.0f / ( real_t )( 1u << ( uint32_t )m_nTessellationLevel );
-			const real_t fBufferVertexSpacing = s_fRegionVertexSpacing * fTessellationDensity;
-			const real_t fUpdateDistance = MAX( fBufferVertexSpacing, m_fDisplacementUpdateDistance );
-			const bool bMoved =
-			        MAX( abs( m_lastBufferPosition.x - target_position_2d.x ), abs( m_lastBufferPosition.y - target_position_2d.y ) )
-			        >= fUpdateDistance;
-			const uint64_t nPageTableGeneration = m_pData ? m_pData->getPhysicalRegionMapGenerationInternal() : 0u;
-			const bool bPageTableChanged = nPageTableGeneration != m_nComputeDisplacementPageTableGeneration;
-			const bool bDisplacementDirty = m_bComputeDisplacementDirty.load( T3D_MEMORY_ORDER_ACQUIRE );
-
-			// Geometry snapping and displacement servicing are separate lifecycles.
-			// A failed displacement request must not force the mesh to resnap every
-			// frame, but it must remain dirty so it is retried without camera motion.
-			if ( bMoved ) {
-				m_lastBufferPosition = target_position_2d;
-				m_pTerrainMesher->snap( clipmap_target_position );
-			}
-			if ( bMoved || bPageTableChanged || bDisplacementDirty ) {
-				if ( tryUpdateComputeDisplacement( clipmap_target_position ) ) {
-					m_nComputeDisplacementPageTableGeneration = nPageTableGeneration;
-					m_bComputeDisplacementDirty.store( false, T3D_MEMORY_ORDER_RELEASE );
-				} else {
-					m_bComputeDisplacementDirty.store( true, T3D_MEMORY_ORDER_RELEASE );
-				}
-			}
-		}
-	} else if ( m_pTerrainMesher ) {
-		m_pTerrainMesher->snap( clipmap_target_position );
-	}
-	if ( m_pRenderCoordinator ) {
-		m_pRenderCoordinator->update();
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nClipmapUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	if ( m_bOceanEnabled && m_pOceanMesher ) {
-		m_pOceanMesher->snap( clipmap_target_position );
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nOceanUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	const bool bInstanceCellStreaming = effectiveInstancerCellStreamingEnabled();
-	const bool bInstanceTargetTracking = bInstanceCellStreaming || m_bInstancerSingleLodBuffers;
-	if ( m_pInstancer && bInstanceTargetTracking ) {
-		if ( bInstanceCellStreaming && m_bRuntimeBoundaryInstancerDeferredLastTick ) {
-			m_pInstancer->deferStreamingSelectionForFrame();
-			++m_nRuntimeBoundaryInstancerDeferralsTotal;
-		} else {
-			m_pInstancer->updateStreaming( clipmap_target_position );
-		}
-	}
-	if ( m_pInstancer ) {
-		m_pInstancer->servicePendingUpdates();
-	}
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nInstancerUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	syncLightShaderParameters();
-	if ( bProfileFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		profile_sample.m_nLightSyncUsec = now - phase_started_usec;
-		phase_started_usec = now;
-	}
-	if ( m_pCollision ) {
-		m_pCollision->servicePendingRegionMapUpdate();
-		if ( m_pCollision->isEnabled() ) {
-			m_pCollision->update();
-		}
-	}
-	if ( bMeasureFrame ) {
-		const uint64_t now = Time::get_singleton()->get_ticks_usec();
-		const uint64_t measured_usec = now - frame_started_usec;
-		if ( bAdaptiveFrame ) {
-			m_nRuntimeAdaptiveLastMeasuredUsec = measured_usec;
-		}
-		if ( bProfileFrame ) {
-			profile_sample.m_nCollisionUsec = now - phase_started_usec;
-			profile_sample.m_nPhysicsTotalUsec = measured_usec;
-			profile_sample.m_nStreamingUsec = profile_sample.m_nDataResidencyUsec + profile_sample.m_nHlodStreamingUsec
-			        + profile_sample.m_nNodeStreamingUsec + profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
-			sampleRuntimeProfile( profile_sample );
-		}
-	}
+	if ( m_runtimeLifecycleState == TERRAIN3D_RUNTIME_INITIALIZING ) { serviceStartup(); }
+	if ( m_bInitialized ) { m_runtimeFrameScheduler.tick( *this, fDelta ); }
 }
 
 /**

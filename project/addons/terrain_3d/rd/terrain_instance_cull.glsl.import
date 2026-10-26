@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bghcbigjswdws"
+path="res://.godot/imported/terrain_instance_cull.glsl-eb365a8720ac185e6ad240932fbd23e0.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/terrain_instance_cull.glsl"
+dest_files=["res://.godot/imported/terrain_instance_cull.glsl-eb365a8720ac185e6ad240932fbd23e0.res"]
+
+[params]
+

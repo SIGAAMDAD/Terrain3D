@@ -95,8 +95,14 @@ typedef struct t3dInstanceCell_s {
 		return !bOwnerData || m_owners.reserve( nCount );
 	}
 
-	EA_FORCE_INLINE bool reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) {
-		return reserve( nCount, bColorData, bOwnerData );
+	bool reserveExact( const size_t nCount, const bool bColorData, const bool bOwnerData = false ) {
+		if ( !m_transforms.reserveExact( nCount ) ) {
+			return false;
+		}
+		if ( bColorData && !m_colors.reserveExact( nCount ) ) {
+			return false;
+		}
+		return !bOwnerData || m_owners.reserveExact( nCount );
 	}
 
 	bool prepareAppend( size_t nAdditional, bool bColorData, bool bOwnerData = false ) {
@@ -128,8 +134,20 @@ typedef struct t3dInstanceCell_s {
 	EA_FORCE_INLINE void setTransform( const size_t iIndex, const Transform3D &rTransform ) {
 		m_transforms[iIndex] = rTransform;
 	}
+	EA_FORCE_INLINE void setTransformAndBehaviorFlags( const size_t iIndex, const Transform3D &rTransform, const uint16_t nBehaviorFlags ) {
+		m_transforms.setTransformAndBehaviorFlags( iIndex, rTransform, nBehaviorFlags );
+	}
 	EA_FORCE_INLINE bool pushTransform( const Transform3D &rTransform ) {
 		return m_transforms.pushBack( rTransform );
+	}
+	EA_FORCE_INLINE bool pushTransform( const Transform3D &rTransform, const uint16_t nBehaviorFlags ) {
+		return m_transforms.pushBack( rTransform, nBehaviorFlags );
+	}
+	EA_FORCE_INLINE uint16_t getTransformBehaviorFlags( const size_t iIndex ) const {
+		return m_transforms.getBehaviorFlags( iIndex );
+	}
+	EA_FORCE_INLINE void setTransformBehaviorFlags( const size_t iIndex, const uint16_t nBehaviorFlags ) {
+		m_transforms.setBehaviorFlags( iIndex, nBehaviorFlags );
 	}
 	EA_FORCE_INLINE Vector3 getTransformOrigin( const size_t iIndex ) const {
 		return m_transforms.getOrigin( iIndex );
@@ -296,6 +314,9 @@ class Terrain3DInstanceStore {
 	void rebuildActiveMeshIds( void );
 	void rebindCellStorage( void );
 	bool copyFrom( const Terrain3DInstanceStore &rOther );
+	bool canGrowCellVector( void ) const;
+	t3dInstanceCell_t *tryGetOrCreateCellInternal(
+	        int nMeshId, const Vector2i &cell, size_t nReserveInstances, bool bColorData, bool bOwnerData, bool bExact );
 
 public:
 	explicit Terrain3DInstanceStore( t3dInstanceStoreAllocationClass_t eAllocationClass = TERRAIN3D_INSTANCE_STORE_PERSISTENT_RESOURCE );
@@ -353,7 +374,7 @@ public:
 
 	const t3dInstanceMesh_t *findMesh( int nMeshId ) const;
 	t3dInstanceMesh_t *findMesh( int nMeshId );
-	t3dInstanceMesh_t &getOrCreateMesh( int nMeshId, size_t nReserveCells = 0 );
+	t3dInstanceMesh_t *tryGetOrCreateMesh( int nMeshId, size_t nReserveCells = 0 );
 	bool eraseMesh( int nMeshId );
 	void swapMeshIds( int nSrcId, int nDstId );
 	EA_FORCE_INLINE bool hasMesh( const int nMeshId ) const {
@@ -362,9 +383,9 @@ public:
 
 	const t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell ) const;
 	t3dInstanceCell_t *findCell( int nMeshId, const Vector2i &cell );
-	t3dInstanceCell_t &getOrCreateCell(
+	t3dInstanceCell_t *tryGetOrCreateCell(
 	        int nMeshId, const Vector2i &cell, size_t nReserveInstances = 0, bool bColorData = false, bool bOwnerData = false );
-	t3dInstanceCell_t &getOrCreateCellExact(
+	t3dInstanceCell_t *tryGetOrCreateCellExact(
 	        int nMeshId, const Vector2i &cell, size_t nReserveInstances, bool bColorData, bool bOwnerData );
 	bool eraseCell( int nMeshId, const Vector2i &cell );
 
@@ -372,7 +393,19 @@ public:
 	bool equalsDictionary( const Dictionary &instances ) const;
 	Dictionary exportDictionary( void ) const;
 	size_t instanceCount( int nMeshId = -1 ) const;
+	bool validateDeep( void ) const;
 	size_t residentBytes( void ) const;
+#if defined( TERRAIN3D_INSTANCE_STORE_TEST_ACCESS )
+	EA_FORCE_INLINE size_t testTransformSlabUsed( void ) const {
+		return m_transformSlab.used();
+	}
+	EA_FORCE_INLINE size_t testColorSlabUsed( void ) const {
+		return m_colorSlab.used();
+	}
+	EA_FORCE_INLINE size_t testOwnerSlabUsed( void ) const {
+		return m_ownerSlab.used();
+	}
+#endif
 };
 
 #endif // TERRAIN3D_INSTANCE_STORE_H

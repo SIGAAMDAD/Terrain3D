@@ -13,6 +13,7 @@
 
 #include <EASTL/vector.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -129,6 +130,8 @@ private:
 	mutable uint32_t m_nInstanceCount = 0u;
 	mutable uint16_t m_nInstanceMeshCount = 0u;
 	uint64_t m_nCookedPageSourceSignature = 0u;
+	uint32_t m_nMegaVTSourceGeneration = 1u;
+	uint32_t m_nMegaVTDirtyMip0Mask = 0u;
 	uint16_t m_nCookedStreamedNodeCount = 0u;
 	Vector2i m_cookedStreamedNodeCoverageMin = s_v2iZero;
 	Vector2i m_cookedStreamedNodeCoverageMax = s_v2iZero;
@@ -225,6 +228,16 @@ public:
 	Ref<Image> sanitizeMap( const t3dMapType_t mapType, const Ref<Image> &rMap ) const;
 	bool validateMapSize( const Ref<Image> &rMap ) const;
 
+	void setMegaVTSourceGeneration( int64_t nGeneration );
+	EA_FORCE_INLINE int64_t getMegaVTSourceGeneration( void ) const {
+		return ( int64_t )( m_nMegaVTSourceGeneration );
+	}
+	void setMegaVTDirtyMip0Mask( int64_t nMask );
+	EA_FORCE_INLINE int64_t getMegaVTDirtyMip0Mask( void ) const {
+		return ( int64_t )( m_nMegaVTDirtyMip0Mask );
+	}
+	void setMegaVTEditorStateInternal( uint32_t nGeneration, uint32_t nDirtyMip0Mask );
+
 	void setHeightRange( const Vector2 &rRange );
 	EA_FORCE_INLINE Vector2 getHeightRange( void ) const {
 		return m_heightRange;
@@ -302,19 +315,42 @@ public:
 		}
 		return m_nInstanceMeshCount;
 	}
-	EA_FORCE_INLINE const Terrain3DInstanceStore &getInstanceStore( void ) const {
-		ensureInstanceStoreResident();
-		return m_instanceStore;
+	EA_FORCE_INLINE bool tryGetInstanceStore( const Terrain3DInstanceStore *&pStore ) const {
+		pStore = NULL;
+		if ( !ensureInstanceStoreResident() ) {
+			return false;
+		}
+		pStore = &m_instanceStore;
+		return true;
 	}
-	EA_FORCE_INLINE Terrain3DInstanceStore &getInstanceStoreMut( void ) {
-		ensureInstanceStoreResident();
+	EA_FORCE_INLINE bool tryGetInstanceStoreMut( Terrain3DInstanceStore *&pStore ) {
+		pStore = NULL;
+		if ( !ensureInstanceStoreResident() ) {
+			return false;
+		}
 		m_bModified = true;
 		m_bInstanceStoreModified = true;
-		return m_instanceStore;
+		pStore = &m_instanceStore;
+		return true;
 	}
-	EA_FORCE_INLINE Terrain3DInstanceStore &getInstanceStoreInternal( void ) {
-		ensureInstanceStoreResident();
-		return m_instanceStore;
+	EA_FORCE_INLINE bool tryGetInstanceStoreInternal( Terrain3DInstanceStore *&pStore ) {
+		pStore = NULL;
+		if ( !ensureInstanceStoreResident() ) {
+			return false;
+		}
+		pStore = &m_instanceStore;
+		return true;
+	}
+	EA_FORCE_INLINE const Terrain3DInstanceStore &getInstanceStore( void ) const {
+		const Terrain3DInstanceStore *pStore = NULL;
+		if ( !tryGetInstanceStore( pStore ) || !pStore ) {
+			abort();
+		}
+		return *pStore;
+	}
+	EA_FORCE_INLINE void markInstanceStoreModifiedInternal( void ) {
+		m_bModified = true;
+		m_bInstanceStoreModified = true;
 	}
 	EA_FORCE_INLINE const Terrain3DInstanceStore *getResidentInstanceStoreInternal( void ) const {
 		return m_bInstanceStoreResident ? &m_instanceStore : NULL;

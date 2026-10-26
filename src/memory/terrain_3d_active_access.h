@@ -10,8 +10,10 @@
 #include <stdint.h>
 // Per-region reader/writer gate for the process-static terrain bank.
 // Writers announce themselves before waiting so later readers cannot starve them.
-typedef struct t3dActiveAccessGate_s {
-	bool acquireRead( void ) {
+typedef struct t3dActiveAccessGate_s
+{
+	bool acquireRead( void )
+	{
 		uint32_t state = m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
 		for ( ;; ) {
 			if ( ( state & s_nActiveAccessWriterBit ) != 0u ) {
@@ -28,7 +30,8 @@ typedef struct t3dActiveAccessGate_s {
 		}
 	}
 
-	bool releaseRead( void ) {
+	bool releaseRead( void )
+	{
 		uint32_t state = m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
 		for ( ;; ) {
 			if ( ( state & s_nActiveAccessReaderMask ) == 0u ) {
@@ -40,7 +43,8 @@ typedef struct t3dActiveAccessGate_s {
 		}
 	}
 
-	void acquireWrite( void ) {
+	void acquireWrite( void )
+	{
 		uint32_t state = m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
 		for ( ;; ) {
 			if ( ( state & s_nActiveAccessWriterBit ) != 0u ) {
@@ -49,7 +53,7 @@ typedef struct t3dActiveAccessGate_s {
 				continue;
 			}
 			if ( m_state.compare_exchange_weak(
-			             state, state | s_nActiveAccessWriterBit, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE ) ) {
+			         state, state | s_nActiveAccessWriterBit, T3D_MEMORY_ORDER_ACQ_REL, T3D_MEMORY_ORDER_ACQUIRE ) ) {
 				break;
 			}
 		}
@@ -58,26 +62,30 @@ typedef struct t3dActiveAccessGate_s {
 		}
 	}
 
-	EA_FORCE_INLINE void releaseWrite( void ) {
+	EA_FORCE_INLINE void releaseWrite( void )
+	{
 		m_state.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	}
 
-	void waitIdle( void ) const {
+	void waitIdle( void ) const
+	{
 		while ( m_state.load( T3D_MEMORY_ORDER_ACQUIRE ) != 0u ) {
 			t3dThreadYield();
 		}
 	}
 
-	EA_FORCE_INLINE void resetUnsafe( void ) {
+	EA_FORCE_INLINE void resetUnsafe( void )
+	{
 		m_state.store( 0u, T3D_MEMORY_ORDER_RELAXED );
 	}
 
-	EA_FORCE_INLINE uint32_t load( void ) const {
+	EA_FORCE_INLINE uint32_t load( void ) const
+	{
 		return m_state.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
 
 private:
-	t3dAtomic_t<uint32_t> m_state{ 0u };
+	t3dAtomic_t<uint32_t> m_state { 0u };
 } t3dActiveAccessGate_t;
 
 #endif // TERRAIN3D_ACTIVE_ACCESS_H

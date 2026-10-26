@@ -22,12 +22,24 @@ typedef struct t3dHlodRuntimeEntryRecord_s {
 	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
 	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
 	t3dRegionCoord_t m_regionMax = t3dPackRegionCoord( s_v2iZero );
-	EA_FORCE_INLINE Vector2i getCluster( void ) const { return t3dUnpackRegionCoord( m_cluster ); }
-	EA_FORCE_INLINE Vector2i getRegionMin( void ) const { return t3dUnpackRegionCoord( m_regionMin ); }
-	EA_FORCE_INLINE Vector2i getRegionMax( void ) const { return t3dUnpackRegionCoord( m_regionMax ); }
-	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) { m_cluster = t3dPackRegionCoord( rValue ); }
-	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) { m_regionMin = t3dPackRegionCoord( rValue ); }
-	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) { m_regionMax = t3dPackRegionCoord( rValue ); }
+	EA_FORCE_INLINE Vector2i getCluster( void ) const {
+		return t3dUnpackRegionCoord( m_cluster );
+	}
+	EA_FORCE_INLINE Vector2i getRegionMin( void ) const {
+		return t3dUnpackRegionCoord( m_regionMin );
+	}
+	EA_FORCE_INLINE Vector2i getRegionMax( void ) const {
+		return t3dUnpackRegionCoord( m_regionMax );
+	}
+	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) {
+		m_cluster = t3dPackRegionCoord( rValue );
+	}
+	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) {
+		m_regionMin = t3dPackRegionCoord( rValue );
+	}
+	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) {
+		m_regionMax = t3dPackRegionCoord( rValue );
+	}
 	AABB m_localBounds;
 	String m_packagePath;
 	real_t m_fGeometricError = 1.0f;

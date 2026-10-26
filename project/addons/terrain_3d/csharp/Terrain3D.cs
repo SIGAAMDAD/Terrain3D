@@ -464,6 +464,7 @@ public partial class Terrain3D : Node3D
 		/// </summary>
 		public new static readonly StringName CastShadows = "cast_shadows";
 		public new static readonly StringName ShadowLodCount = "shadow_lod_count";
+		public new static readonly StringName DominantSunOnly = "dominant_sun_only";
 		public new static readonly StringName NearShadowEnabled = "near_shadow_enabled";
 		public new static readonly StringName MiddleShadowEnabled = "middle_shadow_enabled";
 		public new static readonly StringName FarShadowEnabled = "far_shadow_enabled";
@@ -1403,6 +1404,12 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.ShadowLodCount, value);
 	}
 
+	public new bool DominantSunOnly
+	{
+		get => Get(GDExtensionPropertyName.DominantSunOnly).As<bool>();
+		set => Set(GDExtensionPropertyName.DominantSunOnly, value);
+	}
+
 	public new bool NearShadowEnabled
 	{
 		get => Get(GDExtensionPropertyName.NearShadowEnabled).As<bool>();
@@ -1709,6 +1716,7 @@ public partial class Terrain3D : Node3D
 		public new static readonly StringName IsEditorHlodPreviewActive = "is_editor_hlod_preview_active";
 		public new static readonly StringName ReloadHlodManifest = "reload_hlod_manifest";
 		public new static readonly StringName GetHlodStreamingStats = "get_hlod_streaming_stats";
+		public new static readonly StringName GetInstancePhysicsStats = "get_instance_physics_stats";
 		public new static readonly StringName GetHlodDebugEntries = "get_hlod_debug_entries";
 		/// <summary>Cached name for regional baked-lighting residency diagnostics.</summary>
 		public new static readonly StringName GetLightmapStreamingStats = "get_lightmap_streaming_stats";
@@ -1831,6 +1839,9 @@ public partial class Terrain3D : Node3D
 
 	public new Godot.Collections.Dictionary GetHlodStreamingStats() =>
 		Call(GDExtensionMethodName.GetHlodStreamingStats, []).As<Godot.Collections.Dictionary>();
+
+	public new Godot.Collections.Dictionary GetInstancePhysicsStats() =>
+		Call(GDExtensionMethodName.GetInstancePhysicsStats, []).As<Godot.Collections.Dictionary>();
 
 	public new Godot.Collections.Array GetHlodDebugEntries() =>
 		Call(GDExtensionMethodName.GetHlodDebugEntries, []).As<Godot.Collections.Array>();

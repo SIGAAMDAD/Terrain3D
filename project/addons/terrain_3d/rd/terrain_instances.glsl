@@ -32,6 +32,10 @@ layout(set = 0, binding = 0, std140) uniform InstanceFrame {
     vec4 camera_position[2];
     vec4 motion_jitter;
     vec4 motion_params;
+    vec4 nomad_sun_shape;
+    vec4 nomad_sun_diffuse;
+    vec4 nomad_sun_specular;
+    vec4 nomad_sun_rim;
 }
 frame_data;
 
@@ -54,8 +58,27 @@ layout(set = 0, binding = 2, std430) readonly buffer VisibleIndices {
     uint visible_indices[];
 };
 #ifndef T3D_INSTANCE_BRINGUP
+struct InstanceDrawMeta {
+    uint material_index;
+    uint overlay_material_index;
+    uint first_index;
+    uint index_count;
+    int vertex_offset;
+    uint flags;
+    uint visible_base;
+    uint reserved;
+};
+layout(set = 0, binding = 3, std430) readonly buffer DrawMetadata {
+    InstanceDrawMeta draw_metadata[];
+};
 layout(set = 0, binding = 4, std430) readonly buffer PreviousInstanceRecords {
     InstanceRecord previous_records[];
+};
+layout(set = 0, binding = 5, std430) readonly buffer VisibleDrawSlots {
+    uint visible_draw_slots[];
+};
+layout(set = 0, binding = 6, std430) readonly buffer VisibleLayers {
+    uint visible_layers[];
 };
 #endif
 
@@ -81,6 +104,12 @@ layout(location = 5) out vec3 vertex_world_position;
 layout(location = 6) out vec4 current_screen_position;
 layout(location = 7) out vec4 previous_screen_position;
 #endif
+#ifndef T3D_INSTANCE_BRINGUP
+layout(location = 8) flat out uint draw_material_index;
+layout(location = 9) flat out uint draw_overlay_material_index;
+layout(location = 10) flat out uint draw_flags;
+layout(location = 11) flat out uint draw_visibility_layers;
+#endif
 
 vec3 rotate_quaternion(vec4 q, vec3 v) {
     return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
@@ -96,7 +125,22 @@ vec3 instance_world_position(InstanceRecord record, vec3 local_vertex) {
 }
 
 void main() {
-    uint record_index = visible_indices[push_data.visible_base + uint(gl_InstanceIndex)];
+    uint visible_address = push_data.visible_base + uint(gl_InstanceIndex);
+    uint record_index = visible_indices[visible_address];
+#ifndef T3D_INSTANCE_BRINGUP
+    draw_material_index = push_data.material_index;
+    draw_overlay_material_index = push_data.overlay_material_index;
+    draw_flags = push_data.flags;
+    draw_visibility_layers = push_data.visibility_layers;
+    if (push_data.reserved0 != 0u) {
+        uint draw_slot = visible_draw_slots[visible_address];
+        InstanceDrawMeta metadata = draw_metadata[draw_slot];
+        draw_material_index = metadata.material_index;
+        draw_overlay_material_index = metadata.overlay_material_index;
+        draw_flags = metadata.flags;
+        draw_visibility_layers = visible_layers[visible_address];
+    }
+#endif
     InstanceRecord record = records[record_index];
     vec2 q01 = unpackSnorm2x16(record.quaternion01);
     vec2 q23 = unpackSnorm2x16(record.quaternion23);
@@ -135,8 +179,31 @@ void main() {
 #version 450
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
+#if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
+#extension GL_EXT_samplerless_texture_functions : enable
+#endif
+// WG-C SH05 production policy: instance fragment feedback remains explicitly
+// disabled until the shared set-3 frame/reset publication owner is available.
+// The dormant adapters below are still compiled by the SH-B/WG-C fixture lane.
+#define T3D_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 1
 #ifndef T3D_INSTANCE_BRINGUP
-#include "terrain_forward_lighting_inc.glsl"
+#include "vt/terrain_vt_common_inc.glslinc"
+#include "vt/terrain_vt_filter_math_inc.glslinc"
+#include "vt/terrain_vt_tail_filter_inc.glslinc"
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+// P22 fragment requests use their descriptor-invariant set 3 while P28/P33
+// sampling stays on the canonical shared VT set 1. Rename only the include's
+// block instances so both allocation/page-table views can coexist in this
+// shader without changing the common feedback helper ABI.
+#define vt_allocations vt_fragment_allocations
+#define vt_page_table vt_fragment_page_table
+#define T3D_VT_DECLARE_FRAGMENT_BINDINGS
+#include "vt/terrain_vt_feedback_inc.glslinc"
+#undef T3D_VT_DECLARE_FRAGMENT_BINDINGS
+#undef vt_page_table
+#undef vt_allocations
+#endif
+#include "terrain_forward_lighting_inc.glslinc"
 #endif
 
 layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
@@ -146,6 +213,10 @@ layout(set = 0, binding = 0, std140) uniform InstanceFrameFragment {
     vec4 camera_position[2];
     vec4 motion_jitter;
     vec4 motion_params;
+    vec4 nomad_sun_shape;
+    vec4 nomad_sun_diffuse;
+    vec4 nomad_sun_specular;
+    vec4 nomad_sun_rim;
 }
 frame_data;
 
@@ -154,25 +225,59 @@ uint t3d_view_index() {
 }
 
 #ifndef T3D_INSTANCE_BRINGUP
-struct InstanceMaterial {
-    vec4 albedo;
-    vec4 pbr;
-    vec3 emission;
-    uint flags;
-    float normal_scale;
-    uint reserved0;
-    uvec2 albedo_texture_id;
-    uvec4 normal_orm_ids;
+layout(set = 1, binding = 0, std430) readonly buffer InstanceMaterials {
+    T3DRenderingMaterialGpu materials[];
 };
-layout(set = 0, binding = 3, std430) readonly buffer InstanceMaterials {
-    InstanceMaterial materials[];
+layout(set = 1, binding = 1, std430) readonly buffer VtAllocations {
+    T3DVTAllocation vt_allocations[];
 };
-layout(set = 1, binding = 0) uniform sampler2D base_albedo_texture;
-layout(set = 1, binding = 1) uniform sampler2D base_normal_texture;
-layout(set = 1, binding = 2) uniform sampler2D base_orm_texture;
-layout(set = 1, binding = 3) uniform sampler2D overlay_albedo_texture;
-layout(set = 1, binding = 4) uniform sampler2D overlay_normal_texture;
-layout(set = 1, binding = 5) uniform sampler2D overlay_orm_texture;
+layout(set = 1, binding = 2, std430) readonly buffer VtPageTable {
+    T3DVTPageEntry vt_page_table[];
+};
+layout(set = 1, binding = 3) uniform sampler2DArray vt_albedo_bank0;
+layout(set = 1, binding = 4) uniform sampler2DArray vt_normal_bank0;
+layout(set = 1, binding = 5) uniform sampler2DArray vt_surface_bank0;
+layout(set = 1, binding = 6, std430) readonly buffer VtTailMetadata {
+    T3DVTTailMetadata vt_tails[];
+};
+layout(set = 1, binding = 7) uniform sampler2D vt_albedo_tail;
+layout(set = 1, binding = 8) uniform sampler2D vt_normal_tail;
+layout(set = 1, binding = 9) uniform sampler2D vt_surface_tail;
+layout(set = 1, binding = 10, std430) readonly buffer VtMipLayoutBuffer {
+    T3DVTMipLayout vt_mip_layouts[];
+};
+#define T3D_VT_RESOLVE_ALLOCATION(index) vt_allocations[index]
+#define T3D_VT_RESOLVE_PAGE_ENTRY(index) vt_page_table[index]
+#define T3D_VT_RESOLVE_TAIL_ENTRY(index) vt_tails[index]
+#include "vt/terrain_vt_resolve_core.glslinc"
+#undef T3D_VT_RESOLVE_TAIL_ENTRY
+#undef T3D_VT_RESOLVE_PAGE_ENTRY
+#undef T3D_VT_RESOLVE_ALLOCATION
+#define T3D_VT_CONSUMER_ALLOCATION(index) vt_allocations[index]
+#define T3D_VT_CONSUMER_MIP_LAYOUT(index) vt_mip_layouts[index]
+#define T3D_VT_CONSUMER_TAIL(index) vt_tails[index]
+#define T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(layer, uv, grad_x, grad_y) textureGrad(vt_albedo_bank0, vec3((uv), float(layer)), (grad_x), (grad_y))
+#define T3D_VT_CONSUMER_NORMAL_BANK_GRAD(layer, uv, grad_x, grad_y) textureGrad(vt_normal_bank0, vec3((uv), float(layer)), (grad_x), (grad_y))
+#define T3D_VT_CONSUMER_SURFACE_BANK_GRAD(layer, uv, grad_x, grad_y) textureGrad(vt_surface_bank0, vec3((uv), float(layer)), (grad_x), (grad_y))
+#define T3D_VT_CONSUMER_ALBEDO_TAIL_LOD0(uv) textureLod(vt_albedo_tail, (uv), 0.0)
+#define T3D_VT_CONSUMER_NORMAL_TAIL_LOD0(uv) textureLod(vt_normal_tail, (uv), 0.0)
+#define T3D_VT_CONSUMER_SURFACE_TAIL_LOD0(uv) textureLod(vt_surface_tail, (uv), 0.0)
+#define T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE() textureSize(vt_albedo_tail, 0)
+#define T3D_VT_CONSUMER_NORMAL_TAIL_SIZE() textureSize(vt_normal_tail, 0)
+#define T3D_VT_CONSUMER_SURFACE_TAIL_SIZE() textureSize(vt_surface_tail, 0)
+#include "vt/terrain_vt_consumer_sample_inc.glslinc"
+#undef T3D_VT_CONSUMER_SURFACE_TAIL_SIZE
+#undef T3D_VT_CONSUMER_NORMAL_TAIL_SIZE
+#undef T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE
+#undef T3D_VT_CONSUMER_SURFACE_TAIL_LOD0
+#undef T3D_VT_CONSUMER_NORMAL_TAIL_LOD0
+#undef T3D_VT_CONSUMER_ALBEDO_TAIL_LOD0
+#undef T3D_VT_CONSUMER_SURFACE_BANK_GRAD
+#undef T3D_VT_CONSUMER_NORMAL_BANK_GRAD
+#undef T3D_VT_CONSUMER_ALBEDO_BANK_GRAD
+#undef T3D_VT_CONSUMER_TAIL
+#undef T3D_VT_CONSUMER_MIP_LAYOUT
+#undef T3D_VT_CONSUMER_ALLOCATION
 #endif
 
 layout(push_constant, std430) uniform InstancePush {
@@ -197,6 +302,12 @@ layout(location = 5) in vec3 vertex_world_position;
 layout(location = 6) in vec4 current_screen_position;
 layout(location = 7) in vec4 previous_screen_position;
 #endif
+#ifndef T3D_INSTANCE_BRINGUP
+layout(location = 8) flat in uint draw_material_index;
+layout(location = 9) flat in uint draw_overlay_material_index;
+layout(location = 10) flat in uint draw_flags;
+layout(location = 11) flat in uint draw_visibility_layers;
+#endif
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS
 layout(location = 0) out vec4 out_normal_roughness;
@@ -219,17 +330,6 @@ void main() {
     out_color = vec4(1.0, 0.0, 1.0, 1.0);
 }
 #else
-const uint MATERIAL_ALPHA_SCISSOR = 1u << 0u;
-const uint MATERIAL_HAS_ALBEDO_TEXTURE = 1u << 2u;
-const uint MATERIAL_HAS_NORMAL_TEXTURE = 1u << 3u;
-const uint MATERIAL_HAS_ORM_TEXTURE = 1u << 4u;
-const uint MATERIAL_EMISSIVE = 1u << 5u;
-const uint MATERIAL_VERTEX_COLOR = 1u << 7u;
-const uint MATERIAL_VERTEX_COLOR_SRGB = 1u << 8u;
-const uint MATERIAL_NORMAL_MAPPING = 1u << 10u;
-const uint MATERIAL_AO_ENABLED = 1u << 11u;
-const uint MATERIAL_UNSHADED = 1u << 12u;
-const uint MATERIAL_ROUGHNESS_TEXTURE = 1u << 19u;
 const uint INSTANCE_FADE_ACTIVE = 1u << 24u;
 const uint INSTANCE_FADE_SHIFT = 8u;
 const uint INSTANCE_DEPTH_PREPASS_PASS = 1u << 31u;
@@ -242,26 +342,85 @@ vec3 srgb_to_linear(vec3 color) {
 }
 
 float material_texture_channel(vec4 value, uint channel) {
-    if (channel == 0u) {
+    if (channel == 0u)
         return value.r;
-    }
-    if (channel == 1u) {
+    if (channel == 1u)
         return value.g;
-    }
-    if (channel == 2u) {
+    if (channel == 2u)
         return value.b;
-    }
-    if (channel == 3u) {
-        return value.a;
-    }
-    return dot(value.rgb, vec3(0.33333334));
+    return value.a;
 }
 
-vec3 decode_normal(sampler2D normal_texture, vec2 uv, float normal_scale) {
-    vec2 xy = texture(normal_texture, uv).rg * 2.0 - 1.0;
-    xy *= normal_scale;
-    float z = sqrt(max(1.0 - dot(xy, xy), 0.0));
-    return normalize(vec3(xy, z));
+float t3d_inst_unpack_unorm8(uint packed, uint shift) {
+    return float((packed >> shift) & T3D_VT_MATERIAL_UNORM8_MASK) * (1.0 / 255.0);
+}
+
+bool t3d_inst_sampler_repeats(uint sampler_class) {
+    return sampler_class == T3D_VT_SAMPLER_LINEAR_REPEAT || sampler_class == T3D_VT_SAMPLER_NEAREST_REPEAT;
+}
+
+bool t3d_inst_sampler_nearest(uint sampler_class) {
+    return sampler_class == T3D_VT_SAMPLER_NEAREST_REPEAT || sampler_class == T3D_VT_SAMPLER_NEAREST_CLAMP;
+}
+
+uint t3d_inst_filter_mode(T3DRenderingMaterialGpu material) {
+    return (material.packedScalars1 & T3D_VT_MATERIAL_FILTER_MASK) >> T3D_VT_MATERIAL_FILTER_SHIFT;
+}
+
+uint t3d_inst_effective_sampler_class(T3DRenderingMaterialGpu material) {
+    bool repeat_uv = material.samplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || material.samplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT;
+    uint filterMode = t3d_inst_filter_mode(material);
+    bool nearest = filterMode == T3D_VT_FILTER_NEAREST || filterMode == T3D_VT_FILTER_NEAREST_MIPMAP
+        || filterMode == T3D_VT_FILTER_NEAREST_MIPMAP_ANISOTROPIC;
+    return nearest ? (repeat_uv ? T3D_VT_SAMPLER_NEAREST_REPEAT : T3D_VT_SAMPLER_NEAREST_CLAMP)
+                   : (repeat_uv ? T3D_VT_SAMPLER_LINEAR_REPEAT : T3D_VT_SAMPLER_LINEAR_CLAMP);
+}
+
+vec3 t3d_inst_unpack_rgbe9995(uint packed) {
+    uvec3 mantissa = uvec3(packed & 0x1ffu, (packed >> 9u) & 0x1ffu, (packed >> 18u) & 0x1ffu);
+    uint exponent = (packed >> 27u) & 0x1fu;
+    return vec3(mantissa) * exp2(float(exponent) - 24.0);
+}
+
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+#define T3D_VT_INSTANCE_FEEDBACK_ALLOCATION(material_index) (materials[(material_index)].vtAllocation)
+#define T3D_VT_INSTANCE_FEEDBACK_REPEAT_UV(material_index)                                                                                 \
+    t3d_inst_sampler_repeats(t3d_inst_effective_sampler_class(materials[(material_index)]))
+
+void t3d_vt_instance_fragment_feedback(uint material_index, uint material_flags, vec2 uv) {
+    if (material_index == 0xffffu) {
+        return;
+    }
+
+    uint allocation_id = T3D_VT_INSTANCE_FEEDBACK_ALLOCATION(material_index);
+    if (allocation_id == T3D_VT_INVALID_ALLOCATION || allocation_id >= push_data.reserved1) {
+        return;
+    }
+    bool repeat_uv = T3D_VT_INSTANCE_FEEDBACK_REPEAT_UV(material_index);
+    uint filter_mode = t3d_inst_filter_mode(materials[material_index]);
+#if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+    // Pure depth/shadow stays feedback-free for opaque materials. Alpha-scissor
+    // only requests the page containing opacity-bearing Surface.A.
+    if ((material_flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u) {
+        return;
+    }
+    t3d_vt_fragment_request_surface_a_if_missing(
+        allocation_id, uv, dFdx(uv), dFdy(uv), 0.0, T3D_VT_FRAGMENT_PRIORITY_ALPHA_SCISSOR, repeat_uv, filter_mode);
+#else
+    t3d_vt_fragment_request_material_page_set(
+        allocation_id, uv, dFdx(uv), dFdy(uv), 0.0, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+#endif
+}
+#endif
+
+vec3 decode_normal_sample(vec4 normal_texel, float normal_scale) {
+    vec2 xy = (normal_texel.rg * 2.0 - 1.0) * normal_scale;
+    float len_sq = dot(xy, xy);
+    if (len_sq > 1.0) {
+        xy *= inversesqrt(len_sq);
+        len_sq = 1.0;
+    }
+    return vec3(xy, sqrt(max(1.0 - len_sq, 0.0)));
 }
 
 vec3 face_oriented_normal(vec3 normal_value) {
@@ -269,28 +428,214 @@ vec3 face_oriented_normal(vec3 normal_value) {
     return gl_FrontFacing ? n : -n;
 }
 
-vec3 tangent_to_world(vec3 tangent_normal) {
-    vec3 base_n = normalize(vertex_normal);
-    vec3 n = gl_FrontFacing ? base_n : -base_n;
-    vec3 t = normalize(vertex_tangent.xyz - base_n * dot(base_n, vertex_tangent.xyz));
+vec3 tangent_to_world(vec3 tangent_normal, vec3 face_normal) {
+    vec3 base_n = gl_FrontFacing ? face_normal : -face_normal;
+    vec3 t = normalize(vertex_tangent.xyz - face_normal * dot(face_normal, vertex_tangent.xyz));
     float handedness = gl_FrontFacing ? vertex_tangent.w : -vertex_tangent.w;
-    vec3 b = normalize(cross(n, t)) * handedness;
-    return normalize(mat3(t, b, n) * tangent_normal);
+    vec3 b = normalize(cross(base_n, t)) * handedness;
+    return normalize(mat3(t, b, base_n) * tangent_normal);
 }
 
-void main() {
-#ifndef T3D_FORWARD_DEPTH
-    if (push_data.reserved0 != 0u) {
-        out_color = vec4(1.0, 0.0, 1.0, 1.0);
-#ifdef T3D_FORWARD_SPECULAR
-        out_specular = vec4(0.0);
-#endif
-#ifdef T3D_FORWARD_MOTION
-        out_motion = vec2(0.0);
-#endif
-        return;
+void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
+    vec2 material_uv,
+    out T3DVTConsumerAddress vt_address,
+    out vec4 albedo_texel,
+    out vec4 surface_texel,
+    out float metallic,
+    out float roughness,
+    out float ao,
+    out float normal_scale,
+    out float alpha_cutoff,
+    out uint surface_layout) {
+    uint sampler_class = t3d_inst_effective_sampler_class(material);
+    bool repeat_uv = t3d_inst_sampler_repeats(sampler_class);
+    uint filter_mode = t3d_inst_filter_mode(material);
+    T3DVTConsumerFootprint footprint = t3d_vt_consumer_prepare_footprint(
+        material_uv, dFdx(material_uv), dFdy(material_uv), 0.0, repeat_uv, filter_mode, push_data.reserved1, push_data.reserved2);
+    T3DVTConsumerPageSet3 page_set = t3d_vt_consumer_resolve_page_set3_v3(material.vtAllocation, footprint);
+    T3DVTConsumerAddress albedo_address = page_set.channel0;
+    vt_address = page_set.channel1;
+    T3DVTConsumerAddress surface_address = page_set.channel2;
+    albedo_texel = t3d_vt_consumer_sample_albedo(albedo_address);
+    surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+    metallic = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_METALLIC_SHIFT);
+    roughness = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ROUGHNESS_SHIFT);
+    float ao_strength = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);
+    alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
+    normal_scale = unpackHalf2x16(material.packedScalars1).x;
+    surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
+    if (surface_layout == 0u) {
+        ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface_texel.r, ao_strength) : 1.0;
+        if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u) {
+            roughness = clamp(surface_texel.g, 0.04, 1.0);
+            metallic = clamp(surface_texel.b, 0.0, 1.0);
+        } else {
+            roughness = clamp(roughness * surface_texel.g, 0.02, 1.0);
+            metallic = clamp(metallic * surface_texel.b, 0.0, 1.0);
+        }
+    } else {
+        ao = 1.0;
+        roughness = clamp(roughness * material_texture_channel(surface_texel, min(surface_layout - 1u, 3u)), 0.02, 1.0);
+        metallic = clamp(metallic, 0.0, 1.0);
     }
+}
+
+float t3d_inst_blinn_lobe(float ndoth, float roughness, float width_value, float roughness_influence) {
+    float x2 = ndoth * ndoth;
+    float x4 = x2 * x2;
+    float x8 = x4 * x4;
+    float x16 = x8 * x8;
+    float x32 = x16 * x16;
+    float smoothness = 1.0 - roughness;
+    float roughness_shape = mix(1.0, smoothness * smoothness, roughness_influence);
+    float width = clamp(width_value * roughness_shape, 0.0, 1.0);
+    float broad = mix(x4, x8, width);
+    float narrow = mix(x16, x32, width);
+    float lobe = mix(broad, narrow, width);
+    return lobe * mix(0.08, 1.0, width);
+}
+
+#ifdef T3D_FORWARD_NATIVE_LIGHTING
+void t3d_inst_stylized_local_light_response(vec3 albedo,
+    vec3 N,
+    vec3 V,
+    float roughness,
+    float metallic,
+    float dielectric_specular,
+    vec3 L,
+    vec3 radiance,
+    float attenuation,
+    float specular_amount,
+    inout vec3 diffuse_light,
+    inout vec3 specular_light) {
+    float ndotl = dot(N, L);
+    float lambert = max(ndotl, 0.0);
+    if (lambert <= 0.0 || attenuation <= 0.0) return;
+    vec3 incoming_light = radiance * attenuation / T3D_PI;
+    float diffuse_metal_factor = 1.0 - metallic * 0.88;
+    diffuse_light += albedo * lambert * diffuse_metal_factor * incoming_light;
+    vec3 H = normalize(L + V);
+    float ndoth = max(dot(N, H), 0.0);
+    float x2 = ndoth * ndoth;
+    float x4 = x2 * x2;
+    float x8 = x4 * x4;
+    float x16 = x8 * x8;
+    float smoothness = 1.0 - roughness;
+    float local_specular = mix(x8, x16, smoothness) * smoothness * smoothness;
+    vec3 specular_color = mix(vec3(dielectric_specular), albedo, metallic);
+    specular_light += specular_color * local_specular * 0.12 * max(specular_amount, 0.0) * incoming_light;
+}
+
+void t3d_inst_stylized_direct_response(vec3 albedo,
+    T3DForwardShadingContext context,
+    float roughness,
+    float metallic,
+    float dielectric_specular,
+    uint surface_mask,
+    out vec3 diffuse_light,
+    out vec3 specular_light) {
+    diffuse_light = vec3(0.0);
+    specular_light = vec3(0.0);
+    vec3 N = normalize(context.view_normal);
+    vec3 V = normalize(context.view_direction);
+    float diffuse_metal_factor = 1.0 - metallic * 0.88;
+
+    uint directional_count = min(t3d_forward_light_frame.scene_params.x, 8u);
+    for (uint i = 0u; i < directional_count; ++i) {
+        T3DNativeDirectionalLightData light = t3d_directional_lights.data[i];
+        if ((light.mask & surface_mask) == 0u) continue;
+        vec3 L = normalize(light.direction);
+        float ndotl = dot(N, L);
+        float lambert = max(ndotl, 0.0);
+        float shadow = t3d_directional_shadow(i, context.view_position, N);
+        vec3 incoming_light = light.color * light.energy * shadow / T3D_PI;
+        float wrapped = smoothstep(-frame_data.nomad_sun_shape.x, max(frame_data.nomad_sun_shape.y, 0.001), ndotl);
+        float diffuse_term = mix(lambert, wrapped, frame_data.nomad_sun_shape.z);
+        float contrast_scale = 1.0 + frame_data.nomad_sun_shape.w * 3.5;
+        diffuse_term = clamp((diffuse_term - 0.5) * contrast_scale + 0.5, 0.0, 1.0);
+        diffuse_term = max(diffuse_term, frame_data.nomad_sun_diffuse.z * (1.0 - lambert));
+        float face2 = diffuse_term * diffuse_term;
+        float face4 = face2 * face2;
+        diffuse_term = min(diffuse_term * (1.0 + face4 * frame_data.nomad_sun_diffuse.y), 2.0);
+        diffuse_light += albedo * diffuse_term * diffuse_metal_factor * frame_data.nomad_sun_diffuse.x * incoming_light;
+        if (ndotl > 0.0) {
+            vec3 H = normalize(L + V);
+            float ndoth = max(dot(N, H), 0.0);
+            float specular_lobe = t3d_inst_blinn_lobe(ndoth, roughness, frame_data.nomad_sun_specular.y, frame_data.nomad_sun_specular.z);
+            vec3 specular_color = mix(vec3(dielectric_specular), albedo, metallic);
+            specular_light += specular_color * specular_lobe * frame_data.nomad_sun_specular.x * max(light.specular, 0.0) * incoming_light;
+        }
+        float nv = max(dot(N, V), 0.0);
+        float rim = 1.0 - nv;
+        float rim2 = rim * rim;
+        float rim4 = rim2 * rim2;
+        float rim8 = rim4 * rim4;
+        float rim_shape = mix(rim2, rim8, frame_data.nomad_sun_rim.y);
+        float backlight = max(dot(-N, L), 0.0);
+        diffuse_light += albedo * rim_shape * backlight * frame_data.nomad_sun_rim.x * incoming_light;
+    }
+
+    for (uint light_type = 0u; light_type < 3u; ++light_type) {
+        uint type_offset, item_min, item_max, item_from, item_to;
+        if (!t3d_cluster_range(context.cluster_address, light_type, type_offset, item_min, item_max, item_from, item_to)) continue;
+        for (uint word = item_from; word < item_to; ++word) {
+            uint mask = t3d_cluster_buffer.data[type_offset + word] & t3d_cluster_range_mask(word, item_min, item_max);
+            while (mask != 0u) {
+                uint bit = uint(findMSB(mask));
+                mask &= ~(1u << bit);
+                uint light_index = word * 32u + bit;
+                T3DNativeLightData light = light_type == 0u
+                    ? t3d_omni_lights.data[light_index]
+                    : (light_type == 1u ? t3d_spot_lights.data[light_index] : t3d_area_lights.data[light_index]);
+                if ((light.mask & surface_mask) == 0u) continue;
+                vec3 light_direction;
+                float distance_to_light;
+                float attenuation;
+                float shadow = 1.0;
+                if (light_type == 0u || light_type == 1u) {
+                    vec3 to_light = light.position - context.view_position;
+                    distance_to_light = length(to_light);
+                    if (distance_to_light <= 1e-6) continue;
+                    light_direction = to_light / distance_to_light;
+                    attenuation = t3d_native_attenuation(distance_to_light, light.inv_radius, light.attenuation);
+                }
+                if (light_type == 0u) {
+                    shadow = t3d_omni_shadow(light, context.view_position, N);
+                } else if (light_type == 1u) {
+                    float cone_angle = light.cone_angle;
+                    float scos = max(dot(-light_direction, light.direction), cone_angle);
+                    float spot_rim = max(1e-4, (1.0 - scos) / max(1.0 - cone_angle, 1e-4));
+                    attenuation *= 1.0 - pow(spot_rim, light.cone_attenuation);
+                    shadow = t3d_spot_shadow(light, context.view_position, N, light_direction, distance_to_light);
+                } else {
+                    if (dot(light.direction, context.view_position - light.position) <= 0.0) continue;
+                    float width_length = length(light.area_width);
+                    float height_length = length(light.area_height);
+                    if (width_length <= 1e-6 || height_length <= 1e-6) continue;
+                    vec3 width_direction = light.area_width / width_length;
+                    vec3 height_direction = light.area_height / height_length;
+                    vec3 from_center = context.view_position - light.position;
+                    float local_x = clamp(dot(from_center, width_direction), -0.5 * width_length, 0.5 * width_length);
+                    float local_y = clamp(dot(from_center, height_direction), -0.5 * height_length, 0.5 * height_length);
+                    vec3 closest_point = light.position + width_direction * local_x + height_direction * local_y;
+                    vec3 to_light = closest_point - context.view_position;
+                    distance_to_light = length(to_light);
+                    if (distance_to_light <= 1e-6) continue;
+                    light_direction = to_light / distance_to_light;
+                    attenuation = t3d_native_attenuation(distance_to_light, light.inv_radius, light.attenuation);
+                    float area = max(width_length * height_length, 0.0001);
+                    attenuation *= clamp(area / max(area, distance_to_light * distance_to_light), 0.0, 1.0);
+                    shadow = t3d_area_shadow(light, context.view_position, N);
+                }
+                t3d_inst_stylized_local_light_response(albedo, N, V, roughness, metallic, dielectric_specular,
+                    light_direction, light.color, attenuation * shadow, light.specular_amount, diffuse_light, specular_light);
+            }
+        }
+    }
+}
 #endif
+
+void main() {
     vec4 mesh_color = mesh_vertex_color;
     vec4 base_color = instance_color;
     vec3 normal = face_oriented_normal(vertex_normal);
@@ -299,108 +644,125 @@ void main() {
     float ao = 1.0;
     vec3 emission = vec3(0.0);
     bool unshaded = false;
+    bool stylized_sun = false;
+    float dielectric_specular = 0.04;
     bool base_survives = true;
 
-    if (push_data.material_index != 0xffffu) {
-        InstanceMaterial material = materials[push_data.material_index];
-        if ((material.flags & MATERIAL_VERTEX_COLOR_SRGB) != 0u) {
+    if (draw_material_index != 0xffffu) {
+        T3DRenderingMaterialGpu material = materials[draw_material_index];
+        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
             mesh_color.rgb = srgb_to_linear(mesh_color.rgb);
-        }
-        if ((material.flags & MATERIAL_VERTEX_COLOR) != 0u) {
+        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
             base_color *= mesh_color;
-        }
-        vec4 texel = (material.flags & MATERIAL_HAS_ALBEDO_TEXTURE) != 0u ? texture(base_albedo_texture, vertex_uv) : vec4(1.0);
-        if ((material.flags & MATERIAL_HAS_ALBEDO_TEXTURE) != 0u) {
-            texel.rgb = srgb_to_linear(texel.rgb);
-        }
-        base_color *= material.albedo * texel;
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-        vec4 orm_texel = (material.flags & MATERIAL_HAS_ORM_TEXTURE) != 0u ? texture(base_orm_texture, vertex_uv) : vec4(1.0);
-        bool roughness_only = (material.flags & MATERIAL_ROUGHNESS_TEXTURE) != 0u;
-        float metallic_sample = roughness_only ? 1.0 : orm_texel.b;
-        float roughness_sample = roughness_only ? material_texture_channel(orm_texel, material.reserved0 & 7u) : orm_texel.g;
-        float ao_sample = roughness_only ? 1.0 : orm_texel.r;
-        metallic = clamp(material.pbr.x * metallic_sample, 0.0, 1.0);
-        roughness = clamp(material.pbr.y * roughness_sample, 0.02, 1.0);
-        ao = (material.flags & MATERIAL_AO_ENABLED) != 0u ? mix(1.0, ao_sample, clamp(material.pbr.z, 0.0, 1.0)) : 1.0;
-        if ((material.flags & MATERIAL_NORMAL_MAPPING) != 0u && (material.flags & MATERIAL_HAS_NORMAL_TEXTURE) != 0u) {
-            normal = tangent_to_world(decode_normal(base_normal_texture, vertex_uv, material.normal_scale));
-        }
-        if ((material.flags & MATERIAL_EMISSIVE) != 0u) {
-            emission += material.emission;
-        }
+        vec2 material_uv = vertex_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+        t3d_vt_instance_fragment_feedback(draw_material_index, material.flags, material_uv);
 #endif
-        if ((material.flags & MATERIAL_ALPHA_SCISSOR) != 0u && base_color.a < material.pbr.w) {
-            base_survives = false;
+        T3DVTConsumerAddress vt_address;
+        vec4 albedo_texel;
+        vec4 surface_texel;
+        float normal_scale;
+        float alpha_cutoff;
+        uint surface_layout;
+        t3d_inst_evaluate_surface(material,
+            material_uv,
+            vt_address,
+            albedo_texel,
+            surface_texel,
+            metallic,
+            roughness,
+            ao,
+            normal_scale,
+            alpha_cutoff,
+            surface_layout);
+        base_color *= material.baseColor * albedo_texel;
+        if ((material.flags & T3D_VT_MATERIAL_ALBEDO_SATURATION) != 0u) {
+            float saturation = float(material.reserved & 0xffffu) * (1.5 / 65535.0);
+            float luma = dot(base_color.rgb, vec3(0.299, 0.587, 0.114));
+            base_color.rgb = max(mix(vec3(luma), base_color.rgb, saturation), vec3(0.0));
         }
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-        unshaded = (material.flags & MATERIAL_UNSHADED) != 0u;
+        if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+            normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(vt_address), normal_scale), normal);
+        }
+        emission += t3d_inst_unpack_rgbe9995(material.packedEmission);
+#endif
+        if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u && base_color.a < alpha_cutoff)
+            base_survives = false;
+#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+        unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
+        stylized_sun = (material.flags & T3D_VT_MATERIAL_STYLIZED_SUN) != 0u;
+        dielectric_specular = float((material.reserved >> 16u) & 0xffffu) / 65535.0;
 #endif
     }
 
     vec4 final_color = base_survives ? base_color : vec4(0.0);
     bool overlay_survives = false;
-    if (push_data.overlay_material_index != 0xffffu) {
-        InstanceMaterial overlay = materials[push_data.overlay_material_index];
+    if (draw_overlay_material_index != 0xffffu) {
+        T3DRenderingMaterialGpu overlay = materials[draw_overlay_material_index];
         vec4 overlay_mesh_color = mesh_vertex_color;
-        if ((overlay.flags & MATERIAL_VERTEX_COLOR_SRGB) != 0u) {
+        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
             overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
-        }
         vec4 overlay_color = instance_color;
-        if ((overlay.flags & MATERIAL_VERTEX_COLOR) != 0u) {
+        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
             overlay_color *= overlay_mesh_color;
-        }
-        vec4 overlay_texel = (overlay.flags & MATERIAL_HAS_ALBEDO_TEXTURE) != 0u ? texture(overlay_albedo_texture, vertex_uv) : vec4(1.0);
-        if ((overlay.flags & MATERIAL_HAS_ALBEDO_TEXTURE) != 0u) {
-            overlay_texel.rgb = srgb_to_linear(overlay_texel.rgb);
-        }
-        overlay_color *= overlay.albedo * overlay_texel;
-        overlay_survives = (overlay.flags & MATERIAL_ALPHA_SCISSOR) == 0u || overlay_color.a >= overlay.pbr.w;
+        vec2 overlay_uv = vertex_uv * overlay.uvScaleBias.xy + overlay.uvScaleBias.zw;
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+        t3d_vt_instance_fragment_feedback(draw_overlay_material_index, overlay.flags, overlay_uv);
+#endif
+        T3DVTConsumerAddress overlay_vt_address;
+        vec4 overlay_albedo;
+        vec4 overlay_surface;
+        float overlay_metallic;
+        float overlay_roughness;
+        float overlay_ao;
+        float overlay_normal_scale;
+        float overlay_alpha_cutoff;
+        uint overlay_surface_layout;
+        t3d_inst_evaluate_surface(overlay,
+            overlay_uv,
+            overlay_vt_address,
+            overlay_albedo,
+            overlay_surface,
+            overlay_metallic,
+            overlay_roughness,
+            overlay_ao,
+            overlay_normal_scale,
+            overlay_alpha_cutoff,
+            overlay_surface_layout);
+        overlay_color *= overlay.baseColor * overlay_albedo;
+        overlay_survives = (overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || overlay_color.a >= overlay_alpha_cutoff;
         if (overlay_survives) {
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-            vec4 overlay_orm_texel = (overlay.flags & MATERIAL_HAS_ORM_TEXTURE) != 0u ? texture(overlay_orm_texture, vertex_uv) : vec4(1.0);
-            bool overlay_roughness_only = (overlay.flags & MATERIAL_ROUGHNESS_TEXTURE) != 0u;
-            float overlay_metallic_sample = overlay_roughness_only ? 1.0 : overlay_orm_texel.b;
-            float overlay_roughness_sample =
-                overlay_roughness_only ? material_texture_channel(overlay_orm_texel, overlay.reserved0 & 7u) : overlay_orm_texel.g;
-            float overlay_ao_sample = overlay_roughness_only ? 1.0 : overlay_orm_texel.r;
             float overlay_weight = clamp(overlay_color.a, 0.0, 1.0);
-            metallic = mix(metallic, clamp(overlay.pbr.x * overlay_metallic_sample, 0.0, 1.0), overlay_weight);
-            roughness = mix(roughness, clamp(overlay.pbr.y * overlay_roughness_sample, 0.02, 1.0), overlay_weight);
-            float overlay_ao =
-                (overlay.flags & MATERIAL_AO_ENABLED) != 0u ? mix(1.0, overlay_ao_sample, clamp(overlay.pbr.z, 0.0, 1.0)) : 1.0;
+#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+            metallic = mix(metallic, overlay_metallic, overlay_weight);
+            roughness = mix(roughness, overlay_roughness, overlay_weight);
             ao = mix(ao, overlay_ao, overlay_weight);
-            if ((overlay.flags & MATERIAL_NORMAL_MAPPING) != 0u && (overlay.flags & MATERIAL_HAS_NORMAL_TEXTURE) != 0u) {
-                vec3 overlay_normal = tangent_to_world(decode_normal(overlay_normal_texture, vertex_uv, overlay.normal_scale));
+            if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+                vec3 overlay_normal =
+                    tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
                 normal = normalize(mix(normal, overlay_normal, overlay_weight));
             }
-            if ((overlay.flags & MATERIAL_EMISSIVE) != 0u) {
-                emission += overlay.emission * overlay_weight;
-            }
-#else
-            float overlay_weight = clamp(overlay_color.a, 0.0, 1.0);
+            emission += t3d_inst_unpack_rgbe9995(overlay.packedEmission) * overlay_weight;
 #endif
             final_color.rgb = mix(final_color.rgb, overlay_color.rgb, overlay_weight);
             final_color.a = max(final_color.a, overlay_color.a);
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-            unshaded = unshaded || (overlay.flags & MATERIAL_UNSHADED) != 0u;
+            unshaded = unshaded || (overlay.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
 #endif
         }
     }
 
-    if (!base_survives && !overlay_survives) {
+    if (!base_survives && !overlay_survives)
         discard;
-    }
-    if ((push_data.flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5) {
+    if ((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5)
         discard;
-    }
-    if ((push_data.flags & INSTANCE_FADE_ACTIVE) != 0u) {
-        float visibility_fade = float((push_data.flags >> INSTANCE_FADE_SHIFT) & 0xffffu) / 65535.0;
+    if ((draw_flags & INSTANCE_FADE_ACTIVE) != 0u) {
+        float visibility_fade = float((draw_flags >> INSTANCE_FADE_SHIFT) & 0xffffu) / 65535.0;
         vec2 pixel = floor(gl_FragCoord.xy);
         float dither = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
-        if (dither > visibility_fade) {
+        if (dither > visibility_fade)
             discard;
-        }
     }
 
 #ifdef T3D_FORWARD_DEPTH
@@ -411,7 +773,6 @@ void main() {
 #endif
 #endif
 #else
-
     vec3 lit;
     vec3 specular_light = vec3(0.0);
     if (unshaded) {
@@ -420,43 +781,34 @@ void main() {
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
         vec3 view_position = (frame_data.view_matrix * vec4(vertex_world_position, 1.0)).xyz;
         vec3 view_normal = normalize(mat3(frame_data.view_matrix) * normal);
-        t3d_forward_apply_decals(
-            view_position, push_data.visibility_layers, final_color.rgb, view_normal, roughness, metallic, ao, emission);
+        T3DForwardShadingContext shading_context = t3d_forward_make_shading_context(view_position, view_normal);
+        t3d_forward_apply_decals(shading_context, draw_visibility_layers, final_color.rgb, roughness, metallic, ao, emission);
         emission *= t3d_forward_light_frame.environment_params0.y;
-        normal = normalize(transpose(mat3(frame_data.view_matrix)) * view_normal);
         vec3 direct_diffuse;
         vec3 direct_specular;
-        float material_specular = 1.0 - roughness;
-        t3d_forward_direct_lighting(final_color.rgb,
-            vertex_world_position,
-            normalize(normal),
-            frame_data.view_matrix,
-            frame_data.camera_position[t3d_view_index()].xyz,
-            roughness,
-            metallic,
-            material_specular,
-            push_data.visibility_layers,
-            2u,
-            true,
-            0u,
-            1.0,
-            direct_diffuse,
-            direct_specular);
-        vec3 reflection_view_direction = normalize(-view_position);
+        float material_specular = stylized_sun ? 0.30 : (1.0 - roughness);
+        if (stylized_sun) {
+            t3d_inst_stylized_direct_response(final_color.rgb, shading_context, roughness, metallic, dielectric_specular,
+                draw_visibility_layers, direct_diffuse, direct_specular);
+        } else {
+            t3d_forward_direct_lighting(final_color.rgb,
+                shading_context,
+                roughness,
+                metallic,
+                material_specular,
+                draw_visibility_layers,
+                2u,
+                0u,
+                1.0,
+                direct_diffuse,
+                direct_specular);
+        }
         vec3 ambient_diffuse;
         vec3 environment_specular;
-        t3d_forward_environment_lighting(final_color.rgb,
-            view_normal,
-            reflection_view_direction,
-            roughness,
-            metallic,
-            ao,
-            material_specular,
-            ambient_diffuse,
-            environment_specular);
+        t3d_forward_environment_lighting(
+            final_color.rgb, shading_context, roughness, metallic, ao, material_specular, ambient_diffuse, environment_specular);
         specular_light = direct_specular + environment_specular
-            + t3d_forward_reflection(
-                view_position, view_normal, reflection_view_direction, roughness, metallic, final_color.rgb, push_data.visibility_layers);
+            + t3d_forward_reflection(shading_context, roughness, metallic, final_color.rgb, draw_visibility_layers);
         lit = ambient_diffuse + direct_diffuse + emission;
 #ifndef T3D_FORWARD_SPECULAR
         lit += specular_light;

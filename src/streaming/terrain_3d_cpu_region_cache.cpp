@@ -9,36 +9,13 @@
 #include "core/terrain_3d_util.h"
 #include "streaming/terrain_3d_cpu_cache_policy.h"
 #include "streaming/terrain_3d_runtime_profile.h"
+#include "streaming/terrain_3d_scope_timer.h"
 
 #include <math.h>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
 
-class Terrain3DCpuRegionCacheScopeTimer {
-	uint64_t m_nStartedUsec = 0u;
-	uint64_t *m_pElapsedUsec = NULL;
-
-public:
-	Terrain3DCpuRegionCacheScopeTimer( uint64_t &nElapsedUsec, const bool bEnabled ) {
-		nElapsedUsec = 0u;
-		if ( !bEnabled ) {
-			return;
-		}
-		m_pElapsedUsec = &nElapsedUsec;
-		Time *const pTime = Time::get_singleton();
-		m_nStartedUsec = pTime ? pTime->get_ticks_usec() : 0u;
-	}
-
-	~Terrain3DCpuRegionCacheScopeTimer( void ) {
-		if ( !m_pElapsedUsec ) {
-			return;
-		}
-		Time *const pTime = Time::get_singleton();
-		const uint64_t finishedUsec = pTime ? pTime->get_ticks_usec() : m_nStartedUsec;
-		*m_pElapsedUsec = finishedUsec >= m_nStartedUsec ? finishedUsec - m_nStartedUsec : 0u;
-	}
-};
 
 typedef bool ( *t3dCpuRegionRingFn )( void *pContext, const Vector2i &rLocation );
 
@@ -648,7 +625,7 @@ bool Terrain3DCpuRegionCache::ensureSampleArea( const Vector3 &rWorldPosition, c
 }
 
 void Terrain3DCpuRegionCache::update( const t3dResidencyFrameState_t &rFrame, const bool bForce, const int nEffectiveLoadLayers ) {
-	const Terrain3DCpuRegionCacheScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.m_bProfilingEnabled );
+	const Terrain3DLastScopeTimer serviceTimer( m_nServiceUsecLast, rFrame.m_bProfilingEnabled );
 	setRuntimePageConfig( rFrame.m_runtimePageConfig );
 	m_nLoadsLastTick = 0;
 	m_nStallFlagsLastTick = TERRAIN3D_PROFILE_STALL_NONE;
