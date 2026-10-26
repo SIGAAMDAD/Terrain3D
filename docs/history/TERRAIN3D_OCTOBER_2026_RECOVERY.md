@@ -9,9 +9,10 @@ reconstruction identity and timestamp. They are **not** the original author date
 
 The active `src/` and `project/` source is the same byte-for-byte as the
 2026-10-26 ST06 + HLOD V5 consolidated handoff and the separately uploaded
-`src(1).zip`, excluding four generated `.dll`, `.exp`, `.lib`, `.pdb` files.
-Those four original binary artifacts remain recoverable from the preserved
-`recovered/source-backed-2026-10-26` checkpoint. All build and HLOD
+`src(1).zip`, excluding four generated `.dll`, `.exp`, `.lib`, `.pdb` binaries and thirteen
+Python `.pyc` caches.
+Those seventeen original generated artifacts remain recoverable from the preserved
+`recovered/source-backed-2026-10-26` checkpoint. All 52 non-cache build and HLOD
 integration files from the 2026-10-26 handoff are present.
 
 The current branch should be the starting point for development automation.
@@ -49,3 +50,8 @@ The old source-backed checkpoint and forensic object branches are preserved.
 No original Git author, timestamp, commit object, or source content was
 rewritten. This branch supersedes the previous synthetic final-snapshot
 reconstruction for ongoing source development.
+
+Source verification: 1,269 tracked `src/` + `project/` paths match the
+October 26 `src(1).zip` and ST06/HLOD V5 archives byte-for-byte; 17 generated
+artifacts are excluded. The original complete uploaded snapshot remains
+archived at commit `caad5c6abf565ce78bcc6657d8183dbc48aba866`.
