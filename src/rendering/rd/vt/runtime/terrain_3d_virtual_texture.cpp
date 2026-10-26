@@ -1,4 +1,5 @@
 #include "diagnostics/core/terrain_3d_streaming_profiler.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"

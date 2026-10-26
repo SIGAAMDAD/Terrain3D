@@ -1,4 +1,5 @@
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi_capture.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include <assert.h>
 #include <vector>
 

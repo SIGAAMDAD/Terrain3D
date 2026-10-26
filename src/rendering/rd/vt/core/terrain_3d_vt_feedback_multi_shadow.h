@@ -3,6 +3,7 @@
 #define TERRAIN3D_VT_FEEDBACK_MULTI_SHADOW_H
 
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include <stdint.h>
 
 // Diagnostics-only V1 capture inspection. This contract cannot

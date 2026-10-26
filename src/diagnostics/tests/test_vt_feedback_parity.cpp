@@ -1,5 +1,6 @@
 // Copyright (c) 2023-2026 Terrain3D contributors.
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi_parity.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "rendering/rd/vt/runtime/terrain_3d_vt_feedback_multi_reader.h"
 #include <assert.h>
 #include <string.h>

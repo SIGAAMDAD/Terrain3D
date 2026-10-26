@@ -4,6 +4,7 @@
 #define TERRAIN3D_VT_GPU_H
 
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_global_descriptor_contract.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "Terrain3DTypes.h"
 
 #include "rendering/rd/vt/gpu/terrain_3d_vt_resources.h"

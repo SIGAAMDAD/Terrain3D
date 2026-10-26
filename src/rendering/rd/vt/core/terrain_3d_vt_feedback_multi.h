@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "terrain_3d_vt_feedback_grid.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 
 // P31b experimental, separately versioned feedback. A slot is a 40-byte
 // feedback header followed by fixed, nine-word records per coarse cell:

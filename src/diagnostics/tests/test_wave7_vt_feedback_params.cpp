@@ -1,5 +1,6 @@
 // Pure C++17 validation of the experimental P31a push-constant/slot ABI.
 #include "rendering/rd/vt/core/terrain_3d_vt_single_writer.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include <assert.h>
 #include <string.h>
 

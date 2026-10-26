@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 
 #define T3D_VT_FEEDBACK_MAX_PARENT_DEPTH 32u
 

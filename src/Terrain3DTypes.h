@@ -2051,7 +2051,6 @@ typedef struct t3dRenderingMaterialGpu_s
 	uint32_t m_nReserved;
 } t3dRenderingMaterialGpu_t;
 
-#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 
 typedef struct t3dVTRequestGpuCounters_s
 {

@@ -1,5 +1,6 @@
 // Copyright (c) 2023-2026 Terrain3D contributors.
 #include "rendering/rd/vt/gpu/terrain_3d_vt_feedback_multi_gpu.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "rendering/rd/core/terrain_3d_rd_context.h"
 #include "rendering/rd/core/terrain_3d_gpu_transfer_budget.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_descriptor_recipe.h"

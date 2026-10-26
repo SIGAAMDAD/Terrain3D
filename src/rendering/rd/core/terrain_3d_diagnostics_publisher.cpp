@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/core/terrain_3d_diagnostics_publisher.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "diagnostics/core/terrain_3d_streaming_profiler.h"
 #include "rendering/rd/core/terrain_3d_diagnostic_inputs.h"
 #include "rendering/rd/forward/terrain_3d_rd_forward_plus_bridge.h"

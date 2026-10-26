@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/vt/planning/terrain_3d_vt_resource_plan.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
 #include "core/utility/terrain_3d_checked_math.h"

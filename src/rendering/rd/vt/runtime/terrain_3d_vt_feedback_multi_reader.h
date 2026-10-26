@@ -3,6 +3,7 @@
 #define TERRAIN3D_VT_FEEDBACK_MULTI_READER_H
 
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "rendering/rd/vt/runtime/terrain_3d_vt_feedback_reducer.h"
 #include <stddef.h>
 #include <stdint.h>

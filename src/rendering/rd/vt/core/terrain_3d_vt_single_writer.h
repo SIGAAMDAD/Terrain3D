@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "terrain_3d_vt_feedback_grid.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 
 // Experimental P31a input contract (not a shipping feedback producer):
 // binding 0 is a fully depth-tested R32_UINT virtual-page attachment with

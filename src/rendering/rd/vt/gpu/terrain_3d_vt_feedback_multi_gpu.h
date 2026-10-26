@@ -3,6 +3,7 @@
 #define TERRAIN3D_VT_FEEDBACK_MULTI_GPU_H
 
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi_capture.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_feedback_grid.h"
 #include "rendering/rd/infrastructure/resources/terrain_3d_rd_texture.h"
 #include "rendering/rd/infrastructure/resources/terrain_3d_rd_shader.h"
 #include "rendering/rd/infrastructure/resources/terrain_3d_rd_sampler.h"
