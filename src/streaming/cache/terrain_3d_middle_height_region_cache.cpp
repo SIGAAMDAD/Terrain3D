@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "diagnostics/core/terrain_3d_diagnostics.h"
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency_primitives.h"
 #include "streaming/cache/terrain_3d_middle_height_region_cache.h"
@@ -458,14 +459,12 @@ t3dMiddleHeightRegionCacheStats_t Terrain3DMiddleHeightRegionCache::getStats( vo
 Dictionary Terrain3DMiddleHeightRegionCache::getStatsDictionary( void ) const {
 	const t3dMiddleHeightRegionCacheStats_t values = getStats();
 	Dictionary stats;
-	stats["resident"] = values.m_nResident;
+	t3dAppendRegionCacheActivity( stats, values.m_nResident, values.m_nDesiredLastTick, values.m_nEvictionsLastTick );
 	stats["mapped_capacity"] = values.m_nMappedCapacity;
 	stats["physical_layers"] = values.m_nPhysicalLayers;
-	stats["desired_last_tick"] = values.m_nDesiredLastTick;
-	stats["missing_required_last_tick"] = values.m_nMissingRequiredLastTick;
+	stats[ "missing_required_last_tick" ] = values.m_nMissingRequiredLastTick;
 	stats["uploads_last_tick"] = values.m_nUploadsLastTick;
-	stats["evictions_last_tick"] = values.m_nEvictionsLastTick;
-	stats["page_table_valid"] = values.m_bPageTableValid;
+	stats[ "page_table_valid" ] = values.m_bPageTableValid;
 	stats["height_array_valid"] = values.m_bHeightArrayValid;
 	stats["resolution_divisor"] = values.m_nResolutionDivisor;
 	stats["reserved_bytes"] = ( int64_t )( values.m_nReservedBytes );

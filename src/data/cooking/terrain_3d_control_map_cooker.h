@@ -4,7 +4,7 @@
 #define TERRAIN3D_CONTROL_MAP_COOKER_H
 
 #include "Terrain3DConstants.h"
-#include "core/utility/terrain_3d_byte_access.h"
+#include "core/utility/terrain_3d_binary_io.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -23,8 +23,7 @@ typedef struct t3dControlCookNeighborhood_s {
 	t3dControlCookSource_t m_sources[9];
 } t3dControlCookNeighborhood_t;
 
-
-bool t3dControlCookSetExplicitSource( t3dControlCookSource_t &rSource, const Ref<Image> &rControl );
+bool t3dControlCookSetExplicitSource( t3dControlCookSource_t& rSource, const Ref<Image>& rControl );
 EA_FORCE_INLINE uint32_t t3dControlCookReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
 	return pBytes ? t3dReadNativeUnaligned<uint32_t>( pBytes + nOffset ) : 0u;
 }

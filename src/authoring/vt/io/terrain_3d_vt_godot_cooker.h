@@ -2,6 +2,7 @@
 
 #ifndef TERRAIN3D_VT_GODOT_COOKER_H
 #define TERRAIN3D_VT_GODOT_COOKER_H
+#include "memory/policy/terrain_3d_memory_account.h"
 
 #include "Terrain3DTypes.h"
 
@@ -47,6 +48,7 @@ typedef struct t3dVTEditorChannelCacheEntryV3_s {
 	uint32_t m_nLogicalChannel;
 	t3dVTMipChainLayout_t m_Layout;
 	godot::PackedByteArray m_Bytes;
+	Terrain3DSharedMemoryReservation m_memory;
 } t3dVTEditorChannelCacheEntryV3_t;
 
 
@@ -55,6 +57,7 @@ typedef struct t3dVTEditorAllocationCacheEntryV3_s {
 	uint64_t m_nStableKey;
 	uint64_t m_nKey;
 	godot::PackedByteArray m_PackageBytes;
+	Terrain3DSharedMemoryReservation m_memory;
 } t3dVTEditorAllocationCacheEntryV3_t;
 
 
@@ -86,10 +89,12 @@ static const uint64_t T3D_VT_COOK_WORKING_BYTE_LIMIT = 512ull * 1024ull * 1024ul
 struct t3dVTMergeStatistics_t {
 	uint64_t m_nWorkingBytes = 0u;
 	uint64_t m_nPayloadComparisons = 0u;
+	bool m_bWorkingLimitExceeded = false;
 };
 bool t3d_vt_godot_merge_packages_v3( const godot::PackedByteArray *pPackages, uint32_t nCount,
 	        uint32_t nGeneration, godot::PackedByteArray &rPackageBytes,
-	        uint64_t nWorkingByteLimit = T3D_VT_COOK_WORKING_BYTE_LIMIT, t3dVTMergeStatistics_t *pStatistics = NULL );
+	        uint64_t nWorkingByteLimit = T3D_VT_COOK_WORKING_BYTE_LIMIT, t3dVTMergeStatistics_t *pStatistics = NULL,
+	        Terrain3DSharedMemoryReservation *pPackageMemory = NULL );
 
 bool t3d_vt_godot_collect_asset_materials(
         const godot::Ref<Terrain3DAssets> &rAssets, t3dVTGodotAssetMaterials_t &rMaterials, godot::String *pError );
@@ -115,7 +120,7 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const godot::Ref<Terrain3D
         uint64_t &rFingerprint,
         uint32_t &rPackageGeneration,
         t3dVTEditorCookTelemetryV3_t &rTelemetry,
-        godot::String *pError );
+        godot::String *pError, Terrain3DSharedMemoryReservation *pPackageMemory = NULL );
 bool t3d_vt_godot_cook_runtime_package( const godot::Ref<Terrain3DAssets> &rAssets,
         const uint64_t *pStableKeys,
         const t3dRenderingMaterialGpu_t *pMaterialRecords,

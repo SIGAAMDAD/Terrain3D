@@ -1,5 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_numeric.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypes.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_record.h"
@@ -20,8 +22,8 @@
 
 // t3dIndexedNodePolicy_s centralized in Terrain3DTypes.h.
 
-
-static bool t3dIndexedNodePolicyLess( const t3dIndexedNodePolicy_t &rA, const t3dIndexedNodePolicy_t &rB ) {
+static bool t3dIndexedNodePolicyLess( const t3dIndexedNodePolicy_t& rA, const t3dIndexedNodePolicy_t& rB )
+{
 	return rA.m_nRegion < rB.m_nRegion || ( rA.m_nRegion == rB.m_nRegion && rA.m_policy.m_nSpawnId < rB.m_policy.m_nSpawnId );
 }
 
@@ -30,17 +32,8 @@ static const Terrain3DRenderingMaterial *t3dResolveHlodRenderingMaterial( const 
 	return pPackage ? pPackage->getRenderingMaterialPtr( nSurface ) : NULL;
 }
 
-int Terrain3DHLODStreamer::floorDiv( const int value, const int divisor ) {
-	if ( divisor <= 0 ) {
-		return 0;
-	}
-	int quotient = value / divisor;
-	if ( value < 0 && ( value % divisor ) != 0 ) {
-		--quotient;
-	}
-	return quotient;
-}
-int Terrain3DHLODStreamer::regionIndex( const Vector2i &rRegion ) {
+int Terrain3DHLODStreamer::regionIndex( const Vector2i& rRegion )
+{
 	return Terrain3DData::getRegionMapIndex( rRegion );
 }
 Vector2i Terrain3DHLODStreamer::regionFromIndex( const int index ) {
@@ -49,16 +42,12 @@ Vector2i Terrain3DHLODStreamer::regionFromIndex( const int index ) {
 }
 
 void Terrain3DHLODStreamer::markRdPublicationDirty( void ) {
-	++m_nRdPublicationGeneration;
-	if ( m_nRdPublicationGeneration == 0u ) {
-		m_nRdPublicationGeneration = 1u;
-	}
+	m_nRdPublicationGeneration = t3dNextGeneration( m_nRdPublicationGeneration );
 }
 
 uint64_t Terrain3DHLODStreamer::rdMeshSourceKey( const int nEntryIndex ) {
 	return t3dRdHlodMeshSourceKey( ( uint32_t )( nEntryIndex ) );
 }
-
 
 static AABB t3dTransformHlodBounds( const Transform3D &rTransform, const AABB &rBounds ) {
 	const Vector3 minimum = rBounds.position;
@@ -80,7 +69,6 @@ static AABB t3dTransformHlodBounds( const Transform3D &rTransform, const AABB &r
 	}
 	return AABB( outMin, outMax - outMin );
 }
-
 
 bool Terrain3DHLODStreamer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
 	if ( !pZone ) {
@@ -195,7 +183,7 @@ bool Terrain3DHLODStreamer::buildHierarchy( void ) {
 	}
 	for ( int i = 0; i < ( int )m_entries.size(); ++i ) {
 		t3dEntry_t &entry = m_entries[( size_t )i];
-		const Vector2i parentCluster( floorDiv( entry.getCluster().x, 2 ), floorDiv( entry.getCluster().y, 2 ) );
+		const Vector2i parentCluster( t3dDivideFloor( entry.getCluster().x, 2 ), t3dDivideFloor( entry.getCluster().y, 2 ) );
 		const int parent = findEntry( entry.m_nLevel + 1, parentCluster );
 		entry.m_nParent = parent;
 		if ( parent < 0 ) {
@@ -623,6 +611,17 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	if ( entry.m_bActive || entry.m_bLoadFailed || entry.m_packagePath.is_empty() || !m_pTerrain || !m_pTerrain->sceneNode().is_inside_tree() ) {
 		return entry.m_bActive;
 	}
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain->getMemoryAccountInternal());
+	if (!entry.m_bRequestStarted && entry.m_memory.bytes() == 0) {
+		const uint64_t budget = uint64_t(m_nMemoryBudgetMb) * 1024ull * 1024ull;
+		const uint64_t incoming = uint64_t(MAX<int64_t>(0, entry.m_nEstimatedGpuBytes));
+		uint64_t reserved = 0;
+		for (const auto &candidate : m_entries) { reserved += candidate.m_memory.bytes(); }
+		if (budget == 0 || incoming > budget || reserved > budget - incoming || !entry.m_memory.reserve(incoming)) {
+			++m_nCapacityDeferredLastTick;
+			return false;
+		}
+	}
 	ResourceLoader *loader = ResourceLoader::get_singleton();
 	if ( !loader ) {
 		return false;
@@ -662,20 +661,16 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	const int64_t bytes = MAX<int64_t>( entry.m_nEstimatedGpuBytes, entry.m_ackage->getEstimatedGpuBytes() );
 	const int64_t budget = ( int64_t )m_nMemoryBudgetMb * 1024LL * 1024LL;
 	if ( bytes > budget ) {
+		entry.m_ackage.unref();
 		++m_nCapacityDeferredLastTick;
 		return false;
 	}
 	if ( m_nResidentEstimatedBytes > budget - bytes ) {
-		// No-hole parent promotion sometimes requires the incoming parent and its
-		// active fallback descendants to coexist briefly. Permit one such
-		// transition package above the steady-state budget; never overcommit for
-		// unrelated residency or while a previous transition is still over budget.
-		if ( m_nResidentEstimatedBytes > budget || m_nTransitionOvercommitBytesLastTick > 0 || m_nUnloadBudget <= 0
-		        || !hasActiveDescendant( index ) ) {
-			++m_nCapacityDeferredLastTick;
-			return false;
-		}
-		m_nTransitionOvercommitBytesLastTick = m_nResidentEstimatedBytes + bytes - budget;
+		// Promotion must fit alongside its live fallback. Defer instead of
+		// borrowing an unreserved transition package from the total budget.
+		entry.m_ackage.unref();
+		++m_nCapacityDeferredLastTick;
+		return false;
 	}
 	entry.m_bActive = true;
 	removeLoadingEntry( index );
@@ -691,6 +686,19 @@ bool Terrain3DHLODStreamer::requestOrActivate( const int index ) {
 	++m_nLoadsLastTick;
 	return true;
 }
+void Terrain3DHLODStreamer::setMemoryBudgetMb(int nMb) {
+	const int requested = CLAMP(nMb, 0, 4096);
+	if (requested == m_nMemoryBudgetMb) { return; }
+	m_nMemoryBudgetMb = requested;
+	const int64_t budget = int64_t(m_nMemoryBudgetMb) * 1024LL * 1024LL;
+	while (m_nResidentEstimatedBytes > budget && !m_activeEntries.empty()) {
+		deactivate(m_activeEntries.back());
+	}
+	// A loaded-but-unpublished package must not retain an implicit spare grant.
+	while (!m_loadingEntries.empty()) { deactivate(m_loadingEntries.back()); }
+	publishRepresentationMap();
+}
+
 void Terrain3DHLODStreamer::deactivate( const int index ) {
 	if ( index < 0 || index >= ( int )m_entries.size() ) {
 		return;
@@ -703,11 +711,22 @@ void Terrain3DHLODStreamer::deactivate( const int index ) {
 		                                                : entry.m_nEstimatedGpuBytes;
 		m_nResidentEstimatedBytes = MAX<int64_t>( m_nResidentEstimatedBytes - MAX<int64_t>( bytes, 0 ), 0 );
 	}
+	if (entry.m_bRequestStarted && !entry.m_bActive) {
+		ResourceLoader *loader = ResourceLoader::get_singleton();
+		if (loader) {
+			const auto status = loader->load_threaded_get_status(entry.m_packagePath);
+			if (status == ResourceLoader::THREAD_LOAD_IN_PROGRESS || status == ResourceLoader::THREAD_LOAD_LOADED) {
+				// Godot owns this worker. Join it before returning its reservation.
+				const Ref<Resource> retired = loader->load_threaded_get(entry.m_packagePath);
+			}
+		}
+	}
 	entry.m_bActive = false;
 	removeActiveEntry( index );
 	removeLoadingEntry( index );
 	removeRetiringEntry( index );
 	entry.m_ackage.unref();
+	entry.m_memory.reset();
 	entry.m_bRequestStarted = false;
 	m_bSelectionDirty = true;
 	if ( wasPublished ) {

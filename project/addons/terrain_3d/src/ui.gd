@@ -698,9 +698,11 @@ func update_decal() -> void:
 
 	# Only show decal if in viewport or toolbars
 	var main: Control = EditorInterface.get_editor_main_screen()
-	var main_rect := Rect2(main.position, main.size)
+	# Both the bounds and mouse position must use the main control's space.
+	# SubViewport mouse coordinates have a different origin (and can be scaled).
+	var main_rect := Rect2(Vector2.ZERO, main.size)
 	main_rect.size.y += tool_settings.size.y
-	if not ( main_rect.has_point(plugin.viewport.get_mouse_position()) && plugin.mouse_in_main ):
+	if not ( main_rect.has_point(main.get_local_mouse_position()) && plugin.mouse_in_main ):
 		return
 
 	reset_decal_arrays()

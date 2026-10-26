@@ -292,7 +292,7 @@ private:
 	void freeUniformSets( void );
 	bool ensureDevice( void );
 	bool ensureShaders( void );
-	bool ensureForwardShaders( void );
+	bool ensureForwardShaders( t3dTerrainShaderPath_t path, t3dRdForwardShaderVariant_t variant, bool bOneSunLighting );
 	void freeForwardPipelines( void );
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant, bool bOneSunLighting,
 	        t3dTerrainShaderPath_t shaderPath, uint8_t nShippingFeatureClass, const uint8_t *pLightingModelClasses,
@@ -354,15 +354,15 @@ public:
 	        uint64_t nRegionMapGeneration,
 	        const t3dRdTerrainBindings_t &rBindings,
 	        bool bColorWrite );
-	bool prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-	        const t3dRdFrameSnapshot_t &rSnapshot,
-	        const PackedByteArray &rRegionMapBytes,
-	        uint64_t nRegionMapGeneration,
-	        const t3dRdTerrainBindings_t &rBindings,
-	        const t3dSharedVTBindings_t *pSharedVTBindings,
-	        bool bTemporalHistoryValid,
-	        bool bViewportReconfigured,
-	        bool bOneSunLighting );
+	bool prepareForwardPass( const t3dRdForwardPassContext_t& rContext,
+	                         const t3dRdFrameSnapshot_t& rSnapshot,
+	                         const PackedByteArray& rRegionMapBytes,
+	                         uint64_t nRegionMapGeneration,
+	                         const t3dRdTerrainBindings_t& rBindings,
+	                         const t3dSharedVTBindings_t *pSharedVTBindings,
+	                         bool bTemporalHistoryValid,
+	                         bool bViewportReconfigured,
+	                         bool bOneSunLighting, bool bPrepareRasterPipelines = true );
 	bool renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	bool snapshotWorldRasterBindingsHot( t3dRdWorldTerrainRasterBindings_t &rBindings ) const;
 	Dictionary getDiagnostics( void ) const;

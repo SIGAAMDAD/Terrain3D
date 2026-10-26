@@ -38,7 +38,7 @@ const SETTING_TOOLTIPS: Dictionary = {
 	"strength": "Brush influence per stamp. Pen pressure multiplies this value when a pressure-sensitive device is active.",
 	"height": "Target world-space elevation used by Set Height. Painting blends existing heights toward this value.",
 	"color": "Terrain color tint written to the color map. This does not change the selected terrain material.",
-	"roughness": "Wetness/roughness channel target. Negative values are drier, positive values are wetter, and zero is neutral.",
+	"roughness": "Wetness/roughness channel target. Negative values are wetter, positive values are drier, and zero is neutral.",
 	"enable_texture": "When enabled, Texture Paint/Spray changes material IDs. Disable it to edit only angle or scale metadata on matching texels.",
 	"texture_filter": "Restrict Color or Wetness painting to terrain texels whose visible material matches the selected texture asset.",
 	"margin": "Texture-filter blend margin. Positive values include more transition texels; negative values require the selected texture to be more dominant.",

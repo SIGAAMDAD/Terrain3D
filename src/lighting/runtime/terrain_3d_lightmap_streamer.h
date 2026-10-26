@@ -36,6 +36,7 @@ typedef struct t3dActivePackage_s {
 	uint64_t m_nReceiverSignature = 0u;
 	int m_nReceiverCount = 0;
 	bool m_bDesired = false;
+	Terrain3DSharedMemoryReservation m_memory;
 } t3dActivePackage_t;
 
 
@@ -45,6 +46,13 @@ class Terrain3DLightmapStreamer : public Object {
 
 	Terrain3DOwner *m_pTerrain = NULL;
 	eastl::fixed_vector<t3dActivePackage_t, T3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT, false> m_activePackages;
+	struct PendingPackage {
+		Ref<Terrain3DRegionLighting> package;
+		Ref<LightmapGIData> data;
+		Terrain3DSharedMemoryReservation memory;
+	};
+	eastl::fixed_vector<PendingPackage, T3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT, false> m_pendingPackages;
+	void drainPendingLoads();
 	eastl::fixed_vector<LightmapGI *, T3D_LIGHTMAP_ACTIVE_INSTANCE_LIMIT, false> m_freeNodes;
 	bool m_bEnabled = true;
 	int m_nRadiusRegions = 1;

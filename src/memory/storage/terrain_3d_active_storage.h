@@ -7,6 +7,7 @@
 
 #include "Terrain3DConstants.h"
 #include "core/config/terrain_3d_compiler.h"
+#include "memory/storage/terrain_3d_callback_lease.h"
 #include "core/config/terrain_3d_limits.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "data/model/terrain_3d_region.h"
@@ -40,6 +41,17 @@ typedef struct t3dActiveMapView_s
 
 typedef void ( *t3dActiveLeaseReleaseFn_t )( void *pContext, int iPage );
 
+struct t3dActiveLeaseReleaseState_t {
+	void *m_pReleaseContext = NULL;
+	t3dActiveLeaseReleaseFn_t m_pRelease = NULL;
+	int m_iPage = -1;
+	void release() {
+		if ( m_pRelease && m_pReleaseContext && m_iPage >= 0 ) {
+			m_pRelease( m_pReleaseContext, m_iPage );
+		}
+	}
+};
+
 class Terrain3DActiveMapLease
 {
 public:
@@ -52,19 +64,16 @@ public:
 
 	EA_FORCE_INLINE bool valid( void ) const
 	{
-		return m_view.valid();
+		return m_lease.valid();
 	}
 	EA_FORCE_INLINE const t3dActiveMapView_t& view( void ) const
 	{
-		return m_view;
+		return m_lease.view();
 	}
 	void reset( void );
 
 private:
-	void *m_pReleaseContext = NULL;
-	t3dActiveLeaseReleaseFn_t m_pRelease = NULL;
-	int m_iPage = -1;
-	t3dActiveMapView_t m_view;
+	Terrain3DCallbackLease<t3dActiveMapView_t, t3dActiveLeaseReleaseState_t> m_lease;
 
 public:
 	Terrain3DActiveMapLease( void *pReleaseContext, t3dActiveLeaseReleaseFn_t pRelease, int iPage, const t3dActiveMapView_t& rView );

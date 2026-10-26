@@ -1,5 +1,7 @@
+#include "memory/policy/terrain_3d_memory_account.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "Terrain3DTypeSupport.h"
 #include "data/model/terrain_3d_data.h"
@@ -46,10 +48,8 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/memory.hpp>
 
-
-
-
-static void t3dDataAppendUniquePath( PackedStringArray &rPaths, const String &rPath ) {
+static void t3dDataAppendUniquePath( PackedStringArray& rPaths, const String& rPath )
+{
 	if ( rPath.is_empty() ) {
 		return;
 	}
@@ -60,8 +60,6 @@ static void t3dDataAppendUniquePath( PackedStringArray &rPaths, const String &rP
 	}
 	rPaths.push_back( rPath );
 }
-
-
 
 // Returns the half-open region-coordinate bounds touched by a positive-sized
 // area. Computing the exclusive end independently is required for offset and
@@ -846,6 +844,7 @@ int Terrain3DData::getEffectiveInstanceRegionLoadBudgetPages( void ) const {
 }
 
 void Terrain3DData::configureCpuRegionCache( const bool bEnabled, const int nBudgetMb, const int nLoadLayers, const int nLoadBudgetMb ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_residency.cpuRegionCache().configure( bEnabled, nBudgetMb, nLoadLayers, nLoadBudgetMb );
 }
 
@@ -909,6 +908,7 @@ bool Terrain3DData::evictInstanceRegion( const Vector2i &vLocation ) {
 
 void Terrain3DData::configureInstanceRegionCache(
         const bool bEnabled, const int nBudgetMb, const int nLoadPages, const int nLoadBudgetMb ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	t3dInstanceRegionCacheChanges_s changes;
 	m_residency.instanceRegionCache().configure( bEnabled, nBudgetMb, nLoadPages, nLoadBudgetMb, &changes );
 	applyInstanceRegionCacheChanges( changes );
@@ -1106,7 +1106,6 @@ Terrain3DData::Terrain3DData( void ) :
         m_runtimeArtifacts( &m_regionRepository, &m_regionPersistence ),
         m_residency( m_regionRepository, m_samplingStorage, m_mapEditService, m_regionPersistence, m_runtimeArtifacts ) {
 }
-
 
 bool Terrain3DData::bindRuntimeAllocatorInternal( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
 	if ( !pZone ) {
@@ -1428,6 +1427,7 @@ void Terrain3DData::resetStartupPreparationCold( void ) {
 }
 
 Error Terrain3DData::beginStartupCold( Terrain3DOwner *const pTerrain, const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !pTerrain || nStartupGeneration == 0u ) {
 		LOG( ERROR, "Initialization failed, invalid Terrain3D owner/startup generation" );
 		return ERR_INVALID_PARAMETER;
@@ -1517,6 +1517,7 @@ Error Terrain3DData::beginStartupCold( Terrain3DOwner *const pTerrain, const uin
 }
 
 Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	const uint64_t prepare_started_usec = Time::get_singleton()->get_ticks_usec();
 	LOG( INFO, "[Terrain3D][Startup][Data][Prepare] BEGIN generation=", nStartupGeneration );
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
@@ -1602,6 +1603,7 @@ Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
 }
 
 Error Terrain3DData::commitStartupCold( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	const uint64_t commit_started_usec = Time::get_singleton()->get_ticks_usec();
 	LOG( INFO, "[Terrain3D][Startup][Data][Commit] BEGIN generation=", nStartupGeneration );
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
@@ -1728,7 +1730,6 @@ void Terrain3DData::cancelStartupCold( const uint32_t nStartupGeneration ) {
 	resetStartupPreparationCold();
 	( void )t3dStartupDomainCancel( m_startupState, nStartupGeneration, Time::get_singleton()->get_ticks_usec() );
 }
-
 
 void Terrain3DData::deactivateRuntimeStorage( Terrain3DOwner *const pTerrain ) {
 	if ( pTerrain && m_pTerrain && pTerrain != m_pTerrain ) {
@@ -2056,6 +2057,7 @@ Error Terrain3DData::replaceRegionData( const Vector2i &rRegionLoc, const Dictio
 }
 
 Error Terrain3DData::addRegionInternal( const Ref<Terrain3DRegion> &rRegion, const bool bUpdate, const bool bSanitize ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( rRegion.is_null() || !rRegion->hasValidGeometryContractInternal() ) {
 		LOG( ERROR, "Rejected region that violates the fixed 128 samples x 1.0 metre geometry contract" );
 		return ERR_INVALID_DATA;
@@ -2773,6 +2775,7 @@ Dictionary Terrain3DData::inspectGpuRegionPages( void ) {
 }
 
 Dictionary Terrain3DData::cookGpuRegionPages( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	Dictionary result;
 	PackedStringArray source_files;
 	PackedStringArray errors;
@@ -2931,7 +2934,7 @@ Dictionary Terrain3DData::cookGpuRegionPages( void ) {
 			if ( !t3d_vt_godot_cook_runtime_assets_package(
 			             pAssets, package_bytes, nInstanceVtPackageGeneration, nInstanceVtMaterialCount, &vt_error )
 			        || !Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
-			                { *this, m_pTerrain->getDataDirectory() }, package_bytes, nInstanceVtPackageGeneration, vt_error ) ) {
+			                { *this, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit(m_pTerrain->getMemoryAccountInternal()) }, package_bytes, nInstanceVtPackageGeneration, vt_error ) ) {
 				bInstanceVtPackageCooked = false;
 				errors.push_back( String( "Runtime instance VT package cook failed: " )
 				        + ( vt_error.is_empty() ? String( "unknown error" ) : vt_error ) );
@@ -3260,6 +3263,7 @@ void Terrain3DData::finalizeDirectoryCandidateCold( const bool bCookedRuntimeMan
 }
 
 Error Terrain3DData::loadDirectory( const String &rDir ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	Terrain3DColdPhaseScope cold_scope;
 	t3dStagedRepository_s staged;
 	bool bBoundedCpuLoad = false;
@@ -4567,8 +4571,6 @@ void Terrain3DData::_bind_methods( void ) {
 	ClassDB::bind_integer_constant( get_class_static(), "", "REGION_MAP_SIZE", T3D_REGION_MAP_SIZE );
 
 	ClassDB::bind_method( D_METHOD( "get_region_count" ), &Terrain3DData::getRegionCount );
-	ClassDB::bind_method( D_METHOD( "set_region_locations", "region_locations" ), &Terrain3DData::setRegionLocations );
-	ClassDB::bind_method( D_METHOD( "get_region_locations" ), &Terrain3DData::getRegionLocations );
 	ClassDB::bind_method( D_METHOD( "get_render_region_slots" ), &Terrain3DData::getRenderRegionSlots );
 	ClassDB::bind_method(
 	        D_METHOD( "get_regions_active", "copy", "deep" ), &Terrain3DData::getRegionsActive, DEFVAL( false ), DEFVAL( false ) );
@@ -4694,9 +4696,8 @@ void Terrain3DData::_bind_methods( void ) {
 
 	const int ro_flags = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Runtime Repository Status", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "region_locations", PROPERTY_HINT_ARRAY_TYPE, "Vector2i", ro_flags ),
-	        "set_region_locations",
-	        "get_region_locations" );
+	T3D_BIND_PROPERTY( Terrain3DData, setRegionLocations, getRegionLocations, "region_locations",
+	                   PropertyInfo( Variant::ARRAY, "region_locations", PROPERTY_HINT_ARRAY_TYPE, "Vector2i", ro_flags ), "set_region_locations", "get_region_locations" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "height_maps", PROPERTY_HINT_ARRAY_TYPE, "Image", ro_flags ), "", "get_height_maps" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "control_maps", PROPERTY_HINT_ARRAY_TYPE, "Image", ro_flags ), "", "get_control_maps" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "color_maps", PROPERTY_HINT_ARRAY_TYPE, "Image", ro_flags ), "", "get_color_maps" );

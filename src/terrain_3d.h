@@ -12,7 +12,6 @@
 #include "core/config/terrain_3d_startup_state.h"
 #include "integration/runtime/terrain_3d_runtime_frame_scheduler.h"
 #include "Terrain3DConstants.h"
-#include "rendering/rd/preview/terrain_3d_rd_preview_result.h"
 #include "rendering/rd/world/core/terrain_3d_world_contract.h"
 #include "assets/catalog/terrain_3d_assets.h"
 #include "authoring/editor/terrain_3d_editor.h"
@@ -24,6 +23,7 @@
 #include "instances/runtime/terrain_3d_instancer.h"
 #include "memory/arena/terrain_3d_memory_arena.h"
 #include "memory/policy/terrain_3d_memory_budget.h"
+#include "memory/policy/terrain_3d_memory_account.h"
 #include "memory/arena/terrain_3d_memory_zone.h"
 #include "physics/runtime/terrain_3d_collision.h"
 #include "rendering/compute/terrain_3d_compute.h"
@@ -50,7 +50,6 @@
 #include "rendering/rd/core/terrain_3d_render_coordinator.h"
 #include "streaming/runtime/terrain_3d_node_streamer.h"
 
-
 EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String& rDataDirectory )
 {
 	const String directory = rDataDirectory.strip_edges().trim_suffix( "/" );
@@ -59,36 +58,25 @@ EA_FORCE_INLINE String t3dDefaultRegionLightmapOutputDirectory( const String& rD
 
 // t3dDebugLevel_e centralized in Terrain3DTypes.h.
 
-
 // t3dRuntimeLifecycleState_e centralized in Terrain3DTypes.h.
-
 
 // t3dPerformanceTarget_e centralized in Terrain3DTypes.h.
 
-
 // t3dPerformanceProfileStatus_e centralized in Terrain3DTypes.h.
-
 
 // t3dEnvironmentShadowQuality_e centralized in Terrain3DTypes.h.
 
-
 // t3dRegionSize_e centralized in Terrain3DTypes.h.
-
 
 // t3dOceanPerformancePreset_e centralized in Terrain3DTypes.h.
 
-
 // t3dOceanRefractionMode_e centralized in Terrain3DTypes.h.
-
 
 // t3dOceanFoamMode_e centralized in Terrain3DTypes.h.
 
-
 // t3dOceanScatteringMode_e centralized in Terrain3DTypes.h.
 
-
 // t3dOceanShadingMode_e centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dBakeTaskContext_s
 {
@@ -103,7 +91,6 @@ typedef struct t3dBakeTaskContext_s
 	bool m_bGenerateUvs = false;
 	bool m_bRequireNav = false;
 } t3dBakeTaskContext_t;
-
 
 class Terrain3D : public Node3D, public Terrain3DOwner, public Terrain3DRuntimeFrameHost
 {
@@ -134,6 +121,7 @@ private:
 	uint8_t m_nWarnings = 0u;
 	// Runtime memory ownership. Declaration order is intentional: allocator-backed
 	// containers are destroyed before the zone and its arena backing store.
+	Terrain3DMemoryAccountOwner m_memoryAccount{512ull * 1024ull * 1024ull};
 	Terrain3DMemoryArena m_runtimeMemoryArena;
 	Terrain3DMemoryZone m_runtimeMemoryZone;
 	t3dMemoryArenaSlice_t m_runtimeActiveHeightSlice;
@@ -327,6 +315,7 @@ private:
 	uint64_t m_nMemoryBudgetPolicyFrame = 0u;
 	uint64_t m_nMemoryBudgetPolicyGeneration = 0u;
 	mutable uint64_t m_nTrackedMemoryPeakBytes = 0u;
+	String m_memoryBudgetChangeError;
 	t3dMemoryBudgetResult_t m_nMemoryBudgetResult;
 	mutable uint64_t m_nDiagnosticsCollectionUsecLast = 0u;
 	mutable uint64_t m_nDiagnosticsCollectionUsecTotal = 0u;
@@ -642,6 +631,7 @@ public:
 	{
 		return m_pData;
 	}
+	Terrain3DMemoryAccount *getMemoryAccountInternal( void ) const override { return m_memoryAccount.get(); }
 	EA_FORCE_INLINE Terrain3DMemoryZone *getRuntimeMemoryZoneInternal( void )
 	{
 		return &m_runtimeMemoryZone;
@@ -863,6 +853,25 @@ public:
 	Dictionary getMemoryEstimate( void ) const;
 	Dictionary getTrackedCurrentResidency( void ) const;
 	Dictionary getMemoryBudgetStats( void ) const;
+	Dictionary getMemoryTrackerStats( void ) const;
+	bool setRenderMemoryBudgetMb(Terrain3DMemoryAccount::Domain domain, int budget_mb);
+	int getRenderMemoryBudgetMb(Terrain3DMemoryAccount::Domain domain) const;
+	void setVirtualTextureMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::VIRTUAL_TEXTURE, value); }
+	int getVirtualTextureMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::VIRTUAL_TEXTURE); }
+	void setInstanceRenderMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::INSTANCE_RENDER, value); }
+	int getInstanceRenderMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::INSTANCE_RENDER); }
+	void setWorldRenderMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::WORLD_RENDER, value); }
+	int getWorldRenderMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::WORLD_RENDER); }
+	void setTerrainRenderMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::TERRAIN_RENDER, value); }
+	int getTerrainRenderMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::TERRAIN_RENDER); }
+	void setHlodRenderMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::HLOD_RENDER, value); }
+	int getHlodRenderMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::HLOD_RENDER); }
+	void setOceanRenderMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::OCEAN_RENDER, value); }
+	int getOceanRenderMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::OCEAN_RENDER); }
+	void setForwardLightingMemoryBudgetMb(int value) { setRenderMemoryBudgetMb(Terrain3DMemoryAccount::FORWARD_LIGHTING, value); }
+	int getForwardLightingMemoryBudgetMb() const { return getRenderMemoryBudgetMb(Terrain3DMemoryAccount::FORWARD_LIGHTING); }
+	void setCookingMemoryBudgetMb(int value);
+	int getCookingMemoryBudgetMb() const;
 	void setTotalMemoryBudgetMb( int nBudgetMb );
 	EA_FORCE_INLINE int getTotalMemoryBudgetMb( void ) const
 	{
@@ -1732,6 +1741,7 @@ public:
 	}
 
 	Dictionary getRdRendererDiagnostics( void ) const;
+	Dictionary getGpuUploadDiagnostics(void) const;
 	Dictionary bakeVirtualTextures( void );
 	Ref<Image> createRdMeshPreview( uint16_t nAssetId, const Vector2i& rSize, t3dRdPreviewFailure_t *pFailure = NULL );
 	bool requestRdMeshPreviewAsync( uint16_t nAssetId,

@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypeSupport.h"
 #include "data/persistence/terrain_3d_region_repository.h"
 
@@ -541,8 +542,5 @@ bool Terrain3DRegionRepository::validateInvariants( void ) const {
 }
 
 void Terrain3DRegionRepository::bumpTopologyGeneration( void ) {
-	++m_nTopologyGeneration;
-	if ( m_nTopologyGeneration == 0u ) {
-		m_nTopologyGeneration = 1u;
-	}
+	m_nTopologyGeneration = t3dNextGeneration( m_nTopologyGeneration );
 }

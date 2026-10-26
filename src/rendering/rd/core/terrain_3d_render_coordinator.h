@@ -9,7 +9,6 @@
 #include "Terrain3DConstants.h"
 #include "rendering/rd/world/runtime/terrain_3d_static_scene_publication.h"
 #include "core/utility/terrain_3d_owner.h"
-#include "rendering/rd/preview/terrain_3d_rd_preview_result.h"
 #include "rendering/rd/core/terrain_3d_render_coordinator_access.h"
 #include "rendering/rd/preview/terrain_3d_rd_preview_service.h"
 #include "rendering/rd/core/terrain_3d_render_lifecycle_state.h"
@@ -54,7 +53,6 @@ private:
 	Ref<Compositor> m_attachedCompositor;
 	uint64_t m_nAttachedCameraId = 0u;
 	bool m_bCreatedCompositor = false;
-
 
 	// OWNER THREAD MUTATION: publication/material builders. The render thread may
 	// consume only acquired immutable snapshots and immutable banks selected by a
@@ -101,15 +99,19 @@ private:
 		return { m_pTerrain, m_virtualTexture, m_sharedVtRuntime, m_shaderLibrary,
 			m_publicationBuilder, m_effect, m_nStartupGeneration, m_diagnosticsMutex, *this };
 	}
-	bool composePreviewTerrainPackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint ) override {
-		return m_incrementalMegaVTCooker.composePackageCold( rPackage, rGeneration, rFingerprint );
+	bool composePreviewTerrainPackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint,
+	        Terrain3DSharedMemoryReservation &rPackageMemory ) override {
+		return m_incrementalMegaVTCooker.composePackageCold( rPackage, rGeneration, rFingerprint, &rPackageMemory );
 	}
+	String previewTerrainCompositionErrorCold() const override { return m_incrementalMegaVTCooker.getLastErrorCold(); }
 	void requestMegaVTPackageRecomposeCold( void ) override { m_previewService.requestPackageRecomposeCold(); }
 	uint64_t publishedMegaVTGpuFingerprintCold( void ) const override { return m_previewService.publishedGpuFingerprintCold(); }
 	void persistMegaVTEditorStateCold( void ) override { persistTerrainMegaVTEditorStateHot(); }
 	bool loadPreviewPackage( const void *pBytes, uint64_t nBytes ) override { return loadVirtualTexturePackageCold( pBytes, nBytes ); }
+	bool stagePreviewPackageWarm( const void *pBytes, uint64_t nBytes ) override { return m_sharedVtRuntime.stagePackageWarm( pBytes, nBytes ); }
+	bool servicePreviewPackageWarm( uint64_t nMaxBytes, uint32_t nMaxWorkUnits ) override { return m_sharedVtRuntime.servicePackageRepublishWarm( nMaxBytes, nMaxWorkUnits ); }
+	bool rebuildPreviewPackageResourcesCold( const void *pBytes, uint64_t nBytes, bool bNeutral, t3dVTSharedResourceClass_t eClass ) override;
 	bool ensurePreviewSharedVt( t3dVTSharedResourceClass_t eClass ) override;
-	void shutdownPreviewResources( void ) override { shutdownRendererOnRenderThread( true ); }
 	void setPreviewReady( uint32_t nGeneration, uint32_t nBit ) override { setRenderLifecycleReadyBitOnRenderThread( nGeneration, nBit ); }
 	void clearPreviewReady( uint32_t nBit ) override { clearRenderLifecycleReadyBitOnRenderThread( nBit ); }
 	t3dRenderLifecycleStatus_t previewLifecycleStatus( void ) const override { return snapshotRenderLifecycleStatusOnOwnerThread(); }
@@ -308,6 +310,7 @@ public:
 	uint64_t getWorldBudgetDeferralCount( void ) const;
 	uint64_t getVirtualTextureBudgetDeferralCount( void ) const;
 	uint64_t getVirtualTextureCpuBytes( void ) const;
+	uint64_t getVirtualTextureGpuBytes() const;
 	bool isEditorAuthoringMode( void ) const;
 };
 

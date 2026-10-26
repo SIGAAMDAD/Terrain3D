@@ -117,6 +117,8 @@ private:
 	bool rebuildInstanceOcclusionGeometry( void );
 	bool rebuildInstanceDerivedGeometry( void );
 	void onRenderingMaterialChanged( void );
+	uint64_t computeVtMaterialSourceSignature() const;
+	uint64_t m_nLastVtMaterialSourceSignature = 0u;
 	void disconnectRenderingMaterialSignals( void );
 	void connectRenderingMaterialSignals( void );
 	bool capturePendingSurfaceRenderingMaterialsCold( void );

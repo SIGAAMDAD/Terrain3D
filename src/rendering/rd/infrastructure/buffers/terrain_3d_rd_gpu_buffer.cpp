@@ -1,5 +1,6 @@
 #include "terrain_3d_rd_gpu_buffer.h"
 #include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_memory_domain.h"
 
 using namespace godot;
 bool Terrain3DRdGpuBuffer::isBufferType( const t3dRdResourceType_t type ) {
@@ -110,6 +111,7 @@ void Terrain3DRdGpuBuffer::publishPhysical( const RID &rRid,
 
 void Terrain3DRdGpuBuffer::clearPhysical( void ) {
 		m_hRid = RID();
+		m_memoryReservation.reset();
 		m_nCapacityBytes = 0u;
 		m_nUsedBytes = 0u;
 		m_bPersistent = false;
@@ -131,15 +133,19 @@ bool Terrain3DRdGpuBuffer::createTracked( Terrain3DRdContextAccess &rContext,
 			return false;
 		}
 		RenderingDevice *const rd = rContext.getDevice();
+		Terrain3DMemoryReservation reservation;
+		if (!reservation.resize(nCapacityBytes, Terrain3DMemoryAccount::GPU, g_t3dMemoryAccount, t3dRdMemoryDomain(m_spec.m_owner, m_spec.m_memory))) { return false; }
 		RID created = createPhysical( rd, m_spec, nCapacityBytes, rInitialData );
 		if ( !registerTracked( rContext, rd, created, m_spec, nCapacityBytes ) ) {
 			return false;
 		}
+		m_memoryReservation.swap(reservation);
 		const bool persistent = m_spec.m_creationBits.has_flag( RenderingDevice::BUFFER_CREATION_DYNAMIC_PERSISTENT_BIT )
 		        && persistentMappingAvailable( rd );
 		const uint32_t initial_used = rInitialData.size() > 0 ? ( uint32_t )rInitialData.size() : 0u;
 		publishPhysical( created, nCapacityBytes, initial_used, persistent,
 		        t3dRdGpuBufferNextGeneration( m_nGeneration ) );
+		if (initial_used != 0u) { rContext.recordBufferUpdate(initial_used, m_spec.m_owner, T3D_GPU_PUBLICATION); }
 		return true;
 	}
 
@@ -184,6 +190,8 @@ bool Terrain3DRdGpuBuffer::createLocal( RenderingDevice *const pDevice,
 		if ( !m_bConfigured || isValid() || !pDevice || nCapacityBytes == 0u ) {
 			return false;
 		}
+		Terrain3DMemoryReservation reservation;
+		if (!reservation.resize(nCapacityBytes, Terrain3DMemoryAccount::GPU, g_t3dMemoryAccount, t3dRdMemoryDomain(m_spec.m_owner, m_spec.m_memory))) { return false; }
 		RID created = createPhysical( pDevice, m_spec, nCapacityBytes, rInitialData );
 		if ( !created.is_valid() ) {
 			return false;
@@ -192,6 +200,7 @@ bool Terrain3DRdGpuBuffer::createLocal( RenderingDevice *const pDevice,
 		        && persistentMappingAvailable( pDevice );
 		publishPhysical( created, nCapacityBytes, rInitialData.size() > 0 ? ( uint32_t )rInitialData.size() : 0u,
 		        persistent, t3dRdGpuBufferNextGeneration( m_nGeneration ) );
+		m_memoryReservation.swap(reservation);
 		return true;
 	}
 
@@ -457,6 +466,7 @@ bool Terrain3DRdGpuBuffer::setUsedBytes( const uint32_t nBytes ) {
 	}
 
 void Terrain3DRdGpuBuffer::swap( Terrain3DRdGpuBuffer &rOther ) {
+	m_memoryReservation.swap(rOther.m_memoryReservation);
 		t3dRdGpuBufferSpec_t spec = m_spec;
 		m_spec = rOther.m_spec;
 		rOther.m_spec = spec;

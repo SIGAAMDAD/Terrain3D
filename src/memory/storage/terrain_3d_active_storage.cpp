@@ -454,46 +454,9 @@ void Terrain3DActiveStorage::invalidate( const Vector2i& rLocation )
 }
 
 Terrain3DActiveMapLease::Terrain3DActiveMapLease(
-    void *const pReleaseContext, const t3dActiveLeaseReleaseFn_t pRelease, const int iPage, const t3dActiveMapView_t& rView ) : m_pReleaseContext( pReleaseContext ), m_pRelease( pRelease ), m_iPage( iPage ), m_view( rView )
-{
-}
+    void *const pReleaseContext, const t3dActiveLeaseReleaseFn_t pRelease, const int iPage, const t3dActiveMapView_t& rView ) : m_lease( { pReleaseContext, pRelease, iPage }, rView ) {}
 
-Terrain3DActiveMapLease::~Terrain3DActiveMapLease( void )
-{
-	reset();
-}
-
-Terrain3DActiveMapLease::Terrain3DActiveMapLease( Terrain3DActiveMapLease&& rOther ) noexcept : m_pReleaseContext( rOther.m_pReleaseContext ), m_pRelease( rOther.m_pRelease ), m_iPage( rOther.m_iPage ), m_view( rOther.m_view )
-{
-	rOther.m_pReleaseContext = NULL;
-	rOther.m_pRelease = NULL;
-	rOther.m_iPage = -1;
-	rOther.m_view = {};
-}
-
-Terrain3DActiveMapLease& Terrain3DActiveMapLease::operator=( Terrain3DActiveMapLease&& rOther ) noexcept
-{
-	if ( this != &rOther ) {
-		reset();
-		m_pReleaseContext = rOther.m_pReleaseContext;
-		m_pRelease = rOther.m_pRelease;
-		m_iPage = rOther.m_iPage;
-		m_view = rOther.m_view;
-		rOther.m_pReleaseContext = NULL;
-	rOther.m_pRelease = NULL;
-		rOther.m_iPage = -1;
-		rOther.m_view = {};
-	}
-	return *this;
-}
-
-void Terrain3DActiveMapLease::reset( void )
-{
-	if ( m_pRelease && m_pReleaseContext && m_iPage >= 0 ) {
-		m_pRelease( m_pReleaseContext, m_iPage );
-	}
-	m_pReleaseContext = NULL;
-	m_pRelease = NULL;
-	m_iPage = -1;
-	m_view = {};
-}
+Terrain3DActiveMapLease::~Terrain3DActiveMapLease( void ) = default;
+Terrain3DActiveMapLease::Terrain3DActiveMapLease( Terrain3DActiveMapLease &&rOther ) noexcept = default;
+Terrain3DActiveMapLease &Terrain3DActiveMapLease::operator=( Terrain3DActiveMapLease &&rOther ) noexcept = default;
+void Terrain3DActiveMapLease::reset( void ) { m_lease.reset(); }

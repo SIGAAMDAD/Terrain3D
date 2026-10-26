@@ -11,7 +11,6 @@
 #include "assets/resources/generated_texture.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "data/model/terrain_3d_region.h"
-#include "streaming/policy/terrain_3d_gpu_cache_constants.h"
 #include "streaming/policy/terrain_3d_gpu_cache_policy.h"
 #include "streaming/residency/terrain_3d_residency_state.h"
 #include "streaming/policy/terrain_3d_runtime_profile.h"
@@ -27,15 +26,11 @@
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
 
-
 // t3dGpuRegionCacheStats_s centralized in Terrain3DTypes.h.
-
 
 // t3dGpuRegionCacheUpdateResult_s centralized in Terrain3DTypes.h.
 
-
 // t3dGpuRegionPendingPublication_e centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dGpuRegionPendingUpload_s {
 
@@ -61,7 +56,6 @@ typedef struct t3dGpuRegionPendingUpload_s {
 	uint8_t m_nPublication = TERRAIN3D_GPU_PENDING_PUBLICATION_NONE;
 	uint8_t m_nPrefetchOrigin = 0u;
 } t3dGpuRegionPendingUpload_t;
-
 
 class Terrain3DGpuRegionCache {
 	CLASS_NAME_STATIC( "Terrain3DGpuRegionCache" );

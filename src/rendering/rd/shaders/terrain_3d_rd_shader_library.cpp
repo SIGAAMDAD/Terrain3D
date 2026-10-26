@@ -24,11 +24,12 @@ typedef struct t3dRdShaderSharedState_s {
 	t3dAtomicU32_t m_nPhysicalReadyCount{ 0u };
 	t3dAtomicU32_t m_nPhysicalFailureCount{ 0u };
 	t3dAtomicU32_t m_nPhysicalMissAfterReadyCount{ 0u };
+	t3dAtomicU32_t m_nPhysicalDemandCreateCount { 0u };
+	t3dAtomicU32_t m_nPhysicalDemandFailureCount { 0u };
 	t3dAtomicU32_t m_nPhysicalUsers{ 0u };
 	t3dAtomicU64_t m_nPhysicalDeviceGeneration{ 0u };
 	bool m_bPhysicalMetadataPrepared = false;
 } t3dRdShaderSharedState_t;
-
 
 // Keep the Windows loader path free of Godot Ref/RID/mutex constructors.
 // This pointer is trivially initialized by the CRT; the state itself is created
@@ -66,11 +67,6 @@ bool Terrain3DRdShaderLibrary::physicalCacheReady( void ) {
 }
 
 // t3dRdShaderSourceStage_e centralized in Terrain3DTypes.h.
-
-
-static uint32_t t3dRdShaderSourceCount( void ) {
-	return t3dRdShaderCatalogSourceCount();
-}
 
 static uint64_t t3dRdShaderTicksMsec( void ) {
 	Time *const pTime = Time::get_singleton();
@@ -138,7 +134,6 @@ bool Terrain3DRdShaderLibrary::abortShaderLoad( void ) {
 	        " ms :: ", m_lastError );
 	return false;
 }
-
 
 void Terrain3DRdShaderLibrary::markStartupGpuPending( const uint32_t nGeneration ) {
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
@@ -302,6 +297,32 @@ RID Terrain3DRdShaderLibrary::borrowPhysical( const t3dRdShaderId_t id ) {
 	return state.m_physical[id].rid();
 }
 
+RID Terrain3DRdShaderLibrary::acquirePhysicalCold( Terrain3DRdContext& context, const t3dRdShaderId_t id )
+{
+	if ( !t3dRdShaderSharedStateGet() || id >= T3D_RD_SHADER_COUNT || !physicalCacheReady() ) {
+		return RID();
+	}
+	t3dRdShaderSharedState_t& state = t3dRdShaderSharedState();
+	if ( !context.getDevice() || context.getDeviceGeneration() != state.m_nPhysicalDeviceGeneration || t3dRdShaderCatalogGet( id ).m_domain != T3D_RD_SHADER_GLOBAL_DEVICE ) {
+		return RID();
+	}
+	if ( state.m_physical[ id ].isValid() ) {
+		return borrowPhysical( id );
+	}
+	const Ref<RDShaderSPIRV> spirv = borrowSpirv( id );
+	const String name = String( "T3D.ShaderCache." ) + String::num_uint64( id );
+	context.beginResourceRebuild();
+	const bool created = spirv.is_valid() && state.m_physical[ id ].createTracked( context, T3D_RD_CONTEXT_OWNER_SHADER_CACHE, name, spirv );
+	context.endResourceRebuild();
+	if ( !created ) {
+		++state.m_nPhysicalDemandFailureCount;
+		return RID();
+	}
+	++state.m_nPhysicalReadyCount;
+	++state.m_nPhysicalDemandCreateCount;
+	return state.m_physical[ id ].rid();
+}
+
 bool Terrain3DRdShaderLibrary::isPhysicalReady( void ) const {
 	if ( !t3dRdShaderSharedStateGet() ) { return false; }
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
@@ -320,6 +341,8 @@ bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm( Terrain3DRdContext &conte
 		state.m_nPhysicalReadyCount = 0u;
 		state.m_nPhysicalFailureCount = 0u;
 		state.m_nPhysicalMissAfterReadyCount = 0u;
+		state.m_nPhysicalDemandCreateCount = 0u;
+		state.m_nPhysicalDemandFailureCount = 0u;
 		state.m_nPhysicalUsers = 0u;
 		state.m_bPhysicalMetadataPrepared = false;
 		state.m_nPhysicalDeviceGeneration = generation;
@@ -333,7 +356,7 @@ bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm( Terrain3DRdContext &conte
 	if ( isPhysicalReady() ) { return true; }
 	if ( !state.m_bPhysicalMetadataPrepared ) {
 		bool persistent = Terrain3DRdGpuBuffer::supportsPersistentMapping( context.getDevice() );
-		for ( uint32_t id = 0u; id < T3D_RD_SHADER_TERRAIN_ONE_SUN_BASE && persistent; ++id ) {
+		for ( uint32_t id = 0u; id < T3D_RD_SHADER_NEAR_ALIAS && persistent; ++id ) {
 			const Ref<RDShaderSPIRV> spirv = borrowSpirv( ( t3dRdShaderId_t )id );
 			persistent = spirv.is_valid() && spirv->has_method( StringName( "set_dynamic_buffers" ) );
 		}
@@ -352,7 +375,7 @@ bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm( Terrain3DRdContext &conte
 				0, 1, 8, 9, 13, 23, ( int64_t )( 2ULL << 32u )
 			};
 			for ( const int64_t binding : s_terrainDynamicBindings ) terrain.push_back( binding );
-			for ( uint32_t id = 0u; id < T3D_RD_SHADER_TERRAIN_ONE_SUN_BASE; ++id ) {
+			for ( uint32_t id = 0u; id < T3D_RD_SHADER_NEAR_ALIAS; ++id ) {
 				t3dRdSetDynamicShaderBuffers( borrowSpirv( ( t3dRdShaderId_t )id ), terrain );
 			}
 			t3dRdSetDynamicShaderBuffers( near_spirv, terrain );
@@ -387,7 +410,9 @@ bool Terrain3DRdShaderLibrary::servicePhysicalPrewarm( Terrain3DRdContext &conte
 	for ( uint32_t work = 0u; work < limit && state.m_nPhysicalPrewarmCursor < T3D_RD_SHADER_COUNT; ++state.m_nPhysicalPrewarmCursor ) {
 		const uint32_t nCursor = state.m_nPhysicalPrewarmCursor.load();
 		const t3dRdShaderId_t id = ( t3dRdShaderId_t )nCursor;
-		if ( !t3dRdShaderCatalogEntryEnabled( id ) ) { continue; }
+		if ( !t3dRdShaderCatalogEntryEnabled( id ) || !t3dRdShaderNeedsStartupPhysical( id ) ) {
+			continue;
+		}
 		const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
 		if ( entry.m_domain != T3D_RD_SHADER_GLOBAL_DEVICE ) { continue; }
 		const Ref<RDShaderSPIRV> spirv = borrowSpirv( id );
@@ -426,11 +451,13 @@ void Terrain3DRdShaderLibrary::releasePhysical( Terrain3DRdContext &context ) {
 	state.m_nPhysicalReadyCount = 0u;
 	state.m_nPhysicalFailureCount = 0u;
 	state.m_nPhysicalMissAfterReadyCount = 0u;
+	state.m_nPhysicalDemandCreateCount = 0u;
+	state.m_nPhysicalDemandFailureCount = 0u;
 	state.m_bPhysicalMetadataPrepared = false;
 }
 
-
-bool Terrain3DRdShaderLibrary::beginLoadCold( const uint32_t nStartupGeneration ) {
+bool Terrain3DRdShaderLibrary::beginLoadCold( const uint32_t nStartupGeneration )
+{
 	if ( !t3dRdShaderSharedStateGet() ) {
 		m_lastError = "RD shader shared state is not initialized";
 		return false;
@@ -445,7 +472,7 @@ bool Terrain3DRdShaderLibrary::beginLoadCold( const uint32_t nStartupGeneration 
 	m_nShaderLoadStartMsec = t3dRdShaderTicksMsec();
 	m_nShaderLoadStartUsec = t3dRdShaderTicksUsec();
 	m_nShaderLoadElapsedUsec = 0u;
-	m_nShaderSourceCount = t3dRdShaderSourceCount();
+	m_nShaderSourceCount = t3dRdShaderCatalogSourceCount();
 	m_nShaderSourceRequestCount = 0u;
 	m_nShaderSourceReadyCount = 0u;
 	m_nShaderSourceFailureCount = 0u;
@@ -659,6 +686,13 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {
 	result["physical_shader_generation"] = ( int64_t )( state.m_nPhysicalDeviceGeneration );
 	result["physical_shader_cache_users"] = ( int64_t )( state.m_nPhysicalUsers );
 	result["physical_shader_misses_after_ready"] = ( int64_t )( state.m_nPhysicalMissAfterReadyCount );
+	result[ "physical_shader_demand_created" ] = (int64_t)( state.m_nPhysicalDemandCreateCount );
+	result[ "physical_shader_demand_failed" ] = (int64_t)( state.m_nPhysicalDemandFailureCount );
+	uint32_t startup_physical_count = 0u;
+	for ( uint32_t id = 0u; id < T3D_RD_SHADER_COUNT; ++id ) {
+		startup_physical_count += t3dRdShaderNeedsStartupPhysical( (t3dRdShaderId_t)id ) ? 1u : 0u;
+	}
+	result[ "physical_shader_startup_expected" ] = (int64_t)startup_physical_count;
 	uint32_t catalog_by_category[5]{};
 	uint32_t spirv_by_category[5]{};
 	uint32_t physical_by_category[5]{};
@@ -737,4 +771,3 @@ bool Terrain3DRdShaderLibrary::isReady( void ) const {
 		}
 		return true;
 	}
-

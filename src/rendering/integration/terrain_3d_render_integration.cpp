@@ -1,4 +1,5 @@
 #include "rendering/rd/core/terrain_3d_render_coordinator.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "rendering/rd/core/terrain_3d_rd_context.h"
 #include "instances/physics/terrain_3d_instance_occlusion.h"
@@ -1121,7 +1122,7 @@ void Terrain3D::setOceanSettings( const Ref<Terrain3DOceanSettings> &rSettings )
 }
 
 void Terrain3D::markOceanPublicationDirty( void ) {
-	m_nOceanPublicationGeneration = m_nOceanPublicationGeneration == UINT64_MAX ? 1u : m_nOceanPublicationGeneration + 1u;
+	m_nOceanPublicationGeneration = t3dNextGeneration( m_nOceanPublicationGeneration );
 }
 
 void Terrain3D::connectOceanSettingsPublicationSignal( void ) {
@@ -1240,6 +1241,10 @@ void Terrain3D::destroyRenderCoordinator( const bool bFinal ) {
 
 Dictionary Terrain3D::getRdRendererDiagnostics( void ) const {
 	return m_pRenderCoordinator ? m_pRenderCoordinator->getDiagnostics() : Dictionary();
+}
+
+Dictionary Terrain3D::getGpuUploadDiagnostics(void) const {
+	return Terrain3DRdContext::getShared().getGpuUploadDiagnostics();
 }
 
 Dictionary Terrain3D::bakeVirtualTextures( void ) {

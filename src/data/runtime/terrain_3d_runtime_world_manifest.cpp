@@ -308,22 +308,11 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 	if ( path.is_empty() ) {
 		return false;
 	}
-	const String temporary = path + String( ".tmp" );
-	const String backup = path + String( ".bak" );
-	Terrain3DFilePublication publication( path, temporary, backup );
-	if ( publication.prepare() != OK ) {
+	Terrain3DFilePublication publication( path, path + String( ".tmp" ), path + String( ".bak" ) );
+	Ref<FileAccess> pFile;
+	if ( publication.openStaged( pFile ) != OK ) {
 		if ( pErrors ) {
 			pErrors->push_back( publication.getError() );
-		}
-		return false;
-	}
-	if ( FileAccess::file_exists( temporary ) ) {
-		DirAccess::remove_absolute( temporary );
-	}
-	Ref<FileAccess> pFile = FileAccess::open( temporary, FileAccess::WRITE );
-	if ( pFile.is_null() ) {
-		if ( pErrors ) {
-			pErrors->push_back( "Cannot open world manifest temporary file." );
 		}
 		return false;
 	}
@@ -405,12 +394,9 @@ bool Terrain3DRuntimeWorldManifest::write( const String &rDataDirectory,
 		const String &dependency = ( m_sceneDependencies )[iDependency];
 		t3dRuntimeWorldManifestStoreString( pFile, dependency );
 	}
-	const Error write_error = pFile->get_error();
-	pFile->close();
-	if ( write_error != OK ) {
-		DirAccess::remove_absolute( temporary );
+	if ( publication.finishStaged( pFile ) != OK ) {
 		if ( pErrors ) {
-			pErrors->push_back( "World manifest write failed." );
+			pErrors->push_back( publication.getError() );
 		}
 		return false;
 	}

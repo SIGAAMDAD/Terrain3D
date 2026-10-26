@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "core/utility/terrain_3d_numeric.h"
 #include "assets/resources/terrain_3d_rendering_material.h"
 
@@ -22,71 +23,42 @@ static EA_FORCE_INLINE uint32_t t3dRenderingMaterialPackVtScalars0(
 	        | ( t3dPackUnorm8Nearest( fAlphaScissor ) << T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT );
 }
 
+void Terrain3DRenderingMaterial::_bind_methods( void )
+{
 
-void Terrain3DRenderingMaterial::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_emission", "color" ), &Terrain3DRenderingMaterial::setEmission );
-	ClassDB::bind_method( D_METHOD( "get_emission" ), &Terrain3DRenderingMaterial::getEmission );
-	ClassDB::bind_method( D_METHOD( "set_emission_energy", "value" ), &Terrain3DRenderingMaterial::setEmissionEnergy );
-	ClassDB::bind_method( D_METHOD( "get_emission_energy" ), &Terrain3DRenderingMaterial::getEmissionEnergy );
-	ClassDB::bind_method( D_METHOD( "set_ao_strength", "value" ), &Terrain3DRenderingMaterial::setAoStrength );
-	ClassDB::bind_method( D_METHOD( "get_ao_strength" ), &Terrain3DRenderingMaterial::getAoStrength );
-	ClassDB::bind_method( D_METHOD( "set_texture_filter", "filter" ), &Terrain3DRenderingMaterial::setTextureFilter );
-	ClassDB::bind_method( D_METHOD( "get_texture_filter" ), &Terrain3DRenderingMaterial::getTextureFilter );
-	ClassDB::bind_method( D_METHOD( "set_surface_texture_layout", "layout" ), &Terrain3DRenderingMaterial::setSurfaceTextureLayout );
-	ClassDB::bind_method( D_METHOD( "get_surface_texture_layout" ), &Terrain3DRenderingMaterial::getSurfaceTextureLayout );
-	ClassDB::bind_method( D_METHOD( "set_unshaded", "enabled" ), &Terrain3DRenderingMaterial::setUnshaded );
-	ClassDB::bind_method( D_METHOD( "is_unshaded" ), &Terrain3DRenderingMaterial::isUnshaded );
-	ClassDB::bind_method( D_METHOD( "set_vertex_color", "enabled" ), &Terrain3DRenderingMaterial::setVertexColor );
-	ClassDB::bind_method( D_METHOD( "is_vertex_color" ), &Terrain3DRenderingMaterial::isVertexColor );
-	ClassDB::bind_method( D_METHOD( "set_vertex_color_srgb", "enabled" ), &Terrain3DRenderingMaterial::setVertexColorSrgb );
-	ClassDB::bind_method( D_METHOD( "is_vertex_color_srgb" ), &Terrain3DRenderingMaterial::isVertexColorSrgb );
-	ClassDB::bind_method( D_METHOD( "set_direct_orm_channels", "enabled" ), &Terrain3DRenderingMaterial::setDirectOrmChannels );
-	ClassDB::bind_method( D_METHOD( "uses_direct_orm_channels" ), &Terrain3DRenderingMaterial::usesDirectOrmChannels );
-	ClassDB::bind_method( D_METHOD( "set_albedo_saturation", "value" ), &Terrain3DRenderingMaterial::setAlbedoSaturation );
-	ClassDB::bind_method( D_METHOD( "get_albedo_saturation" ), &Terrain3DRenderingMaterial::getAlbedoSaturation );
-	ClassDB::bind_method( D_METHOD( "set_stylized_sun", "enabled" ), &Terrain3DRenderingMaterial::setStylizedSun );
-	ClassDB::bind_method( D_METHOD( "uses_stylized_sun" ), &Terrain3DRenderingMaterial::usesStylizedSun );
-	ClassDB::bind_method( D_METHOD( "set_dielectric_specular", "value" ), &Terrain3DRenderingMaterial::setDielectricSpecular );
-	ClassDB::bind_method( D_METHOD( "get_dielectric_specular" ), &Terrain3DRenderingMaterial::getDielectricSpecular );
-	ClassDB::bind_method( D_METHOD( "set_vt_stable_key_hex", "key" ), &Terrain3DRenderingMaterial::setVtStableKeyHex );
-	ClassDB::bind_method( D_METHOD( "get_vt_stable_key_hex" ), &Terrain3DRenderingMaterial::getVtStableKeyHex );
 	ClassDB::bind_method( D_METHOD( "import_base_material", "material" ), &Terrain3DRenderingMaterial::importBaseMaterialCold );
 	ClassDB::bind_method( D_METHOD( "is_one_submit_compatible" ), &Terrain3DRenderingMaterial::isOneSubmitCompatible );
 
 	ADD_GROUP( "Lighting", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::COLOR, "emission" ), "set_emission", "get_emission" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "emission_energy", PROPERTY_HINT_RANGE, "0,64,0.01,or_greater" ),
-	        "set_emission_energy",
-	        "get_emission_energy" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "ao_strength", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_ao_strength", "get_ao_strength" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "unshaded" ), "set_unshaded", "is_unshaded" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setEmission, getEmission, "color",
+	                   PropertyInfo( Variant::COLOR, "emission" ), "set_emission", "get_emission" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setEmissionEnergy, getEmissionEnergy, "value",
+	                   PropertyInfo( Variant::FLOAT, "emission_energy", PROPERTY_HINT_RANGE, "0,64,0.01,or_greater" ), "set_emission_energy", "get_emission_energy" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setAoStrength, getAoStrength, "value",
+	                   PropertyInfo( Variant::FLOAT, "ao_strength", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_ao_strength", "get_ao_strength" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setUnshaded, isUnshaded, "enabled",
+	                   PropertyInfo( Variant::BOOL, "unshaded" ), "set_unshaded", "is_unshaded" );
 	ADD_GROUP( "Vertex Input", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "vertex_color" ), "set_vertex_color", "is_vertex_color" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "vertex_color_srgb" ), "set_vertex_color_srgb", "is_vertex_color_srgb" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setVertexColor, isVertexColor, "enabled",
+	                   PropertyInfo( Variant::BOOL, "vertex_color" ), "set_vertex_color", "is_vertex_color" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setVertexColorSrgb, isVertexColorSrgb, "enabled",
+	                   PropertyInfo( Variant::BOOL, "vertex_color_srgb" ), "set_vertex_color_srgb", "is_vertex_color_srgb" );
 	ADD_GROUP( "Imported Shader Profile", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "direct_orm_channels" ), "set_direct_orm_channels", "uses_direct_orm_channels" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "albedo_saturation", PROPERTY_HINT_RANGE, "0,1.5,0.01" ),
-	        "set_albedo_saturation",
-	        "get_albedo_saturation" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "stylized_sun" ), "set_stylized_sun", "uses_stylized_sun" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "dielectric_specular", PROPERTY_HINT_RANGE, "0,1,0.001" ),
-	        "set_dielectric_specular",
-	        "get_dielectric_specular" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setDirectOrmChannels, usesDirectOrmChannels, "enabled",
+	                   PropertyInfo( Variant::BOOL, "direct_orm_channels" ), "set_direct_orm_channels", "uses_direct_orm_channels" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setAlbedoSaturation, getAlbedoSaturation, "value",
+	                   PropertyInfo( Variant::FLOAT, "albedo_saturation", PROPERTY_HINT_RANGE, "0,1.5,0.01" ), "set_albedo_saturation", "get_albedo_saturation" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setStylizedSun, usesStylizedSun, "enabled",
+	                   PropertyInfo( Variant::BOOL, "stylized_sun" ), "set_stylized_sun", "uses_stylized_sun" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setDielectricSpecular, getDielectricSpecular, "value",
+	                   PropertyInfo( Variant::FLOAT, "dielectric_specular", PROPERTY_HINT_RANGE, "0,1,0.001" ), "set_dielectric_specular", "get_dielectric_specular" );
 	ADD_GROUP( "Texture ABI", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "texture_filter",
-	                      PROPERTY_HINT_ENUM,
-	                      "Nearest,Linear,Nearest Mipmap,Linear Mipmap,Nearest Mipmap Anisotropic,Linear Mipmap Anisotropic" ),
-	        "set_texture_filter",
-	        "get_texture_filter" );
-	ADD_PROPERTY(
-	        PropertyInfo(
-	                Variant::INT, "surface_texture_layout", PROPERTY_HINT_ENUM, "ORM,Roughness R,Roughness G,Roughness B,Roughness A" ),
-	        "set_surface_texture_layout",
-	        "get_surface_texture_layout" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "vt_stable_key", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_stable_key_hex",
-	        "get_vt_stable_key_hex" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setTextureFilter, getTextureFilter, "filter",
+	                   PropertyInfo( Variant::INT, "texture_filter", PROPERTY_HINT_ENUM, "Nearest,Linear,Nearest Mipmap,Linear Mipmap,Nearest Mipmap Anisotropic,Linear Mipmap Anisotropic" ), "set_texture_filter", "get_texture_filter" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setSurfaceTextureLayout, getSurfaceTextureLayout, "layout",
+	                   PropertyInfo( Variant::INT, "surface_texture_layout", PROPERTY_HINT_ENUM, "ORM,Roughness R,Roughness G,Roughness B,Roughness A" ), "set_surface_texture_layout", "get_surface_texture_layout" );
+	T3D_BIND_PROPERTY( Terrain3DRenderingMaterial, setVtStableKeyHex, getVtStableKeyHex, "key",
+	                   PropertyInfo( Variant::STRING, "vt_stable_key", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_vt_stable_key_hex", "get_vt_stable_key_hex" );
 }
 
 void Terrain3DRenderingMaterial::setEmission( const Color &rColor ) {
@@ -124,6 +96,7 @@ void Terrain3DRenderingMaterial::setSurfaceTextureLayout( const int32_t iValue )
 	const int32_t value = CLAMP( iValue, ( int32_t )( SURFACE_TEXTURE_ORM ), ( int32_t )( SURFACE_TEXTURE_ROUGHNESS_A ) );
 	if ( m_iSurfaceTextureLayout != value ) {
 		m_iSurfaceTextureLayout = value;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }
@@ -152,6 +125,7 @@ void Terrain3DRenderingMaterial::setVertexColorSrgb( const bool bEnabled ) {
 void Terrain3DRenderingMaterial::setDirectOrmChannels( const bool bEnabled ) {
 	if ( m_bDirectOrmChannels != bEnabled ) {
 		m_bDirectOrmChannels = bEnabled;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }
@@ -229,6 +203,7 @@ String Terrain3DRenderingMaterial::getVtStableKeyHex( void ) const {
 void Terrain3DRenderingMaterial::setVtStableKey( const uint64_t nKey ) {
 	if ( m_nVtStableKey != nKey ) {
 		m_nVtStableKey = nKey;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }
@@ -388,9 +363,9 @@ bool Terrain3DRenderingMaterial::compileInstanceRecordCold( t3dRdInstanceMateria
 	return true;
 }
 
-
 bool Terrain3DRenderingMaterial::compileVtRecordCold(
-        const t3dRenderingMaterialVTBindings_t &rVt, t3dRenderingMaterialGpu_t &rRecord ) const {
+    const t3dRenderingMaterialVTBindings_t& rVt, t3dRenderingMaterialGpu_t& rRecord ) const
+{
 	if ( !Terrain3DWorldMaterial::compileVtRecordCold( rVt, rRecord ) ) {
 		return false;
 	}

@@ -3,7 +3,7 @@
 #include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/forward/terrain_3d_rd_forward_variant.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
-#include "rendering/rd/shaders/terrain_3d_shader_pipeline_abi.h"
+#include "Terrain3DConstants.h"
 
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
@@ -50,17 +50,10 @@ Terrain3DWorldRaster::~Terrain3DWorldRaster( void ) {
 bool Terrain3DWorldRaster::initializeCold( const bool bPersistentFrameBuffer, const bool bPersistentCpuBuffers ) {
 	if ( m_bInitialized ) { return true; }
 	if ( !m_context.getDevice() ) { return false; }
+	m_bPersistentFrameBuffer = bPersistentFrameBuffer;
+	m_bPersistentCpuBuffers = bPersistentCpuBuffers;
 	m_forwardLighting.setPersistentFrameBufferEnabled( bPersistentFrameBuffer );
 	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
-		for ( uint32_t i = 0u; i < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++i ) {
-			const t3dRdShaderId_t id = ( t3dRdShaderId_t )( ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE : T3D_RD_SHADER_WORLD_RASTER_MESH_BASE ) + i );
-			const Ref<RDShaderSPIRV> spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
-			if ( spirv.is_null() ) { shutdownCold(); return false; }
-			t3dWorldMarkDynamicBuffers( spirv, bPersistentFrameBuffer, bPersistentCpuBuffers, primitive == T3D_PRIMITIVE_TERRAIN_STRIP );
-			const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
-			const String resource_name = String( "T3D.World.Raster." ) + class_name + String( ".Shader." ) + String::num_uint64( i );
-			if ( !m_hShader[primitive][i].createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, resource_name, id ) ) { shutdownCold(); return false; }
-		}
 		const t3dRdShaderId_t shadow_id = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW : T3D_RD_SHADER_WORLD_RASTER_MESH_SHADOW;
 		const Ref<RDShaderSPIRV> shadow_spirv = Terrain3DRdShaderLibrary::borrowSpirv( shadow_id );
 		if ( shadow_spirv.is_null() ) { shutdownCold(); return false; }
@@ -73,6 +66,28 @@ bool Terrain3DWorldRaster::initializeCold( const bool bPersistentFrameBuffer, co
 	return true;
 }
 
+bool Terrain3DWorldRaster::ensureShaderCold( const t3dPrimitiveClass_t primitive, const t3dRdForwardShaderVariant_t variant )
+{
+	if ( primitive >= T3D_PRIMITIVE_CLASS_COUNT || variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ) {
+		return false;
+	}
+	Terrain3DRdShader& shader = m_hShader[ primitive ][ variant ];
+	if ( shader.isValid() ) {
+		return true;
+	}
+	const t3dRdShaderId_t id = (t3dRdShaderId_t)( ( primitive == T3D_PRIMITIVE_TERRAIN_STRIP
+	                                                    ? T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE
+	                                                    : T3D_RD_SHADER_WORLD_RASTER_MESH_BASE ) +
+	                                              variant );
+	const Ref<RDShaderSPIRV> spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
+	if ( spirv.is_null() ) {
+		return false;
+	}
+	t3dWorldMarkDynamicBuffers( spirv, m_bPersistentFrameBuffer, m_bPersistentCpuBuffers, primitive == T3D_PRIMITIVE_TERRAIN_STRIP );
+	const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
+	const String name = String( "T3D.World.Raster." ) + class_name + String( ".Shader." ) + String::num_uint64( variant );
+	return shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_WORLD, name, id );
+}
 
 void Terrain3DWorldRaster::freeSetsCold( void ) {
 	m_set0Cache.clear();
@@ -309,6 +324,9 @@ bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContex
 	for ( uint32_t active = 0u; active < 2u; ++active ) {
 		const t3dPrimitiveClass_t primitive_class = active_classes[active];
 		const uint32_t primitive = ( uint32_t )primitive_class;
+		if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_SHADOW && !ensureShaderCold( primitive_class, variant ) ) {
+			return false;
+		}
 		const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
 		        ? m_hShadowShader[primitive].rid()
 		        : m_hShader[primitive][( uint32_t )variant].rid();
@@ -380,8 +398,8 @@ bool Terrain3DWorldRaster::submitHot( const t3dRdForwardPassContext_t &rContext,
 	return true;
 }
 
-
-void Terrain3DWorldRaster::shutdownCold( void ) {
+void Terrain3DWorldRaster::shutdownCold( void )
+{
 	m_bCurrentValid = false;
 	freeSetsCold();
 	m_forwardLighting.shutdown();

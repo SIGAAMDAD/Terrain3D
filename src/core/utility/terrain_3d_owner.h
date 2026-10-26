@@ -20,6 +20,7 @@ class Terrain3DEditor;
 class Terrain3DAssets;
 class Terrain3DMaterial;
 class Terrain3DOceanSettings;
+class Terrain3DMemoryAccount;
 
 // Physics borrows only its scene, residency and collision policy capabilities.
 class Terrain3DCollisionHost {
@@ -44,6 +45,7 @@ protected:
 	~Terrain3DOwner( void ) = default;
 public:
 	virtual Terrain3DInstancer *instancerObject( void ) const = 0;
+	virtual Terrain3DMemoryAccount *getMemoryAccountInternal( void ) const { return nullptr; }
 	virtual Terrain3DCollision *collisionObject( void ) const = 0;
 	virtual Terrain3DHLODStreamer *hlodObject( void ) const = 0;
 	virtual Terrain3DNodeStreamer *nodeStreamerObject( void ) const = 0;

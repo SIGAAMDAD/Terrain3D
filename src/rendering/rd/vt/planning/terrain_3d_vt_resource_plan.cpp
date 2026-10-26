@@ -2,26 +2,42 @@
 
 #include "rendering/rd/vt/planning/terrain_3d_vt_resource_plan.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
+#include "rendering/rd/vt/core/terrain_3d_vt_capacity_policy.h"
 #include "core/utility/terrain_3d_checked_math.h"
 
 #include <limits.h>
 #include <string.h>
 
-static bool t3d_vt_checked_add_u64( uint64_t pA, uint64_t pB, uint64_t &rValue ) {
-	return t3dCheckedAdd( pA, pB, rValue );
-}
-
-static bool t3d_vt_checked_mul_u64( uint64_t pA, uint64_t pB, uint64_t &rValue ) {
-	return t3dCheckedMultiply( pA, pB, rValue );
-}
-
-static bool t3d_vt_add_plan_bytes( uint64_t pBytes, uint64_t &rAccumulator ) {
+static bool t3d_vt_add_plan_bytes( uint64_t pBytes, uint64_t& rAccumulator )
+{
 	uint64_t nNext = 0u;
-	if ( !t3d_vt_checked_add_u64( rAccumulator, pBytes, nNext ) ) {
+	if ( !t3dCheckedAdd<uint64_t>( rAccumulator, pBytes, nNext ) ) {
 		return false;
 	}
 
 	rAccumulator = nNext;
+	return true;
+}
+
+bool t3d_vt_fit_resource_plan_to_budget(t3dWorldLimits_t &rLimits, const t3dVTGpuProfile_t &rProfile,
+        uint64_t budget_bytes, t3dVTGpuResourcePlan_t &rPlan, uint32_t active_tail_height) {
+	t3dWorldLimits_t candidate = rLimits;
+	t3dVTGpuResourcePlan_t plan{};
+	if (candidate.nMaxVtPhysicalPageSets < T3D_VT_MIN_PHYSICAL_PAGE_SETS) { return false; }
+	if (!t3d_vt_compute_resource_plan(candidate, rProfile, plan, active_tail_height)) { return false; }
+	if (plan.nTotalBytes <= budget_bytes) { rPlan = plan; return true; }
+	candidate.nMaxVtPhysicalPageSets = T3D_VT_MIN_PHYSICAL_PAGE_SETS;
+	if (!t3d_vt_compute_resource_plan(candidate, rProfile, plan, active_tail_height) || plan.nTotalBytes > budget_bytes) { return false; }
+	uint32_t lower = T3D_VT_MIN_PHYSICAL_PAGE_SETS, upper = rLimits.nMaxVtPhysicalPageSets;
+	while (lower < upper) {
+		const uint32_t middle = lower + (upper - lower + 1u) / 2u;
+		candidate.nMaxVtPhysicalPageSets = middle;
+		if (!t3d_vt_compute_resource_plan(candidate, rProfile, plan, active_tail_height)) { return false; }
+		if (plan.nTotalBytes <= budget_bytes) { lower = middle; } else { upper = middle - 1u; }
+	}
+	candidate.nMaxVtPhysicalPageSets = lower;
+	if (!t3d_vt_compute_resource_plan(candidate, rProfile, plan, active_tail_height)) { return false; }
+	rLimits = candidate; rPlan = plan;
 	return true;
 }
 
@@ -40,13 +56,13 @@ static bool t3d_vt_compute_block_texture_bytes( uint32_t pWidth,
 	const uint64_t nBlocksY = ( ( uint64_t )pHeight + pBlockHeight - 1u ) / pBlockHeight;
 	uint64_t nBlocks = 0u;
 	uint64_t nLayerBytes = 0u;
-	if ( !t3d_vt_checked_mul_u64( nBlocksX, nBlocksY, nBlocks ) ) {
+	if ( !t3dCheckedMultiply<uint64_t>( nBlocksX, nBlocksY, nBlocks ) ) {
 		return false;
 	}
-	if ( !t3d_vt_checked_mul_u64( nBlocks, pBlockBytes, nLayerBytes ) ) {
+	if ( !t3dCheckedMultiply<uint64_t>( nBlocks, pBlockBytes, nLayerBytes ) ) {
 		return false;
 	}
-	return t3d_vt_checked_mul_u64( nLayerBytes, pLayers, rBytes );
+	return t3dCheckedMultiply<uint64_t>( nLayerBytes, pLayers, rBytes );
 }
 
 t3dVTGpuProfile_t t3d_vt_make_development_gpu_profile() {
@@ -100,23 +116,23 @@ bool t3d_vt_compute_resource_plan(
 	        || pLimits.nMaxVtVirtualPages == 0u || pLimits.nMaxVtPhysicalPageSets == 0u ) return false;
 	uint64_t nBytes = 0u;
 	uint64_t nCount = 0u;
-	if ( !t3d_vt_checked_mul_u64( pLimits.nMaxMaterials, 4u, nCount )
-	        || !t3d_vt_checked_add_u64( nCount, ( uint64_t )T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 4u, nCount )
-	        || !t3d_vt_checked_mul_u64( nCount, pProfile.nVtAllocationRecordBytes, nBytes ) ) return false;
+	if ( !t3dCheckedMultiply<uint64_t>( pLimits.nMaxMaterials, 4u, nCount ) || !t3dCheckedAdd<uint64_t>( nCount, (uint64_t)T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 4u, nCount ) || !t3dCheckedMultiply<uint64_t>( nCount, pProfile.nVtAllocationRecordBytes, nBytes ) )
+		return false;
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_ALLOCATION_TABLE] = nBytes;
 	uint64_t nMipLayoutEntries = 0u;
-	if ( !t3d_vt_checked_mul_u64( nCount, T3D_VT_MAX_MIPS, nMipLayoutEntries )
-	        || !t3d_vt_checked_mul_u64( nMipLayoutEntries, sizeof( t3dVTMipLayout_t ), nBytes ) ) return false;
+	if ( !t3dCheckedMultiply<uint64_t>( nCount, T3D_VT_MAX_MIPS, nMipLayoutEntries ) || !t3dCheckedMultiply<uint64_t>( nMipLayoutEntries, sizeof( t3dVTMipLayout_t ), nBytes ) )
+		return false;
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE] = nBytes;
-	if ( !t3d_vt_checked_mul_u64( pLimits.nMaxVtVirtualPages, pProfile.nVtPageTableEntryBytes, nBytes ) ) { return false; }
+	if ( !t3dCheckedMultiply<uint64_t>( pLimits.nMaxVtVirtualPages, pProfile.nVtPageTableEntryBytes, nBytes ) ) {
+		return false;
+	}
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_PAGE_TABLE] = nBytes;
 
 	uint64_t nTailEntries = 0u;
-	if ( !t3d_vt_checked_add_u64( pLimits.nMaxMaterials, T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY, nTailEntries )
-	        || !t3d_vt_checked_mul_u64( nTailEntries, 4u, nTailEntries ) || nTailEntries == 0u || nTailEntries > UINT32_MAX ) {
+	if ( !t3dCheckedAdd<uint64_t>( pLimits.nMaxMaterials, T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY, nTailEntries ) || !t3dCheckedMultiply<uint64_t>( nTailEntries, 4u, nTailEntries ) || nTailEntries == 0u || nTailEntries > UINT32_MAX ) {
 		return false;
 	}
-	if ( !t3d_vt_checked_mul_u64( nTailEntries, sizeof( t3dVTTailMetadata_t ), nBytes ) ) {
+	if ( !t3dCheckedMultiply<uint64_t>( nTailEntries, sizeof( t3dVTTailMetadata_t ), nBytes ) ) {
 		return false;
 	}
 	rPlan.nBufferBytes[T3D_VT_GPU_BUFFER_TAIL_METADATA] = nBytes;
@@ -190,5 +206,5 @@ bool t3d_vt_compute_resource_plan(
 		}
 	}
 
-	return t3d_vt_checked_add_u64( rPlan.nTotalBufferBytes, rPlan.nTotalTextureBytes, rPlan.nTotalBytes );
+	return t3dCheckedAdd<uint64_t>( rPlan.nTotalBufferBytes, rPlan.nTotalTextureBytes, rPlan.nTotalBytes );
 }

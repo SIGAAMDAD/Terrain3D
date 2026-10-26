@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "rendering/rd/forward/terrain_3d_rd_forward_pipeline_base.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 #include "Terrain3DConstants.h"
 #include "core/utility/terrain_3d_sync.h"
@@ -190,20 +191,23 @@ bool Terrain3DRdClipmapRenderer::ensureShaders( void ) {
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::ensureForwardShaders( void ) {
+bool Terrain3DRdClipmapRenderer::ensureForwardShaders( const t3dTerrainShaderPath_t path,
+                                                       const t3dRdForwardShaderVariant_t variant, const bool bOneSunLighting )
+{
 	if ( !m_context.getDevice() ) { return false; }
-	for ( uint32_t path = 0u; path < T3D_TERRAIN_SHADER_PATH_COUNT; ++path ) {
-		for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
-			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
-				Terrain3DRdShader &shader = m_hszForwardShaders[path][tier][variant];
-				const String name = String( "T3D.Forward.Shader.Terrain." ) + String::num_int64( path ) + "." + String::num_int64( tier ) + "." + String::num_int64( variant );
-				if ( !shader.isValid() && !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, t3dRdTerrainForwardId( path, tier, variant ) ) ) { return false; }
-			}
-			for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT; ++variant ) {
-				Terrain3DRdShader &shader = m_hszForwardOneSunShaders[path][tier][variant];
-				const String name = String( "T3D.Forward.Shader.TerrainOneSun." ) + String::num_int64( path ) + "." + String::num_int64( tier ) + "." + String::num_int64( variant );
-				if ( !shader.isValid() && !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, t3dRdTerrainOneSunId( path, tier, variant ) ) ) { return false; }
-			}
+	if ( path >= T3D_TERRAIN_SHADER_PATH_COUNT || variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX ) {
+		return false;
+	}
+	const bool one_sun = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
+	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
+		Terrain3DRdShader& shader = one_sun ? m_hszForwardOneSunShaders[ path ][ tier ][ variant ] : m_hszForwardShaders[ path ][ tier ][ variant ];
+		if ( shader.isValid() ) {
+			continue;
+		}
+		const String name = String( one_sun ? "T3D.Forward.Shader.TerrainOneSun." : "T3D.Forward.Shader.Terrain." ) + String::num_int64( path ) + "." + String::num_int64( tier ) + "." + String::num_int64( variant );
+		const t3dRdShaderId_t id = one_sun ? t3dRdTerrainOneSunId( path, tier, variant ) : t3dRdTerrainForwardId( path, tier, variant );
+		if ( !shader.createTracked( m_context, T3D_RD_CONTEXT_OWNER_TERRAIN, name, id ) ) {
+			return false;
 		}
 	}
 	return true;
@@ -1016,42 +1020,30 @@ bool Terrain3DRdClipmapRenderer::ensureViewState( const uint32_t nView,
 		setError( "Failed to create Terrain3D per-view framebuffer" );
 		return false;
 	}
-	Ref<RDPipelineRasterizationState> raster;
-	raster.instantiate();
-	raster->set_cull_mode( RenderingDevice::POLYGON_CULL_DISABLED );
-	raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE );
-	Ref<RDPipelineMultisampleState> multisample;
-	multisample.instantiate();
-	multisample->set_sample_count( samples );
-	Ref<RDPipelineDepthStencilState> depth;
-	depth.instantiate();
-	depth->set_enable_depth_test( true );
-	depth->set_enable_depth_write( true );
-	depth->set_depth_compare_operator( RenderingDevice::COMPARE_OP_LESS_OR_EQUAL );
-	Ref<RDPipelineColorBlendStateAttachment> blend_attachment;
-	blend_attachment.instantiate();
-	blend_attachment->set_enable_blend( false );
-	blend_attachment->set_write_r( bColorWrite );
-	blend_attachment->set_write_g( bColorWrite );
-	blend_attachment->set_write_b( bColorWrite );
-	blend_attachment->set_write_a( bColorWrite );
-	Ref<RDPipelineColorBlendState> blend;
-	blend.instantiate();
-	TypedArray<Ref<RDPipelineColorBlendStateAttachment>> blend_attachments;
-	blend_attachments.push_back( blend_attachment );
-	blend->set_attachments( blend_attachments );
+	t3dRdForwardPipelineBaseKey_t pipeline_key;
+	pipeline_key.m_samples = samples;
+	t3dRdForwardPipelineStateOptions_t options;
+	options.m_depthCompare = RenderingDevice::COMPARE_OP_LESS_OR_EQUAL;
+	options.m_nBlendAttachmentCount = 1u;
+	options.m_bColorWrite = bColorWrite;
+	t3dRdForwardPipelineStates_t pipeline_states;
+	if ( !t3dRdBuildForwardPipelineStates( pipeline_key, options, pipeline_states ) ) {
+		freeViewState( state );
+		setError( "Failed to create Terrain3D per-view pipeline states" );
+		return false;
+	}
 	const int64_t framebuffer_format = state.m_hFramebuffer.format( rd );
 	for ( int i = 0; i < 3; ++i ) {
 		const String pipeline_name = String( "T3D.Pipeline.View" ) + String::num_int64( nView ) + "." + String::num_int64( i );
-		state.m_hszPipelines[i] = m_viewPipelines.getOrCreateRaster( nView * 3u + ( uint32_t )i,
-		        pipeline_name, m_hszShaders[i].rid(),
-		        framebuffer_format,
-		        -1,
-		        RenderingDevice::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
-		        raster,
-		        multisample,
-		        depth,
-		        blend );
+		state.m_hszPipelines[ i ] = m_viewPipelines.getOrCreateRaster( nView * 3u + (uint32_t)i,
+		                                                               pipeline_name, m_hszShaders[ i ].rid(),
+		                                                               framebuffer_format,
+		                                                               -1,
+		                                                               RenderingDevice::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
+		                                                               pipeline_states.m_raster,
+		                                                               pipeline_states.m_multisample,
+		                                                               pipeline_states.m_depth,
+		                                                               pipeline_states.m_blend );
 		if ( !state.m_hszPipelines[i].is_valid() ) {
 			m_context.recordResourceCreationFailure( pipeline_name, T3D_RD_CONTEXT_RESOURCE_RASTER_PIPELINE );
 			setError( "Failed to create Terrain3D raster pipeline" );
@@ -1129,8 +1121,7 @@ bool Terrain3DRdClipmapRenderer::initialize( void ) {
 		}
 	}
 
-	if ( !ensureShaders() || !ensureForwardShaders() || !ensureSamplers()
-	        || !ensureFallbackTextures() || !ensureBuffers() ) {
+	if ( !ensureShaders() || !ensureSamplers() || !ensureFallbackTextures() || !ensureBuffers() ) {
 		return false;
 	}
 	return true;
@@ -1751,15 +1742,16 @@ bool Terrain3DRdClipmapRenderer::render( RenderData *const pRenderData,
 	return true;
 }
 
-bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t &rContext,
-        const t3dRdFrameSnapshot_t &rSnapshot,
-        const PackedByteArray &rRegionMapBytes,
-        const uint64_t nRegionMapGeneration,
-        const t3dRdTerrainBindings_t &rBindings,
-        const t3dSharedVTBindings_t *const pSharedVTBindings,
-        const bool bTemporalHistoryValid,
-        const bool bViewportReconfigured,
-        const bool bOneSunLighting ) {
+bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassContext_t& rContext,
+                                                     const t3dRdFrameSnapshot_t& rSnapshot,
+                                                     const PackedByteArray& rRegionMapBytes,
+                                                     const uint64_t nRegionMapGeneration,
+                                                     const t3dRdTerrainBindings_t& rBindings,
+                                                     const t3dSharedVTBindings_t *const pSharedVTBindings,
+                                                     const bool bTemporalHistoryValid,
+                                                     const bool bViewportReconfigured,
+                                                     const bool bOneSunLighting, const bool bPrepareRasterPipelines )
+{
 	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ) {
 		return false;
 	}
@@ -1776,6 +1768,10 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	}
 	const bool one_sun_lighting = bOneSunLighting && variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
 	const t3dTerrainShaderPath_t shader_path = selectTerrainShaderPath( rSnapshot );
+	if ( bPrepareRasterPipelines && !ensureForwardShaders( shader_path, variant, one_sun_lighting ) ) {
+		setError( "Failed to acquire the selected Terrain3D Forward+ shader variant" );
+		return false;
+	}
 	const uint8_t shipping_feature_class = t3dRdTerrainShippingFeatureClass( rSnapshot, shader_path );
 	uint8_t lighting_model_classes[3];
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
@@ -1800,7 +1796,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 	}
 	m_bForwardHistoryValid = bTemporalHistoryValid;
 	if ( m_nForwardPreparedScenePass != rContext.m_nScenePass || m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
-		m_context.beginFrame( rContext.m_nScenePass, rSnapshot.m_nPublicationGeneration );
+		m_context.beginFrame( rContext.m_nRenderFrame, rSnapshot.m_nPublicationGeneration );
 	}
 	clearError();
 	if ( !uploadSnapshotBuffers( rSnapshot, rRegionMapBytes, nRegionMapGeneration )
@@ -1857,6 +1853,13 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass( const t3dRdForwardPassConte
 		m_nForwardPreparedViewportKey = rContext.m_nViewportKey;
 		m_nForwardPreparedSnapshotGeneration = rSnapshot.m_nPublicationGeneration;
 		m_forwardPreparedCullPassKind = rContext.m_passKind;
+	}
+	if ( !bPrepareRasterPipelines ) {
+		// Unified world raster borrows the uploaded terrain resources and performs
+		// its own lighting and draws. Do not compile an unused legacy draw path.
+		m_bLastForwardPipelineKeyValid = false;
+		clearError();
+		return true;
 	}
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) {
 		if ( bViewportReconfigured ) {

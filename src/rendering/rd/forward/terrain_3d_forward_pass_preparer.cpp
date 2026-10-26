@@ -235,6 +235,7 @@ bool Terrain3DForwardPassPreparer::render( Terrain3DForwardPassHost &rHost, t3dF
 
 bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
         t3dForwardPassServices_t &rServices, const t3dRdForwardPassContext_t &rContext ) {
+	Terrain3DRdContext::getShared().beginFrame(rContext.m_nRenderFrame, 0u);
 	m_nForwardPrepareRequestedLaneMask = 0u;
 	m_nForwardPrepareReadyLaneMask = 0u;
 	m_nForwardPrepareFailedLaneMask = 0u;
@@ -263,6 +264,7 @@ bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
 		return false;
 	}
 	const t3dRdFrameSnapshot_t &snapshot = publication->m_snapshot;
+	Terrain3DRdContext::getShared().beginFrame(rContext.m_nRenderFrame, snapshot.m_nPublicationGeneration);
 	const t3dRdRegionMapBank_t *const pRegionMap = rServices.m_publicationBuilder.getRegionMapBank( publication->m_nRegionMapBank );
 	const t3dRdInstanceMeshBank_t *const pMeshes =
 	        rServices.m_publicationBuilder.getInstanceMeshBank( publication->m_nInstanceMeshBank );
@@ -297,7 +299,7 @@ bool Terrain3DForwardPassPreparer::prepare( Terrain3DForwardPassHost &rHost,
 			rHost.publishForwardWorldReadiness( pWorld->m_publication, false );
 		}
 		Terrain3DColdPhaseScope world_prepare_scope;
-		if ( !rServices.m_worldRuntime.preparePublicationCold( pWorld->m_publication, rContext.m_nRenderFrame ) ) {
+		if ( !rServices.m_worldRuntime.preparePublicationCold( pWorld->m_publication, rContext.m_nRenderFrame, &rServices.m_virtualTexture ) ) {
 			return false;
 		}
 	}
@@ -663,17 +665,7 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes( Terrain3DForward
 	const bool world_raster_bindings_needed = rPreparation.m_bHasTerrain || rPreparation.m_bUnifiedWorldPass;
 	const bool terrain_vt_ready = !world_raster_bindings_needed
 	        || ( rPreparation.m_bSharedVtReady && rHost.snapshotForwardSharedVt( shared_vt_bindings ) );
-	const bool terrain_ok = !world_raster_bindings_needed
-	        || ( terrain_vt_ready && rPreparation.m_pRegionMap
-	                && rServices.m_renderer.prepareForwardPass( rContext,
-	                        snapshot,
-	                        rPreparation.m_pRegionMap->m_bytes,
-	                        snapshot.m_nRegionMapGeneration,
-	                        rPreparation.m_pPublication->m_bindings,
-	                        &shared_vt_bindings,
-	                        rPreparation.m_bHistoryValid,
-	                        rPreparation.m_bViewportReconfigured,
-                        snapshot.m_bDominantSunOnly ) );
+	const bool terrain_ok = !world_raster_bindings_needed || ( terrain_vt_ready && rPreparation.m_pRegionMap && rServices.m_renderer.prepareForwardPass( rContext, snapshot, rPreparation.m_pRegionMap->m_bytes, snapshot.m_nRegionMapGeneration, rPreparation.m_pPublication->m_bindings, &shared_vt_bindings, rPreparation.m_bHistoryValid, rPreparation.m_bViewportReconfigured, snapshot.m_bDominantSunOnly, !rPreparation.m_bUnifiedWorldPass ) );
 	bool world_ok = !rPreparation.m_bUnifiedWorldPass;
 	if ( rPreparation.m_bUnifiedWorldPass && terrain_ok ) {
 		t3dRdWorldTerrainRasterBindings_t world_terrain_bindings = {};

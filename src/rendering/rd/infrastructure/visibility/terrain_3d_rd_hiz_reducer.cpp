@@ -1,4 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
+#include "core/utility/terrain_3d_generation.h"
 #include "rendering/rd/infrastructure/visibility/terrain_3d_rd_hiz_reducer.h"
 
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
@@ -72,10 +73,7 @@ bool Terrain3DRdHiZReducer::initializeCold( const t3dRdShaderId_t shaderId,
 		}
 	}
 	m_pushBytes.resize( m_nPushBytes );
-	++m_nResourceGeneration;
-	if ( m_nResourceGeneration == 0u ) {
-		m_nResourceGeneration = 1u;
-	}
+	m_nResourceGeneration = t3dNextGeneration( m_nResourceGeneration );
 	return true;
 }
 

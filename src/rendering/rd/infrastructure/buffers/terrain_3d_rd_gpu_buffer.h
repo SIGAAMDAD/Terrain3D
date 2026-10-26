@@ -4,6 +4,7 @@
 #include "rendering/rd/infrastructure/buffers/terrain_3d_rd_gpu_buffer_types.h"
 #include "rendering/rd/core/terrain_3d_rd_context_access.h"
 #include "rendering/rd/core/terrain_3d_rd_context_contract.h"
+#include "memory/policy/terrain_3d_memory_account.h"
 #include <godot_cpp/classes/rendering_device.hpp>
 
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -30,6 +31,7 @@ typedef struct t3dRdGpuBufferSpec_s {
 // physical state live together: domain code configures the logical buffer once,
 // then asks this object to create/grow/replace/write/read/release that buffer.
 class Terrain3DRdGpuBuffer {
+	Terrain3DMemoryReservation m_memoryReservation;
 	t3dRdGpuBufferSpec_t m_spec;
 	RID m_hRid;
 	uint32_t m_nCapacityBytes = 0u;

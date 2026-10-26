@@ -9,7 +9,6 @@
 #include "assets/resources/generated_texture.h"
 #include "data/model/terrain_3d_region.h"
 #include "eastl_config.h"
-#include "streaming/policy/terrain_3d_gpu_cache_constants.h"
 
 #include <EASTL/bitset.h>
 #include <stddef.h>
@@ -22,7 +21,6 @@
 #include "data/sampling/terrain_3d_sampling_storage.h"
 #include "rendering/material/terrain_3d_material.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
-
 
 typedef struct t3dFarSurfaceAtlasConfig_s {
 
@@ -38,9 +36,7 @@ typedef struct t3dFarSurfaceAtlasConfig_s {
 	Ref<Terrain3DAssets> m_assets;
 } t3dFarSurfaceAtlasConfig_t;
 
-
 // t3dFarSurfaceAtlasStats_s centralized in Terrain3DTypes.h.
-
 
 class Terrain3DFarSurfaceAtlasCache {
 public:

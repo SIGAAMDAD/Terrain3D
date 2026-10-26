@@ -3,6 +3,7 @@
 #define TERRAIN3D_INCREMENTAL_MEGAVT_COOKER_H
 
 #include "Terrain3DTypes.h"
+#include "memory/policy/terrain_3d_memory_account.h"
 #include "data/model/terrain_3d_data_access.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "core/runtime/terrain_3d_eastl_helpers.h"
@@ -49,6 +50,7 @@ struct t3dMegaVTRegionPixels_t {
 // their pixels when revisited. Unchanged encoded region fragments are retained.
 class Terrain3DIncrementalMegaVTCooker {
 private:
+	Terrain3DMemoryReservation m_cpuMemory;
 	Terrain3DThread m_worker;
 	t3dAtomicBool_t m_done{ false };
 	t3dAtomicBool_t m_cancel{ false };
@@ -61,7 +63,9 @@ private:
 	bool m_bCacheRestoreAttempted[T3D_REGION_SLOTS]{};
 	eastl::vector<t3dMegaVTRegionPixels_t, Terrain3DEastlAllocator> m_pixelCache;
 	uint64_t m_nPendingFingerprint = 0u;
-	uint64_t m_nRetryAfterUsec = 0u;
+	uint64_t m_nIdlePublicationGeneration = UINT64_MAX;
+	uint64_t m_nObservedTopologyGeneration = UINT64_MAX;
+	uint32_t m_nFailedSourceGenerations[T3D_REGION_SLOTS]{};
 	uint64_t m_nPublicationDeadlineUsec = 0u;
 	uint64_t m_nSubmitted = 0u;
 	uint64_t m_nAccepted = 0u;
@@ -75,11 +79,15 @@ private:
 	uint64_t m_nPeakCpuByteEstimate = 0u;
 	uint64_t m_nMergeUsec = 0u;
 	uint64_t m_nPayloadComparisons = 0u;
+	uint64_t m_nCompositionWorkingBytes = 0u;
+	uint64_t m_nCompositionWorkingLimit = 0u;
 	uint64_t m_nWorkerByteLimit = 32ull * 1024ull * 1024ull;
 	bool m_bWorkerSucceeded = false;
 	String m_lastError;
 
 	bool captureRegionCold( const t3dMegaVTAuthoringInputs_t &rInputs, const t3dTerrainMegaVTIncrementalCookRequest_t &rRequest );
+	size_t getRetainedPayloadBytesCold( void ) const;
+	void trimCpuReservationCold( void );
 	void cookCapturedRegion( void );
 	void retireClaimCold( Terrain3DTerrainMegaVT &rMegaVT, Terrain3DMegaVTCookHost &rHost, const String &rError );
 	bool publishFragmentFileCold( const t3dMegaVTAuthoringInputs_t &rInputs );
@@ -94,10 +102,14 @@ public:
 	// Restore clean region fragments before the first GPU package is published.
 	void restoreCachedRegionsCold( const t3dMegaVTAuthoringInputs_t &rInputs, uint32_t nTexelsPerMeter );
 	void updateCold( const t3dMegaVTAuthoringInputs_t &rInputs, Terrain3DTerrainMegaVT &rMegaVT, Terrain3DMegaVTCookHost &rHost );
+	void retryDirtyRegionsCold( void );
 	void shutdownCold( Terrain3DTerrainMegaVT &rMegaVT );
-	bool composePackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint );
+	bool composePackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint,
+	        Terrain3DSharedMemoryReservation *pPackageMemory = NULL );
 	Dictionary getDiagnosticsCold( void ) const;
 	size_t getRetainedCpuBytesCold( void ) const;
+	uint64_t getReservedCpuBytesCold() const { return m_cpuMemory.bytes(); }
+	String getLastErrorCold() const { return m_lastError; }
 	// Explicit export is synchronous authoring. It uses the same capture/cook
 	// contract and emits all regions, independently of preview/GPU readiness.
 	static bool appendRuntimeRegionsCold( const t3dMegaVTAuthoringInputs_t &rInputs, PackedByteArray &rPackage, uint32_t &rGeneration, String &rError );

@@ -95,7 +95,7 @@ public:
 
 private:
 	static uint32_t makeContentId( int32_t nRegionX, int32_t nRegionZ, uint32_t nTexelsPerMeter );
-	void initializeRegionIdentity( uint32_t nRegionMapIndex, t3dTerrainMegaVTRegion_t& rRegion );
+	void initializeRegionIdentity( uint32_t nRegionMapIndex, t3dTerrainMegaVTRegion_t& rRegion, uint32_t nAllocationId = T3D_VT_INVALID_ALLOCATION );
 	uint32_t computeRegionDirtyMip0Mask( const t3dTerrainMegaVTRegion_t& rRegion,
 	                                     int32_t nRegionX,
 	                                     int32_t nRegionZ,
@@ -106,6 +106,9 @@ private:
 	const Terrain3DVirtualTexture *m_pVirtualTexture;
 	t3dTerrainMegaVTRegion_t m_szRegions[ T3D_REGION_SLOTS ];
 	t3dTerrainMegaVTEditorState_t m_szEditorState[ T3D_REGION_SLOTS ];
+	uint32_t m_szPackageAllocationSnapshot[T3D_REGION_SLOTS]{};
+	uint32_t m_szPackageCookedGenerationSnapshot[T3D_REGION_SLOTS]{};
+	uint8_t m_szPackageCookedValidSnapshot[T3D_REGION_SLOTS]{};
 	uint64_t m_szInFlightClaimIds[ T3D_REGION_SLOTS ]{};
 	uint64_t m_nNextCookClaimId = 1u; // Never reset across cold resets/reconfiguration.
 	uint64_t m_nPublicationGeneration;

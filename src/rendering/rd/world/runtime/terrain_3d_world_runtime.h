@@ -16,6 +16,7 @@ private:
 	Terrain3DWorldRaster m_raster;
 	t3dWorldResourceLimits_t m_limits{};
 	uint64_t m_nPreparedPublicationGeneration = 0u;
+	uint64_t m_nResolvedVtPackagePublicationGeneration = UINT64_MAX;
 	uint64_t m_nGeometryGeneration = 0u;
 	uint64_t m_nMaterialGeneration = 0u;
 	uint64_t m_nCurrentVisibilityPublicationGeneration = 0u;
@@ -55,7 +56,7 @@ public:
 	bool initializeCold( bool bPersistentFrameBuffer, bool bPersistentCpuBuffers );
 	bool configureLimitsCold( const t3dWorldResourceLimits_t &rLimits );
 	void setFramePolicyHot( uint64_t nUploadBudgetBytes, uint32_t nClusterBudget, bool bBoundaryDeferred );
-	bool preparePublicationCold( const Terrain3DWorldPublication &rPublication, uint64_t nRenderFrame );
+	bool preparePublicationCold( const Terrain3DWorldPublication &rPublication, uint64_t nRenderFrame, const Terrain3DVirtualTexture *pVirtualTexture = NULL );
 	bool prepareVisibilityPass(
 	        const t3dRdForwardPassContext_t &rContext, const t3dRdFrameSnapshot_t &rSnapshot, uint32_t nVisibilityMask );
 	bool prepareRasterPass( const t3dRdForwardPassContext_t &rContext,

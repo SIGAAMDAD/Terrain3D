@@ -76,8 +76,8 @@ static bool t3d_vt_cooker_validate_quality_views_v3( const t3dVTCookedSparsePack
 
 // t3dVTCookStagedPayload_s centralized in Terrain3DTypes.h.
 
-
-static uint32_t t3d_vt_cooker_next_power_of_two( uint32_t nValue ) {
+static uint32_t t3d_vt_cooker_next_power_of_two( uint32_t nValue )
+{
 	if ( nValue <= 1u ) {
 		return 1u;
 	}
@@ -95,11 +95,8 @@ static uint32_t t3d_vt_cooker_fold_signature( const uint64_t nSignature ) {
 	return nFolded == T3D_VT_INVALID_PAGE ? nFolded - 1u : nFolded;
 }
 
-static uint64_t t3d_vt_cooker_hash_mix( uint64_t nHash, const uint64_t nValue ) {
-	return t3dHashFnv1a64LittleU64( nHash, nValue );
-}
-
-static void *t3d_vt_cooker_allocate( const t3dVTCookAllocator_t &rAllocator, const uint64_t nBytes ) {
+static void *t3d_vt_cooker_allocate( const t3dVTCookAllocator_t& rAllocator, const uint64_t nBytes )
+{
 	if ( rAllocator.m_pAllocate == NULL || nBytes == 0u || nBytes > SIZE_MAX ) {
 		return NULL;
 	}
@@ -119,7 +116,6 @@ static void t3d_vt_cooker_free( const t3dVTCookAllocator_t &rAllocator, void *pM
 		rAllocator.m_pFree( rAllocator.m_pUser, pMemory );
 	}
 }
-
 
 bool t3d_vt_cooker_normalize_channel_to_profile( const t3dVTChannelNormalization_t &rRequest,
         const t3dVTCookAllocator_t &rAllocator, uint8_t *pDestination, const uint64_t nDestinationBytes ) {
@@ -201,8 +197,8 @@ bool t3d_vt_cooker_normalize_channel_to_profile( const t3dVTChannelNormalization
 }
 static uint64_t t3d_vt_cooker_payload_signature( const uint32_t nFormat, const uint8_t *pBytes, const uint32_t nBytes ) {
 	uint64_t nHash = t3d_vt_pack_hash64( pBytes, nBytes );
-	nHash = t3d_vt_cooker_hash_mix( nHash, nFormat );
-	nHash = t3d_vt_cooker_hash_mix( nHash, nBytes );
+	nHash = t3dHashFnv1a64LittleU64( nHash, nFormat );
+	nHash = t3dHashFnv1a64LittleU64( nHash, nBytes );
 	return nHash;
 }
 
@@ -366,20 +362,16 @@ bool t3d_vt_cooker_build_pack_source_v3( const t3dVTCookedSparsePackageV3_t &rPa
 
 // t3dVTCookRawTileCacheEntryV3_s centralized in Terrain3DTypes.h.
 
-
-static uint64_t t3d_vt_cooker_hash_bytes_seed_v3( const uint8_t *pBytes, const uint32_t nBytes, uint64_t nHash ) {
-	return t3dHashFnv1a64( pBytes, nBytes, nHash );
-}
-
 static uint64_t t3d_vt_cooker_raw_hash_v3( const uint8_t *pBytes,
-        const uint32_t nBytes,
-        const uint32_t nFamily,
-        const uint32_t nChannel,
-        const uint64_t nSeed ) {
-	uint64_t nHash = t3d_vt_cooker_hash_bytes_seed_v3( pBytes, nBytes, nSeed );
-	nHash = t3d_vt_cooker_hash_mix( nHash, nFamily );
-	nHash = t3d_vt_cooker_hash_mix( nHash, nChannel );
-	nHash = t3d_vt_cooker_hash_mix( nHash, nBytes );
+                                           const uint32_t nBytes,
+                                           const uint32_t nFamily,
+                                           const uint32_t nChannel,
+                                           const uint64_t nSeed )
+{
+	uint64_t nHash = t3dHashFnv1a64( pBytes, nBytes, nSeed );
+	nHash = t3dHashFnv1a64LittleU64( nHash, nFamily );
+	nHash = t3dHashFnv1a64LittleU64( nHash, nChannel );
+	nHash = t3dHashFnv1a64LittleU64( nHash, nBytes );
 	return nHash;
 }
 
@@ -767,8 +759,6 @@ static bool t3d_vt_cooker_build_quality_views_v3( const t3dVTCookSparseSourceV3_
 	return true;
 }
 
-
-
 void t3d_vt_cooker_release_sparse_package_v3( t3dVTCookedSparsePackageV3_t &rPackage ) {
 	const t3dVTCookAllocator_t Allocator = rPackage.m_Allocator;
 	t3d_vt_cooker_free( Allocator, rPackage.m_pAllocations );
@@ -978,7 +968,7 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 		rAllocation.m_nConsumer = ( uint8_t )rSource.m_nConsumer;
 		rPackage.m_pAllocationKeys[iAllocation].m_nStableKey = rSource.m_nStableKey;
 		rPackage.m_pAllocationKeys[iAllocation].m_nAllocationId = iAllocation;
-		uint64_t nAllocationSignature = t3d_vt_cooker_hash_mix( 1469598103934665603ull, rSource.m_nStableKey );
+		uint64_t nAllocationSignature = t3dHashFnv1a64LittleU64( 1469598103934665603ull, rSource.m_nStableKey );
 
 		for ( uint32_t iChannel = 0u; iChannel < T3D_VT_LOGICAL_CHANNEL_COUNT && bOk; ++iChannel ) {
 			t3dVTChannelAllocation_t &rChannelAllocation =
@@ -1065,7 +1055,7 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 							rPage.m_nFlags |= T3D_VT_PAGE_ROOT | T3D_VT_PAGE_TAIL_FALLBACK;
 						}
 						++rPackage.m_Stats.m_nChannelPageCount[iChannel];
-						nAllocationSignature = t3d_vt_cooker_hash_mix( nAllocationSignature, pStaged[nPayloadId].m_nContentSignature );
+						nAllocationSignature = t3dHashFnv1a64LittleU64( nAllocationSignature, pStaged[ nPayloadId ].m_nContentSignature );
 					}
 				}
 			}
@@ -1113,9 +1103,8 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 							rTail.m_nAtlasInteriorHeight = ( uint16_t )nAtlasHeight;
 							rTail.m_nChannel = ( uint16_t )iChannel;
 							rTail.m_nLayout = T3D_VT_PACK_TAIL_LAYOUT_HORIZONTAL_V1;
-							rTail.m_nContentSignature = t3d_vt_cooker_hash_mix(
-							        pStaged[nTailPayload].m_nContentSignature, ( uint64_t )iChannel );
-							nAllocationSignature = t3d_vt_cooker_hash_mix( nAllocationSignature, rTail.m_nContentSignature );
+							rTail.m_nContentSignature = t3dHashFnv1a64LittleU64( pStaged[ nTailPayload ].m_nContentSignature, (uint64_t)iChannel );
+							nAllocationSignature = t3dHashFnv1a64LittleU64( nAllocationSignature, rTail.m_nContentSignature );
 							++nTailCursor;
 						}
 					}
@@ -1147,8 +1136,8 @@ bool t3d_vt_cooker_cook_sparse_pages_v3( const t3dVTCookerSettings_t &rSettings,
 				rPackage.m_pTails[iTail].m_nContentId = nContentId;
 			}
 		}
-		nPackageSignature = t3d_vt_cooker_hash_mix( nPackageSignature, rSource.m_nStableKey );
-		nPackageSignature = t3d_vt_cooker_hash_mix( nPackageSignature, nAllocationSignature );
+		nPackageSignature = t3dHashFnv1a64LittleU64( nPackageSignature, rSource.m_nStableKey );
+		nPackageSignature = t3dHashFnv1a64LittleU64( nPackageSignature, nAllocationSignature );
 	}
 
 	if ( bOk && ( nPageCursor != nTotalPages || nTailCursor != nTotalTails ) ) {

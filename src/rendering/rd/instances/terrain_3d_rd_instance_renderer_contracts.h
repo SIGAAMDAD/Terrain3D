@@ -28,6 +28,10 @@ typedef struct t3dRdInstanceSceneSnapshot_s {
 	bool m_bInstanceLayoutChanged = true;
 	bool m_bTopologyChanged = true;
 
+	size_t getRetainedCpuBytes( void ) const {
+		return m_instances.residentBytes() + m_cells.residentBytes()
+		        + m_dirtyRanges.residentBytes() + m_dirtyCells.residentBytes();
+	}
 	EA_FORCE_INLINE bool bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
 		return m_instances.bindAllocatorZone( pZone, ePolicy ) && m_cells.bindAllocatorZone( pZone, ePolicy )
 		        && m_dirtyRanges.bindAllocatorZone( pZone, ePolicy ) && m_dirtyCells.bindAllocatorZone( pZone, ePolicy );

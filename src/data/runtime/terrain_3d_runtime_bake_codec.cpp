@@ -5,7 +5,7 @@
 #include "Terrain3DConstants.h"
 #include "data/runtime/terrain_3d_runtime_bake_codec.h"
 
-#include "core/containers/terrain_3d_byte_writer.h"
+#include "core/utility/terrain_3d_binary_io.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "core/runtime/terrain_3d_eastl_helpers.h"
 #include "core/utility/terrain_3d_util.h"
@@ -19,27 +19,9 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
-
-EA_FORCE_INLINE static uint16_t t3dRuntimeBakeCodecReadU16( const uint8_t *p ) {
-	return ( uint16_t )( p[0] | ( ( uint16_t )p[1] << 8u ) );
-}
-EA_FORCE_INLINE static uint32_t t3dRuntimeBakeCodecReadU32( const uint8_t *p ) {
-	return ( uint32_t )p[0] | ( ( uint32_t )p[1] << 8u ) | ( ( uint32_t )p[2] << 16u ) | ( ( uint32_t )p[3] << 24u );
-}
-EA_FORCE_INLINE static int32_t t3dRuntimeBakeCodecReadI32( const uint8_t *p ) {
-	return ( int32_t )t3dRuntimeBakeCodecReadU32( p );
-}
-EA_FORCE_INLINE static uint64_t t3dRuntimeBakeCodecReadU64( const uint8_t *p ) {
-	return ( uint64_t )t3dRuntimeBakeCodecReadU32( p ) | ( ( uint64_t )t3dRuntimeBakeCodecReadU32( p + 4 ) << 32u );
-}
-EA_FORCE_INLINE static float t3dRuntimeBakeCodecReadF32( const uint8_t *p ) {
-	const uint32_t bits = t3dRuntimeBakeCodecReadU32( p );
-	float v = 0.f;
-	memcpy( &v, &bits, 4 );
-	return v;
-}
 EA_FORCE_INLINE static uint32_t t3dRuntimeBakeCodecReadControlPixel(
-        const uint8_t *pControl, const size_t nControlBytes, const uint32_t nIndex ) {
+    const uint8_t *pControl, const size_t nControlBytes, const uint32_t nIndex )
+{
 	if ( pControl == NULL || ( size_t )( nIndex + 1u ) * 4u > nControlBytes ) {
 		return T3D_REGION_DEFAULT_CONTROL;
 	}
@@ -89,20 +71,19 @@ static PackedByteArray t3dRuntimeBakeCodecEncodeNavigationMask(
 
 // t3dRuntimeCollisionHeightView_s centralized in Terrain3DTypes.h.
 
-
 static bool t3dRuntimeBakeCodecGetCollisionHeightView(
-        const PackedByteArray &rBlob, t3dRuntimeCollisionHeightView_t &rView ) {
+    const PackedByteArray& rBlob, t3dRuntimeCollisionHeightView_t& rView )
+{
 	rView = t3dRuntimeCollisionHeightView_t();
 	if ( rBlob.size() < 12 ) {
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_COLLISION_HEIGHT_MAGIC
-	        || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_COLLISION_HEIGHT_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	const int width = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
+	const int width = t3dReadLittleUnsigned<uint16_t>( p + 6 );
+	const uint32_t count = t3dReadLittleUnsigned<uint32_t>( p + 8 );
 	if ( width != T3D_REGION_SIZE + 1 || count != ( uint32_t )width * ( uint32_t )width
 	        || rBlob.size() < 12 + ( int64_t )count * 4 ) {
 		return false;
@@ -114,7 +95,6 @@ static bool t3dRuntimeBakeCodecGetCollisionHeightView(
 }
 
 static const uint16_t s_szRuntimeMinMaxLevelSides[] = { 128u, 64u, 32u, 16u, 8u, 4u, 2u, 1u };
-
 
 EA_FORCE_INLINE static String t3dRuntimeBakeCodecDescriptorScenePath( const t3dStreamedNodeRuntimeDescriptor_t &rDescriptor ) {
 	if ( !rDescriptor.m_scenePath.is_empty() ) {
@@ -189,12 +169,12 @@ bool Terrain3DRuntimeBakeCodec::getNavigationMaskView( const PackedByteArray &rB
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_NAV_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_NAV_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	const uint16_t width = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t samples = t3dRuntimeBakeCodecReadU32( p + 8 );
-	const uint32_t plane = t3dRuntimeBakeCodecReadU32( p + 12 );
+	const uint16_t width = t3dReadLittleUnsigned<uint16_t>( p + 6 );
+	const uint32_t samples = t3dReadLittleUnsigned<uint32_t>( p + 8 );
+	const uint32_t plane = t3dReadLittleUnsigned<uint32_t>( p + 12 );
 	const int64_t required_bytes = 16 + ( int64_t )plane * 2;
 	if ( ( width != ( uint16_t )T3D_REGION_SIZE && width != ( uint16_t )( T3D_REGION_SIZE + 1 ) ) || samples != ( uint32_t )width * width
 	        || plane != ( samples + 7u ) / 8u || rBlob.size() < required_bytes ) {
@@ -315,13 +295,13 @@ bool Terrain3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_MINMAX_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION
-	        || t3dRuntimeBakeCodecReadU16( p + 6 ) != ( uint16_t )T3D_REGION_SIZE
-	        || t3dRuntimeBakeCodecReadU32( p + 8 ) != T3D_RUNTIME_MIN_MAX_LEVEL_COUNT ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_MINMAX_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION || t3dReadLittleUnsigned<uint16_t>( p + 6 ) != (uint16_t)T3D_REGION_SIZE || t3dReadLittleUnsigned<uint32_t>( p + 8 ) != T3D_RUNTIME_MIN_MAX_LEVEL_COUNT ) {
 		return false;
 	}
 
-	size_t offset = 12u;
+	t3dByteReader_t reader( p, (size_t)rBlob.size() );
+	size_t& offset = reader.m_iOffset;
+	offset = 12u;
 	const uint8_t *pSelected = NULL;
 	uint32_t selected_count = 0u;
 	uint16_t selected_side = 0u;
@@ -330,8 +310,8 @@ bool Terrain3DRuntimeBakeCodec::getMinMaxLevelView( const PackedByteArray &rBlob
 			return false;
 		}
 		const uint32_t expected_side = s_szRuntimeMinMaxLevelSides[level];
-		const uint32_t side = t3dRuntimeBakeCodecReadU32( p + offset );
-		const uint32_t count = t3dRuntimeBakeCodecReadU32( p + offset + 4u );
+		const uint32_t side = t3dReadLittleUnsigned<uint32_t>( p + offset );
+		const uint32_t count = t3dReadLittleUnsigned<uint32_t>( p + offset + 4u );
 		offset += 8u;
 		const uint32_t expected_count = expected_side * expected_side;
 		if ( side != expected_side || count != expected_count || ( uint64_t )count * 8u > ( uint64_t )rBlob.size() - offset ) {
@@ -359,7 +339,7 @@ Vector2 Terrain3DRuntimeBakeCodec::getMinMaxRange( const t3dMinMaxLevelView_t &r
 		return Vector2();
 	}
 	const uint8_t *const p = rView.m_pRanges + ( size_t )nIndex * 8u;
-	return Vector2( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ) );
+	return Vector2( t3dReadLittleF32( p ), t3dReadLittleF32( p + 4u ) );
 }
 
 bool Terrain3DRuntimeBakeCodec::decodeMinMaxLevel( const PackedByteArray &rBlob,
@@ -447,12 +427,12 @@ bool Terrain3DRuntimeBakeCodec::decodeCollisionBounds( const PackedByteArray &rB
 		return false;
 	}
 	const uint8_t *p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_COLLISION_BOUNDS_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_COLLISION_BOUNDS_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
-	fMinHeight = t3dRuntimeBakeCodecReadF32( p + 8 );
-	fMaxHeight = t3dRuntimeBakeCodecReadF32( p + 12 );
+	nWidth = t3dReadLittleUnsigned<uint16_t>( p + 6 );
+	fMinHeight = t3dReadLittleF32( p + 8 );
+	fMaxHeight = t3dReadLittleF32( p + 12 );
 	return nWidth == T3D_REGION_SIZE + 1;
 }
 
@@ -526,11 +506,13 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors(
 		return false;
 	}
 	const uint8_t *p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_NODE_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_NODE_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	const uint16_t count = t3dRuntimeBakeCodecReadU16( p + 6 );
-	size_t offset = 8u;
+	const uint16_t count = t3dReadLittleUnsigned<uint16_t>( p + 6 );
+	t3dByteReader_t reader( p, (size_t)rBlob.size() );
+	size_t& offset = reader.m_iOffset;
+	offset = 8u;
 	eastl::vector<t3dStreamedNodeRuntimeDescriptor_t, Terrain3DEastlAllocator> nodes;
 	if ( !t3dContainerReserveCold( nodes, count ) ) {
 		return false;
@@ -540,13 +522,11 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors(
 			return false;
 		}
 		t3dStreamedNodeRuntimeDescriptor_t node;
-		node.m_nId = ( int64_t )t3dRuntimeBakeCodecReadU64( p + offset );
+		node.m_nId = (int64_t)t3dReadLittleUnsigned<uint64_t>( p + offset );
 		node.m_spawnName = StringName( String( "Spawn_" ) + String::num_int64( node.m_nId ) );
 		offset += 8;
-		const uint16_t scene_id = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
-		const uint16_t shadow_id = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
+		const uint16_t scene_id = reader.readU16();
+		const uint16_t shadow_id = reader.readU16();
 		node.m_scenePath = rManifest.getSceneDependency( scene_id );
 		if ( node.m_scenePath.is_empty() ) {
 			return false;
@@ -554,43 +534,32 @@ bool Terrain3DRuntimeBakeCodec::decodeNodeDescriptors(
 		if ( shadow_id != UINT16_MAX ) {
 			node.m_shadowProxyScenePath = rManifest.getSceneDependency( shadow_id );
 		}
-		node.m_nFlags = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4;
-		node.m_nHlodMinLevel = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
-		node.m_nBoundaryPolicy = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
-		node.m_coverageMin.x = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4;
-		node.m_coverageMin.y = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4;
-		node.m_coverageMax.x = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4;
-		node.m_coverageMax.y = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4;
-		node.m_nLightingClass = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
-		node.m_nBakedLightingMode = t3dRuntimeBakeCodecReadU16( p + offset );
-		offset += 2;
-		const uint32_t bools = t3dRuntimeBakeCodecReadU32( p + offset );
-		offset += 4;
+		node.m_nFlags = (int32_t)reader.readU32();
+		node.m_nHlodMinLevel = reader.readU16();
+		node.m_nBoundaryPolicy = reader.readU16();
+		node.m_coverageMin.x = (int32_t)reader.readU32();
+		node.m_coverageMin.y = (int32_t)reader.readU32();
+		node.m_coverageMax.x = (int32_t)reader.readU32();
+		node.m_coverageMax.y = (int32_t)reader.readU32();
+		node.m_nLightingClass = reader.readU16();
+		node.m_nBakedLightingMode = reader.readU16();
+		const uint32_t bools = reader.readU32();
 		node.m_bContributeBakedGi = ( bools & 1u ) != 0u;
 		node.m_bReceiveDynamicDirectional = ( bools & 2u ) != 0u;
 		node.m_bDynamicShadowEligible = ( bools & 4u ) != 0u;
 		Basis basis;
 		for ( int row = 0; row < 3; ++row ) {
-			basis[row] = Vector3( t3dRuntimeBakeCodecReadF32( p + offset + row * 12 ),
-			        t3dRuntimeBakeCodecReadF32( p + offset + row * 12 + 4 ),
-			        t3dRuntimeBakeCodecReadF32( p + offset + row * 12 + 8 ) );
+			basis[ row ] = Vector3( t3dReadLittleF32( p + offset + row * 12 ),
+			                        t3dReadLittleF32( p + offset + row * 12 + 4 ),
+			                        t3dReadLittleF32( p + offset + row * 12 + 8 ) );
 		}
 		offset += 36;
-		const Vector3 origin( t3dRuntimeBakeCodecReadF32( p + offset ),
-		        t3dRuntimeBakeCodecReadF32( p + offset + 4 ),
-		        t3dRuntimeBakeCodecReadF32( p + offset + 8 ) );
+		const Vector3 origin( t3dReadLittleF32( p + offset ),
+		                      t3dReadLittleF32( p + offset + 4 ),
+		                      t3dReadLittleF32( p + offset + 8 ) );
 		offset += 12;
 		node.m_transform = Transform3D( basis, origin );
-		const uint32_t state_bytes = t3dRuntimeBakeCodecReadU32( p + offset );
-		offset += 4;
+		const uint32_t state_bytes = reader.readU32();
 		if ( state_bytes > ( size_t )rBlob.size() - offset ) {
 			return false;
 		}
@@ -676,12 +645,12 @@ bool Terrain3DRuntimeBakeCodec::getInstanceMetadataView( const PackedByteArray &
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_INSTANCE_META_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_INSTANCE_META_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	const uint16_t mesh_count = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t cell_count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	const uint32_t instance_count = t3dRuntimeBakeCodecReadU32( p + 12 );
+	const uint16_t mesh_count = t3dReadLittleUnsigned<uint16_t>( p + 6 );
+	const uint32_t cell_count = t3dReadLittleUnsigned<uint32_t>( p + 8 );
+	const uint32_t instance_count = t3dReadLittleUnsigned<uint32_t>( p + 12 );
 	if ( cell_count > 1000000u || ( size_t )rBlob.size() < 16u + ( size_t )cell_count * 44u ) {
 		return false;
 	}
@@ -699,19 +668,19 @@ t3dRuntimeInstanceCellMetadata_t Terrain3DRuntimeBakeCodec::getInstanceMetadataR
 		return record;
 	}
 	const uint8_t *p = rView.m_pRecords + ( size_t )nIndex * 44u;
-	record.m_nMeshId = t3dRuntimeBakeCodecReadU16( p );
+	record.m_nMeshId = t3dReadLittleUnsigned<uint16_t>( p );
 	p += 4u;
-	record.m_cell.x = t3dRuntimeBakeCodecReadI32( p );
+	record.m_cell.x = (int32_t)t3dReadLittleUnsigned<uint32_t>( p );
 	p += 4u;
-	record.m_cell.y = t3dRuntimeBakeCodecReadI32( p );
+	record.m_cell.y = (int32_t)t3dReadLittleUnsigned<uint32_t>( p );
 	p += 4u;
-	record.m_nInstanceCount = t3dRuntimeBakeCodecReadU32( p );
+	record.m_nInstanceCount = t3dReadLittleUnsigned<uint32_t>( p );
 	p += 4u;
-	record.m_nOrdinal = t3dRuntimeBakeCodecReadU32( p );
+	record.m_nOrdinal = t3dReadLittleUnsigned<uint32_t>( p );
 	p += 4u;
-	const Vector3 minimum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) );
+	const Vector3 minimum( t3dReadLittleF32( p ), t3dReadLittleF32( p + 4u ), t3dReadLittleF32( p + 8u ) );
 	p += 12u;
-	const Vector3 maximum( t3dRuntimeBakeCodecReadF32( p ), t3dRuntimeBakeCodecReadF32( p + 4u ), t3dRuntimeBakeCodecReadF32( p + 8u ) );
+	const Vector3 maximum( t3dReadLittleF32( p ), t3dReadLittleF32( p + 4u ), t3dReadLittleF32( p + 8u ) );
 	record.m_originBounds = AABB( minimum, maximum - minimum );
 	return record;
 }
@@ -781,20 +750,21 @@ bool Terrain3DRuntimeBakeCodec::beginLightingReceivers( const PackedByteArray &r
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_LIGHTING_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_LIGHTING_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION ) {
 		return false;
 	}
-	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
+	const uint32_t count = t3dReadLittleUnsigned<uint32_t>( p + 8 );
 	if ( count > 1000000u ) {
 		return false;
 	}
-	size_t offset = 12u;
+	t3dByteReader_t reader( p, (size_t)rBlob.size() );
+	size_t& offset = reader.m_iOffset;
+	offset = 12u;
 	for ( uint32_t i = 0u; i < count; ++i ) {
 		if ( offset + 4u > ( size_t )rBlob.size() ) {
 			return false;
 		}
-		const uint32_t path_bytes = t3dRuntimeBakeCodecReadU32( p + offset );
-		offset += 4u;
+		const uint32_t path_bytes = reader.readU32();
 		if ( path_bytes > 1024u * 1024u || offset + path_bytes + 24u > ( size_t )rBlob.size() ) {
 			return false;
 		}
@@ -816,21 +786,21 @@ bool Terrain3DRuntimeBakeCodec::nextLightingReceiver(
 		return false;
 	}
 	const uint8_t *const p = rCursor.m_pData;
-	const uint32_t path_bytes = t3dRuntimeBakeCodecReadU32( p + rCursor.m_iOffset );
+	const uint32_t path_bytes = t3dReadLittleUnsigned<uint32_t>( p + rCursor.m_iOffset );
 	rCursor.m_iOffset += 4u;
 	if ( rCursor.m_iOffset + path_bytes + 24u > rCursor.m_nSize ) {
 		return false;
 	}
 	rReceiver.m_path = NodePath( String::utf8( ( const char * )( p + rCursor.m_iOffset ), ( int )path_bytes ) );
 	rCursor.m_iOffset += path_bytes;
-	rReceiver.m_uvScale = Rect2( t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset ),
-	        t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 4u ),
-	        t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 8u ),
-	        t3dRuntimeBakeCodecReadF32( p + rCursor.m_iOffset + 12u ) );
+	rReceiver.m_uvScale = Rect2( t3dReadLittleF32( p + rCursor.m_iOffset ),
+	                             t3dReadLittleF32( p + rCursor.m_iOffset + 4u ),
+	                             t3dReadLittleF32( p + rCursor.m_iOffset + 8u ),
+	                             t3dReadLittleF32( p + rCursor.m_iOffset + 12u ) );
 	rCursor.m_iOffset += 16u;
-	rReceiver.m_iSliceIndex = t3dRuntimeBakeCodecReadI32( p + rCursor.m_iOffset );
+	rReceiver.m_iSliceIndex = (int32_t)t3dReadLittleUnsigned<uint32_t>( p + rCursor.m_iOffset );
 	rCursor.m_iOffset += 4u;
-	rReceiver.m_nSubInstance = t3dRuntimeBakeCodecReadI32( p + rCursor.m_iOffset );
+	rReceiver.m_nSubInstance = (int32_t)t3dReadLittleUnsigned<uint32_t>( p + rCursor.m_iOffset );
 	rCursor.m_iOffset += 4u;
 	++rCursor.m_iIndex;
 	return !rReceiver.m_path.is_empty();
@@ -922,27 +892,25 @@ bool Terrain3DRuntimeBakeCodec::findMultimeshFastStart( const PackedByteArray &r
 		return false;
 	}
 	const uint8_t *const p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != T3D_MULTIMESH_MAGIC || t3dRuntimeBakeCodecReadU16( p + 4 ) != T3D_BLOB_VERSION
-	        || t3dRuntimeBakeCodecReadU16( p + 6 ) != 16u ) {
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_MULTIMESH_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_BLOB_VERSION || t3dReadLittleUnsigned<uint16_t>( p + 6 ) != 16u ) {
 		return false;
 	}
-	const uint32_t record_count = t3dRuntimeBakeCodecReadU32( p + 8 );
+	const uint32_t record_count = t3dReadLittleUnsigned<uint32_t>( p + 8 );
 	if ( record_count > 1000000u ) {
 		return false;
 	}
-	size_t offset = 12u;
+	t3dByteReader_t reader( p, (size_t)rBlob.size() );
+	size_t& offset = reader.m_iOffset;
+	offset = 12u;
 	for ( uint32_t record_index = 0u; record_index < record_count; ++record_index ) {
 		if ( offset + 16u > ( size_t )rBlob.size() ) {
 			return false;
 		}
-		const uint16_t mesh_id = t3dRuntimeBakeCodecReadU16( p + offset );
+		const uint16_t mesh_id = t3dReadLittleUnsigned<uint16_t>( p + offset );
 		offset += 4u;
-		const int32_t cell_x = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4u;
-		const int32_t cell_y = t3dRuntimeBakeCodecReadI32( p + offset );
-		offset += 4u;
-		const uint32_t count = t3dRuntimeBakeCodecReadU32( p + offset );
-		offset += 4u;
+		const int32_t cell_x = (int32_t)reader.readU32();
+		const int32_t cell_y = (int32_t)reader.readU32();
+		const uint32_t count = reader.readU32();
 		if ( count > 10000000u || ( uint64_t )count * 64u > ( uint64_t )rBlob.size() - offset ) {
 			return false;
 		}
@@ -950,7 +918,7 @@ bool Terrain3DRuntimeBakeCodec::findMultimeshFastStart( const PackedByteArray &r
 			rBuffer.resize( ( int64_t )count * 16 );
 			float *const out = rBuffer.ptrw();
 			for ( uint64_t value = 0u; value < ( uint64_t )count * 16u; ++value ) {
-				out[value] = t3dRuntimeBakeCodecReadF32( p + offset + value * 4u );
+				out[ value ] = t3dReadLittleF32( p + offset + value * 4u );
 			}
 			nInstanceCount = count;
 			return true;

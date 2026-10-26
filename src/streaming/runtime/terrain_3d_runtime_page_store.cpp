@@ -1886,27 +1886,8 @@ bool Terrain3DRuntimePageStore::writePage( Terrain3DRegion *const pRegion,
 		return t3dRuntimePageStoreWriteFail( pError, "generated runtime page header failed validation" );
 	}
 
-	const String temporary_path = page_path + String( ".tmp" );
-	const String backup_path = page_path + String( ".bak" );
-	Terrain3DFilePublication publication( page_path, temporary_path, backup_path );
-	if ( publication.prepare() != OK ) {
-		return t3dRuntimePageStoreWriteFail( pError, publication.getError() );
-	}
-	if ( FileAccess::file_exists( temporary_path ) ) {
-		DirAccess::remove_absolute( temporary_path );
-	}
-	Ref<FileAccess> pFile = FileAccess::open( temporary_path, FileAccess::WRITE );
-	if ( pFile.is_null() ) {
-		return t3dRuntimePageStoreWriteFail( pError, "temporary runtime page could not be opened for writing" );
-	}
-	pFile->store_buffer( file_bytes );
-	const Error write_error = pFile->get_error();
-	pFile->close();
-	if ( write_error != OK ) {
-		DirAccess::remove_absolute( temporary_path );
-		return t3dRuntimePageStoreWriteFail( pError, "temporary runtime page write failed" );
-	}
-	if ( publication.publish() != OK ) {
+	Terrain3DFilePublication publication( page_path, page_path + String( ".tmp" ), page_path + String( ".bak" ) );
+	if ( publication.stagePacked( file_bytes ) != OK || publication.publish() != OK ) {
 		return t3dRuntimePageStoreWriteFail( pError, publication.getError() );
 	}
 

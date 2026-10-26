@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_hash_bytes.h"
 #include "authoring/world/conversion/terrain_3d_world_godot_converter.h"
 #include "data/formats/terrain_3d_half_buffer.h"
 
@@ -22,12 +23,8 @@
 
 using namespace godot;
 
-static uint64_t t3d_world_godot_hash_mix( uint64_t pHash, uint64_t pValue ) {
-	pHash ^= pValue + 0x9e3779b97f4a7c15uLL + ( pHash << 6u ) + ( pHash >> 2u );
-	return pHash;
-}
-
-static uint32_t t3d_world_godot_pack_snorm10( float pValue ) {
+static uint32_t t3d_world_godot_pack_snorm10( float pValue )
+{
 	float fValue = pValue;
 	if ( fValue < -1.0f ) {
 		fValue = -1.0f;
@@ -253,10 +250,10 @@ uint64_t Terrain3DWorldGodotConverter::computePrototypeKeyCold(
 		return 0u;
 	}
 	uint64_t nHash = 1469598103934665603uLL;
-	nHash = t3d_world_godot_hash_mix( nHash, ( uint64_t )Mesh->get_rid().get_id() );
-	nHash = t3d_world_godot_hash_mix( nHash, pTier );
+	nHash = t3dHashCombine64( nHash, (uint64_t)Mesh->get_rid().get_id() );
+	nHash = t3dHashCombine64( nHash, pTier );
 	if ( pExplicitMaterial.is_valid() ) {
-		return t3d_world_godot_hash_mix( nHash, pExplicitMaterial->get_instance_id() );
+		return t3dHashCombine64( nHash, pExplicitMaterial->get_instance_id() );
 	}
 
 	Ref<ArrayMesh> ArrayMeshRef = Mesh;
@@ -269,7 +266,7 @@ uint64_t Terrain3DWorldGodotConverter::computePrototypeKeyCold(
 			Material = ArrayMeshRef->surface_get_material( s );
 		}
 		const uint64_t nMaterialKey = Material.is_valid() ? ( uint64_t )Material->get_rid().get_id() : 0u;
-		nHash = t3d_world_godot_hash_mix( nHash, nMaterialKey );
+		nHash = t3dHashCombine64( nHash, nMaterialKey );
 	}
 	return nHash == 0u ? 1u : nHash;
 }

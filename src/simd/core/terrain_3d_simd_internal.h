@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_SIMD_INTERNAL_H
 #define TERRAIN3D_SIMD_INTERNAL_H
 
-#include "core/config/terrain_3d_numeric_constants.h"
+#include "Terrain3DConstants.h"
 #include "simd/core/terrain_3d_simd.h"
 
 void t3dSimdScalarHalfToFloat( const uint16_t *, float *, size_t );

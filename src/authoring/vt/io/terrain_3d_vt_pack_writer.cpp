@@ -2,23 +2,18 @@
 
 #include "authoring/vt/io/terrain_3d_vt_pack_writer.h"
 
-#include "rendering/rd/vt/core/terrain_3d_vt_stable_hash.h"
+#include "core/utility/terrain_3d_hash_bytes.h"
 #include "core/utility/terrain_3d_checked_math.h"
 
 #include <stddef.h>
 #include <string.h>
-
-static uint64_t t3d_vt_pack_align( const uint64_t nValue ) {
-	uint64_t aligned = 0u;
-	return t3dCheckedAlignUp<uint64_t>( nValue, T3D_VT_PACK_ALIGNMENT, aligned ) ? aligned : 0u;
-}
 
 static bool t3d_vt_pack_add_bytes( uint64_t &rOffset, const uint64_t nBytes ) {
 	uint64_t nEnd = 0u;
 	if ( !t3dCheckedAdd( rOffset, nBytes, nEnd ) ) {
 		return false;
 	}
-	const uint64_t nAligned = t3d_vt_pack_align( nEnd );
+	const uint64_t nAligned = t3dAlignUpOrZero<uint64_t>( nEnd, T3D_VT_PACK_ALIGNMENT );
 	if ( nAligned == 0u ) {
 		return false;
 	}
@@ -26,12 +21,9 @@ static bool t3d_vt_pack_add_bytes( uint64_t &rOffset, const uint64_t nBytes ) {
 	return true;
 }
 
-static bool t3d_vt_pack_range_valid( const uint64_t nOffset, const uint64_t nBytes, const uint64_t nPackageBytes ) {
-	return t3dByteRangeFits( nOffset, nBytes, nPackageBytes );
-}
-
-uint64_t t3d_vt_pack_hash64( const void *pBytes, const uint64_t nBytes ) {
-	return t3d_vt_stable_hash64( pBytes, nBytes );
+uint64_t t3d_vt_pack_hash64( const void *pBytes, const uint64_t nBytes )
+{
+	return t3dHashStableBytes( pBytes, nBytes );
 }
 
 uint32_t t3d_vt_pack_checksum32( const void *pBytes, const uint64_t nBytes ) {
@@ -67,7 +59,6 @@ uint32_t t3d_vt_pack_expected_tile_bytes( const uint32_t nFormat ) {
 
 // -----------------------------------------------------------------------------
 // Sparse V3 package primitives.
-
 
 uint32_t t3d_vt_pack_expected_physical_tile_bytes_v3( const uint32_t nPhysicalFamily ) {
 	const uint32_t nBlocks = ( T3D_VT_PHYSICAL_TILE + 3u ) / 4u;
@@ -399,7 +390,7 @@ uint64_t t3d_vt_pack_compute_bytes_v3( const t3dVTPackSourceV3_t &rSource ) {
 	if ( ( count ) != 0u ) {                                                                                                               \
 		memcpy( pOut + nOffset, ( source_ptr ), ( size_t )( count ) * sizeof( type ) );                                                    \
 	}                                                                                                                                      \
-	nOffset = t3d_vt_pack_align( nOffset + ( uint64_t )( count ) * sizeof( type ) )
+	nOffset = t3dAlignUpOrZero<uint64_t>( nOffset + ( uint64_t )( count ) * sizeof( type ), T3D_VT_PACK_ALIGNMENT )
 
 bool t3d_vt_pack_write_v3(
         const t3dVTPackSourceV3_t &rSource, void *pDestination, const uint64_t nDestinationBytes, uint64_t &rWrittenBytes ) {
@@ -506,16 +497,7 @@ bool t3d_vt_pack_open_view_v3( const void *pPackage, const uint64_t nPackageByte
 	const uint64_t nTailBytes = ( uint64_t )pHeader->m_nTailCount * sizeof( t3dVTPackTailRecordV3_t );
 	const uint64_t nQualityViewBytes = ( uint64_t )pHeader->m_nQualityViewCount * sizeof( t3dVTPackQualityViewV3_t );
 	const uint64_t nFormatFamilyBytes = ( uint64_t )pHeader->m_nFormatFamilyCount * sizeof( t3dVTPackFormatFamilyRecordV3_t );
-	if ( !t3d_vt_pack_range_valid( pHeader->m_nAllocationOffset, nAllocationBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nAllocationKeyOffset, nAllocationKeyBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nChannelAllocationOffset, nChannelAllocationBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nPageOffset, nPageBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nPayloadDirectoryOffset, nPayloadBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nClusterDirectoryOffset, nClusterBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nTailMetadataOffset, nTailBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nQualityViewOffset, nQualityViewBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nFormatFamilyOffset, nFormatFamilyBytes, nPackageBytes )
-	        || !t3d_vt_pack_range_valid( pHeader->m_nPayloadDataOffset, pHeader->m_nPayloadDataBytes, nPackageBytes ) ) {
+	if ( !t3dByteRangeFits<uint64_t>( pHeader->m_nAllocationOffset, nAllocationBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nAllocationKeyOffset, nAllocationKeyBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nChannelAllocationOffset, nChannelAllocationBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nPageOffset, nPageBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nPayloadDirectoryOffset, nPayloadBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nClusterDirectoryOffset, nClusterBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nTailMetadataOffset, nTailBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nQualityViewOffset, nQualityViewBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nFormatFamilyOffset, nFormatFamilyBytes, nPackageBytes ) || !t3dByteRangeFits<uint64_t>( pHeader->m_nPayloadDataOffset, pHeader->m_nPayloadDataBytes, nPackageBytes ) ) {
 		return false;
 	}
 	if ( pHeader->m_nAllocationOffset != T3D_VT_PACK_V3_HEADER_BYTES

@@ -119,6 +119,8 @@ typedef struct t3dRdVertexFormatRecord_s
 	t3dAtomicU64_t m_nBytesUploaded { 0u };
 	t3dAtomicU64_t m_nFrameBufferUpdates { 0u };
 	t3dAtomicU64_t m_nFrameBytesUploaded { 0u };
+	t3dAtomicU64_t m_nTextureUploads { 0u };
+	t3dAtomicU64_t m_nTextureBytesUploaded { 0u };
 	t3dRdRenderTelemetry_t m_renderTelemetry;
 	Terrain3DRdGpuBuffer *m_pFixedIndirectArena = NULL;
 	uint32_t m_nFixedIndirectReferences[T3D_RD_CONTEXT_FIXED_INDIRECT_SLOT_COUNT]{};
@@ -202,6 +204,8 @@ public:
 	void beginResourceRebuild( void );
 	void endResourceRebuild( void );
 	void beginFrame( uint64_t nGpuFrameId, uint64_t nSnapshotGeneration );
+	void recordTextureUpload(uint64_t nBytes, t3dRdResourceOwner_t owner, Terrain3DGpuBufferPolicy policy = T3D_GPU_DIRTY_UPLOAD);
+	Dictionary getGpuUploadDiagnostics(void) const;
 	void recordBufferUpdate( uint64_t nBytes,
 	        t3dRdResourceOwner_t owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED,
 	        Terrain3DGpuBufferPolicy policy = T3D_GPU_NEUTRAL ) override;

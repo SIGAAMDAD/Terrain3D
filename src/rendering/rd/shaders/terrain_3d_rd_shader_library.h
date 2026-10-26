@@ -59,6 +59,7 @@ private:
 public:
 	static Ref<RDShaderSPIRV> borrowSpirv( t3dRdShaderId_t id );
 	static RID borrowPhysical( t3dRdShaderId_t id );
+	static RID acquirePhysicalCold( Terrain3DRdContext& context, t3dRdShaderId_t id );
 	static bool initializeSharedState( void );
 	static void shutdownSharedState( void );
 	static bool physicalCacheReady( void );

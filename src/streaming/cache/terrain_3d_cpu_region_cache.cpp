@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "diagnostics/core/terrain_3d_diagnostics.h"
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency_primitives.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
@@ -98,7 +99,7 @@ void Terrain3DCpuRegionCache::refreshCapacity( void ) {
 	if ( capacity == m_nCapacity ) {
 		return;
 	}
-	reset( false );
+	reset( true );
 	m_nCapacity = capacity;
 	m_bSelectionDirty = true;
 }
@@ -514,7 +515,7 @@ bool Terrain3DCpuRegionCache::configure( const bool bEnabled, const int nBudgetM
 	const bool bOldEnabled = m_bEnabled;
 	const int oldBudget = m_nBudgetMb;
 	m_bEnabled = bEnabled;
-	m_nBudgetMb = CLAMP( nBudgetMb, T3D_CPU_REGION_CACHE_MIN_BUDGET_MB, T3D_CPU_REGION_CACHE_MAX_BUDGET_MB );
+	m_nBudgetMb = CLAMP( nBudgetMb, 0, T3D_CPU_REGION_CACHE_MAX_BUDGET_MB );
 	m_nLoadBudgetLayers = CLAMP( nLoadLayers, 1, T3D_CPU_REGION_LOAD_MAX_LAYERS );
 	m_nLoadBudgetMb = CLAMP( nLoadBudgetMb, 1, T3D_CPU_REGION_LOAD_MAX_BUDGET_MB );
 	if ( !bOldEnabled && !m_bEnabled ) {
@@ -531,7 +532,7 @@ bool Terrain3DCpuRegionCache::configure( const bool bEnabled, const int nBudgetM
 	}
 	const int capacity = calculateCapacity();
 	if ( !bOldEnabled || oldBudget != m_nBudgetMb || capacity != m_nCapacity ) {
-		reset( false );
+		reset( true );
 		m_nCapacity = capacity;
 		m_bSelectionDirty = true;
 	}
@@ -761,24 +762,15 @@ t3dCpuRegionCacheStats_t Terrain3DCpuRegionCache::getStats( void ) const {
 }
 
 Dictionary Terrain3DCpuRegionCache::getStatsDictionary( const bool bDetailed, const int nEffectiveLoadLayers ) const {
+	const auto values = getStats();
 	Dictionary stats;
-	stats["enabled"] = m_bEnabled;
-	stats["budget_mb"] = m_nBudgetMb;
-	stats["capacity"] = m_nCapacity;
-	stats["resident"] = m_nResidentCount;
-	stats["desired_last_tick"] = m_nDesiredLastTick;
-	stats["loads_last_tick"] = m_nLoadsLastTick;
+	t3dAppendRegionLoadCacheStats( stats, values, m_nBudgetMb, m_nDemandLoads );
 	stats["loads_since_reset"] = ( int64_t )( m_nLoadsSinceReset );
-	stats["evictions_last_tick"] = m_nEvictionsLastTick;
-	stats["pinned_last_tick"] = m_nPinnedLastTick;
-	stats["demand_loads"] = m_nDemandLoads;
-	stats["load_bytes_last_tick"] = ( int64_t )( m_nLoadBytesLastTick );
-	stats["async_requests_last_tick"] = m_nAsyncRequestsLastTick;
+	stats[ "pinned_last_tick" ] = m_nPinnedLastTick;
+	stats[ "async_requests_last_tick" ] = m_nAsyncRequestsLastTick;
 	stats["async_ready_last_tick"] = m_nAsyncReadyLastTick;
 	stats["async_pending_last_tick"] = m_nAsyncPendingLastTick;
-	stats["service_cpu_usec_last"] = ( int64_t )( m_nServiceUsecLast );
-	stats["selection_pending"] = m_bSelectionDirty;
-	stats["reserved_bytes"] = ( int64_t )( getReservedBytes() );
+	stats[ "reserved_bytes" ] = (int64_t)( getReservedBytes() );
 	if ( m_pSamplingStorage ) {
 		stats["active_height_bytes"] = ( int64_t )( m_pSamplingStorage->getActiveReservedBytes() );
 		stats["active_height_physical_capacity"] = m_pSamplingStorage->getActivePhysicalCapacity();

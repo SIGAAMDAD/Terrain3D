@@ -4,6 +4,7 @@
 #define TERRAIN3D_WORLD_MATERIAL_RESOURCE_H
 
 #include "authoring/world/core/terrain_3d_world_authoring.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_contract.h"
 
@@ -16,6 +17,7 @@ class Terrain3DWorldMaterial : public godot::Resource {
 	GDCLASS( Terrain3DWorldMaterial, godot::Resource );
 
 private:
+	uint64_t m_nVtContentGeneration = 1u;
 	godot::Ref<godot::Texture2D> m_albedoTexture;
 	godot::Ref<godot::Texture2D> m_normalTexture;
 	godot::Ref<godot::Texture2D> m_surfaceTexture;
@@ -42,9 +44,13 @@ private:
 	void disconnectAllTextureSignals( void );
 
 protected:
+	void advanceVtContentGeneration() {
+		m_nVtContentGeneration = t3dNextGeneration( m_nVtContentGeneration );
+	}
 	static void _bind_methods( void );
 
 public:
+	uint64_t getVtContentGeneration() const { return m_nVtContentGeneration; }
 	Terrain3DWorldMaterial( void ) = default;
 	~Terrain3DWorldMaterial( void );
 

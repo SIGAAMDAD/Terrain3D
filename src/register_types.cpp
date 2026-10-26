@@ -90,6 +90,14 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 	ClassDB::register_class<Terrain3DUtil>();
 #ifdef T3D_TESTS_ENABLED
 	OS *const os = OS::get_singleton();
+	// RenderingServer is available after module registration. The GPU runner
+	// calls this test-only entry point on its render thread after engine startup.
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "run_vt_warm_gpu_tests" ), &t3dRunVTWarmGpuTests );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "run_centralization_tests" ), &t3dRunCentralizationTests );
+	ClassDB::bind_static_method( "Terrain3DUtil", D_METHOD( "run_system_unit_tests", "suite_filter", "case_filter", "list_only" ), &t3dRunSystemUnitTests );
+	if ( os && os->get_environment( "TERRAIN3D_RUN_VT_WARM_TESTS" ) == "1" && !t3dRunVTWarmRepublishTests() ) {
+		exit( EXIT_FAILURE );
+	}
 	if ( os && os->get_environment( "TERRAIN3D_RUN_MEGAVT_CACHE_TESTS" ) == "1" && !t3dRunMegaVTCacheTests() ) {
 		exit( EXIT_FAILURE );
 	}

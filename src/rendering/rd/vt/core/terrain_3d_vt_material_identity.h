@@ -6,7 +6,7 @@
 #include <godot_cpp/variant/char_string.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-#include "rendering/rd/vt/core/terrain_3d_vt_stable_hash.h"
+#include "core/utility/terrain_3d_hash_bytes.h"
 
 #include <stdint.h>
 
@@ -18,7 +18,7 @@ static inline uint64_t t3d_vt_material_stable_key_from_resource_path( const godo
 	if ( Path.length() <= 0 ) {
 		return 0u;
 	}
-	const uint64_t nKey = t3d_vt_stable_hash64( Path.get_data(), ( uint64_t )Path.length() );
+	const uint64_t nKey = t3dHashStableBytes( Path.get_data(), (uint64_t)Path.length() );
 	return nKey == 0u ? 1u : nKey;
 }
 

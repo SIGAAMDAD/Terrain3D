@@ -30,9 +30,7 @@
 
 // t3dHLODTriangle_s centralized in Terrain3DTypes.h.
 
-
 // t3dHLODBvhNode_s centralized in Terrain3DTypes.h.
-
 
 EA_FORCE_INLINE static AABB t3dHlodBuilderBoundsFromPoint( const Vector3 &p ) {
 	return AABB( p, Vector3() );
@@ -138,7 +136,6 @@ typedef struct t3dHLODTriangleAxisLess_s {
 		        < t3dHlodBuilderComponent( ( *m_pTriangles )[( size_t )nRhs].m_center, m_nAxis );
 	}
 } t3dHLODTriangleAxisLess_t;
-
 
 static int t3dHlodBuilderBuildBvhRecursive( const eastl::vector<t3dHLODTriangle_t> &triangles,
         eastl::vector<int> &order,
@@ -445,12 +442,9 @@ static AABB t3dHlodBuilderTransformBounds( const Transform3D &rTransform, const 
 	return AABB( out_min, out_max - out_min );
 }
 
-static uint64_t t3dHlodBuilderHashBytes( uint64_t nHash, const void *const pData, const size_t nBytes ) {
-	return t3dHashFnv1a64( pData, nBytes, nHash );
-}
-
 Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
-        Terrain3D *const pTerrain, Terrain3DRegion *const pRegion, const int nMeshId ) const {
+    Terrain3D *const pTerrain, Terrain3DRegion *const pRegion, const int nMeshId ) const
+{
 	Dictionary result;
 	result["ok"] = false;
 	if ( !pTerrain || !pRegion || pTerrain->getAssets().is_null() || nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS ) {
@@ -504,14 +498,14 @@ Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
 	bool have_bounds = false;
 	int64_t instance_count = 0;
 	uint64_t signature = 1469598103934665603ull;
-	signature = t3dHlodBuilderHashBytes( signature, &nMeshId, sizeof( nMeshId ) );
+	signature = t3dHashFnv1a64( &nMeshId, sizeof( nMeshId ), signature );
 	const uint32_t category = ( uint32_t )( asset->getInstanceCategory() );
 	const uint32_t hlod_min_level = ( uint32_t )( asset->getHlodMinLevel() );
-	signature = t3dHlodBuilderHashBytes( signature, &category, sizeof( category ) );
-	signature = t3dHlodBuilderHashBytes( signature, &hlod_min_level, sizeof( hlod_min_level ) );
+	signature = t3dHashFnv1a64( &category, sizeof( category ), signature );
+	signature = t3dHashFnv1a64( &hlod_min_level, sizeof( hlod_min_level ), signature );
 	for ( size_t iCell = 0u; iCell < source_instances->m_cells.size(); ++iCell ) {
 		const t3dInstanceCell_s &cell = source_instances->m_cells[iCell];
-		signature = t3dHlodBuilderHashBytes( signature, &cell.m_location, sizeof( cell.m_location ) );
+		signature = t3dHashFnv1a64( &cell.m_location, sizeof( cell.m_location ), signature );
 		if ( cell.usesColors() ) {
 			for ( size_t iColor = 0u; iColor < cell.m_colors.size(); ++iColor ) {
 				const uint32_t color = cell.m_colors[iColor];
@@ -524,7 +518,7 @@ Dictionary Terrain3DHLODBuilder::analyzeInstancerSource(
 		}
 		const t3dPackedTransform_s *const pTransforms = cell.m_transforms.data();
 		if ( pTransforms && !cell.m_transforms.empty() ) {
-			signature = t3dHlodBuilderHashBytes( signature, pTransforms, cell.m_transforms.size() * sizeof( t3dPackedTransform_s ) );
+			signature = t3dHashFnv1a64( pTransforms, cell.m_transforms.size() * sizeof( t3dPackedTransform_s ), signature );
 		}
 		for ( size_t iTransform = 0u; iTransform < cell.m_transforms.size(); ++iTransform ) {
 			const AABB transformed = t3dHlodBuilderTransformBounds( cell.getTransform( iTransform ), mesh_bounds );
@@ -717,9 +711,7 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 	// enormous SurfaceTool before simplification. Bound the temporary image by
 	// chunking spatially-adjacent instance-store cells and, for very dense
 	// sources, pre-reduce each bounded chunk before GDScript assembles L1.
-	
-	
-	
+
 	const int64_t source_triangles = triangles_per_instance * instance_count;
 	const int max_instances_by_triangles = ( int )MAX<int64_t>( 1, T3D_HLOD_CHUNK_TRIANGLE_BUDGET / MAX<int64_t>( triangles_per_instance, 1 ) );
 	const int max_instances_per_chunk = MIN( T3D_HLOD_MAX_INSTANCES_PER_CHUNK, max_instances_by_triangles );
@@ -734,7 +726,6 @@ Dictionary Terrain3DHLODBuilder::buildInstancerSource(
 	bool have_bounds = false;
 	int64_t proxy_triangles = 0;
 	real_t pre_geometric_error = 0.0f;
-
 
 	for ( size_t iCell = 0u; iCell < ( size_t )( ( source_instances->m_cells ).size() ); iCell++ ) {
 		const t3dInstanceCell_s &cell = ( source_instances->m_cells )[iCell];

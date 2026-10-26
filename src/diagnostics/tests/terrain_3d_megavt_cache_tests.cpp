@@ -84,6 +84,53 @@ bool t3dRunMegaVTCacheTests() {
 	if ( fixtureReady ) {
 		CacheTestSource source;
 		t3dMegaVTAuthoringInputs_t inputs{ source, directory };
+		{
+			// A large subsystem ceiling must not reserve idle space and starve
+			// instance material packages that share the same terrain account.
+			Terrain3DMemoryAccountOwner owner(8ull * 1024 * 1024);
+			Terrain3DMemoryAccountScope scope(owner.get());
+			Terrain3DIncrementalMegaVTCooker admitted;
+			admitted.restoreCachedRegionsCold({source, directory, 128ull * 1024 * 1024}, 2);
+			expect(restored(admitted) == 2, "owner budget admits cache bytes without reserving the entire cooker ceiling");
+			const uint64_t retainedPayload = uint64_t(fragments[0].size()) + fragments[1].size() + 128u;
+			expect(admitted.getReservedCpuBytesCold() == retainedPayload && owner.get()->stats().committed == retainedPayload,
+			        "idle cooker charges only retained Godot fragment storage");
+			Terrain3DTerrainMegaVT emptyMegaVT;
+			admitted.shutdownCold(emptyMegaVT);
+			expect(owner.get()->stats().committed == 0, "cooker shutdown returns its payload allowance");
+		}
+		for (const uint64_t totalMb : {256ull, 320ull, 359ull, 360ull}) {
+			Terrain3DMemoryAccountOwner owner(totalMb * 1024 * 1024);
+			Terrain3DMemoryAccountScope scope(owner.get());
+			Terrain3DIncrementalMegaVTCooker admitted;
+			admitted.restoreCachedRegionsCold({source, directory, t3dMemoryCookingLimit(owner.get())}, 2);
+			expect(restored(admitted) == 2, "cached regions restore with a total budget at or below 360 MiB");
+			// Fill the retained-cache allowance. Composition must be able to borrow
+			// unused shared space rather than requiring another copy in this grant.
+			admitted.restoreCachedRegionsCold({source, directory, admitted.getRetainedCpuBytesCold()}, 2);
+			Terrain3DMemoryReservation otherConsumers;
+			const auto stats = owner.get()->stats();
+			expect(otherConsumers.resize(stats.limit - stats.committed - 8ull * 1024 * 1024),
+			        "other terrain consumers leave a bounded 8 MiB composition window");
+			PackedByteArray package; uint32_t generation = 0; uint64_t fingerprint = 0;
+			Terrain3DSharedMemoryReservation packageMemory;
+			t3dVTPackViewV3_t view{};
+			expect(admitted.composePackageCold(package, generation, fingerprint, &packageMemory)
+			        && t3d_vt_pack_open_view_v3(package.ptr(), package.size(), view)
+			        && view.m_pHeader->m_nAllocationCount == 2,
+			        "composition succeeds from shared headroom with a fully occupied cache allowance");
+			expect(owner.get()->stats().peak <= stats.limit, "composition never exceeds the total owner limit");
+			package.clear(); packageMemory.reset();
+			Terrain3DMemoryReservation pressure;
+			expect(pressure.resize(stats.limit - owner.get()->stats().committed), "composition headroom can be exhausted");
+			expect(!admitted.composePackageCold(package, generation, fingerprint, &packageMemory)
+			        && package.is_empty() && owner.get()->stats().denied > 0,
+			        "real total-budget exhaustion rejects composition and reports an admission denial");
+			pressure.reset();
+			expect(admitted.composePackageCold(package, generation, fingerprint, &packageMemory),
+			        "unchanged cached regions compose again after shared headroom returns");
+		}
+		source.residentCalls = 0;
 		Terrain3DIncrementalMegaVTCooker cooker;
 		cooker.restoreCachedRegionsCold( inputs, 2 );
 		expect( restored( cooker ) == 2, "startup restores all clean region fragments before VT initialization" );

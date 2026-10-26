@@ -57,6 +57,7 @@ private:
 	PackedVector2Array m_textureDetiles;
 	PackedVector2Array m_textureDisplacements;
 	uint64_t m_nTexturePublicationGeneration = 1u;
+	uint64_t m_nTerrainVtContentGeneration = 1u;
 	uint64_t m_nMeshSourceGeneration = 1u;
 	uint64_t m_nInstanceVtMaterialSourceGeneration = 1u;
 	int m_szThumbnailBatchIds[T3D_MAX_MESH_ASSETS]{};
@@ -209,6 +210,9 @@ public:
 	void updateTextureList( void );
 	EA_FORCE_INLINE uint64_t getTexturePublicationGeneration( void ) const {
 		return m_nTexturePublicationGeneration;
+	}
+	EA_FORCE_INLINE uint64_t getTerrainVtContentGeneration( void ) const {
+		return m_nTerrainVtContentGeneration;
 	}
 	EA_FORCE_INLINE uint64_t getMeshSourceGeneration( void ) const {
 		return m_nMeshSourceGeneration;

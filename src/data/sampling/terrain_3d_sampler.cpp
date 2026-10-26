@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "data/sampling/terrain_3d_sampler.h"
-#include "core/utility/terrain_3d_byte_access.h"
+#include "core/utility/terrain_3d_binary_io.h"
 
 #include "Terrain3DConstants.h"
 #include "core/config/terrain_3d_compiler.h"
@@ -92,8 +92,8 @@ bool Terrain3DSampler::validateEpoch( void ) {
 	return m_fVertexSpacing > 0.0f;
 }
 
-
-void Terrain3DSampler::resolveAxis( const int64_t nGrid, int64_t &nRegion, int &nLocal ) const {
+void Terrain3DSampler::resolveAxis( const int64_t nGrid, int64_t& nRegion, int& nLocal ) const
+{
 	if ( nGrid >= 0 ) {
 		nRegion = nGrid >> T3D_REGION_SHIFT;
 	} else {
@@ -102,7 +102,6 @@ void Terrain3DSampler::resolveAxis( const int64_t nGrid, int64_t &nRegion, int &
 	}
 	nLocal = ( int )( nGrid - nRegion * ( int64_t )( T3D_REGION_SIZE ) );
 }
-
 
 float Terrain3DSampler::readHeight( const uint8_t *pBytes, const int iIndex ) {
 	return t3dRegionCodecReadHeightBytes( pBytes, iIndex, Image::FORMAT_R16 );

@@ -14,6 +14,8 @@
 // t3dWorldBufferId_e centralized in Terrain3DTypes.h.
 
 
+class Terrain3DVirtualTexture;
+
 class Terrain3DWorldResources {
 private:
 	Terrain3DRdContext *m_pContext = NULL;
@@ -24,12 +26,15 @@ private:
 	uint64_t m_nUploadedPublicationGeneration = 0u;
 	uint64_t m_nGpuBufferBytes = 0u;
 	uint64_t m_nUploadBytes = 0u;
+	uint64_t m_nSkippedPublicationUploadBytes = 0u;
+	bool m_bPublicationUploadCached[WORLD_BUFFER_COUNT]{};
 	uint64_t m_nCapacityGrowthCount = 0u;
 	uint32_t m_nTerrainStripBucketCounts[T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT]{};
 	uint64_t m_nTerrainStripUsefulVertices = 0u;
 	uint64_t m_nTerrainStripFixedSubmittedVertices = 0u;
 	uint64_t m_nTerrainStripBucketSubmittedVertices = 0u;
 	godot::PackedByteArray m_uploadScratch[WORLD_BUFFER_COUNT];
+	Terrain3DMemoryReservation m_uploadMemory[WORLD_BUFFER_COUNT];
 
 	static uint32_t requiredBytes( const Terrain3DWorldPublication &rPublication, t3dWorldBufferId_t eBuffer );
 	static t3dRdMemoryCategory_t memoryCategory( t3dWorldBufferId_t eBuffer );
@@ -41,7 +46,8 @@ private:
 public:
 	bool ensureCapacityCold( const Terrain3DWorldPublication &rPublication );
 	static uint64_t estimatePublicationUploadBytes( const Terrain3DWorldPublication &rPublication );
-	bool uploadPublicationWarm( const Terrain3DWorldPublication &rPublication );
+	bool uploadPublicationWarm( const Terrain3DWorldPublication &rPublication, const Terrain3DVirtualTexture *pVirtualTexture = NULL );
+	bool uploadResolvedMaterialsWarm( const Terrain3DWorldPublication &rPublication, const Terrain3DVirtualTexture &rVirtualTexture );
 	bool uploadFrameHot( const t3dWorldFrame_t &rFrame );
 	void shutdownCold( void );
 	bool isInitialized( void ) const;
@@ -52,6 +58,7 @@ public:
 	uint64_t getUploadedPublicationGeneration( void ) const;
 	uint64_t getGpuBufferBytes( void ) const;
 	uint64_t getUploadBytes( void ) const;
+	uint64_t getSkippedPublicationUploadBytes(void) const { return m_nSkippedPublicationUploadBytes; }
 	uint64_t getCapacityGrowthCount( void ) const;
 	uint32_t getTerrainStripBucketCount( uint32_t nBucket ) const;
 	uint64_t getTerrainStripUsefulVertices( void ) const;

@@ -43,15 +43,19 @@ private:
 	void buildEditorOverlayState(
 	        const t3dMaterialStateSources_t &rSources, t3dRdFrameSnapshot_t &rSnapshot, const Terrain3DMaterial *pMaterial );
 	void buildMaterialFlags( const t3dMaterialStateSources_t &rSources,
+	        const t3dVTMaterialReadSnapshot_t &rVtSnapshot,
 	        t3dRdFrameSnapshot_t &rSnapshot,
 	        Terrain3DMaterial *pMaterial,
 	        Terrain3DData *pData,
 	        const Ref<Terrain3DAssets> &rAssets );
 	void buildMaterialParameters( t3dRdMaterialConfig_t &rConfig, Terrain3DMaterial *pMaterial, const Ref<Terrain3DAssets> &rAssets );
 	void buildMaterialTierConfig( t3dRdMaterialConfig_t &rConfig, Terrain3DMaterial *pMaterial );
-	void buildMaterialLayers(
-	        const t3dMaterialStateSources_t &rSources, t3dRdFrameSnapshot_t &rSnapshot, const Ref<Terrain3DAssets> &rAssets );
-	void buildMaterialState( const t3dMaterialStateSources_t &rSources, t3dRdFrameSnapshot_t &rSnapshot );
+	void buildMaterialLayers( const t3dMaterialStateSources_t &rSources,
+	        const t3dVTMaterialReadSnapshot_t &rVtSnapshot,
+	        t3dRdFrameSnapshot_t &rSnapshot,
+	        const Ref<Terrain3DAssets> &rAssets );
+	void buildMaterialState( const t3dMaterialStateSources_t &rSources,
+	        const t3dVTMaterialReadSnapshot_t &rVtSnapshot, t3dRdFrameSnapshot_t &rSnapshot );
 
 public:
 	bool publishSnapshotState( const t3dMaterialStateSources_t &rSources, t3dRdFrameSnapshot_t &rSnapshot );

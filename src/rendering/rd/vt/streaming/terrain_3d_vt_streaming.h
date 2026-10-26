@@ -87,6 +87,7 @@ typedef struct t3dVTStreamingState_s {
 	uint32_t nUploadedPageSetCountThisFrame;
 	uint64_t nUploadedBytesThisFrame;
 	bool bInitialized;
+	bool bQuiescing;
 } t3dVTStreamingState_t;
 
 
@@ -135,6 +136,10 @@ uint32_t t3d_vt_streaming_ingest_readback_owner_hot( t3dVTStreamingState_t &rSta
         t3dVTGpuCounters_t &rCounters );
 uint32_t t3d_vt_streaming_invalidate_queued_demand_hot( t3dVTStreamingState_t &rState );
 bool t3d_vt_streaming_claim_job_owner_hot( t3dVTStreamingState_t &rState, uint32_t &rJobIndex );
+// Owner thread stops admission/claims, then polls until all worker completions
+// have been acquired. Never cancel a worker that may still touch package bytes.
+bool t3d_vt_streaming_quiesce_package_warm( t3dVTStreamingState_t &rState );
+void t3d_vt_streaming_resume_package_warm( t3dVTStreamingState_t &rState );
 bool t3d_vt_streaming_cancel_claim_owner_hot( t3dVTStreamingState_t &rState, uint32_t pJobIndex );
 bool t3d_vt_streaming_execute_job_async(
         t3dVTStreamingState_t &rState, uint32_t pJobIndex, t3dVTStreamReadDecodeFn_t pReadDecode, void *pUser );

@@ -4,7 +4,7 @@
 #define TERRAIN3D_RESIDENCY_STATE_H
 
 #include "data/persistence/terrain_3d_region_repository.h"
-#include "streaming/policy/terrain_3d_gpu_cache_constants.h"
+#include "Terrain3DConstants.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
 #include "streaming/policy/terrain_3d_streaming_policy.h"
 
@@ -51,8 +51,8 @@ typedef struct t3dResidencyFrameState_s {
 	}
 } t3dResidencyFrameState_t;
 
-
-inline bool t3dResidencyFrameWantsRuntimePage( void *const pContext, const Vector2i &rLocation ) {
+inline bool t3dResidencyFrameWantsRuntimePage( void *const pContext, const Vector2i& rLocation )
+{
 	const t3dResidencyFrameState_s *const pFrame = ( const t3dResidencyFrameState_s * )( pContext );
 	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT || pFrame->isPrefetch( rLocation ) );
 }

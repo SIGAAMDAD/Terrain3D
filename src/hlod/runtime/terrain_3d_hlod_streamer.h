@@ -37,14 +37,12 @@ typedef struct t3dEntry_s : public t3dHLODEntryDescriptor_t {
 	int m_iLoadingListPosition = -1;
 	int m_iRetiringListPosition = -1;
 	Ref<Terrain3DHLODPackage> m_ackage;
+	Terrain3DSharedMemoryReservation m_memory;
 } t3dEntry_t;
-
 
 // t3dNodePolicy_s centralized in Terrain3DTypes.h.
 
-
 // t3dHLODInstancerRepresentationState_s centralized in Terrain3DTypes.h.
-
 
 class Terrain3DHLODStreamer : public Object {
 	GDCLASS( Terrain3DHLODStreamer, Object );
@@ -97,8 +95,7 @@ class Terrain3DHLODStreamer : public Object {
 	uint64_t m_nColdRebuildCount = 0u;
 	uint64_t m_nInstanceMutationInvalidations = 0u;
 
-	static int floorDiv( int value, int divisor );
-	static int regionIndex( const Vector2i &rRegion );
+	static int regionIndex( const Vector2i& rRegion );
 	static Vector2i regionFromIndex( int index );
 	int findEntry( int level, const Vector2i &rCluster ) const;
 	void clearRuntime( bool bNotify, bool bReleaseStorage = false );
@@ -177,9 +174,7 @@ public:
 	EA_FORCE_INLINE int getUnloadBudget( void ) const {
 		return m_nUnloadBudget;
 	}
-	EA_FORCE_INLINE void setMemoryBudgetMb( int nMb ) {
-		m_nMemoryBudgetMb = CLAMP( nMb, 1, 4096 );
-	}
+	void setMemoryBudgetMb(int nMb);
 	EA_FORCE_INLINE int getMemoryBudgetMb( void ) const {
 		return m_nMemoryBudgetMb;
 	}

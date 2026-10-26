@@ -8,7 +8,6 @@
 #include "Terrain3DConstants.h"
 #include "assets/resources/generated_texture.h"
 #include "core/config/terrain_3d_compiler.h"
-#include "streaming/policy/terrain_3d_gpu_cache_constants.h"
 #include "streaming/residency/terrain_3d_residency_state.h"
 
 #include <stddef.h>
@@ -18,12 +17,9 @@
 #include "data/sampling/terrain_3d_sampling_storage.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
 
-
 // t3dMiddleHeightRegionCacheConfig_s centralized in Terrain3DTypes.h.
 
-
 // t3dMiddleHeightRegionCacheStats_s centralized in Terrain3DTypes.h.
-
 
 class Terrain3DMiddleHeightRegionCache {
 public:

@@ -98,6 +98,7 @@ typedef struct t3dAsyncTextureOperationSlot_s {
 	Terrain3DRdTexture m_createResult;
 	t3dRdTextureSpec_t m_createSpec;
 	TypedArray<PackedByteArray> m_createInitialData;
+	Terrain3DMemoryAccount *m_createAccount = nullptr;
 	bool m_bCreateSucceeded = false;
 	Terrain3DRdTexture *m_pFreeTexture = NULL;
 	t3dAtomicU64_t m_nCreateCount{ 0u };

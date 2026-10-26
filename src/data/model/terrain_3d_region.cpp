@@ -1,7 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "data/model/terrain_3d_region.h"
-#include "core/utility/terrain_3d_byte_access.h"
+#include "core/utility/terrain_3d_binary_io.h"
 
 #include "core/utility/logger.h"
 #include "core/config/terrain_3d_compiler.h"
@@ -1494,8 +1495,6 @@ void Terrain3DRegion::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( STREAMED_NODE_BOUNDARY_COVERAGE );
 
 	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DRegion::clear );
-	ClassDB::bind_method( D_METHOD( "set_version", "version" ), &Terrain3DRegion::setVersion );
-	ClassDB::bind_method( D_METHOD( "get_version" ), &Terrain3DRegion::getVersion );
 	ClassDB::bind_method( D_METHOD( "get_region_size" ), &Terrain3DRegion::getRegionSize );
 	ClassDB::bind_method( D_METHOD( "get_vertex_spacing" ), &Terrain3DRegion::getVertexSpacing );
 
@@ -1503,18 +1502,7 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_map", "map_type" ), &Terrain3DRegion::getMap );
 	ClassDB::bind_method( D_METHOD( "set_maps", "maps" ), &Terrain3DRegion::setMaps );
 	ClassDB::bind_method( D_METHOD( "get_maps" ), &Terrain3DRegion::getMaps );
-	ClassDB::bind_method( D_METHOD( "set_height_map", "map" ), &Terrain3DRegion::setHeightMap );
-	ClassDB::bind_method( D_METHOD( "get_height_map" ), &Terrain3DRegion::getHeightMap );
-	ClassDB::bind_method( D_METHOD( "set_control_map", "map" ), &Terrain3DRegion::setControlMap );
-	ClassDB::bind_method( D_METHOD( "get_control_map" ), &Terrain3DRegion::getControlMap );
-	ClassDB::bind_method( D_METHOD( "set_color_map", "map" ), &Terrain3DRegion::setColorMap );
-	ClassDB::bind_method( D_METHOD( "get_color_map" ), &Terrain3DRegion::getColorMap );
-	ClassDB::bind_method( D_METHOD( "set_channel_flags", "flags" ), &Terrain3DRegion::setChannelFlags );
-	ClassDB::bind_method( D_METHOD( "get_channel_flags" ), &Terrain3DRegion::getChannelFlags );
-	ClassDB::bind_method( D_METHOD( "set_megavt_source_generation", "generation" ), &Terrain3DRegion::setMegaVTSourceGeneration );
-	ClassDB::bind_method( D_METHOD( "get_megavt_source_generation" ), &Terrain3DRegion::getMegaVTSourceGeneration );
-	ClassDB::bind_method( D_METHOD( "set_megavt_dirty_mip0_mask", "mask" ), &Terrain3DRegion::setMegaVTDirtyMip0Mask );
-	ClassDB::bind_method( D_METHOD( "get_megavt_dirty_mip0_mask" ), &Terrain3DRegion::getMegaVTDirtyMip0Mask );
+
 	ClassDB::bind_method( D_METHOD( "has_channel", "map_type" ), &Terrain3DRegion::hasChannel );
 	ClassDB::bind_method( D_METHOD( "sanitize_maps" ), &Terrain3DRegion::sanitizeMaps );
 	ClassDB::bind_method( D_METHOD( "is_map_default", "map_type" ), &Terrain3DRegion::isMapDefault );
@@ -1526,8 +1514,6 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "sanitize_map", "map_type", "map" ), &Terrain3DRegion::sanitizeMap );
 	ClassDB::bind_method( D_METHOD( "validate_map_size", "map" ), &Terrain3DRegion::validateMapSize );
 
-	ClassDB::bind_method( D_METHOD( "set_height_range", "range" ), &Terrain3DRegion::setHeightRange );
-	ClassDB::bind_method( D_METHOD( "get_height_range" ), &Terrain3DRegion::getHeightRange );
 	ClassDB::bind_method( D_METHOD( "update_height", "height" ), &Terrain3DRegion::updateHeight );
 	ClassDB::bind_method( D_METHOD( "update_heights", "low_high" ), &Terrain3DRegion::updateHeights );
 	ClassDB::bind_method( D_METHOD( "calc_height_range" ), &Terrain3DRegion::calcHeightRange );
@@ -1535,33 +1521,29 @@ void Terrain3DRegion::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "set_instances", "instances" ), &Terrain3DRegion::setInstances );
 	ClassDB::bind_method( D_METHOD( "get_instances" ), &Terrain3DRegion::getInstances );
 	ClassDB::bind_method( D_METHOD( "_get_instances_legacy_storage" ), &Terrain3DRegion::getInstancesLegacyStorage );
-	ClassDB::bind_method( D_METHOD( "set_instance_page", "page" ), &Terrain3DRegion::setInstancePage );
-	ClassDB::bind_method( D_METHOD( "get_instance_page" ), &Terrain3DRegion::getInstancePage );
 	ClassDB::bind_method( D_METHOD( "ensure_instance_store_resident" ), &Terrain3DRegion::ensureInstanceStoreResident );
 	ClassDB::bind_method( D_METHOD( "evict_instance_store" ), &Terrain3DRegion::evictInstanceStore );
 	ClassDB::bind_method( D_METHOD( "is_instance_store_resident" ), &Terrain3DRegion::isInstanceStoreResident );
 	ClassDB::bind_method( D_METHOD( "get_instance_count", "mesh_id" ), &Terrain3DRegion::getInstanceCount, DEFVAL( -1 ) );
 	ClassDB::bind_method( D_METHOD( "get_instance_page_bytes" ), &Terrain3DRegion::getInstancePageBytes );
-	ClassDB::bind_method( D_METHOD( "set_streamed_nodes", "nodes" ), &Terrain3DRegion::setStreamedNodes );
-	ClassDB::bind_method( D_METHOD( "get_streamed_nodes" ), &Terrain3DRegion::getStreamedNodes );
 	ClassDB::bind_method( D_METHOD( "add_streamed_node",
-	                              "scene",
-	                              "local_transform",
-	                              "state",
-	                              "flags",
-	                              "id",
-	                              "boundary_policy",
-	                              "coverage_min",
-	                              "coverage_max",
-	                              "hlod_min_level" ),
-	        &Terrain3DRegion::addStreamedNode,
-	        DEFVAL( Dictionary() ),
-	        DEFVAL( 0 ),
-	        DEFVAL( 0 ),
-	        DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
-	        DEFVAL( s_v2iZero ),
-	        DEFVAL( s_v2iZero ),
-	        DEFVAL( 1 ) );
+	                                "scene",
+	                                "local_transform",
+	                                "state",
+	                                "flags",
+	                                "id",
+	                                "boundary_policy",
+	                                "coverage_min",
+	                                "coverage_max",
+	                                "hlod_min_level" ),
+	                      &Terrain3DRegion::addStreamedNode,
+	                      DEFVAL( Dictionary() ),
+	                      DEFVAL( 0 ),
+	                      DEFVAL( 0 ),
+	                      DEFVAL( STREAMED_NODE_BOUNDARY_ANCHOR ),
+	                      DEFVAL( s_v2iZero ),
+	                      DEFVAL( s_v2iZero ),
+	                      DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "add_streamed_node_path",
 	                              "scene_path",
 	                              "local_transform",
@@ -1582,8 +1564,6 @@ void Terrain3DRegion::_bind_methods( void ) {
 	        DEFVAL( 1 ) );
 	ClassDB::bind_method( D_METHOD( "remove_streamed_node", "id" ), &Terrain3DRegion::removeStreamedNode );
 	ClassDB::bind_method( D_METHOD( "get_streamed_node_count" ), &Terrain3DRegion::getStreamedNodeCount );
-	ClassDB::bind_method( D_METHOD( "set_lighting", "lighting" ), &Terrain3DRegion::setLighting );
-	ClassDB::bind_method( D_METHOD( "get_lighting" ), &Terrain3DRegion::getLighting );
 	ClassDB::bind_method( D_METHOD( "has_lighting" ), &Terrain3DRegion::hasLighting );
 	ClassDB::bind_method( D_METHOD( "streamed_node_coverage_intersects", "owner_location", "target_min", "target_max" ),
 	        &Terrain3DRegion::streamedNodeCoverageIntersects );
@@ -1591,76 +1571,55 @@ void Terrain3DRegion::_bind_methods( void ) {
 
 	ClassDB::bind_method( D_METHOD( "save", "path", "save_16_bit" ), &Terrain3DRegion::save, DEFVAL( "" ), DEFVAL( false ) );
 
-	ClassDB::bind_method( D_METHOD( "set_deleted", "deleted" ), &Terrain3DRegion::setDeleted );
-	ClassDB::bind_method( D_METHOD( "is_deleted" ), &Terrain3DRegion::isDeleted );
-	ClassDB::bind_method( D_METHOD( "set_edited", "edited" ), &Terrain3DRegion::setEdited );
-	ClassDB::bind_method( D_METHOD( "is_edited" ), &Terrain3DRegion::isEdited );
-	ClassDB::bind_method( D_METHOD( "set_modified", "modified" ), &Terrain3DRegion::setModified );
-	ClassDB::bind_method( D_METHOD( "is_modified" ), &Terrain3DRegion::isModified );
-	ClassDB::bind_method( D_METHOD( "set_location", "location" ), &Terrain3DRegion::setLocation );
-	ClassDB::bind_method( D_METHOD( "get_location" ), &Terrain3DRegion::getLocation );
-
 	ClassDB::bind_method( D_METHOD( "get_data" ), &Terrain3DRegion::getData );
 	ClassDB::bind_method( D_METHOD( "duplicate", "deep" ), &Terrain3DRegion::duplicate, DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "dump", "verbose" ), &Terrain3DRegion::dump, DEFVAL( false ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Identity / Format", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "version", PROPERTY_HINT_NONE, "", ro_flags ), "set_version", "get_version" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::VECTOR2, "height_range", PROPERTY_HINT_NONE, "", ro_flags ), "set_height_range", "get_height_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "channel_flags", PROPERTY_HINT_FLAGS, "Control,Color,Derived", ro_flags ),
-	        "set_channel_flags",
-	        "get_channel_flags" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "megavt_source_generation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_megavt_source_generation",
-	        "get_megavt_source_generation" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "megavt_dirty_mip0_mask", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_megavt_dirty_mip0_mask",
-	        "get_megavt_dirty_mip0_mask" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I, "location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_location",
-	        "get_location" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setVersion, getVersion, "version",
+	                   PropertyInfo( Variant::FLOAT, "version", PROPERTY_HINT_NONE, "", ro_flags ), "set_version", "get_version" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setHeightRange, getHeightRange, "range",
+	                   PropertyInfo( Variant::VECTOR2, "height_range", PROPERTY_HINT_NONE, "", ro_flags ), "set_height_range", "get_height_range" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setChannelFlags, getChannelFlags, "flags",
+	                   PropertyInfo( Variant::INT, "channel_flags", PROPERTY_HINT_FLAGS, "Control,Color,Derived", ro_flags ), "set_channel_flags", "get_channel_flags" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setMegaVTSourceGeneration, getMegaVTSourceGeneration, "generation",
+	                   PropertyInfo( Variant::INT, "megavt_source_generation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_megavt_source_generation", "get_megavt_source_generation" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setMegaVTDirtyMip0Mask, getMegaVTDirtyMip0Mask, "mask",
+	                   PropertyInfo( Variant::INT, "megavt_dirty_mip0_mask", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_megavt_dirty_mip0_mask", "get_megavt_dirty_mip0_mask" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setLocation, getLocation, "location",
+	                   PropertyInfo( Variant::VECTOR2I, "location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_location", "get_location" );
 
 	ADD_GROUP( "Maps", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "height_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-	        "set_height_map",
-	        "get_height_map" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "control_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-	        "set_control_map",
-	        "get_control_map" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "color_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ),
-	        "set_color_map",
-	        "get_color_map" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setHeightMap, getHeightMap, "map",
+	                   PropertyInfo( Variant::OBJECT, "height_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ), "set_height_map", "get_height_map" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setControlMap, getControlMap, "map",
+	                   PropertyInfo( Variant::OBJECT, "control_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ), "set_control_map", "get_control_map" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setColorMap, getColorMap, "map",
+	                   PropertyInfo( Variant::OBJECT, "color_map", PROPERTY_HINT_RESOURCE_TYPE, "Image", ro_flags ), "set_color_map", "get_color_map" );
 
 	ADD_GROUP( "Instances", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::DICTIONARY, "instances", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
 	        "set_instances",
 	        "_get_instances_legacy_storage" );
-	ADD_PROPERTY( PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instance_page", PROPERTY_HINT_NONE, "", ro_flags ),
-	        "set_instance_page",
-	        "get_instance_page" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setInstancePage, getInstancePage, "page",
+	                   PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instance_page", PROPERTY_HINT_NONE, "", ro_flags ), "set_instance_page", "get_instance_page" );
 
 	ADD_GROUP( "Streamed Nodes", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "streamed_nodes", PROPERTY_HINT_NONE, "", ro_flags ),
-	        "set_streamed_nodes",
-	        "get_streamed_nodes" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setStreamedNodes, getStreamedNodes, "nodes",
+	                   PropertyInfo( Variant::ARRAY, "streamed_nodes", PROPERTY_HINT_NONE, "", ro_flags ), "set_streamed_nodes", "get_streamed_nodes" );
 
 	ADD_GROUP( "Baked Lighting", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "lighting", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRegionLighting", ro_flags ),
-	        "set_lighting",
-	        "get_lighting" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setLighting, getLighting, "lighting",
+	                   PropertyInfo( Variant::OBJECT, "lighting", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRegionLighting", ro_flags ), "set_lighting", "get_lighting" );
 
 	ADD_GROUP( "Runtime / Edit State", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "edited", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_edited",
-	        "is_edited" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "deleted", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_deleted",
-	        "is_deleted" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "modified", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_modified",
-	        "is_modified" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setEdited, isEdited, "edited",
+	                   PropertyInfo( Variant::BOOL, "edited", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_edited", "is_edited" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setDeleted, isDeleted, "deleted",
+	                   PropertyInfo( Variant::BOOL, "deleted", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_deleted", "is_deleted" );
+	T3D_BIND_PROPERTY( Terrain3DRegion, setModified, isModified, "modified",
+	                   PropertyInfo( Variant::BOOL, "modified", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_modified", "is_modified" );
 }
 
 // M39 extracted non-template header implementations.

@@ -2,7 +2,7 @@
 #ifndef TERRAIN3D_NATIVE_BACKING_H
 #define TERRAIN3D_NATIVE_BACKING_H
 
-#include "core/runtime/terrain_3d_allocation_domain.h"
+#include "Terrain3DTypes.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "eastl_config.h"
 

@@ -1,5 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypeSupport.h"
 #include "instances/runtime/terrain_3d_instancer.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_record.h"
@@ -17,7 +19,6 @@
 #include "data/runtime/terrain_3d_runtime_bake_codec.h"
 #include "data/sampling/terrain_3d_sampler.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
-#include "instances/contracts/terrain_3d_instance_cache_constants.h"
 #include "memory/core/terrain_3d_memory.h"
 #include "simd/core/terrain_3d_simd.h"
 
@@ -98,8 +99,6 @@ static void t3dInstancerInsertLargestCount( uint32_t *const pCounts, const size_
 		pCounts[index] = swap;
 	}
 }
-
-
 
 static bool t3dBeginInstancePageAccess(
         Terrain3DInstancer *pInstancer, Terrain3DData *pData, const Vector2i &rLocation, bool &bTemporary ) {
@@ -258,8 +257,8 @@ static uint64_t t3dRepositoryMeshInstanceCount( const Terrain3DData *pData, cons
 // -----------------------------------------------------------------------------
 // Private functions
 
-
-bool Terrain3DInstancer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
+bool Terrain3DInstancer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy )
+{
 	if ( !pZone ) {
 		return false;
 	}
@@ -282,15 +281,13 @@ bool Terrain3DInstancer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone,
 	return true;
 }
 
-
-t3dRenderCellKey_t Terrain3DInstancer::makeRenderKey( const t3dRenderCell_t &rCell ) {
+t3dRenderCellKey_t Terrain3DInstancer::makeRenderKey( const t3dRenderCell_t& rCell )
+{
 	return t3dRenderCellKey_t{ rCell.m_region, rCell.m_cell, rCell.m_nMeshId, rCell.m_nLod };
 }
 
 void Terrain3DInstanceSnapshotBuilder::markRdPublicationDirty( void ) {
-	if ( ++m_nRdPublicationGeneration == 0u ) {
-		m_nRdPublicationGeneration = 1u;
-	}
+	m_nRdPublicationGeneration = t3dNextGeneration( m_nRdPublicationGeneration );
 }
 
 void Terrain3DInstancer::markRdPublicationDirty( void ) { m_snapshotBuilder.markRdPublicationDirty(); }
@@ -298,9 +295,7 @@ void Terrain3DInstancer::markRdPublicationDirty( void ) { m_snapshotBuilder.mark
 void Terrain3DInstancer::emitDerivedMutation(
         const Vector2i &rRegion, const Vector2i &rCell, const int nMeshId, const uint32_t nFlags, const uint32_t nSourceRevision ) {
 	markRdPublicationDirty();
-	if ( ++m_nDerivedMutationGeneration == 0u ) {
-		m_nDerivedMutationGeneration = 1u;
-	}
+	m_nDerivedMutationGeneration = t3dNextGeneration( m_nDerivedMutationGeneration );
 	if ( !m_pTerrain ) {
 		return;
 	}
@@ -541,8 +536,8 @@ void Terrain3DInstancer::releaseRenderRegionNode( const uint32_t nNode, const ui
 	m_nRenderRegionFreeHead = nNode;
 }
 
-
-uint32_t Terrain3DInstancer::allocateLogicalRegionNode( const t3dCellUpdateKey_t &rKey, const uint16_t nRegionIndex ) {
+uint32_t Terrain3DInstancer::allocateLogicalRegionNode( const t3dCellUpdateKey_t& rKey, const uint16_t nRegionIndex )
+{
 	uint32_t node_index = UINT32_MAX;
 	if ( m_nLogicalRegionFreeHead != UINT32_MAX ) {
 		node_index = m_nLogicalRegionFreeHead;
@@ -597,7 +592,6 @@ void Terrain3DInstancer::releaseLogicalRegionNode( const uint32_t nNode, const u
 	node.m_nNext = m_nLogicalRegionFreeHead;
 	m_nLogicalRegionFreeHead = nNode;
 }
-
 
 uint32_t Terrain3DInstancer::allocateTransitionCellNode( const t3dCellUpdateKey_t &rKey, const uint32_t nNext ) {
 	uint32_t node_index = UINT32_MAX;
@@ -1186,8 +1180,8 @@ void Terrain3DInstancer::clearRegionUpdates( const bool bActive ) {
 	mask.reset();
 }
 
-
-void Terrain3DInstancer::snapshotRegionUpdates( void ) {
+void Terrain3DInstancer::snapshotRegionUpdates( void )
+{
 	clearRegionUpdates( true );
 	for ( size_t iUpdate = 0u; iUpdate < ( size_t )( ( m_regionUpdateIndices ).size() ); iUpdate++ ) {
 		const uint16_t index = ( m_regionUpdateIndices )[iUpdate];
@@ -1205,8 +1199,8 @@ void Terrain3DInstancer::snapshotRegionUpdates( void ) {
 	m_regionUpdateMask.reset();
 }
 
-
-t3dRegionUpdateState_t *Terrain3DInstancer::getRegionUpdate( const Vector2i &vRegion ) {
+t3dRegionUpdateState_t *Terrain3DInstancer::getRegionUpdate( const Vector2i& vRegion )
+{
 	const int index = Terrain3DData::getRegionMapIndex( vRegion );
 	if ( index < 0 ) {
 		return NULL;
@@ -1241,14 +1235,13 @@ bool Terrain3DInstancer::hasPendingUpdates( void ) const {
 	        || !m_regionUpdateIndices.empty() || !m_streamingUpdates.empty();
 }
 
-
-void Terrain3DInstancer::markPendingRegionWork( const Vector2i &rRegion ) {
+void Terrain3DInstancer::markPendingRegionWork( const Vector2i& rRegion )
+{
 	const int region_index = Terrain3DData::getRegionMapIndex( rRegion );
 	if ( region_index >= 0 ) {
 		m_pendingRegionWorkMask.set( ( size_t )( region_index ) );
 	}
 }
-
 
 void Terrain3DInstancer::rebuildPendingRegionWorkMask( void ) {
 	m_pendingRegionWorkMask.reset();
@@ -1273,8 +1266,8 @@ void Terrain3DInstancer::rebuildPendingRegionWorkMask( void ) {
 	}
 }
 
-
-bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) const {
+bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i& rRegion ) const
+{
 	// Global renderer changes can affect every detailed HLOD source. For ordinary
 	// streaming churn, however, readiness must be scoped to the region being
 	// handed off or a moving camera elsewhere could prevent a proxy from ever
@@ -1292,7 +1285,6 @@ bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i &rRegion ) c
 	}
 	return m_pendingRegionWorkMask.test( ( size_t )region_index );
 }
-
 
 void Terrain3DInstancer::scheduleUpdateProcessing( void ) {
 	// Pending work is serviced from Terrain3D::physicsProcess(). The instance
@@ -1619,7 +1611,6 @@ void Terrain3DInstancer::cancelPendingCellUpdates( void ) {
 	m_bPendingCancelRequested = false;
 	rebuildPendingRegionWorkMask();
 }
-
 
 void Terrain3DInstancer::enqueueRegionMeshUpdates( Terrain3DRegion *const pRegion, const int nMeshId ) {
 	const Vector2i regionLocation = pRegion->getLocation();
@@ -2169,35 +2160,9 @@ void Terrain3DInstancer::servicePendingUpdates( void ) {
 	}
 }
 
-void Terrain3DInstancer::updateMmiByRegion( Terrain3DRegion *const pRegion, const int nMeshId ) {
-	if ( !pRegion || nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS ) {
-		return;
-	}
-	const Vector2i regionLocation = pRegion->getLocation();
-	Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternalMut();
-	t3dInstanceMesh_t *const pNativeMesh = pStore ? pStore->findMesh( nMeshId ) : NULL;
-	if ( !pNativeMesh ) {
-		eraseLogicalCellsByLocation( regionLocation, nMeshId );
-		destroyMmiByLocation( regionLocation, nMeshId );
-		return;
-	}
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( nMeshId );
-	if ( pAsset.is_null() || !pAsset->isEnabled() || pAsset->getLodCount() == 0 ) {
-		for ( size_t iCell = 0u; iCell < ( size_t )( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
-			const t3dInstanceCell_s &cell = ( pNativeMesh->m_cells )[iCell];
-			setLogicalCellCount( regionLocation, nMeshId, cell.m_location, cell.m_transforms.size() );
-		}
-		destroyMmiByLocation( regionLocation, nMeshId );
-		return;
-	}
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
-		t3dInstanceCell_s &cell = ( pNativeMesh->m_cells )[iCell];
-		updateMmiCell( pRegion, nMeshId, cell, pAsset );
-	}
-}
-
 void Terrain3DInstancer::updateMmiCell(
-        Terrain3DRegion *const pRegion, const int nMeshId, t3dInstanceCell_s &rCell, const Ref<Terrain3DMeshAsset> &rAsset ) {
+    Terrain3DRegion *const pRegion, const int nMeshId, t3dInstanceCell_s& rCell, const Ref<Terrain3DMeshAsset>& rAsset )
+{
 	const Vector2i region_location = pRegion->getLocation();
 	const Vector2i cell_location = rCell.m_location;
 	const t3dCellUpdateKey_t transition_key{ region_location, cell_location, nMeshId };
@@ -2432,9 +2397,9 @@ bool Terrain3DInstancer::fillMultimeshBuffer(
 	return true;
 }
 
-
 PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
-        const TypedArray<Transform3D> &rXforms, const PackedColorArray &rColors ) const {
+    const TypedArray<Transform3D>& rXforms, const PackedColorArray& rColors ) const
+{
 	Terrain3DInstanceStore temporary_store;
 	t3dInstanceCell_s *const pCell = temporary_store.tryGetOrCreateCell( 0, s_v2iZero, ( size_t )rXforms.size(), false, false );
 	if ( !pCell ) {
@@ -2473,7 +2438,6 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
 	}
 	return result;
 }
-
 
 bool Terrain3DInstanceSnapshotBuilder::build( const t3dInstancePublicationBuildContext_t &rContext,
 	        t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
@@ -2530,8 +2494,8 @@ bool Terrain3DInstanceSnapshotBuilder::build( const t3dInstancePublicationBuildC
 	return true;
 }
 
-
-bool Terrain3DInstancer::buildAuthoritativeRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+bool Terrain3DInstancer::buildAuthoritativeRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t& rSnapshot ) const
+{
 	t3dInstancePublicationBuildContext_t context;
 	context.m_pTerrain = m_pTerrain;
 	context.m_pHlodStreamer = m_pTerrain ? m_pTerrain->hlodObject() : NULL;
@@ -2653,8 +2617,8 @@ static bool t3dInstancerAppendPendingCellPayload( t3dInstanceCell_s &rCell,
 	return true;
 }
 
-
-typedef struct t3dPreparedRegionMutation_s {
+typedef struct t3dPreparedRegionMutation_s
+{
 
 	Terrain3DRegion *m_pRegion = NULL;
 	Terrain3DInstanceStore *m_pCommitStore = NULL;
@@ -2689,7 +2653,6 @@ typedef struct t3dPreparedRegionMutation_s {
 		return *this;
 	}
 } t3dPreparedRegionMutation_t;
-
 
 static bool t3dInstancerStoreCloneMatches( const Terrain3DInstanceStore &rSource, const Terrain3DInstanceStore &rClone ) {
 	if ( !rSource.validateDeep() || !rClone.validateDeep() || rSource.meshCount() != rClone.meshCount()
@@ -4263,17 +4226,6 @@ bool Terrain3DInstancer::ensureRegionLayout( Terrain3DRegion *pRegion ) {
 	return repartitionRegionStore( pRegion, layout );
 }
 
-bool Terrain3DInstancer::refreshResidentRegionLayouts( void ) {
-	if ( !m_pTerrain ) {
-		return false;
-	}
-	t3dInstanceLayout_t layout;
-	if ( !t3dInstanceLayoutForCellSize( m_nCellSize, layout ) ) {
-		return false;
-	}
-	return repartitionResidentRegions( layout );
-}
-
 void Terrain3DInstancer::setCellSize( const int nCellSize ) {
 	const int cell_size = CLAMP( nCellSize, T3D_INSTANCE_MIN_CELL_SIZE, T3D_INSTANCE_MAX_CELL_SIZE );
 	if ( cell_size != nCellSize || ( cell_size & ( cell_size - 1 ) ) != 0 ) {
@@ -5678,8 +5630,6 @@ void Terrain3DInstancer::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "clear_by_mesh", "mesh_id" ), &Terrain3DInstancer::clearByMesh );
 	ClassDB::bind_method( D_METHOD( "clear_by_location", "region_location", "mesh_id" ), &Terrain3DInstancer::clearByLocation );
 	ClassDB::bind_method( D_METHOD( "clear_by_region", "region", "mesh_id" ), &Terrain3DInstancer::clearByRegion );
-	ClassDB::bind_method( D_METHOD( "set_mode", "mode" ), &Terrain3DInstancer::setMode );
-	ClassDB::bind_method( D_METHOD( "get_mode" ), &Terrain3DInstancer::getMode );
 	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DInstancer::isEnabled );
 	ClassDB::bind_method( D_METHOD( "add_instances", "global_position", "params" ), &Terrain3DInstancer::addInstances );
 	ClassDB::bind_method( D_METHOD( "remove_instances", "global_position", "params" ), &Terrain3DInstancer::removeInstances );
@@ -5729,19 +5679,8 @@ void Terrain3DInstancer::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "build_multimesh_buffer", "transforms", "colors" ),
 	        &Terrain3DInstancer::buildMultimeshBuffer,
 	        DEFVAL( PackedColorArray() ) );
-	ClassDB::bind_method( D_METHOD( "set_cell_size", "cell_size" ), &Terrain3DInstancer::setCellSize );
-	ClassDB::bind_method( D_METHOD( "get_cell_size" ), &Terrain3DInstancer::getCellSize );
 	ClassDB::bind_method( D_METHOD( "get_cells_per_region_axis" ), &Terrain3DInstancer::getCellsPerRegionAxis );
-	ClassDB::bind_method( D_METHOD( "set_cell_streaming_enabled", "enabled" ), &Terrain3DInstancer::setCellStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "is_cell_streaming_enabled" ), &Terrain3DInstancer::isCellStreamingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_single_lod_instance_buffers", "enabled" ), &Terrain3DInstancer::setSingleLodInstanceBuffers );
-	ClassDB::bind_method( D_METHOD( "is_single_lod_instance_buffers" ), &Terrain3DInstancer::isSingleLodInstanceBuffers );
-	ClassDB::bind_method( D_METHOD( "set_cell_streaming_margin", "margin" ), &Terrain3DInstancer::setCellStreamingMargin );
-	ClassDB::bind_method( D_METHOD( "get_cell_streaming_margin" ), &Terrain3DInstancer::getCellStreamingMargin );
-	ClassDB::bind_method( D_METHOD( "set_cell_streaming_step", "distance" ), &Terrain3DInstancer::setCellStreamingStep );
-	ClassDB::bind_method( D_METHOD( "get_cell_streaming_step" ), &Terrain3DInstancer::getCellStreamingStep );
-	ClassDB::bind_method( D_METHOD( "set_update_cell_budget", "cells_per_frame" ), &Terrain3DInstancer::setUpdateCellBudget );
-	ClassDB::bind_method( D_METHOD( "get_update_cell_budget" ), &Terrain3DInstancer::getUpdateCellBudget );
+
 	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DInstancer::getStats );
 	ClassDB::bind_method( D_METHOD( "debug_validate_single_lod_transition_candidates", "previous_position", "target_position" ),
 	        &Terrain3DInstancer::debugValidateSingleLodTransitionCandidates );
@@ -5749,25 +5688,22 @@ void Terrain3DInstancer::_bind_methods( void ) {
 	        D_METHOD( "debug_validate_single_lod_state", "target_position" ), &Terrain3DInstancer::debugValidateSingleLodState );
 
 	ADD_GROUP( "Streaming Policy", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Normal" ), "set_mode", "get_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "cell_size", PROPERTY_HINT_ENUM, "8,16,32,64,128,suffix: samples" ),
-	        "set_cell_size",
-	        "get_cell_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "cell_streaming_enabled" ), "set_cell_streaming_enabled", "is_cell_streaming_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cell_streaming_margin", PROPERTY_HINT_RANGE, "0,1024,1,suffix:m" ),
-	        "set_cell_streaming_margin",
-	        "get_cell_streaming_margin" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cell_streaming_update_distance", PROPERTY_HINT_RANGE, "1,256,1,suffix:m" ),
-	        "set_cell_streaming_step",
-	        "get_cell_streaming_step" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "update_cell_budget", PROPERTY_HINT_RANGE, "0,65536,1,or_greater,suffix: cells/frame" ),
-	        "set_update_cell_budget",
-	        "get_update_cell_budget" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setMode, getMode, "mode",
+	                   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Normal" ), "set_mode", "get_mode" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellSize, getCellSize, "cell_size",
+	                   PropertyInfo( Variant::INT, "cell_size", PROPERTY_HINT_ENUM, "8,16,32,64,128,suffix: samples" ), "set_cell_size", "get_cell_size" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingEnabled, isCellStreamingEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "cell_streaming_enabled" ), "set_cell_streaming_enabled", "is_cell_streaming_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingMargin, getCellStreamingMargin, "margin",
+	                   PropertyInfo( Variant::FLOAT, "cell_streaming_margin", PROPERTY_HINT_RANGE, "0,1024,1,suffix:m" ), "set_cell_streaming_margin", "get_cell_streaming_margin" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingStep, getCellStreamingStep, "distance",
+	                   PropertyInfo( Variant::FLOAT, "cell_streaming_update_distance", PROPERTY_HINT_RANGE, "1,256,1,suffix:m" ), "set_cell_streaming_step", "get_cell_streaming_step" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setUpdateCellBudget, getUpdateCellBudget, "cells_per_frame",
+	                   PropertyInfo( Variant::INT, "update_cell_budget", PROPERTY_HINT_RANGE, "0,65536,1,or_greater,suffix: cells/frame" ), "set_update_cell_budget", "get_update_cell_budget" );
 
 	ADD_GROUP( "LOD / Buffer Policy", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "single_lod_instance_buffers" ),
-	        "set_single_lod_instance_buffers",
-	        "is_single_lod_instance_buffers" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer, setSingleLodInstanceBuffers, isSingleLodInstanceBuffers, "enabled",
+	                   PropertyInfo( Variant::BOOL, "single_lod_instance_buffers" ), "set_single_lod_instance_buffers", "is_single_lod_instance_buffers" );
 
 	ADD_GROUP( "Runtime Status", "" );
 	// Runtime counters remain available through getStats(); status fields are read-only.

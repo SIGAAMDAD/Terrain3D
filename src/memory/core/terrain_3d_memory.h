@@ -14,6 +14,7 @@
 #include "Terrain3DConstants.h"
 #endif
 #include "core/utility/terrain_3d_sync.h"
+#include "memory/policy/terrain_3d_memory_account.h"
 #include <stddef.h>
 #include <stdint.h>
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
@@ -114,30 +115,49 @@ private:
 	t3dRuntimeAllocationPhase_t m_ePrevious;
 };
 
+struct alignas(max_align_t) t3dNativeMemoryHeader {
+	Terrain3DMemoryAccount *account;
+	size_t charged_bytes;
+};
+
 inline void *t3dMemoryAllocate( const size_t nBytes ) {
-	if ( nBytes == 0u ) {
+	if ( nBytes == 0u || nBytes > SIZE_MAX - sizeof(t3dNativeMemoryHeader) ) {
 		return NULL;
 	}
+	const size_t charged_bytes = nBytes + sizeof(t3dNativeMemoryHeader);
+	Terrain3DMemoryAccount *const account = g_t3dMemoryAccount;
+	if (account && !Terrain3DMemoryAllocationPermit::consume(account, charged_bytes)
+	        && !account->reserve(charged_bytes)) { return NULL; }
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
-	void *const pMemory = malloc( nBytes );
+	void *const pMemory = malloc( charged_bytes );
 #else
-	void *const pMemory = memalloc( nBytes );
+	void *const pMemory = memalloc( charged_bytes );
 #endif
 	if ( pMemory ) {
+		if (account) { account->retain(); }
+		auto *header = static_cast<t3dNativeMemoryHeader *>(pMemory);
+		header->account = account;
+		header->charged_bytes = charged_bytes;
 		t3dRecordRuntimeRawAllocation( nBytes );
+		return header + 1;
 	}
-	return pMemory;
+	if (account) { account->release(charged_bytes); }
+	return NULL;
 }
 
 inline void t3dMemoryRelease( void *pPointer ) {
 	if ( !pPointer ) {
 		return;
 	}
+	auto *header = static_cast<t3dNativeMemoryHeader *>(pPointer) - 1;
+	Terrain3DMemoryAccount *const account = header->account;
+	const size_t charged_bytes = header->charged_bytes;
 #if defined( TERRAIN3D_STANDALONE_ALLOCATOR_TEST )
-	free( pPointer );
+	free( header );
 #else
-	memfree( pPointer );
+	memfree( header );
 #endif
+	if (account) { account->release(charged_bytes); account->releaseReference(); }
 }
 
 #endif // TERRAIN3D_MEMORY_H

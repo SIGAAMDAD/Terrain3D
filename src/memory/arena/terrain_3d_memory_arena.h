@@ -4,7 +4,8 @@
 #define TERRAIN3D_MEMORY_ARENA_H
 
 #include "core/config/terrain_3d_compiler.h"
-#include "memory/policy/terrain_3d_memory_constants.h"
+#include "memory/arena/terrain_3d_aligned_backing.h"
+#include "Terrain3DConstants.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,8 +22,8 @@ typedef struct t3dMemoryArenaSlice_s {
 	}
 } t3dMemoryArenaSlice_t;
 
-
-typedef struct t3dMemoryArenaSpan_s {
+typedef struct t3dMemoryArenaSpan_s
+{
 
 	uint8_t *m_pData = NULL;
 	size_t m_nSize = 0u;
@@ -31,7 +32,6 @@ typedef struct t3dMemoryArenaSpan_s {
 		return m_pData != NULL || m_nSize == 0u;
 	}
 } t3dMemoryArenaSpan_t;
-
 
 class Terrain3DMemoryArenaLayout {
 public:
@@ -73,7 +73,7 @@ private:
 class Terrain3DMemoryArena {
 public:
 	Terrain3DMemoryArena( void ) = default;
-	~Terrain3DMemoryArena( void );
+	~Terrain3DMemoryArena( void ) = default;
 	Terrain3DMemoryArena( const Terrain3DMemoryArena & ) = delete;
 	Terrain3DMemoryArena &operator=( const Terrain3DMemoryArena & ) = delete;
 	Terrain3DMemoryArena( Terrain3DMemoryArena &&rOther ) noexcept;
@@ -89,7 +89,7 @@ public:
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice ) const;
 
 	EA_FORCE_INLINE size_t capacity( void ) const {
-		return m_nCapacity;
+		return m_backing.capacity();
 	}
 	EA_FORCE_INLINE size_t baseAlignment( void ) const {
 		return m_nBaseAlignment;
@@ -105,9 +105,7 @@ public:
 	}
 
 private:
-	void *m_pRaw = NULL;
-	uint8_t *m_pBase = NULL;
-	size_t m_nCapacity = 0u;
+	Terrain3DAlignedBacking m_backing;
 	size_t m_nBaseAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT;
 	bool m_bInitialized = false;
 	bool m_bCommitted = false;

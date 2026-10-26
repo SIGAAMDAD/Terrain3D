@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_generation.h"
 #include "terrain_3d.h"
 #include "core/utility/terrain_3d_sync.h"
 
@@ -54,6 +55,7 @@
 // Private functions
 
 void Terrain3D::initializeInternal( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_memoryAccount.get());
 	// Initialization is an explicit owner-controlled rebuild boundary. The phase
 	// scopes below label telemetry only; each storage owner decides whether its
 	// backing may change during this transition.
@@ -176,8 +178,7 @@ void Terrain3D::initializeInternal( void ) {
 	// returns; serviceStartup() advances them from the owner physics tick.
 	if ( !m_bInitialized && m_bIsInsideWorld && is_inside_tree()
 	        && m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING ) {
-		++m_nStartupGeneration;
-		if ( m_nStartupGeneration == 0u ) { ++m_nStartupGeneration; }
+		m_nStartupGeneration = t3dNextGeneration( m_nStartupGeneration );
 		++m_nStartupAttemptCount;
 		m_nStartupStartUsec = Time::get_singleton()->get_ticks_usec();
 		m_nStartupEndUsec = 0u;
@@ -231,7 +232,6 @@ void Terrain3D::runStartupOwnerStage( const char *const pszStage, void ( Terrain
 	        " elapsed=",
 	        Time::get_singleton()->get_ticks_usec() - nStageStartedUsec,
 	        " us" );
-	
 }
 
 void Terrain3D::prepareStartupAssetsStageCold( void ) {
@@ -451,6 +451,7 @@ bool Terrain3D::finalizeStartupOwnerCold( void ) {
 }
 
 void Terrain3D::serviceStartup( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_memoryAccount.get());
 	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING || m_bInitialized || m_nStartupGeneration == 0u ) { return; }
 	const uint32_t nGeneration = m_nStartupGeneration;
 	if ( m_pRenderCoordinator ) {
@@ -598,6 +599,7 @@ void Terrain3D::deactivateRuntime( const bool bStartupFailure ) {
  * the Node lifecycle/public facade and forwards the physics notification.
  */
 void Terrain3D::physicsProcess( const double fDelta ) {
+	Terrain3DMemoryAccountScope memory_scope(m_memoryAccount.get());
 	if ( m_runtimeLifecycleState == TERRAIN3D_RUNTIME_INITIALIZING ) { serviceStartup(); }
 	if ( m_bInitialized ) { m_runtimeFrameScheduler.tick( runtimeFrameServices(), fDelta ); }
 }

@@ -9,16 +9,9 @@ bool Terrain3DRdUniformSet::createTracked( Terrain3DRdContext &context,
 	RenderingDevice *const rd = context.getDevice();
 	if ( !rd ) { return false; }
 	RID created = rd->uniform_set_create( uniforms, shader, set );
-	if ( !created.is_valid() || !context.registerResource( created, name,
-	             T3D_RD_CONTEXT_RESOURCE_UNIFORM_SET, T3D_RD_CONTEXT_MEMORY_NONE, 0u, owner ) ) {
-		context.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-		if ( created.is_valid() ) rd->free_rid( created );
-		return false;
-	}
-	m_rid = created;
-	m_owner = owner;
+	if ( !t3dRdRegisterCreated( context, rd, created, name, T3D_RD_CONTEXT_RESOURCE_UNIFORM_SET, owner, false ) ) { return false; }
 	m_local = false;
-	m_generation = nextGeneration( m_generation );
+	m_state.publish( created, owner );
 	context.recordRenderEvent( owner, EVENT_DESCRIPTOR_CREATE );
 	return true;
 }
@@ -28,37 +21,30 @@ bool Terrain3DRdUniformSet::createLocal( RenderingDevice *rd,
 	if ( isValid() || !rd || !shader.is_valid() ) { return false; }
 	RID created = rd->uniform_set_create( uniforms, shader, set );
 	if ( !created.is_valid() ) { return false; }
-	m_rid = created;
-	m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	m_local = true;
-	m_generation = nextGeneration( m_generation );
+	m_state.publish( created, T3D_RD_CONTEXT_OWNER_UNSPECIFIED );
 	return true;
 }
 
 void Terrain3DRdUniformSet::releaseTracked( Terrain3DRdContext &context ) {
 	if ( !isValid() || m_local ) { return; }
-	context.freeResource( m_rid );
+	context.freeResource( m_state.rid() );
 	abandon();
 }
 
 void Terrain3DRdUniformSet::releaseLocal( RenderingDevice *rd ) {
 	if ( !isValid() || !m_local || !rd ) { return; }
-	rd->free_rid( m_rid );
+	rd->free_rid( m_state.rid() );
 	abandon();
 }
 
 void Terrain3DRdUniformSet::abandon() {
-	m_rid = RID();
-	m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	m_local = false;
-	m_generation = nextGeneration( m_generation );
+	m_state.abandon();
 }
 
 void Terrain3DRdUniformSet::swap( Terrain3DRdUniformSet &other ) {
 	using eastl::swap;
-	swap( m_rid, other.m_rid );
-	swap( m_owner, other.m_owner );
+	m_state.swap( other.m_state, true );
 	swap( m_local, other.m_local );
-	m_generation = nextGeneration( m_generation );
-	other.m_generation = nextGeneration( other.m_generation );
 }

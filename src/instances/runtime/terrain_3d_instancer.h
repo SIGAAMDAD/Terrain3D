@@ -25,7 +25,6 @@
 #include "data/model/terrain_3d_data.h"
 #include "data/sampling/terrain_3d_sampler.h"
 
-
 // t3dInstancerMode_e centralized in Terrain3DTypes.h.
 
 typedef struct t3dInstanceRegionAppend_s {
@@ -55,8 +54,8 @@ typedef struct t3dRenderCellKey_s {
 	}
 } t3dRenderCellKey_t;
 
-
-typedef struct t3dRenderCellKeyHash_s {
+typedef struct t3dRenderCellKeyHash_s
+{
 
 	size_t operator()( const t3dRenderCellKey_t &rKey ) const {
 		size_t h = t3dVector2iHash_t{}( rKey.m_region );
@@ -67,8 +66,8 @@ typedef struct t3dRenderCellKeyHash_s {
 	}
 } t3dRenderCellKeyHash_t;
 
-
-typedef struct t3dRenderCellKeyLess_s {
+typedef struct t3dRenderCellKeyLess_s
+{
 
 	EA_FORCE_INLINE bool operator()( const t3dRenderCellKey_t &a, const t3dRenderCellKey_t &b ) const {
 		if ( a.m_region.x != b.m_region.x ) {
@@ -90,7 +89,6 @@ typedef struct t3dRenderCellKeyLess_s {
 	}
 } t3dRenderCellKeyLess_t;
 
-
 typedef struct t3dCellUpdateKey_s {
 
 	Vector2i m_region;
@@ -101,8 +99,8 @@ typedef struct t3dCellUpdateKey_s {
 	}
 } t3dCellUpdateKey_t;
 
-
-typedef struct t3dCellUpdateKeyHash_s {
+typedef struct t3dCellUpdateKeyHash_s
+{
 
 	size_t operator()( const t3dCellUpdateKey_t &rKey ) const {
 		t3dRenderCellKey_t key{ rKey.m_region, rKey.m_cell, rKey.m_nMeshId, 0 };
@@ -110,8 +108,8 @@ typedef struct t3dCellUpdateKeyHash_s {
 	}
 } t3dCellUpdateKeyHash_t;
 
-
-typedef struct t3dCellUpdateKeyLess_s {
+typedef struct t3dCellUpdateKeyLess_s
+{
 
 	EA_FORCE_INLINE bool operator()( const t3dCellUpdateKey_t &a, const t3dCellUpdateKey_t &b ) const {
 		if ( a.m_region.x != b.m_region.x ) {
@@ -130,19 +128,16 @@ typedef struct t3dCellUpdateKeyLess_s {
 	}
 } t3dCellUpdateKeyLess_t;
 
-
-typedef struct t3dRegionUpdateState_s {
+typedef struct t3dRegionUpdateState_s
+{
 
 	bool m_bAllMeshes = false;
 	eastl::bitset<T3D_MAX_MESH_ASSETS> m_meshes;
 } t3dRegionUpdateState_t;
 
-
 // t3dRenderCell_s centralized in Terrain3DTypes.h.
 
-
 // t3dUsableHeight_s centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dCellInterval_s {
 
@@ -153,8 +148,8 @@ typedef struct t3dCellInterval_s {
 	}
 } t3dCellInterval_t;
 
-
-typedef struct t3dTransitionBucketKey_s {
+typedef struct t3dTransitionBucketKey_s
+{
 
 	Vector2i m_bucket;
 	int m_nMeshId = -1;
@@ -163,8 +158,8 @@ typedef struct t3dTransitionBucketKey_s {
 	}
 } t3dTransitionBucketKey_t;
 
-
-typedef struct t3dTransitionBucketKeyHash_s {
+typedef struct t3dTransitionBucketKeyHash_s
+{
 
 	size_t operator()( const t3dTransitionBucketKey_t &rKey ) const {
 		size_t h = t3dVector2iHash_t{}( rKey.m_bucket );
@@ -173,8 +168,8 @@ typedef struct t3dTransitionBucketKeyHash_s {
 	}
 } t3dTransitionBucketKeyHash_t;
 
-
-typedef struct t3dTransitionBucketKeyLess_s {
+typedef struct t3dTransitionBucketKeyLess_s
+{
 
 	EA_FORCE_INLINE bool operator()( const t3dTransitionBucketKey_t &a, const t3dTransitionBucketKey_t &b ) const {
 		if ( a.m_bucket.x != b.m_bucket.x ) {
@@ -187,7 +182,6 @@ typedef struct t3dTransitionBucketKeyLess_s {
 	}
 } t3dTransitionBucketKeyLess_t;
 
-
 typedef struct t3dPendingPlacement_s {
 	Terrain3DRegion *m_pRegion = NULL;
 	Vector2i m_cell;
@@ -197,19 +191,13 @@ typedef struct t3dPendingPlacement_s {
 	uint16_t m_nBehaviorFlags = ( uint16_t )( FOLLOW_TERRAIN_HEIGHT | MANUAL_ORIENTATION );
 } t3dPendingPlacement_t;
 
-
 // t3dLogicalCellState_s centralized in Terrain3DTypes.h.
-
 
 // t3dRdCellRange_s centralized in Terrain3DTypes.h.
 
-
-
 // t3dRegionList_s centralized in Terrain3DTypes.h.
 
-
 // t3dRenderRegionNode_s centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dLogicalRegionNode_s {
 
@@ -218,16 +206,13 @@ typedef struct t3dLogicalRegionNode_s {
 	uint32_t m_nPrev = UINT32_MAX;
 } t3dLogicalRegionNode_t;
 
-
 // t3dTransitionBucketState_s centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dTransitionCellNode_s {
 
 	t3dCellUpdateKey_t m_key{};
 	uint32_t m_nNext = UINT32_MAX;
 } t3dTransitionCellNode_t;
-
 
 typedef eastl::vector_map<t3dRenderCellKey_t, size_t, t3dRenderCellKeyLess_t, Terrain3DEastlAllocator> t3dRenderCellIndex_t;
 typedef eastl::vector_map<t3dCellUpdateKey_t, t3dLogicalCellState_t, t3dCellUpdateKeyLess_t, Terrain3DEastlAllocator> t3dLogicalCellMap_t;
@@ -261,8 +246,6 @@ public:
 	uint64_t requiredHlodGeneration( void ) const { return m_nHlodRepresentationRequiredGeneration; }
 	uint64_t builtHlodGeneration( void ) const { return m_nHlodRepresentationBuiltGeneration; }
 };
-
-
 
 struct t3dInstanceInitialPolicy_t {
 	int m_nCellSize;
@@ -457,8 +440,7 @@ private:
 	        size_t nBehaviorCount = 0u );
 	bool appendRegionNative( const t3dInstanceRegionAppend_t &rRequest );
 
-
-	Vector2i getCellForLocalPosition( const Vector3 &rLocalPosition, uint8_t nCellShift ) const;
+	Vector2i getCellForLocalPosition( const Vector3& rLocalPosition, uint8_t nCellShift ) const;
 	bool buildRepartitionedStore(
 	        const Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout, Terrain3DInstanceStore &rStore ) const;
 	bool repartitionRegionStore( Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout );
@@ -466,8 +448,7 @@ private:
 	uint32_t getDensityCount( const real_t fDensity );
 	int getMasterLod( const Ref<Terrain3DMeshAsset> &rMa ) const;
 	void processUpdates( void );
-	void updateMmiByRegion( Terrain3DRegion *pRegion, const int nMeshId );
-	void updateMmiCell( Terrain3DRegion *pRegion, const int nMeshId, t3dInstanceCell_s &rCell, const Ref<Terrain3DMeshAsset> &rAsset );
+	void updateMmiCell( Terrain3DRegion *pRegion, const int nMeshId, t3dInstanceCell_s& rCell, const Ref<Terrain3DMeshAsset>& rAsset );
 	void ensureCellAabb( t3dInstanceCell_s &rCell, const AABB &rSourceMeshAabb );
 	// Renderer teardown never mutates persistent content accounting. Callers that
 	// change Terrain3DInstanceStore must update logical counts explicitly.
@@ -596,7 +577,6 @@ public:
 	}
 	int getCellsPerRegionAxis( void ) const;
 	bool ensureRegionLayout( Terrain3DRegion *pRegion );
-	bool refreshResidentRegionLayouts( void );
 	void setCellStreamingEnabled( bool bEnabled );
 	EA_FORCE_INLINE bool isCellStreamingEnabled( void ) const {
 		return m_bCellStreamingEnabled;

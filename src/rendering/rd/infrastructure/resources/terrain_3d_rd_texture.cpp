@@ -1,4 +1,5 @@
 #include "rendering/rd/infrastructure/resources/terrain_3d_rd_texture.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_memory_domain.h"
 
 #include <EASTL/utility.h>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -85,6 +86,8 @@ bool Terrain3DRdTexture::createTracked( Terrain3DRdContext &rContext, const t3dR
 	}
 	Ref<RDTextureView> view;
 	view.instantiate();
+	Terrain3DMemoryReservation reservation;
+	if (!reservation.resize(rSpec.m_layout.m_nBytes, Terrain3DMemoryAccount::GPU, g_t3dMemoryAccount, t3dRdMemoryDomain(rSpec.m_owner, rSpec.m_memory))) { return false; }
 	RID created = rd->texture_create( format, view, rInitialData );
 	if ( !created.is_valid() ) {
 		UtilityFunctions::push_error( "[Terrain3D][RDTexture] RenderingDevice texture_create failed name=", rSpec.m_name,
@@ -95,11 +98,14 @@ bool Terrain3DRdTexture::createTracked( Terrain3DRdContext &rContext, const t3dR
 	if ( !registerTracked( rContext, rd, created, rSpec.m_name, rSpec.m_owner, rSpec.m_memory, rSpec.m_layout.m_nBytes, rSpec.m_bFailureFatal ) ) {
 		return false;
 	}
-	m_hRid = created;
+	m_memoryReservation.swap(reservation);
 	m_layout = rSpec.m_layout;
-	m_owner = rSpec.m_owner;
 	m_bSharedView = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.publish( created, rSpec.m_owner );
+	for (int64_t layer = 0; layer < rInitialData.size(); ++layer) {
+		const PackedByteArray bytes = rInitialData[layer];
+		rContext.recordTextureUpload((uint64_t)bytes.size(), m_state.owner(), T3D_GPU_PUBLICATION);
+	}
 	return true;
 }
 
@@ -117,7 +123,6 @@ bool Terrain3DRdTexture::createSharedTracked( Terrain3DRdContext &rContext, cons
 	RID created = rd->texture_create_shared_from_slice( view, rParent.rid(), rSpec.m_nLayer, rSpec.m_nMipmap,
 	        rSpec.m_nMipmaps, rSpec.m_sliceType );
 	if ( !registerTracked( rContext, rd, created, rSpec.m_name, rSpec.m_owner, rSpec.m_memory, 0u, true ) ) { return false; }
-	m_hRid = created;
 	m_layout = rParent.m_layout;
 	m_layout.m_nWidth = rParent.m_layout.m_nWidth >> rSpec.m_nMipmap;
 	m_layout.m_nHeight = rParent.m_layout.m_nHeight >> rSpec.m_nMipmap;
@@ -126,16 +131,18 @@ bool Terrain3DRdTexture::createSharedTracked( Terrain3DRdContext &rContext, cons
 	m_layout.m_nLayers = 1u;
 	m_layout.m_nMipmaps = rSpec.m_nMipmaps;
 	m_layout.m_nBytes = 0u;
-	m_owner = rSpec.m_owner;
 	m_bSharedView = true;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.publish( created, rSpec.m_owner );
 	return true;
 }
 
-bool Terrain3DRdTexture::updateLayerTracked( Terrain3DRdContext &rContext, const uint32_t nLayer, const PackedByteArray &rData ) const {
+bool Terrain3DRdTexture::updateLayerTracked( Terrain3DRdContext &rContext, const uint32_t nLayer, const PackedByteArray &rData,
+        const Terrain3DGpuBufferPolicy policy ) const {
 	RenderingDevice *const rd = rContext.getDevice();
-	return rd && isValid() && nLayer < m_layout.m_nLayers && !rData.is_empty() && rContext.ownsResource( m_hRid )
-	        && rd->texture_update( m_hRid, nLayer, rData ) == OK;
+	if (!rd || !isValid() || nLayer >= m_layout.m_nLayers || rData.is_empty() || !rContext.ownsResource(m_state.rid())
+	        || rd->texture_update(m_state.rid(), nLayer, rData) != OK) { return false; }
+	rContext.recordTextureUpload((uint64_t)rData.size(), m_state.owner(), policy);
+	return true;
 }
 
 bool Terrain3DRdTexture::copyRegionToTracked( Terrain3DRdContext &rContext, Terrain3DRdTexture &rDestination,
@@ -144,43 +151,38 @@ bool Terrain3DRdTexture::copyRegionToTracked( Terrain3DRdContext &rContext, Terr
 	if ( !isValid() || !rDestination.isValid() || nSrcLayer >= m_layout.m_nLayers || nDstLayer >= rDestination.m_layout.m_nLayers
 	        || nSrcMipmap >= m_layout.m_nMipmaps || nDstMipmap >= rDestination.m_layout.m_nMipmaps ) return false;
 	RenderingDevice *const rd = rContext.getDevice();
-	return rd && rContext.ownsResource( m_hRid ) && rContext.ownsResource( rDestination.m_hRid )
-	        && rd->texture_copy( m_hRid, rDestination.m_hRid, rFrom, rTo, rSize, nSrcMipmap, nDstMipmap, nSrcLayer, nDstLayer ) == OK;
+	return rd && rContext.ownsResource( m_state.rid() ) && rContext.ownsResource( rDestination.m_state.rid() )
+	        && rd->texture_copy( m_state.rid(), rDestination.m_state.rid(), rFrom, rTo, rSize, nSrcMipmap, nDstMipmap, nSrcLayer, nDstLayer ) == OK;
 }
 
 PackedByteArray Terrain3DRdTexture::readbackTracked( Terrain3DRdContext &rContext, const uint32_t nLayer ) const {
 	RenderingDevice *const rd = rContext.getDevice();
-	return rd && isValid() && nLayer < m_layout.m_nLayers && rContext.ownsResource( m_hRid )
-	        ? rd->texture_get_data( m_hRid, nLayer ) : PackedByteArray();
+	return rd && isValid() && nLayer < m_layout.m_nLayers && rContext.ownsResource( m_state.rid() )
+	        ? rd->texture_get_data( m_state.rid(), nLayer ) : PackedByteArray();
 }
 
 Error Terrain3DRdTexture::readbackAsyncTracked( Terrain3DRdContext &rContext, const uint32_t nLayer, const Callable &rCallback ) const {
 	RenderingDevice *const rd = rContext.getDevice();
-	return rd && isValid() && nLayer < m_layout.m_nLayers && rContext.ownsResource( m_hRid )
-	        ? rd->texture_get_data_async( m_hRid, nLayer, rCallback ) : ERR_INVALID_PARAMETER;
+	return rd && isValid() && nLayer < m_layout.m_nLayers && rContext.ownsResource( m_state.rid() )
+	        ? rd->texture_get_data_async( m_state.rid(), nLayer, rCallback ) : ERR_INVALID_PARAMETER;
 }
 
 void Terrain3DRdTexture::releaseTracked( Terrain3DRdContext &rContext ) {
-	if ( m_hRid.is_valid() ) rContext.freeResource( m_hRid, m_layout.m_nBytes );
+	if ( m_state.rid().is_valid() ) rContext.freeResource( m_state.rid(), m_layout.m_nBytes );
 	abandon();
 }
 
 void Terrain3DRdTexture::abandon( void ) {
-	m_hRid = RID();
+	m_memoryReservation.reset();
 	m_layout = t3dRdTextureLayout_t{};
-	m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	m_bSharedView = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.abandon();
 }
 
 void Terrain3DRdTexture::swap( Terrain3DRdTexture &rOther ) {
+	m_memoryReservation.swap( rOther.m_memoryReservation );
 	using eastl::swap;
-	const uint32_t this_generation = nextGeneration( m_nGeneration );
-	const uint32_t other_generation = nextGeneration( rOther.m_nGeneration );
-	swap( m_hRid, rOther.m_hRid );
+	m_state.swap( rOther.m_state );
 	swap( m_layout, rOther.m_layout );
-	swap( m_owner, rOther.m_owner );
 	swap( m_bSharedView, rOther.m_bSharedView );
-	m_nGeneration = this_generation;
-	rOther.m_nGeneration = other_generation;
 }

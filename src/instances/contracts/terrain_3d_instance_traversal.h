@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #ifndef TERRAIN3D_INSTANCE_TRAVERSAL_H
 #define TERRAIN3D_INSTANCE_TRAVERSAL_H
+#include "core/utility/terrain_3d_generation.h"
 
 #include "Terrain3DConstants.h"
 #include "data/model/terrain_3d_region.h"
@@ -82,9 +83,7 @@ EA_FORCE_INLINE bool t3dRefreshInstanceCellBounds( t3dInstanceCell_s &rCell, con
 	rCell.m_cachedAabb = initialized ? bounds : AABB();
 	rCell.m_cachedSourceMeshAabb = rSourceMeshAabb;
 	rCell.m_nCachedAabbRevision = rCell.m_nRevision;
-	if ( ++rCell.m_nCachedAabbGeneration == 0u ) {
-		rCell.m_nCachedAabbGeneration = 1u;
-	}
+	rCell.m_nCachedAabbGeneration = t3dNextGeneration( rCell.m_nCachedAabbGeneration );
 	rCell.m_bCachedAabbValid = true;
 	return initialized;
 }

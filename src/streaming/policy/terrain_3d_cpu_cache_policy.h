@@ -20,7 +20,8 @@ EA_FORCE_INLINE static int t3dCpuCacheCalculateCapacity( const int nBudgetMb, co
 	const size_t budget_bytes = ( size_t )( nBudgetMb )*T3D_CPU_CACHE_MIB;
 	const size_t raw_capacity = budget_bytes / t3dCpuCacheEstimateLayerBytes();
 	const size_t minimum_capacity = ( size_t )( T3D_CPU_CACHE_MIN_SAMPLE_LAYERS );
-	const size_t legal_capacity = raw_capacity < minimum_capacity ? minimum_capacity : raw_capacity;
+	if (raw_capacity < minimum_capacity) { return 0; }
+	const size_t legal_capacity = raw_capacity;
 	return ( int )( legal_capacity > ( size_t )( nMaxLayers ) ? ( size_t )( nMaxLayers ) : legal_capacity );
 }
 

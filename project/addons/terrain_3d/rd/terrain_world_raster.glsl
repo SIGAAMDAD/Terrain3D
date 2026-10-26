@@ -1,3 +1,6 @@
+// Wetness revision 2026-10-05: region-scaled sampling and shared signed roughness.
+// Material graph revision 2026-10-05: shared bounded color sampling.
+// Brush overlay revision 2026-10-05: reimport the root when its include changes.
 #[versions]
 mesh_color_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE";
 mesh_color_specular = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE";
@@ -210,6 +213,7 @@ void main() {
 
 #[fragment]
 #version 450
+#extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #define T3D_TIER 0

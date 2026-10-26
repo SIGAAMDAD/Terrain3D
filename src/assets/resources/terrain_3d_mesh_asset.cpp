@@ -1,5 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
+#include "integration/godot/terrain_3d_binding.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
 
 #include "rendering/rd/vt/core/terrain_3d_vt_material_identity.h"
@@ -269,8 +272,8 @@ Ref<Material> Terrain3DMeshAsset::getMaterial( void ) {
 	}
 }
 
-
-static bool t3dMeshAssetBuildIndexedTriangles( const Ref<Mesh> &rSource, PackedVector3Array &rVertices, PackedInt32Array &rIndices ) {
+static bool t3dMeshAssetBuildIndexedTriangles( const Ref<Mesh>& rSource, PackedVector3Array& rVertices, PackedInt32Array& rIndices )
+{
 	rVertices.clear();
 	rIndices.clear();
 	if ( rSource.is_null() ) {
@@ -357,9 +360,7 @@ bool Terrain3DMeshAsset::rebuildInstanceCollisionGeometry( void ) {
 	m_nInstanceCollisionVertexCount = ( uint32_t )( vertices.size() );
 	m_nInstanceCollisionTriangleCount = ( uint32_t )( indices.size() / 3 );
 	m_bInstanceCollisionDerived = true;
-	if ( ++m_nInstanceCollisionGeneration == 0u ) {
-		m_nInstanceCollisionGeneration = 1u;
-	}
+	m_nInstanceCollisionGeneration = t3dNextGeneration( m_nInstanceCollisionGeneration );
 	return true;
 }
 
@@ -417,9 +418,7 @@ bool Terrain3DMeshAsset::rebuildInstanceOcclusionGeometry( void ) {
 	        m_nInstanceOcclusionProxyVertexCount,
 	        "; triangles=",
 	        m_nInstanceOcclusionProxyTriangleCount );
-	if ( ++m_nInstanceOcclusionProxyGeneration == 0u ) {
-		m_nInstanceOcclusionProxyGeneration = 1u;
-	}
+	m_nInstanceOcclusionProxyGeneration = t3dNextGeneration( m_nInstanceOcclusionProxyGeneration );
 	return true;
 }
 
@@ -906,10 +905,27 @@ void Terrain3DMeshAsset::setMaterialOverlay( const Ref<Material> &rMaterial ) {
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
+uint64_t Terrain3DMeshAsset::computeVtMaterialSourceSignature() const {
+	uint64_t nHash = 1469598103934665603ULL;
+	const Ref<Terrain3DRenderingMaterial> overrides[2] = { m_renderingMaterialOverride, m_renderingMaterialOverlay };
+	const auto append = [&nHash]( const Ref<Terrain3DRenderingMaterial> &rMaterial ) {
+		nHash = (nHash ^ (rMaterial.is_valid() ? rMaterial->get_instance_id() : 0u)) * 1099511628211ULL;
+		nHash = (nHash ^ (rMaterial.is_valid() ? rMaterial->getVtContentGeneration() : 0u)) * 1099511628211ULL;
+	};
+	append( overrides[0] );
+	append( overrides[1] );
+	for ( int64_t i = 0; i < m_surfaceRenderingMaterials.size(); ++i ) { append( m_surfaceRenderingMaterials[i] ); }
+	return nHash;
+}
+
 void Terrain3DMeshAsset::onRenderingMaterialChanged( void ) {
 	invalidateThumbnail();
-	LOG( DEBUG, "Terrain3D rendering material changed; emitting instancer_setting_changed, ID: ", m_nId );
-	emit_signal( "vt_material_changed" );
+	const uint64_t nSignature = computeVtMaterialSourceSignature();
+	if ( nSignature != m_nLastVtMaterialSourceSignature ) {
+		m_nLastVtMaterialSourceSignature = nSignature;
+		emit_signal( "vt_material_changed" );
+	}
+	// Scalar, tint, UV, filtering and pipeline edits still refresh draw records.
 	emit_signal( "instancer_setting_changed", m_nId );
 }
 
@@ -943,6 +959,7 @@ void Terrain3DMeshAsset::connectRenderingMaterialSignals( void ) {
 			material->connect( "changed", material_callback );
 		}
 	}
+	m_nLastVtMaterialSourceSignature = computeVtMaterialSourceSignature();
 }
 
 String Terrain3DMeshAsset::getVtMaterialOwnerIdentityCold( void ) const {
@@ -1193,33 +1210,22 @@ void Terrain3DMeshAsset::setFadeMargin( const real_t fFadeMargin ) {
 // Protected functions
 
 void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
-	if ( rProperty.name != StringName( "generated_type" ) && rProperty.name.begins_with( "generated_" ) ) {
-		if ( m_generatedType == TYPE_NONE ) {
-			rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-		} else {
-			rProperty.usage = PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY;
-		}
+	if ( t3dApplyPropertyPrefixUsage( rProperty, "generated_", "generated_type", true,
+	                                  m_generatedType == TYPE_NONE ? PROPERTY_USAGE_NO_EDITOR : PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ) ) {
 		return;
-	} else if ( rProperty.name == StringName( "hlod_contribution" ) ) {
-		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+	}
+	const bool occlusion = usesInstanceOcclusion();
+	if ( t3dApplyPropertyUsageRules( rProperty, {
+	                                                { "hlod_contribution", true, PROPERTY_USAGE_NO_EDITOR },
+	                                                { "hlod_min_level", m_instanceCategory == INSTANCE_CATEGORY_CLUTTER, PROPERTY_USAGE_NO_EDITOR },
+	                                                { "instance_occlusion_box", true, PROPERTY_USAGE_NO_EDITOR },
+	                                                { "instance_occlusion_proxy_mesh", !occlusion, PROPERTY_USAGE_NO_EDITOR },
+	                                                { "instance_occlusion_proxy_mesh", m_packedScene.is_valid(), PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY },
+	                                                { "instance_occlusion_range", !occlusion, PROPERTY_USAGE_NO_EDITOR },
+	                                            } ) ) {
 		return;
-	} else if ( m_instanceCategory == INSTANCE_CATEGORY_CLUTTER && rProperty.name == StringName( "hlod_min_level" ) ) {
-		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-		return;
-	} else if ( rProperty.name == StringName( "instance_occlusion_box" ) ) {
-		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-		return;
-	} else if ( rProperty.name == StringName( "instance_occlusion_proxy_mesh" ) ) {
-		if ( !usesInstanceOcclusion() ) {
-			rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-		} else if ( m_packedScene.is_valid() ) {
-			rProperty.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
-		}
-		return;
-	} else if ( rProperty.name == StringName( "instance_occlusion_range" ) && !usesInstanceOcclusion() ) {
-		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-		return;
-	} else if ( rProperty.name.match( "lod?_range" ) ) {
+	}
+	if ( rProperty.name.match( "lod?_range" ) ) {
 		const int lod = rProperty.name.substr( 3, 1 ).to_int();
 		const int effective_last_lod = MIN( m_iLastLod, getCategoryMaximumLodCount() - 1 );
 		if ( effective_last_lod < lod ) {
@@ -1231,36 +1237,34 @@ void Terrain3DMeshAsset::_validate_property( PropertyInfo &rProperty ) const {
 }
 
 bool Terrain3DMeshAsset::_property_can_revert( const StringName &rName ) const {
-	return ( rName.match( "instance_category" ) || rName.match( "instance_occlusion_policy" ) || rName.match( "instance_occlusion_range" )
-	        || rName.match( "terrain_alignment" ) || rName.match( "last_lod" ) || rName.match( "last_shadow_lod" )
-	        || rName.match( "density" ) || rName.match( "generated_type" )
-	        || ( m_generatedType > TYPE_NONE && ( rName.match( "height_offset" ) || rName.match( "lod0_range" ) ) ) );
+	Variant value;
+	return _property_get_revert( rName, value );
 }
 
 bool Terrain3DMeshAsset::_property_get_revert( const StringName &rName, Variant &rProperty ) const {
-	if ( rName.match( "instance_category" ) ) {
-		rProperty = INSTANCE_CATEGORY_GROUND_COVER;
-		return true;
-	} else if ( rName.match( "instance_occlusion_policy" ) ) {
+	static const struct t3dPropertyDefault_s
+	{
+		const char *m_pName;
+		double m_fValue;
+		bool m_bFloat;
+	} defaults[] = {
+		{ "instance_category", INSTANCE_CATEGORY_GROUND_COVER, false },
+		{ "terrain_alignment", TERRAIN_ALIGNMENT_UPRIGHT, false },
+		{ "generated_type", TYPE_TEXTURE_CARD, false },
+		{ "instance_occlusion_range", 256.0, true },
+		{ "density", 10.0, true },
+	};
+	for ( const auto& entry : defaults ) {
+		if ( rName == StringName( entry.m_pName ) ) {
+			rProperty = entry.m_bFloat ? Variant( entry.m_fValue ) : Variant( (int)entry.m_fValue );
+			return true;
+		}
+	}
+	if ( rName.match( "instance_occlusion_policy" ) ) {
 		rProperty = m_instanceCategory == INSTANCE_CATEGORY_OCCLUDER ? INSTANCE_OCCLUSION_EXPLICIT_MESH : INSTANCE_OCCLUSION_NONE;
 		return true;
-	} else if ( rName.match( "instance_occlusion_range" ) ) {
-		rProperty = 256.0f;
-		return true;
-	} else if ( rName.match( "terrain_alignment" ) ) {
-		rProperty = TERRAIN_ALIGNMENT_UPRIGHT;
-		return true;
-	} else if ( rName.match( "last_lod" ) ) {
+	} else if ( rName.match( "last_lod" ) || rName.match( "last_shadow_lod" ) ) {
 		rProperty = MIN( getLodCount() - 1, getCategoryMaximumLodCount() - 1 );
-		return true;
-	} else if ( rName.match( "last_shadow_lod" ) ) {
-		rProperty = MIN( getLodCount() - 1, getCategoryMaximumLodCount() - 1 );
-		return true;
-	} else if ( rName.match( "density" ) ) {
-		rProperty = 10.f;
-		return true;
-	} else if ( rName.match( "generated_type" ) ) {
-		rProperty = TYPE_TEXTURE_CARD;
 		return true;
 	} else if ( m_generatedType > TYPE_NONE ) {
 		if ( rName.match( "height_offset" ) ) {
@@ -1366,9 +1370,7 @@ void Terrain3DMeshAsset::setInstanceOcclusionProxyMesh( const Ref<ArrayMesh> &rM
 	m_nInstanceOcclusionProxyTriangleCount = 0u;
 	m_bInstanceOcclusionProxyDerived = false;
 	m_bInstanceProxyImportedOccluder = false;
-	if ( ++m_nInstanceOcclusionProxyGeneration == 0u ) {
-		m_nInstanceOcclusionProxyGeneration = 1u;
-	}
+	m_nInstanceOcclusionProxyGeneration = t3dNextGeneration( m_nInstanceOcclusionProxyGeneration );
 	emit_signal( "setting_changed" );
 	emit_signal( "instancer_setting_changed", m_nId );
 	emit_changed();
@@ -1430,19 +1432,12 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_NONE );
 	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_BOX );
 	BIND_ENUM_CONSTANT( INSTANCE_OCCLUSION_EXPLICIT_MESH );
-	ClassDB::bind_method( D_METHOD( "set_instance_category", "category" ), &Terrain3DMeshAsset::setInstanceCategory );
-	ClassDB::bind_method( D_METHOD( "get_instance_category" ), &Terrain3DMeshAsset::getInstanceCategory );
 	ClassDB::bind_method( D_METHOD( "get_category_maximum_lod_count" ), &Terrain3DMeshAsset::getCategoryMaximumLodCount );
 	ClassDB::bind_method( D_METHOD( "is_individually_editable" ), &Terrain3DMeshAsset::isIndividuallyEditable );
 	ClassDB::bind_method( D_METHOD( "requires_instance_physics" ), &Terrain3DMeshAsset::requiresInstancePhysics );
 	ClassDB::bind_method( D_METHOD( "uses_instance_occlusion" ), &Terrain3DMeshAsset::usesInstanceOcclusion );
 	ClassDB::bind_method( D_METHOD( "uses_full_instance_occlusion" ), &Terrain3DMeshAsset::usesFullInstanceOcclusion );
-	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_policy", "policy" ), &Terrain3DMeshAsset::setInstanceOcclusionPolicy );
-	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_policy" ), &Terrain3DMeshAsset::getInstanceOcclusionPolicy );
-	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_box", "box" ), &Terrain3DMeshAsset::setInstanceOcclusionBox );
-	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_box" ), &Terrain3DMeshAsset::getInstanceOcclusionBox );
-	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_proxy_mesh", "mesh" ), &Terrain3DMeshAsset::setInstanceOcclusionProxyMesh );
-	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_proxy_mesh" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyMesh );
+
 	ClassDB::bind_method( D_METHOD( "has_instance_collision_proxy" ), &Terrain3DMeshAsset::hasInstanceCollisionProxy );
 	ClassDB::bind_method( D_METHOD( "has_instance_occlusion_proxy" ), &Terrain3DMeshAsset::hasInstanceOcclusionProxy );
 	ClassDB::bind_method( D_METHOD( "has_mesh_derived_instance_proxy" ), &Terrain3DMeshAsset::hasMeshDerivedInstanceProxy );
@@ -1459,15 +1454,9 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_proxy_generation" ), &Terrain3DMeshAsset::getInstanceOcclusionProxyGeneration );
 	ClassDB::bind_method( D_METHOD( "get_instance_proxy_vertex_count" ), &Terrain3DMeshAsset::getInstanceProxyVertexCount );
 	ClassDB::bind_method( D_METHOD( "get_instance_proxy_triangle_count" ), &Terrain3DMeshAsset::getInstanceProxyTriangleCount );
-	ClassDB::bind_method( D_METHOD( "set_instance_occlusion_range", "distance" ), &Terrain3DMeshAsset::setInstanceOcclusionRange );
-	ClassDB::bind_method( D_METHOD( "get_instance_occlusion_range" ), &Terrain3DMeshAsset::getInstanceOcclusionRange );
-	ClassDB::bind_method( D_METHOD( "set_terrain_alignment", "alignment" ), &Terrain3DMeshAsset::setTerrainAlignment );
-	ClassDB::bind_method( D_METHOD( "get_terrain_alignment" ), &Terrain3DMeshAsset::getTerrainAlignment );
+
 	ClassDB::bind_method( D_METHOD( "aligns_to_terrain_normal" ), &Terrain3DMeshAsset::alignsToTerrainNormal );
-	ClassDB::bind_method( D_METHOD( "set_hlod_contribution", "mode" ), &Terrain3DMeshAsset::setHlodContribution );
-	ClassDB::bind_method( D_METHOD( "get_hlod_contribution" ), &Terrain3DMeshAsset::getHlodContribution );
-	ClassDB::bind_method( D_METHOD( "set_hlod_min_level", "level" ), &Terrain3DMeshAsset::setHlodMinLevel );
-	ClassDB::bind_method( D_METHOD( "get_hlod_min_level" ), &Terrain3DMeshAsset::getHlodMinLevel );
+
 	ClassDB::bind_method( D_METHOD( "is_hlod_eligible" ), &Terrain3DMeshAsset::isHlodEligible );
 	BIND_ENUM_CONSTANT( TYPE_NONE );
 	BIND_ENUM_CONSTANT( TYPE_TEXTURE_CARD );
@@ -1481,208 +1470,113 @@ void Terrain3DMeshAsset::_bind_methods( void ) {
 	ADD_SIGNAL( MethodInfo( "instance_count_changed" ) );
 
 	ClassDB::bind_method( D_METHOD( "clear" ), &Terrain3DMeshAsset::clear );
-	ClassDB::bind_method( D_METHOD( "set_name", "name" ), &Terrain3DMeshAsset::setName );
-	ClassDB::bind_method( D_METHOD( "get_name" ), &Terrain3DMeshAsset::getName );
-	ClassDB::bind_method( D_METHOD( "set_id", "id" ), &Terrain3DMeshAsset::setId );
-	ClassDB::bind_method( D_METHOD( "get_id" ), &Terrain3DMeshAsset::getId );
+
 	ClassDB::bind_method( D_METHOD( "set_highlighted", "enabled" ), &Terrain3DMeshAsset::setHighlighted );
 	ClassDB::bind_method( D_METHOD( "is_highlighted" ), &Terrain3DMeshAsset::isHighlighted );
 	ClassDB::bind_method( D_METHOD( "get_highlight_color" ), &Terrain3DMeshAsset::getHighlightColor );
 	ClassDB::bind_method( D_METHOD( "get_thumbnail" ), &Terrain3DMeshAsset::getThumbnail );
 
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DMeshAsset::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DMeshAsset::isEnabled );
-
-	ClassDB::bind_method( D_METHOD( "set_scene_file", "scene_file" ), &Terrain3DMeshAsset::setSceneFile );
-	ClassDB::bind_method( D_METHOD( "get_scene_file" ), &Terrain3DMeshAsset::getSceneFile );
-	ClassDB::bind_method( D_METHOD( "set_generated_type", "type" ), &Terrain3DMeshAsset::setGeneratedType );
-	ClassDB::bind_method( D_METHOD( "get_generated_type" ), &Terrain3DMeshAsset::getGeneratedType );
 	ClassDB::bind_method( D_METHOD( "get_mesh", "lod" ), &Terrain3DMeshAsset::getMesh, DEFVAL( 0 ) );
-	ClassDB::bind_method( D_METHOD( "set_height_offset", "offset" ), &Terrain3DMeshAsset::setHeightOffset );
-	ClassDB::bind_method( D_METHOD( "get_height_offset" ), &Terrain3DMeshAsset::getHeightOffset );
-	ClassDB::bind_method( D_METHOD( "set_density", "density" ), &Terrain3DMeshAsset::setDensity );
-	ClassDB::bind_method( D_METHOD( "get_density" ), &Terrain3DMeshAsset::getDensity );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "mode" ), &Terrain3DMeshAsset::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "get_cast_shadows" ), &Terrain3DMeshAsset::getCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_visibility_layers", "layers" ), &Terrain3DMeshAsset::setVisibilityLayers );
-	ClassDB::bind_method( D_METHOD( "get_visibility_layers" ), &Terrain3DMeshAsset::getVisibilityLayers );
-	ClassDB::bind_method( D_METHOD( "set_material_override", "material" ), &Terrain3DMeshAsset::setMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "get_material_override" ), &Terrain3DMeshAsset::getMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "set_material_overlay", "material" ), &Terrain3DMeshAsset::setMaterialOverlay );
-	ClassDB::bind_method( D_METHOD( "get_material_overlay" ), &Terrain3DMeshAsset::getMaterialOverlay );
-	ClassDB::bind_method( D_METHOD( "set_rendering_material_override", "material" ), &Terrain3DMeshAsset::setRenderingMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "get_rendering_material_override" ), &Terrain3DMeshAsset::getRenderingMaterialOverride );
-	ClassDB::bind_method( D_METHOD( "set_rendering_material_overlay", "material" ), &Terrain3DMeshAsset::setRenderingMaterialOverlay );
-	ClassDB::bind_method( D_METHOD( "get_rendering_material_overlay" ), &Terrain3DMeshAsset::getRenderingMaterialOverlay );
-	ClassDB::bind_method( D_METHOD( "set_surface_rendering_materials", "materials" ), &Terrain3DMeshAsset::setSurfaceRenderingMaterials );
-	ClassDB::bind_method( D_METHOD( "get_surface_rendering_materials" ), &Terrain3DMeshAsset::getSurfaceRenderingMaterials );
-
-	ClassDB::bind_method( D_METHOD( "set_generated_faces", "count" ), &Terrain3DMeshAsset::setGeneratedFaces );
-	ClassDB::bind_method( D_METHOD( "get_generated_faces" ), &Terrain3DMeshAsset::getGeneratedFaces );
-	ClassDB::bind_method( D_METHOD( "set_generated_size", "size" ), &Terrain3DMeshAsset::setGeneratedSize );
-	ClassDB::bind_method( D_METHOD( "get_generated_size" ), &Terrain3DMeshAsset::getGeneratedSize );
 
 	ClassDB::bind_method( D_METHOD( "get_lod_count" ), &Terrain3DMeshAsset::getLodCount );
-	ClassDB::bind_method( D_METHOD( "set_last_lod", "lod" ), &Terrain3DMeshAsset::setLastLod );
-	ClassDB::bind_method( D_METHOD( "get_last_lod" ), &Terrain3DMeshAsset::getLastLod );
-	ClassDB::bind_method( D_METHOD( "set_last_shadow_lod", "lod" ), &Terrain3DMeshAsset::setLastShadowLod );
-	ClassDB::bind_method( D_METHOD( "get_last_shadow_lod" ), &Terrain3DMeshAsset::getLastShadowLod );
-	ClassDB::bind_method( D_METHOD( "set_shadow_impostor", "lod" ), &Terrain3DMeshAsset::setShadowImpostor );
-	ClassDB::bind_method( D_METHOD( "get_shadow_impostor" ), &Terrain3DMeshAsset::getShadowImpostor );
 
 	ClassDB::bind_method( D_METHOD( "set_lod_range", "lod", "distance" ), &Terrain3DMeshAsset::setLodRange );
 	ClassDB::bind_method( D_METHOD( "get_lod_range", "lod" ), &Terrain3DMeshAsset::getLodRange );
-	ClassDB::bind_method( D_METHOD( "set_lod0_range", "distance" ), &Terrain3DMeshAsset::setLod0Range );
-	ClassDB::bind_method( D_METHOD( "get_lod0_range" ), &Terrain3DMeshAsset::getLod0Range );
-	ClassDB::bind_method( D_METHOD( "set_lod1_range", "distance" ), &Terrain3DMeshAsset::setLod1Range );
-	ClassDB::bind_method( D_METHOD( "get_lod1_range" ), &Terrain3DMeshAsset::getLod1Range );
-	ClassDB::bind_method( D_METHOD( "set_lod2_range", "distance" ), &Terrain3DMeshAsset::setLod2Range );
-	ClassDB::bind_method( D_METHOD( "get_lod2_range" ), &Terrain3DMeshAsset::getLod2Range );
-	ClassDB::bind_method( D_METHOD( "set_lod3_range", "distance" ), &Terrain3DMeshAsset::setLod3Range );
-	ClassDB::bind_method( D_METHOD( "get_lod3_range" ), &Terrain3DMeshAsset::getLod3Range );
-	ClassDB::bind_method( D_METHOD( "set_lod4_range", "distance" ), &Terrain3DMeshAsset::setLod4Range );
-	ClassDB::bind_method( D_METHOD( "get_lod4_range" ), &Terrain3DMeshAsset::getLod4Range );
-	ClassDB::bind_method( D_METHOD( "set_lod5_range", "distance" ), &Terrain3DMeshAsset::setLod5Range );
-	ClassDB::bind_method( D_METHOD( "get_lod5_range" ), &Terrain3DMeshAsset::getLod5Range );
-	ClassDB::bind_method( D_METHOD( "set_lod6_range", "distance" ), &Terrain3DMeshAsset::setLod6Range );
-	ClassDB::bind_method( D_METHOD( "get_lod6_range" ), &Terrain3DMeshAsset::getLod6Range );
-	ClassDB::bind_method( D_METHOD( "set_lod7_range", "distance" ), &Terrain3DMeshAsset::setLod7Range );
-	ClassDB::bind_method( D_METHOD( "get_lod7_range" ), &Terrain3DMeshAsset::getLod7Range );
-	ClassDB::bind_method( D_METHOD( "set_lod8_range", "distance" ), &Terrain3DMeshAsset::setLod8Range );
-	ClassDB::bind_method( D_METHOD( "get_lod8_range" ), &Terrain3DMeshAsset::getLod8Range );
-	ClassDB::bind_method( D_METHOD( "set_lod9_range", "distance" ), &Terrain3DMeshAsset::setLod9Range );
-	ClassDB::bind_method( D_METHOD( "get_lod9_range" ), &Terrain3DMeshAsset::getLod9Range );
-	ClassDB::bind_method( D_METHOD( "set_fade_margin", "distance" ), &Terrain3DMeshAsset::setFadeMargin );
-	ClassDB::bind_method( D_METHOD( "get_fade_margin" ), &Terrain3DMeshAsset::getFadeMargin );
 
 	ClassDB::bind_method( D_METHOD( "get_instance_count" ), &Terrain3DMeshAsset::getInstanceCount );
 
 	ADD_GROUP( "Instance Policy", "instance_" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "instance_category", PROPERTY_HINT_ENUM, "Clutter,Ground Cover,Occluder" ),
-	        "set_instance_category",
-	        "get_instance_category" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "instance_occlusion_policy", PROPERTY_HINT_ENUM, "None,Box,Explicit Mesh" ),
-	        "set_instance_occlusion_policy",
-	        "get_instance_occlusion_policy" );
-	ADD_PROPERTY( PropertyInfo( Variant::AABB, "instance_occlusion_box" ), "set_instance_occlusion_box", "get_instance_occlusion_box" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "instance_occlusion_proxy_mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ),
-	        "set_instance_occlusion_proxy_mesh",
-	        "get_instance_occlusion_proxy_mesh" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "instance_occlusion_range", PROPERTY_HINT_RANGE, "0,16384,1,or_greater" ),
-	        "set_instance_occlusion_range",
-	        "get_instance_occlusion_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setInstanceCategory, getInstanceCategory, "category",
+	                   PropertyInfo( Variant::INT, "instance_category", PROPERTY_HINT_ENUM, "Clutter,Ground Cover,Occluder" ), "set_instance_category", "get_instance_category" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setInstanceOcclusionPolicy, getInstanceOcclusionPolicy, "policy",
+	                   PropertyInfo( Variant::INT, "instance_occlusion_policy", PROPERTY_HINT_ENUM, "None,Box,Explicit Mesh" ), "set_instance_occlusion_policy", "get_instance_occlusion_policy" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setInstanceOcclusionBox, getInstanceOcclusionBox, "box",
+	                   PropertyInfo( Variant::AABB, "instance_occlusion_box" ), "set_instance_occlusion_box", "get_instance_occlusion_box" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setInstanceOcclusionProxyMesh, getInstanceOcclusionProxyMesh, "mesh",
+	                   PropertyInfo( Variant::OBJECT, "instance_occlusion_proxy_mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ), "set_instance_occlusion_proxy_mesh", "get_instance_occlusion_proxy_mesh" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setInstanceOcclusionRange, getInstanceOcclusionRange, "distance",
+	                   PropertyInfo( Variant::FLOAT, "instance_occlusion_range", PROPERTY_HINT_RANGE, "0,16384,1,or_greater" ), "set_instance_occlusion_range", "get_instance_occlusion_range" );
 
 	ADD_GROUP( "HLOD", "hlod_" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ),
-	        "set_hlod_contribution",
-	        "get_hlod_contribution" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_min_level", "get_hlod_min_level" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setHlodContribution, getHlodContribution, "mode",
+	                   PropertyInfo( Variant::INT, "hlod_contribution", PROPERTY_HINT_ENUM, "Auto,Include,Exclude" ), "set_hlod_contribution", "get_hlod_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setHlodMinLevel, getHlodMinLevel, "level",
+	                   PropertyInfo( Variant::INT, "hlod_min_level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_hlod_min_level", "get_hlod_min_level" );
 
 	ADD_GROUP( "General", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "id", PROPERTY_HINT_NONE ), "set_id", "get_id" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled", PROPERTY_HINT_NONE ), "set_enabled", "is_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setName, getName, "name",
+	                   PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ), "set_name", "get_name" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setId, getId, "id",
+	                   PropertyInfo( Variant::INT, "id", PROPERTY_HINT_NONE ), "set_id", "get_id" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setEnabled, isEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "enabled", PROPERTY_HINT_NONE ), "set_enabled", "is_enabled" );
 
 	ADD_GROUP( "Source / Placement", "" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::OBJECT, "scene_file", PROPERTY_HINT_RESOURCE_TYPE, "PackedScene" ), "set_scene_file", "get_scene_file" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ),
-	        "set_generated_type",
-	        "get_generated_type" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_alignment", PROPERTY_HINT_ENUM, "Upright,Align To Terrain Normal" ),
-	        "set_terrain_alignment",
-	        "get_terrain_alignment" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "height_offset", PROPERTY_HINT_RANGE, "-20.0,20.0,.005" ),
-	        "set_height_offset",
-	        "get_height_offset" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ), "set_density", "get_density" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setSceneFile, getSceneFile, "scene_file",
+	                   PropertyInfo( Variant::OBJECT, "scene_file", PROPERTY_HINT_RESOURCE_TYPE, "PackedScene" ), "set_scene_file", "get_scene_file" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setGeneratedType, getGeneratedType, "type",
+	                   PropertyInfo( Variant::INT, "generated_type", PROPERTY_HINT_ENUM, "None,Texture Card", PROPERTY_USAGE_STORAGE ), "set_generated_type", "get_generated_type" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setTerrainAlignment, getTerrainAlignment, "alignment",
+	                   PropertyInfo( Variant::INT, "terrain_alignment", PROPERTY_HINT_ENUM, "Upright,Align To Terrain Normal" ), "set_terrain_alignment", "get_terrain_alignment" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setHeightOffset, getHeightOffset, "offset",
+	                   PropertyInfo( Variant::FLOAT, "height_offset", PROPERTY_HINT_RANGE, "-20.0,20.0,.005" ), "set_height_offset", "get_height_offset" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setDensity, getDensity, "density",
+	                   PropertyInfo( Variant::FLOAT, "density", PROPERTY_HINT_RANGE, ".01,10.0,.005" ), "set_density", "get_density" );
 
 	ADD_GROUP( "Rendering", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ),
-	        "set_cast_shadows",
-	        "get_cast_shadows" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "visibility_layers", PROPERTY_HINT_LAYERS_3D_RENDER ),
-	        "set_visibility_layers",
-	        "get_visibility_layers" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "rendering_material_override", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ),
-	        "set_rendering_material_override",
-	        "get_rendering_material_override" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "rendering_material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ),
-	        "set_rendering_material_overlay",
-	        "get_rendering_material_overlay" );
-	ADD_PROPERTY( PropertyInfo( Variant::ARRAY,
-	                      "surface_rendering_materials",
-	                      PROPERTY_HINT_ARRAY_TYPE,
-	                      "Terrain3DRenderingMaterial",
-	                      PROPERTY_USAGE_STORAGE ),
-	        "set_surface_rendering_materials",
-	        "get_surface_rendering_materials" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-	                      "material_override",
-	                      PROPERTY_HINT_RESOURCE_TYPE,
-	                      "BaseMaterial3D,ShaderMaterial",
-	                      PROPERTY_USAGE_STORAGE ),
-	        "set_material_override",
-	        "get_material_override" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-	                      "material_overlay",
-	                      PROPERTY_HINT_RESOURCE_TYPE,
-	                      "BaseMaterial3D,ShaderMaterial",
-	                      PROPERTY_USAGE_STORAGE ),
-	        "set_material_overlay",
-	        "get_material_overlay" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setCastShadows, getCastShadows, "mode",
+	                   PropertyInfo( Variant::INT, "cast_shadows", PROPERTY_HINT_ENUM, "Off,On,Double-Sided,Shadows Only" ), "set_cast_shadows", "get_cast_shadows" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setVisibilityLayers, getVisibilityLayers, "layers",
+	                   PropertyInfo( Variant::INT, "visibility_layers", PROPERTY_HINT_LAYERS_3D_RENDER ), "set_visibility_layers", "get_visibility_layers" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setRenderingMaterialOverride, getRenderingMaterialOverride, "material",
+	                   PropertyInfo( Variant::OBJECT, "rendering_material_override", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ), "set_rendering_material_override", "get_rendering_material_override" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setRenderingMaterialOverlay, getRenderingMaterialOverlay, "material",
+	                   PropertyInfo( Variant::OBJECT, "rendering_material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DRenderingMaterial" ), "set_rendering_material_overlay", "get_rendering_material_overlay" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setSurfaceRenderingMaterials, getSurfaceRenderingMaterials, "materials",
+	                   PropertyInfo( Variant::ARRAY, "surface_rendering_materials", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DRenderingMaterial", PROPERTY_USAGE_STORAGE ), "set_surface_rendering_materials", "get_surface_rendering_materials" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMaterialOverride, getMaterialOverride, "material",
+	                   PropertyInfo( Variant::OBJECT, "material_override", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_STORAGE ), "set_material_override", "get_material_override" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMaterialOverlay, getMaterialOverlay, "material",
+	                   PropertyInfo( Variant::OBJECT, "material_overlay", PROPERTY_HINT_RESOURCE_TYPE, "BaseMaterial3D,ShaderMaterial", PROPERTY_USAGE_STORAGE ), "set_material_overlay", "get_material_overlay" );
 
 	ADD_GROUP( "Generated Mesh", "" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "generated_faces", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
-	        "set_generated_faces",
-	        "get_generated_faces" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::VECTOR2, "generated_size", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ),
-	        "set_generated_size",
-	        "get_generated_size" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setGeneratedFaces, getGeneratedFaces, "count",
+	                   PropertyInfo( Variant::INT, "generated_faces", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ), "set_generated_faces", "get_generated_faces" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setGeneratedSize, getGeneratedSize, "size",
+	                   PropertyInfo( Variant::VECTOR2, "generated_size", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_READ_ONLY ), "set_generated_size", "get_generated_size" );
 
 	ADD_GROUP( "LODs", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::INT, "lod_count", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 	        "",
 	        "get_lod_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_lod", PROPERTY_HINT_NONE ), "set_last_lod", "get_last_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ), "set_last_shadow_lod", "get_last_shadow_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ), "set_shadow_impostor", "get_shadow_impostor" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod0_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod0_range",
-	        "get_lod0_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod1_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod1_range",
-	        "get_lod1_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod2_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod2_range",
-	        "get_lod2_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod3_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod3_range",
-	        "get_lod3_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod4_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod4_range",
-	        "get_lod4_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod5_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod5_range",
-	        "get_lod5_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod6_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod6_range",
-	        "get_lod6_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod7_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod7_range",
-	        "get_lod7_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod8_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod8_range",
-	        "get_lod8_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "lod9_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ),
-	        "set_lod9_range",
-	        "get_lod9_range" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "fade_margin", PROPERTY_HINT_RANGE, "0.,64.0,.05,or_greater" ),
-	        "set_fade_margin",
-	        "get_fade_margin" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLastLod, getLastLod, "lod",
+	                   PropertyInfo( Variant::INT, "last_lod", PROPERTY_HINT_NONE ), "set_last_lod", "get_last_lod" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLastShadowLod, getLastShadowLod, "lod",
+	                   PropertyInfo( Variant::INT, "last_shadow_lod", PROPERTY_HINT_NONE ), "set_last_shadow_lod", "get_last_shadow_lod" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setShadowImpostor, getShadowImpostor, "lod",
+	                   PropertyInfo( Variant::INT, "shadow_impostor", PROPERTY_HINT_NONE ), "set_shadow_impostor", "get_shadow_impostor" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod0Range, getLod0Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod0_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod0_range", "get_lod0_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod1Range, getLod1Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod1_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod1_range", "get_lod1_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod2Range, getLod2Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod2_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod2_range", "get_lod2_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod3Range, getLod3Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod3_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod3_range", "get_lod3_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod4Range, getLod4Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod4_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod4_range", "get_lod4_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod5Range, getLod5Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod5_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod5_range", "get_lod5_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod6Range, getLod6Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod6_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod6_range", "get_lod6_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod7Range, getLod7Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod7_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod7_range", "get_lod7_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod8Range, getLod8Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod8_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod8_range", "get_lod8_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setLod9Range, getLod9Range, "distance",
+	                   PropertyInfo( Variant::FLOAT, "lod9_range", PROPERTY_HINT_RANGE, "0.,4096.0,.05,or_greater" ), "set_lod9_range", "get_lod9_range" );
+	T3D_BIND_PROPERTY( Terrain3DMeshAsset, setFadeMargin, getFadeMargin, "distance",
+	                   PropertyInfo( Variant::FLOAT, "fade_margin", PROPERTY_HINT_RANGE, "0.,64.0,.05,or_greater" ), "set_fade_margin", "get_fade_margin" );
 }
 
 // M39 extracted non-template header implementations.

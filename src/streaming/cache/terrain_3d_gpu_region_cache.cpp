@@ -1,5 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "diagnostics/core/terrain_3d_diagnostics.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency_primitives.h"
 #include "streaming/cache/terrain_3d_gpu_region_cache.h"
@@ -36,15 +38,8 @@
 static_assert( T3D_GPU_CACHE_MAX_LAYERS <= ( int )( T3D_TRACKED_BATCH_SLOT_COUNT ) );
 static_assert( T3D_TRACKED_BATCH_UPDATE_COUNT >= 6u );
 
-
-
-
-
-
-
-
-
-static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
+static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault )
+{
 	if ( !pMaterial ) {
 		return nDefault;
 	}
@@ -55,8 +50,6 @@ static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, cons
 EA_FORCE_INLINE static size_t t3dGpuRegionCacheGpuImageBytes( const Ref<Image> &rImage ) {
 	return rImage.is_valid() ? ( size_t )( rImage->get_data().size() ) : 0u;
 }
-
-
 
 Terrain3DGpuRegionCache::Terrain3DGpuRegionCache( Terrain3DRegionRepository &rRepository,
         Terrain3DSamplingStorage &rSamplingStorage,
@@ -148,8 +141,6 @@ bool Terrain3DGpuRegionCache::refreshMiddleCompositeSources( const uint64_t nMat
 	}
 	return true;
 }
-
-
 
 Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage(
         const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor, const int nScratchSlot ) {
@@ -569,10 +560,7 @@ bool Terrain3DGpuRegionCache::validatePublishedMappings( void ) const {
 
 void Terrain3DGpuRegionCache::notePageTableChanged( void ) {
 	m_bPageTableChangedThisTick = true;
-	++m_nPhysicalPageTableGeneration;
-	if ( m_nPhysicalPageTableGeneration == 0u ) {
-		m_nPhysicalPageTableGeneration = 1u;
-	}
+	m_nPhysicalPageTableGeneration = t3dNextGeneration( m_nPhysicalPageTableGeneration );
 #if defined( TOOLS_ENABLED ) || defined( DEBUG_ENABLED )
 	if ( !validatePublishedMappings() ) {
 		LOG( ERROR, "GPU physical page table ownership invariant failed" );
@@ -2119,6 +2107,7 @@ t3dGpuRegionCacheStats_t Terrain3DGpuRegionCache::getStats( void ) const {
 
 Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) const {
 	Dictionary stats;
+	t3dAppendRegionCacheActivity( stats, m_nGpuRegionResidentCount, m_nGpuRegionDesiredLastTick, m_nGpuRegionEvictionsLastTick );
 	const t3dRuntimePageStats_t runtime = m_runtimePageStore.getStats();
 	stats["enabled"] = m_bGpuRegionCacheEnabled;
 	stats["budget_bytes"] = ( int64_t )( m_nGpuRegionCacheBudgetBytes );
@@ -2148,12 +2137,10 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["spare_layers"] = m_nGpuRegionSpareLayerCount;
 	stats["retired_layers"] = m_nGpuRegionRetiredCount;
 	stats["retire_frames"] = m_nGpuRegionRetireFrames;
-	stats["resident"] = m_nGpuRegionResidentCount;
-	stats["republish_pending"] = m_nGpuRegionRepublishPendingCount;
+	stats[ "republish_pending" ] = m_nGpuRegionRepublishPendingCount;
 	stats["requested_pages"] = m_nGpuRegionRequestedPages;
 	stats["required_radius_regions"] = m_nGpuRegionRequiredRadius;
-	stats["desired_last_tick"] = m_nGpuRegionDesiredLastTick;
-	stats["required_last_tick"] = m_nGpuRegionRequiredLastTick;
+	stats[ "required_last_tick" ] = m_nGpuRegionRequiredLastTick;
 	stats["guard_last_tick"] = m_nGpuRegionGuardLastTick;
 	stats["prefetch_last_tick"] = m_nGpuRegionPrefetchLastTick;
 	stats["hysteresis_last_tick"] = m_nGpuRegionHysteresisLastTick;
@@ -2164,8 +2151,7 @@ Dictionary Terrain3DGpuRegionCache::getStatsDictionary( const bool bDetailed ) c
 	stats["effective_upload_limit_last_tick"] = m_nGpuRegionEffectiveUploadLimitLastTick;
 	stats["uploads_last_tick"] = m_nGpuRegionUploadsLastTick;
 	stats["uploads_since_reset"] = ( int64_t )( m_nGpuRegionUploadsSinceReset );
-	stats["evictions_last_tick"] = m_nGpuRegionEvictionsLastTick;
-	stats["cooked_hits_last_tick"] = m_nGpuRegionCookedHitsLastTick;
+	stats[ "cooked_hits_last_tick" ] = m_nGpuRegionCookedHitsLastTick;
 	stats["cooked_misses_last_tick"] = m_nGpuRegionCookedMissesLastTick;
 	stats["runtime_prepares_last_tick"] = m_nGpuRegionRuntimePreparesLastTick;
 	stats["page_table_updates_last_tick"] = m_nGpuRegionPageTableUpdatesLastTick;

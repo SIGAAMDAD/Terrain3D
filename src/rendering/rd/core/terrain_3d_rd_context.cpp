@@ -861,6 +861,7 @@ void Terrain3DRdContext::endResourceRebuild( void ) {
 void Terrain3DRdContext::beginFrame( const uint64_t nGpuFrameId, const uint64_t nSnapshotGeneration ) {
 	m_nGpuFrameId.store( nGpuFrameId, T3D_MEMORY_ORDER_RELEASE );
 	m_nSnapshotGeneration.store( nSnapshotGeneration, T3D_MEMORY_ORDER_RELEASE );
+	if (!m_renderTelemetry.beginFrame(nGpuFrameId)) { return; }
 	m_nFrameBufferUpdates.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	m_nFrameBytesUploaded.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 }
@@ -868,6 +869,7 @@ void Terrain3DRdContext::beginFrame( const uint64_t nGpuFrameId, const uint64_t 
 void Terrain3DRdContext::recordBufferUpdate( const uint64_t nBytes,
         const t3dRdResourceOwner_t owner,
         const Terrain3DGpuBufferPolicy policy ) {
+	if (nBytes == 0u) { return; }
 	m_nBufferUpdates.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	m_nBytesUploaded.fetch_add( nBytes, T3D_MEMORY_ORDER_RELAXED );
 	m_nFrameBufferUpdates.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
@@ -876,6 +878,51 @@ void Terrain3DRdContext::recordBufferUpdate( const uint64_t nBytes,
 	if ( policy == T3D_GPU_DIRTY_UPLOAD && nBytes > 0u ) {
 		m_renderTelemetry.recordDirtyRangeUploaded( owner );
 	}
+}
+
+void Terrain3DRdContext::recordTextureUpload(const uint64_t nBytes, const t3dRdResourceOwner_t owner,
+        const Terrain3DGpuBufferPolicy policy) {
+	if (nBytes == 0u) { return; }
+	m_nTextureUploads.fetch_add(1u, T3D_MEMORY_ORDER_RELAXED);
+	m_nTextureBytesUploaded.fetch_add(nBytes, T3D_MEMORY_ORDER_RELAXED);
+	m_renderTelemetry.recordUpload(owner, policy, nBytes);
+}
+
+Dictionary Terrain3DRdContext::getGpuUploadDiagnostics(void) const {
+	// Atomic CPU counters only: polling this must never synchronize the GPU.
+	Dictionary result, current, completed;
+	static const char *const policies[T3D_GPU_POLICY_COUNT] = {
+		"publication", "dirty_upload", "hot_frame", "scratch", "history", "indirect", "neutral"
+	};
+	uint64_t bytes = 0u, calls = 0u, previous_bytes = 0u, previous_calls = 0u;
+	for (uint32_t owner = 0; owner < T3D_RD_CONTEXT_OWNER_COUNT; ++owner) {
+		for (uint32_t policy = 0; policy < T3D_GPU_POLICY_COUNT; ++policy) {
+			const uint64_t frame_bytes = m_renderTelemetry.getFrameUploadBytes(owner, policy);
+			const uint64_t frame_calls = m_renderTelemetry.getFrameUploadCalls(owner, policy);
+			const uint64_t last_bytes = m_renderTelemetry.getFrameUploadBytes(owner, policy, true);
+			const uint64_t last_calls = m_renderTelemetry.getFrameUploadCalls(owner, policy, true);
+			bytes += frame_bytes; calls += frame_calls;
+			previous_bytes += last_bytes; previous_calls += last_calls;
+			const String key = String(s_owner_keys[owner]) + String("_") + String(policies[policy]);
+			if (frame_calls) { current[key + String("_bytes")] = (int64_t)frame_bytes; current[key + String("_calls")] = (int64_t)frame_calls; }
+			if (last_calls) { completed[key + String("_bytes")] = (int64_t)last_bytes; completed[key + String("_calls")] = (int64_t)last_calls; }
+		}
+	}
+	result["gpu_frame_id"] = (int64_t)m_nGpuFrameId.load(T3D_MEMORY_ORDER_ACQUIRE);
+	result["completed_frame_id"] = (int64_t)m_renderTelemetry.getCompletedFrameId();
+	result["bytes_uploaded_frame"] = (int64_t)bytes;
+	result["upload_calls_frame"] = (int64_t)calls;
+	result["bytes_uploaded_completed_frame"] = (int64_t)previous_bytes;
+	result["upload_calls_completed_frame"] = (int64_t)previous_calls;
+	result["peak_completed_frame_bytes"] = (int64_t)m_renderTelemetry.getPeakFrameBytes();
+	result["buffer_upload_bytes"] = (int64_t)m_nBytesUploaded.load(T3D_MEMORY_ORDER_ACQUIRE);
+	result["texture_upload_bytes"] = (int64_t)m_nTextureBytesUploaded.load(T3D_MEMORY_ORDER_ACQUIRE);
+	result["texture_upload_calls"] = (int64_t)m_nTextureUploads.load(T3D_MEMORY_ORDER_ACQUIRE);
+	result["bytes_uploaded"] = (int64_t)(m_nBytesUploaded.load(T3D_MEMORY_ORDER_ACQUIRE) + m_nTextureBytesUploaded.load(T3D_MEMORY_ORDER_ACQUIRE));
+	result["frame_by_owner_and_policy"] = current;
+	result["completed_frame_by_owner_and_policy"] = completed;
+	result["scope"] = "shared RenderingDevice; successful host uploads; excludes GPU copies/readbacks";
+	return result;
 }
 
 void Terrain3DRdContext::recordRenderEvent( const t3dRdResourceOwner_t owner, const t3dRenderTelemetryEvent_t event ) {
@@ -958,6 +1005,7 @@ Dictionary Terrain3DRdContext::getDiagnostics( void ) const {
 	result["bytes_uploaded"] = ( int64_t )( m_nBytesUploaded.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["buffer_updates_frame"] = ( int64_t )( m_nFrameBufferUpdates.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["bytes_uploaded_frame"] = ( int64_t )( m_nFrameBytesUploaded.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	result["gpu_uploads"] = getGpuUploadDiagnostics();
 	result["gpu_frame_id"] = ( int64_t )( m_nGpuFrameId.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["snapshot_generation"] = ( int64_t )( m_nSnapshotGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ) );
 	result["last_successful_gpu_frame"] = ( int64_t )( m_nLastSuccessfulGpuFrame.load( T3D_MEMORY_ORDER_ACQUIRE ) );

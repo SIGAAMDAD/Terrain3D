@@ -6,7 +6,7 @@
 #include "Terrain3DConstants.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "core/utility/terrain_3d_util.h"
-#include "core/utility/terrain_3d_byte_access.h"
+#include "core/utility/terrain_3d_binary_io.h"
 
 #include <float.h>
 #include <math.h>

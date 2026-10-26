@@ -489,8 +489,6 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	if _instance_edit_mode:
 		return _handle_instance_edit_input(p_event, camera_pos, camera_dir)
 
-	ui.update_decal()
-
 	# If region tool, grab mouse position without considering height
 	if editor.get_tool() == Terrain3DEditor.REGION:
 		var t: float = -Vector3(0, 1, 0).dot(camera_pos) / Vector3(0, 1, 0).dot(camera_dir)
@@ -501,6 +499,8 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 		if intersection_point.z > 3.4e38 or is_nan(intersection_point.y): # max double or nan
 			return AFTER_GUI_INPUT_PASS
 		mouse_global_position = intersection_point
+
+	ui.update_decal()
 
 	## Handle mouse movement
 	if p_event is InputEventMouseMotion:

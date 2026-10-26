@@ -2,6 +2,8 @@
 #define TERRAIN3D_RD_GPU_BUFFER_TYPES_H
 
 #include "Terrain3DTypes.h"
+#include "core/utility/terrain_3d_checked_math.h"
+#include "core/utility/terrain_3d_generation.h"
 
 #include <godot_cpp/variant/rid.hpp>
 #include <stdint.h>
@@ -32,12 +34,7 @@ static_assert( sizeof( uint32_t ) == 4u, "GPU buffer offsets must be 32-bit" );
 inline constexpr bool t3dRdGpuBufferAlignUp( const uint32_t nValue,
         const uint32_t nAlignment,
         uint32_t &rResult ) {
-	if ( nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u
-	        || nValue > UINT32_MAX - ( nAlignment - 1u ) ) {
-		return false;
-	}
-	rResult = ( nValue + nAlignment - 1u ) & ~( nAlignment - 1u );
-	return true;
+	return t3dCheckedAlignUp( nValue, nAlignment, rResult );
 }
 
 inline constexpr bool t3dRdGpuBufferGrownCapacity( const uint32_t nCurrent,
@@ -85,7 +82,7 @@ inline constexpr bool t3dRdGpuBufferReserveOffset( const uint32_t nCursor,
 }
 
 inline constexpr uint32_t t3dRdGpuBufferNextGeneration( const uint32_t nGeneration ) {
-	return nGeneration == UINT32_MAX ? 1u : nGeneration + 1u;
+	return t3dNextGeneration( nGeneration );
 }
 
 constexpr bool t3dRdGpuBufferArithmeticChecks( void ) {

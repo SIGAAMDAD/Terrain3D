@@ -40,6 +40,11 @@ bool t3d_vt_compute_resource_plan(
         const t3dWorldLimits_t &pLimits, const t3dVTGpuProfile_t &pProfile, t3dVTGpuResourcePlan_t &rPlan,
         uint32_t nActiveTailAtlasHeight = 0u );
 
+// Reduce physical residency to fit a GPU resource cap, preserving the complete
+// virtual address space and mandatory tail/table storage. Failure is transactional.
+bool t3d_vt_fit_resource_plan_to_budget(t3dWorldLimits_t &rLimits, const t3dVTGpuProfile_t &rProfile,
+        uint64_t budget_bytes, t3dVTGpuResourcePlan_t &rPlan, uint32_t active_tail_height = 0u);
+
 // Full slots include the authored mip chain and gutters, not just mip zero.
 bool t3d_vt_compute_active_tail_height_cold( const t3dVTTailMetadata_t *pTails,
         uint32_t nTailCount, uint32_t &rHeight );

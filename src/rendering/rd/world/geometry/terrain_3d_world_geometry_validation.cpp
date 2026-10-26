@@ -1,81 +1,65 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_hash_bytes.h"
 #include "rendering/rd/world/geometry/terrain_3d_world_geometry_internal.h"
 
 #include <math.h>
 #include <string.h>
-static uint64_t t3d_world_geometry_hash_byte( uint64_t pHash, uint8_t pByte ) {
-	return ( pHash ^ ( uint64_t )pByte ) * 1099511628211ull;
-}
-
-static uint64_t t3d_world_geometry_hash_u32( uint64_t pHash, uint32_t pValue ) {
-	pHash = t3d_world_geometry_hash_byte( pHash, ( uint8_t )( pValue & 0xffu ) );
-	pHash = t3d_world_geometry_hash_byte( pHash, ( uint8_t )( ( pValue >> 8u ) & 0xffu ) );
-	pHash = t3d_world_geometry_hash_byte( pHash, ( uint8_t )( ( pValue >> 16u ) & 0xffu ) );
-	pHash = t3d_world_geometry_hash_byte( pHash, ( uint8_t )( ( pValue >> 24u ) & 0xffu ) );
-	return pHash;
-}
-
-static uint64_t t3d_world_geometry_hash_u64( uint64_t pHash, uint64_t pValue ) {
-	pHash = t3d_world_geometry_hash_u32( pHash, ( uint32_t )( pValue & 0xffffffffull ) );
-	pHash = t3d_world_geometry_hash_u32( pHash, ( uint32_t )( pValue >> 32u ) );
-	return pHash;
-}
-
-static uint64_t t3d_world_geometry_hash_float( uint64_t pHash, float pValue ) {
-	return t3d_world_geometry_hash_u32( pHash, t3d_world_geometry_float_bits( pValue ) );
+static uint64_t t3d_world_geometry_hash_float( uint64_t pHash, float pValue )
+{
+	return t3dHashFnv1a64LittleU32( pHash, t3d_world_geometry_float_bits( pValue ) );
 }
 
 uint64_t t3d_world_geometry_compute_signature_reference_debug( const t3dWorldGeometryDatabase_t &pDatabase ) {
 	uint64_t nHash = 1469598103934665603ull;
-	nHash = t3d_world_geometry_hash_u32( nHash, 0x47443354u );
-	nHash = t3d_world_geometry_hash_u32( nHash, T3D_WORLD_GEOMETRY_SIGNATURE_VERSION );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nVertexCount );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nClusterVertexIndexCount );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nTriangleCount );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nMeshCount );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nLodCount );
-	nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.nClusterCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, 0x47443354u );
+	nHash = t3dHashFnv1a64LittleU32( nHash, T3D_WORLD_GEOMETRY_SIGNATURE_VERSION );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nVertexCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nClusterVertexIndexCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nTriangleCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nMeshCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nLodCount );
+	nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.nClusterCount );
 
 	for ( uint32_t i = 0u; i < pDatabase.nVertexCount; ++i ) {
 		const t3dWorldVertex_t &V = pDatabase.Buffers.pVertexHeap[i];
 		nHash = t3d_world_geometry_hash_float( nHash, V.m_fPosition[0] );
 		nHash = t3d_world_geometry_hash_float( nHash, V.m_fPosition[1] );
 		nHash = t3d_world_geometry_hash_float( nHash, V.m_fPosition[2] );
-		nHash = t3d_world_geometry_hash_u32( nHash, V.m_nPackedNormal );
-		nHash = t3d_world_geometry_hash_u32( nHash, V.m_nPackedTangent );
-		nHash = t3d_world_geometry_hash_u32( nHash, V.m_nPackedUv0 );
-		nHash = t3d_world_geometry_hash_u32( nHash, V.m_nPackedUv1 );
-		nHash = t3d_world_geometry_hash_u32( nHash, V.m_nColorRgba8 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, V.m_nPackedNormal );
+		nHash = t3dHashFnv1a64LittleU32( nHash, V.m_nPackedTangent );
+		nHash = t3dHashFnv1a64LittleU32( nHash, V.m_nPackedUv0 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, V.m_nPackedUv1 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, V.m_nColorRgba8 );
 	}
 
 	for ( uint32_t i = 0u; i < pDatabase.nClusterVertexIndexCount; ++i ) {
-		nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.Buffers.pClusterVertexIndexHeap[i] );
+		nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.Buffers.pClusterVertexIndexHeap[ i ] );
 	}
 	for ( uint32_t i = 0u; i < pDatabase.nTriangleCount; ++i ) {
-		nHash = t3d_world_geometry_hash_u32( nHash, pDatabase.Buffers.pTriangleHeap[i].nLocalIndices );
+		nHash = t3dHashFnv1a64LittleU32( nHash, pDatabase.Buffers.pTriangleHeap[ i ].nLocalIndices );
 	}
 	for ( uint32_t i = 0u; i < pDatabase.nMeshCount; ++i ) {
 		const t3dWorldMeshRecord_t &R = pDatabase.Buffers.pMeshRecords[i];
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nClusterOffset );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nClusterCount );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nLodOffset );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nLodCount );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nMaterialBase );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nFlags );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nReserved0 );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nReserved1 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nClusterOffset );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nClusterCount );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nLodOffset );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nLodCount );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nMaterialBase );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nFlags );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nReserved0 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nReserved1 );
 	}
 	for ( uint32_t i = 0u; i < pDatabase.nLodCount; ++i ) {
 		const t3dWorldMeshLodRecord_t &R = pDatabase.Buffers.pLodRecords[i];
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nClusterOffset );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nClusterCount );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nClusterOffset );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nClusterCount );
 		nHash = t3d_world_geometry_hash_float( nHash, R.fMinDistance );
 		nHash = t3d_world_geometry_hash_float( nHash, R.fMaxDistance );
 		nHash = t3d_world_geometry_hash_float( nHash, R.fScreenError );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nFlags );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nReserved0 );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nReserved1 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nFlags );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nReserved0 );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nReserved1 );
 	}
 	for ( uint32_t i = 0u; i < pDatabase.nClusterCount; ++i ) {
 		const t3dWorldClusterRecord_t &R = pDatabase.Buffers.pClusterRecords[i];
@@ -87,17 +71,17 @@ uint64_t t3d_world_geometry_compute_signature_reference_debug( const t3dWorldGeo
 		nHash = t3d_world_geometry_hash_float( nHash, R.vConeAxis[1] );
 		nHash = t3d_world_geometry_hash_float( nHash, R.vConeAxis[2] );
 		nHash = t3d_world_geometry_hash_float( nHash, R.fConeCutoff );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nVertexIndexOffset );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nTriangleOffset );
-		nHash = t3d_world_geometry_hash_u32( nHash, ( uint32_t )R.nVertexCount | ( ( uint32_t )R.nTriangleCount << 16u ) );
-		nHash = t3d_world_geometry_hash_u32( nHash, ( uint32_t )R.nLod | ( ( uint32_t )R.nTier << 16u ) );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nMaterialId );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nPackedUvMin );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nPackedUvMax );
-		nHash = t3d_world_geometry_hash_u32( nHash, R.nTexelDensity );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nVertexIndexOffset );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nTriangleOffset );
+		nHash = t3dHashFnv1a64LittleU32( nHash, (uint32_t)R.nVertexCount | ( (uint32_t)R.nTriangleCount << 16u ) );
+		nHash = t3dHashFnv1a64LittleU32( nHash, (uint32_t)R.nLod | ( (uint32_t)R.nTier << 16u ) );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nMaterialId );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nPackedUvMin );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nPackedUvMax );
+		nHash = t3dHashFnv1a64LittleU32( nHash, R.nTexelDensity );
 	}
 
-	return t3d_world_geometry_hash_u64( nHash, 0x4d30322d5445524dull );
+	return t3dHashFnv1a64LittleU64( nHash, 0x4d30322d5445524dull );
 }
 
 bool t3d_world_geometry_reconstruct_triangle_reference_debug( const t3dWorldGeometryDatabase_t &pDatabase,

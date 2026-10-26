@@ -36,6 +36,9 @@ public:
 	        uint32_t nPreviewMaterialCapacity = 0u, uint32_t nPreviewVirtualPageCapacity = 0u,
 	        const t3dWorldResourceLimits_t *pProductionWorldLimits = NULL );
 	void shutdown_cold( bool bPreserveTailStaging = false );
+	bool stagePackageWarm( const void *pBytes, uint64_t nBytes );
+	bool servicePackageRepublishWarm( uint64_t nMaxBytes, uint32_t nMaxWorkUnits );
+	void abortPackageRepublishWarm();
 	bool are_shared_resources_ready() const;
 	t3dVTSharedResourceClass_t get_shared_resource_class() const;
 	const t3dWorldLimits_t &get_limits() const;

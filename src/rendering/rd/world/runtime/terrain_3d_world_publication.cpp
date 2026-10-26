@@ -15,6 +15,7 @@ void Terrain3DWorldPublication::bindRuntimeAllocator( const Terrain3DEastlAlloca
 	m_cells.set_allocator( rAllocator );
 	m_hlodRecords.set_allocator( rAllocator );
 	m_materials.set_allocator( rAllocator );
+	m_instanceMaterialStableKeys.set_allocator( rAllocator );
 	m_visibilityCandidates.set_allocator( rAllocator );
 }
 
@@ -28,6 +29,7 @@ bool Terrain3DWorldPublication::hasCapacity( const t3dWorldPublicationCapacity_t
 	        && m_previousTransforms.capacity() >= rRequired.m_nTransforms && m_instances.capacity() >= rRequired.m_nInstances
 	        && m_cells.capacity() >= rRequired.m_nCells && m_hlodRecords.capacity() >= rRequired.m_nHlodRecords
 	        && m_materials.capacity() >= rRequired.m_nMaterials
+	        && m_instanceMaterialStableKeys.capacity() >= rRequired.m_nMaterials
 	        && m_visibilityCandidates.capacity() >= rRequired.m_nVisibilityCandidates;
 }
 
@@ -44,6 +46,7 @@ bool Terrain3DWorldPublication::reserveCold( const t3dWorldPublicationCapacity_t
 	        && t3dContainerReserveCold( m_instances, rRequired.m_nInstances ) && t3dContainerReserveCold( m_cells, rRequired.m_nCells )
 	        && t3dContainerReserveCold( m_hlodRecords, rRequired.m_nHlodRecords )
 	        && t3dContainerReserveCold( m_materials, rRequired.m_nMaterials )
+	        && t3dContainerReserveCold( m_instanceMaterialStableKeys, rRequired.m_nMaterials )
 	        && t3dContainerReserveCold( m_visibilityCandidates, rRequired.m_nVisibilityCandidates );
 }
 
@@ -63,6 +66,7 @@ void Terrain3DWorldPublication::clearForBuild( void ) {
 	m_cells.clear();
 	m_hlodRecords.clear();
 	m_materials.clear();
+	m_instanceMaterialStableKeys.clear();
 	m_visibilityCandidates.clear();
 	m_nInstanceClusterCount = 0u;
 	m_nHlodClusterCount = 0u;
@@ -98,6 +102,7 @@ bool Terrain3DWorldPublication::copyFrom( const Terrain3DWorldPublication &rOthe
 	        || !t3dVectorCopyWithinCapacity( m_instances, rOther.m_instances ) || !t3dVectorCopyWithinCapacity( m_cells, rOther.m_cells )
 	        || !t3dVectorCopyWithinCapacity( m_hlodRecords, rOther.m_hlodRecords )
 	        || !t3dVectorCopyWithinCapacity( m_materials, rOther.m_materials )
+	        || !t3dVectorCopyWithinCapacity( m_instanceMaterialStableKeys, rOther.m_instanceMaterialStableKeys )
 	        || !t3dVectorCopyWithinCapacity( m_visibilityCandidates, rOther.m_visibilityCandidates ) ) {
 		return false;
 	}
@@ -126,5 +131,6 @@ size_t Terrain3DWorldPublication::getRetainedCpuBytes( void ) const {
 	        + ( m_transforms.capacity() + m_previousTransforms.capacity() ) * sizeof( t3dWorldTransform_t )
 	        + m_instances.capacity() * sizeof( t3dWorldInstance_t ) + m_cells.capacity() * sizeof( t3dWorldCell_t )
 	        + m_hlodRecords.capacity() * sizeof( t3dWorldHlodRecord_t ) + m_materials.capacity() * sizeof( t3dRenderingMaterialGpu_t )
+	        + m_instanceMaterialStableKeys.capacity() * sizeof( uint64_t )
 	        + m_visibilityCandidates.capacity() * sizeof( t3dWorldVisibleItem_t );
 }

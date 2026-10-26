@@ -29,7 +29,6 @@
 using namespace godot;
 #endif
 
-
 // Callback signatures embedded in POD interfaces.
 typedef void ( *t3dParallelTileTask_t )( void *, size_t, size_t, size_t, size_t, int32_t );
 
@@ -444,7 +443,7 @@ typedef enum t3dWorldTransparencyPolicy_e : uint32_t {
 	T3D_WORLD_TRANSPARENCY_ALPHA_SCISSOR_ONLY
 } t3dWorldTransparencyPolicy_t;
 
-// From src/core/runtime/terrain_3d_allocation_domain.h
+// From src/Terrain3DTypes.h
 typedef enum t3dNativeAllocationDomain_e : uint8_t {
 	TERRAIN3D_NATIVE_ALLOCATION_PERSISTENT_RESOURCE = 0u,
 	TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED,
@@ -689,7 +688,6 @@ typedef enum t3dRdPipelineKind_e : uint8_t {
 	T3D_RD_PIPELINE_KIND_COMPUTE,
 } t3dRdPipelineKind_t;
 
-
 // From src/rendering/rd/infrastructure/buffers/terrain_3d_rd_gpu_buffer_types.h
 enum Terrain3DGpuBufferPolicy : uint8_t
 {
@@ -903,7 +901,7 @@ typedef enum t3dRdExternalMeshSourceFlags_e : uint32_t {
 	T3D_RD_EXTERNAL_MESH_REQUIRE_RENDERING_MATERIAL = 1u << 0u,
 } t3dRdExternalMeshSourceFlags_t;
 
-// From src/rendering/rd/preview/terrain_3d_rd_preview_result.h
+// From src/Terrain3DTypes.h
 typedef enum t3dRdPreviewFailure_e {
 	T3D_RD_PREVIEW_NONE,
 	T3D_RD_PREVIEW_ASSET_SOURCE,
@@ -1941,7 +1939,7 @@ typedef enum t3dAdaptiveBudgetReason_e {
 	TERRAIN3D_ADAPTIVE_REASON_STABLE,
 } t3dAdaptiveBudgetReason_t;
 
-// From src/streaming/policy/terrain_3d_gpu_cache_constants.h
+// From src/Terrain3DConstants.h
 typedef enum t3dGpuRegionSlotState_e : uint8_t {
 	TERRAIN3D_GPU_SLOT_FREE = 0u,
 	TERRAIN3D_GPU_SLOT_STAGING = 1u,
@@ -2247,7 +2245,6 @@ typedef struct t3dErosionFinalStatistics_s {
 	float m_fMaximumLowering = 0.0f;
 	float m_fMaximumRaising = 0.0f;
 } t3dErosionFinalStatistics_t;
-
 
 // From src/authoring/erosion/terrain_3d_erosion_job.cpp
 typedef struct t3dTransitionScore_s {
@@ -2692,7 +2689,6 @@ typedef struct t3dWorldOwnershipRegistry_s {
 	uint32_t nGeneration;
 } t3dWorldOwnershipRegistry_t;
 
-
 // From src/authoring/world/conversion/terrain_3d_world_godot_converter.h
 typedef struct t3dWorldGodotMaterialResolver_s {
 	t3dWorldResolveMaterialVTColdFn_t pResolveMaterialVT;
@@ -2858,7 +2854,6 @@ typedef struct t3dStartupLoadStats_s {
 	bool m_bSucceededLast = false;
 } t3dStartupLoadStats_t;
 
-
 // From src/data/runtime/terrain_3d_runtime_bake_codec.cpp
 typedef struct t3dRuntimeCollisionHeightView_s {
 	const uint8_t *m_pHeights = NULL;
@@ -2951,7 +2946,6 @@ typedef struct t3dEastlAllocationStats_s {
 	size_t m_nOverflowLiveBytes = 0u;
 } t3dEastlAllocationStats_t;
 
-
 // From src/hlod/build/terrain_3d_hlod_builder.cpp
 typedef struct t3dHLODTriangle_s {
 	Vector3 m_a;
@@ -3037,7 +3031,6 @@ typedef struct t3dInstancePublicationCategoryDiagnostics_s {
 	uint64_t m_nHlodTransitionGapErrors = 0u;
 } t3dInstancePublicationCategoryDiagnostics_t;
 
-
 // From src/instances/runtime/terrain_3d_instancer.h
 typedef struct t3dRenderCell_s {
 	Vector2i m_region;
@@ -3059,7 +3052,6 @@ typedef struct t3dUsableHeight_s {
 	bool m_bRaycastHit = false;
 	Vector3 m_normal = Vector3( 0.f, 1.f, 0.f );
 } t3dUsableHeight_t;
-
 
 // From src/instances/runtime/terrain_3d_instancer.h
 typedef struct t3dLogicalCellState_s {
@@ -3441,7 +3433,6 @@ typedef struct t3dRdPacketBuildEntry_s {
 	uint32_t m_nCellIndex = 0u;
 } t3dRdPacketBuildEntry_t;
 
-
 // From src/rendering/rd/instances/terrain_3d_rd_mesh_cache.cpp
 struct AttributeDesc {
 	uint32_t location;
@@ -3791,7 +3782,6 @@ typedef struct t3dRdDrawPushConstants_s {
 	uint32_t m_nPadding1 = 0u;
 } t3dRdDrawPushConstants_t;
 
-
 // From src/rendering/rd/core/terrain_3d_render_lifecycle_state.h
 typedef struct t3dRenderLifecycleStatus_s {
 	uint32_t m_nStartupGeneration = 0u;
@@ -3957,7 +3947,6 @@ typedef struct t3dVTAllocation_s {
 	uint32_t m_nContentId;
 	uint32_t m_nReserved;
 } t3dVTAllocation_t;
-
 
 // From src/rendering/rd/vt/core/terrain_3d_vt_contract.h
 typedef struct t3dVTPageEntry_s {
@@ -4422,7 +4411,6 @@ typedef struct t3dVTGpuResourceStats_s {
 	uint32_t nHotSealViolationCount;
 } t3dVTGpuResourceStats_t;
 
-
 // From src/rendering/rd/vt/core/terrain_3d_vt_runtime_contract.h
 typedef struct t3dVTGpuCounters_s {
 	uint32_t nRequestCount;
@@ -4576,7 +4564,6 @@ typedef struct t3dWorldClusterCookStats_s {
 	uint32_t m_nPaddedTriangleSlots;
 } t3dWorldClusterCookStats_t;
 
-
 // From src/rendering/rd/world/core/terrain_3d_world_contract.h
 typedef struct alignas( 16 ) t3dWorldTerrainCluster_s {
 	uint32_t m_nPatchId;
@@ -4593,7 +4580,6 @@ typedef struct alignas( 16 ) t3dWorldTerrainCluster_s {
 	uint32_t m_nReserved2;
 } t3dWorldTerrainCluster_t;
 
-
 // From src/rendering/rd/world/core/terrain_3d_world_contract.h
 typedef struct alignas( 16 ) t3dWorldVisibleItem_s {
 	uint32_t m_nClusterOrTerrainId;
@@ -4609,7 +4595,6 @@ typedef struct alignas( 16 ) t3dWorldDrawIndirectArgs_s {
 	uint32_t m_nFirstVertex;
 	uint32_t m_nFirstInstance;
 } t3dWorldDrawIndirectArgs_t;
-
 
 // From src/rendering/rd/world/core/terrain_3d_world_contract.h
 typedef struct alignas( 16 ) t3dWorldMeshClusterSpan_s {
@@ -4807,7 +4792,6 @@ typedef struct t3dWorldHiZReducePush_s {
 		uint32_t m_nDestinationWidth;
 		uint32_t m_nDestinationHeight;
 	} t3dWorldHiZReducePush_t;
-
 
 // From src/rendering/rd/world/runtime/terrain_3d_world_publication.h
 typedef struct alignas( 16 ) t3dWorldCell_s {
@@ -5156,7 +5140,6 @@ typedef struct t3dSimdCapabilities_s {
 	bool m_bNeon = false;
 } t3dSimdCapabilities_t;
 
-
 // From src/streaming/residency/terrain_3d_active_height_residency.h
 typedef struct t3dActiveHeightResidencyStats_s {
 	int m_nReconciliationsLastTick = 0;
@@ -5302,7 +5285,6 @@ typedef struct t3dMiddleHeightRegionCacheStats_s {
 	bool m_bPageTableValid = false;
 	bool m_bHeightArrayValid = false;
 } t3dMiddleHeightRegionCacheStats_t;
-
 
 // From src/streaming/runtime/terrain_3d_runtime_page_store.h
 typedef struct t3dRuntimePageNumericConfig_s {
@@ -5862,7 +5844,6 @@ typedef struct t3dWorldGeometryClusterBuilder_s {
 	uint32_t nTier;
 } t3dWorldGeometryClusterBuilder_t;
 
-
 // From src/rendering/rd/ocean/terrain_3d_rd_ocean_renderer.h
 typedef struct t3dRdOceanStripSnapshot_s {
 	uint64_t m_nGeneration = 0u;
@@ -5888,7 +5869,6 @@ typedef struct t3dAdaptiveBudgetState_s {
 	t3dAdaptiveBudgetReason_t m_reason = TERRAIN3D_ADAPTIVE_REASON_DISABLED;
 	bool m_bInitialized = false;
 } t3dAdaptiveBudgetState_t;
-
 
 // From src/streaming/policy/terrain_3d_streaming_policy.h
 typedef struct t3dRegionStreamingPrediction_s

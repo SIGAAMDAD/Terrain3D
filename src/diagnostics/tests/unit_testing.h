@@ -3,6 +3,9 @@
 #ifndef TERRAIN3D_UNIT_TESTING_H
 #define TERRAIN3D_UNIT_TESTING_H
 
+#include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/string.hpp>
+
 #define EXPECT_FALSE( cond )                                                                                                               \
 	do {                                                                                                                                   \
 		if ( cond ) {                                                                                                                      \
@@ -30,6 +33,12 @@ bool t3dTestRdTextureLayouts( void );
 bool t3dTestRdMaterialAbi( void );
 bool t3dTestRdInstanceAbi( void );
 bool t3dRunRdCpuTests( void );
+bool t3dRunCentralizationTests( void );
 bool t3dRunMegaVTCacheTests( void );
+bool t3dRunVTWarmRepublishTests( void );
+bool t3dRunVTWarmGpuTests( void );
+
+godot::Dictionary t3dRunSystemUnitTests( const godot::String &suiteFilter,
+		const godot::String &caseFilter, bool listOnly );
 
 #endif // TERRAIN3D_UNIT_TESTING_H

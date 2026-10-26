@@ -40,36 +40,22 @@ bool Terrain3DRdShader::createTracked( Terrain3DRdContext &rContext, const t3dRd
 	RenderingDevice *const rd = rContext.getDevice();
 	if ( !rd ) { return false; }
 	if ( Terrain3DRdShaderLibrary::physicalCacheReady() ) {
-		const RID borrowed = Terrain3DRdShaderLibrary::borrowPhysical( id );
+		const RID borrowed = Terrain3DRdShaderLibrary::acquirePhysicalCold( rContext, id );
 		if ( !borrowed.is_valid() ) {
-			UtilityFunctions::push_error( "[Terrain3D][ShaderCache] Catalog shader is absent from the ready physical cache: id=", ( int64_t )id, " name=", rName );
+			UtilityFunctions::push_error( "[Terrain3D][ShaderCache] Failed acquiring catalog shader: id=", (int64_t)id, " name=", rName );
 			return false;
 		}
-		m_hRid = borrowed;
-		m_owner = owner;
 		m_bBorrowed = true;
-		m_nGeneration = nextGeneration( m_nGeneration );
+		m_state.publish( borrowed, owner );
 		return true;
 	}
 	const Ref<RDShaderSPIRV> spirv = Terrain3DRdShaderLibrary::borrowSpirv( id );
 	if ( spirv.is_null() ) { return false; }
 	RID created = createPhysical( rd, spirv, rName );
-	if ( !created.is_valid() ) {
-		rContext.recordResourceCreationFailure( rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER );
-		rContext.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-		return false;
-	}
-	if ( !rContext.registerResource( created, rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER,
-	             T3D_RD_CONTEXT_MEMORY_NONE, 0u, owner ) ) {
-		rContext.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-		rd->free_rid( created );
-		return false;
-	}
-	m_hRid = created;
-	m_owner = owner;
+	if ( !t3dRdRegisterCreated( rContext, rd, created, rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER, owner ) ) { return false; }
 	m_bLocal = false;
 	m_bBorrowed = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.publish( created, owner );
 	return true;
 }
 
@@ -84,23 +70,11 @@ bool Terrain3DRdShader::createTracked( Terrain3DRdContext &rContext, const t3dRd
 	RenderingDevice *const rd = rContext.getDevice();
 	if ( !rd ) { return false; }
 	RID created = createPhysical( rd, rSpirv, rName );
-	if ( !created.is_valid() ) {
-		rContext.recordResourceCreationFailure( rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER );
-		rContext.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-		return false;
-	}
-	if ( !rContext.registerResource( created, rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER,
-	             T3D_RD_CONTEXT_MEMORY_NONE, 0u, owner ) ) {
-		rContext.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-		rd->free_rid( created );
-		return false;
-	}
+	if ( !t3dRdRegisterCreated( rContext, rd, created, rRegistryName, T3D_RD_CONTEXT_RESOURCE_SHADER, owner ) ) { return false; }
 
-	m_hRid = created;
-	m_owner = owner;
 	m_bLocal = false;
 	m_bBorrowed = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.publish( created, owner );
 	return true;
 }
 
@@ -109,42 +83,33 @@ bool Terrain3DRdShader::createLocal(
 	if ( isValid() || !pRd || rName.is_empty() || rSpirv.is_null() ) { return false; }
 	RID created = createPhysical( pRd, rSpirv, rName );
 	if ( !created.is_valid() ) { return false; }
-	m_hRid = created;
-	m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	m_bLocal = true;
 	m_bBorrowed = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.publish( created, T3D_RD_CONTEXT_OWNER_UNSPECIFIED );
 	return true;
 }
 
 void Terrain3DRdShader::releaseTracked( Terrain3DRdContext &rContext ) {
-	if ( !m_hRid.is_valid() || m_bLocal ) { return; }
-	if ( !m_bBorrowed ) rContext.freeResource( m_hRid );
+	if ( !m_state.rid().is_valid() || m_bLocal ) { return; }
+	if ( !m_bBorrowed ) rContext.freeResource( m_state.rid() );
 	abandon();
 }
 
 void Terrain3DRdShader::releaseLocal( RenderingDevice *const pRd ) {
-	if ( !m_hRid.is_valid() || !m_bLocal || !pRd ) { return; }
-	pRd->free_rid( m_hRid );
+	if ( !m_state.rid().is_valid() || !m_bLocal || !pRd ) { return; }
+	pRd->free_rid( m_state.rid() );
 	abandon();
 }
 
 void Terrain3DRdShader::abandon( void ) {
-	m_hRid = RID();
-	m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	m_bLocal = false;
 	m_bBorrowed = false;
-	m_nGeneration = nextGeneration( m_nGeneration );
+	m_state.abandon();
 }
 
 void Terrain3DRdShader::swap( Terrain3DRdShader &rOther ) {
 	using eastl::swap;
-	const uint32_t this_generation = nextGeneration( m_nGeneration );
-	const uint32_t other_generation = nextGeneration( rOther.m_nGeneration );
-	swap( m_hRid, rOther.m_hRid );
-	swap( m_owner, rOther.m_owner );
+	m_state.swap( rOther.m_state );
 	swap( m_bLocal, rOther.m_bLocal );
 	swap( m_bBorrowed, rOther.m_bBorrowed );
-	m_nGeneration = this_generation;
-	rOther.m_nGeneration = other_generation;
 }

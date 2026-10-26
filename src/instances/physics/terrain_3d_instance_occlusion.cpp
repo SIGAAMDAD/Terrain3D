@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_generation.h"
 #include "instances/physics/terrain_3d_instance_occlusion.h"
 
 #include "assets/catalog/terrain_3d_assets.h"
@@ -26,9 +27,7 @@ bool Terrain3DInstanceOcclusion::bindRuntimeAllocator( Terrain3DMemoryZone *cons
 }
 
 void Terrain3DInstanceOcclusion::advancePublicationGeneration( void ) {
-	if ( ++m_nPublicationGeneration == 0u ) {
-		m_nPublicationGeneration = 1u;
-	}
+	m_nPublicationGeneration = t3dNextGeneration( m_nPublicationGeneration );
 }
 
 bool Terrain3DInstanceOcclusion::rebuildCellCapacityCold( void ) {
@@ -64,8 +63,6 @@ bool Terrain3DInstanceOcclusion::rebuildCellCapacityCold( void ) {
 	++m_nColdCapacityRebuilds;
 	return true;
 }
-
-
 
 bool Terrain3DInstanceOcclusion::hasUsableExplicitProxy( const Ref<Terrain3DMeshAsset> &rAsset ) const {
 	if ( rAsset.is_null() || rAsset->getInstanceOcclusionPolicy() != INSTANCE_OCCLUSION_EXPLICIT_MESH

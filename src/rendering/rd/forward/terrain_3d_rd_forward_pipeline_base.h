@@ -36,6 +36,7 @@ typedef struct t3dRdForwardPipelineStateOptions_s {
 	RenderingDevice::PolygonCullMode m_cullMode = RenderingDevice::POLYGON_CULL_DISABLED;
 	uint32_t m_nBlendAttachmentCount = 0u;
 	bool m_bBlendFirstAttachment = false;
+	bool m_bColorWrite = true;
 	bool m_bEnableDepthTest = true;
 	bool m_bEnableDepthWrite = true;
 	decltype( RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL ) m_depthCompare = RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL;

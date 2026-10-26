@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "assets/import/terrain_3d_world_import_profile.h"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -7,76 +8,40 @@
 using namespace godot;
 
 void Terrain3DWorldImportProfile::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DWorldImportProfile::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DWorldImportProfile::isEnabled );
-	ClassDB::bind_method( D_METHOD( "set_category", "category" ), &Terrain3DWorldImportProfile::setCategory );
-	ClassDB::bind_method( D_METHOD( "get_category" ), &Terrain3DWorldImportProfile::getCategory );
-	ClassDB::bind_method( D_METHOD( "set_material_policy", "policy" ), &Terrain3DWorldImportProfile::setMaterialPolicy );
-	ClassDB::bind_method( D_METHOD( "get_material_policy" ), &Terrain3DWorldImportProfile::getMaterialPolicy );
-	ClassDB::bind_method( D_METHOD( "set_transparency_policy", "policy" ), &Terrain3DWorldImportProfile::setTransparencyPolicy );
-	ClassDB::bind_method( D_METHOD( "get_transparency_policy" ), &Terrain3DWorldImportProfile::getTransparencyPolicy );
-	ClassDB::bind_method( D_METHOD( "set_static_only", "enabled" ), &Terrain3DWorldImportProfile::setStaticOnly );
-	ClassDB::bind_method( D_METHOD( "is_static_only" ), &Terrain3DWorldImportProfile::isStaticOnly );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "enabled" ), &Terrain3DWorldImportProfile::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "is_cast_shadows" ), &Terrain3DWorldImportProfile::isCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_receive_shadows", "enabled" ), &Terrain3DWorldImportProfile::setReceiveShadows );
-	ClassDB::bind_method( D_METHOD( "is_receive_shadows" ), &Terrain3DWorldImportProfile::isReceiveShadows );
-	ClassDB::bind_method( D_METHOD( "set_max_distance", "distance" ), &Terrain3DWorldImportProfile::setMaxDistance );
-	ClassDB::bind_method( D_METHOD( "get_max_distance" ), &Terrain3DWorldImportProfile::getMaxDistance );
 
-	ClassDB::bind_method( D_METHOD( "set_vt_cluster_target_pages", "pages" ), &Terrain3DWorldImportProfile::setVtClusterTargetPages );
-	ClassDB::bind_method( D_METHOD( "get_vt_cluster_target_pages" ), &Terrain3DWorldImportProfile::getVtClusterTargetPages );
-	ClassDB::bind_method( D_METHOD( "set_vt_cluster_target_bytes", "bytes" ), &Terrain3DWorldImportProfile::setVtClusterTargetBytes );
-	ClassDB::bind_method( D_METHOD( "get_vt_cluster_target_bytes" ), &Terrain3DWorldImportProfile::getVtClusterTargetBytes );
-	ClassDB::bind_method(
-	        D_METHOD( "set_vt_outer_compression", "compression" ), &Terrain3DWorldImportProfile::setVtOuterCompression );
-	ClassDB::bind_method( D_METHOD( "get_vt_outer_compression" ), &Terrain3DWorldImportProfile::getVtOuterCompression );
-	ClassDB::bind_method( D_METHOD( "set_vt_mip_quality", "quality" ), &Terrain3DWorldImportProfile::setVtMipQuality );
-	ClassDB::bind_method( D_METHOD( "get_vt_mip_quality" ), &Terrain3DWorldImportProfile::getVtMipQuality );
-	ClassDB::bind_method(
-	        D_METHOD( "set_vt_compression_quality", "quality" ), &Terrain3DWorldImportProfile::setVtCompressionQuality );
-	ClassDB::bind_method( D_METHOD( "get_vt_compression_quality" ), &Terrain3DWorldImportProfile::getVtCompressionQuality );
 	ClassDB::bind_method( D_METHOD( "get_vt_page_interior" ), &Terrain3DWorldImportProfile::getVtPageInterior );
 	ClassDB::bind_method( D_METHOD( "get_vt_page_gutter" ), &Terrain3DWorldImportProfile::getVtPageGutter );
 
 	ADD_GROUP( "Conversion", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "category", PROPERTY_HINT_ENUM, "Auto,World,Clutter,Foliage" ), "set_category", "get_category" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "material_policy",
-	                      PROPERTY_HINT_ENUM,
-	                      "Auto Convert,Require World Material,Native On Unsupported" ),
-	        "set_material_policy",
-	        "get_material_policy" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "transparency_policy", PROPERTY_HINT_ENUM, "Native Sorted,Alpha Scissor Only" ),
-	        "set_transparency_policy",
-	        "get_transparency_policy" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setEnabled, isEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setCategory, getCategory, "category",
+	                   PropertyInfo( Variant::INT, "category", PROPERTY_HINT_ENUM, "Auto,World,Clutter,Foliage" ), "set_category", "get_category" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setMaterialPolicy, getMaterialPolicy, "policy",
+	                   PropertyInfo( Variant::INT, "material_policy", PROPERTY_HINT_ENUM, "Auto Convert,Require World Material,Native On Unsupported" ), "set_material_policy", "get_material_policy" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setTransparencyPolicy, getTransparencyPolicy, "policy",
+	                   PropertyInfo( Variant::INT, "transparency_policy", PROPERTY_HINT_ENUM, "Native Sorted,Alpha Scissor Only" ), "set_transparency_policy", "get_transparency_policy" );
 
 	ADD_GROUP( "Virtual Texture Cook", "vt_" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_cluster_target_pages", PROPERTY_HINT_RANGE, "1,4096,1", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_cluster_target_pages",
-	        "get_vt_cluster_target_pages" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "vt_cluster_target_bytes", PROPERTY_HINT_RANGE, "65536,268435456,65536", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_cluster_target_bytes",
-	        "get_vt_cluster_target_bytes" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_outer_compression", PROPERTY_HINT_ENUM, "None,Zstd", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_outer_compression",
-	        "get_vt_outer_compression" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_mip_quality", PROPERTY_HINT_RANGE, "0,3,1", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_mip_quality",
-	        "get_vt_mip_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "vt_compression_quality", PROPERTY_HINT_RANGE, "0,3,1", PROPERTY_USAGE_STORAGE ),
-	        "set_vt_compression_quality",
-	        "get_vt_compression_quality" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setVtClusterTargetPages, getVtClusterTargetPages, "pages",
+	                   PropertyInfo( Variant::INT, "vt_cluster_target_pages", PROPERTY_HINT_RANGE, "1,4096,1", PROPERTY_USAGE_STORAGE ), "set_vt_cluster_target_pages", "get_vt_cluster_target_pages" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setVtClusterTargetBytes, getVtClusterTargetBytes, "bytes",
+	                   PropertyInfo( Variant::INT, "vt_cluster_target_bytes", PROPERTY_HINT_RANGE, "65536,268435456,65536", PROPERTY_USAGE_STORAGE ), "set_vt_cluster_target_bytes", "get_vt_cluster_target_bytes" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setVtOuterCompression, getVtOuterCompression, "compression",
+	                   PropertyInfo( Variant::INT, "vt_outer_compression", PROPERTY_HINT_ENUM, "None,Zstd", PROPERTY_USAGE_STORAGE ), "set_vt_outer_compression", "get_vt_outer_compression" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setVtMipQuality, getVtMipQuality, "quality",
+	                   PropertyInfo( Variant::INT, "vt_mip_quality", PROPERTY_HINT_RANGE, "0,3,1", PROPERTY_USAGE_STORAGE ), "set_vt_mip_quality", "get_vt_mip_quality" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setVtCompressionQuality, getVtCompressionQuality, "quality",
+	                   PropertyInfo( Variant::INT, "vt_compression_quality", PROPERTY_HINT_RANGE, "0,3,1", PROPERTY_USAGE_STORAGE ), "set_vt_compression_quality", "get_vt_compression_quality" );
 	ADD_GROUP( "Reserved Compatibility Metadata", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "static_only" ), "set_static_only", "is_static_only" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "cast_shadows" ), "set_cast_shadows", "is_cast_shadows" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "receive_shadows" ), "set_receive_shadows", "is_receive_shadows" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "max_distance", PROPERTY_HINT_RANGE, "0,100000,1,or_greater,suffix:m" ),
-	        "set_max_distance",
-	        "get_max_distance" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setStaticOnly, isStaticOnly, "enabled",
+	                   PropertyInfo( Variant::BOOL, "static_only" ), "set_static_only", "is_static_only" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setCastShadows, isCastShadows, "enabled",
+	                   PropertyInfo( Variant::BOOL, "cast_shadows" ), "set_cast_shadows", "is_cast_shadows" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setReceiveShadows, isReceiveShadows, "enabled",
+	                   PropertyInfo( Variant::BOOL, "receive_shadows" ), "set_receive_shadows", "is_receive_shadows" );
+	T3D_BIND_PROPERTY( Terrain3DWorldImportProfile, setMaxDistance, getMaxDistance, "distance",
+	                   PropertyInfo( Variant::FLOAT, "max_distance", PROPERTY_HINT_RANGE, "0,100000,1,or_greater,suffix:m" ), "set_max_distance", "get_max_distance" );
 }
 
 void Terrain3DWorldImportProfile::setEnabled( const bool bEnabled ) {

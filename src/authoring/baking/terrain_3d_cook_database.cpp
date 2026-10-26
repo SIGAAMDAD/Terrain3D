@@ -5,11 +5,9 @@
 
 #include "data/persistence/terrain_3d_region_repository.h"
 #include "data/persistence/terrain_3d_file_publication.h"
-#include "data/runtime/terrain_3d_runtime_page_constants.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
-
 
 void Terrain3DCookDatabase::reset( void ) {
 	m_bLoaded = false;
@@ -55,13 +53,9 @@ bool Terrain3DCookDatabase::write( const String &rDataDirectory, const uint64_t 
 		return false;
 	}
 	const String path = getPath( rDataDirectory );
-	const String temporary = path + String( ".tmp" );
-	Terrain3DFilePublication publication( path, temporary, path + String( ".bak" ) );
-	if ( publication.prepare() != OK ) {
-		return false;
-	}
-	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
-	if ( file.is_null() ) {
+	Terrain3DFilePublication publication( path, path + String( ".tmp" ), path + String( ".bak" ) );
+	Ref<FileAccess> file;
+	if ( publication.openStaged( file ) != OK ) {
 		return false;
 	}
 	file->store_64( T3D_COOK_DATABASE_MAGIC );
@@ -75,10 +69,8 @@ bool Terrain3DCookDatabase::write( const String &rDataDirectory, const uint64_t 
 		const uint64_t signature = ( m_regionSignatures )[iRegion];
 		file->store_64( signature );
 	}
-	const Error error = file->get_error();
-	file->close();
-	if ( error != OK ) {
-		DirAccess::remove_absolute( temporary );
+	const uint64_t expected_bytes = T3D_COOK_DATABASE_HEADER_BYTES + (uint64_t)T3D_REGION_SLOTS * sizeof( uint64_t );
+	if ( publication.finishStaged( file, expected_bytes ) != OK ) {
 		return false;
 	}
 	return publication.publish() == OK && publication.commit() == OK;

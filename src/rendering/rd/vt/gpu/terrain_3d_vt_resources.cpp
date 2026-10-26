@@ -340,7 +340,7 @@ bool Terrain3DVTResourceImage::update_vt_bank_layer( t3dVTResourceChannel_t pCha
 
 bool Terrain3DVTResourceImage::update_vt_tail_layer( t3dVTResourceChannel_t pChannel, uint32_t pLayer, const PackedByteArray &rData ) const {
 	return m_pContext && ( uint32_t )pChannel < T3D_VT_CHANNEL_COUNT
-	        && m_vtTail[pChannel].updateLayerTracked( *m_pContext, pLayer, rData );
+	        && m_vtTail[pChannel].updateLayerTracked( *m_pContext, pLayer, rData, T3D_GPU_PUBLICATION );
 }
 
 Terrain3DRdContext *Terrain3DVTResourceImage::get_rd_context() const {

@@ -7,6 +7,7 @@
 #include "Terrain3DConstants.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "core/config/terrain_3d_compiler.h"
+#include "memory/storage/terrain_3d_callback_lease.h"
 #include "core/config/terrain_3d_limits.h"
 #include "data/model/terrain_3d_region.h"
 #include "memory/arena/terrain_3d_memory_zone.h"
@@ -33,6 +34,18 @@ typedef struct t3dResidentMapView_s {
 
 typedef void ( *t3dResidentLeaseReleaseFn_t )( void *pContext, int iSlot, uint32_t nGeneration );
 
+struct t3dResidentLeaseReleaseState_t {
+	void *m_pReleaseContext = NULL;
+	t3dResidentLeaseReleaseFn_t m_pRelease = NULL;
+	int16_t m_iSlot = -1;
+	uint32_t m_nGeneration = 0u;
+	void release() {
+		if ( m_pRelease && m_pReleaseContext && m_iSlot >= 0 ) {
+			m_pRelease( m_pReleaseContext, m_iSlot, m_nGeneration );
+		}
+	}
+};
+
 class Terrain3DResidentMapLease {
 public:
 	Terrain3DResidentMapLease( void ) = default;
@@ -43,19 +56,15 @@ public:
 	Terrain3DResidentMapLease &operator=( Terrain3DResidentMapLease &&rOther ) noexcept;
 
 	EA_FORCE_INLINE bool valid( void ) const {
-		return m_view.valid();
+		return m_lease.valid();
 	}
 	EA_FORCE_INLINE const t3dResidentMapView_t &getView( void ) const {
-		return m_view;
+		return m_lease.view();
 	}
 	void reset( void );
 
 private:
-	void *m_pReleaseContext = NULL;
-	t3dResidentLeaseReleaseFn_t m_pRelease = NULL;
-	int16_t m_iSlot = -1;
-	uint32_t m_nGeneration = 0u;
-	t3dResidentMapView_t m_view;
+	Terrain3DCallbackLease<t3dResidentMapView_t, t3dResidentLeaseReleaseState_t> m_lease;
 
 public:
 	Terrain3DResidentMapLease( void *pReleaseContext, t3dResidentLeaseReleaseFn_t pRelease, int iSlot, uint32_t nGeneration, const t3dResidentMapView_t &rView );

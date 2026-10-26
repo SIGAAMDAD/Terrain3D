@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_RD_SHADER_H
 #define TERRAIN3D_RD_SHADER_H
 
-#include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_resource_state.h"
 #include "rendering/rd/shaders/terrain_3d_rd_shader_catalog.h"
 
 #include <stdint.h>
@@ -10,13 +10,10 @@
 using namespace godot;
 
 class Terrain3DRdShader {
-	RID m_hRid;
-	uint32_t m_nGeneration = 0u;
-	t3dRdResourceOwner_t m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
+	Terrain3DRdResourceState<1u> m_state;
 	bool m_bLocal = false;
 	bool m_bBorrowed = false;
 
-	static uint32_t nextGeneration( uint32_t nGeneration ) { return nGeneration == UINT32_MAX ? 1u : nGeneration + 1u; }
 	static RID createPhysical( RenderingDevice *pRd, const Ref<RDShaderSPIRV> &rSpirv, const String &rName );
 
 public:
@@ -24,10 +21,10 @@ public:
 	Terrain3DRdShader( const Terrain3DRdShader & ) = delete;
 	Terrain3DRdShader &operator=( const Terrain3DRdShader & ) = delete;
 
-	EA_FORCE_INLINE bool isValid( void ) const { return m_hRid.is_valid(); }
-	EA_FORCE_INLINE const RID &rid( void ) const { return m_hRid; }
-	EA_FORCE_INLINE uint32_t generation( void ) const { return m_nGeneration; }
-	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_owner; }
+	EA_FORCE_INLINE bool isValid( void ) const { return m_state.isValid(); }
+	EA_FORCE_INLINE const RID &rid( void ) const { return m_state.rid(); }
+	EA_FORCE_INLINE uint32_t generation( void ) const { return m_state.generation(); }
+	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_state.owner(); }
 	EA_FORCE_INLINE bool isLocal( void ) const { return m_bLocal; }
 
 	bool createTracked( Terrain3DRdContext &rContext, t3dRdResourceOwner_t owner,

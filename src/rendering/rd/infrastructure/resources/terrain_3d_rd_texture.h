@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_RD_TEXTURE_H
 #define TERRAIN3D_RD_TEXTURE_H
 
-#include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_resource_state.h"
 
 #include <stdint.h>
 #include <godot_cpp/classes/rd_texture_format.hpp>
@@ -56,10 +56,9 @@ typedef struct t3dRdTextureSliceSpec_s {
 
 
 class Terrain3DRdTexture {
-	RID m_hRid;
+	Terrain3DMemoryReservation m_memoryReservation;
+	Terrain3DRdResourceState<1u> m_state;
 	t3dRdTextureLayout_t m_layout;
-	uint32_t m_nGeneration = 0u;
-	t3dRdResourceOwner_t m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
 	bool m_bSharedView = false;
 
 	static uint32_t maximumMipCount( uint32_t nWidth, uint32_t nHeight );
@@ -68,18 +67,17 @@ class Terrain3DRdTexture {
 	static bool registerTracked( Terrain3DRdContext &rContext, RenderingDevice *pRd, RID &rRid,
 	        const String &rName, t3dRdResourceOwner_t owner,
 	        t3dRdMemoryCategory_t memory, uint64_t nBytes, bool bFailureFatal );
-	static uint32_t nextGeneration( uint32_t nGeneration ) { return nGeneration == UINT32_MAX ? 1u : nGeneration + 1u; }
 
 public:
 	Terrain3DRdTexture( void ) = default;
 	Terrain3DRdTexture( const Terrain3DRdTexture & ) = delete;
 	Terrain3DRdTexture &operator=( const Terrain3DRdTexture & ) = delete;
 
-	EA_FORCE_INLINE bool isValid( void ) const { return m_hRid.is_valid(); }
-	EA_FORCE_INLINE const RID &rid( void ) const { return m_hRid; }
+	EA_FORCE_INLINE bool isValid( void ) const { return m_state.isValid(); }
+	EA_FORCE_INLINE const RID &rid( void ) const { return m_state.rid(); }
 	EA_FORCE_INLINE const t3dRdTextureLayout_t &layout( void ) const { return m_layout; }
 	EA_FORCE_INLINE uint64_t bytes( void ) const { return m_layout.m_nBytes; }
-	EA_FORCE_INLINE uint32_t generation( void ) const { return m_nGeneration; }
+	EA_FORCE_INLINE uint32_t generation( void ) const { return m_state.generation(); }
 	EA_FORCE_INLINE bool isSharedView( void ) const { return m_bSharedView; }
 	static bool isBorrowedValid( RenderingDevice *pRd, const RID &rRid );
 	static Ref<RDTextureFormat> borrowedFormat( RenderingDevice *pRd, const RID &rRid );
@@ -90,7 +88,8 @@ public:
 	        const TypedArray<PackedByteArray> &rInitialData = TypedArray<PackedByteArray>() );
 	bool createSharedTracked( Terrain3DRdContext &rContext, const Terrain3DRdTexture &rParent,
 	        const t3dRdTextureSliceSpec_t &rSpec, const Ref<RDTextureView> &rView = Ref<RDTextureView>() );
-	bool updateLayerTracked( Terrain3DRdContext &rContext, uint32_t nLayer, const PackedByteArray &rData ) const;
+	bool updateLayerTracked( Terrain3DRdContext &rContext, uint32_t nLayer, const PackedByteArray &rData,
+	        Terrain3DGpuBufferPolicy policy = T3D_GPU_DIRTY_UPLOAD ) const;
 	bool copyRegionToTracked( Terrain3DRdContext &rContext, Terrain3DRdTexture &rDestination,
 	        const Vector3 &rFrom, const Vector3 &rTo, const Vector3 &rSize,
 	        uint32_t nSrcMipmap = 0u, uint32_t nDstMipmap = 0u, uint32_t nSrcLayer = 0u, uint32_t nDstLayer = 0u ) const;

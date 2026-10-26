@@ -10,6 +10,7 @@ const CONTROL_GROUP_PREFIXES = [
 	"Terrain Rendering / Shader Tier Ranges",
 	"Streaming & Residency",
 	"Runtime Scheduling - Advanced",
+	"Memory",
 ]
 
 const HistoryGraph = preload("res://addons/terrain_3d/src/runtime_profiler_history_graph.gd")
@@ -285,7 +286,12 @@ func _update_diagnostics_products(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
 	_diagnostics_memory_tree.clear()
 	var root: TreeItem = _diagnostics_memory_tree.create_item()
+	var account: Dictionary = terrain.get_memory_tracker_stats() if is_instance_valid(terrain) else {}
 	var rows: Array[Array] = [
+		["Accounted allocations", Terrain3DRuntimeValueMap.format_bytes(account.get("current_bytes", 0)), "enforced shared account"],
+		["Account peak", Terrain3DRuntimeValueMap.format_bytes(account.get("peak_bytes", 0)), "allocation-time peak"],
+		["Account free", Terrain3DRuntimeValueMap.format_bytes(account.get("headroom_bytes", 0)), "admission headroom"],
+		["Rejected allocations", str(account.get("denied_allocations", 0)), "budget admission"],
 		["Configured total", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("configured_budget_bytes")), p_memory.string_value("pressure_state", "normal")],
 		["Current known", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("current_known_bytes")), "tracked"],
 		["Peak known", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("peak_known_bytes")), "tracked peak"],
@@ -300,6 +306,11 @@ func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
 		item.set_text(0, str(row[0]))
 		item.set_text(1, str(row[1]))
 		item.set_text(2, str(row[2]))
+	for resource: Dictionary in account.get("resources", []):
+		var item: TreeItem = _diagnostics_memory_tree.create_item(root)
+		item.set_text(0, str(resource.get("name", "")).capitalize())
+		item.set_text(1, "%s / %s" % [Terrain3DRuntimeValueMap.format_bytes(resource.get("current_bytes", 0)), Terrain3DRuntimeValueMap.format_bytes(resource.get("effective_limit_bytes", 0))])
+		item.set_text(2, "shared total" if resource.get("inherits_total", false) else "resource cap")
 
 
 func _update_render_pipeline_product(p_tiers: Array[Terrain3DRuntimeValueMap]) -> void:
@@ -398,6 +409,7 @@ func _update_rd_renderer_product() -> void:
 	if not is_instance_valid(terrain):
 		return
 	var diagnostics: Dictionary = terrain.get_rd_renderer_diagnostics()
+	var uploads: Dictionary = terrain.get_gpu_upload_diagnostics()
 	var rows: Array[Array] = [
 		["Rendering path", "RenderingDevice / Forward+", "Terrain3D production rendering is RD-owned and submits into native Forward+ passes"],
 		["RD color writes", "yes" if bool(diagnostics.get("color_write_enabled", false)) else "no", "Terrain3D-owned Forward+ color submission active for the RD backend"],
@@ -424,7 +436,10 @@ func _update_rd_renderer_product() -> void:
 		["Peak RD buffers", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("peak_buffer_bytes", 0))), "High-water Terrain3D-owned RD buffer memory"],
 		["Live RD textures", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("live_texture_bytes", 0))), "Terrain3D-owned RD texture memory; borrowed native renderer textures excluded"],
 		["Buffer updates", str(int(diagnostics.get("buffer_updates", 0))), "Explicit RD buffer update calls"],
-		["Bytes uploaded", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("bytes_uploaded", 0))), "Total explicit RD buffer upload traffic"],
+		["GPU uploads this frame", Terrain3DRuntimeValueMap.format_bytes(float(uploads.get("bytes_uploaded_frame", 0))), "Successful buffer and texture host uploads across Terrain3D nodes, viewports and passes; current frame may still be in progress"],
+		["GPU uploads previous frame", Terrain3DRuntimeValueMap.format_bytes(float(uploads.get("bytes_uploaded_completed_frame", 0))), "Total host upload bytes in the last completed rendered frame"],
+		["Peak GPU uploads per frame", Terrain3DRuntimeValueMap.format_bytes(float(uploads.get("peak_completed_frame_bytes", 0))), "Largest completed frame, including startup and package publication"],
+		["Bytes uploaded", Terrain3DRuntimeValueMap.format_bytes(float(uploads.get("bytes_uploaded", 0))), "Lifetime successful buffer and texture host uploads; excludes GPU copies and readbacks"],
 		["Consecutive failures", str(int(diagnostics.get("consecutive_render_failures", 0))), "RD failures since the most recent successful render"],
 		["Near height binding", "READY" if bool(diagnostics.get("published_height_texture_valid", false)) else "PENDING", "Published Near height-array RID; PENDING uses Middle/Far/background fallback without latching the renderer"],
 		["Renderer recoveries", str(int(diagnostics.get("renderer_recoveries", 0))), "Automatic retries after a latched failure when terrain/material resource generations advance"],

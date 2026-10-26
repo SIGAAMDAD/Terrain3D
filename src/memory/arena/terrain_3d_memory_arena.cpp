@@ -3,7 +3,7 @@
 #include "memory/arena/terrain_3d_memory_arena.h"
 
 #include "memory/core/terrain_3d_memory.h"
-#include "memory/policy/terrain_3d_memory_math.h"
+#include "core/utility/terrain_3d_checked_math.h"
 
 #include <EASTL/numeric_limits.h>
 #include <string.h>
@@ -14,8 +14,6 @@ Terrain3DMemoryArenaLayout::Terrain3DMemoryArenaLayout( const size_t nCapacityBy
 {
 	configure( nCapacityBytes );
 }
-
-
 
 bool Terrain3DMemoryArenaLayout::configure( const size_t nCapacityBytes )
 {
@@ -32,14 +30,14 @@ bool Terrain3DMemoryArenaLayout::reserveLow( const size_t nBytes, const size_t n
 	if ( m_bSealed || !m_bValid ) {
 		return false;
 	}
-	if ( !t3dMemoryIsPowerOfTwo( nAlignment ) ) {
+	if ( !t3dIsPowerOfTwo<size_t>( nAlignment ) ) {
 		m_bValid = false;
 		return false;
 	}
 	m_nMaxAlignment = MAX( m_nMaxAlignment, nAlignment );
 
 	size_t aligned = 0u;
-	if ( !t3dMemoryAlignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nCapacity || nBytes > m_nCapacity - aligned ) {
+	if ( !t3dCheckedAlignUp<size_t>( m_nLowCursor, nAlignment, aligned ) || aligned > m_nCapacity || nBytes > m_nCapacity - aligned ) {
 		m_bValid = false;
 		return false;
 	}
@@ -55,11 +53,6 @@ bool Terrain3DMemoryArenaLayout::seal( void )
 	}
 	m_bSealed = true;
 	return true;
-}
-
-Terrain3DMemoryArena::~Terrain3DMemoryArena( void )
-{
-	release();
 }
 
 Terrain3DMemoryArena::Terrain3DMemoryArena( Terrain3DMemoryArena&& rOther ) noexcept
@@ -78,9 +71,7 @@ Terrain3DMemoryArena& Terrain3DMemoryArena::operator=( Terrain3DMemoryArena&& rO
 
 void Terrain3DMemoryArena::swap( Terrain3DMemoryArena& rOther ) noexcept
 {
-	eastl::swap( m_pRaw, rOther.m_pRaw );
-	eastl::swap( m_pBase, rOther.m_pBase );
-	eastl::swap( m_nCapacity, rOther.m_nCapacity );
+	m_backing.swap( rOther.m_backing );
 	eastl::swap( m_nBaseAlignment, rOther.m_nBaseAlignment );
 	eastl::swap( m_bInitialized, rOther.m_bInitialized );
 	eastl::swap( m_bCommitted, rOther.m_bCommitted );
@@ -93,24 +84,11 @@ bool Terrain3DMemoryArena::initialize( const Terrain3DMemoryArenaLayout& rLayout
 	if ( !rLayout.valid() || !rLayout.sealed() ) {
 		return false;
 	}
-	m_nCapacity = rLayout.capacity();
 	m_nBaseAlignment = MAX( rLayout.maxAlignment(), T3D_ARENA_DEFAULT_BASE_ALIGNMENT );
-	if ( m_nCapacity == 0u ) {
-		m_bInitialized = true;
-		return true;
-	}
-	if ( m_nCapacity > eastl::numeric_limits<size_t>::max() - ( m_nBaseAlignment - 1u ) ) {
+	if ( !m_backing.allocate( rLayout.capacity(), m_nBaseAlignment ) ) {
 		release();
 		return false;
 	}
-	m_pRaw = t3dMemoryAllocate( m_nCapacity + m_nBaseAlignment - 1u );
-	if ( !m_pRaw ) {
-		release();
-		return false;
-	}
-	const uintptr_t raw_address = (uintptr_t)( m_pRaw );
-	const uintptr_t mask = (uintptr_t)( m_nBaseAlignment - 1u );
-	m_pBase = (uint8_t *)( ( raw_address + mask ) & ~mask );
 	m_bInitialized = true;
 	return true;
 }
@@ -120,8 +98,8 @@ bool Terrain3DMemoryArena::commit( void )
 	if ( !initialized() || m_bSealed ) {
 		return false;
 	}
-	if ( m_nCapacity > 0u ) {
-		memset( m_pBase, 0, m_nCapacity );
+	if ( m_backing.capacity() > 0u ) {
+		memset( m_backing.data(), 0, m_backing.capacity() );
 	}
 	m_bCommitted = true;
 	return true;
@@ -138,10 +116,7 @@ bool Terrain3DMemoryArena::seal( void )
 
 void Terrain3DMemoryArena::release( void )
 {
-	t3dMemoryRelease( m_pRaw );
-	m_pRaw = NULL;
-	m_pBase = NULL;
-	m_nCapacity = 0u;
+	m_backing.release();
 	m_nBaseAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT;
 	m_bInitialized = false;
 	m_bCommitted = false;
@@ -150,10 +125,10 @@ void Terrain3DMemoryArena::release( void )
 
 bool Terrain3DMemoryArena::sliceInBounds( const t3dMemoryArenaSlice_t& rSlice ) const
 {
-	if ( !rSlice.m_bReserved || rSlice.m_iOffset > m_nCapacity || rSlice.m_nAlignment == 0u || ( rSlice.m_nAlignment & ( rSlice.m_nAlignment - 1u ) ) != 0u || rSlice.m_iOffset % rSlice.m_nAlignment != 0u ) {
+	if ( !rSlice.m_bReserved || rSlice.m_iOffset > m_backing.capacity() || rSlice.m_nAlignment == 0u || ( rSlice.m_nAlignment & ( rSlice.m_nAlignment - 1u ) ) != 0u || rSlice.m_iOffset % rSlice.m_nAlignment != 0u ) {
 		return false;
 	}
-	return rSlice.m_nSize <= m_nCapacity - rSlice.m_iOffset;
+	return rSlice.m_nSize <= m_backing.capacity() - rSlice.m_iOffset;
 }
 
 t3dMemoryArenaSpan_t Terrain3DMemoryArena::resolve( const t3dMemoryArenaSlice_t& rSlice )
@@ -161,7 +136,7 @@ t3dMemoryArenaSpan_t Terrain3DMemoryArena::resolve( const t3dMemoryArenaSlice_t&
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return { m_pBase ? m_pBase + rSlice.m_iOffset : NULL, rSlice.m_nSize };
+	return { m_backing.data() ? m_backing.data() + rSlice.m_iOffset : NULL, rSlice.m_nSize };
 }
 
 t3dMemoryArenaSpan_t Terrain3DMemoryArena::resolve( const t3dMemoryArenaSlice_t& rSlice ) const
@@ -169,5 +144,5 @@ t3dMemoryArenaSpan_t Terrain3DMemoryArena::resolve( const t3dMemoryArenaSlice_t&
 	if ( !initialized() || !sliceInBounds( rSlice ) ) {
 		return {};
 	}
-	return { m_pBase ? m_pBase + rSlice.m_iOffset : NULL, rSlice.m_nSize };
+	return { m_backing.data() ? m_backing.data() + rSlice.m_iOffset : NULL, rSlice.m_nSize };
 }

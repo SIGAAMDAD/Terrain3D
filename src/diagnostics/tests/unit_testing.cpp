@@ -6,6 +6,11 @@
 #include "assets/resources/generated_texture.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "diagnostics/tests/unit_testing.h"
+#include "data/persistence/terrain_3d_file_publication.h"
+#include "diagnostics/core/terrain_3d_diagnostics.h"
+#include "rendering/rd/forward/terrain_3d_rd_forward_pipeline_base.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_catalog.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 
 #include "core/config/terrain_3d_compiler.h"
 #include "core/utility/terrain_3d_util.h"
@@ -748,6 +753,131 @@ bool t3dRunRdCpuTests( void ) {
 	t3dRunRdInstanceAbiTests( state );
 	t3dRunHlodArrayMeshSurfaceTests( state );
 	state.expect( t3dRunMegaVTCacheTests(), "MegaVT region cache startup regression suite" );
+	state.expect( t3dRunVTWarmRepublishTests(), "VT warm republish regression suite" );
 	UtilityFunctions::print( "=== Terrain3D RD CPU tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
+	return state.m_nFailed == 0u;
+}
+
+bool t3dRunCentralizationTests( void )
+{
+	t3dRdUnitTestState_t state;
+	uint32_t startupShaders = 0u;
+	bool startupDomainsValid = true;
+	bool rasterVariantsDeferred = true;
+	for ( uint32_t value = 0u; value < T3D_RD_SHADER_COUNT; ++value ) {
+		const t3dRdShaderId_t id = ( t3dRdShaderId_t )value;
+		const bool required = t3dRdShaderNeedsStartupPhysical( id );
+		if ( required ) {
+			++startupShaders;
+			startupDomainsValid = startupDomainsValid && t3dRdShaderCatalogGet( id ).m_domain == T3D_RD_SHADER_GLOBAL_DEVICE;
+		}
+		if ( value < T3D_RD_SHADER_NEAR_ALIAS
+		        || ( value >= T3D_RD_SHADER_INSTANCE_FORWARD_BASE && value < T3D_RD_SHADER_INSTANCE_ALIAS )
+		        || ( value >= T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE && value < T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) ) {
+			rasterVariantsDeferred = rasterVariantsDeferred && !required;
+		}
+	}
+	state.expect( startupShaders == 17u && startupDomainsValid, "Startup creates only 17 global-device infrastructure shaders" );
+	state.expect( rasterVariantsDeferred, "Terrain, one-sun, instance and world pass variants are deferred until PREPARE" );
+	state.expect( t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_NEAR_ALIAS )
+	        && t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW )
+	        && t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_WORLD_RASTER_MESH_SHADOW )
+	        && t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_DISPLACEMENT_COMPUTE ), "Raster aliases, fixed shadows and displacement remain available at startup" );
+	state.expect( !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_BRUSH_COMPUTE )
+	        && !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_DERIVED_COMPUTE )
+	        && !t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_COUNT ), "Local-device programs and invalid IDs are excluded from global prewarm" );
+	if ( Terrain3DRdContext::isOnRenderThread() && Terrain3DRdShaderLibrary::physicalCacheReady() ) {
+		Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+		const t3dRdShaderId_t requested[] = {
+			t3dRdTerrainForwardId( T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL, 0u, 0u ),
+			t3dRdTerrainForwardId( T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED, 0u, 0u ),
+			t3dRdTerrainOneSunId( T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED, 0u, 0u ),
+			T3D_RD_SHADER_INSTANCE_FORWARD_BASE, T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE,
+			T3D_RD_SHADER_WORLD_RASTER_MESH_BASE
+		};
+		for ( const t3dRdShaderId_t id : requested ) {
+			Terrain3DRdShader first, second;
+			const bool created = first.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.Test.Lazy.First", id );
+			const bool reused = second.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN, "T3D.Test.Lazy.Second", id );
+			const RID physical = first.rid();
+			state.expect( created && reused && physical.is_valid() && physical == second.rid(), "Deferred raster variant reuses one physical shader across borrowers" );
+			first.releaseTracked( context );
+			second.releaseTracked( context );
+			state.expect( Terrain3DRdShaderLibrary::borrowPhysical( id ) == physical, "Borrower release retains the physical shader until the final cache user exits" );
+		}
+		state.expect( !Terrain3DRdShaderLibrary::acquirePhysicalCold( context, T3D_RD_SHADER_BRUSH_COMPUTE ).is_valid()
+		        && !Terrain3DRdShaderLibrary::acquirePhysicalCold( context, T3D_RD_SHADER_COUNT ).is_valid()
+		        && Terrain3DRdShaderLibrary::physicalCacheReady(), "Local and invalid requests cannot create global shaders or invalidate the ready cache" );
+	}
+	for ( uint32_t mode = 0u; mode < 3u; ++mode ) {
+		for ( uint32_t cull = 0u; cull < 3u; ++cull ) {
+			t3dRdForwardPipelineBaseKey_t key;
+			key.m_samples = RenderingDevice::TEXTURE_SAMPLES_4;
+			t3dRdForwardPipelineStateOptions_t options;
+			options.m_cullMode = (RenderingDevice::PolygonCullMode)cull;
+			options.m_frontFace = RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE;
+			options.m_depthCompare = RenderingDevice::COMPARE_OP_LESS_OR_EQUAL;
+			options.m_nBlendAttachmentCount = 1u;
+			options.m_bBlendFirstAttachment = mode == 1u;
+			options.m_bEnableDepthWrite = mode != 1u;
+			options.m_bColorWrite = mode != 2u;
+			t3dRdForwardPipelineStates_t values;
+			const bool created = t3dRdBuildForwardPipelineStates( key, options, values );
+			state.expect( created, "Pipeline states exist for every opacity/cull combination" );
+			if ( !created ) {
+				continue;
+			}
+			const Ref<RDPipelineColorBlendStateAttachment> blend = values.m_blend->get_attachments()[ 0 ];
+			state.expect( values.m_multisample->get_sample_count() == RenderingDevice::TEXTURE_SAMPLES_4 && values.m_raster->get_cull_mode() == options.m_cullMode && values.m_raster->get_front_face() == RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE && values.m_depth->get_enable_depth_test() && values.m_depth->get_enable_depth_write() == ( mode != 1u ) && values.m_depth->get_depth_compare_operator() == RenderingDevice::COMPARE_OP_LESS_OR_EQUAL,
+			              "Pipeline sample, cull, winding and depth policy is preserved" );
+			state.expect( blend->get_enable_blend() == ( mode == 1u ) && blend->get_write_r() == ( mode != 2u ) && blend->get_write_g() == ( mode != 2u ) && blend->get_write_b() == ( mode != 2u ) && blend->get_write_a() == ( mode != 2u ),
+			              "Transparent blending and depth-only RGBA masks are preserved" );
+			if ( mode == 1u ) {
+				state.expect( blend->get_src_color_blend_factor() == RenderingDevice::BLEND_FACTOR_SRC_ALPHA && blend->get_dst_color_blend_factor() == RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA && blend->get_src_alpha_blend_factor() == RenderingDevice::BLEND_FACTOR_ONE && blend->get_dst_alpha_blend_factor() == RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				              "Transparent color and alpha use the original blend factors" );
+			}
+		}
+	}
+
+	t3dCpuRegionCacheStats_t counters;
+	counters.m_nLoadBytesLastTick = UINT64_MAX;
+	counters.m_nServiceUsecLast = (uint64_t)INT64_MAX;
+	Dictionary stats;
+	t3dAppendRegionLoadCacheStats( stats, counters, 16, 7 );
+	state.expect( (int64_t)stats[ "load_bytes_last_tick" ] == -1 && (int64_t)stats[ "service_cpu_usec_last" ] == INT64_MAX && (int64_t)stats[ "demand_loads" ] == 7 && stats.size() == 11,
+	              "Cache counters preserve signed 64-bit Variant conversion and common schema" );
+
+	const String path = ProjectSettings::get_singleton()->globalize_path( "res://../validation/centralization_writer_contract.bin" );
+	const String staged = path + String( ".staged" ), previous = path + String( ".previous" );
+	const bool fresh = !FileAccess::file_exists( path ) && !FileAccess::file_exists( staged ) && !FileAccess::file_exists( previous );
+	state.expect( fresh, "Publication fixture paths are unused" );
+	if ( !fresh ) {
+		return false;
+	}
+	PackedByteArray original, replacement;
+	original.append( 0x13u );
+	replacement.append( 0x42u );
+	replacement.append( 0x7fu );
+	state.expect( t3dPublishPackedFile( path, original, NULL ) == OK, "Packed publication writes the exact initial bytes" );
+	Terrain3DFilePublication transaction( path, staged, previous );
+	state.expect( transaction.stagePacked( replacement ) == OK && FileAccess::get_file_as_bytes( path ) == original && transaction.publish() == OK && FileAccess::get_file_as_bytes( path ) == replacement,
+	              "Staging preserves the old artifact until publication" );
+	state.expect( transaction.rollback() == OK && FileAccess::get_file_as_bytes( path ) == original,
+	              "Rejected publication restores the original artifact" );
+	Terrain3DFilePublication shortWrite( path, staged, previous );
+	Ref<FileAccess> file;
+	state.expect( shortWrite.openStaged( file ) == OK, "Scalar serializers share staged stream opening" );
+	if ( file.is_valid() ) {
+		file->store_32( 0x12345678u );
+		state.expect( shortWrite.finishStaged( file, 8u ) == ERR_FILE_CANT_WRITE && file.is_null() && !FileAccess::file_exists( staged ) && FileAccess::get_file_as_bytes( path ) == original,
+		              "Short write is rejected, closed and cleaned without replacing the original" );
+	}
+	Terrain3DFilePublication accepted( path, staged, previous );
+	state.expect( accepted.stagePacked( replacement ) == OK && accepted.publish() == OK && accepted.commit() == OK && FileAccess::get_file_as_bytes( path ) == replacement && !FileAccess::file_exists( previous ),
+	              "Accepted publication retains exact bytes and releases the backup" );
+	DirAccess::remove_absolute( staged );
+	DirAccess::remove_absolute( previous );
+	DirAccess::remove_absolute( path );
+	UtilityFunctions::print( "=== Centralization tests: ", state.m_nPassed, " passed, ", state.m_nFailed, " failed ===" );
 	return state.m_nFailed == 0u;
 }

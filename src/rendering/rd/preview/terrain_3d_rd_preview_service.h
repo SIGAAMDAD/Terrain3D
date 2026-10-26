@@ -16,7 +16,6 @@
 #include "core/utility/terrain_3d_sync.h"
 #include "memory/arena/terrain_3d_zone_allocator.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
-#include "rendering/rd/preview/terrain_3d_rd_preview_result.h"
 #include "rendering/rd/vt/runtime/terrain_3d_shared_vt_runtime.h"
 
 #include <godot_cpp/classes/image.hpp>
@@ -26,15 +25,18 @@
 #include "assets/catalog/terrain_3d_assets.h"
 #include "memory/arena/terrain_3d_memory_zone.h"
 
-
 class Terrain3DPreviewHost {
 protected:
 	~Terrain3DPreviewHost( void ) = default;
 public:
-	virtual bool composePreviewTerrainPackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint ) = 0;
+	virtual bool composePreviewTerrainPackageCold( PackedByteArray &rPackage, uint32_t &rGeneration, uint64_t &rFingerprint,
+	        Terrain3DSharedMemoryReservation &rPackageMemory ) = 0;
+	virtual String previewTerrainCompositionErrorCold() const { return "Terrain MegaVT package composition failed"; }
 	virtual bool loadPreviewPackage( const void *pBytes, uint64_t nBytes ) = 0;
+	virtual bool stagePreviewPackageWarm( const void *pBytes, uint64_t nBytes ) = 0;
+	virtual bool servicePreviewPackageWarm( uint64_t nMaxBytes, uint32_t nMaxWorkUnits ) = 0;
+	virtual bool rebuildPreviewPackageResourcesCold( const void *pBytes, uint64_t nBytes, bool bNeutral, t3dVTSharedResourceClass_t eClass ) = 0;
 	virtual bool ensurePreviewSharedVt( t3dVTSharedResourceClass_t eClass ) = 0;
-	virtual void shutdownPreviewResources( void ) = 0;
 	virtual void setPreviewReady( uint32_t nGeneration, uint32_t nBit ) = 0;
 	virtual void clearPreviewReady( uint32_t nBit ) = 0;
 	virtual t3dRenderLifecycleStatus_t previewLifecycleStatus( void ) const = 0;
@@ -110,6 +112,8 @@ private:
 	uint16_t m_nCachedPreviewAssetId = UINT16_MAX;
 	uint64_t m_nPreviewMeshGeneration = 0u;
 	t3dAtomicU64_t m_nPublishedGpuFingerprint{ 0u };
+	Terrain3DSharedMemoryReservation m_packageMemory;
+	Terrain3DSharedMemoryReservation m_publishedPackageMemory;
 	PackedByteArray m_previewVtPackageBytes;
 	PackedByteArray m_previewVtPublishedPackageBytes;
 	uint64_t m_nPreviewVtFingerprint = 0u;
@@ -118,6 +122,10 @@ private:
 	uint32_t m_nPreviewVtPublishedPackageGeneration = 0u;
 	uint64_t m_nPreviewVtRecookCount = 0u;
 	uint64_t m_nPreviewVtObservedMaterialSourceGeneration = 0u;
+	uint64_t m_nPreviewVtDirtyMaterialSourceGeneration = 0u;
+	uint64_t m_nPreviewVtCookAfterUsec = 0u;
+	uint64_t m_nPreviewVtRecomposeRevision = 0u;
+	bool m_bPreviewVtAuthoringDirty = false;
 	uint64_t m_nPreviewVtStagedMaterialSourceGeneration = 0u;
 	uint64_t m_nPreviewVtFailedMaterialSourceGeneration = 0u;
 	uint64_t m_nPreviewVtPublishCount = 0u;
@@ -185,7 +193,7 @@ public:
 	        t3dAllocatorOverflowPolicy_t ePolicy );
 	bool bakePreviewVirtualTexturesCold( const t3dPreviewServices_t &rServices, String *pError );
 	bool preparePreviewAuthoringPackageCold(
-	        const t3dPreviewServices_t &rServices, const Ref<Terrain3DAssets> &rAssets, String *pError );
+	        const t3dPreviewServices_t &rServices, const Ref<Terrain3DAssets> &rAssets, String *pError, bool bImmediate = false );
 	bool queuePreviewVtRepublishCold( const t3dPreviewServices_t &rServices );
 	bool reloadPublishedPreviewVtPackageCold( const t3dPreviewServices_t &rServices );
 	void servicePreviewVtRepublishOnRenderThread( const t3dPreviewServices_t &rServices );

@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/vt/io/terrain_3d_vt_pack_runtime.h"
+#include "core/utility/terrain_3d_checked_math.h"
 
 #include <limits.h>
 #include <string.h>
@@ -32,10 +33,6 @@ static bool t3d_vt_pack_runtime_tail_block_layout(
 	}
 }
 
-static uint64_t t3d_vt_runtime_align64( const uint64_t nValue ) {
-	return ( nValue + 63u ) & ~63ull;
-}
-
 void t3d_vt_pack_runtime_clear( t3dVTPackRuntimeStorage_t &rStorage ) {
 	memset( &rStorage, 0, sizeof( rStorage ) );
 }
@@ -55,13 +52,13 @@ static bool t3d_vt_pack_runtime_raw_clusters_only_v3( const t3dVTPackViewV3_t &r
 #define T3D_VT_RUNTIME_ADD( count, type )                                                                                                  \
 	do {                                                                                                                                     \
 		if ( ( uint64_t )( count ) > ( UINT64_MAX - nBytes ) / sizeof( type ) ) { return false; }                                              \
-		nBytes = t3d_vt_runtime_align64( nBytes ) + ( uint64_t )( count ) * sizeof( type );                                                     \
+		nBytes = t3dAlignUpOrZero<uint64_t>( nBytes, 64u ) + ( uint64_t )( count ) * sizeof( type );                                                     \
 	} while ( 0 )
 
 #define T3D_VT_RUNTIME_TAKE( field, count, type )                                                                                          \
 	do {                                                                                                                                     \
 		Candidate.field = ( type * )( pBase + nOffset );                                                                                      \
-		nOffset = t3d_vt_runtime_align64( nOffset + ( uint64_t )( count ) * sizeof( type ) );                                                   \
+		nOffset = t3dAlignUpOrZero<uint64_t>( nOffset + ( uint64_t )( count ) * sizeof( type ), 64u );                                                   \
 	} while ( 0 )
 
 static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
@@ -84,7 +81,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 	}
 	const uint32_t nRuntimeAllocationCount = Header.m_nAllocationCount * T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
 
-	uint64_t nBytes = t3d_vt_runtime_align64( nPackageBytes );
+	uint64_t nBytes = t3dAlignUpOrZero<uint64_t>( nPackageBytes, 64u );
 	T3D_VT_RUNTIME_ADD( 1u, t3dVTFileHeader_t );
 	T3D_VT_RUNTIME_ADD( nRuntimeAllocationCount, t3dVTAllocationRecordV1_t );
 	T3D_VT_RUNTIME_ADD( Header.m_nPageCount, t3dVTPageFileRecord_t );
@@ -112,7 +109,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 	Candidate.pPackageBytes = pBase;
 	Candidate.nPackageBytes = nPackageBytes;
 	memcpy( Candidate.pPackageBytes, pPackage, ( size_t )nPackageBytes );
-	nOffset = t3d_vt_runtime_align64( nPackageBytes );
+	nOffset = t3dAlignUpOrZero<uint64_t>( nPackageBytes, 64u );
 	if ( !t3d_vt_pack_open_view_v3( Candidate.pPackageBytes, nPackageBytes, Candidate.PackViewV3 )
 	        || !t3d_vt_pack_runtime_raw_clusters_only_v3( Candidate.PackViewV3 ) ) {
 		rAllocator.pFree( rAllocator.pUser, pBlock );

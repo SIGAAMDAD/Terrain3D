@@ -4,7 +4,7 @@
 #include "core/utility/terrain_3d_sync.h"
 
 #include "memory/core/terrain_3d_memory.h"
-#include "memory/policy/terrain_3d_memory_math.h"
+#include "core/utility/terrain_3d_checked_math.h"
 
 #include <EASTL/numeric_limits.h>
 #include <stdlib.h>
@@ -29,7 +29,6 @@ Terrain3DMemoryZone::~Terrain3DMemoryZone()
 		abort();
 	}
 }
-
 
 bool Terrain3DMemoryZone::initialize( void *const pBacking, const size_t nBytes )
 {
@@ -161,7 +160,7 @@ bool Terrain3DMemoryZone::canTakeExtentUnlocked( const size_t nBytes, const size
 			continue;
 		}
 		size_t aligned_address = 0u;
-		if ( !t3dMemoryAlignUp( source_address + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) {
+		if ( !t3dCheckedAlignUp<size_t>( source_address + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) {
 			continue;
 		}
 		const size_t user = aligned_address - base;
@@ -197,7 +196,7 @@ bool Terrain3DMemoryZone::takeExtentUnlocked(
 			continue;
 		}
 		size_t aligned_address = 0u;
-		if ( !t3dMemoryAlignUp( source_address + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) {
+		if ( !t3dCheckedAlignUp<size_t>( source_address + nPrefixBytes, nAlignment, aligned_address ) || aligned_address < base ) {
 			continue;
 		}
 		const size_t user = aligned_address - base;
@@ -275,7 +274,7 @@ void *Terrain3DMemoryZone::allocateSmallUnlocked( const int nClassIndex, const s
 		page.m_nBytes = T3D_SMALL_PAGE_BYTES;
 		page.m_iClass = (uint16_t)nClassIndex;
 		size_t stride = 0u;
-		t3dMemoryAlignUp( sizeof( t3dMemoryZoneAllocationHeader_t ) + s_szSmallClasses[ nClassIndex ], 16u, stride );
+		t3dCheckedAlignUp<size_t>( sizeof( t3dMemoryZoneAllocationHeader_t ) + s_szSmallClasses[ nClassIndex ], 16u, stride );
 		page.m_nBlockStride = (uint32_t)stride;
 		page.m_nTotalBlocks = (uint16_t)( T3D_SMALL_PAGE_BYTES / stride );
 		page.m_iFirstFree = 0u;
@@ -339,7 +338,7 @@ void *Terrain3DMemoryZone::allocateLargeUnlocked( const size_t nBytes, const siz
 
 void *Terrain3DMemoryZone::allocateUnlocked( const size_t nBytes, const size_t nAlignment )
 {
-	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || nBytes == 0u || !t3dMemoryIsPowerOfTwo( nAlignment ) || nAlignment > UINT32_MAX ) {
+	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || nBytes == 0u || !t3dIsPowerOfTwo<size_t>( nAlignment ) || nAlignment > UINT32_MAX ) {
 		return NULL;
 	}
 	const int class_index = classIndexFor( nBytes, nAlignment );
@@ -353,7 +352,7 @@ bool Terrain3DMemoryZone::canAllocate( const size_t nBytes, const size_t nAlignm
 	}
 	Terrain3DScopedLock lock( m_mutex );
 	const size_t alignment = MAX( nAlignment, (size_t)alignof( void * ) );
-	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || !t3dMemoryIsPowerOfTwo( alignment ) || alignment > UINT32_MAX ) {
+	if ( m_state != T3D_MEMORY_ZONE_ACTIVE || !t3dIsPowerOfTwo<size_t>( alignment ) || alignment > UINT32_MAX ) {
 		return false;
 	}
 #if defined( TERRAIN3D_STORAGE_FAULT_TEST )

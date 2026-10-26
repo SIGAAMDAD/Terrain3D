@@ -11,6 +11,24 @@ namespace TokisanGames;
 [Tool]
 public partial class Terrain3D : Node3D
 {
+	/// <summary>Shared RenderingDevice host-upload counters without a GPU synchronization.</summary>
+	public Godot.Collections.Dictionary GetGpuUploadDiagnostics() =>
+		Call("get_gpu_upload_diagnostics", []).As<Godot.Collections.Dictionary>();
+
+	/// <summary>Live owner allocation accounting; never synchronizes the GPU.</summary>
+	public Godot.Collections.Dictionary GetMemoryTrackerStats() =>
+		Call("get_memory_tracker_stats", []).As<Godot.Collections.Dictionary>();
+
+	/// <summary>GPU resource caps in MiB. Zero inherits the shared total ceiling.</summary>
+	public int VirtualTextureMemoryBudgetMb { get => Get("virtual_texture_memory_budget_mb").AsInt32(); set => Set("virtual_texture_memory_budget_mb", value); }
+	public int InstanceRenderMemoryBudgetMb { get => Get("instance_render_memory_budget_mb").AsInt32(); set => Set("instance_render_memory_budget_mb", value); }
+	public int WorldRenderMemoryBudgetMb { get => Get("world_render_memory_budget_mb").AsInt32(); set => Set("world_render_memory_budget_mb", value); }
+	public int TerrainRenderMemoryBudgetMb { get => Get("terrain_render_memory_budget_mb").AsInt32(); set => Set("terrain_render_memory_budget_mb", value); }
+	public int HlodRenderMemoryBudgetMb { get => Get("hlod_render_memory_budget_mb").AsInt32(); set => Set("hlod_render_memory_budget_mb", value); }
+	public int OceanRenderMemoryBudgetMb { get => Get("ocean_render_memory_budget_mb").AsInt32(); set => Set("ocean_render_memory_budget_mb", value); }
+	public int ForwardLightingMemoryBudgetMb { get => Get("forward_lighting_memory_budget_mb").AsInt32(); set => Set("forward_lighting_memory_budget_mb", value); }
+	/// <summary>Working allowance for new incremental VT cooking jobs; zero selects automatic sizing.</summary>
+	public int CookingMemoryBudgetMb { get => Get("cooking_memory_budget_mb").AsInt32(); set => Set("cooking_memory_budget_mb", value); }
 
 	public enum DebugLevelEnum
 	{

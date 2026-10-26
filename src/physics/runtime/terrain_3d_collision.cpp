@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "Terrain3DTypeSupport.h"
 #include "physics/runtime/terrain_3d_collision.h"
 
@@ -1151,42 +1152,30 @@ void Terrain3DCollision::_bind_methods( void ) {
 	ClassDB::bind_method(
 	        D_METHOD( "update", "region_location", "rebuild" ), &Terrain3DCollision::update, DEFVAL( s_v2iMax ), DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "destroy" ), &Terrain3DCollision::destroy );
-	ClassDB::bind_method( D_METHOD( "set_mode", "mode" ), &Terrain3DCollision::setMode );
-	ClassDB::bind_method( D_METHOD( "get_mode" ), &Terrain3DCollision::getMode );
 	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DCollision::isEnabled );
 	ClassDB::bind_method( D_METHOD( "is_editor_mode" ), &Terrain3DCollision::isEditorMode );
 	ClassDB::bind_method( D_METHOD( "is_dynamic_mode" ), &Terrain3DCollision::isDynamicMode );
 
-	ClassDB::bind_method( D_METHOD( "set_shape_size", "size" ), &Terrain3DCollision::setShapeSize );
-	ClassDB::bind_method( D_METHOD( "get_shape_size" ), &Terrain3DCollision::getShapeSize );
-	ClassDB::bind_method( D_METHOD( "set_radius", "radius" ), &Terrain3DCollision::setRadius );
-	ClassDB::bind_method( D_METHOD( "get_radius" ), &Terrain3DCollision::getRadius );
-	ClassDB::bind_method( D_METHOD( "set_layer", "layers" ), &Terrain3DCollision::setLayer );
-	ClassDB::bind_method( D_METHOD( "get_layer" ), &Terrain3DCollision::getLayer );
-	ClassDB::bind_method( D_METHOD( "set_mask", "mask" ), &Terrain3DCollision::setMask );
-	ClassDB::bind_method( D_METHOD( "get_mask" ), &Terrain3DCollision::getMask );
-	ClassDB::bind_method( D_METHOD( "set_priority", "priority" ), &Terrain3DCollision::setPriority );
-	ClassDB::bind_method( D_METHOD( "get_priority" ), &Terrain3DCollision::getPriority );
-	ClassDB::bind_method( D_METHOD( "set_physics_material", "material" ), &Terrain3DCollision::setPhysicsMaterial );
-	ClassDB::bind_method( D_METHOD( "get_physics_material" ), &Terrain3DCollision::getPhysicsMaterial );
 	ClassDB::bind_method( D_METHOD( "get_rid" ), &Terrain3DCollision::getRid );
 	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DCollision::getStats );
 
 	ADD_GROUP( "Collision Geometry & Range", "" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Dynamic / Game,Dynamic / Editor,Full / Game,Full / Editor" ),
-	        "set_mode",
-	        "get_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shape_size", PROPERTY_HINT_RANGE, "8,64,8" ), "set_shape_size", "get_shape_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "radius", PROPERTY_HINT_RANGE, "16,256,16" ), "set_radius", "get_radius" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setMode, getMode, "mode",
+	                   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Dynamic / Game,Dynamic / Editor,Full / Game,Full / Editor" ), "set_mode", "get_mode" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setShapeSize, getShapeSize, "size",
+	                   PropertyInfo( Variant::INT, "shape_size", PROPERTY_HINT_RANGE, "8,64,8" ), "set_shape_size", "get_shape_size" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setRadius, getRadius, "radius",
+	                   PropertyInfo( Variant::INT, "radius", PROPERTY_HINT_RANGE, "16,256,16" ), "set_radius", "get_radius" );
 
 	ADD_GROUP( "Physics Layers", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "layer", PROPERTY_HINT_LAYERS_3D_PHYSICS ), "set_layer", "get_layer" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "mask", PROPERTY_HINT_LAYERS_3D_PHYSICS ), "set_mask", "get_mask" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setLayer, getLayer, "layers",
+	                   PropertyInfo( Variant::INT, "layer", PROPERTY_HINT_LAYERS_3D_PHYSICS ), "set_layer", "get_layer" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setMask, getMask, "mask",
+	                   PropertyInfo( Variant::INT, "mask", PROPERTY_HINT_LAYERS_3D_PHYSICS ), "set_mask", "get_mask" );
 
 	ADD_GROUP( "Physics Material", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "priority", PROPERTY_HINT_RANGE, "0.1,256,.1" ), "set_priority", "get_priority" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "physics_material", PROPERTY_HINT_RESOURCE_TYPE, "PhysicsMaterial" ),
-	        "set_physics_material",
-	        "get_physics_material" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setPriority, getPriority, "priority",
+	                   PropertyInfo( Variant::FLOAT, "priority", PROPERTY_HINT_RANGE, "0.1,256,.1" ), "set_priority", "get_priority" );
+	T3D_BIND_PROPERTY( Terrain3DCollision, setPhysicsMaterial, getPhysicsMaterial, "material",
+	                   PropertyInfo( Variant::OBJECT, "physics_material", PROPERTY_HINT_RESOURCE_TYPE, "PhysicsMaterial" ), "set_physics_material", "get_physics_material" );
 }

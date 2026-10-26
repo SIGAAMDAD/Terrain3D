@@ -1,5 +1,8 @@
+#include "memory/policy/terrain_3d_memory_account.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DConstants.h"
 #include "assets/catalog/terrain_3d_assets.h"
 
@@ -20,22 +23,20 @@
 // -----------------------------------------------------------------------------
 // Private functions
 
-
 static void t3dAssetsMaterialHashU64( uint64_t &rHash, const uint64_t nValue ) {
 	rHash = t3dHashFnv1a64LittleU64( rHash, nValue );
 }
 
 void Terrain3DAssets::advanceTexturePublicationGeneration( const bool ) {
-	m_nTexturePublicationGeneration = m_nTexturePublicationGeneration == UINT64_MAX ? 1u : m_nTexturePublicationGeneration + 1u;
+	m_nTexturePublicationGeneration = t3dNextGeneration( m_nTexturePublicationGeneration );
 }
 
 void Terrain3DAssets::advanceMeshSourceGeneration( void ) {
-	m_nMeshSourceGeneration = m_nMeshSourceGeneration == UINT64_MAX ? 1u : m_nMeshSourceGeneration + 1u;
+	m_nMeshSourceGeneration = t3dNextGeneration( m_nMeshSourceGeneration );
 }
 
 void Terrain3DAssets::advanceInstanceVtMaterialSourceGeneration( void ) {
-	m_nInstanceVtMaterialSourceGeneration =
-	        m_nInstanceVtMaterialSourceGeneration == UINT64_MAX ? 1u : m_nInstanceVtMaterialSourceGeneration + 1u;
+	m_nInstanceVtMaterialSourceGeneration = t3dNextGeneration( m_nInstanceVtMaterialSourceGeneration );
 }
 
 template <typename T>
@@ -623,6 +624,8 @@ void Terrain3DAssets::validateArrayMember( const Ref<Texture2D> &rTexture,
 }
 
 void Terrain3DAssets::updateTextureFiles( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
+	m_nTerrainVtContentGeneration = t3dNextGeneration( m_nTerrainVtContentGeneration );
 	advanceTexturePublicationGeneration( false );
 	m_bPersistenceDirty = true;
 	IS_INIT( VOID );
@@ -880,6 +883,7 @@ void Terrain3DAssets::updateTextureFiles( void ) {
 }
 
 void Terrain3DAssets::updateTextureSettingsInternal( const bool bPersistentChange ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	advanceTexturePublicationGeneration( false );
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
@@ -963,6 +967,7 @@ void Terrain3DAssets::updateTexturePreview( void ) {
 }
 
 void Terrain3DAssets::updateMeshInternal( const int nId, const bool bPersistentChange ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	advanceMeshSourceGeneration();
 	if ( bPersistentChange ) {
 		m_bPersistenceDirty = true;
@@ -1287,10 +1292,10 @@ bool Terrain3DAssets::setMeshAssetsBatch( const Dictionary &rAssetsById ) {
 	return true;
 }
 
-
 // p_id = -1 for all meshes
 // Adapted from godot\editor\plugins\editor_preview_plugins.cpp:EditorMeshPreviewPlugin
 void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize, const bool bForce ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !IS_EDITOR || !m_pTerrain ) {
 		return;
 	}
@@ -1307,10 +1312,7 @@ void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize
 	m_iThumbnailBatchCursor = 0;
 	m_thumbnailBatchSize = CLAMP( rSize, V2I( 2 ), V2I( 4096 ) );
 	m_nThumbnailBatchDeferredRetries = 0u;
-	++m_nThumbnailBatchGeneration;
-	if ( m_nThumbnailBatchGeneration == 0u ) {
-		++m_nThumbnailBatchGeneration;
-	}
+	m_nThumbnailBatchGeneration = t3dNextGeneration( m_nThumbnailBatchGeneration );
 	for ( int i = start_id; i < end_id && m_nThumbnailBatchCount < T3D_MAX_MESH_ASSETS; ++i ) {
 		const Ref<Terrain3DMeshAsset> asset = getMeshAsset( i );
 		if ( asset.is_null() || asset->getMesh( 0 ).is_null() ) {
@@ -1329,6 +1331,7 @@ void Terrain3DAssets::createMeshThumbnails( const int nId, const Vector2i &rSize
 }
 
 void Terrain3DAssets::serviceMeshThumbnailAsync( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_bThumbnailBatchActive || !m_pTerrain ) {
 		return;
 	}
@@ -1472,15 +1475,11 @@ void Terrain3DAssets::_bind_methods( void ) {
 
 	ClassDB::bind_method( D_METHOD( "set_texture_asset", "id", "texture" ), &Terrain3DAssets::setTextureAsset );
 	ClassDB::bind_method( D_METHOD( "get_texture_asset", "id" ), &Terrain3DAssets::getTextureAsset );
-	ClassDB::bind_method( D_METHOD( "set_texture_list", "texture_list" ), &Terrain3DAssets::setTextureList );
-	ClassDB::bind_method( D_METHOD( "get_texture_list" ), &Terrain3DAssets::getTextureList );
 	ClassDB::bind_method( D_METHOD( "get_texture_count" ), &Terrain3DAssets::getTextureCount );
 	ClassDB::bind_method( D_METHOD( "get_albedo_array_rid" ), &Terrain3DAssets::getAlbedoArrayRid );
 	ClassDB::bind_method( D_METHOD( "get_normal_array_rid" ), &Terrain3DAssets::getNormalArrayRid );
 	ClassDB::bind_method( D_METHOD( "get_surface_array_rid" ), &Terrain3DAssets::getSurfaceArrayRid );
 	ClassDB::bind_method( D_METHOD( "get_displacement_array_rid" ), &Terrain3DAssets::getDisplacementArrayRid );
-	ClassDB::bind_method( D_METHOD( "set_texture_packing_mode", "mode" ), &Terrain3DAssets::setTexturePackingMode );
-	ClassDB::bind_method( D_METHOD( "get_texture_packing_mode" ), &Terrain3DAssets::getTexturePackingMode );
 	ClassDB::bind_method( D_METHOD( "get_packed_pbr_mipmap_count" ), &Terrain3DAssets::getPackedPbrMipmapCount );
 	ClassDB::bind_method( D_METHOD( "get_texture_colors" ), &Terrain3DAssets::getTextureColors );
 	ClassDB::bind_method( D_METHOD( "get_texture_normal_depths" ), &Terrain3DAssets::getTextureNormalDepths );
@@ -1520,17 +1519,12 @@ void Terrain3DAssets::_bind_methods( void ) {
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_GROUP( "Packing / Runtime Format", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "texture_packing_mode",
-	                      PROPERTY_HINT_ENUM,
-	                      "Legacy AlbedoHeight + NormalRoughness,Packed PBR RGBA8 + Displacement R8" ),
-	        "set_texture_packing_mode",
-	        "get_texture_packing_mode" );
+	T3D_BIND_PROPERTY( Terrain3DAssets, setTexturePackingMode, getTexturePackingMode, "mode",
+	                   PropertyInfo( Variant::INT, "texture_packing_mode", PROPERTY_HINT_ENUM, "Legacy AlbedoHeight + NormalRoughness,Packed PBR RGBA8 + Displacement R8" ), "set_texture_packing_mode", "get_texture_packing_mode" );
 
 	ADD_GROUP( "Texture Asset Registry", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "texture_list", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DTextureAsset", ro_flags ),
-	        "set_texture_list",
-	        "get_texture_list" );
+	T3D_BIND_PROPERTY( Terrain3DAssets, setTextureList, getTextureList, "texture_list",
+	                   PropertyInfo( Variant::ARRAY, "texture_list", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DTextureAsset", ro_flags ), "set_texture_list", "get_texture_list" );
 
 	ADD_GROUP( "Mesh Asset Registry", "" );
 	ADD_PROPERTY( PropertyInfo( Variant::ARRAY, "mesh_list", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DMeshAsset", ro_flags ),

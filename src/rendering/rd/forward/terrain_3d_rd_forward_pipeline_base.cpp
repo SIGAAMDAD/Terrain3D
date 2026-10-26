@@ -60,11 +60,17 @@ bool t3dRdBuildForwardSharedPipelineStates( const t3dRdForwardPipelineBaseKey_t 
 			}
 			const bool blend = rOptions.m_bBlendFirstAttachment && i == 0u;
 			attachment->set_enable_blend( blend );
+			attachment->set_write_r( rOptions.m_bColorWrite );
+			attachment->set_write_g( rOptions.m_bColorWrite );
+			attachment->set_write_b( rOptions.m_bColorWrite );
+			attachment->set_write_a( rOptions.m_bColorWrite );
 			if ( blend ) {
 				attachment->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
 				attachment->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
+				attachment->set_color_blend_op( RenderingDevice::BLEND_OP_ADD );
 				attachment->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
 				attachment->set_dst_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
+				attachment->set_alpha_blend_op( RenderingDevice::BLEND_OP_ADD );
 			}
 			attachments.push_back( attachment );
 		}

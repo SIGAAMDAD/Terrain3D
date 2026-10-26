@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "diagnostics/core/terrain_3d_diagnostics.h"
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency_primitives.h"
 #include "streaming/cache/terrain_3d_instance_region_cache.h"
@@ -289,7 +290,7 @@ bool Terrain3DInstanceRegionCache::attachResidentStore(
 		}
 		++m_nEvictionsLastTick;
 	}
-	if ( !bDemandLoad && !t3dInstanceCacheCanStream( m_nResidentBytes, bytes, budget, m_nResidentCount ) ) {
+	if ( !t3dInstanceCacheCanStream( m_nResidentBytes, bytes, budget, m_nResidentCount ) ) {
 		return false;
 	}
 	m_szLocations[targetSlot] = t3dPackRegionCoord( vLocation );
@@ -447,7 +448,7 @@ void Terrain3DInstanceRegionCache::configure( const bool bEnabled,
         t3dInstanceRegionCacheChanges_s *const pChanges ) {
 	const bool bWasEnabled = m_bEnabled;
 	m_bEnabled = bEnabled;
-	m_nBudgetMb = CLAMP( nBudgetMb, T3D_INSTANCE_REGION_CACHE_MIN_BUDGET_MB, T3D_INSTANCE_REGION_CACHE_MAX_BUDGET_MB );
+	m_nBudgetMb = CLAMP( nBudgetMb, 0, T3D_INSTANCE_REGION_CACHE_MAX_BUDGET_MB );
 	m_nLoadBudgetPages = CLAMP( nLoadPages, 1, T3D_INSTANCE_REGION_LOAD_MAX_PAGES );
 	m_nLoadBudgetMb = CLAMP( nLoadBudgetMb, 1, T3D_INSTANCE_REGION_LOAD_MAX_BUDGET_MB );
 	if ( bWasEnabled && !bEnabled ) {
@@ -456,6 +457,13 @@ void Terrain3DInstanceRegionCache::configure( const bool bEnabled,
 	}
 	if ( !bWasEnabled && bEnabled ) {
 		reset( false, pChanges );
+	}
+	const size_t budget = size_t(m_nBudgetMb) * T3D_INSTANCE_CACHE_MIB;
+	while (m_nResidentCount > 0 && m_nResidentBytes > budget) {
+		const int slot = t3dRegionResidencySelectFarthestSlot(m_szLocations, m_nCapacity,
+		        m_center == s_v2iMax ? Vector2i() : m_center,
+		        [](const int, const Vector2i &location) { return location != s_v2iMax; });
+		if (slot < 0 || !evictSlot(slot, pChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_BUDGET_RECOVERY, s_v2iMax)) { break; }
 	}
 	m_bSelectionDirty = true;
 }
@@ -496,7 +504,7 @@ void Terrain3DInstanceRegionCache::update( const t3dResidencyFrameState_s &rFram
 	uint8_t desiredMap[T3D_REGION_SLOTS];
 	t3dRegionResidencyBuildDesiredMap( desired, desiredCount, desiredMap, T3D_ARRAY_COUNT( desiredMap ) );
 	const size_t residentBudget = ( size_t )( m_nBudgetMb )*T3D_INSTANCE_CACHE_MIB;
-	while ( m_nResidentCount > 1 && m_nResidentBytes > residentBudget ) {
+	while ( m_nResidentCount > 0 && m_nResidentBytes > residentBudget ) {
 		const int farthestSlot = t3dRegionResidencySelectFarthestSlot( m_szLocations, m_nCapacity, center,
 		        []( const int, const Vector2i &location ) { return location != s_v2iMax; } );
 		if ( farthestSlot < 0 || !evictSlot( farthestSlot, &rChanges, TERRAIN3D_INSTANCE_REGION_EVICTION_BUDGET_RECOVERY, s_v2iMax ) ) {
@@ -583,27 +591,18 @@ t3dInstanceRegionCacheStats_t Terrain3DInstanceRegionCache::getStats( void ) con
 }
 
 Dictionary Terrain3DInstanceRegionCache::getStatsDictionary( const bool bDetailed, const int nEffectiveLoadPages ) const {
+	const auto values = getStats();
 	Dictionary stats;
-	stats["enabled"] = m_bEnabled;
-	stats["budget_mb"] = m_nBudgetMb;
-	stats["capacity"] = m_nCapacity;
-	stats["resident"] = m_nResidentCount;
+	t3dAppendRegionLoadCacheStats( stats, values, m_nBudgetMb, m_nDemandLoads );
 	stats["resident_bytes"] = ( int64_t )( m_nResidentBytes );
-	stats["desired_last_tick"] = m_nDesiredLastTick;
-	stats["loads_last_tick"] = m_nLoadsLastTick;
-	stats["evictions_last_tick"] = m_nEvictionsLastTick;
-	stats["load_bytes_last_tick"] = ( int64_t )( m_nLoadBytesLastTick );
-	stats["service_cpu_usec_last"] = ( int64_t )( m_nServiceUsecLast );
-	stats["demand_loads"] = m_nDemandLoads;
-	stats["selection_pending"] = m_bSelectionDirty;
-	stats["materialization_pending"] = m_bMaterializationPending;
+	stats[ "materialization_pending" ] = m_bMaterializationPending;
 	stats["materialization_service_active"] = m_bMaterializationServiceActive;
 	stats["cold_materializations"] = ( int64_t )( m_nColdMaterializations );
 	stats["materialization_misses"] = ( int64_t )( m_nMaterializationMisses );
 	stats["evictions_total"] = ( int64_t )( m_nEvictionsTotal );
 	stats["cache_policy_evictions"] = ( int64_t )( m_nCachePolicyEvictions );
-	stats["tracked_resident_bytes"] = ( int64_t )( getTrackedResidentBytesSum() );
-	stats["resident_byte_accounting_consistent"] = m_nResidentBytes == getTrackedResidentBytesSum();
+	stats[ "tracked_resident_bytes" ] = (int64_t)( values.m_nTrackedResidentBytes );
+	stats[ "resident_byte_accounting_consistent" ] = m_nResidentBytes == values.m_nTrackedResidentBytes;
 	if ( !bDetailed ) {
 		return stats;
 	}

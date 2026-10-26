@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_generation.h"
 #include "authoring/world/core/terrain_3d_world_authoring.h"
 
 #include <string.h>
@@ -125,10 +126,7 @@ void t3d_world_ownership_registry_clear_cold( t3dWorldOwnershipRegistry_t &rRegi
 		return;
 	}
 
-	++rRegistry.nGeneration;
-	if ( rRegistry.nGeneration == 0u ) {
-		rRegistry.nGeneration = 1u;
-	}
+	rRegistry.nGeneration = t3dNextGeneration( rRegistry.nGeneration );
 	rRegistry.nCount = 0u;
 	for ( uint32_t i = 0u; i < rRegistry.nCapacity; ++i ) {
 		rRegistry.pEntries[i].nSourceId = 0u;

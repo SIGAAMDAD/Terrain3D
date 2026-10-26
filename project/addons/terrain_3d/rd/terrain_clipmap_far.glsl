@@ -1,3 +1,5 @@
+// Wetness revision 2026-10-05: region-scaled sampling and shared signed roughness.
+// Material graph revision 2026-10-05: shared bounded color sampling.
 #[versions]
 color = "";
 color_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING";
@@ -71,6 +73,7 @@ editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#de
 
 #[fragment]
 #version 450
+#extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #include "vt/terrain_vt_common_inc.glslinc"

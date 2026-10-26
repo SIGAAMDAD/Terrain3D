@@ -8,26 +8,12 @@
 
 using namespace godot;
 
-static size_t t3dDiagnosticsMeshSnapshotBytes( const t3dRdMeshSourceSnapshot_t& rSnapshot )
-{
-	size_t nBytes = rSnapshot.m_vertexBytes.size() + rSnapshot.m_index32Bytes.size();
-	nBytes += rSnapshot.m_vertexChunkHashes.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_index32ChunkHashes.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_surfaces.capacity() * sizeof( t3dRdMeshSourceSurface_t );
-	nBytes += rSnapshot.m_lods.capacity() * sizeof( t3dRdMeshSourceLod_t );
-	nBytes += rSnapshot.m_materials.capacity() * sizeof( t3dRdInstanceMaterial_t );
-	nBytes += rSnapshot.m_vtMaterials.capacity() * sizeof( t3dRenderingMaterialGpu_t );
-	nBytes += rSnapshot.m_materialKeys.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_vtStableKeys.capacity() * sizeof( uint64_t );
-	return nBytes;
-}
-
 size_t Terrain3DDiagnosticsPublisher::getRetainedCpuBytes( const t3dDiagnosticInputs_t& rInputs ) const
 {
 	const t3dPreviewDiagnosticsView_t m_previewServiceView = rInputs.m_previewService.getDiagnosticsView();
 	size_t nBytes = rInputs.m_publicationBuilder.getRetainedCpuBytes() + rInputs.m_forwardPassPreparer.getRetainedCpuBytes();
-	nBytes += t3dDiagnosticsMeshSnapshotBytes( m_previewServiceView.m_cachedPreviewMeshes );
-	nBytes += t3dDiagnosticsMeshSnapshotBytes( m_previewServiceView.m_pendingPreviewMeshes );
+	nBytes += m_previewServiceView.m_cachedPreviewMeshes.getRetainedCpuBytes();
+	nBytes += m_previewServiceView.m_pendingPreviewMeshes.getRetainedCpuBytes();
 	nBytes += rInputs.m_instanceRenderer.getRetainedCpuBytes() + m_previewServiceView.m_previewRenderer.getRetainedCpuBytes();
 	nBytes += rInputs.m_worldRuntime.getRetainedCpuBytes();
 	nBytes += (size_t)( rInputs.m_virtualTexture.get_cpu_image_bytes() );
@@ -171,6 +157,7 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const t3dDiagnosticInp
 	world_renderer[ "visibility_prepares" ] = (int64_t)rInputs.m_worldRuntime.getVisibilityPrepareCount();
 	world_renderer[ "gpu_buffer_bytes" ] = (int64_t)world_resources.getGpuBufferBytes();
 	world_renderer[ "upload_bytes" ] = (int64_t)world_resources.getUploadBytes();
+	world_renderer[ "skipped_publication_upload_bytes" ] = (int64_t)world_resources.getSkippedPublicationUploadBytes();
 	world_renderer[ "resource_generation" ] = (int64_t)world_resources.getResourceGeneration();
 	world_renderer[ "hiz_width" ] = (int64_t)world_hiz.getWidth();
 	world_renderer[ "hiz_height" ] = (int64_t)world_hiz.getHeight();
@@ -260,6 +247,7 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const t3dDiagnosticInp
 	                                                : String( "neutral" );
 	result[ "virtual_texture_database_generation" ] = (int64_t)( rInputs.m_virtualTexture.getDatabaseGeneration() );
 	result[ "virtual_texture_package_generation" ] = (int64_t)( rInputs.m_virtualTexture.getPackageGeneration() );
+	result[ "virtual_texture_publication_generation" ] = (int64_t)rInputs.m_virtualTexture.getPackagePublicationGeneration();
 	result[ "virtual_texture_active_allocation_count" ] = (int64_t)( rInputs.m_virtualTexture.getActiveAllocationCount() );
 	result[ "virtual_texture_active_virtual_page_count" ] = (int64_t)( rInputs.m_virtualTexture.getActiveVirtualPageCount() );
 	result[ "virtual_texture_package_content_signature" ] =

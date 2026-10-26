@@ -66,6 +66,17 @@ typedef struct t3dRdMeshSourceSnapshot_s {
 	eastl::vector<uint32_t, Terrain3DEastlAllocator> m_worldTriangleWords;
 	eastl::vector<t3dWorldCluster_t, Terrain3DEastlAllocator> m_worldClusters;
 	eastl::vector<t3dWorldClusterVTMetadata_t, Terrain3DEastlAllocator> m_worldClusterVtMetadata;
+	// Payload bytes and retained capacities only; excludes this record's inline storage.
+	size_t getRetainedCpuBytes( void ) const {
+		return m_vertexBytes.size() + m_index32Bytes.size()
+		        + t3dContainerResidentBytes( m_vertexChunkHashes ) + t3dContainerResidentBytes( m_index32ChunkHashes )
+		        + t3dContainerResidentBytes( m_surfaces ) + t3dContainerResidentBytes( m_lods )
+		        + t3dContainerResidentBytes( m_materials ) + t3dContainerResidentBytes( m_vtMaterials )
+		        + t3dContainerResidentBytes( m_materialKeys ) + t3dContainerResidentBytes( m_vtStableKeys )
+		        + t3dContainerResidentBytes( m_worldVertices ) + t3dContainerResidentBytes( m_worldClusterVertexIndices )
+		        + t3dContainerResidentBytes( m_worldTriangleWords ) + t3dContainerResidentBytes( m_worldClusters )
+		        + t3dContainerResidentBytes( m_worldClusterVtMetadata );
+	}
 	EA_FORCE_INLINE void bindRuntimeAllocator( const Terrain3DEastlAllocator &rAllocator ) {
 		m_vertexChunkHashes.set_allocator( rAllocator );
 		m_index32ChunkHashes.set_allocator( rAllocator );

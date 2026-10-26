@@ -125,7 +125,11 @@ public:
 			return false;
 		}
 		if ( !m_pZone ) {
-			return true;
+			if (!g_t3dMemoryAccount) { return true; }
+			const auto stats = g_t3dMemoryAccount->stats();
+			const uint64_t overhead = header_size + alignment_slack + sizeof(t3dNativeMemoryHeader);
+			const uint64_t available = stats.limit - stats.committed;
+			return overhead <= available && n <= available - overhead;
 		}
 		const size_t total = n + header_size + alignment_slack;
 		if ( m_pZone->canAllocate( total, alignment ) ) {

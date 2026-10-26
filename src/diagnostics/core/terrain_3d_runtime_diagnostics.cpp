@@ -435,6 +435,7 @@ Dictionary Terrain3D::getRuntimeDiagnostics( const bool bDeep ) const {
 	diagnostics["region_streaming"] = getRegionStreamingStats();
 	diagnostics["region_streaming_configuration"] = getRegionStreamingConfigurationStatus();
 	diagnostics["memory"] = bDeep ? getMemoryEstimate() : getRuntimeMemoryStatsFast();
+	diagnostics["memory_tracker"] = getMemoryTrackerStats();
 
 	Dictionary startup;
 	startup["generation"] = ( int64_t )( m_nStartupGeneration );

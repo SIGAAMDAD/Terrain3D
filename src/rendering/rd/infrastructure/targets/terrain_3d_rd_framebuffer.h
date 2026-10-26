@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_RD_FRAMEBUFFER_H
 #define TERRAIN3D_RD_FRAMEBUFFER_H
 
-#include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_resource_state.h"
 
 #include <stdint.h>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -9,21 +9,18 @@
 using namespace godot;
 
 class Terrain3DRdFramebuffer {
-	RID m_hRid;
-	uint32_t m_nGeneration = 0u;
-	t3dRdResourceOwner_t m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
+	Terrain3DRdResourceState<1u> m_state;
 
-	static uint32_t nextGeneration( uint32_t nGeneration ) { return nGeneration == UINT32_MAX ? 1u : nGeneration + 1u; }
 
 public:
 	Terrain3DRdFramebuffer( void ) = default;
 	Terrain3DRdFramebuffer( const Terrain3DRdFramebuffer & ) = delete;
 	Terrain3DRdFramebuffer &operator=( const Terrain3DRdFramebuffer & ) = delete;
 
-	EA_FORCE_INLINE bool isValid( void ) const { return m_hRid.is_valid(); }
-	EA_FORCE_INLINE const RID &rid( void ) const { return m_hRid; }
-	EA_FORCE_INLINE uint32_t generation( void ) const { return m_nGeneration; }
-	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_owner; }
+	EA_FORCE_INLINE bool isValid( void ) const { return m_state.isValid(); }
+	EA_FORCE_INLINE const RID &rid( void ) const { return m_state.rid(); }
+	EA_FORCE_INLINE uint32_t generation( void ) const { return m_state.generation(); }
+	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_state.owner(); }
 
 	bool createTracked( Terrain3DRdContext &rContext, t3dRdResourceOwner_t owner,
 	        const String &rName, const TypedArray<RID> &rAttachments,

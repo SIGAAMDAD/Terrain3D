@@ -3,6 +3,7 @@
 #define TERRAIN3D_INSTANCE_STORE_H
 
 #include "Terrain3DTypes.h"
+#include "core/utility/terrain_3d_generation.h"
 
 #include "Terrain3DConstants.h"
 #include "data/formats/terrain_3d_packed_transform.h"
@@ -184,10 +185,7 @@ typedef struct t3dInstanceCell_s {
 	void touch( void ) {
 		m_bModified = true;
 		m_bCachedAabbValid = false;
-		++m_nRevision;
-		if ( m_nRevision == 0 ) {
-			m_nRevision = 1;
-		}
+		m_nRevision = t3dNextGeneration( m_nRevision );
 	}
 } t3dInstanceCell_t;
 

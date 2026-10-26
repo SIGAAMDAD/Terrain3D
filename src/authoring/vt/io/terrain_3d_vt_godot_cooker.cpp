@@ -116,6 +116,8 @@ static bool t3d_vt_godot_encode_tile( void *pUser, const t3dVTEncodeTileRequest_
 		return t3d_vt_godot_reference_fallback( rRequest, rWrittenBytes );
 	}
 
+	Terrain3DMemoryReservation source_memory;
+	if (!source_memory.resize(uint64_t(rRequest.m_nSourceBytes) * 3u)) { return false; }
 	PackedByteArray SourceBytes;
 	SourceBytes.resize( rRequest.m_nSourceBytes );
 	memcpy( SourceBytes.ptrw(), rRequest.m_pSourcePixels, rRequest.m_nSourceBytes );
@@ -163,13 +165,9 @@ void t3d_vt_godot_make_encoder( t3dVTEncoderInterface_t &rEncoder ) {
 	rEncoder.m_pEncodeTile = t3d_vt_godot_encode_tile;
 }
 
-
-static uint64_t t3d_vt_godot_hash_bytes( uint64_t nHash, const void *const pData, const uint64_t nBytes ) {
-	return t3dHashFnv1a64( pData, nBytes, nHash );
-}
-
-static uint64_t t3d_vt_godot_hash_u64( uint64_t nHash, const uint64_t nValue ) {
-	return t3d_vt_godot_hash_bytes( nHash, &nValue, sizeof( nValue ) );
+static uint64_t t3d_vt_godot_hash_u64( uint64_t nHash, const uint64_t nValue )
+{
+	return t3dHashFnv1a64( &nValue, sizeof( nValue ), nHash );
 }
 
 static void t3d_vt_godot_clear_source_v3( t3dVTGodotSourceV3_t &rSource ) {
@@ -206,7 +204,7 @@ static uint64_t t3d_vt_godot_channel_fingerprint_v3( const t3dVTCookImageView_t 
 	nHash = t3d_vt_godot_hash_u64( nHash, rView.m_nWidth );
 	nHash = t3d_vt_godot_hash_u64( nHash, rView.m_nHeight );
 	nHash = t3d_vt_godot_hash_u64( nHash, rView.m_nComponents );
-	nHash = t3d_vt_godot_hash_bytes( nHash, rBytes.ptr(), ( uint64_t )rBytes.size() );
+	nHash = t3dHashFnv1a64( rBytes.ptr(), (uint64_t)rBytes.size(), nHash );
 	return nHash == 0u ? 1u : nHash;
 }
 
@@ -448,24 +446,25 @@ static void t3d_vt_godot_editor_free( void *pUser, void *pMemory ) {
 
 // t3dVTEditorChannelCacheDiskHeaderV3_s centralized in Terrain3DTypes.h.
 
-
-typedef struct t3dVTEditorFragmentV3_s {
+typedef struct t3dVTEditorFragmentV3_s
+{
 
 	uint64_t m_nStableKey;
 	uint64_t m_nKey;
 	PackedByteArray m_Bytes;
 } t3dVTEditorFragmentV3_t;
 
-
-typedef struct t3dVTEditorUniquePayloadV3_s {
+typedef struct t3dVTEditorUniquePayloadV3_s
+{
 
 	t3dVTPackPayloadRecordV3_t m_Record;
-	PackedByteArray m_Bytes;
+	// The immutable input fragments outlive the merge. Borrow their payloads
+	// until concatenation instead of allocating another complete byte copy.
+	const uint8_t *m_pBytes = NULL;
+	uint32_t m_nBytes = 0u;
 } t3dVTEditorUniquePayloadV3_t;
 
-
 // t3dVTEditorTimedEncoderV3_s centralized in Terrain3DTypes.h.
-
 
 static uint64_t t3d_vt_godot_now_usec_v3( void ) {
 	Time *const pTime = Time::get_singleton();
@@ -490,27 +489,8 @@ static bool t3d_vt_godot_write_cache_atomic_v3( const String &rPath, const Packe
 	if ( rPath.is_empty() || rBytes.is_empty() ) {
 		return false;
 	}
-	const String temporary = rPath + String( ".tmp" );
-	const String backup = rPath + String( ".bak" );
-	Terrain3DFilePublication publication( rPath, temporary, backup );
-	if ( publication.prepare() != OK ) {
-		return false;
-	}
-	if ( FileAccess::file_exists( temporary ) ) {
-		DirAccess::remove_absolute( temporary );
-	}
-	Ref<FileAccess> file = FileAccess::open( temporary, FileAccess::WRITE );
-	if ( file.is_null() ) {
-		return false;
-	}
-	file->store_buffer( rBytes );
-	const Error eError = file->get_error();
-	file->close();
-	if ( eError != OK ) {
-		DirAccess::remove_absolute( temporary );
-		return false;
-	}
-	return publication.publish() == OK && publication.commit() == OK;
+	Terrain3DFilePublication publication( rPath, rPath + String( ".tmp" ), rPath + String( ".bak" ) );
+	return publication.stagePacked( rBytes ) == OK && publication.publish() == OK && publication.commit() == OK;
 }
 
 static bool t3d_vt_godot_timed_encode_tile_v3(
@@ -564,7 +544,10 @@ static bool t3d_vt_godot_load_channel_cache_disk_v3( t3dVTEditorCookCacheV3_t &r
 	if ( path.is_empty() || !FileAccess::file_exists( path ) ) {
 		return false;
 	}
-	const PackedByteArray fileBytes = FileAccess::get_file_as_bytes( path );
+	const Ref<FileAccess> cache_file = FileAccess::open(path, FileAccess::READ);
+	Terrain3DMemoryReservation file_memory;
+	if (cache_file.is_null() || !file_memory.resize(cache_file->get_length())) { return false; }
+	const PackedByteArray fileBytes = cache_file->get_buffer(cache_file->get_length());
 	if ( fileBytes.size() < ( int64_t )sizeof( t3dVTEditorChannelCacheDiskHeaderV3_t ) ) {
 		return false;
 	}
@@ -587,11 +570,13 @@ static bool t3d_vt_godot_load_channel_cache_disk_v3( t3dVTEditorCookCacheV3_t &r
 	entry.m_nLogicalChannel = nChannel;
 	entry.m_nTargetExtent = nTargetExtent;
 	entry.m_Layout = header.m_Layout;
+	if (!entry.m_memory.reserve(header.m_nPayloadBytes)) { return false; }
 	entry.m_Bytes.resize( ( int64_t )header.m_nPayloadBytes );
 	if ( entry.m_Bytes.size() != ( int64_t )header.m_nPayloadBytes ) {
 		return false;
 	}
 	memcpy( entry.m_Bytes.ptrw(), pPayload, ( size_t )header.m_nPayloadBytes );
+	if (!t3dContainerReserveCold(rCache.m_ChannelEntries, rCache.m_ChannelEntries.size() + 1u)) { return false; }
 	rCache.m_ChannelEntries.push_back( entry );
 	rpEntry = &rCache.m_ChannelEntries.back();
 	return true;
@@ -614,6 +599,8 @@ static void t3d_vt_godot_store_channel_cache_disk_v3(
 	header.m_nPayloadBytes = ( uint64_t )rEntry.m_Bytes.size();
 	header.m_nPayloadChecksum = t3d_vt_pack_checksum32( rEntry.m_Bytes.ptr(), header.m_nPayloadBytes );
 	PackedByteArray fileBytes;
+	Terrain3DMemoryReservation file_memory;
+	if (!file_memory.resize(sizeof(header) + header.m_nPayloadBytes)) { return; }
 	fileBytes.resize( ( int64_t )( sizeof( header ) + header.m_nPayloadBytes ) );
 	if ( fileBytes.size() != ( int64_t )( sizeof( header ) + header.m_nPayloadBytes ) ) {
 		return;
@@ -652,7 +639,10 @@ static bool t3d_vt_godot_load_allocation_cache_disk_v3( t3dVTEditorCookCacheV3_t
 	if ( path.is_empty() || !FileAccess::file_exists( path ) ) {
 		return false;
 	}
-	const PackedByteArray bytes = FileAccess::get_file_as_bytes( path );
+	const Ref<FileAccess> cache_file = FileAccess::open(path, FileAccess::READ);
+	Terrain3DSharedMemoryReservation file_memory;
+	if (cache_file.is_null() || !file_memory.reserve(cache_file->get_length())) { return false; }
+	const PackedByteArray bytes = cache_file->get_buffer(cache_file->get_length());
 	if ( !t3d_vt_godot_validate_allocation_fragment_v3( bytes, nStableKey ) ) {
 		return false;
 	}
@@ -660,6 +650,8 @@ static bool t3d_vt_godot_load_allocation_cache_disk_v3( t3dVTEditorCookCacheV3_t
 	entry.m_nStableKey = nStableKey;
 	entry.m_nKey = nKey;
 	entry.m_PackageBytes = bytes;
+	entry.m_memory = file_memory;
+	if (!t3dContainerReserveCold(rCache.m_AllocationEntries, rCache.m_AllocationEntries.size() + 1u)) { return false; }
 	rCache.m_AllocationEntries.push_back( entry );
 	rpEntry = &rCache.m_AllocationEntries.back();
 	return true;
@@ -760,6 +752,10 @@ static bool t3d_vt_godot_prepare_channel_cache_v3( t3dVTEditorCookCacheV3_t &rCa
 		entry.m_nTargetExtent = nTargetExtent;
 		entry.m_nLogicalChannel = ( uint32_t )Channel;
 		entry.m_Layout = layout;
+		if (!entry.m_memory.reserve(layout.m_nTotalBytes)) {
+			rAllocator.m_pFree(rAllocator.m_pUser, pMipBytes);
+			return false;
+		}
 		entry.m_Bytes.resize( ( int64_t )layout.m_nTotalBytes );
 		if ( entry.m_Bytes.size() != ( int64_t )layout.m_nTotalBytes ) {
 			rAllocator.m_pFree( rAllocator.m_pUser, pMipBytes );
@@ -767,7 +763,8 @@ static bool t3d_vt_godot_prepare_channel_cache_v3( t3dVTEditorCookCacheV3_t &rCa
 		}
 		memcpy( entry.m_Bytes.ptrw(), pMipBytes, ( size_t )layout.m_nTotalBytes );
 		rAllocator.m_pFree( rAllocator.m_pUser, pMipBytes );
-		rCache.m_ChannelEntries.push_back( entry );
+		if (!t3dContainerReserveCold(rCache.m_ChannelEntries, rCache.m_ChannelEntries.size() + 1u)) { return false; }
+	rCache.m_ChannelEntries.push_back( entry );
 		pEntry = &rCache.m_ChannelEntries.back();
 		t3d_vt_godot_store_channel_cache_disk_v3( rCache, *pEntry );
 	}
@@ -861,6 +858,7 @@ static bool t3d_vt_godot_cook_allocation_fragment_v3( const Ref<Terrain3DAssets>
 		             rTelemetry,
 		             nPreparedKey )
 		        || nPreparedKey != channelKeys[iChannel] ) {
+			rCache.m_ChannelEntries.clear();
 			if ( pError ) {
 				*pError = "VT V3 cooker could not prepare a channel pyramid";
 			}
@@ -877,6 +875,10 @@ static bool t3d_vt_godot_cook_allocation_fragment_v3( const Ref<Terrain3DAssets>
 	rTelemetry.m_nStage = T3D_VT_EDITOR_COOK_STAGE_PAGE;
 	const uint64_t nCookStart = t3d_vt_godot_now_usec_v3();
 	const bool bCooked = t3d_vt_cooker_cook_sparse_pages_v3( rSettings, &cookSource, 1u, encoder, rAllocator, NULL, package );
+	// Prepared pyramids are borrowed only by the sparse cook. Encoded fragments
+	// and the disk cache retain reusable results; keeping raw pyramids for every
+	// material consumes the headroom needed to serialize and merge the package.
+	rCache.m_ChannelEntries.clear();
 	const uint64_t nCookEnd = t3d_vt_godot_now_usec_v3();
 	rTelemetry.m_nEncodeUsec += timedEncoder.m_nEncodeUsec;
 	if ( nCookEnd >= nCookStart ) {
@@ -899,6 +901,8 @@ static bool t3d_vt_godot_cook_allocation_fragment_v3( const Ref<Terrain3DAssets>
 		t3d_vt_cooker_release_sparse_package_v3( package );
 		return false;
 	}
+	Terrain3DSharedMemoryReservation fragment_memory;
+	if (!fragment_memory.reserve(nBytes)) { t3d_vt_cooker_release_sparse_package_v3(package); return false; }
 	rFragmentBytes.resize( ( int64_t )nBytes );
 	uint64_t nWritten = 0u;
 	const bool bWritten = rFragmentBytes.size() == ( int64_t )nBytes
@@ -912,6 +916,7 @@ static bool t3d_vt_godot_cook_allocation_fragment_v3( const Ref<Terrain3DAssets>
 	entry.m_nStableKey = nStableKey;
 	entry.m_nKey = rAllocationKey;
 	entry.m_PackageBytes = rFragmentBytes;
+	entry.m_memory = fragment_memory;
 	for ( size_t iEntry = 0u; iEntry < rCache.m_AllocationEntries.size(); ++iEntry ) {
 		if ( rCache.m_AllocationEntries[iEntry].m_nStableKey == nStableKey ) {
 			rCache.m_AllocationEntries[iEntry] = entry;
@@ -919,6 +924,7 @@ static bool t3d_vt_godot_cook_allocation_fragment_v3( const Ref<Terrain3DAssets>
 			return true;
 		}
 	}
+	if (!t3dContainerReserveCold(rCache.m_AllocationEntries, rCache.m_AllocationEntries.size() + 1u)) { return false; }
 	rCache.m_AllocationEntries.push_back( entry );
 	t3d_vt_godot_store_allocation_cache_disk_v3( rCache, rCache.m_AllocationEntries.back() );
 	return true;
@@ -994,8 +1000,8 @@ static uint32_t t3d_vt_godot_find_or_add_payload_v3(
 		++rIndex.m_nComparisons;
 		const t3dVTEditorUniquePayloadV3_t &rExisting = rPayloads[iPayload];
 		if ( rExisting.m_Record.m_nContentSignature == rPayload.m_nContentSignature && rExisting.m_Record.m_nFormat == rPayload.m_nFormat
-		        && rExisting.m_Record.m_nFlags == rPayload.m_nFlags && rExisting.m_Bytes.size() == nBytes
-		        && memcmp( rExisting.m_Bytes.ptr(), pBytes, nBytes ) == 0 ) {
+		        && rExisting.m_Record.m_nFlags == rPayload.m_nFlags && rExisting.m_nBytes == nBytes
+		        && memcmp( rExisting.m_pBytes, pBytes, nBytes ) == 0 ) {
 			return iPayload;
 		}
 	}
@@ -1007,10 +1013,8 @@ static uint32_t t3d_vt_godot_find_or_add_payload_v3(
 	entry.m_Record.m_nCodec = T3D_VT_PACK_CODEC_NONE;
 	entry.m_Record.m_nStoredBytes = nBytes;
 	entry.m_Record.m_nDecodedBytes = nBytes;
-	if ( entry.m_Bytes.resize( nBytes ) != OK ) {
-		return UINT32_MAX;
-	}
-	memcpy( entry.m_Bytes.ptrw(), pBytes, nBytes );
+	entry.m_pBytes = pBytes;
+	entry.m_nBytes = nBytes;
 	rPayloads.push_back( entry );
 	const uint32_t nId = ( uint32_t )rPayloads.size() - 1u;
 	rIndex.m_next.push_back( rIndex.m_heads[nBucket] );
@@ -1060,26 +1064,40 @@ static bool t3dVTPlanMergeV3( const eastl::vector<t3dVTEditorFragmentV3_t, Terra
 	}
 	if ( rPlan.m_nAllocations > UINT32_MAX / T3D_VT_LOGICAL_CHANNEL_COUNT || rPlan.m_nPages > UINT32_MAX
 	        || rPlan.m_nTails > UINT32_MAX || rPlan.m_nViews > UINT32_MAX || rPlan.m_nPayloads > UINT32_MAX / 4u ) { return false; }
-	// Three complete input sizes cover unique byte copies, concatenation and
-	// serialized output (including its record tables). Explicit vector capacity
-	// is counted separately; bucket rounding is at most four times payloads.
-	return t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nInputBytes, 3u )
+	// Admit the bounded metadata first. Borrowed input bytes are already owned
+	// by the caller. Deduplicated concatenation and output are admitted later,
+	// when their actual sizes are known; input size is not their working cost.
+	// Include allocator/header slack for all table allocations and fragment maps.
+	const uint64_t nAllocationSlack = sizeof( t3dEastlAllocationHeader_t ) + T3D_EASTL_DEFAULT_ALIGNMENT
+	        + sizeof( t3dNativeMemoryHeader );
+	return t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rFragments.size() + 14u, nAllocationSlack )
 	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rFragments.size(), sizeof( t3dVTEditorFragmentV3_t ) + sizeof( eastl::vector<uint32_t, Terrain3DEastlAllocator> ) )
 	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nAllocations, sizeof( t3dVTEditorAllocationInputV3_t ) + sizeof( t3dVTPackAllocationRecordV3_t ) + sizeof( t3dVTPackAllocationKeyRecordV3_t ) + T3D_VT_LOGICAL_CHANNEL_COUNT * sizeof( t3dVTChannelAllocation_t ) )
 	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nPages, sizeof( t3dVTPackPageRecordV3_t ) )
 	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nTails, sizeof( t3dVTPackTailRecordV3_t ) )
 	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nViews, sizeof( t3dVTPackQualityViewV3_t ) )
-	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nPayloads, sizeof( t3dVTEditorUniquePayloadV3_t ) + sizeof( t3dVTPackPayloadRecordV3_t ) + 6u * sizeof( uint32_t ) )
-	        && rPlan.m_nWorkingBytes <= nWorkingByteLimit;
+	        && t3dVTMergeAddBytes( rPlan.m_nWorkingBytes, rPlan.m_nPayloads, sizeof( t3dVTEditorUniquePayloadV3_t ) + sizeof( t3dVTPackPayloadRecordV3_t ) + 6u * sizeof( uint32_t ) );
+}
+
+static bool t3dVTMergeAdmitWorkingBytes( const uint64_t nRequired, const uint64_t nLimit,
+        t3dVTMergeStatistics_t *const pStatistics ) {
+	if ( pStatistics != NULL ) {
+		pStatistics->m_nWorkingBytes = MAX( pStatistics->m_nWorkingBytes, nRequired );
+		pStatistics->m_bWorkingLimitExceeded = nRequired > nLimit;
+	}
+	return nRequired <= nLimit;
 }
 
 static bool t3d_vt_godot_merge_allocation_fragments_v3(
         const eastl::vector<t3dVTEditorFragmentV3_t, Terrain3DEastlAllocator> &rFragments,
         const uint32_t nPackageGeneration,
         PackedByteArray &rPackageBytes, const uint64_t nWorkingByteLimit = T3D_VT_COOK_WORKING_BYTE_LIMIT,
-        t3dVTMergeStatistics_t *const pStatistics = NULL ) {
+        t3dVTMergeStatistics_t *const pStatistics = NULL,
+        Terrain3DSharedMemoryReservation *const pPackageMemory = NULL, String *const pMergeError = NULL ) {
+	const char *stage = "input validation";
+	const auto fail = [&]() { if (pMergeError) { *pMergeError = String(stage); } return false; };
 	if ( rFragments.empty() ) {
-		return false;
+		return fail();
 	}
 	eastl::vector<t3dVTPackAllocationRecordV3_t, Terrain3DEastlAllocator> allocations;
 	eastl::vector<t3dVTPackAllocationKeyRecordV3_t, Terrain3DEastlAllocator> keys;
@@ -1093,8 +1111,16 @@ static bool t3d_vt_godot_merge_allocation_fragments_v3(
 	eastl::vector<t3dVTPackViewV3_t, Terrain3DEastlAllocator> inputViews;
 	eastl::vector<eastl::vector<uint32_t, Terrain3DEastlAllocator>, Terrain3DEastlAllocator> payloadMaps;
 	eastl::vector<t3dVTEditorAllocationInputV3_t, Terrain3DEastlAllocator> inputs;
-	if ( !t3dVTPlanMergeV3( rFragments, inputViews, plan, nWorkingByteLimit ) ) { return false; }
-	if ( pStatistics != NULL ) { pStatistics->m_nWorkingBytes = plan.m_nWorkingBytes; }
+	if ( !t3dVTPlanMergeV3( rFragments, inputViews, plan, nWorkingByteLimit ) ) {
+		if ( plan.m_nWorkingBytes > nWorkingByteLimit ) {
+			( void )t3dVTMergeAdmitWorkingBytes( plan.m_nWorkingBytes, nWorkingByteLimit, pStatistics );
+		}
+		return fail();
+	}
+	// This is a local working ceiling, not another shared-account reservation.
+	// Native tables and Godot buffers charge that account individually.
+	if ( !t3dVTMergeAdmitWorkingBytes( plan.m_nWorkingBytes, nWorkingByteLimit, pStatistics ) ) { return fail(); }
+	stage = "metadata allocation";
 	if ( !t3dVectorResizeCold( payloadMaps, rFragments.size() )
 	        || !t3dContainerReserveCold( inputs, ( size_t )plan.m_nAllocations )
 	        || !t3dContainerReserveCold( allocations, ( size_t )plan.m_nAllocations )
@@ -1104,27 +1130,29 @@ static bool t3d_vt_godot_merge_allocation_fragments_v3(
 	        || !t3dContainerReserveCold( tails, ( size_t )plan.m_nTails )
 	        || !t3dContainerReserveCold( views, ( size_t )plan.m_nViews )
 	        || !t3dContainerReserveCold( uniquePayloads, ( size_t )plan.m_nPayloads )
-	        || !payloadIndex.prepare( ( uint32_t )plan.m_nPayloads ) ) { return false; }
+	        || !payloadIndex.prepare( ( uint32_t )plan.m_nPayloads ) ) { return fail(); }
+	stage = "payload extraction";
 	for ( uint32_t iFragment = 0u; iFragment < ( uint32_t )rFragments.size(); ++iFragment ) {
 		t3dVTPackViewV3_t &view = inputViews[iFragment];
 		for ( uint32_t iAllocation = 0u; iAllocation < view.m_pHeader->m_nAllocationCount; ++iAllocation ) {
 			inputs.push_back( { iFragment, iAllocation, view.m_pAllocationKeys[iAllocation].m_nStableKey } );
 		}
 		eastl::vector<uint32_t, Terrain3DEastlAllocator> &map = payloadMaps[iFragment];
-		if ( !t3dVectorResizeCold( map, view.m_pHeader->m_nPayloadCount ) ) { return false; }
+		if ( !t3dVectorResizeCold( map, view.m_pHeader->m_nPayloadCount ) ) { return fail(); }
 		for ( uint32_t iPayload = 0u; iPayload < view.m_pHeader->m_nPayloadCount; ++iPayload ) {
 			const uint8_t *pBytes = NULL;
 			uint32_t nBytes = 0u;
-			if ( !t3d_vt_godot_payload_bytes_v3( view, iPayload, pBytes, nBytes ) ) { return false; }
+			if ( !t3d_vt_godot_payload_bytes_v3( view, iPayload, pBytes, nBytes ) ) { return fail(); }
 			map[iPayload] = t3d_vt_godot_find_or_add_payload_v3( uniquePayloads, payloadIndex, view.m_pPayloads[iPayload], pBytes, nBytes );
-			if ( map[iPayload] == UINT32_MAX ) { return false; }
+			if ( map[iPayload] == UINT32_MAX ) { return fail(); }
 		}
 	}
 	if ( pStatistics != NULL ) { pStatistics->m_nPayloadComparisons = payloadIndex.m_nComparisons; }
+	stage = "allocation remapping";
 	eastl::sort( inputs.begin(), inputs.end(), &t3dVTAllocationInputLess );
 	for ( size_t iInput = 0u; iInput < inputs.size(); ++iInput ) {
 		const t3dVTEditorAllocationInputV3_t &input = inputs[iInput];
-		if ( iInput != 0u && inputs[iInput - 1u].nStableKey == input.nStableKey ) { return false; }
+		if ( iInput != 0u && inputs[iInput - 1u].nStableKey == input.nStableKey ) { return fail(); }
 		const t3dVTPackViewV3_t &view = inputViews[input.nFragment];
 		const eastl::vector<uint32_t, Terrain3DEastlAllocator> &payloadMap = payloadMaps[input.nFragment];
 		const uint32_t nNewAllocation = ( uint32_t )allocations.size();
@@ -1163,29 +1191,35 @@ static bool t3d_vt_godot_merge_allocation_fragments_v3(
 			views.push_back( quality );
 		}
 	}
+	stage = "assembled table validation";
 	if ( allocations.empty() || uniquePayloads.empty() || tails.empty() || views.empty() ) {
-		return false;
+		return fail();
 	}
 	eastl::vector<t3dVTPackPayloadRecordV3_t, Terrain3DEastlAllocator> payloads;
-	if ( !t3dVectorResizeCold( payloads, uniquePayloads.size() ) ) { return false; }
+	if ( !t3dVectorResizeCold( payloads, uniquePayloads.size() ) ) { return fail(); }
 	uint64_t nPayloadBytes = 0u;
 	for ( size_t iPayload = 0u; iPayload < uniquePayloads.size(); ++iPayload ) {
-		nPayloadBytes += ( uint64_t )uniquePayloads[iPayload].m_Bytes.size();
+		nPayloadBytes += uniquePayloads[iPayload].m_nBytes;
 		if ( nPayloadBytes > INT64_MAX || nPayloadBytes > UINT32_MAX ) {
-			return false;
+			return fail();
 		}
 	}
+	stage = "payload concatenation";
 	PackedByteArray payloadBytes;
-	if ( payloadBytes.resize( ( int64_t )nPayloadBytes ) != OK ) {
-		return false;
+	Terrain3DMemoryReservation payloadMemory;
+	uint64_t nWorkingBytes = 0u;
+	if ( !t3dCheckedAdd( plan.m_nWorkingBytes, nPayloadBytes + 64u, nWorkingBytes )
+	        || !t3dVTMergeAdmitWorkingBytes( nWorkingBytes, nWorkingByteLimit, pStatistics ) ) { return fail(); }
+	if ( !payloadMemory.resize( nPayloadBytes + 64u ) || payloadBytes.resize( ( int64_t )nPayloadBytes ) != OK ) {
+		return fail();
 	}
 	uint32_t nPayloadOffset = 0u;
 	for ( uint32_t iPayload = 0u; iPayload < ( uint32_t )uniquePayloads.size(); ++iPayload ) {
 		payloads[iPayload] = uniquePayloads[iPayload].m_Record;
 		payloads[iPayload].m_nClusterId = 0u;
 		payloads[iPayload].m_nClusterOffset = nPayloadOffset;
-		memcpy( payloadBytes.ptrw() + nPayloadOffset, uniquePayloads[iPayload].m_Bytes.ptr(), ( size_t )uniquePayloads[iPayload].m_Bytes.size() );
-		nPayloadOffset += ( uint32_t )uniquePayloads[iPayload].m_Bytes.size();
+		memcpy( payloadBytes.ptrw() + nPayloadOffset, uniquePayloads[iPayload].m_pBytes, uniquePayloads[iPayload].m_nBytes );
+		nPayloadOffset += uniquePayloads[iPayload].m_nBytes;
 	}
 	t3dVTPackClusterRecordV3_t cluster;
 	memset( &cluster, 0, sizeof( cluster ) );
@@ -1199,7 +1233,7 @@ static bool t3d_vt_godot_merge_allocation_fragments_v3(
 	cluster.m_nChecksum = t3d_vt_pack_checksum32( payloadBytes.ptr(), nPayloadBytes );
 	t3dVTPackFormatFamilyRecordV3_t formatFamilies[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	if ( !t3d_vt_pack_init_format_family_records_v3( formatFamilies, T3D_VT_LOGICAL_CHANNEL_COUNT ) ) {
-		return false;
+		return fail();
 	}
 	t3dVTPackSourceV3_t packSource;
 	memset( &packSource, 0, sizeof( packSource ) );
@@ -1223,15 +1257,23 @@ static bool t3d_vt_godot_merge_allocation_fragments_v3(
 	packSource.m_pPayloadData = payloadBytes.ptr();
 	packSource.m_nPayloadDataBytes = nPayloadBytes;
 	packSource.m_nPackageGeneration = nPackageGeneration == 0u ? 1u : nPackageGeneration;
+	stage = "package validation";
 	const uint64_t nBytes = t3d_vt_pack_compute_bytes_v3( packSource );
 	if ( nBytes == 0u || nBytes > INT64_MAX ) {
-		return false;
+		return fail();
 	}
+	stage = "output allocation";
 	PackedByteArray output;
-	if ( output.resize( ( int64_t )nBytes ) != OK ) { return false; }
+	Terrain3DSharedMemoryReservation outputMemory;
+	if ( !t3dCheckedAdd( nWorkingBytes, nBytes + 64u, nWorkingBytes )
+	        || !t3dVTMergeAdmitWorkingBytes( nWorkingBytes, nWorkingByteLimit, pStatistics ) ) { return fail(); }
+	if ( !outputMemory.reserve( nBytes + 64u ) || output.resize( ( int64_t )nBytes ) != OK ) { return fail(); }
+	stage = "package serialization";
 	uint64_t nWritten = 0u;
-	if ( !t3d_vt_pack_write_v3( packSource, output.ptrw(), nBytes, nWritten ) || nWritten != nBytes ) { return false; }
+	if ( !t3d_vt_pack_write_v3( packSource, output.ptrw(), nBytes, nWritten ) || nWritten != nBytes ) { return fail(); }
+	if (pMergeError) { *pMergeError = String(); }
 	rPackageBytes = output;
+	if ( pPackageMemory != NULL ) { *pPackageMemory = outputMemory; }
 	return true;
 }
 
@@ -1268,11 +1310,11 @@ bool t3d_vt_godot_cook_source_fragment_v3( const t3dVTCookSparseSourceV3_t &rSou
 
 bool t3d_vt_godot_merge_packages_v3( const PackedByteArray *pPackages, const uint32_t nCount,
 	        const uint32_t nGeneration, PackedByteArray &rPackageBytes, const uint64_t nWorkingByteLimit,
-	        t3dVTMergeStatistics_t *const pStatistics ) {
+	        t3dVTMergeStatistics_t *const pStatistics, Terrain3DSharedMemoryReservation *const pPackageMemory ) {
 	if ( pStatistics != NULL ) { *pStatistics = t3dVTMergeStatistics_t{}; }
 	if ( pPackages == NULL || nCount == 0u ) { return false; }
 	eastl::vector<t3dVTEditorFragmentV3_t, Terrain3DEastlAllocator> fragments;
-	if ( ( uint64_t )nCount * sizeof( t3dVTEditorFragmentV3_t ) > nWorkingByteLimit
+	if ( !t3dVTMergeAdmitWorkingBytes( ( uint64_t )nCount * sizeof( t3dVTEditorFragmentV3_t ), nWorkingByteLimit, pStatistics )
 	        || !t3dContainerReserveCold( fragments, nCount ) ) { return false; }
 	for ( uint32_t i = 0u; i < nCount; ++i ) {
 		if ( pPackages[i].is_empty() ) { continue; }
@@ -1280,7 +1322,7 @@ bool t3d_vt_godot_merge_packages_v3( const PackedByteArray *pPackages, const uin
 		fragment.m_Bytes = pPackages[i];
 		fragments.push_back( fragment );
 	}
-	return t3d_vt_godot_merge_allocation_fragments_v3( fragments, nGeneration, rPackageBytes, nWorkingByteLimit, pStatistics );
+	return t3d_vt_godot_merge_allocation_fragments_v3( fragments, nGeneration, rPackageBytes, nWorkingByteLimit, pStatistics, pPackageMemory );
 }
 
 bool t3d_vt_godot_cook_editor_package_incremental_v3( const Ref<Terrain3DAssets> &rAssets,
@@ -1292,7 +1334,7 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const Ref<Terrain3DAssets>
         uint64_t &rFingerprint,
         uint32_t &rPackageGeneration,
         t3dVTEditorCookTelemetryV3_t &rTelemetry,
-        String *const pError ) {
+        String *const pError, Terrain3DSharedMemoryReservation *const pPackageMemory ) {
 	( void )pMaterialRecords; // Runtime-only scalar/material state must not invalidate page payloads.
 	rPackageBytes.clear();
 	rFingerprint = 0u;
@@ -1304,10 +1346,30 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const Ref<Terrain3DAssets>
 		}
 		return false;
 	}
+	// Reject ambiguous allocation identities before cooking, and discard cache
+	// entries for removed materials before borrowing this invocation's fragments.
+	for (uint32_t i = 0; i < nMaterialCount; ++i) {
+		for (uint32_t j = 0; j < i; ++j) {
+			if (pStableKeys[i] == pStableKeys[j]) {
+				if (pError) { *pError = "VT editor V3 incremental cooker encountered duplicate stable keys"; }
+				return false;
+			}
+		}
+	}
+	rCache.m_ChannelEntries.clear();
+	for (size_t i = rCache.m_AllocationEntries.size(); i > 0; --i) {
+		bool active = false;
+		for (uint32_t material = 0; material < nMaterialCount; ++material) {
+			if (rCache.m_AllocationEntries[i - 1].m_nStableKey == pStableKeys[material]) { active = true; break; }
+		}
+		if (!active) { rCache.m_AllocationEntries.erase(rCache.m_AllocationEntries.begin() + (i - 1)); }
+	}
 	t3dVTCookerSettings_t settings;
 	t3d_vt_cooker_default_settings( settings );
 	t3dVTCookAllocator_t allocator;
-	allocator.m_pUser = NULL;
+	t3dVTEditorAllocationBudget_t allocation_budget;
+	allocation_budget.m_nLimit = t3dMemoryCompositionLimit(g_t3dMemoryAccount);
+	allocator.m_pUser = &allocation_budget;
 	allocator.m_pAllocate = &t3d_vt_godot_editor_allocate;
 	allocator.m_pFree = &t3d_vt_godot_editor_free;
 	eastl::vector<t3dVTEditorFragmentV3_t, Terrain3DEastlAllocator> fragments;
@@ -1354,9 +1416,26 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const Ref<Terrain3DAssets>
 	}
 	rTelemetry.m_nStage = T3D_VT_EDITOR_COOK_STAGE_PACK;
 	const uint64_t nPackStart = t3d_vt_godot_now_usec_v3();
-	if ( !t3d_vt_godot_merge_allocation_fragments_v3( fragments, rPackageGeneration, rPackageBytes ) ) {
+	t3dVTMergeStatistics_t statistics;
+	const uint64_t denied_before = g_t3dMemoryAccount ? g_t3dMemoryAccount->stats().denied : 0u;
+	String merge_error;
+	const uint64_t composition_limit = t3dMemoryCompositionLimit(g_t3dMemoryAccount);
+	if ( !t3d_vt_godot_merge_allocation_fragments_v3( fragments, rPackageGeneration, rPackageBytes,
+	             composition_limit, &statistics, pPackageMemory, &merge_error ) ) {
 		if ( pError ) {
-			*pError = "VT editor V3 incremental cooker could not stage the deterministic package";
+			*pError = "VT editor V3 incremental cooker could not stage the deterministic package: ";
+			if (g_t3dMemoryAccount && g_t3dMemoryAccount->stats().denied != denied_before) {
+				const auto memory = g_t3dMemoryAccount->stats();
+				*pError += String("shared memory budget exhausted (committed=") + String::num_uint64(memory.committed)
+				        + String(", limit=") + String::num_uint64(memory.limit) + String(", planned_working_bytes=")
+				        + String::num_uint64(statistics.m_nWorkingBytes) + String(")");
+			} else if (statistics.m_bWorkingLimitExceeded) {
+				*pError += String("composition working limit exceeded (required=") + String::num_uint64(statistics.m_nWorkingBytes)
+				        + String(", limit=") + String::num_uint64(composition_limit) + String(")");
+			} else {
+				*pError += "invalid allocation fragments or failed package serialization";
+				*pError += String(" (stage=") + merge_error + String(")");
+			}
 		}
 		return false;
 	}
@@ -1576,9 +1655,9 @@ bool t3d_vt_godot_cook_runtime_package( const Ref<Terrain3DAssets> &rAssets,
 	return true;
 }
 
-
 bool t3d_vt_godot_collect_asset_materials(
-        const Ref<Terrain3DAssets> &rAssets, t3dVTGodotAssetMaterials_t &rMaterials, String *const pError ) {
+    const Ref<Terrain3DAssets>& rAssets, t3dVTGodotAssetMaterials_t& rMaterials, String *const pError )
+{
 	rMaterials.m_stableKeys.clear();
 	rMaterials.m_records.clear();
 	uint32_t rMaterialCount = 0u;

@@ -1,5 +1,5 @@
 #include "memory/storage/terrain_3d_resident_pool.h"
-#include "memory/policy/terrain_3d_memory_math.h"
+#include "core/utility/terrain_3d_checked_math.h"
 #include "core/utility/terrain_3d_sync.h"
 
 #include "Terrain3DConstants.h"
@@ -18,54 +18,12 @@ static void t3dResidentLeaseReleaseThunk( void *const pContext, const int iSlot,
 }
 
 Terrain3DResidentMapLease::Terrain3DResidentMapLease(
-    void *const pReleaseContext, const t3dResidentLeaseReleaseFn_t pRelease, const int iSlot, const uint32_t nGeneration, const t3dResidentMapView_t& rView ) : m_pReleaseContext( pReleaseContext ), m_pRelease( pRelease ), m_iSlot( (int16_t)( iSlot ) ), m_nGeneration( nGeneration ), m_view( rView )
-{
-}
-Terrain3DResidentMapLease::~Terrain3DResidentMapLease( void )
-{
-	reset();
-}
+    void *const pReleaseContext, const t3dResidentLeaseReleaseFn_t pRelease, const int iSlot, const uint32_t nGeneration, const t3dResidentMapView_t& rView ) : m_lease( { pReleaseContext, pRelease, ( int16_t )iSlot, nGeneration }, rView ) {}
 
-Terrain3DResidentMapLease::Terrain3DResidentMapLease( Terrain3DResidentMapLease&& rOther ) noexcept : m_pReleaseContext( rOther.m_pReleaseContext ), m_pRelease( rOther.m_pRelease ), m_iSlot( rOther.m_iSlot ), m_nGeneration( rOther.m_nGeneration ), m_view( rOther.m_view )
-{
-	rOther.m_pReleaseContext = NULL;
-	rOther.m_pRelease = NULL;
-	rOther.m_iSlot = -1;
-	rOther.m_nGeneration = 0u;
-	rOther.m_view = {};
-}
-
-Terrain3DResidentMapLease& Terrain3DResidentMapLease::operator=( Terrain3DResidentMapLease&& rOther ) noexcept
-{
-	if ( this == &rOther ) {
-		return *this;
-	}
-	reset();
-	m_pReleaseContext = rOther.m_pReleaseContext;
-	m_pRelease = rOther.m_pRelease;
-	m_iSlot = rOther.m_iSlot;
-	m_nGeneration = rOther.m_nGeneration;
-	m_view = rOther.m_view;
-	rOther.m_pReleaseContext = NULL;
-	rOther.m_pRelease = NULL;
-	rOther.m_iSlot = -1;
-	rOther.m_nGeneration = 0u;
-	rOther.m_view = {};
-	return *this;
-}
-
-void Terrain3DResidentMapLease::reset( void )
-{
-	if ( m_pRelease && m_pReleaseContext && m_iSlot >= 0 ) {
-		m_pRelease( m_pReleaseContext, m_iSlot, m_nGeneration );
-	}
-	m_pReleaseContext = NULL;
-	m_pRelease = NULL;
-	m_iSlot = -1;
-	m_nGeneration = 0u;
-	m_view = {};
-}
-
+Terrain3DResidentMapLease::~Terrain3DResidentMapLease( void ) = default;
+Terrain3DResidentMapLease::Terrain3DResidentMapLease( Terrain3DResidentMapLease &&rOther ) noexcept = default;
+Terrain3DResidentMapLease &Terrain3DResidentMapLease::operator=( Terrain3DResidentMapLease &&rOther ) noexcept = default;
+void Terrain3DResidentMapLease::reset( void ) { m_lease.reset(); }
 
 bool Terrain3DResidentRegionPool::buildSlotLayout( const uint32_t nChannels, t3dSlotLayout_t& rLayout, size_t& nTexelCount )
 {
@@ -80,27 +38,27 @@ bool Terrain3DResidentRegionPool::buildSlotLayout( const uint32_t nChannels, t3d
 	}
 	const size_t height_bytes = texels * sizeof( uint16_t );
 	size_t padded = 0u;
-	if ( !t3dMemoryAlignUp( height_bytes, T3D_RESIDENT_CACHE_ALIGNMENT, padded ) ) {
+	if ( !t3dCheckedAlignUp<size_t>( height_bytes, T3D_RESIDENT_CACHE_ALIGNMENT, padded ) ) {
 		return false;
 	}
 	rLayout.m_nHeightSlotBytes = padded;
 	rLayout.m_nStride = padded;
 	if ( ( nChannels & RESIDENT_CHANNEL_CONTROL ) != 0u ) {
-		if ( !t3dMemoryAlignUp( texels * sizeof( uint32_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dCheckedAlignUp<size_t>( texels * sizeof( uint32_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nControlSlotBytes = padded;
 		rLayout.m_nStride += padded;
 	}
 	if ( ( nChannels & RESIDENT_CHANNEL_COLOR ) != 0u ) {
-		if ( !t3dMemoryAlignUp( texels * sizeof( uint32_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dCheckedAlignUp<size_t>( texels * sizeof( uint32_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nColorSlotBytes = padded;
 		rLayout.m_nStride += padded;
 	}
 	if ( ( nChannels & RESIDENT_CHANNEL_DERIVED ) != 0u ) {
-		if ( !t3dMemoryAlignUp( texels * sizeof( uint16_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dCheckedAlignUp<size_t>( texels * sizeof( uint16_t ), T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nDerivedSlotBytes = padded;
@@ -120,7 +78,7 @@ bool Terrain3DResidentRegionPool::addEstimatedOptionalBytes(
 		return false;
 	}
 	size_t padded = 0u;
-	if ( !t3dMemoryAlignUp( nTexelCount * nBytesPerTexel, T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || nTotal > eastl::numeric_limits<size_t>::max() - padded ) {
+	if ( !t3dCheckedAlignUp<size_t>( nTexelCount * nBytesPerTexel, T3D_RESIDENT_CACHE_ALIGNMENT, padded ) || nTotal > eastl::numeric_limits<size_t>::max() - padded ) {
 		return false;
 	}
 	nTotal += padded;

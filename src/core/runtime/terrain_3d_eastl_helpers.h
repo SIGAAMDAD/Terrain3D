@@ -29,11 +29,19 @@ EA_FORCE_INLINE bool t3dContainerReserveCold( C &rContainer, const size_t nCapac
 	if ( nCapacity <= rContainer.capacity() ) {
 		return true;
 	}
-	if ( nCapacity > SIZE_MAX / sizeof( typename C::value_type )
-	        || !rContainer.get_allocator().canAllocate(
+	if ( nCapacity > SIZE_MAX / sizeof( typename C::value_type ) ) { return false; }
+	// Bootstrap admission below is atomic and records budget denials. A separate
+	// advisory headroom probe would hide those denials from authoring retries.
+	if ( !rContainer.get_allocator().isBootstrap() && !rContainer.get_allocator().canAllocate(
 	                nCapacity * sizeof( typename C::value_type ), alignof( typename C::value_type ) ) ) {
 		return false;
 	}
+	const size_t alignment = MAX(size_t(alignof(typename C::value_type)), size_t(T3D_EASTL_DEFAULT_ALIGNMENT));
+	const size_t overhead = sizeof(t3dEastlAllocationHeader_t) + alignment - 1u + sizeof(t3dNativeMemoryHeader);
+	const size_t requested = nCapacity * sizeof(typename C::value_type);
+	if (requested > SIZE_MAX - overhead) { return false; }
+	Terrain3DMemoryAllocationPermit permit(rContainer.get_allocator().isBootstrap() ? requested + overhead : 0u);
+	if (!permit.valid()) { return false; }
 	rContainer.reserve( nCapacity );
 	return rContainer.capacity() >= nCapacity;
 }

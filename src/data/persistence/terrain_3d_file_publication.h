@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <stdint.h>
 
 // One writer owns each path. Keep the previous file until the caller accepts
 // the published artifact. Recovery never discards an ambiguous previous file.
@@ -96,6 +97,53 @@ public:
 
 	const godot::String &getError( void ) const { return m_error; }
 
+	// Serialization stays with the format owner. These operations only own the
+	// staged stream; callers may validate the published file before committing.
+	godot::Error openStaged( godot::Ref<godot::FileAccess>& rFile )
+	{
+		const godot::Error error = prepare();
+		if ( error != godot::OK ) {
+			return error;
+		}
+		if ( godot::FileAccess::file_exists( m_staged ) ) {
+			godot::DirAccess::remove_absolute( m_staged );
+		}
+		rFile = godot::FileAccess::open( m_staged, godot::FileAccess::WRITE );
+		return rFile.is_valid() ? godot::OK : fail( godot::ERR_CANT_OPEN, "Could not open staged artifact." );
+	}
+
+	godot::Error finishStaged( godot::Ref<godot::FileAccess>& rFile, uint64_t nExpectedBytes = UINT64_MAX )
+	{
+		if ( rFile.is_null() ) {
+			return fail( godot::ERR_UNCONFIGURED, "No staged artifact stream." );
+		}
+		if ( nExpectedBytes == UINT64_MAX ) {
+			nExpectedBytes = rFile->get_position();
+		}
+		rFile->flush();
+		godot::Error error = rFile->get_error();
+		if ( error == godot::OK && rFile->get_length() != nExpectedBytes ) {
+			error = godot::ERR_FILE_CANT_WRITE;
+		}
+		rFile.unref();
+		if ( error != godot::OK ) {
+			godot::DirAccess::remove_absolute( m_staged );
+			return fail( error, "Could not write staged artifact." );
+		}
+		return godot::OK;
+	}
+
+	godot::Error stagePacked( const godot::PackedByteArray& rBytes )
+	{
+		godot::Ref<godot::FileAccess> file;
+		const godot::Error error = openStaged( file );
+		if ( error != godot::OK ) {
+			return error;
+		}
+		file->store_buffer( rBytes );
+		return finishStaged( file, (uint64_t)rBytes.size() );
+	}
+
 private:
 	static godot::String canonicalPath( const godot::String &rPath ) {
 		godot::ProjectSettings *const pSettings = godot::ProjectSettings::get_singleton();
@@ -124,17 +172,10 @@ private:
 // Common packed artifact writer. Explicit errors preserve the previous file.
 inline godot::Error t3dPublishPackedFile( const godot::String &rPath, const godot::PackedByteArray &rBytes, godot::String *pError ) {
 	Terrain3DFilePublication publication( rPath, rPath + godot::String( ".staged" ), rPath + godot::String( ".previous" ) );
-	godot::Error error = publication.prepare();
-	if ( error != godot::OK ) { if ( pError ) { *pError = publication.getError(); } return error; }
-	godot::Ref<godot::FileAccess> file = godot::FileAccess::open( rPath + godot::String( ".staged" ), godot::FileAccess::WRITE );
-	if ( file.is_null() ) { if ( pError ) { *pError = "Could not open staged artifact: " + rPath; } return godot::ERR_CANT_OPEN; }
-	file->store_buffer( rBytes );
-	file->flush();
-	error = file->get_error();
-	if ( error == godot::OK && file->get_length() != ( uint64_t )rBytes.size() ) { error = godot::ERR_FILE_CANT_WRITE; }
-	file.unref();
-	if ( error != godot::OK ) { if ( pError ) { *pError = "Could not write staged artifact: " + rPath; } return error; }
-	error = publication.publish();
+	godot::Error error = publication.stagePacked( rBytes );
+	if ( error == godot::OK ) {
+		error = publication.publish();
+	}
 	if ( error == godot::OK ) { error = publication.commit(); }
 	if ( error != godot::OK && pError ) { *pError = publication.getError(); }
 	return error;

@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "authoring/world/core/terrain_3d_world_controller.h"
 #include "rendering/rd/world/build/terrain_3d_world_static_builder.h"
 #include "memory/core/terrain_3d_memory.h"
@@ -28,22 +29,7 @@ Terrain3DWorldController::~Terrain3DWorldController( void ) {
 }
 
 void Terrain3DWorldController::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DWorldController::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DWorldController::isEnabled );
-	ClassDB::bind_method( D_METHOD( "set_mode", "mode" ), &Terrain3DWorldController::setMode );
-	ClassDB::bind_method( D_METHOD( "get_mode" ), &Terrain3DWorldController::getMode );
-	ClassDB::bind_method( D_METHOD( "set_convert_mesh_instances", "enabled" ), &Terrain3DWorldController::setConvertMeshInstances );
-	ClassDB::bind_method( D_METHOD( "is_convert_mesh_instances" ), &Terrain3DWorldController::isConvertMeshInstances );
-	ClassDB::bind_method( D_METHOD( "set_convert_dynamic_objects", "enabled" ), &Terrain3DWorldController::setConvertDynamicObjects );
-	ClassDB::bind_method( D_METHOD( "is_convert_dynamic_objects" ), &Terrain3DWorldController::isConvertDynamicObjects );
-	ClassDB::bind_method( D_METHOD( "set_convert_hidden_objects", "enabled" ), &Terrain3DWorldController::setConvertHiddenObjects );
-	ClassDB::bind_method( D_METHOD( "is_convert_hidden_objects" ), &Terrain3DWorldController::isConvertHiddenObjects );
-	ClassDB::bind_method( D_METHOD( "set_cell_size", "cell_size" ), &Terrain3DWorldController::setCellSize );
-	ClassDB::bind_method( D_METHOD( "get_cell_size" ), &Terrain3DWorldController::getCellSize );
-	ClassDB::bind_method( D_METHOD( "set_default_profile", "profile" ), &Terrain3DWorldController::setDefaultProfile );
-	ClassDB::bind_method( D_METHOD( "get_default_profile" ), &Terrain3DWorldController::getDefaultProfile );
-	ClassDB::bind_method( D_METHOD( "set_auto_rebuild_on_ready", "enabled" ), &Terrain3DWorldController::setAutoRebuildOnReady );
-	ClassDB::bind_method( D_METHOD( "is_auto_rebuild_on_ready" ), &Terrain3DWorldController::isAutoRebuildOnReady );
+
 	ClassDB::bind_method( D_METHOD( "request_cold_rebuild" ), &Terrain3DWorldController::requestColdRebuild );
 	ClassDB::bind_method( D_METHOD( "release_world_ownership" ), &Terrain3DWorldController::releaseWorldOwnership );
 	ClassDB::bind_method(
@@ -52,21 +38,23 @@ void Terrain3DWorldController::_bind_methods( void ) {
 	        D_METHOD( "get_backend_status_reference_debug" ), &Terrain3DWorldController::getBackendStatusReferenceDebug );
 
 	ADD_GROUP( "World", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Explicit,Eligible Scene,Full Static Scene" ),
-	        "set_mode",
-	        "get_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "default_profile", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DWorldImportProfile" ),
-	        "set_default_profile",
-	        "get_default_profile" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "4,256,1,suffix:m" ), "set_cell_size", "get_cell_size" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_rebuild_on_ready" ), "set_auto_rebuild_on_ready", "is_auto_rebuild_on_ready" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setEnabled, isEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setMode, getMode, "mode",
+	                   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Explicit,Eligible Scene,Full Static Scene" ), "set_mode", "get_mode" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setDefaultProfile, getDefaultProfile, "profile",
+	                   PropertyInfo( Variant::OBJECT, "default_profile", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DWorldImportProfile" ), "set_default_profile", "get_default_profile" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setCellSize, getCellSize, "cell_size",
+	                   PropertyInfo( Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "4,256,1,suffix:m" ), "set_cell_size", "get_cell_size" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setAutoRebuildOnReady, isAutoRebuildOnReady, "enabled",
+	                   PropertyInfo( Variant::BOOL, "auto_rebuild_on_ready" ), "set_auto_rebuild_on_ready", "is_auto_rebuild_on_ready" );
 	ADD_GROUP( "Compatibility Ingress", "convert_" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_mesh_instances" ), "set_convert_mesh_instances", "is_convert_mesh_instances" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_dynamic_objects", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_convert_dynamic_objects",
-	        "is_convert_dynamic_objects" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "convert_hidden_objects" ), "set_convert_hidden_objects", "is_convert_hidden_objects" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertMeshInstances, isConvertMeshInstances, "enabled",
+	                   PropertyInfo( Variant::BOOL, "convert_mesh_instances" ), "set_convert_mesh_instances", "is_convert_mesh_instances" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertDynamicObjects, isConvertDynamicObjects, "enabled",
+	                   PropertyInfo( Variant::BOOL, "convert_dynamic_objects", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_convert_dynamic_objects", "is_convert_dynamic_objects" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertHiddenObjects, isConvertHiddenObjects, "enabled",
+	                   PropertyInfo( Variant::BOOL, "convert_hidden_objects" ), "set_convert_hidden_objects", "is_convert_hidden_objects" );
 }
 
 void Terrain3DWorldController::_notification( const int32_t nWhat ) {

@@ -114,7 +114,7 @@ using namespace godot;
 #define T3D_RENDER_READY_STARTUP_REQUIRED ( T3D_RENDER_READY_SHADER_GPU | T3D_RENDER_READY_VT_STORAGE | T3D_RENDER_READY_VT_EXECUTABLE | T3D_RENDER_READY_VT_PUBLISHED | T3D_RENDER_READY_TERRAIN | T3D_RENDER_READY_WORLD | T3D_RENDER_READY_INSTANCES | T3D_RENDER_READY_OCEAN )
 #define T3D_RENDER_READY_RESOURCE_CONSUMERS ( T3D_RENDER_READY_VT_STORAGE | T3D_RENDER_READY_VT_EXECUTABLE | T3D_RENDER_READY_VT_PUBLISHED | T3D_RENDER_READY_TERRAIN | T3D_RENDER_READY_WORLD | T3D_RENDER_READY_INSTANCES | T3D_RENDER_READY_OCEAN | T3D_RENDER_READY_PREVIEW )
 
-// Formerly local to rendering/rd/shaders/terrain_3d_shader_pipeline_abi.h.
+// Formerly local to Terrain3DConstants.h.
 #define T3D_RD_TERRAIN_SET0_MASK ( T3D_RD_DESCRIPTOR_RANGE_MASK( 0u, 38u ) )
 #define T3D_RD_TERRAIN_SET2_MASK ( T3D_RD_DESCRIPTOR_RANGE_MASK( 0u, 15u ) )
 #define T3D_RD_TERRAIN_PUSH_BYTES ( 16u )
@@ -597,24 +597,16 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 
 // Centralized native compile-time constants. Keep tunable limits and format constants here.
 
-
 // Full-region heightmap collision samples region_size + 1 vertices. Keep the
 // axis scratch large enough for the maximum supported 2048-texel region.
 
-
 #define s_regionMapVSize ( Vector2i( T3D_REGION_MAP_SIZE, T3D_REGION_MAP_SIZE ) )
-
 
 // t3dPerformanceProfileOwner_e centralized in Terrain3DTypes.h.
 
-
 // t3dPerformanceProfileValueKind_e centralized in Terrain3DTypes.h.
 
-
 // t3dPerformanceProfileSetting_s centralized in Terrain3DTypes.h.
-
-
-
 
 // End centralized native compile-time constants.
 
@@ -663,16 +655,13 @@ static const Image::Format s_szRegionMapFormats[T3D_TYPE_MAX_VALUE + 1u] = {
 
 // t3dRegionCoord_s centralized in Terrain3DTypes.h.
 
-
 #define T3D_REGION_COORD_INVALID ( INT8_MAX )
-
 
 #define s_v3Zero ( Vector3( 0.f, 0.f, 0.f ) )
 #define s_v3Max ( Vector3( FLT_MAX, FLT_MAX, FLT_MAX ) )
 #define s_v3Nan ( Vector3( NAN, NAN, NAN ) )
 #define s_v3Up ( Vector3( 0.f, 1.f, 0.f ) )
 // static const Vector3 V3_DOWN{ 0.f, -1.f, 0.f };
-
 
 // Set class name for logger.h
 
@@ -733,7 +722,6 @@ static const Image::Format s_szRegionMapFormats[T3D_TYPE_MAX_VALUE + 1u] = {
 		LOG( ERROR, mesg );                                                                                                                \
 		return ret;                                                                                                                        \
 	}
-
 
 // Additional migrated constants.
 #define s_pszNativeBuildId ( "mesh-derived-instance-physics-occlusion-p13-2-rd-capacity-align-2026-09-16" )

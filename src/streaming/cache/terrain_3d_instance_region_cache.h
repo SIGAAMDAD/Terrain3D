@@ -8,7 +8,6 @@
 
 #include "Terrain3DConstants.h"
 #include "core/config/terrain_3d_compiler.h"
-#include "instances/contracts/terrain_3d_instance_cache_constants.h"
 #include "streaming/residency/terrain_3d_residency_state.h"
 
 #include <stddef.h>
@@ -16,7 +15,6 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include "data/persistence/terrain_3d_region_repository.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
-
 
 typedef struct t3dInstanceRegionCacheChanges_s {
 
@@ -29,9 +27,7 @@ typedef struct t3dInstanceRegionCacheChanges_s {
 	void recordEvicted( const Vector2i &vLocation );
 } t3dInstanceRegionCacheChanges_t;
 
-
 // t3dInstanceRegionCacheEvictionReason_e centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dInstanceRegionCacheEvictionDiagnostic_s {
 
@@ -42,7 +38,6 @@ typedef struct t3dInstanceRegionCacheEvictionDiagnostic_s {
 	size_t m_nBudgetBytes = 0u;
 	t3dInstanceRegionCacheEvictionReason_t m_eReason = TERRAIN3D_INSTANCE_REGION_EVICTION_NONE;
 } t3dInstanceRegionCacheEvictionDiagnostic_t;
-
 
 typedef struct t3dInstanceRegionCacheStats_s {
 
@@ -66,7 +61,6 @@ typedef struct t3dInstanceRegionCacheStats_s {
 	size_t m_nTrackedResidentBytes = 0u;
 	t3dInstanceRegionCacheEvictionDiagnostic_t m_lastEviction;
 } t3dInstanceRegionCacheStats_t;
-
 
 class Terrain3DInstanceRegionCache {
 public:

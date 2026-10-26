@@ -1,3 +1,4 @@
+#include "memory/policy/terrain_3d_memory_account.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DTypes.h"
@@ -1385,6 +1386,7 @@ void Terrain3DEditor::storeUndo( void ) {
 }
 
 void Terrain3DEditor::applyUndo( const Dictionary &rData ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	IS_INIT_COND_MESG( !m_pTerrain->getPlugin(), "_terrain isn't initialized, returning", VOID );
 	LOG( INFO, "Applying Undo/Redo data" );
 
@@ -1600,6 +1602,7 @@ Color Terrain3DEditor::average( const Vector3 &rGlobalPosition, const Color &clr
 // Sanitizes incoming brush data and applies editor defaults and clamps.
 // Only editor-owned fields are sanitized here; instancer-specific fields remain untouched.
 void Terrain3DEditor::setBrushData( const Dictionary &rData ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_brushData = rData; // Same instance. Anything could be inserted after this, eg mouse_pressure
 	m_pCachedBrushImage = NULL;
 	m_cachedBrushImageSize = s_v2iZero;
@@ -1687,6 +1690,7 @@ void Terrain3DEditor::setOperation( const t3dOperation_t operation ) {
 
 // Called on mouse click
 void Terrain3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Terrain isn't initialized" ); return; }
 	LOG( INFO, "Setting up undo snapshot" );
 	m_undoData.clear();
@@ -1705,6 +1709,7 @@ void Terrain3DEditor::startOperation( const Vector3 &rGlobalPosition ) {
 
 // Called on mouse movement with left mouse button down
 void Terrain3DEditor::operate( const Vector3 &rGlobalPosition, const real_t fCameraDirection ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Terrain isn't initialized" ); return; }
 	if ( !m_bIsOperating ) {
 		LOG( ERROR, "Run start_operation() before operating" );
@@ -1818,6 +1823,7 @@ void Terrain3DEditor::trimBrushScratch( void ) {
 
 // Called on left mouse button released
 void Terrain3DEditor::stopOperation( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Terrain isn't initialized" ); return; }
 	// If undo was created and terrain actually modified, store it
 	LOG( DEBUG,

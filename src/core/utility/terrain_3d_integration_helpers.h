@@ -2,6 +2,7 @@
 
 #ifndef TERRAIN3D_INTEGRATION_HELPERS_H
 #define TERRAIN3D_INTEGRATION_HELPERS_H
+#include "core/utility/terrain_3d_numeric.h"
 
 #include "Terrain3DConstants.h"
 #include "streaming/policy/terrain_3d_performance_profile.h"
@@ -12,14 +13,6 @@
 #include <godot_cpp/variant/variant.hpp>
 
 using namespace godot;
-
-static inline int32_t t3dDivideFloor( const int32_t nValue, const int32_t nDivisor ) {
-	int32_t nQuotient = nValue / nDivisor;
-	if ( nValue % nDivisor < 0 ) {
-		--nQuotient;
-	}
-	return nQuotient;
-}
 
 static inline void t3dAppendRuntimeProblem( Array &rProblems,
         const String &rSeverity,

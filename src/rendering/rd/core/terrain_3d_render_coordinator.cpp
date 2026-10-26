@@ -1,3 +1,4 @@
+#include "memory/policy/terrain_3d_memory_account.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "Terrain3DConstants.h"
@@ -109,10 +110,13 @@ bool Terrain3DRenderCoordinator::setVirtualTextureQualityProfile( const uint32_t
 }
 
 bool Terrain3DRenderCoordinator::bakePreviewVirtualTexturesCold( String *const pError ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
+	m_incrementalMegaVTCooker.retryDirtyRegionsCold();
 	return m_previewService.bakePreviewVirtualTexturesCold( previewServices(), pError );
 }
 
 bool Terrain3DRenderCoordinator::loadVirtualTexturePackageCold( const void *const pPackageBytes, const uint64_t nPackageBytes ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	const t3dRenderLifecycleStatus_t renderStatus = snapshotRenderLifecycleStatusOnOwnerThread();
 	if ( !m_bRuntimeAllocatorBound || ( renderStatus.m_nReadyMask & T3D_RENDER_READY_RESOURCE_CONSUMERS ) != 0u ) {
 		return false;
@@ -121,6 +125,7 @@ bool Terrain3DRenderCoordinator::loadVirtualTexturePackageCold( const void *cons
 }
 
 bool Terrain3DRenderCoordinator::loadRuntimeVirtualTexturePackageFileCold( String *const pError ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( m_pTerrain == NULL ) {
 		if ( pError ) {
 			*pError = "RD runtime VT package has no Terrain3D owner";
@@ -148,6 +153,7 @@ bool Terrain3DRenderCoordinator::loadRuntimeVirtualTexturePackageFileCold( Strin
 }
 
 bool Terrain3DRenderCoordinator::preparePreviewAuthoringPackageCold( const Ref<Terrain3DAssets> &rAssets, String *const pError ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	return m_previewService.preparePreviewAuthoringPackageCold( previewServices(), rAssets, pError );
 }
 
@@ -164,10 +170,12 @@ uint64_t Terrain3DRenderCoordinator::advanceGeneration( const uint64_t nGenerati
 }
 
 void Terrain3DRenderCoordinator::serviceColdCapacity( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_publicationBuilder.serviceColdCapacity( publicationServices() );
 }
 
 void Terrain3DRenderCoordinator::publishSnapshot( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_publicationBuilder.publish( publicationServices() );
 }
 
@@ -288,6 +296,7 @@ bool Terrain3DRenderCoordinator::isForwardBridgeReady( void ) const {
 }
 
 void Terrain3DRenderCoordinator::updateRenderRoute( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	const bool bBridgeReady = isForwardBridgeReady();
 	const uint32_t nStartupGeneration = m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
 	const t3dRenderLifecycleStatus_t renderStatus = snapshotRenderLifecycleStatusOnOwnerThread();
@@ -403,6 +412,7 @@ const t3dSharedVTBindings_t &Terrain3DRenderCoordinator::getSharedVtBindingsHot(
 }
 
 bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dVTSharedResourceClass_t eResourceClass ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
@@ -456,24 +466,46 @@ bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dVTSharedRes
 }
 
 void Terrain3DRenderCoordinator::servicePreviewVtRepublishOnRenderThread( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_previewService.servicePreviewVtRepublishOnRenderThread( previewServices() );
 }
 
+bool Terrain3DRenderCoordinator::rebuildPreviewPackageResourcesCold( const void *const pBytes, const uint64_t nBytes,
+        const bool bNeutral, const t3dVTSharedResourceClass_t eClass ) {
+#ifdef DEBUG_ENABLED
+	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
+#endif
+	if ( eClass == T3D_VT_SHARED_RESOURCES_NONE || ( !bNeutral && ( pBytes == NULL || nBytes == 0u ) ) ) {
+		return false;
+	}
+	// This is the only live-authoring cold path: the package no longer fits the
+	// retained resource plan. Ordinary content revisions must stay on warm republish.
+	shutdownRendererOnRenderThread( true );
+	const bool bLoaded = bNeutral ? m_virtualTexture.clearPackageCold()
+	                              : loadVirtualTexturePackageCold( pBytes, nBytes );
+	if ( !bLoaded ) {
+		return false;
+	}
+	return ensurePreviewSharedVt( eClass );
+}
+
 bool Terrain3DRenderCoordinator::ensurePreviewSharedVt( const t3dVTSharedResourceClass_t eClass ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !ensureSharedVtRuntimeCold( eClass ) ) {
 		return false;
 	}
 	if ( eClass != T3D_VT_SHARED_RESOURCES_PRODUCTION || !m_bStartupActivationCommitted ) {
 		return true;
 	}
-	// Live VT publication tears down the production consumers as well. Restore
-	// their readiness here; a disabled Forward+ route cannot rebuild them later.
+	// Explicit preview-to-production capacity transitions recreate consumers.
+	// Restore their readiness here before a disabled Forward+ route can be used.
 	return initializeRendererOnRenderThread()
 	        && completeRendererRecoveryOnRenderThread( m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ),
 	                snapshotRenderLifecycleStatusOnOwnerThread().m_nRecoveryRevision );
 }
 
 bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( const uint64_t nRenderFrame ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
@@ -580,6 +612,7 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( const uint64_
 }
 
 void Terrain3DRenderCoordinator::initializeOcean( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_publicationBuilder.initializeOcean( publicationServices() );
 }
 
@@ -592,6 +625,7 @@ bool Terrain3DRenderCoordinator::isStartupGenerationCurrent( const uint32_t nSta
 }
 
 void Terrain3DRenderCoordinator::publishRenderLifecycleStatusOnRenderThread( const t3dRenderLifecycleStatus_t &rStatus ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
@@ -602,6 +636,7 @@ void Terrain3DRenderCoordinator::publishRenderLifecycleStatusOnRenderThread( con
 }
 
 void Terrain3DRenderCoordinator::publishRenderLifecycleStatusCold( const t3dRenderLifecycleStatus_t &rStatus ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	Terrain3DScopedLock lock( m_renderLifecycleMutex );
 	t3dRenderLifecycleStatus_t status = rStatus;
 	status.m_nRevision = advanceGeneration( m_renderLifecycleStatus.m_nRevision );
@@ -639,6 +674,7 @@ void Terrain3DRenderCoordinator::clearRenderLifecycleReadyBitOnRenderThread( con
 
 void Terrain3DRenderCoordinator::publishRenderSharedResourceReadyOnRenderThread(
         const t3dVTSharedResourceClass_t eResourceClass ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
@@ -657,6 +693,7 @@ void Terrain3DRenderCoordinator::publishRenderSharedResourceReadyOnRenderThread(
 
 void Terrain3DRenderCoordinator::publishRenderLifecycleFailureOnRenderThread(
         const uint32_t nStartupGeneration, const t3dRenderLifecycleFailure_t eFailure ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	t3dRenderLifecycleStatus_t status = snapshotRenderLifecycleStatusOnOwnerThread();
 	if ( status.m_nStartupGeneration != nStartupGeneration ) {
 		status = t3dRenderLifecycleStatus_t{};
@@ -775,6 +812,7 @@ void Terrain3DRenderCoordinator::cancelStartupCold( const uint32_t nStartupGener
 }
 
 bool Terrain3DRenderCoordinator::beginStartupCold( Terrain3DOwner *const pTerrain, const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( pTerrain == NULL || nStartupGeneration == 0u ) {
 		return false;
 	}
@@ -866,6 +904,7 @@ bool Terrain3DRenderCoordinator::beginStartupCold( Terrain3DOwner *const pTerrai
 }
 
 void Terrain3DRenderCoordinator::serviceStartupCold( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_bStartupColdBegun || m_bStartupColdFailed || nStartupGeneration == 0u || m_nStartupGeneration != nStartupGeneration ) {
 		return;
 	}
@@ -1008,6 +1047,7 @@ bool Terrain3DRenderCoordinator::isStartupActivationReady( const uint32_t nStart
 }
 
 bool Terrain3DRenderCoordinator::prepareStartupActivationCold( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( m_bStartupActivationPrepared ) {
 		return m_nStartupGeneration == nStartupGeneration && !m_bStartupColdFailed;
 	}
@@ -1162,6 +1202,7 @@ bool Terrain3DRenderCoordinator::commitStartupActivationCold( const uint32_t nSt
 }
 
 bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_bStartupColdBegun || m_pTerrain == NULL || nStartupGeneration == 0u
 	        || m_nStartupGeneration != nStartupGeneration
 	        || m_pTerrain->getStartupGenerationInternal() != nStartupGeneration ) {
@@ -1326,7 +1367,7 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	} else if ( Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
 		Terrain3DData *const pSource = m_pTerrain->dataObject();
 		if ( pSource != NULL ) {
-			m_incrementalMegaVTCooker.restoreCachedRegionsCold( { *pSource, m_pTerrain->getDataDirectory() },
+			m_incrementalMegaVTCooker.restoreCachedRegionsCold( { *pSource, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit(m_pTerrain->getMemoryAccountInternal()) },
 			        m_terrainMegaVT.getTexelsPerMeter() );
 		}
 		if ( assets.is_valid() && !preparePreviewAuthoringPackageCold( assets, &vtError ) ) {
@@ -1458,6 +1499,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 }
 
 void Terrain3DRenderCoordinator::serviceShaderStartupCold( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	const uint32_t nStartupGeneration = m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
 	if ( !isStartupGenerationCurrent( nStartupGeneration ) ) {
 		return;
@@ -1500,6 +1542,7 @@ bool Terrain3DRenderCoordinator::queueStartupGpuServiceOnRenderThread( const uin
 }
 
 bool Terrain3DRenderCoordinator::serviceStartupGpuOnRenderThreadBudgeted( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
@@ -1649,6 +1692,7 @@ bool Terrain3DRenderCoordinator::serviceStartupGpuOnRenderThreadBudgeted( const 
 }
 
 void Terrain3DRenderCoordinator::serviceShaderStartupOnRenderThread( const uint32_t nStartupGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
@@ -1751,6 +1795,7 @@ void Terrain3DRenderCoordinator::serviceShaderStartupOnRenderThread( const uint3
 
 void Terrain3DRenderCoordinator::serviceStartupWorldPublicationOnRenderThread(
         const uint32_t nStartupGeneration, const uint64_t nSnapshotGeneration ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !isStartupGenerationCurrent( nStartupGeneration ) ) {
 		m_nStartupStaleCompletionRejectCount.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 		return;
@@ -1766,7 +1811,7 @@ void Terrain3DRenderCoordinator::serviceStartupWorldPublicationOnRenderThread(
 	bool bPrepared = false;
 	if ( bWorldValid ) {
 		Terrain3DColdPhaseScope cold_phase_scope;
-		bPrepared = m_worldRuntime.preparePublicationCold( pWorld->m_publication, 0u );
+		bPrepared = m_worldRuntime.preparePublicationCold( pWorld->m_publication, 0u, &m_virtualTexture );
 	}
 	const uint64_t nElapsedUsec = t3dRdStartupTicksUsec() - nStartedUsec;
 	if ( !isStartupGenerationCurrent( nStartupGeneration ) ) {
@@ -1821,6 +1866,7 @@ void Terrain3DRenderCoordinator::serviceStartupWorldPublicationOnRenderThread(
 }
 
 void Terrain3DRenderCoordinator::update( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	// Snapshot custom instancing lighting globals on the coordinator thread.
 	// The render thread consumes only this small locked POD copy and never calls
 	// back into RenderingServer for global shader parameters.
@@ -1835,7 +1881,7 @@ void Terrain3DRenderCoordinator::update( void ) {
 	m_previewService.servicePreviewReadbackWatchdogCold( previewServices() );
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
 		Terrain3DData *const pSource = m_pTerrain->dataObject();
-		if ( pSource != NULL ) { m_incrementalMegaVTCooker.updateCold( { *pSource, m_pTerrain->getDataDirectory() }, m_terrainMegaVT, *this ); }
+		if ( pSource != NULL ) { m_incrementalMegaVTCooker.updateCold( { *pSource, m_pTerrain->getDataDirectory(), t3dMemoryCookingLimit(m_pTerrain->getMemoryAccountInternal()) }, m_terrainMegaVT, *this ); }
 		m_previewService.updateAuthoringCold( previewServices() );
 	}
 	publishSnapshot();
@@ -1928,6 +1974,7 @@ bool Terrain3DRenderCoordinator::queueRendererRecoveryCold(
 
 bool Terrain3DRenderCoordinator::completeRendererRecoveryOnRenderThread(
         const uint32_t nStartupGeneration, const uint64_t nRecoveryRevision ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
@@ -1936,7 +1983,7 @@ bool Terrain3DRenderCoordinator::completeRendererRecoveryOnRenderThread(
 	        ? m_publicationBuilder.getWorldPublicationBank( pPublication->m_nWorldPublicationBank )
 	        : NULL;
 	const bool bWorldPrepared = pWorld != NULL && pWorld->m_publication.m_nGeneration != 0u
-	        && m_worldRuntime.preparePublicationCold( pWorld->m_publication, 0u );
+	        && m_worldRuntime.preparePublicationCold( pWorld->m_publication, 0u, &m_virtualTexture );
 	t3dRenderLifecycleStatus_t status = snapshotRenderLifecycleStatusOnOwnerThread();
 	status.m_nStartupGeneration = nStartupGeneration;
 	status.m_nRecoveryRevision = nRecoveryRevision;
@@ -1962,6 +2009,7 @@ bool Terrain3DRenderCoordinator::completeRendererRecoveryOnRenderThread(
 
 void Terrain3DRenderCoordinator::recoverRendererLifecycleOnRenderThread(
         const uint32_t nStartupGeneration, const uint64_t nRecoveryRevision ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
@@ -2042,6 +2090,7 @@ void Terrain3DRenderCoordinator::shutdownRendererLifecycleOnRenderThread( const 
 }
 
 void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_previewService.renderPreviewOnRenderThread( previewServices() );
 }
 
@@ -2062,6 +2111,7 @@ bool Terrain3DRenderCoordinator::requestMeshPreviewAsync( const uint16_t nAssetI
 
 
 void Terrain3DRenderCoordinator::renderPreviewAsyncOnRenderThread( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	m_previewService.renderPreviewAsyncOnRenderThread( previewServices() );
 }
 
@@ -2071,6 +2121,7 @@ void Terrain3DRenderCoordinator::consumePreviewReadbackOnRenderThread(
 }
 
 void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	if ( !m_bCompositorDebugEnabled || !pRenderData ) {
 		return;
 	}
@@ -2125,6 +2176,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 }
 
 bool Terrain3DRenderCoordinator::publishStaticWorldCold( const uint64_t nProducerId, const Terrain3DWorldPublication &rWorld ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	return m_staticScene.publishCold( nProducerId, rWorld );
 }
 void Terrain3DRenderCoordinator::releaseStaticSceneDatabaseCold( const uint64_t nProducerId ) {
@@ -2142,6 +2194,7 @@ bool Terrain3DRenderCoordinator::isStaticWorldReadyCold( const uint64_t nProduce
 
 void Terrain3DRenderCoordinator::publishStaticWorldReadinessOnRenderThread(
         const Terrain3DWorldPublication &rWorld, const bool bReady ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	// preparePublicationCold may return true while retaining an older upload.
 	// Only the exact uploaded generation with prepared raster bindings can hand off.
 	const bool bExactReady = bReady && m_worldRuntime.isReady()
@@ -2154,6 +2207,7 @@ void Terrain3DRenderCoordinator::resetForwardLifecycle( void ) {
 }
 
 bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContext_t &rContext ) {
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
 	t3dForwardPassServices_t services{
 		m_publicationBuilder, m_renderer, m_instanceRenderer, m_oceanRenderer, m_worldRuntime, m_virtualTexture,
 		m_bRenderEnabled, m_bRendererInitialized, m_bInstanceRendererInitialized, m_bOceanRendererInitialized,
@@ -2168,7 +2222,7 @@ bool Terrain3DRenderCoordinator::renderForwardPass( const t3dRdForwardPassContex
 }
 
 size_t Terrain3DRenderCoordinator::getRetainedCpuBytes( void ) const {
-	return m_diagnosticsPublisher.getRetainedCpuBytes( diagnosticInputs() ) + m_incrementalMegaVTCooker.getRetainedCpuBytesCold() + m_staticScene.getRetainedCpuBytes();
+	return m_diagnosticsPublisher.getRetainedCpuBytes( diagnosticInputs() ) + MAX(uint64_t(m_incrementalMegaVTCooker.getRetainedCpuBytesCold()), m_incrementalMegaVTCooker.getReservedCpuBytesCold()) + m_staticScene.getRetainedCpuBytes();
 }
 
 Dictionary Terrain3DRenderCoordinator::getForwardLaneDiagnostics( void ) const {
@@ -2259,6 +2313,9 @@ uint64_t Terrain3DRenderCoordinator::getWorldBudgetDeferralCount( void ) const {
 uint64_t Terrain3DRenderCoordinator::getVirtualTextureBudgetDeferralCount( void ) const {
 	const t3dVTStreamingStats_t &rStats = m_virtualTexture.get_streaming().Stats;
 	return rStats.nBudgetDeferredCount + rStats.nAdmissionBudgetDeferredCount;
+}
+uint64_t Terrain3DRenderCoordinator::getVirtualTextureGpuBytes() const {
+	return m_virtualTexture.get_gpu_reserved_bytes();
 }
 uint64_t Terrain3DRenderCoordinator::getVirtualTextureCpuBytes( void ) const {
 	return m_virtualTexture.get_cpu_image_bytes();

@@ -9,7 +9,6 @@
 #include "core/utility/terrain_3d_sync.h"
 #include "Terrain3DConstants.h"
 #include "eastl_config.h"
-#include "data/runtime/terrain_3d_runtime_page_constants.h"
 #include "instances/storage/terrain_3d_instance_store.h"
 
 #include <EASTL/array.h>
@@ -22,12 +21,9 @@
 #include "data/persistence/terrain_3d_region_persistence.h"
 #include "data/persistence/terrain_3d_region_repository.h"
 
-
 // t3dRuntimePageConsumer_e centralized in Terrain3DTypes.h.
 
-
 // t3dRuntimePageNumericConfig_s centralized in Terrain3DTypes.h.
-
 
 EA_FORCE_INLINE t3dRuntimePageNumericConfig_t t3dCompileRuntimePageNumericConfig(
         const int nColorDivisor, const int nDerivedDivisor, const int nMiddleHeightDivisor, const int nPrepareThreads ) {
@@ -51,7 +47,6 @@ typedef struct t3dRuntimePageConfig_s {
 	bool m_bCookedPagesEnabled = false;
 	bool m_bEditorAuthoring = false;
 } t3dRuntimePageConfig_t;
-
 
 // One consumed GPU detail page. Image handles retain the existing Godot
 // reference ownership; the page store remains the owner of prepared slots.
@@ -87,7 +82,6 @@ typedef struct t3dRuntimePageContent_s {
 	PackedByteArray m_multimeshFastStart;
 } t3dRuntimePageContent_t;
 
-
 // Authoring/cook payload and runtime materialized payload share one canonical
 // page-content schema. Runtime-only byte staging and prepared-instance state
 // remain on t3dRuntimePagePayload_s below.
@@ -96,15 +90,11 @@ typedef struct t3dRuntimePageCookPayload_s : public t3dRuntimePageContent_t {
 	uint32_t m_nMaterialMask = 1u;
 } t3dRuntimePageCookPayload_t;
 
-
 // t3dRuntimePageProbeState_e centralized in Terrain3DTypes.h.
-
 
 // t3dRuntimePageProbe_s centralized in Terrain3DTypes.h.
 
-
 // t3dRuntimePageStats_s centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dRuntimePageServiceState_s {
 
@@ -117,13 +107,11 @@ typedef struct t3dRuntimePageServiceState_s {
 	void *m_pWantedContext = NULL;
 } t3dRuntimePageServiceState_t;
 
-
 // Owns cooked runtime-page I/O, validation/materialization, merged consumer
 // requests, worker preparation, and prepared-page lifetime. Residency consumers
 // decide which locations they want; this store performs one physical page read
 // that can satisfy all consumers of that location.
 // t3dRuntimePageMeta_s centralized in Terrain3DTypes.h.
-
 
 typedef struct t3dRuntimePagePayload_s : public t3dRuntimePageContent_t {
 
@@ -139,8 +127,8 @@ typedef struct t3dRuntimePagePayload_s : public t3dRuntimePageContent_t {
 	Terrain3DInstanceStore m_preparedInstanceStore{ TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED };
 } t3dRuntimePagePayload_t;
 
-
-typedef struct t3dRuntimePageSource_s {
+typedef struct t3dRuntimePageSource_s
+{
 
 	String m_pagePath;
 	String m_sourcePath;
@@ -149,12 +137,11 @@ typedef struct t3dRuntimePageSource_s {
 	bool m_bPresent = false;
 } t3dRuntimePageSource_t;
 
-
-typedef struct t3dRuntimePageWorkerScratch_s {
+typedef struct t3dRuntimePageWorkerScratch_s
+{
 
 	PackedByteArray m_ioBytes;
 } t3dRuntimePageWorkerScratch_t;
-
 
 class Terrain3DRuntimePageStore {
 public:

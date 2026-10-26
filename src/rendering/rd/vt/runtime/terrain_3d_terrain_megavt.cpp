@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/vt/runtime/terrain_3d_terrain_megavt.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "core/utility/terrain_3d_hash_bytes.h"
 
 #include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"
@@ -98,7 +99,7 @@ uint32_t Terrain3DTerrainMegaVT::makeContentId( const int32_t nRegionX, const in
 	return hash == 0u ? 1u : hash;
 }
 
-void Terrain3DTerrainMegaVT::initializeRegionIdentity( const uint32_t nRegionMapIndex, t3dTerrainMegaVTRegion_t& rRegion )
+void Terrain3DTerrainMegaVT::initializeRegionIdentity( const uint32_t nRegionMapIndex, t3dTerrainMegaVTRegion_t& rRegion, const uint32_t nAllocationId )
 {
 	uint16_t nMip0Width = 0u;
 	uint16_t nMip0Height = 0u;
@@ -110,8 +111,8 @@ void Terrain3DTerrainMegaVT::initializeRegionIdentity( const uint32_t nRegionMap
 	int32_t nRegionX = 0;
 	int32_t nRegionZ = 0;
 	regionIndexToLocation( nRegionMapIndex, nRegionX, nRegionZ );
-	rRegion.m_nAllocationId =
-	    m_pVirtualTexture ? m_pVirtualTexture->getTerrainMegaVTAllocationId( nRegionMapIndex ) : T3D_VT_INVALID_ALLOCATION;
+	rRegion.m_nAllocationId = nAllocationId != T3D_VT_INVALID_ALLOCATION ? nAllocationId
+	        : ( m_pVirtualTexture ? m_pVirtualTexture->getTerrainMegaVTAllocationId( nRegionMapIndex ) : T3D_VT_INVALID_ALLOCATION );
 	rRegion.m_nGeneration = rRegion.m_nGeneration == 0u ? 1u : rRegion.m_nGeneration;
 	rRegion.m_nContentId = makeContentId( nRegionX, nRegionZ, m_nTexelsPerMeter );
 	rRegion.m_vWorldToUv[ 0 ] = 1.0f / (float)( T3D_REGION_WORLD_SIZE_METERS );
@@ -130,26 +131,29 @@ bool Terrain3DTerrainMegaVT::syncRegionPresenceHot( const uint16_t *const pLogic
 	if ( !m_bAttached || m_pVirtualTexture == NULL || !m_pVirtualTexture->is_initialized() || pLogicalRegionMap == NULL ) {
 		return false;
 	}
+	if ( !m_pVirtualTexture->snapshotTerrainMegaVTReadStateCold( m_szPackageAllocationSnapshot,
+	             m_szPackageCookedGenerationSnapshot, m_szPackageCookedValidSnapshot, T3D_REGION_SLOTS ) ) {
+		return false;
+	}
 	bool bChanged = nTopologyGeneration != m_nTopologyGeneration;
 	for ( uint32_t i = 0u; i < (uint32_t)( T3D_REGION_SLOTS ); ++i ) {
 		t3dTerrainMegaVTRegion_t& region = m_szRegions[ i ];
 		if ( ( region.m_nFlags & T3D_TERRAIN_MEGAVT_REGION_COOKED ) != 0u ) {
-			const uint32_t nAllocation = m_pVirtualTexture->getTerrainMegaVTAllocationId( i );
+			const uint32_t nAllocation = m_szPackageAllocationSnapshot[i];
 			bChanged |= nAllocation != region.m_nAllocationId;
 			region.m_nAllocationId = nAllocation;
 		}
 		const bool bPresent = pLogicalRegionMap[ i ] != 0u;
 		const bool bWasPresent = ( region.m_nFlags & T3D_TERRAIN_MEGAVT_REGION_PRESENT ) != 0u;
 		if ( region.m_nAllocationId == T3D_VT_INVALID_ALLOCATION ) {
-			initializeRegionIdentity( i, region );
+			initializeRegionIdentity( i, region, m_szPackageAllocationSnapshot[i] );
 			bChanged = true;
 		}
 		if ( bPresent != bWasPresent ) {
 			if ( bPresent ) {
 				region.m_nFlags |= T3D_TERRAIN_MEGAVT_REGION_PRESENT;
-				uint32_t nCookedGeneration = 0u;
-				if ( m_szEditorState[i].m_nDirtyMip0Mask == 0u && m_pVirtualTexture->getTerrainMegaVTCookedGenerationCold( i, nCookedGeneration ) ) {
-					region.m_nGeneration = nCookedGeneration;
+				if ( m_szEditorState[i].m_nDirtyMip0Mask == 0u && m_szPackageCookedValidSnapshot[i] != 0u ) {
+					region.m_nGeneration = m_szPackageCookedGenerationSnapshot[i];
 					region.m_nFlags |= T3D_TERRAIN_MEGAVT_REGION_COOKED;
 				}
 			} else {
@@ -159,7 +163,7 @@ bool Terrain3DTerrainMegaVT::syncRegionPresenceHot( const uint16_t *const pLogic
 				}
 				m_szEditorState[i] = t3dTerrainMegaVTEditorState_t{};
 				m_szInFlightClaimIds[i] = 0u;
-				region.m_nGeneration = region.m_nGeneration == UINT32_MAX ? 1u : region.m_nGeneration + 1u;
+				region.m_nGeneration = t3dNextGeneration( region.m_nGeneration );
 				region.m_nFlags &= ~( T3D_TERRAIN_MEGAVT_REGION_COOKED | T3D_TERRAIN_MEGAVT_REGION_EDITOR_DYNAMIC );
 			}
 			bChanged = true;
@@ -207,7 +211,7 @@ bool Terrain3DTerrainMegaVT::buildCookRequest( const uint32_t nRegionMapIndex, t
 
 void Terrain3DTerrainMegaVT::advancePublicationGeneration()
 {
-	m_nPublicationGeneration = m_nPublicationGeneration == UINT64_MAX ? 1u : m_nPublicationGeneration + 1u;
+	m_nPublicationGeneration = t3dNextGeneration( m_nPublicationGeneration );
 }
 
 bool Terrain3DTerrainMegaVT::locationToRegionIndex( const int32_t nRegionX, const int32_t nRegionZ, uint32_t& rRegionMapIndex )
@@ -340,7 +344,7 @@ bool Terrain3DTerrainMegaVT::markEditorDirtyBoundsHot( const t3dTerrainMegaVTEdi
 			editor.m_nDirtyMip0Mask |= nMip0Mask;
 			editor.m_nDirtyPageMask = computeDirtyPageClosure(
 			    region.m_nMip0WidthPages, region.m_nMip0HeightPages, region.m_nMipCount, editor.m_nDirtyMip0Mask );
-			region.m_nGeneration = region.m_nGeneration == UINT32_MAX ? 1u : region.m_nGeneration + 1u;
+			region.m_nGeneration = t3dNextGeneration( region.m_nGeneration );
 			region.m_nFlags |= T3D_TERRAIN_MEGAVT_REGION_EDITOR_DYNAMIC;
 			region.m_nFlags &= ~T3D_TERRAIN_MEGAVT_REGION_COOKED;
 			if ( !bWasDirty ) {
@@ -350,7 +354,7 @@ bool Terrain3DTerrainMegaVT::markEditorDirtyBoundsHot( const t3dTerrainMegaVTEdi
 		}
 	}
 	if ( bChanged ) {
-		m_nEditorDirtyGeneration = m_nEditorDirtyGeneration == UINT64_MAX ? 1u : m_nEditorDirtyGeneration + 1u;
+		m_nEditorDirtyGeneration = t3dNextGeneration( m_nEditorDirtyGeneration );
 		advancePublicationGeneration();
 	}
 	return bChanged;

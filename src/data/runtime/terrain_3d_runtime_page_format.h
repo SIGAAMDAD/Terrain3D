@@ -5,7 +5,7 @@
 
 #include "Terrain3DTypes.h"
 
-#include "data/runtime/terrain_3d_runtime_page_constants.h"
+#include "Terrain3DConstants.h"
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "core/utility/terrain_3d_checked_math.h"
 
@@ -17,15 +17,11 @@
 
 // t3dRuntimePageChannel_e centralized in Terrain3DTypes.h.
 
-
 // t3dRuntimePageCompression_e centralized in Terrain3DTypes.h.
-
 
 // t3dRuntimePageChannelInfo_s centralized in Terrain3DTypes.h.
 
-
 // t3dRuntimePageHeader_s centralized in Terrain3DTypes.h.
-
 
 inline const t3dRuntimePageChannelInfo_t *t3dRuntimePageFindChannel(
         const t3dRuntimePageHeader_t &rHeader, const t3dRuntimePageChannel_t channel ) {

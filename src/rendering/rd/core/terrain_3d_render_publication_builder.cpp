@@ -1248,6 +1248,8 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState( const t3dPublicationS
 	        m_cachedInstanceMeshes.m_worldClusterVtMetadata.end() );
 	world.m_materials.insert(
 	        world.m_materials.end(), m_cachedInstanceMeshes.m_vtMaterials.begin(), m_cachedInstanceMeshes.m_vtMaterials.end() );
+	world.m_instanceMaterialStableKeys.insert( world.m_instanceMaterialStableKeys.end(),
+	        m_cachedInstanceMeshes.m_vtStableKeys.begin(), m_cachedInstanceMeshes.m_vtStableKeys.end() );
 	for ( size_t i = 0u; i < m_cachedInstanceMeshes.m_worldClusters.size(); ++i ) {
 		const uint32_t kind = m_cachedInstanceMeshes.m_worldClusters[i].m_nPackedLodGeometryKind >> 16u;
 		if ( kind == T3D_WORLD_GEOMETRY_HLOD_CLUSTER ) {
@@ -1726,40 +1728,16 @@ void Terrain3DRenderPublicationBuilder::clearCachedSources( void ) {
 	m_bWorldPublicationCapacityPending = true;
 }
 
-static size_t t3dPublicationMeshSnapshotBytes( const t3dRdMeshSourceSnapshot_t &rSnapshot ) {
-	size_t nBytes = rSnapshot.m_vertexBytes.size() + rSnapshot.m_index32Bytes.size();
-	nBytes += rSnapshot.m_vertexChunkHashes.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_index32ChunkHashes.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_surfaces.capacity() * sizeof( t3dRdMeshSourceSurface_t );
-	nBytes += rSnapshot.m_lods.capacity() * sizeof( t3dRdMeshSourceLod_t );
-	nBytes += rSnapshot.m_materials.capacity() * sizeof( t3dRdInstanceMaterial_t );
-	nBytes += rSnapshot.m_vtMaterials.capacity() * sizeof( t3dRenderingMaterialGpu_t );
-	nBytes += rSnapshot.m_materialKeys.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_vtStableKeys.capacity() * sizeof( uint64_t );
-	nBytes += rSnapshot.m_worldVertices.capacity() * sizeof( t3dWorldVertex_t );
-	nBytes += rSnapshot.m_worldClusterVertexIndices.capacity() * sizeof( uint32_t );
-	nBytes += rSnapshot.m_worldTriangleWords.capacity() * sizeof( uint32_t );
-	nBytes += rSnapshot.m_worldClusters.capacity() * sizeof( t3dWorldCluster_t );
-	nBytes += rSnapshot.m_worldClusterVtMetadata.capacity() * sizeof( t3dWorldClusterVTMetadata_t );
-	return nBytes;
-}
-
-static size_t t3dPublicationSceneSnapshotBytes( const t3dRdInstanceSceneSnapshot_t &rSnapshot ) {
-	return rSnapshot.m_instances.capacity() * sizeof( t3dRdInstanceRecord_t ) + rSnapshot.m_cells.capacity() * sizeof( t3dRdInstanceCell_t )
-	        + rSnapshot.m_dirtyRanges.capacity() * sizeof( t3dRdInstanceDirtyRange_t )
-	        + rSnapshot.m_dirtyCells.capacity() * sizeof( uint32_t );
-}
-
 size_t Terrain3DRenderPublicationBuilder::getRetainedCpuBytes( void ) const {
 	size_t bytes = sizeof( m_snapshotSlots );
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_regionMapBanks ); ++iBank ) {
 		bytes += m_regionMapBanks[iBank].m_bytes.size();
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceMeshBanks ); ++iBank ) {
-		bytes += t3dPublicationMeshSnapshotBytes( m_instanceMeshBanks[iBank].m_snapshot );
+		bytes += m_instanceMeshBanks[iBank].m_snapshot.getRetainedCpuBytes();
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); ++iBank ) {
-		bytes += t3dPublicationSceneSnapshotBytes( m_instanceSceneBanks[iBank].m_snapshot );
+		bytes += m_instanceSceneBanks[iBank].m_snapshot.getRetainedCpuBytes();
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_oceanStripBanks ); ++iBank ) {
 		bytes += sizeof( m_oceanStripBanks[iBank].m_snapshot );
@@ -1767,10 +1745,10 @@ size_t Terrain3DRenderPublicationBuilder::getRetainedCpuBytes( void ) const {
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_worldPublicationBanks ); ++iBank ) {
 		bytes += m_worldPublicationBanks[iBank].m_publication.getRetainedCpuBytes();
 	}
-	bytes += t3dPublicationMeshSnapshotBytes( m_cachedInstanceMeshes );
-	bytes += t3dPublicationSceneSnapshotBytes( m_cachedRegularInstanceScene );
-	bytes += t3dPublicationSceneSnapshotBytes( m_cachedHlodInstanceScene );
-	bytes += t3dPublicationSceneSnapshotBytes( m_cachedInstanceScene );
+	bytes += m_cachedInstanceMeshes.getRetainedCpuBytes();
+	bytes += m_cachedRegularInstanceScene.getRetainedCpuBytes();
+	bytes += m_cachedHlodInstanceScene.getRetainedCpuBytes();
+	bytes += m_cachedInstanceScene.getRetainedCpuBytes();
 	bytes += m_cachedHlodMeshSources.capacity() * sizeof( t3dRdExternalMeshSource_t );
 	return bytes;
 }

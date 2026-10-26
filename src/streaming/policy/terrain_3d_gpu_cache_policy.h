@@ -6,7 +6,7 @@
 #include "Terrain3DTypes.h"
 
 #include "core/config/terrain_3d_compiler.h"
-#include "streaming/policy/terrain_3d_gpu_cache_constants.h"
+#include "Terrain3DConstants.h"
 
 #include <limits.h>
 #include <math.h>
@@ -17,9 +17,7 @@
 
 // t3dGpuCacheCoord_s centralized in Terrain3DTypes.h.
 
-
 // t3dGpuCacheSelectionStats_s centralized in Terrain3DTypes.h.
-
 
 typedef bool ( *t3dGpuCacheActiveFn_t )( int iX, int iY, const void *pContext );
 
@@ -53,7 +51,6 @@ int t3dGpuCacheCalculateBudgetPhysicalLayers( const uint64_t nBudgetBytes,
         const bool bDerivedEnabled,
         const int nColorDivisor,
         const int nDerivedDivisor );
-
 
 int t3dGpuCacheCalculateFootprintRadiusRegions( const int nMeshSize, const int nDetailLods );
 

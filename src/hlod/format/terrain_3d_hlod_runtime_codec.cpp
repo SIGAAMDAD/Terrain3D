@@ -1,10 +1,12 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_numeric.h"
+#include "core/utility/terrain_3d_checked_math.h"
 #include "Terrain3DTypes.h"
 #include "Terrain3DConstants.h"
 #include "hlod/format/terrain_3d_hlod_runtime_codec.h"
 
-#include "core/containers/terrain_3d_byte_writer.h"
+#include "core/utility/terrain_3d_binary_io.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "eastl_config.h"
 
@@ -15,50 +17,10 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
-
 // t3dHLODRuntimeNodeTemp_s centralized in Terrain3DTypes.h.
-
 
 static bool t3dHlodRuntimeNodeTempLess( const t3dHLODRuntimeNodeTemp_t &rA, const t3dHLODRuntimeNodeTemp_t &rB ) {
 	return rA.m_nRegion < rB.m_nRegion || ( rA.m_nRegion == rB.m_nRegion && rA.m_nSpawn < rB.m_nSpawn );
-}
-
-EA_FORCE_INLINE static int t3dHlodRuntimeCodecFloorDiv( const int value, const int divisor ) {
-	if ( divisor <= 0 ) {
-		return 0;
-	}
-	int quotient = value / divisor;
-	if ( value < 0 && ( value % divisor ) != 0 ) {
-		--quotient;
-	}
-	return quotient;
-}
-EA_FORCE_INLINE static uint8_t t3dHlodRuntimeCodecRu8( const uint8_t *p ) {
-	return p[0];
-}
-EA_FORCE_INLINE static uint16_t t3dHlodRuntimeCodecRu16( const uint8_t *p ) {
-	return ( uint16_t )( p[0] | ( ( uint16_t )p[1] << 8 ) );
-}
-EA_FORCE_INLINE static uint32_t t3dHlodRuntimeCodecRu32( const uint8_t *p ) {
-	return ( uint32_t )p[0] | ( ( uint32_t )p[1] << 8 ) | ( ( uint32_t )p[2] << 16 ) | ( ( uint32_t )p[3] << 24 );
-}
-EA_FORCE_INLINE static int32_t t3dHlodRuntimeCodecRi32( const uint8_t *p ) {
-	return ( int32_t )t3dHlodRuntimeCodecRu32( p );
-}
-EA_FORCE_INLINE static uint64_t t3dHlodRuntimeCodecRu64( const uint8_t *p ) {
-	return ( uint64_t )t3dHlodRuntimeCodecRu32( p ) | ( ( uint64_t )t3dHlodRuntimeCodecRu32( p + 4 ) << 32 );
-}
-EA_FORCE_INLINE static int64_t t3dHlodRuntimeCodecRi64( const uint8_t *p ) {
-	return ( int64_t )t3dHlodRuntimeCodecRu64( p );
-}
-EA_FORCE_INLINE static float t3dHlodRuntimeCodecRf32( const uint8_t *p ) {
-	uint32_t bits = t3dHlodRuntimeCodecRu32( p );
-	float v = 0;
-	memcpy( &v, &bits, 4 );
-	return v;
-}
-EA_FORCE_INLINE static bool t3dHlodRuntimeCodecHasBytes( const size_t nOffset, const size_t nBytes, const size_t nTotalBytes ) {
-	return nOffset <= nTotalBytes && nBytes <= nTotalBytes - nOffset;
 }
 
 bool Terrain3DHLODRuntimeCodec::decodeEntryDictionary(
@@ -101,7 +63,7 @@ PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 	for ( int i = 0; i < ( int )entries.size(); ++i ) {
 		t3dHLODEntryDescriptor_t &entry = entries[( size_t )i];
 		const Vector2i parent_cluster(
-		        t3dHlodRuntimeCodecFloorDiv( entry.getCluster().x, 2 ), t3dHlodRuntimeCodecFloorDiv( entry.getCluster().y, 2 ) );
+		    t3dDivideFloor( entry.getCluster().x, 2 ), t3dDivideFloor( entry.getCluster().y, 2 ) );
 		int parent = -1;
 		for ( int j = 0; j < ( int )entries.size(); ++j ) {
 			if ( entries[( size_t )j].m_nLevel == entry.m_nLevel + 1 && entries[( size_t )j].getCluster() == parent_cluster ) {
@@ -208,19 +170,17 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 		return false;
 	}
 	const uint8_t *p = rBlob.ptr();
-	size_t offset = 0u;
-	if ( t3dHlodRuntimeCodecRu32( p ) != T3D_HLOD_RUNTIME_MAGIC || t3dHlodRuntimeCodecRu16( p + 4 ) != T3D_HLOD_RUNTIME_VERSION ) {
+	t3dByteReader_t reader( p, (size_t)rBlob.size() );
+	size_t& offset = reader.m_iOffset;
+	offset = 0u;
+	if ( t3dReadLittleUnsigned<uint32_t>( p ) != T3D_HLOD_RUNTIME_MAGIC || t3dReadLittleUnsigned<uint16_t>( p + 4 ) != T3D_HLOD_RUNTIME_VERSION ) {
 		return false;
 	}
 	offset = 8u;
-	const uint32_t entry_count = t3dHlodRuntimeCodecRu32( p + offset );
-	offset += 4u;
-	const uint32_t root_count = t3dHlodRuntimeCodecRu32( p + offset );
-	offset += 4u;
-	const uint32_t mesh_bytes = t3dHlodRuntimeCodecRu32( p + offset );
-	offset += 4u;
-	const uint32_t node_count = t3dHlodRuntimeCodecRu32( p + offset );
-	offset += 4u;
+	const uint32_t entry_count = reader.readU32();
+	const uint32_t root_count = reader.readU32();
+	const uint32_t mesh_bytes = reader.readU32();
+	const uint32_t node_count = reader.readU32();
 	if ( entry_count > 65535u || root_count > entry_count || mesh_bytes > ( uint32_t )( T3D_REGION_SLOTS * T3D_MAX_MESH_ASSETS )
 	        || node_count > 1000000u ) {
 		return false;
@@ -229,45 +189,38 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 		return false;
 	}
 	for ( uint32_t i = 0u; i < entry_count; ++i ) {
-		if ( !t3dHlodRuntimeCodecHasBytes( offset, 104u, ( size_t )rBlob.size() ) ) {
+		if ( !t3dByteRangeFits<size_t>( offset, 104u, (size_t)rBlob.size() ) ) {
 			return false;
 		}
 		t3dHLODEntryDescriptor_t &entry = rData.m_entries[i];
-		entry.m_nLevel = t3dHlodRuntimeCodecRu8( p + offset );
+		entry.m_nLevel = t3dReadLittleUnsigned<uint8_t>( p + offset );
 		offset += 4u;
-		entry.setCluster( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
+		entry.setCluster( Vector2i( (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset ), (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset + 4u ) ) );
 		offset += 8u;
-		entry.setRegionMin( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
+		entry.setRegionMin( Vector2i( (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset ), (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset + 4u ) ) );
 		offset += 8u;
-		entry.setRegionMax( Vector2i( t3dHlodRuntimeCodecRi32( p + offset ), t3dHlodRuntimeCodecRi32( p + offset + 4u ) ) );
+		entry.setRegionMax( Vector2i( (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset ), (int32_t)t3dReadLittleUnsigned<uint32_t>( p + offset + 4u ) ) );
 		offset += 8u;
-		entry.m_localBounds = AABB( Vector3( t3dHlodRuntimeCodecRf32( p + offset ),
-		                                    t3dHlodRuntimeCodecRf32( p + offset + 4u ),
-		                                    t3dHlodRuntimeCodecRf32( p + offset + 8u ) ),
-		        Vector3( t3dHlodRuntimeCodecRf32( p + offset + 12u ),
-		                t3dHlodRuntimeCodecRf32( p + offset + 16u ),
-		                t3dHlodRuntimeCodecRf32( p + offset + 20u ) ) );
+		entry.m_localBounds = AABB( Vector3( t3dReadLittleF32( p + offset ),
+		                                     t3dReadLittleF32( p + offset + 4u ),
+		                                     t3dReadLittleF32( p + offset + 8u ) ),
+		                            Vector3( t3dReadLittleF32( p + offset + 12u ),
+		                                     t3dReadLittleF32( p + offset + 16u ),
+		                                     t3dReadLittleF32( p + offset + 20u ) ) );
 		offset += 24u;
-		entry.m_fGeometricError = t3dHlodRuntimeCodecRf32( p + offset );
-		offset += 4u;
-		entry.m_nSourceSignature = t3dHlodRuntimeCodecRi64( p + offset );
-		offset += 8u;
-		entry.m_nBuildSignature = t3dHlodRuntimeCodecRi64( p + offset );
-		offset += 8u;
-		entry.m_nEstimatedGpuBytes = t3dHlodRuntimeCodecRi64( p + offset );
-		offset += 8u;
-		entry.m_nParent = t3dHlodRuntimeCodecRi32( p + offset );
-		offset += 4u;
+		entry.m_fGeometricError = reader.readF32();
+		entry.m_nSourceSignature = (int64_t)reader.readU64();
+		entry.m_nBuildSignature = (int64_t)reader.readU64();
+		entry.m_nEstimatedGpuBytes = (int64_t)reader.readU64();
+		entry.m_nParent = (int32_t)reader.readU32();
 		for ( int child = 0; child < 4; ++child ) {
-			entry.m_szChildren[child] = t3dHlodRuntimeCodecRi32( p + offset );
-			offset += 4u;
+			entry.m_szChildren[ child ] = (int32_t)reader.readU32();
 		}
-		if ( !t3dHlodRuntimeCodecHasBytes( offset, 4u, ( size_t )rBlob.size() ) ) {
+		if ( !t3dByteRangeFits<size_t>( offset, 4u, (size_t)rBlob.size() ) ) {
 			return false;
 		}
-		const uint32_t len = t3dHlodRuntimeCodecRu32( p + offset );
-		offset += 4u;
-		if ( !t3dHlodRuntimeCodecHasBytes( offset, len, ( size_t )rBlob.size() ) ) {
+		const uint32_t len = reader.readU32();
+		if ( !t3dByteRangeFits<size_t>( offset, len, (size_t)rBlob.size() ) ) {
 			return false;
 		}
 		entry.m_packagePath = String::utf8( ( const char * )( p + offset ), ( int )len );
@@ -283,21 +236,20 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 			}
 		}
 	}
-	if ( !t3dHlodRuntimeCodecHasBytes( offset, ( size_t )root_count * 4u, ( size_t )rBlob.size() ) ) {
+	if ( !t3dByteRangeFits<size_t>( offset, (size_t)root_count * 4u, (size_t)rBlob.size() ) ) {
 		return false;
 	}
 	if ( !t3dVectorResizeCold( rData.m_roots, root_count ) ) {
 		return false;
 	}
 	for ( uint32_t i = 0u; i < root_count; ++i ) {
-		const int root = ( int )t3dHlodRuntimeCodecRu32( p + offset );
-		offset += 4u;
+		const int root = (int)reader.readU32();
 		if ( root < 0 || root >= ( int )entry_count ) {
 			return false;
 		}
 		rData.m_roots[i] = root;
 	}
-	if ( !t3dHlodRuntimeCodecHasBytes( offset, mesh_bytes, ( size_t )rBlob.size() ) ) {
+	if ( !t3dByteRangeFits<size_t>( offset, mesh_bytes, (size_t)rBlob.size() ) ) {
 		return false;
 	}
 	if ( !t3dVectorResizeCold( rData.m_instancerMinLevels, mesh_bytes ) ) {
@@ -307,7 +259,7 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 		memcpy( rData.m_instancerMinLevels.data(), p + offset, mesh_bytes );
 	}
 	offset += mesh_bytes;
-	if ( !t3dHlodRuntimeCodecHasBytes( offset, ( size_t )node_count * 12u, ( size_t )rBlob.size() ) ) {
+	if ( !t3dByteRangeFits<size_t>( offset, (size_t)node_count * 12u, (size_t)rBlob.size() ) ) {
 		return false;
 	}
 	if ( !t3dVectorResizeCold( rData.m_nodePolicies, node_count ) ) {
@@ -317,9 +269,9 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 	uint16_t previous_region = 0u;
 	bool have_region = false;
 	for ( uint32_t i = 0u; i < node_count; ++i ) {
-		const uint16_t region = t3dHlodRuntimeCodecRu16( p + offset );
-		const uint8_t level = t3dHlodRuntimeCodecRu8( p + offset + 2u );
-		const int64_t spawn = t3dHlodRuntimeCodecRi64( p + offset + 4u );
+		const uint16_t region = t3dReadLittleUnsigned<uint16_t>( p + offset );
+		const uint8_t level = t3dReadLittleUnsigned<uint8_t>( p + offset + 2u );
+		const int64_t spawn = (int64_t)t3dReadLittleUnsigned<uint64_t>( p + offset + 4u );
 		offset += 12u;
 		if ( region >= T3D_REGION_SLOTS || level == 0u || ( have_region && region < previous_region ) ) {
 			return false;
@@ -332,5 +284,5 @@ bool Terrain3DHLODRuntimeCodec::decode( const PackedByteArray &rBlob, t3dHLODRun
 	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
 		rData.m_szNodePolicyOffsets[( size_t )i + 1u] += rData.m_szNodePolicyOffsets[( size_t )i];
 	}
-	return offset == ( size_t )rBlob.size();
+	return reader.complete();
 }

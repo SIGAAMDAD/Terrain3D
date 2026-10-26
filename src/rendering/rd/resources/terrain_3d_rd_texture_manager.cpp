@@ -276,6 +276,8 @@ bool Terrain3DRdTextureManager::createTexture( Terrain3DRdTexture &rTexture, con
 	}
 	if ( !Terrain3DRdContext::getGlobalDevice() ) { return false; }
 	Terrain3DScopedLock createLock( m_createMutex );
+	// The owner waits for this job, keeping the captured account alive.
+	m_createAccount = g_t3dMemoryAccount;
 	{
 		Terrain3DScopedLock resultLock( m_resultMutex );
 		m_createResult.abandon();
@@ -439,6 +441,7 @@ void Terrain3DRdTextureManager::freeTexture( Terrain3DRdTexture &rTexture ) {
 }
 
 void Terrain3DRdTextureManager::renderCreateTexture( void ) {
+	Terrain3DMemoryAccountScope memory_scope(m_createAccount);
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
 	if ( !context.isReady() && !context.initialize() ) { return; }
 	Terrain3DScopedLock resultLock( m_resultMutex );

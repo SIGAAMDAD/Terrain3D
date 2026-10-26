@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_RD_GEOMETRY_VIEW_H
 #define TERRAIN3D_RD_GEOMETRY_VIEW_H
 
-#include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_resource_state.h"
 
 #include <stdint.h>
 #include <godot_cpp/variant/packed_int64_array.hpp>
@@ -12,12 +12,8 @@ using namespace godot;
 // Cohesive owner for RenderingDevice vertex/index array views. The underlying
 // vertex/index buffers remain externally owned by Terrain3DRdGpuBuffer.
 class Terrain3DRdGeometryView {
-	RID m_hVertexArray;
-	RID m_hIndexArray;
-	uint32_t m_nGeneration = 0u;
-	t3dRdResourceOwner_t m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
+	Terrain3DRdResourceState<2u> m_state;
 
-	static uint32_t nextGeneration( uint32_t nGeneration ) { return nGeneration == UINT32_MAX ? 1u : nGeneration + 1u; }
 	bool ownerCompatible( t3dRdResourceOwner_t owner ) const;
 
 public:
@@ -27,13 +23,13 @@ public:
 	Terrain3DRdGeometryView( Terrain3DRdGeometryView &&rOther ) noexcept;
 	Terrain3DRdGeometryView &operator=( Terrain3DRdGeometryView && ) = delete;
 
-	EA_FORCE_INLINE bool hasVertex( void ) const { return m_hVertexArray.is_valid(); }
-	EA_FORCE_INLINE bool hasIndex( void ) const { return m_hIndexArray.is_valid(); }
-	EA_FORCE_INLINE bool isValid( void ) const { return m_hVertexArray.is_valid() || m_hIndexArray.is_valid(); }
-	EA_FORCE_INLINE const RID &vertexRid( void ) const { return m_hVertexArray; }
-	EA_FORCE_INLINE const RID &indexRid( void ) const { return m_hIndexArray; }
-	EA_FORCE_INLINE uint32_t generation( void ) const { return m_nGeneration; }
-	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_owner; }
+	EA_FORCE_INLINE bool hasVertex( void ) const { return m_state.rid().is_valid(); }
+	EA_FORCE_INLINE bool hasIndex( void ) const { return m_state.rid( 1u ).is_valid(); }
+	EA_FORCE_INLINE bool isValid( void ) const { return m_state.isValid(); }
+	EA_FORCE_INLINE const RID &vertexRid( void ) const { return m_state.rid(); }
+	EA_FORCE_INLINE const RID &indexRid( void ) const { return m_state.rid( 1u ); }
+	EA_FORCE_INLINE uint32_t generation( void ) const { return m_state.generation(); }
+	EA_FORCE_INLINE t3dRdResourceOwner_t owner( void ) const { return m_state.owner(); }
 
 	bool createVertexTracked( Terrain3DRdContext &rContext, t3dRdResourceOwner_t owner,
 	        const String &rName, uint32_t nVertexCount, int64_t nVertexFormat,

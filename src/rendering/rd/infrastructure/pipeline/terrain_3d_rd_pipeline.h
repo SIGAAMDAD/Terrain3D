@@ -3,7 +3,7 @@
 
 #include "Terrain3DTypes.h"
 
-#include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/resources/terrain_3d_rd_resource_state.h"
 
 // t3dRdPipelineKind_e centralized in Terrain3DTypes.h.
 
@@ -12,24 +12,23 @@
 // object alone creates, registers and releases its RenderingDevice RID.
 class Terrain3DRdPipeline {
 private:
-	RID m_rid;
+	Terrain3DRdResourceState<1u> m_state;
 	t3dRdPipelineKind_t m_kind = T3D_RD_PIPELINE_KIND_NONE;
-	t3dRdResourceOwner_t m_owner = T3D_RD_CONTEXT_OWNER_UNSPECIFIED;
-	uint32_t m_generation = 0u;
 	bool m_local = false;
 
-	static uint32_t nextGeneration( uint32_t value ) { return value == UINT32_MAX ? 1u : value + 1u; }
+	static uint64_t beginPhysicalCreation( const String& name, t3dRdPipelineKind_t kind );
+	static void finishPhysicalCreation( const String& name, const RID& pipeline, uint64_t started );
 
 public:
 	Terrain3DRdPipeline() = default;
 	Terrain3DRdPipeline( const Terrain3DRdPipeline & ) = delete;
 	Terrain3DRdPipeline &operator=( const Terrain3DRdPipeline & ) = delete;
 
-	const RID &rid() const { return m_rid; }
-	bool isValid() const { return m_rid.is_valid(); }
+	const RID &rid() const { return m_state.rid(); }
+	bool isValid() const { return m_state.isValid(); }
 	t3dRdPipelineKind_t kind() const { return m_kind; }
-	uint32_t generation() const { return m_generation; }
-	t3dRdResourceOwner_t owner() const { return m_owner; }
+	uint32_t generation() const { return m_state.generation(); }
+	t3dRdResourceOwner_t owner() const { return m_state.owner(); }
 	bool isLocal() const { return m_local; }
 
 	template <typename TCreator>
@@ -38,20 +37,15 @@ public:
 		if ( isValid() || kind == T3D_RD_PIPELINE_KIND_NONE || name.is_empty() ) { return false; }
 		RenderingDevice *const rd = context.getDevice();
 		if ( !rd ) { return false; }
+		const uint64_t started = beginPhysicalCreation( name, kind );
 		RID created = creator( rd );
+		finishPhysicalCreation( name, created, started );
 		const t3dRdResourceType_t type = kind == T3D_RD_PIPELINE_KIND_RASTER
 		        ? T3D_RD_CONTEXT_RESOURCE_RASTER_PIPELINE : T3D_RD_CONTEXT_RESOURCE_COMPUTE_PIPELINE;
-		if ( !created.is_valid() || !context.registerResource( created, name, type,
-		             T3D_RD_CONTEXT_MEMORY_NONE, 0u, owner ) ) {
-			context.recordRenderEvent( owner, EVENT_RESOURCE_FAILURE );
-			if ( created.is_valid() ) rd->free_rid( created );
-			return false;
-		}
-		m_rid = created;
+		if ( !t3dRdRegisterCreated( context, rd, created, name, type, owner, false ) ) { return false; }
 		m_kind = kind;
-		m_owner = owner;
 		m_local = false;
-		m_generation = nextGeneration( m_generation );
+		m_state.publish( created, owner );
 		context.recordRenderEvent( owner, EVENT_PIPELINE_CREATE );
 		return true;
 	}

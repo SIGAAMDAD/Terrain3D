@@ -4,6 +4,7 @@
 #define TERRAIN3D_VIRTUAL_TEXTURE_H
 
 #include "Terrain3DTypes.h"
+#include "Terrain3DConstants.h"
 
 #include "core/config/terrain_3d_startup_state.h"
 #include "memory/arena/terrain_3d_memory_zone.h"
@@ -25,6 +26,17 @@ typedef struct t3dVTStagedRequest_s {
 	uint16_t nProducer;
 	uint16_t nReserved;
 } t3dVTStagedRequest_t;
+
+
+typedef struct t3dVTMaterialReadSnapshot_s {
+	uint32_t nDatabaseKind;
+	uint32_t nDatabaseGeneration;
+	uint32_t nPackageGeneration;
+	uint32_t nMaterialCount;
+	uint64_t nPackageContentSignature;
+	uint64_t nPackagePublicationGeneration;
+	uint32_t nMaterialAllocation[T3D_RD_MATERIAL_LAYER_COUNT];
+} t3dVTMaterialReadSnapshot_t;
 
 
 // t3dVTFinalTelemetry_s centralized in Terrain3DTypes.h.
@@ -63,6 +75,15 @@ public:
 	uint32_t get_page_table_generation() const;
 	uint32_t getMaterialVTAllocationId( uint32_t nMaterialId ) const;
 	bool loadPackageCold( const void *pPackageBytes, uint64_t nPackageBytes );
+	bool stagePackageWarm( const void *pPackageBytes, uint64_t nPackageBytes );
+	// Quiescing may span calls. Once GPU mutation starts, all upload slices and
+	// any rollback complete in this render-thread call; consumers see one commit.
+	bool servicePackageRepublishWarm( uint64_t nMaxBytes, uint32_t nMaxWorkUnits );
+	void abortPackageRepublishWarm();
+	bool isPackageRepublishPendingWarm() const { return m_bWarmPackagePending; }
+	bool isPackageResourceRebuildRequiredWarm() const { return m_bWarmResourceRebuildRequired; }
+	bool isPackageRollbackReadyWarm() const { return m_bWarmRollbackReady; }
+	uint64_t getPackagePublicationGeneration() const { return m_nPackagePublicationGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ); }
 	bool clearPackageCold( void );
 	void set_startup_generation( uint32_t nGeneration );
 	void cancel_startup_cold( uint32_t nGeneration );
@@ -72,6 +93,8 @@ public:
 	void mark_startup_failed( uint32_t nGeneration );
 	godot::Dictionary get_startup_diagnostics() const;
 	bool findMaterialAllocationCold( uint64_t nStableKey, uint32_t &rAllocationId ) const;
+	bool snapshotMaterialReadStateCold( t3dVTMaterialReadSnapshot_t &rSnapshot ) const;
+	bool snapshotTerrainMegaVTReadStateCold( uint32_t *pAllocationIds, uint32_t *pCookedGenerations, uint8_t *pCookedValid, uint32_t nCount ) const;
 	uint32_t getActiveAllocationCount() const;
 	uint32_t getActiveVirtualPageCount() const;
 	uint32_t getLoadedPackageAllocationCountCold() const;
@@ -122,6 +145,10 @@ public:
 	bool service_retired_slots_hot( uint32_t pFrameId );
 
 private:
+	bool open_package_candidate( const void *pBytes, uint64_t nBytes, t3dVTPackRuntimeStorage_t &rCandidate );
+	bool validate_package_limits( const t3dVTPackRuntimeStorage_t &rCandidate ) const;
+	bool publish_package_state_warm( const t3dVTDatabaseView_t &rDatabase, bool bNeutral,
+	        uint64_t nMaxBytes, uint32_t nMaxWorkUnits, bool *pMutationStarted = NULL );
 	bool allocate_cpu_image_cold();
 	void release_cpu_image_cold();
 	bool prepare_neutral_legacy_cpu_cold();
@@ -143,6 +170,18 @@ private:
 	t3dVTResidencyPolicy_t m_ResidencyPolicy;
 	t3dVTDatabaseView_t m_NeutralDatabase;
 	t3dVTPackRuntimeStorage_t m_RuntimePack;
+	mutable Terrain3DMutex m_packageMutex;
+	t3dVTPackRuntimeStorage_t m_WarmCandidate{};
+	t3dAtomicU64_t m_nPackagePublicationGeneration{ 0u };
+	uint64_t m_nWarmPublicationAttemptCount = 0u;
+	uint64_t m_nWarmPublicationSuccessCount = 0u;
+	uint64_t m_nWarmPublicationFailureCount = 0u;
+	uint64_t m_nWarmPublicationUsecLast = 0u;
+	bool m_bWarmPackagePending = false;
+	bool m_bWarmCandidateNeutral = false;
+	bool m_bWarmResourceRebuildRequired = false;
+	bool m_bWarmRollbackReady = true;
+	bool m_bInitialPublicationStarted = false;
 	t3dVTFileHeader_t m_NeutralHeader;
 	t3dVTAllocationRecordV1_t m_NeutralAllocations[T3D_VT_CHANNEL_COUNT];
 	t3dVTPageFileRecord_t m_NeutralPages[T3D_VT_CHANNEL_COUNT];

@@ -4,6 +4,7 @@
 extends Terrain3DExecutionModeMenuBase
 
 const RUNTIME_PROFILER_WINDOW_PATH: String = "res://addons/terrain_3d/src/runtime_profiler_window.gd"
+const MEMORY_TRACKER_WINDOW_PATH: String = "res://addons/terrain_3d/src/memory_tracker_window.gd"
 
 const MENU_AUTHORING: int = 0
 const MENU_RUNTIME_PROFILE: int = 1
@@ -11,9 +12,11 @@ const MENU_NODE_STREAM_PREVIEW: int = 2
 const MENU_OPEN_PROFILER: int = 10
 const MENU_RESET_PROFILER: int = 11
 const MENU_EXPORT_SNAPSHOT: int = 12
+const MENU_MEMORY_TRACKER: int = 13
 
 var terrain: Terrain3D
 var _profiler_window: Terrain3DRuntimeProfilerWindowBase
+var _memory_tracker_window: Window
 var _export_dialog: FileDialog
 var _menu_initialized: bool = false
 
@@ -34,6 +37,7 @@ func _enter_tree() -> void:
 	popup.add_radio_check_item("Runtime Profile", MENU_RUNTIME_PROFILE)
 	popup.add_separator()
 	popup.add_item("Open Live Profiler...", MENU_OPEN_PROFILER)
+	popup.add_item("Memory Tracker & Budgets...", MENU_MEMORY_TRACKER)
 	popup.add_item("Reset Live Counters", MENU_RESET_PROFILER)
 	popup.add_item("Export Live Snapshot...", MENU_EXPORT_SNAPSHOT)
 	if not popup.id_pressed.is_connected(_on_menu_pressed):
@@ -65,6 +69,19 @@ func _get_or_create_profiler_window() -> Terrain3DRuntimeProfilerWindowBase:
 	return _profiler_window
 
 
+func _get_or_create_memory_tracker() -> Window:
+	if is_instance_valid(_memory_tracker_window):
+		return _memory_tracker_window
+	var script: GDScript = load(MEMORY_TRACKER_WINDOW_PATH) as GDScript
+	if script == null:
+		push_error("Unable to load Terrain3D memory tracker")
+		return null
+	_memory_tracker_window = script.new() as Window
+	add_child(_memory_tracker_window)
+	_memory_tracker_window.call("set_terrain", terrain)
+	return _memory_tracker_window
+
+
 func _get_or_create_export_dialog() -> FileDialog:
 	if is_instance_valid(_export_dialog):
 		return _export_dialog
@@ -87,6 +104,8 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 		terrain.editor_execution_mode_changed.connect(_on_execution_mode_changed)
 	if is_instance_valid(_profiler_window):
 		_profiler_window.set_terrain(terrain)
+	if is_instance_valid(_memory_tracker_window):
+		_memory_tracker_window.call("set_terrain", terrain)
 	_sync_state()
 
 
@@ -134,6 +153,10 @@ func _on_menu_pressed(p_id: int) -> void:
 			var profiler_window: Terrain3DRuntimeProfilerWindowBase = _get_or_create_profiler_window()
 			if is_instance_valid(profiler_window):
 				profiler_window.open_for_terrain(terrain)
+		MENU_MEMORY_TRACKER:
+			var tracker: Window = _get_or_create_memory_tracker()
+			if is_instance_valid(tracker):
+				tracker.call("open_for_terrain", terrain)
 		MENU_RESET_PROFILER:
 			terrain.reset_runtime_diagnostics()
 			if is_instance_valid(_profiler_window) and _profiler_window.visible:

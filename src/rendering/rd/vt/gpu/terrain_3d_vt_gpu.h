@@ -30,6 +30,8 @@ public:
 	        const t3dWorldLimits_t &pLimits );
 	void shutdown_cold( bool bPreserveTailStaging = false );
 	void seal_hot_runtime();
+	bool begin_package_publication_warm();
+	void set_database_view_warm( const t3dVTDatabaseView_t *pDatabase ) { m_pDatabaseView = pDatabase; }
 	bool upload_database_warm( const t3dVTDatabaseView_t &pDatabase, const t3dVTResidencyState_t &pResidency );
 	bool service_database_upload_warm( const t3dVTDatabaseView_t &pDatabase, const t3dVTResidencyState_t &pResidency,
 	        uint64_t nMaxBytes, uint32_t nMaxWorkUnits );
@@ -84,7 +86,9 @@ private:
 	const t3dVTDatabaseView_t *m_pDatabaseView;
 	t3dWorldLimits_t m_Limits;
 	t3dVTGpuResourcePlan_t m_Plan;
+	Terrain3DMemoryReservation m_stagingMemory;
 	godot::PackedByteArray m_AllocationUpload;
+	godot::PackedByteArray m_DatabaseUpload;
 	godot::PackedByteArray m_PageEntryUpload;
 	godot::PackedInt32Array m_RetiredPageScratch;
 	godot::PackedInt32Array m_RetiredSlotScratch;

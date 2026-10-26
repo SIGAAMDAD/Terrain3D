@@ -363,6 +363,7 @@ void Terrain3DMaterialStateBuilder::buildEditorOverlayState(
 }
 
 void Terrain3DMaterialStateBuilder::buildMaterialFlags( const t3dMaterialStateSources_t& rSources,
+                                                        const t3dVTMaterialReadSnapshot_t& rVtSnapshot,
                                                         t3dRdFrameSnapshot_t& rSnapshot,
                                                         Terrain3DMaterial *const pMaterial,
                                                         Terrain3DData *const pData,
@@ -385,7 +386,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags( const t3dMaterialStateSo
 	if ( m_macroNoiseTexture.getRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MACRO_NOISE;
 	}
-	if ( rSources.m_virtualTexture.supportsSparseV3() ) {
+	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MICRO_VT;
 		if ( rSources.m_terrainMegaVT.isReady() ) {
 			config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MEGAVT;
@@ -620,8 +621,8 @@ void Terrain3DMaterialStateBuilder::buildMaterialTierConfig( t3dRdMaterialConfig
 	                     MAX( 0.0f, (float)( pMaterial->getFarMaterialLod() ) - 4.0f ) );
 }
 
-void Terrain3DMaterialStateBuilder::buildMaterialLayers(
-    const t3dMaterialStateSources_t& rSources, t3dRdFrameSnapshot_t& rSnapshot, const Ref<Terrain3DAssets>& rAssets )
+void Terrain3DMaterialStateBuilder::buildMaterialLayers( const t3dMaterialStateSources_t& rSources,
+    const t3dVTMaterialReadSnapshot_t& rVtSnapshot, t3dRdFrameSnapshot_t& rSnapshot, const Ref<Terrain3DAssets>& rAssets )
 {
 	if ( rAssets.is_null() ) {
 		rSnapshot.m_nMaterialLayerCount = 1u;
@@ -639,7 +640,8 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	const PackedVector2Array displacements = rAssets->getTextureDisplacements();
 	const uint32_t count = (uint32_t)( CLAMP( rAssets->getTextureCount(), 1, (int)( T3D_RD_MATERIAL_LAYER_COUNT ) ) );
 	rSnapshot.m_nMaterialLayerCount = count;
-	bool canonical_vt_v3 = ( rSnapshot.m_materialConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MICRO_VT ) != 0u && rSources.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V3;
+	bool canonical_vt_v3 = ( rSnapshot.m_materialConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MICRO_VT ) != 0u
+	        && rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3;
 	for ( uint32_t i = 0u; i < T3D_RD_MATERIAL_LAYER_COUNT; ++i ) {
 		t3dRdMaterialLayer_t& layer = rSnapshot.m_szMaterials[ i ];
 		const Color color = i < (uint32_t)( colors.size() ) ? colors[ (int64_t)( i ) ] : Color( 1.0, 1.0, 1.0, 1.0 );
@@ -661,9 +663,10 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		layer.m_fDisplacementScale = (float)( displacement.y );
 		const bool legacy_array_resident = rAssets->getAlbedoArrayRid().is_valid() && i < (uint32_t)( rAssets->getGeneratedArraySize() );
 		layer.m_nPhysicalLayer = i;
-		layer.m_nMicroVTAllocation = rSources.m_virtualTexture.getMaterialVTAllocationId( i );
+		layer.m_nMicroVTAllocation = i < rVtSnapshot.nMaterialCount
+		        ? rVtSnapshot.nMaterialAllocation[i] : T3D_VT_INVALID_ALLOCATION;
 		layer.m_nMicroVTGeneration = (uint32_t)( rAssets->getTexturePublicationGeneration() & 0xffffffffu );
-		layer.m_nMicroVTFlags = rSources.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? 1u : 0u;
+		layer.m_nMicroVTFlags = rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? 1u : 0u;
 		layer.m_nMicroVTReserved = 0u;
 		layer.m_nFlags = 0u;
 		if ( rAssets->usesPackedPbr() ) {
@@ -687,18 +690,19 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	                                                      : T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
 }
 
-void Terrain3DMaterialStateBuilder::buildMaterialState( const t3dMaterialStateSources_t& rSources, t3dRdFrameSnapshot_t& rSnapshot )
+void Terrain3DMaterialStateBuilder::buildMaterialState( const t3dMaterialStateSources_t& rSources,
+    const t3dVTMaterialReadSnapshot_t& rVtSnapshot, t3dRdFrameSnapshot_t& rSnapshot )
 {
 	const Ref<Terrain3DAssets> assets = rSources.m_pTerrain ? rSources.m_pTerrain->assetsResource() : Ref<Terrain3DAssets>();
 	const Ref<Terrain3DMaterial> material = rSources.m_pTerrain ? rSources.m_pTerrain->materialResource() : Ref<Terrain3DMaterial>();
 	Terrain3DMaterial *const pMaterial = material.ptr();
 	if ( pMaterial ) {
 		Terrain3DData *const pData = rSources.m_pTerrain ? rSources.m_pTerrain->dataObject() : NULL;
-		buildMaterialFlags( rSources, rSnapshot, pMaterial, pData, assets );
+		buildMaterialFlags( rSources, rVtSnapshot, rSnapshot, pMaterial, pData, assets );
 		buildMaterialParameters( rSnapshot.m_materialConfig, pMaterial, assets );
 		buildMaterialTierConfig( rSnapshot.m_materialConfig, pMaterial );
 	}
-	buildMaterialLayers( rSources, rSnapshot, assets );
+	buildMaterialLayers( rSources, rVtSnapshot, rSnapshot, assets );
 	rSnapshot.m_nMaterialGeneration = 0u;
 }
 
@@ -729,6 +733,11 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState( const t3dMaterialState
 	const RID displacement_map = rSources.m_pTerrain->getComputeDisplacementTextureRid();
 	const RID world_noise_map = m_worldNoiseCache.getRid();
 	const RID macro_noise_map = m_macroNoiseTexture.getRid();
+	t3dVTMaterialReadSnapshot_t vtSnapshot{};
+	if ( !rSources.m_virtualTexture.snapshotMaterialReadStateCold( vtSnapshot ) ) {
+		LOG( ERROR, "Unable to snapshot Terrain3D VT material mapping state" );
+		return false;
+	}
 	const uint64_t material_sources[] = { rd_material.is_valid() ? rd_material->getRdPublicationGeneration() : 0u,
 		                                  rd_assets.is_valid() ? rd_assets->getTexturePublicationGeneration() : 0u,
 		                                  data ? data->getActiveStorageGeneration() : 0u,
@@ -751,12 +760,13 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState( const t3dMaterialState
 		                                  rd_assets.is_valid() ? (uint64_t)( rd_assets->getSurfaceArraySize() ) : 0u,
 		                                  rd_assets.is_valid() ? (uint64_t)( rd_assets->getDisplacementArraySize() ) : 0u,
 		                                  rd_assets.is_valid() ? (uint64_t)( rd_assets->getFarAlbedoArraySize() ) : 0u,
-		                                  rSources.m_virtualTexture.supportsSparseV3() ? 1u : 0u,
-		                                  (uint64_t)rSources.m_virtualTexture.getDatabaseGeneration(),
-		                                  rSources.m_virtualTexture.getPackageContentSignature() };
+		                                  vtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? 1u : 0u,
+		                                  (uint64_t)vtSnapshot.nDatabaseGeneration,
+		                                  vtSnapshot.nPackageContentSignature,
+		                                  vtSnapshot.nPackagePublicationGeneration };
 	const uint64_t material_source_generation = t3dHashFnv1a64( material_sources, sizeof( material_sources ), 1469598103934665603ULL );
 	if ( !m_bMaterialStateInitialized || material_source_generation != m_nMaterialSourceGeneration ) {
-		buildMaterialState( rSources, snapshot );
+		buildMaterialState( rSources, vtSnapshot, snapshot );
 		memcpy( m_cachedMaterialLayers, snapshot.m_szMaterials, sizeof( m_cachedMaterialLayers ) );
 		m_cachedMaterialConfig = snapshot.m_materialConfig;
 		m_nCachedMaterialLayerCount = snapshot.m_nMaterialLayerCount;

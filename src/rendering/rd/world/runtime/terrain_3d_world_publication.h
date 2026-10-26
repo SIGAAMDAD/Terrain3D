@@ -63,6 +63,8 @@ public:
 	eastl::vector<t3dWorldCell_t, Terrain3DEastlAllocator> m_cells;
 	eastl::vector<t3dWorldHlodRecord_t, Terrain3DEastlAllocator> m_hlodRecords;
 	eastl::vector<t3dRenderingMaterialGpu_t, Terrain3DEastlAllocator> m_materials;
+	// CPU-only keys for the instance-material prefix; resolve against the live VT package.
+	eastl::vector<uint64_t, Terrain3DEastlAllocator> m_instanceMaterialStableKeys;
 	eastl::vector<t3dWorldVisibleItem_t, Terrain3DEastlAllocator> m_visibilityCandidates;
 
 	void bindRuntimeAllocator( const Terrain3DEastlAllocator &rAllocator );

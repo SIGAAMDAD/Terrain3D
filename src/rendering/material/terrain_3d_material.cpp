@@ -1,5 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypeSupport.h"
 #include "Terrain3DConstants.h"
 #include "rendering/material/terrain_3d_material.h"
@@ -429,8 +431,7 @@ static EA_FORCE_INLINE void t3dMaterialMixSignature( uint64_t &rHash, const uint
 }
 
 void Terrain3DMaterial::bumpRdPublicationGeneration( void ) {
-	m_runtimeState.m_nRdPublicationGeneration =
-	        m_runtimeState.m_nRdPublicationGeneration == UINT64_MAX ? 1u : m_runtimeState.m_nRdPublicationGeneration + 1u;
+	m_runtimeState.m_nRdPublicationGeneration = t3dNextGeneration( m_runtimeState.m_nRdPublicationGeneration );
 }
 
 void Terrain3DMaterial::setRuntimeMaterialParam( const StringName &strName, const Variant &rValue ) {
@@ -1317,8 +1318,8 @@ String Terrain3DMaterial::getTierShadowContext( const t3dShaderTier_t tier ) con
 	return vformat( "Enabled to %.1f m", m_pTerrain->getRuntimeShadowRangeEndM() );
 }
 
-
-Dictionary Terrain3DMaterial::getShaderTierDiagnostics( const int nTier ) const {
+Dictionary Terrain3DMaterial::getShaderTierDiagnostics( const int nTier ) const
+{
 	Dictionary diagnostics;
 	const int tier = CLAMP( nTier, ( int )SHADER_TIER_NEAR, ( int )SHADER_TIER_FAR );
 	const t3dTierQualityConfig_t &quality = tier == SHADER_TIER_NEAR
@@ -1347,8 +1348,6 @@ Dictionary Terrain3DMaterial::getShaderTierDiagnostics( const int nTier ) const 
 String Terrain3DMaterial::getTierShaderStatus( const t3dShaderTier_t ) const {
 	return "RD catalog-managed";
 }
-
-
 
 void Terrain3DMaterial::setPackedPbrSingleFetch( const bool bEnabled ) {
 	// Compatibility shim for scenes serialized by the experimental packed-PBR
@@ -1849,89 +1848,14 @@ void Terrain3DMaterial::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( FULL_REBUILD );
 
 	// Private
-	ClassDB::bind_method( D_METHOD( "_set_shader_parameters", "dict" ), &Terrain3DMaterial::setShaderParameters );
-	ClassDB::bind_method( D_METHOD( "_get_shader_parameters" ), &Terrain3DMaterial::getShaderParameters );
-	ADD_PROPERTY( PropertyInfo( Variant::DICTIONARY, "_shader_parameters", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "_set_shader_parameters",
-	        "_get_shader_parameters" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShaderParameters, getShaderParameters, "dict",
+	                   PropertyInfo( Variant::DICTIONARY, "_shader_parameters", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "_set_shader_parameters", "_get_shader_parameters" );
 
 	// Public
 	ClassDB::bind_method( D_METHOD( "update", "flags" ), &Terrain3DMaterial::update, DEFVAL( UNIFORMS_ONLY ) );
 	ClassDB::bind_method( D_METHOD( "update_editor_overlay" ), &Terrain3DMaterial::updateEditorOverlay );
 	ClassDB::bind_method( D_METHOD( "is_render_shader_ready" ), &Terrain3DMaterial::isRenderShaderReady );
 	ClassDB::bind_method( D_METHOD( "is_region_page_table_valid" ), &Terrain3DMaterial::isRegionPageTableValid );
-
-	ClassDB::bind_method( D_METHOD( "set_world_background", "background" ), &Terrain3DMaterial::setWorldBackground );
-	ClassDB::bind_method( D_METHOD( "get_world_background" ), &Terrain3DMaterial::getWorldBackground );
-	ClassDB::bind_method( D_METHOD( "set_texture_filtering", "filtering" ), &Terrain3DMaterial::setTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "get_texture_filtering" ), &Terrain3DMaterial::getTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_shader_performance_preset", "preset" ), &Terrain3DMaterial::setShaderPerformancePreset );
-	ClassDB::bind_method( D_METHOD( "get_shader_performance_preset" ), &Terrain3DMaterial::getShaderPerformancePreset );
-	ClassDB::bind_method( D_METHOD( "set_near_texture_filtering", "filtering" ), &Terrain3DMaterial::setNearTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "get_near_texture_filtering" ), &Terrain3DMaterial::getNearTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_near_material_sampling_quality", "quality" ), &Terrain3DMaterial::setNearMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_material_sampling_quality" ), &Terrain3DMaterial::getNearMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_terrain_normal_quality", "quality" ), &Terrain3DMaterial::setNearTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_terrain_normal_quality" ), &Terrain3DMaterial::getNearTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_terrain_color_quality", "quality" ), &Terrain3DMaterial::setNearTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_terrain_color_quality" ), &Terrain3DMaterial::getNearTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_surface_response_quality", "quality" ), &Terrain3DMaterial::setNearSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_surface_response_quality" ), &Terrain3DMaterial::getNearSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "set_near_texture_surface_mode", "mode" ), &Terrain3DMaterial::setNearTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "get_near_texture_surface_mode" ), &Terrain3DMaterial::getNearTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "set_near_lighting_model", "model" ), &Terrain3DMaterial::setNearLightingModel );
-	ClassDB::bind_method( D_METHOD( "get_near_lighting_model" ), &Terrain3DMaterial::getNearLightingModel );
-	ClassDB::bind_method( D_METHOD( "set_near_detiling_quality", "quality" ), &Terrain3DMaterial::setNearDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "get_near_detiling_quality" ), &Terrain3DMaterial::getNearDetilingQuality );
-	ClassDB::bind_method(
-	        D_METHOD( "set_near_authored_color_contribution", "contribution" ), &Terrain3DMaterial::setNearAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_near_authored_color_contribution" ), &Terrain3DMaterial::getNearAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_near_wetness_contribution", "contribution" ), &Terrain3DMaterial::setNearWetnessContribution );
-	ClassDB::bind_method( D_METHOD( "get_near_wetness_contribution" ), &Terrain3DMaterial::getNearWetnessContribution );
-	ClassDB::bind_method( D_METHOD( "set_near_material_lod_bias", "bias" ), &Terrain3DMaterial::setNearMaterialLodBias );
-	ClassDB::bind_method( D_METHOD( "get_near_material_lod_bias" ), &Terrain3DMaterial::getNearMaterialLodBias );
-
-	ClassDB::bind_method(
-	        D_METHOD( "set_middle_material_sampling_quality", "quality" ), &Terrain3DMaterial::setMiddleMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_material_sampling_quality" ), &Terrain3DMaterial::getMiddleMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_surface_source", "source" ), &Terrain3DMaterial::setMiddleSurfaceSource );
-	ClassDB::bind_method( D_METHOD( "get_middle_surface_source" ), &Terrain3DMaterial::getMiddleSurfaceSource );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_normal_quality", "quality" ), &Terrain3DMaterial::setMiddleTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_normal_quality" ), &Terrain3DMaterial::getMiddleTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_color_quality", "quality" ), &Terrain3DMaterial::setMiddleTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_color_quality" ), &Terrain3DMaterial::getMiddleTerrainColorQuality );
-	ClassDB::bind_method(
-	        D_METHOD( "set_middle_surface_response_quality", "quality" ), &Terrain3DMaterial::setMiddleSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_surface_response_quality" ), &Terrain3DMaterial::getMiddleSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "set_middle_lighting_model", "model" ), &Terrain3DMaterial::setMiddleLightingModel );
-	ClassDB::bind_method( D_METHOD( "get_middle_lighting_model" ), &Terrain3DMaterial::getMiddleLightingModel );
-	ClassDB::bind_method( D_METHOD( "set_middle_detiling_quality", "quality" ), &Terrain3DMaterial::setMiddleDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "get_middle_detiling_quality" ), &Terrain3DMaterial::getMiddleDetilingQuality );
-	ClassDB::bind_method(
-	        D_METHOD( "set_middle_authored_color_contribution", "contribution" ), &Terrain3DMaterial::setMiddleAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_middle_authored_color_contribution" ), &Terrain3DMaterial::getMiddleAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_middle_wetness_contribution", "contribution" ), &Terrain3DMaterial::setMiddleWetnessContribution );
-	ClassDB::bind_method( D_METHOD( "get_middle_wetness_contribution" ), &Terrain3DMaterial::getMiddleWetnessContribution );
-
-	ClassDB::bind_method( D_METHOD( "set_far_material_sampling_quality", "quality" ), &Terrain3DMaterial::setFarMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_material_sampling_quality" ), &Terrain3DMaterial::getFarMaterialSamplingQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_terrain_normal_quality", "quality" ), &Terrain3DMaterial::setFarTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_terrain_normal_quality" ), &Terrain3DMaterial::getFarTerrainNormalQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_terrain_color_quality", "quality" ), &Terrain3DMaterial::setFarTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_terrain_color_quality" ), &Terrain3DMaterial::getFarTerrainColorQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_surface_response_quality", "quality" ), &Terrain3DMaterial::setFarSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_surface_response_quality" ), &Terrain3DMaterial::getFarSurfaceResponseQuality );
-	ClassDB::bind_method( D_METHOD( "set_far_lighting_model", "model" ), &Terrain3DMaterial::setFarLightingModel );
-	ClassDB::bind_method( D_METHOD( "get_far_lighting_model" ), &Terrain3DMaterial::getFarLightingModel );
-	ClassDB::bind_method( D_METHOD( "set_far_detiling_quality", "quality" ), &Terrain3DMaterial::setFarDetilingQuality );
-	ClassDB::bind_method( D_METHOD( "get_far_detiling_quality" ), &Terrain3DMaterial::getFarDetilingQuality );
-	ClassDB::bind_method(
-	        D_METHOD( "set_far_authored_color_contribution", "contribution" ), &Terrain3DMaterial::setFarAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "get_far_authored_color_contribution" ), &Terrain3DMaterial::getFarAuthoredColorContribution );
-	ClassDB::bind_method( D_METHOD( "set_far_wetness_contribution", "contribution" ), &Terrain3DMaterial::setFarWetnessContribution );
-	ClassDB::bind_method( D_METHOD( "get_far_wetness_contribution" ), &Terrain3DMaterial::getFarWetnessContribution );
-	ClassDB::bind_method( D_METHOD( "set_far_material_lod_bias", "bias" ), &Terrain3DMaterial::setFarMaterialLodBias );
-	ClassDB::bind_method( D_METHOD( "get_far_material_lod_bias" ), &Terrain3DMaterial::getFarMaterialLodBias );
 
 	ClassDB::bind_method( D_METHOD( "get_near_range_context" ), &Terrain3DMaterial::getNearRangeContext );
 	ClassDB::bind_method( D_METHOD( "get_middle_range_context" ), &Terrain3DMaterial::getMiddleRangeContext );
@@ -1942,304 +1866,135 @@ void Terrain3DMaterial::_bind_methods( void ) {
 	ClassDB::bind_method( D_METHOD( "get_near_shader_status" ), &Terrain3DMaterial::getNearShaderStatus );
 	ClassDB::bind_method( D_METHOD( "get_middle_shader_status" ), &Terrain3DMaterial::getMiddleShaderStatus );
 	ClassDB::bind_method( D_METHOD( "get_far_shader_status" ), &Terrain3DMaterial::getFarShaderStatus );
-	ClassDB::bind_method( D_METHOD( "set_middle_texture_filtering", "filtering" ), &Terrain3DMaterial::setMiddleTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "get_middle_texture_filtering" ), &Terrain3DMaterial::getMiddleTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_sampling_mode", "mode" ), &Terrain3DMaterial::setMiddleTerrainSamplingMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_sampling_mode" ), &Terrain3DMaterial::getMiddleTerrainSamplingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_normal_mode", "mode" ), &Terrain3DMaterial::setMiddleTerrainNormalMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_normal_mode" ), &Terrain3DMaterial::getMiddleTerrainNormalMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_color_sampling_mode", "mode" ), &Terrain3DMaterial::setMiddleColorSamplingMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_color_sampling_mode" ), &Terrain3DMaterial::getMiddleColorSamplingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_surface_data_mode", "mode" ), &Terrain3DMaterial::setMiddleSurfaceDataMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_surface_data_mode" ), &Terrain3DMaterial::getMiddleSurfaceDataMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_texture_surface_mode", "mode" ), &Terrain3DMaterial::setMiddleTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_texture_surface_mode" ), &Terrain3DMaterial::getMiddleTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_terrain_shading_mode", "mode" ), &Terrain3DMaterial::setMiddleTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_terrain_shading_mode" ), &Terrain3DMaterial::getMiddleTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_detiling_mode", "mode" ), &Terrain3DMaterial::setMiddleDetilingMode );
-	ClassDB::bind_method( D_METHOD( "get_middle_detiling_mode" ), &Terrain3DMaterial::getMiddleDetilingMode );
-	ClassDB::bind_method( D_METHOD( "set_middle_auto_shader_enabled", "enabled" ), &Terrain3DMaterial::setMiddleAutoShaderEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_auto_shader_enabled" ), &Terrain3DMaterial::getMiddleAutoShaderEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_authored_color_enabled", "enabled" ), &Terrain3DMaterial::setMiddleAuthoredColorEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_authored_color_enabled" ), &Terrain3DMaterial::getMiddleAuthoredColorEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_wetness_enabled", "enabled" ), &Terrain3DMaterial::setMiddleWetnessEnabled );
-	ClassDB::bind_method( D_METHOD( "get_middle_wetness_enabled" ), &Terrain3DMaterial::getMiddleWetnessEnabled );
-	ClassDB::bind_method( D_METHOD( "set_middle_material_lod_bias", "bias" ), &Terrain3DMaterial::setMiddleMaterialLodBias );
-	ClassDB::bind_method( D_METHOD( "get_middle_material_lod_bias" ), &Terrain3DMaterial::getMiddleMaterialLodBias );
-	ClassDB::bind_method( D_METHOD( "set_far_texture_filtering", "filtering" ), &Terrain3DMaterial::setFarTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "get_far_texture_filtering" ), &Terrain3DMaterial::getFarTextureFiltering );
-	ClassDB::bind_method( D_METHOD( "set_far_texture_surface_mode", "mode" ), &Terrain3DMaterial::setFarTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "get_far_texture_surface_mode" ), &Terrain3DMaterial::getFarTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "set_far_terrain_shading_mode", "mode" ), &Terrain3DMaterial::setFarTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "get_far_terrain_shading_mode" ), &Terrain3DMaterial::getFarTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "set_far_material_lod", "lod" ), &Terrain3DMaterial::setFarMaterialLod );
-	ClassDB::bind_method( D_METHOD( "get_far_material_lod" ), &Terrain3DMaterial::getFarMaterialLod );
-	ClassDB::bind_method( D_METHOD( "set_far_authored_color_enabled", "enabled" ), &Terrain3DMaterial::setFarAuthoredColorEnabled );
-	ClassDB::bind_method( D_METHOD( "get_far_authored_color_enabled" ), &Terrain3DMaterial::getFarAuthoredColorEnabled );
-	ClassDB::bind_method( D_METHOD( "set_far_wetness_enabled", "enabled" ), &Terrain3DMaterial::setFarWetnessEnabled );
-	ClassDB::bind_method( D_METHOD( "get_far_wetness_enabled" ), &Terrain3DMaterial::getFarWetnessEnabled );
-	ClassDB::bind_method( D_METHOD( "set_terrain_sampling_mode", "mode" ), &Terrain3DMaterial::setTerrainSamplingMode );
-	ClassDB::bind_method( D_METHOD( "get_terrain_sampling_mode" ), &Terrain3DMaterial::getTerrainSamplingMode );
-	ClassDB::bind_method( D_METHOD( "set_terrain_normal_mode", "mode" ), &Terrain3DMaterial::setTerrainNormalMode );
-	ClassDB::bind_method( D_METHOD( "get_terrain_normal_mode" ), &Terrain3DMaterial::getTerrainNormalMode );
-	ClassDB::bind_method( D_METHOD( "set_color_sampling_mode", "mode" ), &Terrain3DMaterial::setColorSamplingMode );
-	ClassDB::bind_method( D_METHOD( "get_color_sampling_mode" ), &Terrain3DMaterial::getColorSamplingMode );
-	ClassDB::bind_method( D_METHOD( "set_projection_mode", "mode" ), &Terrain3DMaterial::setProjectionMode );
-	ClassDB::bind_method( D_METHOD( "get_projection_mode" ), &Terrain3DMaterial::getProjectionMode );
-	ClassDB::bind_method( D_METHOD( "set_tessellation_material_mode", "mode" ), &Terrain3DMaterial::setTessellationMaterialMode );
-	ClassDB::bind_method( D_METHOD( "get_tessellation_material_mode" ), &Terrain3DMaterial::getTessellationMaterialMode );
-	ClassDB::bind_method( D_METHOD( "set_surface_data_mode", "mode" ), &Terrain3DMaterial::setSurfaceDataMode );
-	ClassDB::bind_method( D_METHOD( "get_surface_data_mode" ), &Terrain3DMaterial::getSurfaceDataMode );
-	ClassDB::bind_method( D_METHOD( "set_texture_surface_mode", "mode" ), &Terrain3DMaterial::setTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "get_texture_surface_mode" ), &Terrain3DMaterial::getTextureSurfaceMode );
-	ClassDB::bind_method( D_METHOD( "set_terrain_shading_mode", "mode" ), &Terrain3DMaterial::setTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "get_terrain_shading_mode" ), &Terrain3DMaterial::getTerrainShadingMode );
-	ClassDB::bind_method( D_METHOD( "set_detiling_mode", "mode" ), &Terrain3DMaterial::setDetilingMode );
-	ClassDB::bind_method( D_METHOD( "get_detiling_mode" ), &Terrain3DMaterial::getDetilingMode );
-	ClassDB::bind_method( D_METHOD( "set_world_noise_shader_mode", "mode" ), &Terrain3DMaterial::setWorldNoiseShaderMode );
-	ClassDB::bind_method( D_METHOD( "get_world_noise_shader_mode" ), &Terrain3DMaterial::getWorldNoiseShaderMode );
+
 	ClassDB::bind_method( D_METHOD( "get_shader_tier_diagnostics", "tier" ), &Terrain3DMaterial::getShaderTierDiagnostics );
-	ClassDB::bind_method( D_METHOD( "set_packed_pbr_single_fetch", "enabled" ), &Terrain3DMaterial::setPackedPbrSingleFetch );
-	ClassDB::bind_method( D_METHOD( "get_packed_pbr_single_fetch" ), &Terrain3DMaterial::getPackedPbrSingleFetch );
 	ClassDB::bind_method( D_METHOD( "set_auto_shader_enabled", "enabled" ), &Terrain3DMaterial::setAutoShaderEnabled );
 	ClassDB::bind_method( D_METHOD( "set_auto_shader_enabled_transient", "enabled" ), &Terrain3DMaterial::setAutoShaderEnabledTransient );
 	ClassDB::bind_method( D_METHOD( "get_auto_shader_enabled" ), &Terrain3DMaterial::getAutoShaderEnabled );
-	ClassDB::bind_method( D_METHOD( "set_dual_scaling_enabled", "enabled" ), &Terrain3DMaterial::setDualScalingEnabled );
-	ClassDB::bind_method( D_METHOD( "get_dual_scaling_enabled" ), &Terrain3DMaterial::getDualScalingEnabled );
-	ClassDB::bind_method( D_METHOD( "set_macro_variation_enabled", "enabled" ), &Terrain3DMaterial::setMacroVariationEnabled );
-	ClassDB::bind_method( D_METHOD( "get_macro_variation_enabled" ), &Terrain3DMaterial::getMacroVariationEnabled );
-	ClassDB::bind_method( D_METHOD( "set_projection_enabled", "enabled" ), &Terrain3DMaterial::setProjectionEnabled );
-	ClassDB::bind_method( D_METHOD( "get_projection_enabled" ), &Terrain3DMaterial::getProjectionEnabled );
-
-	ClassDB::bind_method( D_METHOD( "set_displacement_scale", "scale" ), &Terrain3DMaterial::setDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "get_displacement_scale" ), &Terrain3DMaterial::getDisplacementScale );
-	ClassDB::bind_method( D_METHOD( "set_displacement_sharpness", "sharpness" ), &Terrain3DMaterial::setDisplacementSharpness );
-	ClassDB::bind_method( D_METHOD( "get_displacement_sharpness" ), &Terrain3DMaterial::getDisplacementSharpness );
 
 	ClassDB::bind_method( D_METHOD( "set_shader_param", "name", "value" ), &Terrain3DMaterial::setShaderParam );
 	ClassDB::bind_method( D_METHOD( "get_shader_param", "name" ), &Terrain3DMaterial::getShaderParam );
 
 	// PBR output
-	ClassDB::bind_method( D_METHOD( "set_output_albedo_enabled", "enabled" ), &Terrain3DMaterial::setOutputAlbedoEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_albedo_enabled" ), &Terrain3DMaterial::getOutputAlbedoEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_roughness_enabled", "enabled" ), &Terrain3DMaterial::setOutputRoughnessEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_roughness_enabled" ), &Terrain3DMaterial::getOutputRoughnessEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_specular_enabled", "enabled" ), &Terrain3DMaterial::setOutputSpecularEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_specular_enabled" ), &Terrain3DMaterial::getOutputSpecularEnabled );
-	ClassDB::bind_method( D_METHOD( "set_output_normal_map_enabled", "enabled" ), &Terrain3DMaterial::setOutputNormalMapEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_normal_map_enabled" ), &Terrain3DMaterial::getOutputNormalMapEnabled );
-	ClassDB::bind_method(
-	        D_METHOD( "set_output_ambient_occlusion_enabled", "enabled" ), &Terrain3DMaterial::setOutputAmbientOcclusionEnabled );
-	ClassDB::bind_method( D_METHOD( "get_output_ambient_occlusion_enabled" ), &Terrain3DMaterial::getOutputAmbientOcclusionEnabled );
 
 	// Overlays
-	ClassDB::bind_method( D_METHOD( "set_show_region_grid", "enabled" ), &Terrain3DMaterial::setShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_region_grid" ), &Terrain3DMaterial::getShowRegionGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_instancer_grid", "enabled" ), &Terrain3DMaterial::setShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_instancer_grid" ), &Terrain3DMaterial::getShowInstancerGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_vertex_grid", "enabled" ), &Terrain3DMaterial::setShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "get_show_vertex_grid" ), &Terrain3DMaterial::getShowVertexGrid );
-	ClassDB::bind_method( D_METHOD( "set_show_contours", "enabled" ), &Terrain3DMaterial::setShowContours );
-	ClassDB::bind_method( D_METHOD( "get_show_contours" ), &Terrain3DMaterial::getShowContours );
-	ClassDB::bind_method( D_METHOD( "set_show_navigation", "enabled" ), &Terrain3DMaterial::setShowNavigation );
-	ClassDB::bind_method( D_METHOD( "get_show_navigation" ), &Terrain3DMaterial::getShowNavigation );
 
 	// Debug Views
-	ClassDB::bind_method( D_METHOD( "set_show_checkered", "enabled" ), &Terrain3DMaterial::setShowCheckered );
-	ClassDB::bind_method( D_METHOD( "get_show_checkered" ), &Terrain3DMaterial::getShowCheckered );
-	ClassDB::bind_method( D_METHOD( "set_show_grey", "enabled" ), &Terrain3DMaterial::setShowGrey );
-	ClassDB::bind_method( D_METHOD( "get_show_grey" ), &Terrain3DMaterial::getShowGrey );
-	ClassDB::bind_method( D_METHOD( "set_show_heightmap", "enabled" ), &Terrain3DMaterial::setShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "get_show_heightmap" ), &Terrain3DMaterial::getShowHeightmap );
-	ClassDB::bind_method( D_METHOD( "set_show_jaggedness", "enabled" ), &Terrain3DMaterial::setShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "get_show_jaggedness" ), &Terrain3DMaterial::getShowJaggedness );
-	ClassDB::bind_method( D_METHOD( "set_show_autoshader", "enabled" ), &Terrain3DMaterial::setShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "get_show_autoshader" ), &Terrain3DMaterial::getShowAutoshader );
-	ClassDB::bind_method( D_METHOD( "set_show_control_texture", "enabled" ), &Terrain3DMaterial::setShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "get_show_control_texture" ), &Terrain3DMaterial::getShowControlTexture );
-	ClassDB::bind_method( D_METHOD( "set_show_control_blend", "enabled" ), &Terrain3DMaterial::setShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "get_show_control_blend" ), &Terrain3DMaterial::getShowControlBlend );
-	ClassDB::bind_method( D_METHOD( "set_show_control_angle", "enabled" ), &Terrain3DMaterial::setShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "get_show_control_angle" ), &Terrain3DMaterial::getShowControlAngle );
-	ClassDB::bind_method( D_METHOD( "set_show_control_scale", "enabled" ), &Terrain3DMaterial::setShowControlScale );
-	ClassDB::bind_method( D_METHOD( "get_show_control_scale" ), &Terrain3DMaterial::getShowControlScale );
-	ClassDB::bind_method( D_METHOD( "set_show_colormap", "enabled" ), &Terrain3DMaterial::setShowColormap );
-	ClassDB::bind_method( D_METHOD( "get_show_colormap" ), &Terrain3DMaterial::getShowColormap );
-	ClassDB::bind_method( D_METHOD( "set_show_roughmap", "enabled" ), &Terrain3DMaterial::setShowRoughmap );
-	ClassDB::bind_method( D_METHOD( "get_show_roughmap" ), &Terrain3DMaterial::getShowRoughmap );
 
 	// PBR Views
-	ClassDB::bind_method( D_METHOD( "set_show_texture_albedo", "enabled" ), &Terrain3DMaterial::setShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_albedo" ), &Terrain3DMaterial::getShowTextureAlbedo );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_height", "enabled" ), &Terrain3DMaterial::setShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_height" ), &Terrain3DMaterial::getShowTextureHeight );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_normal", "enabled" ), &Terrain3DMaterial::setShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_normal" ), &Terrain3DMaterial::getShowTextureNormal );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_ao", "enabled" ), &Terrain3DMaterial::setShowTextureAo );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_ao" ), &Terrain3DMaterial::getShowTextureAo );
-	ClassDB::bind_method( D_METHOD( "set_show_texture_rough", "enabled" ), &Terrain3DMaterial::setShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "get_show_texture_rough" ), &Terrain3DMaterial::getShowTextureRough );
-	ClassDB::bind_method( D_METHOD( "set_show_displacement_buffer", "enabled" ), &Terrain3DMaterial::setShowDisplacementBuffer );
-	ClassDB::bind_method( D_METHOD( "get_show_displacement_buffer" ), &Terrain3DMaterial::getShowDisplacementBuffer );
 
 	ClassDB::bind_method( D_METHOD( "save", "path" ), &Terrain3DMaterial::save, DEFVAL( "" ) );
 
 	// Inspector groups are intentionally distinct from shader uniform-group names.
 
 	ADD_GROUP( "Profile", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "shader_performance_preset",
-	                      PROPERTY_HINT_ENUM,
-	                      "Custom,Cinematic,High,Xbox 360 Styled,Low,Minimum,Xbox 360 Authentic" ),
-	        "set_shader_performance_preset",
-	        "get_shader_performance_preset" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShaderPerformancePreset, getShaderPerformancePreset, "preset",
+	                   PropertyInfo( Variant::INT, "shader_performance_preset", PROPERTY_HINT_ENUM, "Custom,Cinematic,High,Xbox 360 Styled,Low,Minimum,Xbox 360 Authentic" ), "set_shader_performance_preset", "get_shader_performance_preset" );
 
 	ADD_GROUP( "Common Material Policy", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "world_background", PROPERTY_HINT_ENUM, "None,Flat,Noise" ),
-	        "set_world_background",
-	        "get_world_background" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "world_noise_shader_mode",
-	                      PROPERTY_HINT_ENUM,
-	                      "Dynamic,Cached + Vertex Normals,Cached + Fragment Normals,Procedural + Vertex "
-	                      "Normals,Procedural + Fragment Normals" ),
-	        "set_world_noise_shader_mode",
-	        "get_world_noise_shader_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setWorldBackground, getWorldBackground, "background",
+	                   PropertyInfo( Variant::INT, "world_background", PROPERTY_HINT_ENUM, "None,Flat,Noise" ), "set_world_background", "get_world_background" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setWorldNoiseShaderMode, getWorldNoiseShaderMode, "mode",
+	                   PropertyInfo( Variant::INT, "world_noise_shader_mode", PROPERTY_HINT_ENUM, "Dynamic,Cached + Vertex Normals,Cached + Fragment Normals,Procedural + Vertex "
+	                                                                                              "Normals,Procedural + Fragment Normals" ),
+	                   "set_world_noise_shader_mode", "get_world_noise_shader_mode" );
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_shader_enabled" ), "set_auto_shader_enabled", "get_auto_shader_enabled" );
 
 	ADD_GROUP( "Near Quality", "" );
-	ADD_PROPERTY(
-	        PropertyInfo(
-	                Variant::INT, "near_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-	        "set_near_texture_filtering",
-	        "get_near_texture_filtering" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-	        "set_near_material_sampling_quality",
-	        "get_near_material_sampling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-	        "set_near_terrain_normal_quality",
-	        "get_near_terrain_normal_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-	        "set_near_terrain_color_quality",
-	        "get_near_terrain_color_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-	        "set_near_surface_response_quality",
-	        "get_near_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ),
-	        "set_near_texture_surface_mode",
-	        "get_near_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-	        "set_near_lighting_model",
-	        "get_near_lighting_model" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "near_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-	        "set_near_detiling_quality",
-	        "get_near_detiling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_near_authored_color_contribution",
-	        "get_near_authored_color_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_near_wetness_contribution",
-	        "get_near_wetness_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "near_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-	        "set_near_material_lod_bias",
-	        "get_near_material_lod_bias" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearTextureFiltering, getNearTextureFiltering, "filtering",
+	                   PropertyInfo( Variant::INT, "near_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ), "set_near_texture_filtering", "get_near_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearMaterialSamplingQuality, getNearMaterialSamplingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "near_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ), "set_near_material_sampling_quality", "get_near_material_sampling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearTerrainNormalQuality, getNearTerrainNormalQuality, "quality",
+	                   PropertyInfo( Variant::INT, "near_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ), "set_near_terrain_normal_quality", "get_near_terrain_normal_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearTerrainColorQuality, getNearTerrainColorQuality, "quality",
+	                   PropertyInfo( Variant::INT, "near_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ), "set_near_terrain_color_quality", "get_near_terrain_color_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearSurfaceResponseQuality, getNearSurfaceResponseQuality, "quality",
+	                   PropertyInfo( Variant::INT, "near_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ), "set_near_surface_response_quality", "get_near_surface_response_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearTextureSurfaceMode, getNearTextureSurfaceMode, "mode",
+	                   PropertyInfo( Variant::INT, "near_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ), "set_near_texture_surface_mode", "get_near_texture_surface_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearLightingModel, getNearLightingModel, "model",
+	                   PropertyInfo( Variant::INT, "near_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ), "set_near_lighting_model", "get_near_lighting_model" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearDetilingQuality, getNearDetilingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "near_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ), "set_near_detiling_quality", "get_near_detiling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearAuthoredColorContribution, getNearAuthoredColorContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "near_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_near_authored_color_contribution", "get_near_authored_color_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearWetnessContribution, getNearWetnessContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "near_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_near_wetness_contribution", "get_near_wetness_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setNearMaterialLodBias, getNearMaterialLodBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "near_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ), "set_near_material_lod_bias", "get_near_material_lod_bias" );
 
 	ADD_GROUP( "Middle Quality", "" );
-	ADD_PROPERTY(
-	        PropertyInfo(
-	                Variant::INT, "middle_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-	        "set_middle_texture_filtering",
-	        "get_middle_texture_filtering" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-	        "set_middle_material_sampling_quality",
-	        "get_middle_material_sampling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_source", PROPERTY_HINT_ENUM, "Baked Composite,Runtime Material" ),
-	        "set_middle_surface_source",
-	        "get_middle_surface_source" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-	        "set_middle_terrain_normal_quality",
-	        "get_middle_terrain_normal_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-	        "set_middle_terrain_color_quality",
-	        "get_middle_terrain_color_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-	        "set_middle_surface_response_quality",
-	        "get_middle_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ),
-	        "set_middle_texture_surface_mode",
-	        "get_middle_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-	        "set_middle_lighting_model",
-	        "get_middle_lighting_model" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-	        "set_middle_detiling_quality",
-	        "get_middle_detiling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_middle_authored_color_contribution",
-	        "get_middle_authored_color_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_middle_wetness_contribution",
-	        "get_middle_wetness_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "middle_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-	        "set_middle_material_lod_bias",
-	        "get_middle_material_lod_bias" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTextureFiltering, getMiddleTextureFiltering, "filtering",
+	                   PropertyInfo( Variant::INT, "middle_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ), "set_middle_texture_filtering", "get_middle_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleMaterialSamplingQuality, getMiddleMaterialSamplingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "middle_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ), "set_middle_material_sampling_quality", "get_middle_material_sampling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleSurfaceSource, getMiddleSurfaceSource, "source",
+	                   PropertyInfo( Variant::INT, "middle_surface_source", PROPERTY_HINT_ENUM, "Baked Composite,Runtime Material" ), "set_middle_surface_source", "get_middle_surface_source" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTerrainNormalQuality, getMiddleTerrainNormalQuality, "quality",
+	                   PropertyInfo( Variant::INT, "middle_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ), "set_middle_terrain_normal_quality", "get_middle_terrain_normal_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTerrainColorQuality, getMiddleTerrainColorQuality, "quality",
+	                   PropertyInfo( Variant::INT, "middle_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ), "set_middle_terrain_color_quality", "get_middle_terrain_color_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleSurfaceResponseQuality, getMiddleSurfaceResponseQuality, "quality",
+	                   PropertyInfo( Variant::INT, "middle_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ), "set_middle_surface_response_quality", "get_middle_surface_response_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTextureSurfaceMode, getMiddleTextureSurfaceMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ), "set_middle_texture_surface_mode", "get_middle_texture_surface_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleLightingModel, getMiddleLightingModel, "model",
+	                   PropertyInfo( Variant::INT, "middle_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ), "set_middle_lighting_model", "get_middle_lighting_model" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleDetilingQuality, getMiddleDetilingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "middle_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ), "set_middle_detiling_quality", "get_middle_detiling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleAuthoredColorContribution, getMiddleAuthoredColorContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "middle_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_middle_authored_color_contribution", "get_middle_authored_color_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleWetnessContribution, getMiddleWetnessContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "middle_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_middle_wetness_contribution", "get_middle_wetness_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleMaterialLodBias, getMiddleMaterialLodBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "middle_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ), "set_middle_material_lod_bias", "get_middle_material_lod_bias" );
 
 	ADD_GROUP( "Far Quality", "" );
-	ADD_PROPERTY(
-	        PropertyInfo(
-	                Variant::INT, "far_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ),
-	        "set_far_texture_filtering",
-	        "get_far_texture_filtering" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ),
-	        "set_far_material_sampling_quality",
-	        "get_far_material_sampling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ),
-	        "set_far_terrain_normal_quality",
-	        "get_far_terrain_normal_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ),
-	        "set_far_terrain_color_quality",
-	        "get_far_terrain_color_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ),
-	        "set_far_surface_response_quality",
-	        "get_far_surface_response_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ),
-	        "set_far_texture_surface_mode",
-	        "get_far_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ),
-	        "set_far_lighting_model",
-	        "get_far_lighting_model" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ),
-	        "set_far_detiling_quality",
-	        "get_far_detiling_quality" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_far_authored_color_contribution",
-	        "get_far_authored_color_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_far_wetness_contribution",
-	        "get_far_wetness_contribution" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ),
-	        "set_far_material_lod_bias",
-	        "get_far_material_lod_bias" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarTextureFiltering, getFarTextureFiltering, "filtering",
+	                   PropertyInfo( Variant::INT, "far_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest" ), "set_far_texture_filtering", "get_far_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarMaterialSamplingQuality, getFarMaterialSamplingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "far_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full" ), "set_far_material_sampling_quality", "get_far_material_sampling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarTerrainNormalQuality, getFarTerrainNormalQuality, "quality",
+	                   PropertyInfo( Variant::INT, "far_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed" ), "set_far_terrain_normal_quality", "get_far_terrain_normal_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarTerrainColorQuality, getFarTerrainColorQuality, "quality",
+	                   PropertyInfo( Variant::INT, "far_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact" ), "set_far_terrain_color_quality", "get_far_terrain_color_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarSurfaceResponseQuality, getFarSurfaceResponseQuality, "quality",
+	                   PropertyInfo( Variant::INT, "far_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed" ), "set_far_surface_response_quality", "get_far_surface_response_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarTextureSurfaceMode, getFarTextureSurfaceMode, "mode",
+	                   PropertyInfo( Variant::INT, "far_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures" ), "set_far_texture_surface_mode", "get_far_texture_surface_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarLightingModel, getFarLightingModel, "model",
+	                   PropertyInfo( Variant::INT, "far_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR" ), "set_far_lighting_model", "get_far_lighting_model" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarDetilingQuality, getFarDetilingQuality, "quality",
+	                   PropertyInfo( Variant::INT, "far_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation" ), "set_far_detiling_quality", "get_far_detiling_quality" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarAuthoredColorContribution, getFarAuthoredColorContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "far_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_far_authored_color_contribution", "get_far_authored_color_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarWetnessContribution, getFarWetnessContribution, "contribution",
+	                   PropertyInfo( Variant::FLOAT, "far_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_far_wetness_contribution", "get_far_wetness_contribution" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarMaterialLodBias, getFarMaterialLodBias, "bias",
+	                   PropertyInfo( Variant::FLOAT, "far_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25" ), "set_far_material_lod_bias", "get_far_material_lod_bias" );
 
 	ADD_GROUP( "Global Projection / Tessellation / Variation", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "projection_mode", PROPERTY_HINT_ENUM, "Disabled,Shared Fragment Basis,Exact Per-Corner" ),
-	        "set_projection_mode",
-	        "get_projection_mode" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "tessellation_material_mode", PROPERTY_HINT_ENUM, "Geometry Only,Geometry + Material Height" ),
-	        "set_tessellation_material_mode",
-	        "get_tessellation_material_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "dual_scaling_enabled" ), "set_dual_scaling_enabled", "get_dual_scaling_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "macro_variation_enabled" ), "set_macro_variation_enabled", "get_macro_variation_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setProjectionMode, getProjectionMode, "mode",
+	                   PropertyInfo( Variant::INT, "projection_mode", PROPERTY_HINT_ENUM, "Disabled,Shared Fragment Basis,Exact Per-Corner" ), "set_projection_mode", "get_projection_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTessellationMaterialMode, getTessellationMaterialMode, "mode",
+	                   PropertyInfo( Variant::INT, "tessellation_material_mode", PROPERTY_HINT_ENUM, "Geometry Only,Geometry + Material Height" ), "set_tessellation_material_mode", "get_tessellation_material_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setDualScalingEnabled, getDualScalingEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "dual_scaling_enabled" ), "set_dual_scaling_enabled", "get_dual_scaling_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMacroVariationEnabled, getMacroVariationEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "macro_variation_enabled" ), "set_macro_variation_enabled", "get_macro_variation_enabled" );
 
 	ADD_GROUP( "PBR Output / Debug", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_albedo" ), "set_output_albedo_enabled", "get_output_albedo_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_roughness" ), "set_output_roughness_enabled", "get_output_roughness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_specular" ), "set_output_specular_enabled", "get_output_specular_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_normal_map" ), "set_output_normal_map_enabled", "get_output_normal_map_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "output_ambient_occlusion" ),
-	        "set_output_ambient_occlusion_enabled",
-	        "get_output_ambient_occlusion_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setOutputAlbedoEnabled, getOutputAlbedoEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "output_albedo" ), "set_output_albedo_enabled", "get_output_albedo_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setOutputRoughnessEnabled, getOutputRoughnessEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "output_roughness" ), "set_output_roughness_enabled", "get_output_roughness_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setOutputSpecularEnabled, getOutputSpecularEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "output_specular" ), "set_output_specular_enabled", "get_output_specular_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setOutputNormalMapEnabled, getOutputNormalMapEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "output_normal_map" ), "set_output_normal_map_enabled", "get_output_normal_map_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setOutputAmbientOcclusionEnabled, getOutputAmbientOcclusionEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "output_ambient_occlusion" ), "set_output_ambient_occlusion_enabled", "get_output_ambient_occlusion_enabled" );
 
 	ADD_GROUP( "Runtime Render Status", "" );
 	ADD_PROPERTY(
@@ -2284,149 +2039,102 @@ void Terrain3DMaterial::_bind_methods( void ) {
 	        "get_far_shader_status" );
 
 	ADD_GROUP( "Serialized Compatibility", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "texture_filtering", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_texture_filtering",
-	        "get_texture_filtering" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_terrain_sampling_mode",
-	        "get_terrain_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_terrain_normal_mode",
-	        "get_terrain_normal_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_color_sampling_mode",
-	        "get_color_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_surface_data_mode",
-	        "get_surface_data_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "texture_surface_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_texture_surface_mode",
-	        "get_texture_surface_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_terrain_shading_mode",
-	        "get_terrain_shading_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_detiling_mode",
-	        "get_detiling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_terrain_sampling_mode",
-	        "get_middle_terrain_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_terrain_normal_mode",
-	        "get_middle_terrain_normal_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_color_sampling_mode",
-	        "get_middle_color_sampling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_surface_data_mode",
-	        "get_middle_surface_data_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_terrain_shading_mode",
-	        "get_middle_terrain_shading_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "middle_detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_detiling_mode",
-	        "get_middle_detiling_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_auto_shader_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_auto_shader_enabled",
-	        "get_middle_auto_shader_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_authored_color_enabled",
-	        "get_middle_authored_color_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "middle_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_middle_wetness_enabled",
-	        "get_middle_wetness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "far_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_far_terrain_shading_mode",
-	        "get_far_terrain_shading_mode" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "far_material_lod", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_far_material_lod",
-	        "get_far_material_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "far_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_far_authored_color_enabled",
-	        "get_far_authored_color_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "far_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_far_wetness_enabled",
-	        "get_far_wetness_enabled" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "packed_pbr_single_fetch", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_packed_pbr_single_fetch",
-	        "get_packed_pbr_single_fetch" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "projection_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
-	        "set_projection_enabled",
-	        "get_projection_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTextureFiltering, getTextureFiltering, "filtering",
+	                   PropertyInfo( Variant::INT, "texture_filtering", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_texture_filtering", "get_texture_filtering" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTerrainSamplingMode, getTerrainSamplingMode, "mode",
+	                   PropertyInfo( Variant::INT, "terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_terrain_sampling_mode", "get_terrain_sampling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTerrainNormalMode, getTerrainNormalMode, "mode",
+	                   PropertyInfo( Variant::INT, "terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_terrain_normal_mode", "get_terrain_normal_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setColorSamplingMode, getColorSamplingMode, "mode",
+	                   PropertyInfo( Variant::INT, "color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_color_sampling_mode", "get_color_sampling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setSurfaceDataMode, getSurfaceDataMode, "mode",
+	                   PropertyInfo( Variant::INT, "surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_surface_data_mode", "get_surface_data_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTextureSurfaceMode, getTextureSurfaceMode, "mode",
+	                   PropertyInfo( Variant::INT, "texture_surface_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_texture_surface_mode", "get_texture_surface_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setTerrainShadingMode, getTerrainShadingMode, "mode",
+	                   PropertyInfo( Variant::INT, "terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_terrain_shading_mode", "get_terrain_shading_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setDetilingMode, getDetilingMode, "mode",
+	                   PropertyInfo( Variant::INT, "detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_detiling_mode", "get_detiling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTerrainSamplingMode, getMiddleTerrainSamplingMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_terrain_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_terrain_sampling_mode", "get_middle_terrain_sampling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTerrainNormalMode, getMiddleTerrainNormalMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_terrain_normal_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_terrain_normal_mode", "get_middle_terrain_normal_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleColorSamplingMode, getMiddleColorSamplingMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_color_sampling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_color_sampling_mode", "get_middle_color_sampling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleSurfaceDataMode, getMiddleSurfaceDataMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_surface_data_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_surface_data_mode", "get_middle_surface_data_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleTerrainShadingMode, getMiddleTerrainShadingMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_terrain_shading_mode", "get_middle_terrain_shading_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleDetilingMode, getMiddleDetilingMode, "mode",
+	                   PropertyInfo( Variant::INT, "middle_detiling_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_detiling_mode", "get_middle_detiling_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleAutoShaderEnabled, getMiddleAutoShaderEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "middle_auto_shader_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_auto_shader_enabled", "get_middle_auto_shader_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleAuthoredColorEnabled, getMiddleAuthoredColorEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "middle_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_authored_color_enabled", "get_middle_authored_color_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setMiddleWetnessEnabled, getMiddleWetnessEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "middle_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_middle_wetness_enabled", "get_middle_wetness_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarTerrainShadingMode, getFarTerrainShadingMode, "mode",
+	                   PropertyInfo( Variant::INT, "far_terrain_shading_mode", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_far_terrain_shading_mode", "get_far_terrain_shading_mode" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarMaterialLod, getFarMaterialLod, "lod",
+	                   PropertyInfo( Variant::FLOAT, "far_material_lod", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_far_material_lod", "get_far_material_lod" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarAuthoredColorEnabled, getFarAuthoredColorEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "far_authored_color_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_far_authored_color_enabled", "get_far_authored_color_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setFarWetnessEnabled, getFarWetnessEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "far_wetness_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_far_wetness_enabled", "get_far_wetness_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setPackedPbrSingleFetch, getPackedPbrSingleFetch, "enabled",
+	                   PropertyInfo( Variant::BOOL, "packed_pbr_single_fetch", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_packed_pbr_single_fetch", "get_packed_pbr_single_fetch" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setProjectionEnabled, getProjectionEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "projection_enabled", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_projection_enabled", "get_projection_enabled" );
 
 	ADD_GROUP( "Hidden Terrain Aliases", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_region_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_region_grid",
-	        "get_show_region_grid" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_instancer_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_instancer_grid",
-	        "get_show_instancer_grid" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_vertex_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_vertex_grid",
-	        "get_show_vertex_grid" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_contours", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_contours",
-	        "get_show_contours" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_navigation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_navigation",
-	        "get_show_navigation" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "displacement_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_displacement_scale",
-	        "get_displacement_scale" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "displacement_sharpness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_displacement_sharpness",
-	        "get_displacement_sharpness" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_checkered", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_checkered",
-	        "get_show_checkered" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_grey", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_grey",
-	        "get_show_grey" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_heightmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_heightmap",
-	        "get_show_heightmap" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_jaggedness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_jaggedness",
-	        "get_show_jaggedness" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_autoshader", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_autoshader",
-	        "get_show_autoshader" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_texture", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_control_texture",
-	        "get_show_control_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_blend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_control_blend",
-	        "get_show_control_blend" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_angle", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_control_angle",
-	        "get_show_control_angle" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_control_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_control_scale",
-	        "get_show_control_scale" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_colormap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_colormap",
-	        "get_show_colormap" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_roughmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_roughmap",
-	        "get_show_roughmap" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_albedo", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_texture_albedo",
-	        "get_show_texture_albedo" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_height", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_texture_height",
-	        "get_show_texture_height" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_normal", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_texture_normal",
-	        "get_show_texture_normal" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_ao", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_texture_ao",
-	        "get_show_texture_ao" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_texture_rough", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_texture_rough",
-	        "get_show_texture_rough" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "show_displacement_buffer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ),
-	        "set_show_displacement_buffer",
-	        "get_show_displacement_buffer" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowRegionGrid, getShowRegionGrid, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_region_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_region_grid", "get_show_region_grid" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowInstancerGrid, getShowInstancerGrid, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_instancer_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_instancer_grid", "get_show_instancer_grid" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowVertexGrid, getShowVertexGrid, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_vertex_grid", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_vertex_grid", "get_show_vertex_grid" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowContours, getShowContours, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_contours", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_contours", "get_show_contours" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowNavigation, getShowNavigation, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_navigation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_navigation", "get_show_navigation" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setDisplacementScale, getDisplacementScale, "scale",
+	                   PropertyInfo( Variant::FLOAT, "displacement_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_displacement_scale", "get_displacement_scale" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setDisplacementSharpness, getDisplacementSharpness, "sharpness",
+	                   PropertyInfo( Variant::FLOAT, "displacement_sharpness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_displacement_sharpness", "get_displacement_sharpness" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowCheckered, getShowCheckered, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_checkered", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_checkered", "get_show_checkered" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowGrey, getShowGrey, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_grey", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_grey", "get_show_grey" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowHeightmap, getShowHeightmap, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_heightmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_heightmap", "get_show_heightmap" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowJaggedness, getShowJaggedness, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_jaggedness", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_jaggedness", "get_show_jaggedness" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowAutoshader, getShowAutoshader, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_autoshader", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_autoshader", "get_show_autoshader" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowControlTexture, getShowControlTexture, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_control_texture", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_control_texture", "get_show_control_texture" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowControlBlend, getShowControlBlend, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_control_blend", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_control_blend", "get_show_control_blend" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowControlAngle, getShowControlAngle, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_control_angle", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_control_angle", "get_show_control_angle" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowControlScale, getShowControlScale, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_control_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_control_scale", "get_show_control_scale" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowColormap, getShowColormap, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_colormap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_colormap", "get_show_colormap" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowRoughmap, getShowRoughmap, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_roughmap", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_roughmap", "get_show_roughmap" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowTextureAlbedo, getShowTextureAlbedo, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_texture_albedo", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_texture_albedo", "get_show_texture_albedo" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowTextureHeight, getShowTextureHeight, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_texture_height", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_texture_height", "get_show_texture_height" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowTextureNormal, getShowTextureNormal, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_texture_normal", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_texture_normal", "get_show_texture_normal" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowTextureAo, getShowTextureAo, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_texture_ao", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_texture_ao", "get_show_texture_ao" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowTextureRough, getShowTextureRough, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_texture_rough", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_texture_rough", "get_show_texture_rough" );
+	T3D_BIND_PROPERTY( Terrain3DMaterial, setShowDisplacementBuffer, getShowDisplacementBuffer, "enabled",
+	                   PropertyInfo( Variant::BOOL, "show_displacement_buffer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR ), "set_show_displacement_buffer", "get_show_displacement_buffer" );
 
 	ADD_SIGNAL( MethodInfo( "shader_tier_state_changed",
 	        PropertyInfo( Variant::INT, "tier" ),

@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "core/utility/terrain_3d_numeric.h"
 #include "data/formats/terrain_3d_half.h"
 #include "assets/resources/terrain_3d_world_material_resource.h"
@@ -31,7 +32,8 @@ Terrain3DWorldMaterial::~Terrain3DWorldMaterial( void ) {
 }
 
 void Terrain3DWorldMaterial::onTextureChanged( void ) {
-	emit_changed();
+	advanceVtContentGeneration();
+		emit_changed();
 }
 
 bool Terrain3DWorldMaterial::referencesTexture( const Ref<Texture2D> &rTexture ) const {
@@ -72,77 +74,46 @@ void Terrain3DWorldMaterial::disconnectAllTextureSignals( void ) {
 }
 
 void Terrain3DWorldMaterial::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_albedo_texture", "texture" ), &Terrain3DWorldMaterial::setAlbedoTexture );
-	ClassDB::bind_method( D_METHOD( "get_albedo_texture" ), &Terrain3DWorldMaterial::getAlbedoTexture );
-	ClassDB::bind_method( D_METHOD( "set_normal_texture", "texture" ), &Terrain3DWorldMaterial::setNormalTexture );
-	ClassDB::bind_method( D_METHOD( "get_normal_texture" ), &Terrain3DWorldMaterial::getNormalTexture );
-	ClassDB::bind_method( D_METHOD( "set_surface_texture", "texture" ), &Terrain3DWorldMaterial::setSurfaceTexture );
-	ClassDB::bind_method( D_METHOD( "get_surface_texture" ), &Terrain3DWorldMaterial::getSurfaceTexture );
-	ClassDB::bind_method( D_METHOD( "set_height_texture", "texture" ), &Terrain3DWorldMaterial::setHeightTexture );
-	ClassDB::bind_method( D_METHOD( "get_height_texture" ), &Terrain3DWorldMaterial::getHeightTexture );
-	ClassDB::bind_method( D_METHOD( "set_base_color", "color" ), &Terrain3DWorldMaterial::setBaseColor );
-	ClassDB::bind_method( D_METHOD( "get_base_color" ), &Terrain3DWorldMaterial::getBaseColor );
-	ClassDB::bind_method( D_METHOD( "set_uv_scale", "scale" ), &Terrain3DWorldMaterial::setUvScale );
-	ClassDB::bind_method( D_METHOD( "get_uv_scale" ), &Terrain3DWorldMaterial::getUvScale );
-	ClassDB::bind_method( D_METHOD( "set_uv_offset", "offset" ), &Terrain3DWorldMaterial::setUvOffset );
-	ClassDB::bind_method( D_METHOD( "get_uv_offset" ), &Terrain3DWorldMaterial::getUvOffset );
-	ClassDB::bind_method( D_METHOD( "set_roughness", "value" ), &Terrain3DWorldMaterial::setRoughness );
-	ClassDB::bind_method( D_METHOD( "get_roughness" ), &Terrain3DWorldMaterial::getRoughness );
-	ClassDB::bind_method( D_METHOD( "set_metallic", "value" ), &Terrain3DWorldMaterial::setMetallic );
-	ClassDB::bind_method( D_METHOD( "get_metallic" ), &Terrain3DWorldMaterial::getMetallic );
-	ClassDB::bind_method( D_METHOD( "set_normal_scale", "value" ), &Terrain3DWorldMaterial::setNormalScale );
-	ClassDB::bind_method( D_METHOD( "get_normal_scale" ), &Terrain3DWorldMaterial::getNormalScale );
-	ClassDB::bind_method( D_METHOD( "set_alpha_scissor_threshold", "value" ), &Terrain3DWorldMaterial::setAlphaScissorThreshold );
-	ClassDB::bind_method( D_METHOD( "get_alpha_scissor_threshold" ), &Terrain3DWorldMaterial::getAlphaScissorThreshold );
-	ClassDB::bind_method( D_METHOD( "set_alpha_scissor", "enabled" ), &Terrain3DWorldMaterial::setAlphaScissor );
-	ClassDB::bind_method( D_METHOD( "is_alpha_scissor" ), &Terrain3DWorldMaterial::isAlphaScissor );
-	ClassDB::bind_method( D_METHOD( "set_two_sided", "enabled" ), &Terrain3DWorldMaterial::setTwoSided );
-	ClassDB::bind_method( D_METHOD( "is_two_sided" ), &Terrain3DWorldMaterial::isTwoSided );
-	ClassDB::bind_method( D_METHOD( "set_foliage", "enabled" ), &Terrain3DWorldMaterial::setFoliage );
-	ClassDB::bind_method( D_METHOD( "is_foliage" ), &Terrain3DWorldMaterial::isFoliage );
-	ClassDB::bind_method( D_METHOD( "set_cast_shadows", "enabled" ), &Terrain3DWorldMaterial::setCastShadows );
-	ClassDB::bind_method( D_METHOD( "is_cast_shadows" ), &Terrain3DWorldMaterial::isCastShadows );
-	ClassDB::bind_method( D_METHOD( "set_receive_shadows", "enabled" ), &Terrain3DWorldMaterial::setReceiveShadows );
-	ClassDB::bind_method( D_METHOD( "is_receive_shadows" ), &Terrain3DWorldMaterial::isReceiveShadows );
-	ClassDB::bind_method( D_METHOD( "set_sampler_class", "sampler_class" ), &Terrain3DWorldMaterial::setSamplerClass );
-	ClassDB::bind_method( D_METHOD( "get_sampler_class" ), &Terrain3DWorldMaterial::getSamplerClass );
-	ClassDB::bind_method( D_METHOD( "set_render_tier", "tier" ), &Terrain3DWorldMaterial::setRenderTier );
-	ClassDB::bind_method( D_METHOD( "get_render_tier" ), &Terrain3DWorldMaterial::getRenderTier );
 
 	ADD_GROUP( "Textures", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "albedo_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
-	        "set_albedo_texture",
-	        "get_albedo_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "normal_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
-	        "set_normal_texture",
-	        "get_normal_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "surface_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
-	        "set_surface_texture",
-	        "get_surface_texture" );
-	ADD_PROPERTY( PropertyInfo( Variant::OBJECT, "height_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
-	        "set_height_texture",
-	        "get_height_texture" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setAlbedoTexture, getAlbedoTexture, "texture",
+	                   PropertyInfo( Variant::OBJECT, "albedo_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_albedo_texture", "get_albedo_texture" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setNormalTexture, getNormalTexture, "texture",
+	                   PropertyInfo( Variant::OBJECT, "normal_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_normal_texture", "get_normal_texture" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setSurfaceTexture, getSurfaceTexture, "texture",
+	                   PropertyInfo( Variant::OBJECT, "surface_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_surface_texture", "get_surface_texture" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setHeightTexture, getHeightTexture, "texture",
+	                   PropertyInfo( Variant::OBJECT, "height_texture", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_height_texture", "get_height_texture" );
 	ADD_GROUP( "Surface", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::COLOR, "base_color" ), "set_base_color", "get_base_color" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "roughness", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_roughness", "get_roughness" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "metallic", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_metallic", "get_metallic" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "normal_scale", PROPERTY_HINT_RANGE, "0,4,0.01" ), "set_normal_scale", "get_normal_scale" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2, "uv_scale" ), "set_uv_scale", "get_uv_scale" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2, "uv_offset" ), "set_uv_offset", "get_uv_offset" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setBaseColor, getBaseColor, "color",
+	                   PropertyInfo( Variant::COLOR, "base_color" ), "set_base_color", "get_base_color" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setRoughness, getRoughness, "value",
+	                   PropertyInfo( Variant::FLOAT, "roughness", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_roughness", "get_roughness" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setMetallic, getMetallic, "value",
+	                   PropertyInfo( Variant::FLOAT, "metallic", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_metallic", "get_metallic" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setNormalScale, getNormalScale, "value",
+	                   PropertyInfo( Variant::FLOAT, "normal_scale", PROPERTY_HINT_RANGE, "0,4,0.01" ), "set_normal_scale", "get_normal_scale" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setUvScale, getUvScale, "scale",
+	                   PropertyInfo( Variant::VECTOR2, "uv_scale" ), "set_uv_scale", "get_uv_scale" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setUvOffset, getUvOffset, "offset",
+	                   PropertyInfo( Variant::VECTOR2, "uv_offset" ), "set_uv_offset", "get_uv_offset" );
 	ADD_GROUP( "Pipeline", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "alpha_scissor" ), "set_alpha_scissor", "is_alpha_scissor" );
-	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "alpha_scissor_threshold", PROPERTY_HINT_RANGE, "0,1,0.01" ),
-	        "set_alpha_scissor_threshold",
-	        "get_alpha_scissor_threshold" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "two_sided" ), "set_two_sided", "is_two_sided" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "foliage" ), "set_foliage", "is_foliage" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "cast_shadows" ), "set_cast_shadows", "is_cast_shadows" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "receive_shadows" ), "set_receive_shadows", "is_receive_shadows" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "sampler_class", PROPERTY_HINT_ENUM, "Repeat,Clamp" ), "set_sampler_class", "get_sampler_class" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "render_tier", PROPERTY_HINT_ENUM, "Auto,World,Clutter,Foliage" ),
-	        "set_render_tier",
-	        "get_render_tier" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setAlphaScissor, isAlphaScissor, "enabled",
+	                   PropertyInfo( Variant::BOOL, "alpha_scissor" ), "set_alpha_scissor", "is_alpha_scissor" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setAlphaScissorThreshold, getAlphaScissorThreshold, "value",
+	                   PropertyInfo( Variant::FLOAT, "alpha_scissor_threshold", PROPERTY_HINT_RANGE, "0,1,0.01" ), "set_alpha_scissor_threshold", "get_alpha_scissor_threshold" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setTwoSided, isTwoSided, "enabled",
+	                   PropertyInfo( Variant::BOOL, "two_sided" ), "set_two_sided", "is_two_sided" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setFoliage, isFoliage, "enabled",
+	                   PropertyInfo( Variant::BOOL, "foliage" ), "set_foliage", "is_foliage" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setCastShadows, isCastShadows, "enabled",
+	                   PropertyInfo( Variant::BOOL, "cast_shadows" ), "set_cast_shadows", "is_cast_shadows" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setReceiveShadows, isReceiveShadows, "enabled",
+	                   PropertyInfo( Variant::BOOL, "receive_shadows" ), "set_receive_shadows", "is_receive_shadows" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setSamplerClass, getSamplerClass, "sampler_class",
+	                   PropertyInfo( Variant::INT, "sampler_class", PROPERTY_HINT_ENUM, "Repeat,Clamp" ), "set_sampler_class", "get_sampler_class" );
+	T3D_BIND_PROPERTY( Terrain3DWorldMaterial, setRenderTier, getRenderTier, "tier",
+	                   PropertyInfo( Variant::INT, "render_tier", PROPERTY_HINT_ENUM, "Auto,World,Clutter,Foliage" ), "set_render_tier", "get_render_tier" );
 }
 
 void Terrain3DWorldMaterial::setAlbedoTexture( const Ref<Texture2D> &rValue ) {
@@ -153,7 +124,8 @@ void Terrain3DWorldMaterial::setAlbedoTexture( const Ref<Texture2D> &rValue ) {
 	m_albedoTexture = rValue;
 	disconnectTextureSignalIfUnused( previous );
 	connectTextureSignal( m_albedoTexture );
-	emit_changed();
+	advanceVtContentGeneration();
+		emit_changed();
 }
 
 void Terrain3DWorldMaterial::setNormalTexture( const Ref<Texture2D> &rValue ) {
@@ -164,7 +136,8 @@ void Terrain3DWorldMaterial::setNormalTexture( const Ref<Texture2D> &rValue ) {
 	m_normalTexture = rValue;
 	disconnectTextureSignalIfUnused( previous );
 	connectTextureSignal( m_normalTexture );
-	emit_changed();
+	advanceVtContentGeneration();
+		emit_changed();
 }
 
 void Terrain3DWorldMaterial::setSurfaceTexture( const Ref<Texture2D> &rValue ) {
@@ -175,7 +148,8 @@ void Terrain3DWorldMaterial::setSurfaceTexture( const Ref<Texture2D> &rValue ) {
 	m_surfaceTexture = rValue;
 	disconnectTextureSignalIfUnused( previous );
 	connectTextureSignal( m_surfaceTexture );
-	emit_changed();
+	advanceVtContentGeneration();
+		emit_changed();
 }
 
 void Terrain3DWorldMaterial::setHeightTexture( const Ref<Texture2D> &rValue ) {
@@ -186,11 +160,13 @@ void Terrain3DWorldMaterial::setHeightTexture( const Ref<Texture2D> &rValue ) {
 	m_heightTexture = rValue;
 	disconnectTextureSignalIfUnused( previous );
 	connectTextureSignal( m_heightTexture );
-	emit_changed();
+	advanceVtContentGeneration();
+		emit_changed();
 }
 
 void Terrain3DWorldMaterial::setBaseColor( const Color &rColor ) {
 	if ( m_baseColor != rColor ) {
+		if ( (m_baseColor.a < 1.0f) != (rColor.a < 1.0f) ) { advanceVtContentGeneration(); }
 		m_baseColor = rColor;
 		emit_changed();
 	}
@@ -238,6 +214,7 @@ void Terrain3DWorldMaterial::setAlphaScissorThreshold( const float fValue ) {
 void Terrain3DWorldMaterial::setAlphaScissor( const bool bEnabled ) {
 	if ( m_bAlphaScissor != bEnabled ) {
 		m_bAlphaScissor = bEnabled;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }
@@ -269,6 +246,7 @@ void Terrain3DWorldMaterial::setSamplerClass( const int32_t iClass ) {
 	const int32_t value = iClass == ( int32_t )( T3D_VT_SAMPLER_LINEAR_CLAMP ) ? iClass : ( int32_t )( T3D_VT_SAMPLER_LINEAR_REPEAT );
 	if ( m_iSamplerClass != value ) {
 		m_iSamplerClass = value;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }
@@ -276,6 +254,7 @@ void Terrain3DWorldMaterial::setRenderTier( const int32_t iTier ) {
 	const int32_t value = iTier >= 0 && iTier <= ( int32_t )( T3D_WORLD_IMPORT_FOLIAGE ) ? iTier : ( int32_t )( T3D_WORLD_IMPORT_AUTO );
 	if ( m_iRenderTier != value ) {
 		m_iRenderTier = value;
+		advanceVtContentGeneration();
 		emit_changed();
 	}
 }

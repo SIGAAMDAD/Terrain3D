@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/runtime/terrain_3d_world_runtime.h"
 #include "rendering/rd/instances/terrain_3d_rd_frustum.h"
+#include "rendering/rd/vt/runtime/terrain_3d_virtual_texture.h"
 
 #include <math.h>
 #include <string.h>
@@ -95,13 +96,14 @@ bool Terrain3DWorldRuntime::initializeCold( const bool bPersistentFrameBuffer, c
 	return true;
 }
 
-bool Terrain3DWorldRuntime::preparePublicationCold( const Terrain3DWorldPublication &rPublication, const uint64_t nRenderFrame ) {
+bool Terrain3DWorldRuntime::preparePublicationCold( const Terrain3DWorldPublication &rPublication, const uint64_t nRenderFrame, const Terrain3DVirtualTexture *const pVirtualTexture ) {
 	++m_nPrepareCount;
 	if ( rPublication.m_nGeneration == 0u || !t3dWorldPublicationFitsLimits( rPublication, m_limits ) ) {
 		m_bReady = false;
 		++m_nPrepareFailureCount;
 		return false;
 	}
+	const uint64_t nVtPublicationGeneration = pVirtualTexture ? pVirtualTexture->getPackagePublicationGeneration() : UINT64_MAX;
 	if ( m_nPreparedPublicationGeneration != rPublication.m_nGeneration ) {
 		if ( !t3dWorldPublicationMaterialReferencesValid( rPublication ) ) {
 			m_bReady = false;
@@ -129,7 +131,7 @@ bool Terrain3DWorldRuntime::preparePublicationCold( const Terrain3DWorldPublicat
 			++m_nPublicationBudgetDeferralCount;
 			return true;
 		}
-		if ( !m_resources.ensureCapacityCold( rPublication ) || !m_resources.uploadPublicationWarm( rPublication ) ) {
+		if ( !m_resources.ensureCapacityCold( rPublication ) || !m_resources.uploadPublicationWarm( rPublication, pVirtualTexture ) ) {
 			m_bReady = false;
 			++m_nPrepareFailureCount;
 			return false;
@@ -139,6 +141,7 @@ bool Terrain3DWorldRuntime::preparePublicationCold( const Terrain3DWorldPublicat
 			m_nPublicationClusterCredit -= MIN( m_nPublicationClusterCredit, ( uint32_t )MIN( nRequiredClusters, ( uint64_t )UINT32_MAX ) );
 		}
 		m_nPreparedPublicationGeneration = rPublication.m_nGeneration;
+		m_nResolvedVtPackagePublicationGeneration = nVtPublicationGeneration;
 		m_nGeometryGeneration = rPublication.m_nGeometryGeneration;
 		m_nMaterialGeneration = rPublication.m_nMaterialGeneration;
 		m_nClusterCount = ( uint32_t )rPublication.m_clusters.size();
@@ -147,6 +150,15 @@ bool Terrain3DWorldRuntime::preparePublicationCold( const Terrain3DWorldPublicat
 		m_nMaterialCount = ( uint32_t )rPublication.m_materials.size();
 		m_nVisibilityCandidateCount = ( uint32_t )rPublication.m_visibilityCandidates.size();
 		++m_nUploadCount;
+	}
+	// VT package replacement can reorder allocations without changing geometry.
+	if ( pVirtualTexture && m_nResolvedVtPackagePublicationGeneration != nVtPublicationGeneration ) {
+		if ( !m_resources.uploadResolvedMaterialsWarm( rPublication, *pVirtualTexture ) ) {
+			m_bReady = false;
+			++m_nPrepareFailureCount;
+			return false;
+		}
+		m_nResolvedVtPackagePublicationGeneration = nVtPublicationGeneration;
 	}
 	if ( m_bInitialized && !m_visibility.prepareBindingsCold( m_resources, m_hiZ ) ) {
 		m_bReady = false;
@@ -260,6 +272,7 @@ void Terrain3DWorldRuntime::shutdownCold( void ) {
 	m_hiZ.shutdownCold();
 	m_resources.shutdownCold();
 	m_nPreparedPublicationGeneration = 0u;
+	m_nResolvedVtPackagePublicationGeneration = UINT64_MAX;
 	m_nCurrentVisibilityPublicationGeneration = 0u;
 	m_nPreviousVisibilityPublicationGeneration = 0u;
 	m_nCurrentVisibilityTerrainGeneration = 0u;

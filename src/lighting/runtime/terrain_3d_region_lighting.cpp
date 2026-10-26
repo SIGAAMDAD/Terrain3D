@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "lighting/runtime/terrain_3d_region_lighting.h"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -9,7 +10,6 @@ t3dAtomicU64_t Terrain3DRegionLighting::s_nGlobalPublicationGeneration{ 1u };
 void Terrain3DRegionLighting::touchGlobalPublicationGeneration( void ) {
 	s_nGlobalPublicationGeneration.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL );
 }
-
 
 #define T3D_SET_VALUE( methodName, methodSymbol, field_name, value_type )                                                                  \
 	void Terrain3DRegionLighting::methodSymbol( value_type value ) {                                                                       \
@@ -207,178 +207,58 @@ int Terrain3DRegionLighting::stripBakedUsersWithPathFragment( const String &rFra
 }
 
 void Terrain3DRegionLighting::_bind_methods( void ) {
-	ClassDB::bind_method( D_METHOD( "set_light_data_path", "path" ), &Terrain3DRegionLighting::setLightDataPath );
-	ClassDB::bind_method( D_METHOD( "get_light_data_path" ), &Terrain3DRegionLighting::getLightDataPath );
 	ClassDB::bind_method( D_METHOD( "has_light_data" ), &Terrain3DRegionLighting::hasLightData );
-	ClassDB::bind_method( D_METHOD( "set_terrain_shadow_mask_path", "path" ), &Terrain3DRegionLighting::setTerrainShadowMaskPath );
-	ClassDB::bind_method( D_METHOD( "get_terrain_shadow_mask_path" ), &Terrain3DRegionLighting::getTerrainShadowMaskPath );
 	ClassDB::bind_method( D_METHOD( "has_terrain_shadow_mask" ), &Terrain3DRegionLighting::hasTerrainShadowMask );
-	ClassDB::bind_method( D_METHOD( "set_baked_user_data", "data" ), &Terrain3DRegionLighting::setBakedUserData );
-	ClassDB::bind_method( D_METHOD( "get_baked_user_data" ), &Terrain3DRegionLighting::getBakedUserData );
-	ClassDB::bind_method( D_METHOD( "set_cluster_location", "location" ), &Terrain3DRegionLighting::setClusterLocation );
-	ClassDB::bind_method( D_METHOD( "get_cluster_location" ), &Terrain3DRegionLighting::getClusterLocation );
-	ClassDB::bind_method( D_METHOD( "set_region_min", "location" ), &Terrain3DRegionLighting::setRegionMin );
-	ClassDB::bind_method( D_METHOD( "get_region_min" ), &Terrain3DRegionLighting::getRegionMin );
-	ClassDB::bind_method( D_METHOD( "set_region_max", "location" ), &Terrain3DRegionLighting::setRegionMax );
-	ClassDB::bind_method( D_METHOD( "get_region_max" ), &Terrain3DRegionLighting::getRegionMax );
-	ClassDB::bind_method( D_METHOD( "set_cluster_size_regions", "size" ), &Terrain3DRegionLighting::setClusterSizeRegions );
-	ClassDB::bind_method( D_METHOD( "get_cluster_size_regions" ), &Terrain3DRegionLighting::getClusterSizeRegions );
-	ClassDB::bind_method( D_METHOD( "set_terrain_proxy_lod", "lod" ), &Terrain3DRegionLighting::setTerrainProxyLod );
-	ClassDB::bind_method( D_METHOD( "get_terrain_proxy_lod" ), &Terrain3DRegionLighting::getTerrainProxyLod );
-	ClassDB::bind_method( D_METHOD( "set_context_radius_regions", "radius" ), &Terrain3DRegionLighting::setContextRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "get_context_radius_regions" ), &Terrain3DRegionLighting::getContextRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "set_shadowmask_mode", "mode" ), &Terrain3DRegionLighting::setShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "get_shadowmask_mode" ), &Terrain3DRegionLighting::getShadowmaskMode );
-	ClassDB::bind_method( D_METHOD( "set_bake_signature", "signature" ), &Terrain3DRegionLighting::setBakeSignature );
-	ClassDB::bind_method( D_METHOD( "get_bake_signature" ), &Terrain3DRegionLighting::getBakeSignature );
-	ClassDB::bind_method(
-	        D_METHOD( "set_directional_light_signature", "signature" ), &Terrain3DRegionLighting::setDirectionalLightSignature );
-	ClassDB::bind_method( D_METHOD( "get_directional_light_signature" ), &Terrain3DRegionLighting::getDirectionalLightSignature );
-	ClassDB::bind_method( D_METHOD( "set_baked_unix", "unix_time" ), &Terrain3DRegionLighting::setBakedUnix );
-	ClassDB::bind_method( D_METHOD( "get_baked_unix" ), &Terrain3DRegionLighting::getBakedUnix );
-	ClassDB::bind_method( D_METHOD( "set_receiver_count", "count" ), &Terrain3DRegionLighting::setReceiverCount );
-	ClassDB::bind_method( D_METHOD( "get_receiver_count" ), &Terrain3DRegionLighting::getReceiverCount );
-	ClassDB::bind_method( D_METHOD( "set_contributor_count", "count" ), &Terrain3DRegionLighting::setContributorCount );
-	ClassDB::bind_method( D_METHOD( "get_contributor_count" ), &Terrain3DRegionLighting::getContributorCount );
-	ClassDB::bind_method( D_METHOD( "set_lightmap_texture_count", "count" ), &Terrain3DRegionLighting::setLightmapTextureCount );
-	ClassDB::bind_method( D_METHOD( "get_lightmap_texture_count" ), &Terrain3DRegionLighting::getLightmapTextureCount );
-	ClassDB::bind_method( D_METHOD( "set_shadowmask_texture_count", "count" ), &Terrain3DRegionLighting::setShadowmaskTextureCount );
-	ClassDB::bind_method( D_METHOD( "get_shadowmask_texture_count" ), &Terrain3DRegionLighting::getShadowmaskTextureCount );
-	ClassDB::bind_method( D_METHOD( "set_has_probe_data", "has_probes" ), &Terrain3DRegionLighting::setHasProbeData );
-	ClassDB::bind_method( D_METHOD( "has_probe_data" ), &Terrain3DRegionLighting::hasProbeData );
-	ClassDB::bind_method( D_METHOD( "set_disk_bytes", "bytes" ), &Terrain3DRegionLighting::setDiskBytes );
-	ClassDB::bind_method( D_METHOD( "get_disk_bytes" ), &Terrain3DRegionLighting::getDiskBytes );
-	ClassDB::bind_method( D_METHOD( "set_estimated_gpu_bytes", "bytes" ), &Terrain3DRegionLighting::setEstimatedGpuBytes );
-	ClassDB::bind_method( D_METHOD( "get_estimated_gpu_bytes" ), &Terrain3DRegionLighting::getEstimatedGpuBytes );
-	ClassDB::bind_method( D_METHOD( "set_source_scene", "path" ), &Terrain3DRegionLighting::setSourceScene );
-	ClassDB::bind_method( D_METHOD( "get_source_scene" ), &Terrain3DRegionLighting::getSourceScene );
+
 	ClassDB::bind_method( D_METHOD( "has_shadowmask" ), &Terrain3DRegionLighting::hasShadowmask );
 	ClassDB::bind_method( D_METHOD( "strip_baked_users_with_path_fragment", "path_fragment" ),
 	        &Terrain3DRegionLighting::stripBakedUsersWithPathFragment );
 
 	ADD_GROUP( "Bake Configuration", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "cluster_size_regions", PROPERTY_HINT_RANGE, "1,8,1" ),
-	        "set_cluster_size_regions",
-	        "get_cluster_size_regions" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "terrain_proxy_lod", PROPERTY_HINT_RANGE, "0,8,1" ),
-	        "set_terrain_proxy_lod",
-	        "get_terrain_proxy_lod" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "context_radius_regions", PROPERTY_HINT_RANGE, "0,4,1" ),
-	        "set_context_radius_regions",
-	        "get_context_radius_regions" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay" ),
-	        "set_shadowmask_mode",
-	        "get_shadowmask_mode" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setClusterSizeRegions, getClusterSizeRegions, "size",
+	                   PropertyInfo( Variant::INT, "cluster_size_regions", PROPERTY_HINT_RANGE, "1,8,1" ), "set_cluster_size_regions", "get_cluster_size_regions" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setTerrainProxyLod, getTerrainProxyLod, "lod",
+	                   PropertyInfo( Variant::INT, "terrain_proxy_lod", PROPERTY_HINT_RANGE, "0,8,1" ), "set_terrain_proxy_lod", "get_terrain_proxy_lod" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setContextRadiusRegions, getContextRadiusRegions, "radius",
+	                   PropertyInfo( Variant::INT, "context_radius_regions", PROPERTY_HINT_RANGE, "0,4,1" ), "set_context_radius_regions", "get_context_radius_regions" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setShadowmaskMode, getShadowmaskMode, "mode",
+	                   PropertyInfo( Variant::INT, "shadowmask_mode", PROPERTY_HINT_ENUM, "None,Replace,Overlay" ), "set_shadowmask_mode", "get_shadowmask_mode" );
 
 	ADD_GROUP( "Package Reference", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "light_data_path", PROPERTY_HINT_FILE, "*.lmbake" ),
-	        "set_light_data_path",
-	        "get_light_data_path" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING, "terrain_shadow_mask_path", PROPERTY_HINT_FILE, "*.res,*.tres" ),
-	        "set_terrain_shadow_mask_path",
-	        "get_terrain_shadow_mask_path" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::ARRAY, "baked_user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_INTERNAL ),
-	        "set_baked_user_data",
-	        "get_baked_user_data" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setLightDataPath, getLightDataPath, "path",
+	                   PropertyInfo( Variant::STRING, "light_data_path", PROPERTY_HINT_FILE, "*.lmbake" ), "set_light_data_path", "get_light_data_path" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setTerrainShadowMaskPath, getTerrainShadowMaskPath, "path",
+	                   PropertyInfo( Variant::STRING, "terrain_shadow_mask_path", PROPERTY_HINT_FILE, "*.res,*.tres" ), "set_terrain_shadow_mask_path", "get_terrain_shadow_mask_path" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setBakedUserData, getBakedUserData, "data",
+	                   PropertyInfo( Variant::ARRAY, "baked_user_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_INTERNAL ), "set_baked_user_data", "get_baked_user_data" );
 
 	ADD_GROUP( "Generated Bake Metadata", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
-	                      "cluster_location",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_cluster_location",
-	        "get_cluster_location" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
-	                      "region_min",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_region_min",
-	        "get_region_min" );
-	ADD_PROPERTY( PropertyInfo( Variant::VECTOR2I,
-	                      "region_max",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_region_max",
-	        "get_region_max" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "bake_signature",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_bake_signature",
-	        "get_bake_signature" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING,
-	                      "directional_light_signature",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_directional_light_signature",
-	        "get_directional_light_signature" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "baked_unix",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_baked_unix",
-	        "get_baked_unix" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "receiver_count",
-	                      PROPERTY_HINT_RANGE,
-	                      "0,1000000,1",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_receiver_count",
-	        "get_receiver_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "contributor_count",
-	                      PROPERTY_HINT_RANGE,
-	                      "0,1000000,1",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_contributor_count",
-	        "get_contributor_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "lightmap_texture_count",
-	                      PROPERTY_HINT_RANGE,
-	                      "0,1024,1",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_lightmap_texture_count",
-	        "get_lightmap_texture_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "shadowmask_texture_count",
-	                      PROPERTY_HINT_RANGE,
-	                      "0,1024,1",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_shadowmask_texture_count",
-	        "get_shadowmask_texture_count" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL,
-	                      "has_probe_data",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_has_probe_data",
-	        "has_probe_data" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "disk_bytes",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_disk_bytes",
-	        "get_disk_bytes" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT,
-	                      "estimated_gpu_bytes",
-	                      PROPERTY_HINT_NONE,
-	                      "",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_estimated_gpu_bytes",
-	        "get_estimated_gpu_bytes" );
-	ADD_PROPERTY( PropertyInfo( Variant::STRING,
-	                      "source_scene",
-	                      PROPERTY_HINT_FILE,
-	                      "*.tscn,*.scn",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "set_source_scene",
-	        "get_source_scene" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setClusterLocation, getClusterLocation, "location",
+	                   PropertyInfo( Variant::VECTOR2I, "cluster_location", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_cluster_location", "get_cluster_location" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setRegionMin, getRegionMin, "location",
+	                   PropertyInfo( Variant::VECTOR2I, "region_min", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_min", "get_region_min" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setRegionMax, getRegionMax, "location",
+	                   PropertyInfo( Variant::VECTOR2I, "region_max", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_region_max", "get_region_max" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setBakeSignature, getBakeSignature, "signature",
+	                   PropertyInfo( Variant::INT, "bake_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_bake_signature", "get_bake_signature" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setDirectionalLightSignature, getDirectionalLightSignature, "signature",
+	                   PropertyInfo( Variant::STRING, "directional_light_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_directional_light_signature", "get_directional_light_signature" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setBakedUnix, getBakedUnix, "unix_time",
+	                   PropertyInfo( Variant::INT, "baked_unix", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_baked_unix", "get_baked_unix" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setReceiverCount, getReceiverCount, "count",
+	                   PropertyInfo( Variant::INT, "receiver_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_receiver_count", "get_receiver_count" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setContributorCount, getContributorCount, "count",
+	                   PropertyInfo( Variant::INT, "contributor_count", PROPERTY_HINT_RANGE, "0,1000000,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_contributor_count", "get_contributor_count" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setLightmapTextureCount, getLightmapTextureCount, "count",
+	                   PropertyInfo( Variant::INT, "lightmap_texture_count", PROPERTY_HINT_RANGE, "0,1024,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_lightmap_texture_count", "get_lightmap_texture_count" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setShadowmaskTextureCount, getShadowmaskTextureCount, "count",
+	                   PropertyInfo( Variant::INT, "shadowmask_texture_count", PROPERTY_HINT_RANGE, "0,1024,1", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_shadowmask_texture_count", "get_shadowmask_texture_count" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setHasProbeData, hasProbeData, "has_probes",
+	                   PropertyInfo( Variant::BOOL, "has_probe_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_has_probe_data", "has_probe_data" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setDiskBytes, getDiskBytes, "bytes",
+	                   PropertyInfo( Variant::INT, "disk_bytes", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_disk_bytes", "get_disk_bytes" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setEstimatedGpuBytes, getEstimatedGpuBytes, "bytes",
+	                   PropertyInfo( Variant::INT, "estimated_gpu_bytes", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_estimated_gpu_bytes", "get_estimated_gpu_bytes" );
+	T3D_BIND_PROPERTY( Terrain3DRegionLighting, setSourceScene, getSourceScene, "path",
+	                   PropertyInfo( Variant::STRING, "source_scene", PROPERTY_HINT_FILE, "*.tscn,*.scn", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_source_scene", "get_source_scene" );
 }

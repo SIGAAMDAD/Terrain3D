@@ -4,9 +4,9 @@
 #define TERRAIN3D_LINEAR_ARENA_H
 
 #include "core/config/terrain_3d_compiler.h"
-#include "memory/core/terrain_3d_memory.h"
-#include "memory/policy/terrain_3d_memory_math.h"
-#include "memory/policy/terrain_3d_memory_constants.h"
+#include "memory/arena/terrain_3d_aligned_backing.h"
+#include "core/utility/terrain_3d_checked_math.h"
+#include "Terrain3DConstants.h"
 
 #include <EASTL/type_traits.h>
 #include <EASTL/numeric_limits.h>
@@ -28,7 +28,7 @@ public:
 			return true;
 		}
 		size_t aligned_offset = 0u;
-		if ( !t3dMemoryAlignUp( m_nSize, nAlignment, aligned_offset ) || nBytes > eastl::numeric_limits<size_t>::max() - aligned_offset ) {
+		if ( !t3dCheckedAlignUp<size_t>( m_nSize, nAlignment, aligned_offset ) || nBytes > eastl::numeric_limits<size_t>::max() - aligned_offset ) {
 			m_bValid = false;
 			return false;
 		}
@@ -70,10 +70,7 @@ class Terrain3DLinearArena
 {
 public:
 	Terrain3DLinearArena( void ) = default;
-	EA_FORCE_INLINE ~Terrain3DLinearArena( void )
-	{
-		release();
-	}
+	~Terrain3DLinearArena( void ) = default;
 	Terrain3DLinearArena( const Terrain3DLinearArena& ) = delete;
 	Terrain3DLinearArena& operator=( const Terrain3DLinearArena& ) = delete;
 
@@ -82,29 +79,13 @@ public:
 		if ( m_bCapacitySealed ) {
 			return false;
 		}
-		releaseBacking();
-		if ( nBytes == 0u ) {
-			return true;
-		}
-		if ( nBaseAlignment == 0u || ( nBaseAlignment & ( nBaseAlignment - 1u ) ) != 0u || nBytes > eastl::numeric_limits<size_t>::max() - ( nBaseAlignment - 1u ) ) {
-			return false;
-		}
-
-		m_pRaw = t3dMemoryAllocate( nBytes + nBaseAlignment - 1u );
-		if ( !m_pRaw ) {
-			return false;
-		}
-		const uintptr_t raw_address = (uintptr_t)( m_pRaw );
-		const uintptr_t mask = (uintptr_t)( nBaseAlignment - 1u );
-		m_pBase = (uint8_t *)( ( raw_address + mask ) & ~mask );
-		m_nCapacity = nBytes;
 		m_iOffset = 0u;
-		return true;
+		return m_backing.allocate( nBytes, nBaseAlignment );
 	}
 
 	bool ensureCapacity( const size_t nBytes, const size_t nBaseAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT )
 	{
-		if ( nBytes <= m_nCapacity && ( m_pBase || nBytes == 0u ) ) {
+		if ( nBytes <= m_backing.capacity() && ( m_backing.data() || nBytes == 0u ) ) {
 			m_iOffset = 0u;
 			return true;
 		}
@@ -146,18 +127,12 @@ public:
 		if ( nBytes == 0u ) {
 			return NULL;
 		}
-		if ( !m_pBase || nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
+		size_t aligned_offset = 0u;
+		if ( !m_backing.data() || !t3dCheckedAlignUp( m_iOffset, nAlignment, aligned_offset )
+		        || !t3dByteRangeFits( aligned_offset, nBytes, m_backing.capacity() ) ) {
 			return NULL;
 		}
-		const size_t mask = nAlignment - 1u;
-		if ( m_iOffset > eastl::numeric_limits<size_t>::max() - mask ) {
-			return NULL;
-		}
-		const size_t aligned_offset = ( m_iOffset + mask ) & ~mask;
-		if ( aligned_offset > m_nCapacity || nBytes > m_nCapacity - aligned_offset ) {
-			return NULL;
-		}
-		void *result = m_pBase + aligned_offset;
+		void *result = m_backing.data() + aligned_offset;
 		m_iOffset = aligned_offset + nBytes;
 		return result;
 	}
@@ -174,7 +149,7 @@ public:
 
 	EA_FORCE_INLINE size_t capacity( void ) const
 	{
-		return m_nCapacity;
+		return m_backing.capacity();
 	}
 
 	EA_FORCE_INLINE size_t used( void ) const
@@ -184,29 +159,22 @@ public:
 
 	EA_FORCE_INLINE size_t remaining( void ) const
 	{
-		return m_nCapacity - m_iOffset;
+		return m_backing.capacity() - m_iOffset;
 	}
 
 	EA_FORCE_INLINE bool valid( void ) const
 	{
-		return m_pBase != NULL || m_nCapacity == 0u;
+		return m_backing.data() != NULL || m_backing.capacity() == 0u;
 	}
 
 private:
 	void releaseBacking( void )
 	{
-		if ( m_pRaw ) {
-			t3dMemoryRelease( m_pRaw );
-		}
-		m_pRaw = NULL;
-		m_pBase = NULL;
-		m_nCapacity = 0u;
+		m_backing.release();
 		m_iOffset = 0u;
 	}
 
-	void *m_pRaw = NULL;
-	uint8_t *m_pBase = NULL;
-	size_t m_nCapacity = 0u;
+	Terrain3DAlignedBacking m_backing;
 	size_t m_iOffset = 0u;
 	bool m_bCapacitySealed = false;
 };

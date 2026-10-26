@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "integration/godot/terrain_3d_binding.h"
 #include "Terrain3DTypeSupport.h"
 #include "lighting/runtime/terrain_3d_lightmap_streamer.h"
 
@@ -28,7 +29,6 @@ typedef struct t3dLightmapCandidate_s {
 	int64_t m_nDistance = INT64_MAX;
 	Vector2i m_location = s_v2iMax;
 } t3dLightmapCandidate_t;
-
 
 static bool t3dLightmapCandidateLess( const t3dLightmapCandidate_t &rA, const t3dLightmapCandidate_t &rB ) {
 	if ( rA.m_nDistance != rB.m_nDistance ) {
@@ -128,7 +128,6 @@ typedef struct t3dLightmapReceiverStateContext_s {
 	Ref<LightmapGIData> *m_pRuntimeData;
 } t3dLightmapReceiverStateContext_t;
 
-
 static void t3dLightmapCollectReceiverState( void *const pContext, const t3dRuntimeLightingReceiverRecord_s &rReceiver ) {
 	t3dLightmapReceiverStateContext_t *const pState = ( t3dLightmapReceiverStateContext_t * )( pContext );
 	Node *const pReceiver = t3dLightmapStreamerResolveLightmapReceiver( pState->m_pTerrain, rReceiver.m_path );
@@ -168,7 +167,20 @@ void Terrain3DLightmapStreamer::initialize( Object *const pTerrainObject ) {
 	m_nNodeRuntimeGeneration = 0u;
 }
 
+void Terrain3DLightmapStreamer::drainPendingLoads() {
+	ResourceLoader *loader = ResourceLoader::get_singleton();
+	for (const auto &pending : m_pendingPackages) {
+		if (!loader || pending.data.is_valid()) { continue; }
+		const auto status = loader->load_threaded_get_status(pending.package->getLightDataPath());
+		if (status == ResourceLoader::THREAD_LOAD_IN_PROGRESS || status == ResourceLoader::THREAD_LOAD_LOADED) {
+			const Ref<Resource> retired = loader->load_threaded_get(pending.package->getLightDataPath());
+		}
+	}
+	m_pendingPackages.clear();
+}
+
 void Terrain3DLightmapStreamer::destroy( void ) {
+	drainPendingLoads();
 	while ( !m_activePackages.empty() ) {
 		deactivate( m_activePackages.size() - 1u );
 	}
@@ -208,6 +220,7 @@ void Terrain3DLightmapStreamer::releaseNode( LightmapGI *const pNode ) {
 }
 
 void Terrain3DLightmapStreamer::suspend( void ) {
+	drainPendingLoads();
 	while ( !m_activePackages.empty() ) {
 		deactivate( m_activePackages.size() - 1u );
 	}
@@ -227,10 +240,11 @@ void Terrain3DLightmapStreamer::setEnabled( const bool bEnabled ) {
 }
 
 void Terrain3DLightmapStreamer::setResidencyBudgetMb( const int nBudgetMb ) {
-	const int budget_mb = CLAMP( nBudgetMb, 1, 1024 );
+	const int budget_mb = CLAMP( nBudgetMb, 0, 1024 );
 	if ( m_nResidencyBudgetMb == budget_mb ) {
 		return;
 	}
+	if (budget_mb < m_nResidencyBudgetMb) { drainPendingLoads(); }
 	m_nResidencyBudgetMb = budget_mb;
 	const size_t budget_bytes = ( size_t )( getEffectiveResidencyBudgetMb() ) * 1024u * 1024u;
 	while ( !m_activePackages.empty() && getResidentEstimatedBytes() > budget_bytes ) {
@@ -243,7 +257,7 @@ int Terrain3DLightmapStreamer::getEffectiveResidencyBudgetMb( void ) const {
 	// The terrain memory-budget coordinator already assigns this subsystem's
 	// residency budget. Authoring pins successfully loaded packages, but does not
 	// manufacture a second editor-only allowance outside that aggregate budget.
-	return MAX( 1, m_nResidencyBudgetMb );
+	return MAX( 0, m_nResidencyBudgetMb );
 }
 
 void Terrain3DLightmapStreamer::setRadiusRegions( const int nRadius ) {
@@ -285,6 +299,26 @@ t3dSourceLoadResult_t Terrain3DLightmapStreamer::requestSourceData(
 	if ( pLoader == NULL ) {
 		return SOURCE_LOAD_FAILED;
 	}
+	Terrain3DMemoryAccountScope memory_scope(m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr);
+	PendingPackage *pending = nullptr;
+	uint64_t reserved = m_nResidentEstimatedBytes;
+	for (auto &candidate : m_pendingPackages) {
+		reserved += candidate.memory.bytes();
+		if (candidate.package == rPackage) { pending = &candidate; }
+	}
+	if (!pending) {
+		const uint64_t incoming = uint64_t(MAX<int64_t>(0, rPackage->getEstimatedGpuBytes()));
+		const uint64_t budget = uint64_t(getEffectiveResidencyBudgetMb()) * 1024ull * 1024ull;
+		PendingPackage candidate;
+		if (budget == 0 || m_pendingPackages.full() || incoming > budget || reserved > budget - incoming || !candidate.memory.reserve(incoming)) {
+			++m_nCapacityDeferredLastTick;
+			return SOURCE_LOAD_FAILED;
+		}
+		candidate.package = rPackage;
+		m_pendingPackages.push_back(candidate);
+		pending = &m_pendingPackages.back();
+	}
+	if (pending->data.is_valid()) { rData = pending->data; return SOURCE_LOAD_READY; }
 	const String path = rPackage->getLightDataPath();
 	const ResourceLoader::ThreadLoadStatus status = pLoader->load_threaded_get_status( path );
 	if ( status == ResourceLoader::THREAD_LOAD_INVALID_RESOURCE ) {
@@ -308,6 +342,7 @@ t3dSourceLoadResult_t Terrain3DLightmapStreamer::requestSourceData(
 	}
 	const Ref<Resource> pResource = pLoader->load_threaded_get( path );
 	rData = pResource;
+	pending->data = rData;
 	if ( rData.is_null() ) {
 		++m_nResourceFailuresLastTick;
 		++m_nResourceFailuresTotal;
@@ -425,6 +460,13 @@ bool Terrain3DLightmapStreamer::activate( const Ref<Terrain3DRegionLighting> &rP
 	active.m_nReceiverSignature = nSignature;
 	active.m_nReceiverCount = nReceiverCount;
 	active.m_bDesired = true;
+	for (size_t i = 0; i < m_pendingPackages.size(); ++i) {
+		if (m_pendingPackages[i].package == rPackage) {
+			active.m_memory = m_pendingPackages[i].memory;
+			m_pendingPackages.erase(m_pendingPackages.begin() + i);
+			break;
+		}
+	}
 	m_activePackages.push_back( active );
 	m_nResidentEstimatedBytes += incoming_bytes;
 	++m_nLoadsLastTick;
@@ -759,27 +801,23 @@ void Terrain3DLightmapStreamer::_bind_methods( void ) {
 	ClassDB::bind_method(
 	        D_METHOD( "update_residency", "target_position", "force" ), &Terrain3DLightmapStreamer::updateResidency, DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "suspend" ), &Terrain3DLightmapStreamer::suspend );
-	ClassDB::bind_method( D_METHOD( "set_enabled", "enabled" ), &Terrain3DLightmapStreamer::setEnabled );
-	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DLightmapStreamer::isEnabled );
-	ClassDB::bind_method( D_METHOD( "set_radius_regions", "radius" ), &Terrain3DLightmapStreamer::setRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "get_radius_regions" ), &Terrain3DLightmapStreamer::getRadiusRegions );
-	ClassDB::bind_method( D_METHOD( "set_load_budget", "budget" ), &Terrain3DLightmapStreamer::setLoadBudget );
-	ClassDB::bind_method( D_METHOD( "get_load_budget" ), &Terrain3DLightmapStreamer::getLoadBudget );
-	ClassDB::bind_method( D_METHOD( "set_unload_budget", "budget" ), &Terrain3DLightmapStreamer::setUnloadBudget );
-	ClassDB::bind_method( D_METHOD( "get_unload_budget" ), &Terrain3DLightmapStreamer::getUnloadBudget );
+
 	ClassDB::bind_method( D_METHOD( "set_residency_budget_mb", "budget_mb" ), &Terrain3DLightmapStreamer::setResidencyBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_residency_budget_mb" ), &Terrain3DLightmapStreamer::getResidencyBudgetMb );
 	ClassDB::bind_method( D_METHOD( "get_active_package_count" ), &Terrain3DLightmapStreamer::getActivePackageCount );
 	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DLightmapStreamer::getStats );
 
 	ADD_GROUP( "Residency", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
-	ADD_PROPERTY(
-	        PropertyInfo( Variant::INT, "radius_regions", PROPERTY_HINT_RANGE, "0,16,1" ), "set_radius_regions", "get_radius_regions" );
+	T3D_BIND_PROPERTY( Terrain3DLightmapStreamer, setEnabled, isEnabled, "enabled",
+	                   PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
+	T3D_BIND_PROPERTY( Terrain3DLightmapStreamer, setRadiusRegions, getRadiusRegions, "radius",
+	                   PropertyInfo( Variant::INT, "radius_regions", PROPERTY_HINT_RANGE, "0,16,1" ), "set_radius_regions", "get_radius_regions" );
 
 	ADD_GROUP( "Work Budgets", "" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "load_budget", PROPERTY_HINT_RANGE, "0,64,1" ), "set_load_budget", "get_load_budget" );
-	ADD_PROPERTY( PropertyInfo( Variant::INT, "unload_budget", PROPERTY_HINT_RANGE, "0,64,1" ), "set_unload_budget", "get_unload_budget" );
+	T3D_BIND_PROPERTY( Terrain3DLightmapStreamer, setLoadBudget, getLoadBudget, "budget",
+	                   PropertyInfo( Variant::INT, "load_budget", PROPERTY_HINT_RANGE, "0,64,1" ), "set_load_budget", "get_load_budget" );
+	T3D_BIND_PROPERTY( Terrain3DLightmapStreamer, setUnloadBudget, getUnloadBudget, "budget",
+	                   PropertyInfo( Variant::INT, "unload_budget", PROPERTY_HINT_RANGE, "0,64,1" ), "set_unload_budget", "get_unload_budget" );
 
 	ADD_GROUP( "Runtime Status", "" );
 	// Runtime counters remain available through getStats(); status fields are read-only.

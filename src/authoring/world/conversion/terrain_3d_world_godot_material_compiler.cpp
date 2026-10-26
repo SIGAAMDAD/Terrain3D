@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_hash_bytes.h"
 #include "authoring/world/conversion/terrain_3d_world_godot_converter.h"
 #include "assets/resources/terrain_3d_rendering_material.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_material_identity.h"
@@ -11,11 +12,6 @@
 #include <string.h>
 
 using namespace godot;
-
-static uint64_t t3d_world_material_hash_mix( uint64_t pHash, uint64_t pValue ) {
-	pHash ^= pValue + 0x9e3779b97f4a7c15uLL + ( pHash << 6u ) + ( pHash >> 2u );
-	return pHash;
-}
 
 static uint64_t t3d_world_material_stable_key( const Ref<Resource> &pMaterial ) {
 	return pMaterial.is_valid() ? t3d_vt_material_stable_key_from_resource_path( pMaterial->get_path() ) : 0u;
@@ -148,7 +144,7 @@ bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold( const Ref<Material
 		nKey = pExplicitMaterial.is_valid() ? ( uint64_t )pExplicitMaterial->get_instance_id()
 		                                    : ( pMaterial.is_valid() ? ( uint64_t )pMaterial->get_instance_id() : 1u );
 	}
-	nKey = t3d_world_material_hash_mix( nKey, pTier );
+	nKey = t3dHashCombine64( nKey, pTier );
 
 	for ( uint32_t i = 0u; i < m_pBuffers->nMaterialEntryCount; ++i ) {
 		if ( m_pBuffers->pMaterialEntries[i].nKey == nKey ) {

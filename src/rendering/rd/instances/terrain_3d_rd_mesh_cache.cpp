@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypes.h"
 
 #include "Terrain3DConstants.h"
@@ -692,7 +693,6 @@ uint32_t Terrain3DRdMeshCache::nextArenaCapacity( const uint32_t nRequiredBytes,
 
 // t3dRdAssetMaterialResolveContext_s centralized in Terrain3DTypes.h.
 
-
 static const Terrain3DRenderingMaterial *t3dRdResolveAssetSurfaceRenderingMaterial( const void *const pContext, const uint32_t nSurface )
 {
 	const t3dRdAssetMaterialResolveContext_t *const pResolve = (const t3dRdAssetMaterialResolveContext_t *const)( pContext );
@@ -1379,9 +1379,7 @@ bool Terrain3DRdMeshCache::upload( const t3dRdMeshSourceSnapshot_t *const pSnaps
 		return false;
 	}
 	m_nSourceGeneration = pSnapshot->m_nGeneration;
-	if ( ++m_nGeneration == 0u ) {
-		m_nGeneration = 1u;
-	}
+	m_nGeneration = t3dNextGeneration( m_nGeneration );
 	m_lastError = String();
 	return true;
 }

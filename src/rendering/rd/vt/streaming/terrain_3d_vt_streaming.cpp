@@ -292,6 +292,7 @@ static void t3d_vt_stream_record_admission_status( t3dVTStreamingState_t &rState
 
 t3dVTAdmissionStatus_t t3d_vt_streaming_admit_request_hot(
         t3dVTStreamingState_t &rState, const t3dVTRuntimeRequest_t &pRequest, const uint32_t pFrameId ) {
+	if ( rState.bQuiescing ) { return T3D_VT_ADMISSION_DEFERRED_FRAME_BUDGET; }
 	if ( !rState.bInitialized || rState.pResidency == NULL || rState.pResidency->pDatabase == NULL
 	        || rState.pResidency->pDatabase->pHeader == NULL
 	        || pRequest.nVirtualPage >= rState.pResidency->pDatabase->pHeader->nPageCount ) {
@@ -467,7 +468,7 @@ uint32_t t3d_vt_streaming_invalidate_queued_demand_hot( t3dVTStreamingState_t &r
 
 bool t3d_vt_streaming_claim_job_owner_hot( t3dVTStreamingState_t &rState, uint32_t &rJobIndex ) {
 	rJobIndex = T3D_VT_INVALID_ID;
-	if ( !rState.bInitialized || rState.nQueuedJobCount == 0u ) {
+	if ( !rState.bInitialized || rState.bQuiescing || rState.nQueuedJobCount == 0u ) {
 		return false;
 	}
 	if ( rState.nInFlightIoJobCount >= rState.Limits.nMaxInFlightIoJobs ) {
@@ -603,6 +604,29 @@ static void t3d_vt_stream_begin_upload_frame( t3dVTStreamingState_t &rState, con
 	}
 }
 
+bool t3d_vt_streaming_quiesce_package_warm( t3dVTStreamingState_t &rState ) {
+	if ( !rState.bInitialized ) { return false; }
+	rState.bQuiescing = true;
+	(void)t3d_vt_streaming_invalidate_queued_demand_hot( rState );
+	t3d_vt_stream_collect_completions_owner_hot( rState );
+	if ( rState.nInFlightIoJobCount != 0u ) { return false; }
+	for ( uint32_t i = 0u; i < rState.nReadyJobCount; ++i ) {
+		t3d_vt_stream_free_job( rState, rState.Buffers.pReadyJobs[i] );
+	}
+	rState.nReadyJobCount = 0u;
+	for ( uint32_t i = 0u; i < rState.Buffers.nScratchLaneCount; ++i ) {
+		if ( rState.Buffers.pScratchLaneOwner[i] != T3D_VT_INVALID_ID
+		        || rState.Buffers.pScratchLaneCompletion[i].load( T3D_MEMORY_ORDER_ACQUIRE ) != T3D_VT_STREAM_COMPLETION_IDLE ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+void t3d_vt_streaming_resume_package_warm( t3dVTStreamingState_t &rState ) {
+	rState.bQuiescing = false;
+}
+
 static uint32_t t3d_vt_stream_validate_completion_identity( const t3dVTStreamingState_t &pState, const t3dVTStreamJob_t &pJob ) {
 	if ( pState.pResidency == NULL || pState.pResidency->pDatabase == NULL || pState.pResidency->pDatabase->pHeader == NULL
 	        || pJob.nDatabaseGeneration != pState.pResidency->nDatabaseGeneration ) {
@@ -651,7 +675,7 @@ uint64_t t3d_vt_streaming_service_uploads_batched_hot( t3dVTStreamingState_t &rS
         t3dVTUploadCommitFn_t pUploadStage,
         t3dVTUploadBatchEndFn_t pBatchEnd,
         void *pUser ) {
-	if ( !rState.bInitialized || pUploadStage == NULL || ( pBatchBegin == NULL ) != ( pBatchEnd == NULL ) ) {
+	if ( !rState.bInitialized || rState.bQuiescing || pUploadStage == NULL || ( pBatchBegin == NULL ) != ( pBatchEnd == NULL ) ) {
 		return 0u;
 	}
 	t3d_vt_stream_collect_completions_owner_hot( rState );

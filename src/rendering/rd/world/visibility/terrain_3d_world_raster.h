@@ -58,7 +58,10 @@ typedef struct t3dPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
 	uint64_t m_nSubmitCount[T3D_RD_FORWARD_PASS_MAX]{};
 	bool m_bCurrentValid = false;
 	bool m_bInitialized = false;
+	bool m_bPersistentFrameBuffer = false;
+	bool m_bPersistentCpuBuffers = false;
 
+	bool ensureShaderCold( t3dPrimitiveClass_t primitive, t3dRdForwardShaderVariant_t variant );
 	bool ensureSetsCold( Terrain3DWorldResources &rResources,
 	        const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 	        const t3dSharedVTBindings_t &rVT,

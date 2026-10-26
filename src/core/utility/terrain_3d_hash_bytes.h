@@ -6,6 +6,19 @@
 #include <stdint.h>
 #include <string.h>
 
+EA_FORCE_INLINE uint64_t t3dHashCombine64( const uint64_t nHash, const uint64_t nValue )
+{
+	return nHash ^ ( nValue + 0x9e3779b97f4a7c15ULL + ( nHash << 6u ) + ( nHash >> 2u ) );
+}
+
+inline uint64_t t3dHashFnv1a64LittleU32( uint64_t nHash, const uint32_t nValue )
+{
+	for ( uint32_t i = 0u; i < 4u; ++i ) {
+		nHash = ( nHash ^ (uint8_t)( nValue >> ( i * 8u ) ) ) * 1099511628211ull;
+	}
+	return nHash;
+}
+
 // Integer avalanche only. Coordinate mixing, seeds and normalization are
 // domain policy and remain with each baker.
 EA_FORCE_INLINE uint32_t t3dHashAvalanche32( uint32_t nValue ) {
@@ -68,6 +81,17 @@ EA_FORCE_INLINE void t3dHashFnv1a64AppendNativeF32( uint64_t &nHash, const float
 	static_assert( sizeof( bits ) == sizeof( fValue ), "32-bit float required by native cache signatures" );
 	memcpy( &bits, &fValue, sizeof( bits ) );
 	t3dHashFnv1a64AppendNativeU32( nHash, bits );
+}
+
+// Existing VT package seed and null-input policy; persisted signatures stay unchanged.
+inline uint64_t t3dHashStableBytes( const void *pBytes, const uint64_t nBytes )
+{
+	const uint8_t *const pData = (const uint8_t *)pBytes;
+	uint64_t nHash = 1469598103934665603ull;
+	if ( pData == NULL ) {
+		return nBytes == 0u ? nHash : 0u;
+	}
+	return t3dHashFnv1a64( pData, nBytes, nHash );
 }
 
 #endif // TERRAIN3D_HASH_BYTES_H

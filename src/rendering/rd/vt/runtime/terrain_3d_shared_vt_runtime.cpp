@@ -1,4 +1,5 @@
 #include "rendering/rd/vt/runtime/terrain_3d_shared_vt_runtime.h"
+#include "core/utility/terrain_3d_generation.h"
 #include <string.h>
 using namespace godot;
 
@@ -53,7 +54,7 @@ bool Terrain3DSharedVTRuntime::refresh_shared_vt_bindings_hot() {
 	        || m_SharedVTBindings.hMipLayoutTable != next.hMipLayoutTable || m_SharedVTBindings.hTailMetadata != next.hTailMetadata;
 	uint64_t nBindingGeneration = m_SharedVTBindings.nBindingGeneration;
 	if ( bResourceChanged ) {
-		nBindingGeneration = nBindingGeneration == UINT64_MAX ? 1u : nBindingGeneration + 1u;
+		nBindingGeneration = t3dNextGeneration( nBindingGeneration );
 		if ( nBindingGeneration == 0u ) {
 			nBindingGeneration = 1u;
 		}
@@ -101,6 +102,17 @@ bool Terrain3DSharedVTRuntime::prepare_shared_vt_cpu_cold(
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
+	}
+	if (g_t3dMemoryAccount) {
+		const auto domain = g_t3dMemoryAccount->stats().domains[Terrain3DMemoryAccount::VIRTUAL_TEXTURE];
+		if (domain.limit) {
+			const uint64_t available = domain.limit > domain.committed ? domain.limit - domain.committed : 0;
+			if (!t3d_vt_fit_resource_plan_to_budget(m_Limits, m_Profile, available, Plan, nTailHeight)) {
+				g_t3dMemoryAccount->recordDenial(Terrain3DMemoryAccount::VIRTUAL_TEXTURE);
+				memset(&m_Limits, 0, sizeof(m_Limits)); memset(&m_Profile, 0, sizeof(m_Profile));
+				return false;
+			}
+		}
 	}
 	m_ePreparingSharedResourceClass = eResourceClass;
 	const uint32_t nGeneration = m_pVirtualTexture->get_startup_snapshot().m_nGeneration;
@@ -277,6 +289,29 @@ void Terrain3DSharedVTRuntime::shutdown_cold( const bool bPreserveTailStaging ) 
     memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
     memset( &m_Limits, 0, sizeof( m_Limits ) );
     memset( &m_Profile, 0, sizeof( m_Profile ) );
+}
+
+bool Terrain3DSharedVTRuntime::stagePackageWarm( const void *const pBytes, const uint64_t nBytes ) {
+	return Terrain3DRdContext::isOnRenderThread() && are_shared_resources_ready()
+	        && m_pVirtualTexture->stagePackageWarm( pBytes, nBytes );
+}
+
+bool Terrain3DSharedVTRuntime::servicePackageRepublishWarm( const uint64_t nMaxBytes, const uint32_t nMaxWorkUnits ) {
+	if ( !Terrain3DRdContext::isOnRenderThread() || !are_shared_resources_ready() ) { return false; }
+	const bool bResult = m_pVirtualTexture->servicePackageRepublishWarm( nMaxBytes, nMaxWorkUnits );
+	// Compatible publication changes table contents/counts, never resource handles.
+	if ( !m_pVirtualTexture->isPackageRepublishPendingWarm() && m_pVirtualTexture->is_initialized() ) {
+		m_SharedVTBindings.nAllocationCount = m_pVirtualTexture->getActiveAllocationCount();
+		m_SharedVTBindings.nVirtualPageCount = m_pVirtualTexture->getActiveVirtualPageCount();
+		m_SharedVTBindings.nVTPageTableGeneration = m_pVirtualTexture->get_page_table_generation();
+	}
+	return bResult;
+}
+
+void Terrain3DSharedVTRuntime::abortPackageRepublishWarm() {
+	if ( Terrain3DRdContext::isOnRenderThread() && m_pVirtualTexture != NULL ) {
+		m_pVirtualTexture->abortPackageRepublishWarm();
+	}
 }
 
 bool Terrain3DSharedVTRuntime::are_shared_resources_ready() const {
