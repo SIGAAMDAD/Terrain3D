@@ -713,6 +713,25 @@ bool Terrain3DRdShaderLibrary::beginLoadCold(
 	}
 	t3dStartupDomainRequest( m_startupState, m_nStartupGeneration, m_nShaderLoadStartUsec, m_nShaderLoadExpectedCount );
 	t3dStartupDomainSetStage( m_startupState, T3D_STARTUP_PREPARING );
+	// Every active catalog shader must be requested as a source before SPIR-V
+	// resolution begins. Check the entire table, including editor-only programs.
+	for ( uint32_t iActive = 0u; iActive < t3dRdShaderCatalogActiveCount(); ++iActive ) {
+		const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( iActive );
+		const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
+		bool bSourceRegistered = false;
+		for ( uint32_t iSource = 0u; iSource < m_nShaderSourceCount; ++iSource ) {
+			if ( String( entry.m_path ) == String( t3dRdShaderCatalogSourcePath( iSource ) ) ) {
+				bSourceRegistered = true;
+				break;
+			}
+		}
+		if ( !bSourceRegistered ) {
+			m_lastError = "Active RD shader source is missing from startup catalog: id=" +
+				String::num_int64( ( int64_t ) id ) + " path=" + String( entry.m_path );
+			++m_nShaderSourceFailureCount;
+			return abortShaderLoad();
+		}
+	}
 	ResourceLoader *const pLoader = ResourceLoader::get_singleton();
 	if ( pLoader == NULL ) {
 		m_lastError = "ResourceLoader is unavailable while requesting RD shader sources";

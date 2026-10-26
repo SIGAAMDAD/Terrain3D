@@ -12,6 +12,7 @@ static const char *const s_otherGlobalPaths[] = {
 	"res://addons/terrain_3d/rd/terrain_cluster_compact.glsl",
 	"res://addons/terrain_3d/rd/terrain_world_raster.glsl",
 	"res://addons/terrain_3d/rd/terrain_ocean.glsl",
+	"res://addons/terrain_3d/compute/terrain_brush_tiles.glsl",
 	"res://addons/terrain_3d/compute/terrain_displacement.glsl",
 	"res://addons/terrain_3d/compute/terrain_page_storage.glsl",
 	"res://addons/terrain_3d/compute/terrain_page_derived.glsl",
