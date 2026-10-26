@@ -103,12 +103,12 @@ func _on_child_entered_tree(p_node: Node) -> void:
 
 
 func _setup_child_signal(p_node: Node, helper: TransformChangedNotifier) -> void:
-	if not p_node.is_inside_tree():
+	# The deferred setup can run after the child exits or its helper is replaced.
+	if not is_instance_valid(p_node) or not is_instance_valid(helper) or not p_node.is_inside_tree() or helper.get_parent() != p_node:
 		return
-	if helper.transform_changed.is_connected(_on_child_transform_changed):
-		return
-
-	helper.transform_changed.connect(_on_child_transform_changed.bind(p_node))
+	var callback: Callable = _on_child_transform_changed.bind(p_node)
+	if not helper.transform_changed.is_connected(callback):
+		helper.transform_changed.connect(callback)
 	_update_child_offset(p_node)
 
 
@@ -118,8 +118,9 @@ func _on_child_exiting_tree(p_node: Node) -> void:
 
 	var helper := p_node.get_node_or_null(CHILD_HELPER_PATH) as TransformChangedNotifier
 	if helper:
-		if helper.transform_changed.is_connected(_on_child_transform_changed):
-			helper.transform_changed.disconnect(_on_child_transform_changed)
+		var callback: Callable = _on_child_transform_changed.bind(p_node)
+		if helper.transform_changed.is_connected(callback):
+			helper.transform_changed.disconnect(callback)
 		p_node.remove_child(helper)
 		helper.queue_free()
 

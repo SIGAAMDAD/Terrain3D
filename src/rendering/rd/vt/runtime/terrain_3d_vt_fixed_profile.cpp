@@ -4,42 +4,44 @@
 
 #define T3D_VT_MASK( channel ) T3D_VT_LOGICAL_CHANNEL_BIT( channel )
 
-
-static uint32_t t3d_vt_fixed_profile_consumer_allowed_mask( const t3dVTConsumer_t Consumer ) {
+static uint32_t t3d_vt_fixed_profile_consumer_allowed_mask(
+	const t3dVTConsumer_t Consumer ) {
 	switch ( Consumer ) {
-		case T3D_VT_CONSUMER_CLIPMAP:
-			return T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
-		case T3D_VT_CONSUMER_INSTANCE:
-			return T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
-		default:
-			return 0u;
+	case T3D_VT_CONSUMER_CLIPMAP:
+		return T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
+	case T3D_VT_CONSUMER_INSTANCE:
+		return T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
+	default:
+		return 0u;
 	}
 }
 
-static uint32_t t3d_vt_fixed_profile_consumer_required_mask( const t3dVTConsumer_t Consumer ) {
+static uint32_t t3d_vt_fixed_profile_consumer_required_mask(
+	const t3dVTConsumer_t Consumer ) {
 	switch ( Consumer ) {
-		case T3D_VT_CONSUMER_CLIPMAP:
-			return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR );
-		case T3D_VT_CONSUMER_INSTANCE:
-			return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO );
-		default:
-			return 0u;
+	case T3D_VT_CONSUMER_CLIPMAP:
+		return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR );
+	case T3D_VT_CONSUMER_INSTANCE:
+		return T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO );
+	default:
+		return 0u;
 	}
 }
 
-static uint32_t t3d_vt_fixed_profile_clamp_source_extent( const uint32_t nExtent ) {
+static uint32_t t3d_vt_fixed_profile_clamp_source_extent(
+	const uint32_t nExtent ) {
 	return nExtent > T3D_VT_MAX_AUTHORED_EXTENT ? T3D_VT_MAX_AUTHORED_EXTENT : nExtent;
 }
 
 static const t3dVTFixedProfileDesc_t s_VtFixedProfiles[T3D_VT_FIXED_PROFILE_COUNT] = {
 	// Just Make It Run: Albedo 256, PBR/Normal 128, no Height/ORM.
 	{ { 256u, 128u, 0u, 128u, 0u },
-	        T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR )
-	                | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) },
+	  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR ) |
+		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) },
 	// Low: Albedo 512, 256 secondary maps, no Height.
 	{ { 512u, 256u, 0u, 256u, 256u },
-	        T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR )
-	                | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ORM ) },
+	  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_PBR ) |
+		  T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | T3D_VT_MASK( T3D_VT_LOGICAL_CHANNEL_ORM ) },
 	// Normal: Albedo 1024, 512 secondary maps.
 	{ { 1024u, 512u, 512u, 512u, 512u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 	// High: Albedo 2048, 1024 secondary maps.
@@ -50,22 +52,27 @@ static const t3dVTFixedProfileDesc_t s_VtFixedProfiles[T3D_VT_FIXED_PROFILE_COUN
 	{ { 4096u, 4096u, 4096u, 4096u, 4096u }, T3D_VT_LOGICAL_CHANNEL_MASK_ALL },
 };
 
-const t3dVTFixedProfileDesc_t *t3d_vt_fixed_profile_get( const t3dVTFixedProfile_t Profile ) {
-	if ( ( uint32_t )( Profile ) >= T3D_VT_FIXED_PROFILE_COUNT ) {
+const t3dVTFixedProfileDesc_t *t3d_vt_fixed_profile_get(
+	const t3dVTFixedProfile_t Profile ) {
+	if ( ( uint32_t ) ( Profile ) >= T3D_VT_FIXED_PROFILE_COUNT ) {
 		return NULL;
 	}
-	return &s_VtFixedProfiles[( uint32_t )( Profile )];
+	return &s_VtFixedProfiles[( uint32_t ) ( Profile )];
 }
 
-uint32_t t3d_vt_fixed_profile_channel_extent( const t3dVTFixedProfile_t Profile, const t3dVTLogicalChannel_t Channel ) {
+uint32_t t3d_vt_fixed_profile_channel_extent(
+	const t3dVTFixedProfile_t	Profile,
+	const t3dVTLogicalChannel_t Channel ) {
 	const t3dVTFixedProfileDesc_t *const pProfile = t3d_vt_fixed_profile_get( Profile );
-	if ( pProfile == NULL || ( uint32_t )( Channel ) >= T3D_VT_LOGICAL_CHANNEL_COUNT ) {
+	if ( pProfile == NULL || ( uint32_t ) ( Channel ) >= T3D_VT_LOGICAL_CHANNEL_COUNT ) {
 		return 0u;
 	}
-	return pProfile->m_nExtent[( uint32_t )( Channel )];
+	return pProfile->m_nExtent[( uint32_t ) ( Channel )];
 }
 
-uint32_t t3d_vt_fixed_profile_mip0_pages( const t3dVTFixedProfile_t Profile, const t3dVTLogicalChannel_t Channel ) {
+uint32_t t3d_vt_fixed_profile_mip0_pages(
+	const t3dVTFixedProfile_t	Profile,
+	const t3dVTLogicalChannel_t Channel ) {
 	const uint32_t nExtent = t3d_vt_fixed_profile_channel_extent( Profile, Channel );
 	if ( nExtent == 0u ) {
 		return 0u;
@@ -73,11 +80,12 @@ uint32_t t3d_vt_fixed_profile_mip0_pages( const t3dVTFixedProfile_t Profile, con
 	return ( nExtent + T3D_VT_PAGE_INTERIOR - 1u ) / T3D_VT_PAGE_INTERIOR;
 }
 
-bool t3d_vt_fixed_profile_quality_base_mip( const t3dVTFixedProfile_t HighestProfile,
-        const t3dVTFixedProfile_t ViewProfile,
-        const t3dVTLogicalChannel_t Channel,
-        const uint32_t nMipCount,
-        uint8_t &rBaseMip ) {
+bool t3d_vt_fixed_profile_quality_base_mip(
+	const t3dVTFixedProfile_t	HighestProfile,
+	const t3dVTFixedProfile_t	ViewProfile,
+	const t3dVTLogicalChannel_t Channel,
+	const uint32_t				nMipCount,
+	uint8_t					   &rBaseMip ) {
 	rBaseMip = T3D_VT_PACK_INVALID_MIP;
 	const uint32_t nTopExtent = t3d_vt_fixed_profile_channel_extent( HighestProfile, Channel );
 	const uint32_t nTargetExtent = t3d_vt_fixed_profile_channel_extent( ViewProfile, Channel );
@@ -93,17 +101,22 @@ bool t3d_vt_fixed_profile_quality_base_mip( const t3dVTFixedProfile_t HighestPro
 	if ( nExtent != nTargetExtent || nMip >= nMipCount || nMip > 0xffu ) {
 		return false;
 	}
-	rBaseMip = ( uint8_t )nMip;
+	rBaseMip = ( uint8_t ) nMip;
 	return true;
 }
 
 bool t3d_vt_fixed_profile_validate_extent(
-        const t3dVTFixedProfile_t Profile, const t3dVTLogicalChannel_t Channel, const uint32_t nWidth, const uint32_t nHeight ) {
+	const t3dVTFixedProfile_t	Profile,
+	const t3dVTLogicalChannel_t Channel,
+	const uint32_t				nWidth,
+	const uint32_t				nHeight ) {
 	const uint32_t nExtent = t3d_vt_fixed_profile_channel_extent( Profile, Channel );
 	return nExtent > 0u && nWidth == nExtent && nHeight == nExtent;
 }
 
-uint32_t t3d_vt_fixed_profile_clipmap_mask( const t3dVTFixedProfile_t Profile, const bool bHeightEnabled ) {
+uint32_t t3d_vt_fixed_profile_clipmap_mask(
+	const t3dVTFixedProfile_t Profile,
+	const bool				  bHeightEnabled ) {
 	const t3dVTFixedProfileDesc_t *const pProfile = t3d_vt_fixed_profile_get( Profile );
 	if ( pProfile == NULL ) {
 		return 0u;
@@ -115,7 +128,10 @@ uint32_t t3d_vt_fixed_profile_clipmap_mask( const t3dVTFixedProfile_t Profile, c
 	return nMask & pProfile->m_nSupportedChannelMask & T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
 }
 
-uint32_t t3d_vt_fixed_profile_instance_mask( const t3dVTFixedProfile_t Profile, const bool bNormalEnabled, const bool bOrmEnabled ) {
+uint32_t t3d_vt_fixed_profile_instance_mask(
+	const t3dVTFixedProfile_t Profile,
+	const bool				  bNormalEnabled,
+	const bool				  bOrmEnabled ) {
 	const t3dVTFixedProfileDesc_t *const pProfile = t3d_vt_fixed_profile_get( Profile );
 	if ( pProfile == NULL ) {
 		return 0u;
@@ -130,14 +146,14 @@ uint32_t t3d_vt_fixed_profile_instance_mask( const t3dVTFixedProfile_t Profile, 
 	return nMask & pProfile->m_nSupportedChannelMask & T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
 }
 
-
-bool t3d_vt_fixed_profile_source_supports( const t3dVTFixedProfile_t Profile,
-        const t3dVTConsumer_t Consumer,
-        const uint32_t nAuthoredChannelMask,
-        const uint32_t nSourceExtent[T3D_VT_LOGICAL_CHANNEL_COUNT] ) {
+bool t3d_vt_fixed_profile_source_supports(
+	const t3dVTFixedProfile_t Profile,
+	const t3dVTConsumer_t	  Consumer,
+	const uint32_t			  nAuthoredChannelMask,
+	const uint32_t			  nSourceExtent[T3D_VT_LOGICAL_CHANNEL_COUNT] ) {
 	const t3dVTFixedProfileDesc_t *const pProfile = t3d_vt_fixed_profile_get( Profile );
-	const uint32_t nAllowedMask = t3d_vt_fixed_profile_consumer_allowed_mask( Consumer );
-	const uint32_t nRequiredMask = t3d_vt_fixed_profile_consumer_required_mask( Consumer );
+	const uint32_t						 nAllowedMask = t3d_vt_fixed_profile_consumer_allowed_mask( Consumer );
+	const uint32_t						 nRequiredMask = t3d_vt_fixed_profile_consumer_required_mask( Consumer );
 	if ( pProfile == NULL || nSourceExtent == NULL || nAllowedMask == 0u || nRequiredMask == 0u ) {
 		return false;
 	}
@@ -161,14 +177,15 @@ bool t3d_vt_fixed_profile_source_supports( const t3dVTFixedProfile_t Profile,
 	return true;
 }
 
-t3dVTFixedProfile_t t3d_vt_fixed_profile_highest_supported( const t3dVTConsumer_t Consumer,
-        const uint32_t nAuthoredChannelMask,
-        const uint32_t nSourceExtent[T3D_VT_LOGICAL_CHANNEL_COUNT] ) {
+t3dVTFixedProfile_t t3d_vt_fixed_profile_highest_supported(
+	const t3dVTConsumer_t Consumer,
+	const uint32_t		  nAuthoredChannelMask,
+	const uint32_t		  nSourceExtent[T3D_VT_LOGICAL_CHANNEL_COUNT] ) {
 	if ( nSourceExtent == NULL ) {
 		return T3D_VT_FIXED_PROFILE_INVALID;
 	}
 	for ( uint32_t iProfile = T3D_VT_FIXED_PROFILE_COUNT; iProfile > 0u; --iProfile ) {
-		const t3dVTFixedProfile_t Profile = ( t3dVTFixedProfile_t )( iProfile - 1u );
+		const t3dVTFixedProfile_t Profile = ( t3dVTFixedProfile_t ) ( iProfile - 1u );
 		if ( t3d_vt_fixed_profile_source_supports( Profile, Consumer, nAuthoredChannelMask, nSourceExtent ) ) {
 			return Profile;
 		}

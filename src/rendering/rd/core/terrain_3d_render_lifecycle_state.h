@@ -8,17 +8,4 @@
 
 #include <stdint.h>
 
-// t3dRenderLifecycleStage_e centralized in Terrain3DTypes.h.
-
-
-// t3dRenderReadyBits_e centralized in Terrain3DTypes.h.
-
-
-
-// t3dRenderLifecycleFailure_e centralized in Terrain3DTypes.h.
-
-
-// t3dRenderLifecycleStatus_s centralized in Terrain3DTypes.h.
-
-
 #endif // TERRAIN3D_RENDER_LIFECYCLE_STATE_H

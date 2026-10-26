@@ -10,11 +10,6 @@
 #include "memory/arena/terrain_3d_memory_zone.h"
 
 #include <stdint.h>
-// t3dAllocatorAllocationOrigin_e centralized in Terrain3DTypes.h.
-
-
-// t3dAllocatorOverflowPolicy_e centralized in Terrain3DTypes.h.
-
 
 // Allocator routing is explicit per Terrain3DEastlAllocator instance.
 // This header retains only allocation-origin and overflow-policy enums.

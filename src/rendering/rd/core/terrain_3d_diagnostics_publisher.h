@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <godot_cpp/variant/dictionary.hpp>
 
-
-class Terrain3DDiagnosticsPublisher {
+class Terrain3DDiagnosticsPublisher
+{
 public:
-	size_t getRetainedCpuBytes( const t3dDiagnosticInputs_t &rInputs ) const;
+	size_t			  getRetainedCpuBytes( const t3dDiagnosticInputs_t &rInputs ) const;
 	godot::Dictionary getForwardLaneDiagnostics( const t3dDiagnosticInputs_t &rInputs ) const;
 	godot::Dictionary getForwardDrawBaselineDiagnostics( const t3dDiagnosticInputs_t &rInputs ) const;
 	godot::Dictionary getDiagnostics( const t3dDiagnosticInputs_t &rInputs ) const;

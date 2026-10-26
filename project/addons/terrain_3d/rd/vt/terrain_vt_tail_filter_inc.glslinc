@@ -83,11 +83,7 @@ T3DVTBoundedFilterPlan t3d_vt_tail_filter_plan(T3DVTTailMetadata tail,
     uint tail_delta = min(resolved_mip >= tail_first_mip ? resolved_mip - tail_first_mip : 0u, tail_mip_count - 1u);
     uint first_width = max(t3d_vt_tail_width(tail), 1u);
     uint first_height = max(t3d_vt_tail_height(tail), 1u);
-    uint mip_x = 0u;
-    for (uint i = 0u; i < T3D_VT_MAX_MIPS; ++i) {
-        if (i >= tail_delta) break;
-        mip_x += max(first_width >> i, 1u);
-    }
+    uint mip_x = t3d_vt_tail_mip_offset(first_width, tail_delta);
     vec2 extent = vec2(float(max(first_width >> tail_delta, 1u)), float(max(first_height >> tail_delta, 1u)));
     vec2 origin = vec2(float(tail.atlasX + mip_x), float(tail.atlasY));
     vec2 safe_min = origin + vec2(0.5);

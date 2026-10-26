@@ -60,6 +60,15 @@ static func create_control(p_descriptor: Dictionary, p_changed: Callable) -> Con
 	return null
 
 
+# Godot uses different editability properties for buttons and SpinBox.
+# Calling Control.set("disabled", ...) on a SpinBox does not disable it.
+static func set_control_enabled(p_control: Control, p_enabled: bool) -> void:
+	if p_control is SpinBox:
+		(p_control as SpinBox).editable = p_enabled
+	elif p_control is BaseButton:
+		(p_control as BaseButton).disabled = not p_enabled
+
+
 static func sync_control(p_control: Control, p_descriptor: Dictionary, p_value: Variant) -> void:
 	if p_control is CheckBox:
 		(p_control as CheckBox).button_pressed = bool(p_value)

@@ -9,22 +9,10 @@
 #include <stdint.h>
 #include <godot_cpp/core/defs.hpp>
 
-// t3dAdaptiveBudgetValues_s centralized in Terrain3DTypes.h.
-
-
-// t3dAdaptiveBudgetLimits_s centralized in Terrain3DTypes.h.
-
-
-// t3dAdaptiveBudgetPressure_s centralized in Terrain3DTypes.h.
-
-
-// t3dAdaptiveBudgetReason_e centralized in Terrain3DTypes.h.
-
-
-// t3dAdaptiveBudgetState_s centralized in Terrain3DTypes.h.
-
-
-EA_FORCE_INLINE int t3dAdaptiveClampValue( const int nValue, const int nMinimum, const int nMaximum ) {
+EA_FORCE_INLINE int t3dAdaptiveClampValue(
+	const int nValue,
+	const int nMinimum,
+	const int nMaximum ) {
 	const int maximum = godot::MAX( nMinimum, nMaximum );
 	return godot::MAX( nMinimum, godot::MIN( nValue, maximum ) );
 }
@@ -32,7 +20,9 @@ EA_FORCE_INLINE int t3dAdaptiveClampValue( const int nValue, const int nMinimum,
 void t3dAdaptiveSanitizeLimits( t3dAdaptiveBudgetLimits_t &rLimits );
 
 EA_FORCE_INLINE void t3dAdaptiveReset(
-        const t3dAdaptiveBudgetLimits_t &rLimits, t3dAdaptiveBudgetState_t &rState, const t3dAdaptiveBudgetReason_t reason ) {
+	const t3dAdaptiveBudgetLimits_t &rLimits,
+	t3dAdaptiveBudgetState_t		&rState,
+	const t3dAdaptiveBudgetReason_t	 reason ) {
 	rState.m_effective = rLimits.m_maximum;
 	rState.m_nOverBudgetStreak = 0;
 	rState.m_nUnderBudgetStreak = 0;
@@ -40,7 +30,9 @@ EA_FORCE_INLINE void t3dAdaptiveReset(
 	rState.m_bInitialized = true;
 }
 
-inline int t3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
+inline int t3dAdaptiveDecrease(
+	const int nValue,
+	const int nMinimum ) {
 	if ( nValue <= nMinimum ) {
 		return nMinimum;
 	}
@@ -48,7 +40,9 @@ inline int t3dAdaptiveDecrease( const int nValue, const int nMinimum ) {
 	return godot::MAX( nMinimum, nValue - step );
 }
 
-inline int t3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
+inline int t3dAdaptiveIncrease(
+	const int nValue,
+	const int nMaximum ) {
 	if ( nValue >= nMaximum ) {
 		return nMaximum;
 	}
@@ -58,9 +52,9 @@ inline int t3dAdaptiveIncrease( const int nValue, const int nMaximum ) {
 
 void t3dAdaptiveClampState( const t3dAdaptiveBudgetLimits_t &rLimits, t3dAdaptiveBudgetState_t &rState );
 
-bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t &rLimits,
-        const t3dAdaptiveBudgetPressure_t &rPressure,
-        const uint64_t nMeasuredUsec,
-        t3dAdaptiveBudgetState_t &rState );
+bool t3dAdaptiveStep( const t3dAdaptiveBudgetLimits_t	&rLimits,
+					  const t3dAdaptiveBudgetPressure_t &rPressure,
+					  const uint64_t					 nMeasuredUsec,
+					  t3dAdaptiveBudgetState_t			&rState );
 
 #endif // TERRAIN3D_ADAPTIVE_BUDGET_POLICY_H

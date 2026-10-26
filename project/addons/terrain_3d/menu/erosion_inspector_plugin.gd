@@ -1,42 +1,69 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-# Adds the Terrain3D erosion workflow directly to Terrain3D's node Inspector.
+# Lightweight Terrain3D Inspector launcher. Authoring workflows use editor windows.
 @tool
 extends EditorInspectorPlugin
-
-const EROSION_PANEL_PATH: String = "res://addons/terrain_3d/menu/erosion_simulator.gd"
 
 var plugin: Terrain3DEditorPluginBase
 
 
 func _can_handle(p_object: Object) -> bool:
-	return p_object is Terrain3D
+	return p_object is Terrain3D or p_object is Terrain3DMaterial
 
 
 func _parse_begin(p_object: Object) -> void:
-	if not (p_object is Terrain3D):
+	if is_instance_valid(plugin):
+		_add_tools(p_object)
+
+
+func _add_tools(p_object: Object) -> void:
+	var terrain_node: Terrain3D = p_object as Terrain3D
+	if not is_instance_valid(terrain_node):
+		terrain_node = plugin.get_terrain()
+		if not is_instance_valid(terrain_node) or terrain_node.material != p_object:
+			return
+	var target: WeakRef = weakref(terrain_node)
+	var section: VBoxContainer = VBoxContainer.new()
+	section.add_theme_constant_override("separation", 5)
+	var header: Label = Label.new()
+	header.text = "Terrain3D Tools"
+	header.add_theme_font_size_override("font_size", 14)
+	section.add_child(header)
+
+	var actions: HFlowContainer = HFlowContainer.new()
+	actions.add_theme_constant_override("h_separation", 5)
+	actions.add_theme_constant_override("v_separation", 5)
+	section.add_child(actions)
+	for action: String in ["Paint", "Erosion...", "All Tools...", "Render Quality..."]:
+		var button: Button = Button.new()
+		button.text = action
+		button.tooltip_text = "Open %s for the selected terrain." % action.trim_suffix("...")
+		button.pressed.connect(_open_tools.bind(target, action))
+		actions.add_child(button)
+	add_custom_control(section)
+
+
+func _open_tools(p_target: WeakRef, p_action: String) -> void:
+	var terrain_node := p_target.get_ref() as Terrain3D
+	if not is_instance_valid(plugin) or not is_instance_valid(terrain_node):
 		return
-
-	# Keep the primary Terrain3D editor independent from the optional erosion UI.
-	# A bad panel script should produce an Inspector error, not disable the plugin.
-	var panel_script := load(EROSION_PANEL_PATH) as Script
-	if not is_instance_valid(panel_script):
-		_add_error_control("Terrain erosion UI could not be loaded.")
-		return
-
-	var panel: Control = panel_script.new() as Control
-	if not is_instance_valid(panel):
-		_add_error_control("Terrain erosion UI could not be instantiated.")
-		return
-	panel.set("plugin", plugin)
-	panel.set("terrain", p_object)
-	add_custom_control(panel)
+	EditorInterface.set_main_screen_editor("3D")
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(terrain_node)
+	EditorInterface.inspect_object(terrain_node)
+	# Let the selection bind the terrain before opening a dependent popup.
+	if p_action == "All Tools...":
+		plugin.call_deferred("_open_terrain_tools_menu")
+	elif p_action == "Erosion...":
+		plugin.call_deferred("open_erosion_simulator")
+	elif p_action == "Render Quality...":
+		plugin.call_deferred("open_shader_performance")
 
 
-func _add_error_control(p_message: String) -> void:
-	var error_label: Label = Label.new()
-	error_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	error_label.text = p_message
-	error_label.tooltip_text = "Check the editor Output panel for Terrain3D erosion script errors."
-	error_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.35))
-	add_custom_control(error_label)
-	push_error(p_message)
+func _parse_property(_object: Object, _type: Variant.Type, p_name: String,
+		_hint_type: PropertyHint, _hint_string: String, p_usage_flags: int, _wide: bool) -> bool:
+	# Native editors retain undo, resources, ranges and instance validation.
+	# Preserve native read-only diagnostics; suppress only obsolete aliases.
+	return p_name in [
+		"save_16_bit", "show_grid", "gi_mode", "ocean_gi_mode", "packed_pbr_single_fetch",
+	]

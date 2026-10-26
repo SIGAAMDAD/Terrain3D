@@ -129,7 +129,15 @@ This keeps dependency ownership visible at the include site and requires only `s
 
 ## Build discovery
 
-This source snapshot contains the native source tree and Godot project, not the outer native build root. The authoritative native source inventory for this snapshot is `tools/verification/source_manifest.json`; source-tree verification checks that it exactly matches the checked-in `src` tree. Full-repository SCons/Visual Studio build metadata, when present in the outer build root, must consume this same source set rather than maintain an independent stale list.
+This repository includes `SConstruct` and the Visual Studio NMake project. The P00/P01
+migration freezes the native translation units in `build/source_sets.py` instead of
+performing an unrestricted source glob. `build/tu_ownership_review.csv` records the
+planned runtime/editor source ownership but does not exclude units until P06.
+
+The native dependencies are supplied separately as `terrain3d_dependencies.zip`
+(`godot-cpp/` and `thirdparty/`). Extract it at the native build root before
+building. See `tools/dual_dll/README.md` for the three Windows x86-64 targets,
+ClassDB capture, and P00/P01 validation commands.
 
 The managed addon project is `project/Terrain3D.csproj` and targets `Godot.NET.Sdk/4.7.2` / `net8.0`; `project/Terrain3D.sln` resolves that project directly.
 
@@ -148,18 +156,18 @@ Backing-growth legality still belongs to the object that owns the storage:
 
 A steady-state regression is an **owner backing-growth/capacity miss or unexpected allocation event** during `HOT_FRAME`/`HOT_RENDER`.
 
-## Repository sustainability verification
+## Source-tree verification
 
-Run the source-tree/project acceptance gates with:
+The reconstructable checks included with this snapshot are:
 
 ```text
-python3 tools/verification/verify_source_tree_hygiene.py
-python3 tools/verification/verify_compatibility_ledger.py
-python3 tools/csharp/generate_wrappers.py --check
-python3 tools/verification/verify_header_self_sufficiency.py --godot-cpp <godot-cpp-root> --thirdparty <thirdparty-root>
+python3 tools/dual_dll/p00_snapshot.py --check
+python3 tools/dual_dll/verify_p01.py
 ```
 
-`verify_source_tree_hygiene.py` checks the frozen native source inventory, local include resolution, Godot resource/import/UID references, managed solution linkage, generated C# wrapper drift, and accidental packaged build/cache output. `verify_compatibility_ledger.py` ratchets the small set of intentionally retained serialized-migration surfaces so later cleanup does not silently delete or spread compatibility behavior.
+The source-level checks above do not compile or link the three native DLLs.
+Run the Windows/MSVC build matrix and the Godot host/ClassDB checks described
+in `tools/dual_dll/README.md` before treating the P01 runtime gate as verified.
 
 ### RenderingDevice owned-resource boundaries
 
@@ -167,7 +175,7 @@ python3 tools/verification/verify_header_self_sufficiency.py --godot-cpp <godot-
 
 ## Generated C# wrappers
 
-`tools/csharp/wrapper_manifest.json` is the source of truth for mechanical GDExtension wrapper binding glue. Regenerate after changing the mechanical wrapper surface with:
+The source README describes the C# wrapper-generation tooling used in the original outer repository. That tooling is not bundled with this source snapshot. In the complete repository, regenerate after changing the mechanical wrapper surface with:
 
 ```text
 python3 tools/csharp/generate_wrappers.py

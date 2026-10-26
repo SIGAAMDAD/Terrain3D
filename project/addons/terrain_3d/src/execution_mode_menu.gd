@@ -96,11 +96,34 @@ func _get_or_create_export_dialog() -> FileDialog:
 	return _export_dialog
 
 
+# Apply EditorSettings even when the Memory Tracker window is never opened.
+# No scene properties are written and an existing runtime-profile limit is kept.
+func _apply_saved_authoring_memory_limits(selected: Terrain3D) -> void:
+	if not Engine.is_editor_hint():
+		return
+	var settings: EditorSettings = EditorInterface.get_editor_settings()
+	var keys: PackedStringArray = PackedStringArray([
+		"terrain3d/editor_authoring/total_memory_mb",
+		"terrain3d/editor_authoring/transient_reserve_mb",
+		"terrain3d/editor_authoring/cooking_memory_mb",
+	])
+	var defaults: PackedInt32Array = PackedInt32Array([8192, 256, 0])
+	for index: int in range(keys.size()):
+		if not settings.has_setting(keys[index]):
+			settings.set_setting(keys[index], defaults[index])
+	if not selected.set_editor_authoring_memory_profile_mb(
+			int(settings.get_setting(keys[0])),
+			int(settings.get_setting(keys[1])),
+			int(settings.get_setting(keys[2]))):
+		push_warning("Terrain3D: saved editor memory limits exceed current live residency; preserving the active profile")
+
+
 func set_terrain(p_terrain: Terrain3D) -> void:
 	if is_instance_valid(terrain) and terrain.editor_execution_mode_changed.is_connected(_on_execution_mode_changed):
 		terrain.editor_execution_mode_changed.disconnect(_on_execution_mode_changed)
 	terrain = p_terrain
 	if is_instance_valid(terrain):
+		_apply_saved_authoring_memory_limits(terrain)
 		terrain.editor_execution_mode_changed.connect(_on_execution_mode_changed)
 	if is_instance_valid(_profiler_window):
 		_profiler_window.set_terrain(terrain)

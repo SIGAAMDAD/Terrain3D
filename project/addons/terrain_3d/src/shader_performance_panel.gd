@@ -302,7 +302,7 @@ func sync_from_material() -> void:
 
 func _set_controls_enabled(p_enabled: bool) -> void:
 	for control: Control in _controls:
-		control.set("disabled", not p_enabled)
+		SettingControlFactory.set_control_enabled(control, p_enabled)
 
 
 func _set_descriptor_value(p_descriptor: Dictionary, p_value: Variant) -> void:

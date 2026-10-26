@@ -17,21 +17,13 @@
 #include <stdint.h>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-
-static float t3dInstancePublicationPointRectMinDistanceSquared(
-        const Vector3 &rPoint, const float fMinX, const float fMinZ, const float fMaxX, const float fMaxZ ) {
-	const float dx = ( float )( rPoint.x ) < fMinX ? fMinX - ( float )( rPoint.x )
-	                                               : ( ( float )( rPoint.x ) > fMaxX ? ( float )( rPoint.x ) - fMaxX : 0.0f );
-	const float dz = ( float )( rPoint.z ) < fMinZ ? fMinZ - ( float )( rPoint.z )
-	                                               : ( ( float )( rPoint.z ) > fMaxZ ? ( float )( rPoint.z ) - fMaxZ : 0.0f );
-	return dx * dx + dz * dz;
-}
-
-static int t3dInstancePublicationSelectLod( const Terrain3DMeshAsset &rAsset,
-        const Vector2i &rRegionLocation,
-        const Vector2i &rCellLocation,
-        const int nCellSize,
-        const Vector3 &rTargetPosition ) {
+// LOD selection must use the same camera-to-AABB-center distance as the CPU
+// draw path and GPU compute culler. One cell publishes only one mesh LOD.
+static int t3dInstancePublicationSelectLod(
+	const Terrain3DMeshAsset &rAsset,
+	const float				  fDistanceSquared,
+	const int				  nPreviousLod,
+	const float				  fCellRadius ) {
 	const int lod_count = rAsset.getLodCount();
 	if ( lod_count <= 0 ) {
 		return -1;
@@ -45,27 +37,36 @@ static int t3dInstancePublicationSelectLod( const Terrain3DMeshAsset &rAsset,
 	if ( last_lod < first_lod ) {
 		return -1;
 	}
-
-	const float region_x = ( float )( rRegionLocation.x * T3D_REGION_WORLD_SIZE_METERS );
-	const float region_z = ( float )( rRegionLocation.y * T3D_REGION_WORLD_SIZE_METERS );
-	const float min_x = region_x + ( float )( rCellLocation.x * nCellSize );
-	const float min_z = region_z + ( float )( rCellLocation.y * nCellSize );
-	const float max_x = min_x + ( float )( nCellSize );
-	const float max_z = min_z + ( float )( nCellSize );
-	const float distance_sq = t3dInstancePublicationPointRectMinDistanceSquared( rTargetPosition, min_x, min_z, max_x, max_z );
-
+	const float margin = MAX( 0.0f, ( float ) rAsset.getFadeMargin() );
+	const float hysteresis = MAX( 1.0f, margin );
+	// Preserve the previous LOD within a hysteresis band. The previous cell
+	// is consulted only at the same publication index with matching identity.
+	if ( nPreviousLod >= first_lod && nPreviousLod <= last_lod ) {
+		const float begin = ( float ) rAsset.getLodRangeBegin( nPreviousLod );
+		const float end = ( float ) rAsset.getLodRangeEnd( nPreviousLod );
+		const float lower = MAX( 0.0f, begin - hysteresis );
+		const float upper = end > 0.001f ? end + hysteresis + ( nPreviousLod == last_lod ? fCellRadius : 0.0f ) : 0.0f;
+		if ( fDistanceSquared >= lower * lower && ( upper <= 0.001f || fDistanceSquared < upper * upper ) ) {
+			return nPreviousLod;
+		}
+	}
 	for ( int lod = first_lod; lod <= last_lod; ++lod ) {
-		const float end = ( float )( rAsset.getLodRangeEnd( lod ) );
-		if ( end <= 0.001f || distance_sq < end * end ) {
+		const float end = ( float ) rAsset.getLodRangeEnd( lod );
+		if ( end <= 0.001f || fDistanceSquared < end * end ) {
 			return lod;
 		}
 	}
-	const float last_end = ( float )( rAsset.getLodRangeEnd( last_lod ) );
-	const float fade = ( float )( rAsset.getFadeMargin() );
-	return last_end <= 0.001f || distance_sq < ( last_end + fade ) * ( last_end + fade ) ? last_lod : -1;
+	const float last_end = ( float ) rAsset.getLodRangeEnd( last_lod );
+	// Keep the cell published while any of its instances can still be inside
+	// the last LOD's range. GPU fading is evaluated per instance, not per cell.
+	const float conservative_end = last_end + margin + fCellRadius;
+	return last_end <= 0.001f || fDistanceSquared < conservative_end * conservative_end ? last_lod : -1;
 }
 
-static int t3dInstancePublicationResolveSourceLod( const Terrain3DMeshAsset &rAsset, const int nDesiredLod, const int nMinimumLod ) {
+static int t3dInstancePublicationResolveSourceLod(
+	const Terrain3DMeshAsset &rAsset,
+	const int				  nDesiredLod,
+	const int				  nMinimumLod ) {
 	for ( int lod = nDesiredLod; lod >= nMinimumLod; --lod ) {
 		if ( lod < rAsset.getLodCount() && rAsset.getMesh( lod ).is_valid() ) {
 			return lod;
@@ -74,10 +75,12 @@ static int t3dInstancePublicationResolveSourceLod( const Terrain3DMeshAsset &rAs
 	return -1;
 }
 
-static bool t3dInstancePublicationBuildConservativeSourceAabb( const Terrain3DMeshAsset &rAsset, AABB &rAabb ) {
+static bool t3dInstancePublicationBuildConservativeSourceAabb(
+	const Terrain3DMeshAsset &rAsset,
+	AABB					 &rAabb ) {
 	bool initialized = false;
 	for ( int lod = 0; lod < rAsset.getLodCount(); ++lod ) {
-		const Ref<Mesh> mesh = rAsset.getMesh( lod );
+		const Ref< Mesh > mesh = rAsset.getMesh( lod );
 		if ( mesh.is_null() ) {
 			continue;
 		}
@@ -96,7 +99,9 @@ static bool t3dInstancePublicationBuildConservativeSourceAabb( const Terrain3DMe
 }
 
 static bool t3dInstancePublicationEnsureCellBounds(
-        t3dInstanceCell_s &rCell, const AABB &rConservativeSourceAabb, t3dInstancePublicationDiagnostics_t &rDiagnostics ) {
+	t3dInstanceCell_s					&rCell,
+	const AABB							&rConservativeSourceAabb,
+	t3dInstancePublicationDiagnostics_t &rDiagnostics ) {
 	if ( t3dInstanceCellBoundsCurrent( rCell, rConservativeSourceAabb ) ) {
 		++rDiagnostics.m_nBoundsReused;
 		return rCell.m_cachedAabb.has_surface();
@@ -106,21 +111,29 @@ static bool t3dInstancePublicationEnsureCellBounds(
 	return initialized;
 }
 
-static bool t3dInstancePublicationSameLayout( const t3dRdInstanceCell_t &a, const t3dRdInstanceCell_t &b ) {
-	return a.m_nRegionX == b.m_nRegionX && a.m_nRegionZ == b.m_nRegionZ && a.m_nCellX == b.m_nCellX && a.m_nCellZ == b.m_nCellZ
-	        && a.m_nMeshAssetId == b.m_nMeshAssetId && a.m_nFirstInstance == b.m_nFirstInstance && a.m_nInstanceCount == b.m_nInstanceCount;
+static bool t3dInstancePublicationSameLayout(
+	const t3dRdInstanceCell_t &a,
+	const t3dRdInstanceCell_t &b ) {
+	return a.m_nRegionX == b.m_nRegionX && a.m_nRegionZ == b.m_nRegionZ && a.m_nCellX == b.m_nCellX &&
+		   a.m_nCellZ == b.m_nCellZ && a.m_nMeshAssetId == b.m_nMeshAssetId &&
+		   a.m_nFirstInstance == b.m_nFirstInstance && a.m_nInstanceCount == b.m_nInstanceCount;
 }
 
-static bool t3dInstancePublicationSameDescriptor( const t3dRdInstanceCell_t &a, const t3dRdInstanceCell_t &b ) {
-	return t3dInstancePublicationSameLayout( a, b ) && a.m_nMeshSourceKey == b.m_nMeshSourceKey && a.m_nLod == b.m_nLod
-	        && a.m_nRevision == b.m_nRevision && a.m_nSettingsRevision == b.m_nSettingsRevision
-	        && a.m_nVisibilityLayers == b.m_nVisibilityLayers && a.m_nFlags == b.m_nFlags && a.m_fLodBegin == b.m_fLodBegin
-	        && a.m_fLodEnd == b.m_fLodEnd && a.m_fFadeMargin == b.m_fFadeMargin && a.m_bounds.is_equal_approx( b.m_bounds )
-	        && a.m_occlusionBounds.is_equal_approx( b.m_occlusionBounds ) && a.m_nOcclusionSourceRevision == b.m_nOcclusionSourceRevision
-	        && a.m_nOcclusionProxyGeneration == b.m_nOcclusionProxyGeneration && a.m_nOcclusionProxyPolicy == b.m_nOcclusionProxyPolicy;
+static bool t3dInstancePublicationSameDescriptor(
+	const t3dRdInstanceCell_t &a,
+	const t3dRdInstanceCell_t &b ) {
+	return t3dInstancePublicationSameLayout( a, b ) && a.m_nMeshSourceKey == b.m_nMeshSourceKey &&
+		   a.m_nLod == b.m_nLod && a.m_nRevision == b.m_nRevision && a.m_nSettingsRevision == b.m_nSettingsRevision &&
+		   a.m_nVisibilityLayers == b.m_nVisibilityLayers && a.m_nFlags == b.m_nFlags &&
+		   a.m_fLodBegin == b.m_fLodBegin && a.m_fLodEnd == b.m_fLodEnd && a.m_fFadeMargin == b.m_fFadeMargin &&
+		   a.m_bounds.is_equal_approx( b.m_bounds ) && a.m_occlusionBounds.is_equal_approx( b.m_occlusionBounds ) &&
+		   a.m_nOcclusionSourceRevision == b.m_nOcclusionSourceRevision &&
+		   a.m_nOcclusionProxyGeneration == b.m_nOcclusionProxyGeneration &&
+		   a.m_nOcclusionProxyPolicy == b.m_nOcclusionProxyPolicy;
 }
 
-void t3dInstancePublicationDiagnostics_s::reset( void ) {
+void t3dInstancePublicationDiagnostics_s::reset(
+	void ) {
 	for ( int category = 0; category < 3; ++category ) {
 		m_categories[category] = t3dInstancePublicationCategoryDiagnostics_t();
 	}
@@ -148,81 +161,88 @@ void t3dInstancePublicationDiagnostics_s::reset( void ) {
 	m_nInstanceLayoutChanges = 0u;
 }
 
-typedef struct t3dInstancePublicationBuildState_s {
-
+typedef struct t3dInstancePublicationBuildState_s
+{
 	const t3dInstancePublicationBuildContext_t *m_pContext = NULL;
-	t3dRdInstanceSceneSnapshot_s *m_pSnapshot = NULL;
-	t3dInstancePublicationDiagnostics_t *m_pDiagnostics = NULL;
-	const t3dRdInstanceCell_t *m_pPreviousCells = NULL;
-	size_t m_nPreviousInstanceCount = 0u;
-	size_t m_nPreviousCellCount = 0u;
-	Ref<Terrain3DAssets> m_assets;
+	t3dRdInstanceSceneSnapshot_s			   *m_pSnapshot = NULL;
+	t3dInstancePublicationDiagnostics_t		   *m_pDiagnostics = NULL;
+	const t3dRdInstanceCell_t				   *m_pPreviousCells = NULL;
+	size_t										m_nPreviousInstanceCount = 0u;
+	size_t										m_nPreviousCellCount = 0u;
+	Ref< Terrain3DAssets >						m_assets;
 } t3dInstancePublicationBuildState_t;
 
-
-static void t3dInstancePublicationMarkUnavailableAsset( t3dInstancePublicationBuildState_t &rState,
-        const int nMeshId,
-        const bool bAssetIdValid,
-        const Ref<Terrain3DMeshAsset> &rAsset,
-        const bool bAssetEnabled,
-        const size_t nSourceCount ) {
+static void t3dInstancePublicationMarkUnavailableAsset(
+	t3dInstancePublicationBuildState_t &rState,
+	const int							nMeshId,
+	const bool							bAssetIdValid,
+	const Ref< Terrain3DMeshAsset >	   &rAsset,
+	const bool							bAssetEnabled,
+	const size_t						nSourceCount ) {
 	t3dInstancePublicationDiagnostics_t &diagnostics = *rState.m_pDiagnostics;
-	diagnostics.m_nSkippedMissingAssetRecords += ( uint64_t )( nSourceCount );
+	diagnostics.m_nSkippedMissingAssetRecords += ( uint64_t ) ( nSourceCount );
 	if ( !bAssetIdValid ) {
-		diagnostics.m_nInvalidAssetIdRecords += ( uint64_t )( nSourceCount );
+		diagnostics.m_nInvalidAssetIdRecords += ( uint64_t ) ( nSourceCount );
 		if ( diagnostics.m_nFirstInvalidAssetId < 0 ) {
 			diagnostics.m_nFirstInvalidAssetId = nMeshId;
 		}
 	} else if ( rAsset.is_null() ) {
-		diagnostics.m_nMissingAssetRecords += ( uint64_t )( nSourceCount );
+		diagnostics.m_nMissingAssetRecords += ( uint64_t ) ( nSourceCount );
 		if ( diagnostics.m_nFirstMissingAssetId < 0 ) {
 			diagnostics.m_nFirstMissingAssetId = nMeshId;
 		}
 	} else if ( !bAssetEnabled ) {
-		diagnostics.m_nDisabledAssetRecords += ( uint64_t )( nSourceCount );
+		diagnostics.m_nDisabledAssetRecords += ( uint64_t ) ( nSourceCount );
 		if ( diagnostics.m_nFirstDisabledAssetId < 0 ) {
 			diagnostics.m_nFirstDisabledAssetId = nMeshId;
 		}
 	} else {
-		diagnostics.m_nNoLodAssetRecords += ( uint64_t )( nSourceCount );
+		diagnostics.m_nNoLodAssetRecords += ( uint64_t ) ( nSourceCount );
 		if ( diagnostics.m_nFirstNoLodAssetId < 0 ) {
 			diagnostics.m_nFirstNoLodAssetId = nMeshId;
 		}
 	}
 }
 
-static bool t3dInstancePublicationAcceptCell( t3dInstancePublicationBuildState_t &rState,
-        t3dInstanceMesh_t &rMesh,
-        t3dInstanceCell_s &rSourceCell,
-        const Ref<Terrain3DMeshAsset> &rAsset,
-        const bool bAssetIdValid,
-        const bool bAssetEnabled,
-        const bool bAssetValid,
-        const t3dHLODInstancerRepresentationState_t &rHlodState,
-        bool &rHlodSourceCounted,
-        t3dInstancePublicationCategoryDiagnostics_t &rCategory,
-        const Vector2i &rRegionLocation,
-        const AABB &rConservativeSourceAabb,
-        const bool bConservativeBoundsValid,
-        int &rDesiredLod,
-        int &rSourceLod ) {
+static bool t3dInstancePublicationAcceptCell(
+	t3dInstancePublicationBuildState_t			&rState,
+	t3dInstanceMesh_t							&rMesh,
+	t3dInstanceCell_s							&rSourceCell,
+	const Ref< Terrain3DMeshAsset >				&rAsset,
+	const bool									 bAssetIdValid,
+	const bool									 bAssetEnabled,
+	const bool									 bAssetValid,
+	const t3dHLODInstancerRepresentationState_t &rHlodState,
+	bool										&rHlodSourceCounted,
+	t3dInstancePublicationCategoryDiagnostics_t &rCategory,
+	const Vector2i								&rRegionLocation,
+	const AABB									&rConservativeSourceAabb,
+	const bool									 bConservativeBoundsValid,
+	int											&rDesiredLod,
+	int											&rSourceLod ) {
 	const size_t source_count = rSourceCell.m_transforms.size();
 	if ( source_count == 0u ) {
 		return false;
 	}
 
 	t3dInstancePublicationDiagnostics_t &diagnostics = *rState.m_pDiagnostics;
-	diagnostics.m_nResidentSourceRecords += ( uint64_t )( source_count );
+	diagnostics.m_nResidentSourceRecords += ( uint64_t ) ( source_count );
 	if ( !bAssetValid ) {
-		t3dInstancePublicationMarkUnavailableAsset( rState, rMesh.m_nId, bAssetIdValid, rAsset, bAssetEnabled, source_count );
+		t3dInstancePublicationMarkUnavailableAsset( rState,
+													rMesh.m_nId,
+													bAssetIdValid,
+													rAsset,
+													bAssetEnabled,
+													source_count );
 		return false;
 	}
-	diagnostics.m_nRenderableAssetSourceRecords += ( uint64_t )( source_count );
+	diagnostics.m_nRenderableAssetSourceRecords += ( uint64_t ) ( source_count );
 
 	if ( rHlodState.m_nMinimumLevel > 0u ) {
 		if ( !rHlodSourceCounted ) {
 			++rCategory.m_nHlodEligibleSources;
-			if ( rHlodState.m_nActiveLevel >= rHlodState.m_nMinimumLevel && rHlodState.m_nResidentLevel >= rHlodState.m_nMinimumLevel ) {
+			if ( rHlodState.m_nActiveLevel >= rHlodState.m_nMinimumLevel &&
+				 rHlodState.m_nResidentLevel >= rHlodState.m_nMinimumLevel ) {
 				++rCategory.m_nHlodActiveReplacements;
 			}
 			rHlodSourceCounted = true;
@@ -237,7 +257,7 @@ static bool t3dInstancePublicationAcceptCell( t3dInstancePublicationBuildState_t
 		if ( active_replacement && !resident_replacement ) {
 			++rCategory.m_nHlodTransitionGapErrors;
 			UtilityFunctions::push_error(
-			        "Terrain3DInstancePublicationBuilder: HLOD detail suppression requested without resident replacement" );
+				"Terrain3DInstancePublicationBuilder: HLOD detail suppression requested without resident replacement" );
 		}
 		++rCategory.m_nHlodDetailRetainedMissingProxy;
 		if ( retiring_replacement && !active_replacement ) {
@@ -249,15 +269,38 @@ static bool t3dInstancePublicationAcceptCell( t3dInstancePublicationBuildState_t
 		++rCategory.m_nVisibilityLayerFilteredCells;
 		return false;
 	}
-	rDesiredLod = t3dInstancePublicationSelectLod( *rAsset.ptr(),
-	        rRegionLocation,
-	        rSourceCell.m_location,
-	        MAX( rState.m_pContext->m_nCellSize, 1 ),
-	        rState.m_pContext->m_targetPosition );
+	if ( !bConservativeBoundsValid ||
+		 !t3dInstancePublicationEnsureCellBounds( rSourceCell, rConservativeSourceAabb, diagnostics ) ) {
+		++rCategory.m_nLodMissingSourceSkips;
+		return false;
+	}
+	const Vector3 region_offset( ( float ) rRegionLocation.x * T3D_REGION_WORLD_SIZE_METERS,
+								 0.0f,
+								 ( float ) rRegionLocation.y * T3D_REGION_WORLD_SIZE_METERS );
+	const Vector3 cell_center = rSourceCell.m_cachedAabb.get_center() + region_offset;
+	const float	  distance_sq = ( float ) cell_center.distance_squared_to( rState.m_pContext->m_targetPosition );
+	int			  previous_lod = -1;
+	const size_t  output_cell = rState.m_pSnapshot->m_cells.size();
+	if ( output_cell < rState.m_nPreviousCellCount ) {
+		const t3dRdInstanceCell_t &previous = rState.m_pPreviousCells[output_cell];
+		if ( previous.m_nRegionX == rRegionLocation.x && previous.m_nRegionZ == rRegionLocation.y &&
+			 previous.m_nCellX == rSourceCell.m_location.x && previous.m_nCellZ == rSourceCell.m_location.y &&
+			 previous.m_nMeshAssetId == ( uint16_t ) rMesh.m_nId ) {
+			// Source-LOD fallback can differ from the selected range; only
+			// reuse it for hysteresis when the stored source mesh matches.
+			if ( previous.m_nLod >= 0 && previous.m_nLod < rAsset->getLodCount() &&
+				 rAsset->getMesh( previous.m_nLod ).is_valid() ) {
+				previous_lod = previous.m_nLod;
+			}
+		}
+	}
+	const float cell_radius = ( float ) rSourceCell.m_cachedAabb.size.length() * 0.5f;
+	rDesiredLod = t3dInstancePublicationSelectLod( *rAsset.ptr(), distance_sq, previous_lod, cell_radius );
 	if ( rDesiredLod < 0 ) {
 		return false;
 	}
-	const int minimum_source_lod = rAsset->getCastShadows() == s_shadowCastingOnly ? MAX( rAsset->getShadowImpostor(), 0 ) : 0;
+	const int minimum_source_lod =
+		rAsset->getCastShadows() == s_shadowCastingOnly ? MAX( rAsset->getShadowImpostor(), 0 ) : 0;
 	rSourceLod = t3dInstancePublicationResolveSourceLod( *rAsset.ptr(), rDesiredLod, minimum_source_lod );
 	if ( rSourceLod < 0 ) {
 		++rCategory.m_nLodMissingSourceSkips;
@@ -266,49 +309,54 @@ static bool t3dInstancePublicationAcceptCell( t3dInstancePublicationBuildState_t
 	if ( rSourceLod != rDesiredLod ) {
 		++rCategory.m_nLodFallbacks;
 	}
-	const Ref<Mesh> source_mesh = rAsset->getMesh( rSourceLod );
+	const Ref< Mesh > source_mesh = rAsset->getMesh( rSourceLod );
 	if ( source_mesh.is_null() || !bConservativeBoundsValid ) {
 		++rCategory.m_nLodMissingSourceSkips;
 		return false;
 	}
-	if ( source_count > UINT32_MAX || rState.m_pSnapshot->m_instances.size() + source_count > rState.m_pSnapshot->m_instances.capacity()
-	        || rState.m_pSnapshot->m_cells.size() >= rState.m_pSnapshot->m_cells.capacity() ) {
+	if ( source_count > UINT32_MAX ||
+		 rState.m_pSnapshot->m_instances.size() + source_count > rState.m_pSnapshot->m_instances.capacity() ||
+		 rState.m_pSnapshot->m_cells.size() >= rState.m_pSnapshot->m_cells.capacity() ) {
 		UtilityFunctions::push_error( "Terrain3DInstancePublicationBuilder: fixed snapshot capacity exceeded" );
-		return false;
-	}
-	if ( !t3dInstancePublicationEnsureCellBounds( rSourceCell, rConservativeSourceAabb, diagnostics ) ) {
-		++rCategory.m_nLodMissingSourceSkips;
 		return false;
 	}
 	return true;
 }
 
-static void t3dInstancePublicationPopulateCell( t3dInstancePublicationBuildState_t &rState,
-        const t3dInstanceMesh_t &rMesh,
-        const t3dInstanceCell_s &rSourceCell,
-        const Ref<Terrain3DMeshAsset> &rAsset,
-        const Vector2i &rRegionLocation,
-        const Vector3 &rRegionOffset,
-        const int nDesiredLod,
-        const int nSourceLod,
-        t3dInstancePublicationCategoryDiagnostics_t &rCategory,
-        t3dRdInstanceCell_t &rCell ) {
+static void t3dInstancePublicationPopulateCell(
+	t3dInstancePublicationBuildState_t			&rState,
+	const t3dInstanceMesh_t						&rMesh,
+	const t3dInstanceCell_s						&rSourceCell,
+	const Ref< Terrain3DMeshAsset >				&rAsset,
+	const Vector2i								&rRegionLocation,
+	const Vector3								&rRegionOffset,
+	const int									 nDesiredLod,
+	const int									 nSourceLod,
+	t3dInstancePublicationCategoryDiagnostics_t &rCategory,
+	t3dRdInstanceCell_t							&rCell ) {
 	rCell.m_nRegionX = rRegionLocation.x;
 	rCell.m_nRegionZ = rRegionLocation.y;
-	rCell.m_nCellX = ( int16_t )( CLAMP( rSourceCell.m_location.x, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
-	rCell.m_nCellZ = ( int16_t )( CLAMP( rSourceCell.m_location.y, ( int )( INT16_MIN ), ( int )( INT16_MAX ) ) );
-	rCell.m_nMeshAssetId = ( uint16_t )( rMesh.m_nId );
-	rCell.m_nLod = ( int16_t )( nSourceLod );
+	rCell.m_nCellX = ( int16_t ) ( CLAMP( rSourceCell.m_location.x, ( int ) ( INT16_MIN ), ( int ) ( INT16_MAX ) ) );
+	rCell.m_nCellZ = ( int16_t ) ( CLAMP( rSourceCell.m_location.y, ( int ) ( INT16_MIN ), ( int ) ( INT16_MAX ) ) );
+	rCell.m_nMeshAssetId = ( uint16_t ) ( rMesh.m_nId );
+	rCell.m_nLod = ( int16_t ) ( nSourceLod );
 	rCell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( rCell.m_nMeshAssetId, nSourceLod );
-	rCell.m_nFirstInstance = ( uint32_t )( rState.m_pSnapshot->m_instances.size() );
-	rCell.m_nInstanceCount = ( uint32_t )( rSourceCell.m_transforms.size() );
+	rCell.m_nFirstInstance = ( uint32_t ) ( rState.m_pSnapshot->m_instances.size() );
+	rCell.m_nInstanceCount = ( uint32_t ) ( rSourceCell.m_transforms.size() );
 	rCell.m_nRevision = rSourceCell.m_nRevision;
-	rCell.m_nSettingsRevision = rState.m_pContext->m_pMeshSettingsRevision ? rState.m_pContext->m_pMeshSettingsRevision[rMesh.m_nId] : 0u;
+	rCell.m_nSettingsRevision =
+		rState.m_pContext->m_pMeshSettingsRevision ? rState.m_pContext->m_pMeshSettingsRevision[rMesh.m_nId] : 0u;
 	rCell.m_nVisibilityLayers = rAsset->getVisibilityLayers();
-	rCell.m_nFlags = t3dRdInstanceCategoryFlags( ( int32_t )( rAsset->getInstanceCategory() ) ) | T3D_RD_INSTANCE_LOD_PRESELECTED;
-	rCell.m_fLodBegin = ( float )( rAsset->getLodRangeBegin( nDesiredLod ) );
-	rCell.m_fLodEnd = ( float )( rAsset->getLodRangeEnd( nDesiredLod ) );
-	rCell.m_fFadeMargin = ( float )( rAsset->getFadeMargin() );
+	rCell.m_nFlags =
+		t3dRdInstanceCategoryFlags( ( int32_t ) ( rAsset->getInstanceCategory() ) ) | T3D_RD_INSTANCE_LOD_PRESELECTED;
+	// Single-LOD publication has no overlapping outgoing/incoming cell.
+	// Only fade the final range to zero, after its actual selection cutoff.
+	rCell.m_fLodBegin = 0.0f;
+	rCell.m_fFadeMargin = MAX( 0.0f, ( float ) rAsset->getFadeMargin() );
+	const int final_lod =
+		MIN( MIN( rAsset->getLastLod(), rAsset->getLodCount() - 1 ), rAsset->getCategoryMaximumLodCount() - 1 );
+	const float selected_end = ( float ) rAsset->getLodRangeEnd( nDesiredLod );
+	rCell.m_fLodEnd = nDesiredLod == final_lod && selected_end > 0.001f ? selected_end + rCell.m_fFadeMargin : 0.0f;
 	if ( rCell.m_fFadeMargin > 0.0f ) {
 		++rCategory.m_nFadeActiveCells;
 	}
@@ -329,18 +377,19 @@ static void t3dInstancePublicationPopulateCell( t3dInstancePublicationBuildState
 	rCell.m_bounds.position += rRegionOffset;
 }
 
-static bool t3dInstancePublicationCommitCell( t3dInstancePublicationBuildState_t &rState,
-        const t3dInstanceCell_s &rSourceCell,
-        const Vector3 &rRegionOffset,
-        const int nSourceLod,
-        t3dInstancePublicationCategoryDiagnostics_t &rCategory,
-        t3dRdInstanceCell_t &rCell ) {
-	t3dRdInstanceSceneSnapshot_s &snapshot = *rState.m_pSnapshot;
+static bool t3dInstancePublicationCommitCell(
+	t3dInstancePublicationBuildState_t			&rState,
+	const t3dInstanceCell_s						&rSourceCell,
+	const Vector3								&rRegionOffset,
+	const int									 nSourceLod,
+	t3dInstancePublicationCategoryDiagnostics_t &rCategory,
+	t3dRdInstanceCell_t							&rCell ) {
+	t3dRdInstanceSceneSnapshot_s		&snapshot = *rState.m_pSnapshot;
 	t3dInstancePublicationDiagnostics_t &diagnostics = *rState.m_pDiagnostics;
-	const size_t source_count = rSourceCell.m_transforms.size();
-	const size_t output_cell = snapshot.m_cells.size();
-	t3dRdInstanceCell_t previous_cell;
-	const bool has_previous = output_cell < rState.m_nPreviousCellCount;
+	const size_t						 source_count = rSourceCell.m_transforms.size();
+	const size_t						 output_cell = snapshot.m_cells.size();
+	t3dRdInstanceCell_t					 previous_cell;
+	const bool							 has_previous = output_cell < rState.m_nPreviousCellCount;
 	if ( has_previous ) {
 		previous_cell = rState.m_pPreviousCells[output_cell];
 	}
@@ -350,20 +399,23 @@ static bool t3dInstancePublicationCommitCell( t3dInstancePublicationBuildState_t
 		if ( !snapshot.m_instances.resizeUninitialized( snapshot.m_instances.size() + source_count ) ) {
 			return false;
 		}
-		diagnostics.m_nPackedRecordsReused += ( uint64_t )( source_count );
+		diagnostics.m_nPackedRecordsReused += ( uint64_t ) ( source_count );
 	} else {
 		for ( size_t iInstance = 0u; iInstance < source_count; ++iInstance ) {
 			Transform3D transform = rSourceCell.getTransform( iInstance );
 			transform.origin += rRegionOffset;
-			const uint32_t color = iInstance < rSourceCell.m_colors.size() ? rSourceCell.m_colors[iInstance] : T3D_INSTANCE_WHITE_RGBA8;
+			const uint32_t color =
+				iInstance < rSourceCell.m_colors.size() ? rSourceCell.m_colors[iInstance] : T3D_INSTANCE_WHITE_RGBA8;
 			if ( !snapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform, color ) ) ) {
-				UtilityFunctions::push_error( "Terrain3DInstancePublicationBuilder: record storage exceeded fixed capacity" );
+				UtilityFunctions::push_error(
+					"Terrain3DInstancePublicationBuilder: record storage exceeded fixed capacity" );
 				return false;
 			}
 		}
-		diagnostics.m_nPackedRecordsRebuilt += ( uint64_t )( source_count );
+		diagnostics.m_nPackedRecordsRebuilt += ( uint64_t ) ( source_count );
 		if ( same_layout ) {
-			if ( !snapshot.m_dirtyRanges.pushBack( t3dRdInstanceDirtyRange_t{ rCell.m_nFirstInstance, rCell.m_nInstanceCount } ) ) {
+			if ( !snapshot.m_dirtyRanges.pushBack(
+					 t3dRdInstanceDirtyRange_t{ rCell.m_nFirstInstance, rCell.m_nInstanceCount } ) ) {
 				return false;
 			}
 			++diagnostics.m_nDirtyRecordRanges;
@@ -374,12 +426,13 @@ static bool t3dInstancePublicationCommitCell( t3dInstancePublicationBuildState_t
 	if ( !same_layout ) {
 		snapshot.m_bInstanceLayoutChanged = true;
 		snapshot.m_bTopologyChanged = true;
-	} else if ( previous_cell.m_nMeshSourceKey != rCell.m_nMeshSourceKey || previous_cell.m_nLod != rCell.m_nLod
-	        || previous_cell.m_nSettingsRevision != rCell.m_nSettingsRevision || previous_cell.m_nFlags != rCell.m_nFlags ) {
+	} else if ( previous_cell.m_nMeshSourceKey != rCell.m_nMeshSourceKey || previous_cell.m_nLod != rCell.m_nLod ||
+				previous_cell.m_nSettingsRevision != rCell.m_nSettingsRevision ||
+				previous_cell.m_nFlags != rCell.m_nFlags ) {
 		snapshot.m_bTopologyChanged = true;
 	}
 	if ( descriptor_changed ) {
-		if ( !snapshot.m_dirtyCells.pushBack( ( uint32_t )( output_cell ) ) ) {
+		if ( !snapshot.m_dirtyCells.pushBack( ( uint32_t ) ( output_cell ) ) ) {
 			return false;
 		}
 		if ( reuse_records ) {
@@ -397,54 +450,67 @@ static bool t3dInstancePublicationCommitCell( t3dInstancePublicationBuildState_t
 	} else {
 		++rCategory.m_nPublishedHigherLodCells;
 	}
-	diagnostics.m_nPublishedRecords += ( uint64_t )( source_count );
+	diagnostics.m_nPublishedRecords += ( uint64_t ) ( source_count );
 	++diagnostics.m_nPublishedCells;
 	return true;
 }
 
-static bool t3dInstancePublicationBuildMesh( t3dInstancePublicationBuildState_t &rState,
-        t3dInstanceMesh_t &rMesh,
-        const Vector2i &rRegionLocation,
-        const Vector3 &rRegionOffset ) {
-	const bool asset_id_valid = rMesh.m_nId >= 0 && rMesh.m_nId < T3D_MAX_MESH_ASSETS;
-	const Ref<Terrain3DMeshAsset> asset = asset_id_valid ? rState.m_assets->getMeshAsset( rMesh.m_nId ) : Ref<Terrain3DMeshAsset>();
-	const bool asset_enabled = asset.is_valid() && asset->isEnabled();
-	const bool asset_valid = asset_enabled && asset->getLodCount() > 0;
-	const uint32_t category_index = asset_valid ? t3dRdInstanceCategoryIndex( ( int32_t )( asset->getInstanceCategory() ) ) : 0u;
+static bool t3dInstancePublicationBuildMesh(
+	t3dInstancePublicationBuildState_t &rState,
+	t3dInstanceMesh_t				   &rMesh,
+	const Vector2i					   &rRegionLocation,
+	const Vector3					   &rRegionOffset ) {
+	const bool						asset_id_valid = rMesh.m_nId >= 0 && rMesh.m_nId < T3D_MAX_MESH_ASSETS;
+	const Ref< Terrain3DMeshAsset > asset =
+		asset_id_valid ? rState.m_assets->getMeshAsset( rMesh.m_nId ) : Ref< Terrain3DMeshAsset >();
+	const bool	   asset_enabled = asset.is_valid() && asset->isEnabled();
+	const bool	   asset_valid = asset_enabled && asset->getLodCount() > 0;
+	const uint32_t category_index =
+		asset_valid ? t3dRdInstanceCategoryIndex( ( int32_t ) ( asset->getInstanceCategory() ) ) : 0u;
 	t3dInstancePublicationCategoryDiagnostics_t &category = rState.m_pDiagnostics->m_categories[category_index];
-	t3dHLODInstancerRepresentationState_t hlod_state;
-	if ( asset_valid && rState.m_pContext->m_pHlodStreamer && asset->getInstanceCategory() != INSTANCE_CATEGORY_CLUTTER ) {
-		hlod_state = rState.m_pContext->m_pHlodStreamer->getInstancerRepresentationState( rRegionLocation, rMesh.m_nId );
+	t3dHLODInstancerRepresentationState_t		 hlod_state;
+	if ( asset_valid && rState.m_pContext->m_pHlodStreamer &&
+		 asset->getInstanceCategory() != INSTANCE_CATEGORY_CLUTTER ) {
+		hlod_state =
+			rState.m_pContext->m_pHlodStreamer->getInstancerRepresentationState( rRegionLocation, rMesh.m_nId );
 	}
-	bool hlod_source_counted = false;
-	AABB conservative_source_aabb;
+	bool	   hlod_source_counted = false;
+	AABB	   conservative_source_aabb;
 	const bool conservative_bounds_valid =
-	        asset_valid && t3dInstancePublicationBuildConservativeSourceAabb( *asset.ptr(), conservative_source_aabb );
+		asset_valid && t3dInstancePublicationBuildConservativeSourceAabb( *asset.ptr(), conservative_source_aabb );
 
 	for ( size_t iCell = 0u; iCell < rMesh.m_cells.size(); ++iCell ) {
 		t3dInstanceCell_s &source_cell = rMesh.m_cells[iCell];
-		int desired_lod = -1;
-		int source_lod = -1;
+		int				   desired_lod = -1;
+		int				   source_lod = -1;
 		if ( !t3dInstancePublicationAcceptCell( rState,
-		             rMesh,
-		             source_cell,
-		             asset,
-		             asset_id_valid,
-		             asset_enabled,
-		             asset_valid,
-		             hlod_state,
-		             hlod_source_counted,
-		             category,
-		             rRegionLocation,
-		             conservative_source_aabb,
-		             conservative_bounds_valid,
-		             desired_lod,
-		             source_lod ) ) {
+												rMesh,
+												source_cell,
+												asset,
+												asset_id_valid,
+												asset_enabled,
+												asset_valid,
+												hlod_state,
+												hlod_source_counted,
+												category,
+												rRegionLocation,
+												conservative_source_aabb,
+												conservative_bounds_valid,
+												desired_lod,
+												source_lod ) ) {
 			continue;
 		}
 		t3dRdInstanceCell_t cell;
-		t3dInstancePublicationPopulateCell(
-		        rState, rMesh, source_cell, asset, rRegionLocation, rRegionOffset, desired_lod, source_lod, category, cell );
+		t3dInstancePublicationPopulateCell( rState,
+											rMesh,
+											source_cell,
+											asset,
+											rRegionLocation,
+											rRegionOffset,
+											desired_lod,
+											source_lod,
+											category,
+											cell );
 		if ( !t3dInstancePublicationCommitCell( rState, source_cell, rRegionOffset, source_lod, category, cell ) ) {
 			return false;
 		}
@@ -452,7 +518,9 @@ static bool t3dInstancePublicationBuildMesh( t3dInstancePublicationBuildState_t 
 	return true;
 }
 
-static bool t3dInstancePublicationBuildRegion( t3dInstancePublicationBuildState_t &rState, Terrain3DRegion *const pRegion ) {
+static bool t3dInstancePublicationBuildRegion(
+	t3dInstancePublicationBuildState_t &rState,
+	Terrain3DRegion *const				pRegion ) {
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return true;
 	}
@@ -461,8 +529,8 @@ static bool t3dInstancePublicationBuildRegion( t3dInstancePublicationBuildState_
 		return true;
 	}
 	const Vector2i region_location = pRegion->getLocation();
-	if ( rState.m_pContext->m_bRespectRegionResidency
-	        && rState.m_pContext->m_pTerrain->getRegionStreamingStateInternal( region_location ) < TERRAIN3D_REGION_STREAMING_HOT ) {
+	if ( rState.m_pContext->m_bRespectRegionResidency && rState.m_pContext->m_pTerrain->getRegionStreamingStateInternal(
+															 region_location ) < TERRAIN3D_REGION_STREAMING_HOT ) {
 		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
 			for ( size_t iCell = 0u; iCell < pStore->meshes()[iMesh].m_cells.size(); ++iCell ) {
 				if ( !pStore->meshes()[iMesh].m_cells[iCell].m_transforms.empty() ) {
@@ -472,9 +540,10 @@ static bool t3dInstancePublicationBuildRegion( t3dInstancePublicationBuildState_
 		}
 		return true;
 	}
-	const real_t region_world_size = ( real_t )( T3D_REGION_WORLD_SIZE_METERS );
-	const Vector3 region_offset(
-	        ( real_t )( region_location.x ) * region_world_size, 0.0, ( real_t )( region_location.y ) * region_world_size );
+	const real_t  region_world_size = ( real_t ) ( T3D_REGION_WORLD_SIZE_METERS );
+	const Vector3 region_offset( ( real_t ) ( region_location.x ) * region_world_size,
+								 0.0,
+								 ( real_t ) ( region_location.y ) * region_world_size );
 	for ( size_t iMesh = 0u; iMesh < pStore->meshesMut().size(); ++iMesh ) {
 		if ( !t3dInstancePublicationBuildMesh( rState, pStore->meshesMut()[iMesh], region_location, region_offset ) ) {
 			return false;
@@ -483,9 +552,11 @@ static bool t3dInstancePublicationBuildRegion( t3dInstancePublicationBuildState_
 	return true;
 }
 
-static void t3dInstancePublicationFinalizeSnapshot( t3dInstancePublicationBuildState_t &rState ) {
+static void t3dInstancePublicationFinalizeSnapshot(
+	t3dInstancePublicationBuildState_t &rState ) {
 	t3dRdInstanceSceneSnapshot_s &snapshot = *rState.m_pSnapshot;
-	if ( rState.m_nPreviousInstanceCount != snapshot.m_instances.size() || rState.m_nPreviousCellCount != snapshot.m_cells.size() ) {
+	if ( rState.m_nPreviousInstanceCount != snapshot.m_instances.size() ||
+		 rState.m_nPreviousCellCount != snapshot.m_cells.size() ) {
 		snapshot.m_bInstanceLayoutChanged = true;
 		snapshot.m_bTopologyChanged = true;
 	}
@@ -496,9 +567,10 @@ static void t3dInstancePublicationFinalizeSnapshot( t3dInstancePublicationBuildS
 	}
 }
 
-bool Terrain3DInstancePublicationBuilder::build( const t3dInstancePublicationBuildContext_t &rContext,
-        t3dRdInstanceSceneSnapshot_s &rSnapshot,
-        t3dInstancePublicationDiagnostics_t &rDiagnostics ) {
+bool Terrain3DInstancePublicationBuilder::build(
+	const t3dInstancePublicationBuildContext_t &rContext,
+	t3dRdInstanceSceneSnapshot_s			   &rSnapshot,
+	t3dInstancePublicationDiagnostics_t		   &rDiagnostics ) {
 	rDiagnostics.reset();
 	t3dInstancePublicationBuildState_t state;
 	state.m_pContext = &rContext;
@@ -515,7 +587,8 @@ bool Terrain3DInstancePublicationBuilder::build( const t3dInstancePublicationBui
 	rSnapshot.m_bInstanceLayoutChanged = state.m_nPreviousInstanceCount == 0u && state.m_nPreviousCellCount == 0u;
 	rSnapshot.m_bTopologyChanged = rSnapshot.m_bInstanceLayoutChanged;
 	rSnapshot.m_nGeneration = rContext.m_nGeneration;
-	if ( !rContext.m_pTerrain || !rContext.m_pTerrain->dataObject() || rContext.m_pTerrain->assetsResource().is_null() ) {
+	if ( !rContext.m_pTerrain || !rContext.m_pTerrain->dataObject() ||
+		 rContext.m_pTerrain->assetsResource().is_null() ) {
 		if ( state.m_nPreviousInstanceCount != 0u || state.m_nPreviousCellCount != 0u ) {
 			rSnapshot.m_bInstanceLayoutChanged = true;
 			rSnapshot.m_bTopologyChanged = true;
@@ -534,7 +607,7 @@ bool Terrain3DInstancePublicationBuilder::build( const t3dInstancePublicationBui
 		}
 		return true;
 	}
-	Terrain3DData *const pData = rContext.m_pTerrain->dataObject();
+	Terrain3DData *const		  pData = rContext.m_pTerrain->dataObject();
 	Terrain3DRegion *const *const ppRegions = pData->getRegionPtrMapInternal();
 	for ( int iRegion = 0; iRegion < T3D_REGION_SLOTS; ++iRegion ) {
 		if ( !t3dInstancePublicationBuildRegion( state, ppRegions[iRegion] ) ) {

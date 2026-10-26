@@ -1,12 +1,100 @@
+# Doom 3-derived first-party C++17; NEO Source Formatting Spec revision 3.1.
+# clang-format 19+ (20/21 recommended).
+#
+# REQUIRED SIGNATURE: keep the opening '(' attached to the method name:
+#   void idThing::Update(
+#       int frameTime
+#   ) {
+# BreakFunctionDefinitionParameters approximates the required parameter
+# layout. clang-format cannot guarantee this expanded form for every syntax
+# variation (including no-argument definitions and initializers). Manually
+# inspect resulting definitions; protect any exact signatures when necessary.
+# Enum/struct typedef grammar and repository architecture need separate checks.
+
 BasedOnStyle: LLVM
-UseTab: ForIndentation
-IndentWidth: 4
+Language: Cpp
+Standard: c++17
+
+# Doom 3 indentation / tabular declarations.
+UseTab: Always
 TabWidth: 4
-ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: false
+IndentCaseBlocks: false
+IndentPPDirectives: None
 NamespaceIndentation: None
+
+# Class/struct/enum definitions: brace on next line.
+# Function definitions and control flow: brace on the closing line.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Never
+  AfterEnum: true
+  AfterFunction: false
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+
+# Doom 3 argument/control spacing: Foo( value ), if ( value ) { ... }.
+SpaceBeforeParens: ControlStatements
+SpacesInParens: Custom
+SpacesInParensOptions:
+  InCStyleCasts: true
+  InConditionalStatements: true
+  InEmptyParentheses: false
+  Other: true
+SpaceBeforeAssignmentOperators: true
+SpacesInAngles: Always
+SpaceAfterTemplateKeyword: false
+SpaceBeforeSquareBrackets: false
+SpacesInSquareBrackets: false
+SpaceBeforeCpp11BracedList: false
+SpaceAfterCStyleCast: true
+
+# Legacy pointer/reference spelling and declaration alignment.
+DerivePointerAlignment: false
 PointerAlignment: Right
-AllowShortFunctionsOnASingleLine: Empty
-AllowShortLambdasOnASingleLine: None
+ReferenceAlignment: Pointer
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments: None
+AlignConsecutiveMacros: Consecutive
+AlignEscapedNewlines: Right
+
+# Avoid compacting executable bodies and limit unrelated reflow.
+AllowShortFunctionsOnASingleLine: None
 AllowShortBlocksOnASingleLine: Never
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: false
+BinPackParameters: false
+# Keep Name( attached; break after it and use one parameter per line.
+# BraceWrapping.AfterFunction=false prefers the closing ) { form.
+BreakFunctionDefinitionParameters: true
+BreakBeforeBinaryOperators: None
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: Never
+ColumnLimit: 120
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Preserve engine ordering, banners, registration tables and include groups.
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false
+FixNamespaceComments: false
+SortUsingDeclarations: Never

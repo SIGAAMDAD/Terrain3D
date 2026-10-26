@@ -42,12 +42,29 @@ static func tooltip_for_key(p_key: String) -> String:
 static func descriptors_for_class(p_class_name: String, p_group_prefixes: Array = []) -> Array[Dictionary]:
 	_ensure_loaded()
 	var result: Array[Dictionary] = []
+	var native_group: String = "General"
+	var native_subgroup: String = ""
 	for property_info: Dictionary in ClassDB.class_get_property_list(StringName(p_class_name), true):
 		var property_name: String = str(property_info.get("name", ""))
-		if property_name.is_empty():
+		var usage: int = int(property_info.get("usage", 0))
+		if usage & PROPERTY_USAGE_GROUP:
+			native_group = property_name
+			native_subgroup = ""
+			continue
+		if usage & PROPERTY_USAGE_SUBGROUP:
+			native_subgroup = property_name
+			continue
+		if property_name.is_empty() or not (usage & PROPERTY_USAGE_EDITOR) or (usage & PROPERTY_USAGE_READ_ONLY):
 			continue
 		var record: Dictionary = get_record(p_class_name, StringName(property_name))
-		if record.is_empty() or str(record.get("state", "")) != "editable" or str(record.get("visibility", "hidden")) == "hidden":
+		if record.is_empty():
+			# New native settings remain available before authored metadata catches up.
+			var native_path: String = native_group
+			if not native_subgroup.is_empty():
+				native_path += " / " + native_subgroup
+			record = {"display_name": property_name.capitalize(), "group_path": native_path,
+				"state": "editable", "visibility": "basic"}
+		if str(record.get("state", "")) != "editable" or str(record.get("visibility", "hidden")) == "hidden":
 			continue
 		var group_path: String = str(record.get("group_path", ""))
 		if not _matches_group(group_path, p_group_prefixes):

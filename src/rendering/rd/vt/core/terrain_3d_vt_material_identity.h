@@ -10,7 +10,8 @@
 
 #include <stdint.h>
 
-static inline uint64_t t3d_vt_material_stable_key_from_resource_path( const godot::String &rPath ) {
+static inline uint64_t t3d_vt_material_stable_key_from_resource_path(
+	const godot::String &rPath ) {
 	if ( rPath.is_empty() ) {
 		return 0u;
 	}
@@ -18,16 +19,18 @@ static inline uint64_t t3d_vt_material_stable_key_from_resource_path( const godo
 	if ( Path.length() <= 0 ) {
 		return 0u;
 	}
-	const uint64_t nKey = t3dHashStableBytes( Path.get_data(), (uint64_t)Path.length() );
+	const uint64_t nKey = t3dHashStableBytes( Path.get_data(), ( uint64_t ) Path.length() );
 	return nKey == 0u ? 1u : nKey;
 }
 
 static inline uint64_t t3d_vt_material_stable_key_from_owner_role(
-        const godot::String &rOwnerIdentity, const godot::String &rRoleIdentity ) {
+	const godot::String &rOwnerIdentity,
+	const godot::String &rRoleIdentity ) {
 	if ( rOwnerIdentity.is_empty() || rRoleIdentity.is_empty() ) {
 		return 0u;
 	}
-	const godot::String identity = godot::String( "terrain3d-vt-material:" ) + rOwnerIdentity + godot::String( ":" ) + rRoleIdentity;
+	const godot::String identity =
+		godot::String( "terrain3d-vt-material:" ) + rOwnerIdentity + godot::String( ":" ) + rRoleIdentity;
 	return t3d_vt_material_stable_key_from_resource_path( identity );
 }
 

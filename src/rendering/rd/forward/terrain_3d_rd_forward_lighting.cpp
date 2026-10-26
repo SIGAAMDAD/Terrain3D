@@ -6,29 +6,39 @@
 
 #include <string.h>
 #include <godot_cpp/classes/rd_sampler_state.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
-Terrain3DRdForwardLighting::Terrain3DRdForwardLighting( Terrain3DRdContext &rContext ) :
-        m_context( rContext ), m_descriptors( rContext, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING ) {
+Terrain3DRdForwardLighting::Terrain3DRdForwardLighting(
+	Terrain3DRdContext &rContext ) :
+	m_context( rContext ),
+	m_compact( rContext ),
+	m_descriptors( rContext, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING ) {
+	m_bCompactRequested = godot::OS::get_singleton() &&
+		godot::OS::get_singleton()->get_environment( "TERRAIN3D_GPU_COMPACT_CLUSTERS" ) == "1";
 	m_frameBytes.resize( sizeof( t3dRdForwardLightFrame_t ) );
 }
 
-Terrain3DRdForwardLighting::~Terrain3DRdForwardLighting( void ) {
+Terrain3DRdForwardLighting::~Terrain3DRdForwardLighting(
+	void ) {
 	shutdown();
 }
 
-void Terrain3DRdForwardLighting::setError( const String &rError ) {
+void Terrain3DRdForwardLighting::setError(
+	const String &rError ) {
 	m_lastError = rError;
 }
 
-void Terrain3DRdForwardLighting::freeSets( void ) {
+void Terrain3DRdForwardLighting::freeSets(
+	void ) {
 	m_descriptors.clear();
 }
 
-bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
+bool Terrain3DRdForwardLighting::ensureOwnedResources(
+	void ) {
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( !rd ) {
 		return false;
@@ -49,9 +59,10 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		m_nFrameGeneration = 0u;
 	}
 	m_nDeviceGeneration = generation;
-	if ( m_hFrameBuffer.is_valid() && m_hFallbackShadowTexture.isValid() && m_hFallbackShadowSampler.isValid()
-	        && m_hFallbackStorageBuffer.is_valid() && m_hFallbackColorTexture.isValid() && m_hFallbackColorArrayTexture.isValid()
-	        && m_hFallbackRadianceTexture.isValid() && m_hFallbackRadianceArrayTexture.isValid() && m_hLinearSampler.isValid() ) {
+	if ( m_hFrameBuffer.is_valid() && m_hFallbackShadowTexture.isValid() && m_hFallbackShadowSampler.isValid() &&
+		 m_hFallbackStorageBuffer.is_valid() && m_hFallbackColorTexture.isValid() &&
+		 m_hFallbackColorArrayTexture.isValid() && m_hFallbackRadianceTexture.isValid() &&
+		 m_hFallbackRadianceArrayTexture.isValid() && m_hLinearSampler.isValid() ) {
 		return true;
 	}
 
@@ -62,9 +73,8 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		spec.m_owner = T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING;
 		spec.m_type = T3D_RD_CONTEXT_RESOURCE_UNIFORM_BUFFER;
 		spec.m_memory = T3D_RD_CONTEXT_MEMORY_UNIFORM;
-		spec.m_creationBits = m_bPersistentFrameBuffer ? Terrain3DRdGpuBuffer::persistentCreationBits()
-		                                                    : BitField<RenderingDevice::BufferCreationBits>( 0 );
-		if ( !m_hFrameBuffer.configure( spec ) || !m_hFrameBuffer.createTracked( m_context, sizeof( t3dRdForwardLightFrame_t ) ) ) {
+		if ( !m_hFrameBuffer.configure( spec ) ||
+			 !m_hFrameBuffer.createTracked( m_context, sizeof( t3dRdForwardLightFrame_t ) ) ) {
 			m_context.endResourceRebuild();
 			setError( "Failed to create Forward+ lighting frame UBO" );
 			return false;
@@ -76,15 +86,21 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		spec.m_owner = T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING;
 		spec.m_memory = T3D_RD_CONTEXT_MEMORY_SHADOW;
 		spec.m_layout.m_format = RenderingDevice::DATA_FORMAT_D32_SFLOAT;
-		spec.m_layout.m_nWidth = 1u; spec.m_layout.m_nHeight = 1u; spec.m_layout.m_nLayers = 1u; spec.m_layout.m_nMipmaps = 1u;
-		spec.m_layout.m_nUsageBits = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		spec.m_layout.m_nWidth = 1u;
+		spec.m_layout.m_nHeight = 1u;
+		spec.m_layout.m_nLayers = 1u;
+		spec.m_layout.m_nMipmaps = 1u;
+		spec.m_layout.m_nUsageBits =
+			RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 		spec.m_layout.m_nBytes = sizeof( float );
 		if ( !m_hFallbackShadowTexture.createTracked( m_context, spec ) ) {
-			m_context.endResourceRebuild(); setError( "Failed to create Forward+ fallback shadow texture" ); return false;
+			m_context.endResourceRebuild();
+			setError( "Failed to create Forward+ fallback shadow texture" );
+			return false;
 		}
 	}
 	if ( !m_hFallbackShadowSampler.isValid() ) {
-		Ref<RDSamplerState> sampler;
+		Ref< RDSamplerState > sampler;
 		sampler.instantiate();
 		sampler->set_mag_filter( RenderingDevice::SAMPLER_FILTER_NEAREST );
 		sampler->set_min_filter( RenderingDevice::SAMPLER_FILTER_NEAREST );
@@ -94,8 +110,10 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		sampler->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		sampler->set_enable_compare( true );
 		sampler->set_compare_op( RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
-		if ( !m_hFallbackShadowSampler.createTracked( m_context, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING,
-		             "T3D.ForwardLighting.FallbackShadowSampler", sampler ) ) {
+		if ( !m_hFallbackShadowSampler.createTracked( m_context,
+													  T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING,
+													  "T3D.ForwardLighting.FallbackShadowSampler",
+													  sampler ) ) {
 			m_context.endResourceRebuild();
 			setError( "Failed to create Forward+ fallback shadow sampler" );
 			return false;
@@ -107,31 +125,56 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		spec.m_owner = T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING;
 		spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
 		spec.m_memory = T3D_RD_CONTEXT_MEMORY_UNIFORM;
-		if ( !m_hFallbackStorageBuffer.configure( spec ) || !m_hFallbackStorageBuffer.createTracked( m_context, 256u ) ) {
+		if ( !m_hFallbackStorageBuffer.configure( spec ) ||
+			 !m_hFallbackStorageBuffer.createTracked( m_context, 256u ) ) {
 			m_context.endResourceRebuild();
 			setError( "Failed to create Forward+ fallback scene storage buffer" );
 			return false;
 		}
 	}
 	PackedByteArray fallbackPixel;
-	fallbackPixel.resize( 4 ); memset( fallbackPixel.ptrw(), 0, 4 );
-	TypedArray<PackedByteArray> fallbackInitial; fallbackInitial.push_back( fallbackPixel );
-	auto ensureColorTexture = [&]( Terrain3DRdTexture &rTexture, const String &rName, RenderingDevice::TextureType type ) -> bool {
-		if ( rTexture.isValid() ) { return true; }
-		t3dRdTextureSpec_t spec; spec.m_name = rName; spec.m_owner = T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING;
-		spec.m_memory = T3D_RD_CONTEXT_MEMORY_TERRAIN_TEXTURE; spec.m_layout.m_format = RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
-		spec.m_layout.m_type = type; spec.m_layout.m_nWidth = 1u; spec.m_layout.m_nHeight = 1u; spec.m_layout.m_nLayers = 1u; spec.m_layout.m_nMipmaps = 1u;
-		spec.m_layout.m_nUsageBits = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT; spec.m_layout.m_nBytes = 4u;
+	fallbackPixel.resize( 4 );
+	memset( fallbackPixel.ptrw(), 0, 4 );
+	TypedArray< PackedByteArray > fallbackInitial;
+	fallbackInitial.push_back( fallbackPixel );
+	auto ensureColorTexture =
+		[&]( Terrain3DRdTexture &rTexture, const String &rName, RenderingDevice::TextureType type ) -> bool {
+		if ( rTexture.isValid() ) {
+			return true;
+		}
+		t3dRdTextureSpec_t spec;
+		spec.m_name = rName;
+		spec.m_owner = T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING;
+		spec.m_memory = T3D_RD_CONTEXT_MEMORY_TERRAIN_TEXTURE;
+		spec.m_layout.m_format = RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM;
+		spec.m_layout.m_type = type;
+		spec.m_layout.m_nWidth = 1u;
+		spec.m_layout.m_nHeight = 1u;
+		spec.m_layout.m_nLayers = 1u;
+		spec.m_layout.m_nMipmaps = 1u;
+		spec.m_layout.m_nUsageBits =
+			RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT;
+		spec.m_layout.m_nBytes = 4u;
 		return rTexture.createTracked( m_context, spec, fallbackInitial );
 	};
-	if ( !ensureColorTexture( m_hFallbackColorTexture, "T3D.ForwardLighting.FallbackColor", RenderingDevice::TEXTURE_TYPE_2D )
-	        || !ensureColorTexture( m_hFallbackColorArrayTexture, "T3D.ForwardLighting.FallbackColorArray", RenderingDevice::TEXTURE_TYPE_2D_ARRAY )
-	        || !ensureColorTexture( m_hFallbackRadianceTexture, "T3D.ForwardLighting.FallbackRadiance", RenderingDevice::TEXTURE_TYPE_2D )
-	        || !ensureColorTexture( m_hFallbackRadianceArrayTexture, "T3D.ForwardLighting.FallbackRadianceArray", RenderingDevice::TEXTURE_TYPE_2D_ARRAY ) ) {
-		m_context.endResourceRebuild(); setError( "Failed to create Forward+ fallback color/radiance texture" ); return false;
+	if ( !ensureColorTexture( m_hFallbackColorTexture,
+							  "T3D.ForwardLighting.FallbackColor",
+							  RenderingDevice::TEXTURE_TYPE_2D ) ||
+		 !ensureColorTexture( m_hFallbackColorArrayTexture,
+							  "T3D.ForwardLighting.FallbackColorArray",
+							  RenderingDevice::TEXTURE_TYPE_2D_ARRAY ) ||
+		 !ensureColorTexture( m_hFallbackRadianceTexture,
+							  "T3D.ForwardLighting.FallbackRadiance",
+							  RenderingDevice::TEXTURE_TYPE_2D ) ||
+		 !ensureColorTexture( m_hFallbackRadianceArrayTexture,
+							  "T3D.ForwardLighting.FallbackRadianceArray",
+							  RenderingDevice::TEXTURE_TYPE_2D_ARRAY ) ) {
+		m_context.endResourceRebuild();
+		setError( "Failed to create Forward+ fallback color/radiance texture" );
+		return false;
 	}
 	if ( !m_hLinearSampler.isValid() ) {
-		Ref<RDSamplerState> sampler;
+		Ref< RDSamplerState > sampler;
 		sampler.instantiate();
 		sampler->set_mag_filter( RenderingDevice::SAMPLER_FILTER_LINEAR );
 		sampler->set_min_filter( RenderingDevice::SAMPLER_FILTER_LINEAR );
@@ -139,8 +182,10 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 		sampler->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		sampler->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		sampler->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-		if ( !m_hLinearSampler.createTracked( m_context, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING,
-		             "T3D.ForwardLighting.LinearSampler", sampler ) ) {
+		if ( !m_hLinearSampler.createTracked( m_context,
+											  T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING,
+											  "T3D.ForwardLighting.LinearSampler",
+											  sampler ) ) {
 			m_context.endResourceRebuild();
 			setError( "Failed to create Forward+ scene integration sampler" );
 			return false;
@@ -150,22 +195,29 @@ bool Terrain3DRdForwardLighting::ensureOwnedResources( void ) {
 	return true;
 }
 
-RID Terrain3DRdForwardLighting::resolveShadowTexture( const RID &rNative ) const {
+RID Terrain3DRdForwardLighting::resolveShadowTexture(
+	const RID &rNative ) const {
 	return rNative.is_valid() ? rNative : m_hFallbackShadowTexture.rid();
 }
-RID Terrain3DRdForwardLighting::resolveShadowSampler( const RID &rNative ) const {
+RID Terrain3DRdForwardLighting::resolveShadowSampler(
+	const RID &rNative ) const {
 	return rNative.is_valid() ? rNative : m_hFallbackShadowSampler.rid();
 }
-RID Terrain3DRdForwardLighting::resolveStorageBuffer( const RID &rNative ) const {
+RID Terrain3DRdForwardLighting::resolveStorageBuffer(
+	const RID &rNative ) const {
 	return rNative.is_valid() ? rNative : m_hFallbackStorageBuffer;
 }
-RID Terrain3DRdForwardLighting::resolveColorTexture( const RID &rNative ) const {
+RID Terrain3DRdForwardLighting::resolveColorTexture(
+	const RID &rNative ) const {
 	return rNative.is_valid() ? rNative : m_hFallbackColorTexture.rid();
 }
-RID Terrain3DRdForwardLighting::resolveColorArrayTexture( const RID &rNative ) const {
+RID Terrain3DRdForwardLighting::resolveColorArrayTexture(
+	const RID &rNative ) const {
 	return rNative.is_valid() ? rNative : m_hFallbackColorArrayTexture.rid();
 }
-RID Terrain3DRdForwardLighting::resolveRadianceTexture( const RID &rNative, const bool bArray ) const {
+RID Terrain3DRdForwardLighting::resolveRadianceTexture(
+	const RID &rNative,
+	const bool bArray ) const {
 	if ( rNative.is_valid() ) {
 		return rNative;
 	}
@@ -173,10 +225,12 @@ RID Terrain3DRdForwardLighting::resolveRadianceTexture( const RID &rNative, cons
 }
 
 bool Terrain3DRdForwardLighting::prepare(
-        const t3dRdForwardPassContext_t &rContext, const uint32_t nDefaultSurfaceMask, const bool bOneSun ) {
-	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE
-	        || ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION
-	                && rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT ) ) {
+	const t3dRdForwardPassContext_t &rContext,
+	const uint32_t					 nDefaultSurfaceMask,
+	const bool						 bOneSun ) {
+	if ( rContext.m_phase != T3D_RD_FORWARD_PHASE_PREPARE ||
+		 ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION &&
+		   rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT ) ) {
 		return true;
 	}
 	if ( !ensureOwnedResources() ) {
@@ -186,16 +240,14 @@ bool Terrain3DRdForwardLighting::prepare(
 		setError( "Forward+ lighting packet is missing the native directional-light buffer" );
 		return false;
 	}
-	if ( !bOneSun
-	        && ( !rContext.m_hOmniLightBuffer.is_valid() || !rContext.m_hSpotLightBuffer.is_valid()
-	                || !rContext.m_hAreaLightBuffer.is_valid() || !rContext.m_hClusterBuffer.is_valid() ) ) {
+	if ( !bOneSun && ( !rContext.m_hOmniLightBuffer.is_valid() || !rContext.m_hSpotLightBuffer.is_valid() ||
+					   !rContext.m_hAreaLightBuffer.is_valid() || !rContext.m_hClusterBuffer.is_valid() ) ) {
 		setError( "Forward+ lighting packet is missing a native local-light or cluster buffer" );
 		return false;
 	}
-	if ( rContext.m_fCameraZFar <= 0.0f
-	        || ( !bOneSun
-	                && ( rContext.m_nClusterWidth == 0u || rContext.m_nClusterTypeSize == 0u
-	                        || rContext.m_nClusterMaxElementsDiv32 == 0u ) ) ) {
+	if ( rContext.m_fCameraZFar <= 0.0f ||
+		 ( !bOneSun && ( rContext.m_nClusterWidth == 0u || rContext.m_nClusterTypeSize == 0u ||
+						 rContext.m_nClusterMaxElementsDiv32 == 0u ) ) ) {
 		setError( "Forward+ lighting packet has invalid Godot 4.7.2 cluster/depth metadata" );
 		return false;
 	}
@@ -234,7 +286,8 @@ bool Terrain3DRdForwardLighting::prepare(
 			++m_nEnvironmentResourceChanges;
 		}
 	}
-	if ( !resources_changed && m_nFrameGeneration == rContext.m_nFrameGeneration && m_nFrameSurfaceMask == nDefaultSurfaceMask ) {
+	if ( !resources_changed && m_nFrameGeneration == rContext.m_nFrameGeneration &&
+		 m_nFrameSurfaceMask == nDefaultSurfaceMask ) {
 		return true;
 	}
 
@@ -246,8 +299,9 @@ bool Terrain3DRdForwardLighting::prepare(
 	frame.m_nClusterMaxElementsDiv32 = bOneSun ? 0u : rContext.m_nClusterMaxElementsDiv32;
 	frame.m_nDirectionalLightCount = MIN( rContext.m_nDirectionalLightCount, bOneSun ? 1u : 8u );
 	frame.m_nDefaultSurfaceMask = nDefaultSurfaceMask;
-	frame.m_nShadowFlags = ( !bOneSun && rContext.m_hShadowAtlasTexture.is_valid() ? 1u : 0u )
-	        | ( rContext.m_hDirectionalShadowAtlasTexture.is_valid() ? 2u : 0u ) | ( rContext.m_hNativeShadowSampler.is_valid() ? 4u : 0u );
+	frame.m_nShadowFlags = ( !bOneSun && rContext.m_hShadowAtlasTexture.is_valid() ? 1u : 0u ) |
+						   ( rContext.m_hDirectionalShadowAtlasTexture.is_valid() ? 2u : 0u ) |
+						   ( rContext.m_hNativeShadowSampler.is_valid() ? 4u : 0u );
 	frame.m_nDirectionalSoftShadows = rContext.m_bDirectionalLightSoftShadows ? 1u : 0u;
 	frame.m_fCameraZNear = rContext.m_fCameraZNear;
 	frame.m_fCameraZFar = rContext.m_fCameraZFar;
@@ -257,31 +311,41 @@ bool Terrain3DRdForwardLighting::prepare(
 	frame.m_nRenderHeight = MAX( rContext.m_renderSize.y, 0 );
 	frame.m_nClusterMaxElements = bOneSun ? 0u : rContext.m_nClusterMaxElements;
 	frame.m_nSceneFeatureFlags =
-	        ( !bOneSun && rContext.m_hReflectionProbeBuffer.is_valid() && rContext.m_hReflectionAtlasTexture.is_valid() ? 1u : 0u )
-	        | ( !bOneSun && rContext.m_hDecalBuffer.is_valid() && rContext.m_hDecalAtlasTexture.is_valid()
-	                                && rContext.m_hDecalAtlasSrgbTexture.is_valid()
-	                        ? 2u
-	                        : 0u )
-	        | ( ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT ) != 0u ? 4u : 0u )
-	        | ( radiance_valid && ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP ) != 0u ? 8u : 0u )
-	        | ( radiance_valid && ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP ) != 0u ? 16u : 0u )
-	        | ( radiance_array ? 32u : 0u );
-	memcpy( frame.m_szAmbientLightColorEnergy, rContext.m_szAmbientLightColorEnergy, sizeof( frame.m_szAmbientLightColorEnergy ) );
+		( !bOneSun && rContext.m_hReflectionProbeBuffer.is_valid() && rContext.m_hReflectionAtlasTexture.is_valid()
+			  ? 1u
+			  : 0u ) |
+		( !bOneSun && rContext.m_hDecalBuffer.is_valid() && rContext.m_hDecalAtlasTexture.is_valid() &&
+				  rContext.m_hDecalAtlasSrgbTexture.is_valid()
+			  ? 2u
+			  : 0u ) |
+		( ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_AMBIENT_LIGHT ) != 0u ? 4u : 0u ) |
+		( radiance_valid && ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP ) != 0u ? 8u
+																											: 0u ) |
+		( radiance_valid && ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP ) != 0u ? 16u
+																											   : 0u ) |
+		( radiance_array ? 32u : 0u );
+	memcpy( frame.m_szAmbientLightColorEnergy,
+			rContext.m_szAmbientLightColorEnergy,
+			sizeof( frame.m_szAmbientLightColorEnergy ) );
 	frame.m_szEnvironmentParams0[0] = rContext.m_fAmbientColorSkyMix;
 	frame.m_szEnvironmentParams0[1] = rContext.m_fEmissiveExposureNormalization;
 	frame.m_szEnvironmentParams0[2] = rContext.m_fIblExposureNormalization;
 	frame.m_szEnvironmentParams0[3] = rContext.m_fRadiancePixelSize;
 	frame.m_szEnvironmentParams1[0] = rContext.m_fRadianceBorderSize;
-	memcpy( frame.m_szRadianceInverseXform, rContext.m_szRadianceInverseXform, sizeof( frame.m_szRadianceInverseXform ) );
-	const bool missing_radiance = !radiance_valid
-	        && ( rContext.m_nEnvironmentFlags & ( T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP | T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP ) )
-	                != 0u;
+	memcpy( frame.m_szRadianceInverseXform,
+			rContext.m_szRadianceInverseXform,
+			sizeof( frame.m_szRadianceInverseXform ) );
+	const bool missing_radiance =
+		!radiance_valid && ( rContext.m_nEnvironmentFlags & ( T3D_RD_FORWARD_ENV_USE_AMBIENT_CUBEMAP |
+															  T3D_RD_FORWARD_ENV_USE_REFLECTION_CUBEMAP ) ) != 0u;
 	if ( missing_radiance && m_nLastInvalidEnvironmentFrameGeneration != rContext.m_nFrameGeneration ) {
 		++m_nEnvironmentInvalidResourceCount;
 		m_nLastInvalidEnvironmentFrameGeneration = rContext.m_nFrameGeneration;
 	}
 	m_nLastEnvironmentFlags = rContext.m_nEnvironmentFlags;
-	memcpy( m_szLastAmbientLightColorEnergy, rContext.m_szAmbientLightColorEnergy, sizeof( m_szLastAmbientLightColorEnergy ) );
+	memcpy( m_szLastAmbientLightColorEnergy,
+			rContext.m_szAmbientLightColorEnergy,
+			sizeof( m_szLastAmbientLightColorEnergy ) );
 	m_fLastAmbientColorSkyMix = rContext.m_fAmbientColorSkyMix;
 	m_fLastIblExposureNormalization = rContext.m_fIblExposureNormalization;
 	m_fLastEmissiveExposureNormalization = rContext.m_fEmissiveExposureNormalization;
@@ -291,17 +355,25 @@ bool Terrain3DRdForwardLighting::prepare(
 		setError( "Failed to update Forward+ lighting metadata UBO" );
 		return false;
 	}
+	// BR11 is strictly optional; failure preserves the native raster contract.
+	if ( m_bCompactRequested && !bOneSun ) m_compact.prepare( rContext );
 	m_nFrameGeneration = rContext.m_nFrameGeneration;
 	m_nFrameSurfaceMask = nDefaultSurfaceMask;
 	m_lastError = String();
 	return true;
 }
 
-RID Terrain3DRdForwardLighting::getSet( const RID &rShader ) const {
+RID Terrain3DRdForwardLighting::ensureCompactSet( const RID &shader ) {
+	return m_bCompactRequested ? m_compact.ensureRasterSet( shader ) : RID();
+}
+
+RID Terrain3DRdForwardLighting::getSet(
+	const RID &rShader ) const {
 	return m_bKeyValid ? m_descriptors.find( descriptorKey( rShader ) ) : RID();
 }
 
-Terrain3DRdForwardLighting::t3dRdForwardDescriptorKey_t Terrain3DRdForwardLighting::descriptorKey( const RID &rShader ) const {
+Terrain3DRdForwardLighting::t3dRdForwardDescriptorKey_t Terrain3DRdForwardLighting::descriptorKey(
+	const RID &rShader ) const {
 	t3dRdForwardDescriptorKey_t key;
 	key.shader = rShader;
 	key.frame = m_hFrameBuffer;
@@ -311,12 +383,13 @@ Terrain3DRdForwardLighting::t3dRdForwardDescriptorKey_t Terrain3DRdForwardLighti
 	return key;
 }
 
-RID Terrain3DRdForwardLighting::ensureSet( const RID &rShader ) {
+RID Terrain3DRdForwardLighting::ensureSet(
+	const RID &rShader ) {
 	if ( !rShader.is_valid() || !m_bKeyValid ) {
 		return RID();
 	}
 	const t3dRdForwardDescriptorKey_t key = descriptorKey( rShader );
-	const RID existing = m_descriptors.find( key );
+	const RID						  existing = m_descriptors.find( key );
 	if ( existing.is_valid() ) {
 		return existing;
 	}
@@ -324,58 +397,73 @@ RID Terrain3DRdForwardLighting::ensureSet( const RID &rShader ) {
 	if ( !rd ) {
 		return RID();
 	}
-	TypedArray<Ref<RDUniform>> uniforms;
+	TypedArray< Ref< RDUniform > > uniforms;
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_FRAME_BINDING,
-	        m_bPersistentFrameBuffer ? RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER_DYNAMIC : RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER,
-	        m_hFrameBuffer ) );
-	uniforms.push_back( Terrain3DRdBindingBuilder::single(
-	        T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_BINDING, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_key.m_hDirectional ) );
+														   RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER,
+														   m_hFrameBuffer ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_BINDING,
+														   RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER,
+														   m_key.m_hDirectional ) );
 	if ( !m_key.m_bOneSun ) {
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_OMNI_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_key.m_hOmni ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_SPOT_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_key.m_hSpot ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_AREA_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_key.m_hArea ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_CLUSTER_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_key.m_hCluster ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_SHADOW_SAMPLER_BINDING, RenderingDevice::UNIFORM_TYPE_SAMPLER, m_key.m_hShadowSampler ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_SHADOW_ATLAS_BINDING, RenderingDevice::UNIFORM_TYPE_TEXTURE, m_key.m_hShadowAtlas ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_OMNI_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hOmni ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_SPOT_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hSpot ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_AREA_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hArea ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_CLUSTER_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hCluster ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_SHADOW_SAMPLER_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_SAMPLER,
+															   m_key.m_hShadowSampler ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_SHADOW_ATLAS_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hShadowAtlas ) );
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_SHADOW_BINDING,
-		        RenderingDevice::UNIFORM_TYPE_TEXTURE,
-		        m_key.m_hDirectionalShadowAtlas ) );
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hDirectionalShadowAtlas ) );
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_REFLECTION_BUFFER_BINDING,
-		        RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
-		        m_key.m_hReflectionProbeBuffer ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_REFLECTION_ATLAS_BINDING, RenderingDevice::UNIFORM_TYPE_TEXTURE, m_key.m_hReflectionAtlas ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_DECAL_BUFFER_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_key.m_hDecalBuffer ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_BINDING, RenderingDevice::UNIFORM_TYPE_TEXTURE, m_key.m_hDecalAtlas ) );
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_SRGB_BINDING, RenderingDevice::UNIFORM_TYPE_TEXTURE, m_key.m_hDecalAtlasSrgb ) );
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hReflectionProbeBuffer ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_REFLECTION_ATLAS_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hReflectionAtlas ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DECAL_BUFFER_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+															   m_key.m_hDecalBuffer ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hDecalAtlas ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DECAL_ATLAS_SRGB_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hDecalAtlasSrgb ) );
 	} else {
 		// P06 one-sun layout keeps directional shadows and environment radiance,
 		// but does not bind local-light, cluster, decal, or reflection-probe resources.
-		uniforms.push_back( Terrain3DRdBindingBuilder::single(
-		        T3D_RD_FORWARD_LIGHTING_SHADOW_SAMPLER_BINDING, RenderingDevice::UNIFORM_TYPE_SAMPLER, m_key.m_hShadowSampler ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_SHADOW_SAMPLER_BINDING,
+															   RenderingDevice::UNIFORM_TYPE_SAMPLER,
+															   m_key.m_hShadowSampler ) );
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_DIRECTIONAL_SHADOW_BINDING,
-		        RenderingDevice::UNIFORM_TYPE_TEXTURE,
-		        m_key.m_hDirectionalShadowAtlas ) );
+															   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+															   m_key.m_hDirectionalShadowAtlas ) );
 	}
-	uniforms.push_back( Terrain3DRdBindingBuilder::single(
-	        T3D_RD_FORWARD_LIGHTING_SCENE_SAMPLER_BINDING, RenderingDevice::UNIFORM_TYPE_SAMPLER, m_hLinearSampler.rid() ) );
-	uniforms.push_back( Terrain3DRdBindingBuilder::single(
-	        T3D_RD_FORWARD_LIGHTING_RADIANCE_BINDING, RenderingDevice::UNIFORM_TYPE_TEXTURE, m_key.m_hRadiance ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_SCENE_SAMPLER_BINDING,
+														   RenderingDevice::UNIFORM_TYPE_SAMPLER,
+														   m_hLinearSampler.rid() ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_FORWARD_LIGHTING_RADIANCE_BINDING,
+														   RenderingDevice::UNIFORM_TYPE_TEXTURE,
+														   m_key.m_hRadiance ) );
 	m_context.beginResourceRebuild();
-	const RID set = m_descriptors.getOrCreate( key,
-	        String( "T3D.ForwardLighting.Set." ) + String::num_uint64( rShader.get_id() ),
-	        uniforms,
-	        rShader,
-	        T3D_RD_FORWARD_LIGHTING_DESCRIPTOR_SET );
+	const RID set =
+		m_descriptors.getOrCreate( key,
+								   String( "T3D.ForwardLighting.Set." ) + String::num_uint64( rShader.get_id() ),
+								   uniforms,
+								   rShader,
+								   T3D_RD_FORWARD_LIGHTING_DESCRIPTOR_SET );
 	m_context.endResourceRebuild();
 	if ( !set.is_valid() ) {
 		setError( "Failed to create Terrain3D Forward+ lighting descriptor set" );
@@ -384,17 +472,21 @@ RID Terrain3DRdForwardLighting::ensureSet( const RID &rShader ) {
 	return set;
 }
 
-void Terrain3DRdForwardLighting::invalidateBorrowedState( void ) {
+void Terrain3DRdForwardLighting::invalidateBorrowedState(
+	void ) {
 	m_context.beginResourceRebuild();
 	freeSets();
 	m_context.endResourceRebuild();
 	m_key = t3dRdForwardLightKey_t{};
+	m_compact.invalidate();
 	m_bKeyValid = false;
 	m_nFrameGeneration = 0u;
 }
 
-void Terrain3DRdForwardLighting::shutdown( void ) {
+void Terrain3DRdForwardLighting::shutdown(
+	void ) {
 	freeSets();
+	m_compact.shutdown();
 	m_hLinearSampler.releaseTracked( m_context );
 	m_hFallbackRadianceArrayTexture.releaseTracked( m_context );
 	m_hFallbackRadianceTexture.releaseTracked( m_context );
@@ -410,30 +502,32 @@ void Terrain3DRdForwardLighting::shutdown( void ) {
 	m_nFrameGeneration = 0u;
 }
 
-Dictionary Terrain3DRdForwardLighting::getDiagnostics( void ) const {
+Dictionary Terrain3DRdForwardLighting::getDiagnostics(
+	void ) const {
 	Dictionary result;
-	result["forward_light_sets"] = ( int64_t )( m_descriptors.size() );
-	result["forward_light_set_rebuilds"] = ( int64_t )( m_nSceneResourceChanges );
-	result["forward_light_frame_updates"] = ( int64_t )m_context.getRenderUploadCalls(
-	        T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING, T3D_GPU_HOT_FRAME );
-	result["forward_scene_resource_changes"] = ( int64_t )( m_nSceneResourceChanges );
-	result["forward_environment_flags"] = ( int64_t )( m_nLastEnvironmentFlags );
+	result["forward_light_sets"] = ( int64_t ) ( m_descriptors.size() );
+	result["forward_light_set_rebuilds"] = ( int64_t ) ( m_nSceneResourceChanges );
+	result["forward_light_frame_updates"] =
+		( int64_t ) m_context.getRenderUploadCalls( T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING, T3D_GPU_HOT_FRAME );
+	result["forward_scene_resource_changes"] = ( int64_t ) ( m_nSceneResourceChanges );
+	result["forward_environment_flags"] = ( int64_t ) ( m_nLastEnvironmentFlags );
 	result["forward_environment_ambient_rgb"] = Color( m_szLastAmbientLightColorEnergy[0],
-	        m_szLastAmbientLightColorEnergy[1],
-	        m_szLastAmbientLightColorEnergy[2],
-	        m_szLastAmbientLightColorEnergy[3] );
+													   m_szLastAmbientLightColorEnergy[1],
+													   m_szLastAmbientLightColorEnergy[2],
+													   m_szLastAmbientLightColorEnergy[3] );
 	result["forward_environment_sky_mix"] = m_fLastAmbientColorSkyMix;
 	result["forward_environment_ibl_exposure"] = m_fLastIblExposureNormalization;
 	result["forward_environment_emissive_exposure"] = m_fLastEmissiveExposureNormalization;
 	result["forward_environment_radiance_valid"] = m_bLastRadianceValid;
-	result["forward_environment_radiance_array"] = ( m_nLastEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
-	result["forward_environment_frame_updates"] = ( int64_t )( m_nEnvironmentFrameUpdates );
-	result["forward_environment_resource_changes"] = ( int64_t )( m_nEnvironmentResourceChanges );
-	result["forward_environment_invalid_resource_count"] = ( int64_t )( m_nEnvironmentInvalidResourceCount );
+	result["forward_environment_radiance_array"] =
+		( m_nLastEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
+	result["forward_environment_frame_updates"] = ( int64_t ) ( m_nEnvironmentFrameUpdates );
+	result["forward_environment_resource_changes"] = ( int64_t ) ( m_nEnvironmentResourceChanges );
+	result["forward_environment_invalid_resource_count"] = ( int64_t ) ( m_nEnvironmentInvalidResourceCount );
 	result["forward_reflection_resources"] =
-	        m_bKeyValid && m_key.m_hReflectionProbeBuffer.is_valid() && m_key.m_hReflectionAtlas.is_valid();
-	result["forward_decal_resources"] =
-	        m_bKeyValid && m_key.m_hDecalBuffer.is_valid() && m_key.m_hDecalAtlas.is_valid() && m_key.m_hDecalAtlasSrgb.is_valid();
+		m_bKeyValid && m_key.m_hReflectionProbeBuffer.is_valid() && m_key.m_hReflectionAtlas.is_valid();
+	result["forward_decal_resources"] = m_bKeyValid && m_key.m_hDecalBuffer.is_valid() &&
+										m_key.m_hDecalAtlas.is_valid() && m_key.m_hDecalAtlasSrgb.is_valid();
 	result["forward_one_sun"] = m_bKeyValid && m_key.m_bOneSun;
 	result["forward_light_resources_ready"] = m_bKeyValid;
 	result["forward_light_last_error"] = m_lastError;

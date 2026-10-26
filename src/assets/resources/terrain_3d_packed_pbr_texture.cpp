@@ -1,3 +1,5 @@
+#include "assets/resources/terrain_3d_resource_helpers.h"
+#include "assets/resources/terrain_3d_resource_helpers.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "integration/godot/terrain_3d_binding.h"
@@ -11,31 +13,21 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
-EA_FORCE_INLINE static bool t3dPackedPbrTextureIsPackedSurfaceFormat( const Image::Format format ) {
-	return format == Image::FORMAT_RGBA8 || format == Image::FORMAT_DXT5 || format == Image::FORMAT_BPTC_RGBA;
-}
-
-void Terrain3DPackedPBRTexture::disconnectSource( const Ref<Texture2D> &rSource ) {
-	if ( rSource.is_null() ) {
-		return;
-	}
+void Terrain3DPackedPBRTexture::disconnectSource(
+	const Ref< Texture2D > &rSource ) {
 	const Callable callback = callable_mp( this, &Terrain3DPackedPBRTexture::sourceChanged );
-	if ( rSource->is_connected( "changed", callback ) ) {
-		rSource->disconnect( "changed", callback );
-	}
+	t3dConnectResourceChanged( rSource, callback, false );
 }
 
-void Terrain3DPackedPBRTexture::connectSource( const Ref<Texture2D> &rSource ) {
-	if ( rSource.is_null() ) {
-		return;
-	}
+void Terrain3DPackedPBRTexture::connectSource(
+	const Ref< Texture2D > &rSource ) {
 	const Callable callback = callable_mp( this, &Terrain3DPackedPBRTexture::sourceChanged );
-	if ( !rSource->is_connected( "changed", callback ) ) {
-		rSource->connect( "changed", callback );
-	}
+	t3dConnectResourceChanged( rSource, callback, true );
 }
 
-void Terrain3DPackedPBRTexture::setSource( Ref<Texture2D> &iSlot, const Ref<Texture2D> &rSource ) {
+void Terrain3DPackedPBRTexture::setSource(
+	Ref< Texture2D >	   &iSlot,
+	const Ref< Texture2D > &rSource ) {
 	if ( iSlot == rSource ) {
 		return;
 	}
@@ -45,11 +37,13 @@ void Terrain3DPackedPBRTexture::setSource( Ref<Texture2D> &iSlot, const Ref<Text
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::sourceChanged( void ) {
+void Terrain3DPackedPBRTexture::sourceChanged(
+	void ) {
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::invalidate( void ) {
+void Terrain3DPackedPBRTexture::invalidate(
+	void ) {
 	m_bDirty = true;
 	m_lastError = String();
 	emit_changed();
@@ -58,7 +52,8 @@ void Terrain3DPackedPBRTexture::invalidate( void ) {
 	}
 }
 
-void Terrain3DPackedPBRTexture::queueRebuild( void ) {
+void Terrain3DPackedPBRTexture::queueRebuild(
+	void ) {
 	if ( m_bRebuildQueued ) {
 		return;
 	}
@@ -66,27 +61,30 @@ void Terrain3DPackedPBRTexture::queueRebuild( void ) {
 	call_deferred( "_deferred_rebuild" );
 }
 
-void Terrain3DPackedPBRTexture::deferredRebuild( void ) {
+void Terrain3DPackedPBRTexture::deferredRebuild(
+	void ) {
 	m_bRebuildQueued = false;
 	if ( m_bAutoRebuild && m_bDirty && hasRequiredSources() ) {
 		rebuild();
 	}
 }
 
-Ref<Image> Terrain3DPackedPBRTexture::prepareSource(
-        const Ref<Texture2D> &rSource, const Vector2i &rTargetSize, const String &rLabel ) const {
+Ref< Image > Terrain3DPackedPBRTexture::prepareSource(
+	const Ref< Texture2D > &rSource,
+	const Vector2i		   &rTargetSize,
+	const String		   &rLabel ) const {
 	if ( rSource.is_null() ) {
-		return Ref<Image>();
+		return Ref< Image >();
 	}
-	Ref<Image> pImage = rSource->get_image();
+	Ref< Image > pImage = rSource->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
 		LOG( ERROR, "Surface/height ", rLabel, " source image is missing or empty." );
-		return Ref<Image>();
+		return Ref< Image >();
 	}
 	pImage = pImage->duplicate();
 	if ( pImage->is_compressed() && pImage->decompress() != OK ) {
 		LOG( ERROR, "Surface/height ", rLabel, " source could not be decompressed." );
-		return Ref<Image>();
+		return Ref< Image >();
 	}
 	if ( pImage->has_mipmaps() ) {
 		pImage->clear_mipmaps();
@@ -97,17 +95,19 @@ Ref<Image> Terrain3DPackedPBRTexture::prepareSource(
 	return pImage;
 }
 
-void Terrain3DPackedPBRTexture::setGeneratedSurfaceTexture( const Ref<ImageTexture> &rTexture ) {
+void Terrain3DPackedPBRTexture::setGeneratedSurfaceTexture(
+	const Ref< ImageTexture > &rTexture ) {
 	m_generatedSurfaceTexture = rTexture;
 	m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 }
 
-void Terrain3DPackedPBRTexture::setGeneratedDisplacementTexture( const Ref<ImageTexture> &rTexture ) {
+void Terrain3DPackedPBRTexture::setGeneratedDisplacementTexture(
+	const Ref< ImageTexture > &rTexture ) {
 	m_generatedDisplacementTexture = rTexture;
 	if ( m_generatedDisplacementTexture.is_valid() ) {
-		const Ref<Image> pImage = m_generatedDisplacementTexture->get_image();
+		const Ref< Image > pImage = m_generatedDisplacementTexture->get_image();
 		if ( pImage.is_valid() && pImage->get_format() == Image::FORMAT_R16 ) {
-			const Ref<Image> pMigrated = Terrain3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
+			const Ref< Image > pMigrated = Terrain3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_valid() && !pMigrated->is_empty() ) {
 				m_generatedDisplacementTexture = ImageTexture::create_from_image( pMigrated );
 				LOG( WARN, "Migrated serialized R16 displacement data to R8." );
@@ -117,11 +117,12 @@ void Terrain3DPackedPBRTexture::setGeneratedDisplacementTexture( const Ref<Image
 	m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 }
 
-void Terrain3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rTexture ) {
+void Terrain3DPackedPBRTexture::setGeneratedTexture(
+	const Ref< ImageTexture > &rTexture ) {
 	if ( rTexture.is_null() ) {
 		return;
 	}
-	const Ref<Image> pImage = rTexture->get_image();
+	const Ref< Image > pImage = rTexture->get_image();
 	if ( pImage.is_null() || pImage->is_empty() ) {
 		return;
 	}
@@ -131,8 +132,9 @@ void Terrain3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rT
 		return;
 	}
 	if ( pImage->get_format() == Image::FORMAT_RGBA16I ) {
-		const Ref<Image> pSurface = Terrain3DUtil::convertPackedPbrRgba16uiToSurface( pImage, m_bGenerateMipmaps );
-		const Ref<Image> pDisplacement = Terrain3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, m_bGenerateMipmaps );
+		const Ref< Image > pSurface = Terrain3DUtil::convertPackedPbrRgba16uiToSurface( pImage, m_bGenerateMipmaps );
+		const Ref< Image > pDisplacement =
+			Terrain3DUtil::convertPackedPbrRgba16uiToDisplacement( pImage, m_bGenerateMipmaps );
 		if ( pSurface.is_valid() && pDisplacement.is_valid() ) {
 			m_generatedSurfaceTexture = ImageTexture::create_from_image( pSurface );
 			m_generatedDisplacementTexture = ImageTexture::create_from_image( pDisplacement );
@@ -142,12 +144,13 @@ void Terrain3DPackedPBRTexture::setGeneratedTexture( const Ref<ImageTexture> &rT
 	}
 }
 
-void Terrain3DPackedPBRTexture::setPackedTexture( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setPackedTexture(
+	const Ref< Texture2D > &rTexture ) {
 	if ( rTexture.is_valid() ) {
-		const Ref<Image> pImage = rTexture->get_image();
-		if ( pImage.is_null() || pImage->is_empty() || !t3dPackedPbrTextureIsPackedSurfaceFormat( pImage->get_format() ) ) {
+		const Ref< Image > pImage = rTexture->get_image();
+		if ( pImage.is_null() || pImage->is_empty() || !t3dIsPackedSurfaceFormat( pImage->get_format() ) ) {
 			m_lastError = "Packed PBR texture must be RGBA8, BC3/DXT5, or BC7/BPTC_RGBA: "
-			              "R=normal X, G=normal Y, B=roughness, A=AO.";
+						  "R=normal X, G=normal Y, B=roughness, A=AO.";
 			LOG( ERROR, m_lastError );
 			return;
 		}
@@ -161,17 +164,18 @@ void Terrain3DPackedPBRTexture::setPackedTexture( const Ref<Texture2D> &rTexture
 	emit_changed();
 }
 
-void Terrain3DPackedPBRTexture::setDisplacementTexture( const Ref<Texture2D> &rTexture ) {
-	Ref<Texture2D> pTexture = rTexture;
+void Terrain3DPackedPBRTexture::setDisplacementTexture(
+	const Ref< Texture2D > &rTexture ) {
+	Ref< Texture2D > pTexture = rTexture;
 	if ( pTexture.is_valid() ) {
-		Ref<Image> pImage = pTexture->get_image();
+		Ref< Image > pImage = pTexture->get_image();
 		if ( pImage.is_null() || pImage->is_empty() ) {
 			m_lastError = "Displacement texture image is missing or empty.";
 			LOG( ERROR, m_lastError );
 			return;
 		}
 		if ( pImage->get_format() == Image::FORMAT_R16 ) {
-			const Ref<Image> pMigrated = Terrain3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
+			const Ref< Image > pMigrated = Terrain3DUtil::packDisplacementR8( pImage, 0, pImage->has_mipmaps() );
 			if ( pMigrated.is_null() || pMigrated->is_empty() ) {
 				m_lastError = "Could not migrate legacy R16 displacement texture to R8.";
 				LOG( ERROR, m_lastError );
@@ -196,29 +200,35 @@ void Terrain3DPackedPBRTexture::setDisplacementTexture( const Ref<Texture2D> &rT
 	emit_changed();
 }
 
-void Terrain3DPackedPBRTexture::setNormalSource( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setNormalSource(
+	const Ref< Texture2D > &rTexture ) {
 	setSource( m_normalSource, rTexture );
 }
 
-void Terrain3DPackedPBRTexture::setRoughnessSource( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setRoughnessSource(
+	const Ref< Texture2D > &rTexture ) {
 	setSource( m_roughnessSource, rTexture );
 }
 
-void Terrain3DPackedPBRTexture::setDisplacementSource( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setDisplacementSource(
+	const Ref< Texture2D > &rTexture ) {
 	setSource( m_displacementSource, rTexture );
 }
 
-void Terrain3DPackedPBRTexture::setAoSource( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setAoSource(
+	const Ref< Texture2D > &rTexture ) {
 	setSource( m_aoSource, rTexture );
 }
 
-void Terrain3DPackedPBRTexture::setMetallicSource( const Ref<Texture2D> &rTexture ) {
+void Terrain3DPackedPBRTexture::setMetallicSource(
+	const Ref< Texture2D > &rTexture ) {
 	// Kept only for old resource compatibility. Runtime metallic is now the
 	// Terrain3DTextureAsset metallic scalar.
 	setSource( m_metallicSource, rTexture );
 }
 
-void Terrain3DPackedPBRTexture::setOutputSize( const Vector2i &rSize ) {
+void Terrain3DPackedPBRTexture::setOutputSize(
+	const Vector2i &rSize ) {
 	const Vector2i size( MAX( rSize.x, 1 ), MAX( rSize.y, 1 ) );
 	if ( m_outputSize == size ) {
 		return;
@@ -227,7 +237,8 @@ void Terrain3DPackedPBRTexture::setOutputSize( const Vector2i &rSize ) {
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::setInvertNormalGreen( const bool bEnabled ) {
+void Terrain3DPackedPBRTexture::setInvertNormalGreen(
+	const bool bEnabled ) {
 	if ( m_bInvertNormalGreen == bEnabled ) {
 		return;
 	}
@@ -235,11 +246,13 @@ void Terrain3DPackedPBRTexture::setInvertNormalGreen( const bool bEnabled ) {
 	invalidate();
 }
 
-EA_FORCE_INLINE static int32_t t3dSanitizeSurfaceChannel( int32_t nChannel ) {
-	return CLAMP( nChannel, ( int32_t )( CHANNEL_RED ), ( int32_t )( CHANNEL_ALPHA ) );
+EA_FORCE_INLINE static int32_t t3dSanitizeSurfaceChannel(
+	int32_t nChannel ) {
+	return CLAMP( nChannel, ( int32_t ) ( CHANNEL_RED ), ( int32_t ) ( CHANNEL_ALPHA ) );
 }
 
-void Terrain3DPackedPBRTexture::setRoughnessChannel( const int32_t nChannel ) {
+void Terrain3DPackedPBRTexture::setRoughnessChannel(
+	const int32_t nChannel ) {
 	const int32_t channel = t3dSanitizeSurfaceChannel( nChannel );
 	if ( m_nRoughnessChannel == channel ) {
 		return;
@@ -248,7 +261,8 @@ void Terrain3DPackedPBRTexture::setRoughnessChannel( const int32_t nChannel ) {
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::setDisplacementChannel( const int32_t nChannel ) {
+void Terrain3DPackedPBRTexture::setDisplacementChannel(
+	const int32_t nChannel ) {
 	const int32_t channel = t3dSanitizeSurfaceChannel( nChannel );
 	if ( m_nDisplacementChannel == channel ) {
 		return;
@@ -257,7 +271,8 @@ void Terrain3DPackedPBRTexture::setDisplacementChannel( const int32_t nChannel )
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::setAoChannel( const int32_t nChannel ) {
+void Terrain3DPackedPBRTexture::setAoChannel(
+	const int32_t nChannel ) {
 	const int32_t channel = t3dSanitizeSurfaceChannel( nChannel );
 	if ( m_nAoChannel == channel ) {
 		return;
@@ -266,7 +281,8 @@ void Terrain3DPackedPBRTexture::setAoChannel( const int32_t nChannel ) {
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::setMetallicChannel( const int32_t nChannel ) {
+void Terrain3DPackedPBRTexture::setMetallicChannel(
+	const int32_t nChannel ) {
 	const int32_t channel = t3dSanitizeSurfaceChannel( nChannel );
 	if ( m_nMetallicChannel == channel ) {
 		return;
@@ -276,7 +292,8 @@ void Terrain3DPackedPBRTexture::setMetallicChannel( const int32_t nChannel ) {
 	emit_changed();
 }
 
-void Terrain3DPackedPBRTexture::setGenerateMipmaps( const bool bEnabled ) {
+void Terrain3DPackedPBRTexture::setGenerateMipmaps(
+	const bool bEnabled ) {
 	if ( m_bGenerateMipmaps == bEnabled ) {
 		return;
 	}
@@ -284,7 +301,8 @@ void Terrain3DPackedPBRTexture::setGenerateMipmaps( const bool bEnabled ) {
 	invalidate();
 }
 
-void Terrain3DPackedPBRTexture::setAutoRebuild( const bool bEnabled ) {
+void Terrain3DPackedPBRTexture::setAutoRebuild(
+	const bool bEnabled ) {
 	if ( m_bAutoRebuild == bEnabled ) {
 		return;
 	}
@@ -295,37 +313,43 @@ void Terrain3DPackedPBRTexture::setAutoRebuild( const bool bEnabled ) {
 	emit_changed();
 }
 
-bool Terrain3DPackedPBRTexture::hasRequiredSources( void ) const {
-	return ( m_packedTexture.is_valid() && m_displacementTexture.is_valid() )
-	        || ( m_normalSource.is_valid() && m_roughnessSource.is_valid() );
+bool Terrain3DPackedPBRTexture::hasRequiredSources(
+	void ) const {
+	return ( m_packedTexture.is_valid() && m_displacementTexture.is_valid() ) ||
+		   ( m_normalSource.is_valid() && m_roughnessSource.is_valid() );
 }
 
-bool Terrain3DPackedPBRTexture::isValidSurfaceTexture( void ) const {
-	const Ref<Texture2D> pTexture = m_packedTexture.is_valid() ? m_packedTexture : Ref<Texture2D>( m_generatedSurfaceTexture );
+bool Terrain3DPackedPBRTexture::isValidSurfaceTexture(
+	void ) const {
+	const Ref< Texture2D > pTexture =
+		m_packedTexture.is_valid() ? m_packedTexture : Ref< Texture2D >( m_generatedSurfaceTexture );
 	if ( pTexture.is_null() ) {
 		return false;
 	}
-	Ref<Image> pImage = pTexture->get_image();
-	return pImage.is_valid() && !pImage->is_empty() && t3dPackedPbrTextureIsPackedSurfaceFormat( pImage->get_format() );
+	Ref< Image > pImage = pTexture->get_image();
+	return pImage.is_valid() && !pImage->is_empty() && t3dIsPackedSurfaceFormat( pImage->get_format() );
 }
 
-bool Terrain3DPackedPBRTexture::isValidDisplacementTexture( void ) const {
-	const Ref<Texture2D> pTexture =
-	        m_displacementTexture.is_valid() ? m_displacementTexture : Ref<Texture2D>( m_generatedDisplacementTexture );
+bool Terrain3DPackedPBRTexture::isValidDisplacementTexture(
+	void ) const {
+	const Ref< Texture2D > pTexture =
+		m_displacementTexture.is_valid() ? m_displacementTexture : Ref< Texture2D >( m_generatedDisplacementTexture );
 	if ( pTexture.is_null() ) {
 		return false;
 	}
-	Ref<Image> pImage = pTexture->get_image();
+	Ref< Image > pImage = pTexture->get_image();
 	return pImage.is_valid() && !pImage->is_empty() && pImage->get_format() == Image::FORMAT_R8;
 }
 
-bool Terrain3DPackedPBRTexture::rebuild( void ) {
+bool Terrain3DPackedPBRTexture::rebuild(
+	void ) {
 	m_bRebuildQueued = false;
 	m_lastError = String();
 	if ( m_packedTexture.is_valid() || m_displacementTexture.is_valid() ) {
 		m_bDirty = !( isValidSurfaceTexture() && isValidDisplacementTexture() );
 		if ( m_bDirty ) {
-			m_lastError = "Packed PBR resources require one RGBA8/BC3/BC7 packed texture and one R8 displacement texture.";
+			m_lastError =
+				"Packed PBR resources require one RGBA8/BC3/BC7 packed texture and one R8 displacement texture.";
 		}
 		return !m_bDirty;
 	}
@@ -334,21 +358,27 @@ bool Terrain3DPackedPBRTexture::rebuild( void ) {
 		LOG( ERROR, m_lastError );
 		return false;
 	}
-	const Vector2i size( MAX( m_outputSize.x, 1 ), MAX( m_outputSize.y, 1 ) );
-	const Ref<Image> pNormal = prepareSource( m_normalSource, size, "normal" );
-	const Ref<Image> pRoughness = prepareSource( m_roughnessSource, size, "roughness" );
-	const Ref<Image> pDisplacement = prepareSource( m_displacementSource, size, "displacement" );
-	const Ref<Image> pAo = prepareSource( m_aoSource, size, "AO" );
+	const Vector2i	   size( MAX( m_outputSize.x, 1 ), MAX( m_outputSize.y, 1 ) );
+	const Ref< Image > pNormal = prepareSource( m_normalSource, size, "normal" );
+	const Ref< Image > pRoughness = prepareSource( m_roughnessSource, size, "roughness" );
+	const Ref< Image > pDisplacement = prepareSource( m_displacementSource, size, "displacement" );
+	const Ref< Image > pAo = prepareSource( m_aoSource, size, "AO" );
 	if ( pNormal.is_null() || pRoughness.is_null() ) {
 		m_lastError = "A required source image could not be prepared.";
 		return false;
 	}
 
-	const Ref<Image> pSurface = Terrain3DUtil::packSurfaceRgba8(
-	        pNormal, pRoughness, pAo, m_bInvertNormalGreen, m_nRoughnessChannel, m_nAoChannel, m_bGenerateMipmaps );
-	const Ref<Image> pHeight = pDisplacement.is_valid()
-	        ? Terrain3DUtil::packDisplacementR8( pDisplacement, m_nDisplacementChannel, m_bGenerateMipmaps )
-	        : Terrain3DUtil::getDefaultDisplacementImage( size, m_bGenerateMipmaps );
+	const Ref< Image > pSurface = Terrain3DUtil::packSurfaceRgba8( pNormal,
+																   pRoughness,
+																   pAo,
+																   m_bInvertNormalGreen,
+																   m_nRoughnessChannel,
+																   m_nAoChannel,
+																   m_bGenerateMipmaps );
+	const Ref< Image > pHeight =
+		pDisplacement.is_valid()
+			? Terrain3DUtil::packDisplacementR8( pDisplacement, m_nDisplacementChannel, m_bGenerateMipmaps )
+			: Terrain3DUtil::getDefaultDisplacementImage( size, m_bGenerateMipmaps );
 	if ( pSurface.is_null() || pSurface->is_empty() || pHeight.is_null() || pHeight->is_empty() ) {
 		m_lastError = "Terrain3DUtil failed to generate the surface/height images.";
 		return false;
@@ -361,29 +391,34 @@ bool Terrain3DPackedPBRTexture::rebuild( void ) {
 	return true;
 }
 
-Ref<Texture2D> Terrain3DPackedPBRTexture::getSurfaceTexture( void ) {
+Ref< Texture2D > Terrain3DPackedPBRTexture::getSurfaceTexture(
+	void ) {
 	if ( m_bDirty && hasRequiredSources() && !rebuild() ) {
-		return Ref<Texture2D>();
+		return Ref< Texture2D >();
 	}
-	Ref<Texture2D> pTexture = m_packedTexture.is_valid() ? m_packedTexture : Ref<Texture2D>( m_generatedSurfaceTexture );
-	return isValidSurfaceTexture() ? pTexture : Ref<Texture2D>();
+	Ref< Texture2D > pTexture =
+		m_packedTexture.is_valid() ? m_packedTexture : Ref< Texture2D >( m_generatedSurfaceTexture );
+	return isValidSurfaceTexture() ? pTexture : Ref< Texture2D >();
 }
 
-Ref<Texture2D> Terrain3DPackedPBRTexture::getDisplacementTexture( void ) {
+Ref< Texture2D > Terrain3DPackedPBRTexture::getDisplacementTexture(
+	void ) {
 	if ( m_bDirty && hasRequiredSources() && !rebuild() ) {
-		return Ref<Texture2D>();
+		return Ref< Texture2D >();
 	}
-	Ref<Texture2D> pTexture = m_displacementTexture.is_valid() ? m_displacementTexture : Ref<Texture2D>( m_generatedDisplacementTexture );
-	return isValidDisplacementTexture() ? pTexture : Ref<Texture2D>();
+	Ref< Texture2D > pTexture =
+		m_displacementTexture.is_valid() ? m_displacementTexture : Ref< Texture2D >( m_generatedDisplacementTexture );
+	return isValidDisplacementTexture() ? pTexture : Ref< Texture2D >();
 }
 
-Error Terrain3DPackedPBRTexture::saveDisplacementDds( const String &rPath ) {
-	const Ref<Texture2D> pTexture = getDisplacementTexture();
+Error Terrain3DPackedPBRTexture::saveDisplacementDds(
+	const String &rPath ) {
+	const Ref< Texture2D > pTexture = getDisplacementTexture();
 	if ( pTexture.is_null() ) {
 		m_lastError = "No valid R8 displacement texture is available.";
 		return ERR_INVALID_DATA;
 	}
-	const Ref<Image> pImage = pTexture->get_image();
+	const Ref< Image > pImage = pTexture->get_image();
 	if ( pImage.is_null() || pImage->get_format() != Image::FORMAT_R8 ) {
 		m_lastError = "Displacement image is not R8_UNORM.";
 		return ERR_INVALID_DATA;
@@ -395,39 +430,47 @@ Error Terrain3DPackedPBRTexture::saveDisplacementDds( const String &rPath ) {
 	return error;
 }
 
-String Terrain3DPackedPBRTexture::getChannelLayout( void ) const {
+String Terrain3DPackedPBRTexture::getChannelLayout(
+	void ) const {
 	return "Surface RGBA8: R=Normal X, G=Normal Y, B=Roughness, A=AO; Displacement R8_UNORM: R=Height; "
-	       "Metallic=Terrain3DTextureAsset scalar";
+		   "Metallic=Terrain3DTextureAsset scalar";
 }
 
-void Terrain3DPackedPBRTexture::_validate_property( PropertyInfo &rProperty ) const {
-	t3dApplyPropertyUsageRules( rProperty, {
-	                                           { "metallic_source", true, PROPERTY_USAGE_STORAGE },
-	                                           { "metallic_channel", true, PROPERTY_USAGE_STORAGE },
-	                                           { "generated_texture", true, PROPERTY_USAGE_STORAGE },
-	                                       } );
+void Terrain3DPackedPBRTexture::_validate_property(
+	PropertyInfo &rProperty ) const {
+	t3dApplyPropertyUsageRules( rProperty,
+								{
+									{ "metallic_source", true, PROPERTY_USAGE_STORAGE },
+									{ "metallic_channel", true, PROPERTY_USAGE_STORAGE },
+									{ "generated_texture", true, PROPERTY_USAGE_STORAGE },
+								} );
 }
 
-void Terrain3DPackedPBRTexture::_bind_methods( void ) {
-
+void Terrain3DPackedPBRTexture::_bind_methods(
+	void ) {
 	ClassDB::bind_method( D_METHOD( "rebuild" ), &Terrain3DPackedPBRTexture::rebuild );
 	ClassDB::bind_method( D_METHOD( "is_dirty" ), &Terrain3DPackedPBRTexture::isDirty );
 	ClassDB::bind_method( D_METHOD( "has_required_sources" ), &Terrain3DPackedPBRTexture::hasRequiredSources );
 	ClassDB::bind_method( D_METHOD( "is_valid_surface_texture" ), &Terrain3DPackedPBRTexture::isValidSurfaceTexture );
-	ClassDB::bind_method( D_METHOD( "is_valid_displacement_texture" ), &Terrain3DPackedPBRTexture::isValidDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "is_valid_displacement_texture" ),
+						  &Terrain3DPackedPBRTexture::isValidDisplacementTexture );
 	ClassDB::bind_method( D_METHOD( "is_valid_packed_texture" ), &Terrain3DPackedPBRTexture::isValidPackedTexture );
 	ClassDB::bind_method( D_METHOD( "get_last_error" ), &Terrain3DPackedPBRTexture::getLastError );
 	ClassDB::bind_method( D_METHOD( "get_surface_texture" ), &Terrain3DPackedPBRTexture::getSurfaceTexture );
 	ClassDB::bind_method( D_METHOD( "get_displacement_texture" ), &Terrain3DPackedPBRTexture::getDisplacementTexture );
 	ClassDB::bind_method( D_METHOD( "get_texture" ), &Terrain3DPackedPBRTexture::getTexture );
 	ClassDB::bind_method( D_METHOD( "get_generated_texture" ), &Terrain3DPackedPBRTexture::getGeneratedTexture );
-	ClassDB::bind_method( D_METHOD( "get_generated_surface_texture" ), &Terrain3DPackedPBRTexture::getGeneratedSurfaceTexture );
-	ClassDB::bind_method( D_METHOD( "get_generated_displacement_texture" ), &Terrain3DPackedPBRTexture::getGeneratedDisplacementTexture );
-	ClassDB::bind_method( D_METHOD( "save_displacement_dds", "path" ), &Terrain3DPackedPBRTexture::saveDisplacementDds );
+	ClassDB::bind_method( D_METHOD( "get_generated_surface_texture" ),
+						  &Terrain3DPackedPBRTexture::getGeneratedSurfaceTexture );
+	ClassDB::bind_method( D_METHOD( "get_generated_displacement_texture" ),
+						  &Terrain3DPackedPBRTexture::getGeneratedDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "save_displacement_dds", "path" ),
+						  &Terrain3DPackedPBRTexture::saveDisplacementDds );
 	ClassDB::bind_method( D_METHOD( "get_channel_layout" ), &Terrain3DPackedPBRTexture::getChannelLayout );
-	ClassDB::bind_method( D_METHOD( "_set_generated_surface_texture", "texture" ), &Terrain3DPackedPBRTexture::setGeneratedSurfaceTexture );
-	ClassDB::bind_method(
-	        D_METHOD( "_set_generated_displacement_texture", "texture" ), &Terrain3DPackedPBRTexture::setGeneratedDisplacementTexture );
+	ClassDB::bind_method( D_METHOD( "_set_generated_surface_texture", "texture" ),
+						  &Terrain3DPackedPBRTexture::setGeneratedSurfaceTexture );
+	ClassDB::bind_method( D_METHOD( "_set_generated_displacement_texture", "texture" ),
+						  &Terrain3DPackedPBRTexture::setGeneratedDisplacementTexture );
 	ClassDB::bind_method( D_METHOD( "_deferred_rebuild" ), &Terrain3DPackedPBRTexture::deferredRebuild );
 
 	BIND_ENUM_CONSTANT( CHANNEL_RED );
@@ -436,58 +479,158 @@ void Terrain3DPackedPBRTexture::_bind_methods( void ) {
 	BIND_ENUM_CONSTANT( CHANNEL_ALPHA );
 
 	ADD_GROUP( "Runtime Packed Output", "" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setPackedTexture, getPackedTexture, "texture",
-	                   PropertyInfo( Variant::OBJECT, "packed_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_packed_texture", "get_packed_texture" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setDisplacementTexture, getDirectDisplacementTexture, "texture",
-	                   PropertyInfo( Variant::OBJECT, "displacement_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D", PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ), "set_displacement_texture", "get_direct_displacement_texture" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setPackedTexture,
+					   getPackedTexture,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT,
+									 "packed_texture",
+									 PROPERTY_HINT_RESOURCE_TYPE,
+									 "ImageTexture,CompressedTexture2D",
+									 PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+					   "set_packed_texture",
+					   "get_packed_texture" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setDisplacementTexture,
+					   getDirectDisplacementTexture,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT,
+									 "displacement_texture",
+									 PROPERTY_HINT_RESOURCE_TYPE,
+									 "ImageTexture,CompressedTexture2D",
+									 PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+					   "set_displacement_texture",
+					   "get_direct_displacement_texture" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-	                      "generated_surface_texture",
-	                      PROPERTY_HINT_RESOURCE_TYPE,
-	                      "ImageTexture",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "_set_generated_surface_texture",
-	        "get_generated_surface_texture" );
+								"generated_surface_texture",
+								PROPERTY_HINT_RESOURCE_TYPE,
+								"ImageTexture",
+								PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+				  "_set_generated_surface_texture",
+				  "get_generated_surface_texture" );
 	ADD_PROPERTY( PropertyInfo( Variant::OBJECT,
-	                      "generated_displacement_texture",
-	                      PROPERTY_HINT_RESOURCE_TYPE,
-	                      "ImageTexture",
-	                      PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
-	        "_set_generated_displacement_texture",
-	        "get_generated_displacement_texture" );
+								"generated_displacement_texture",
+								PROPERTY_HINT_RESOURCE_TYPE,
+								"ImageTexture",
+								PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
+				  "_set_generated_displacement_texture",
+				  "get_generated_displacement_texture" );
 
 	ADD_GROUP( "Source Channels", "" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setNormalSource, getNormalSource, "texture",
-	                   PropertyInfo( Variant::OBJECT, "normal_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_normal_source", "get_normal_source" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setRoughnessSource, getRoughnessSource, "texture",
-	                   PropertyInfo( Variant::OBJECT, "roughness_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_roughness_source", "get_roughness_source" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setDisplacementSource, getDisplacementSource, "texture",
-	                   PropertyInfo( Variant::OBJECT, "displacement_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_displacement_source", "get_displacement_source" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setAoSource, getAoSource, "texture",
-	                   PropertyInfo( Variant::OBJECT, "ao_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ), "set_ao_source", "get_ao_source" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setNormalSource,
+					   getNormalSource,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT, "normal_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
+					   "set_normal_source",
+					   "get_normal_source" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setRoughnessSource,
+					   getRoughnessSource,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT, "roughness_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
+					   "set_roughness_source",
+					   "get_roughness_source" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setDisplacementSource,
+					   getDisplacementSource,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT, "displacement_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
+					   "set_displacement_source",
+					   "get_displacement_source" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setAoSource,
+					   getAoSource,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT, "ao_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D" ),
+					   "set_ao_source",
+					   "get_ao_source" );
 
 	ADD_GROUP( "Packing Rules", "" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setOutputSize, getOutputSize, "size",
-	                   PropertyInfo( Variant::VECTOR2I, "output_size", PROPERTY_HINT_NONE, "" ), "set_output_size", "get_output_size" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setInvertNormalGreen, getInvertNormalGreen, "enabled",
-	                   PropertyInfo( Variant::BOOL, "invert_normal_green" ), "set_invert_normal_green", "get_invert_normal_green" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setRoughnessChannel, getRoughnessChannel, "channel",
-	                   PropertyInfo( Variant::INT, "roughness_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ), "set_roughness_channel", "get_roughness_channel" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setDisplacementChannel, getDisplacementChannel, "channel",
-	                   PropertyInfo( Variant::INT, "displacement_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ), "set_displacement_channel", "get_displacement_channel" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setAoChannel, getAoChannel, "channel",
-	                   PropertyInfo( Variant::INT, "ao_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ), "set_ao_channel", "get_ao_channel" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setOutputSize,
+					   getOutputSize,
+					   "size",
+					   PropertyInfo( Variant::VECTOR2I, "output_size", PROPERTY_HINT_NONE, "" ),
+					   "set_output_size",
+					   "get_output_size" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setInvertNormalGreen,
+					   getInvertNormalGreen,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "invert_normal_green" ),
+					   "set_invert_normal_green",
+					   "get_invert_normal_green" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setRoughnessChannel,
+					   getRoughnessChannel,
+					   "channel",
+					   PropertyInfo( Variant::INT, "roughness_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ),
+					   "set_roughness_channel",
+					   "get_roughness_channel" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setDisplacementChannel,
+					   getDisplacementChannel,
+					   "channel",
+					   PropertyInfo( Variant::INT, "displacement_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ),
+					   "set_displacement_channel",
+					   "get_displacement_channel" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setAoChannel,
+					   getAoChannel,
+					   "channel",
+					   PropertyInfo( Variant::INT, "ao_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha" ),
+					   "set_ao_channel",
+					   "get_ao_channel" );
 
 	ADD_GROUP( "Build Behavior", "" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setGenerateMipmaps, getGenerateMipmaps, "enabled",
-	                   PropertyInfo( Variant::BOOL, "generate_mipmaps" ), "set_generate_mipmaps", "get_generate_mipmaps" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setAutoRebuild, getAutoRebuild, "enabled",
-	                   PropertyInfo( Variant::BOOL, "auto_rebuild" ), "set_auto_rebuild", "get_auto_rebuild" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setGenerateMipmaps,
+					   getGenerateMipmaps,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "generate_mipmaps" ),
+					   "set_generate_mipmaps",
+					   "get_generate_mipmaps" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setAutoRebuild,
+					   getAutoRebuild,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "auto_rebuild" ),
+					   "set_auto_rebuild",
+					   "get_auto_rebuild" );
 
 	ADD_GROUP( "Compatibility", "" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setMetallicSource, getMetallicSource, "texture",
-	                   PropertyInfo( Variant::OBJECT, "metallic_source", PROPERTY_HINT_RESOURCE_TYPE, "Texture2D", PROPERTY_USAGE_STORAGE ), "set_metallic_source", "get_metallic_source" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setMetallicChannel, getMetallicChannel, "channel",
-	                   PropertyInfo( Variant::INT, "metallic_channel", PROPERTY_HINT_ENUM, "Red,Green,Blue,Alpha", PROPERTY_USAGE_STORAGE ), "set_metallic_channel", "get_metallic_channel" );
-	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture, setGeneratedTexture, getLegacyGeneratedTexture, "texture",
-	                   PropertyInfo( Variant::OBJECT, "generated_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture", PROPERTY_USAGE_STORAGE ), "_set_generated_texture", "_get_legacy_generated_texture" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setMetallicSource,
+					   getMetallicSource,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT,
+									 "metallic_source",
+									 PROPERTY_HINT_RESOURCE_TYPE,
+									 "Texture2D",
+									 PROPERTY_USAGE_STORAGE ),
+					   "set_metallic_source",
+					   "get_metallic_source" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setMetallicChannel,
+					   getMetallicChannel,
+					   "channel",
+					   PropertyInfo( Variant::INT,
+									 "metallic_channel",
+									 PROPERTY_HINT_ENUM,
+									 "Red,Green,Blue,Alpha",
+									 PROPERTY_USAGE_STORAGE ),
+					   "set_metallic_channel",
+					   "get_metallic_channel" );
+	T3D_BIND_PROPERTY( Terrain3DPackedPBRTexture,
+					   setGeneratedTexture,
+					   getLegacyGeneratedTexture,
+					   "texture",
+					   PropertyInfo( Variant::OBJECT,
+									 "generated_texture",
+									 PROPERTY_HINT_RESOURCE_TYPE,
+									 "ImageTexture",
+									 PROPERTY_USAGE_STORAGE ),
+					   "_set_generated_texture",
+					   "_get_legacy_generated_texture" );
 }

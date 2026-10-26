@@ -1,3 +1,5 @@
+#include "core/utility/terrain_3d_object_bytes.h"
+#include "core/utility/terrain_3d_checked_math.h"
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "integration/godot/terrain_3d_binding.h"
@@ -11,7 +13,6 @@
 #include <EASTL/sort.h>
 
 #include "Terrain3DConstants.h"
-#include "authoring/editor/terrain_3d_editor.h"
 #include "core/utility/logger.h"
 #include "core/config/terrain_3d_compiler.h"
 #include "core/utility/terrain_3d_util.h"
@@ -30,21 +31,21 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
-static_assert( T3D_INSTANCE_REGION_TABLE_CAPACITY == ( size_t )( T3D_REGION_SLOTS ),
-        "Instancer region tables must cover every Terrain3DData region slot" );
+static_assert( T3D_INSTANCE_REGION_TABLE_CAPACITY == ( size_t ) ( T3D_REGION_SLOTS ),
+			   "Instancer region tables must cover every Terrain3DData region slot" );
 
-static size_t t3dInstancerSaturatingAdd( const size_t nA, const size_t nB ) {
-	return nB > eastl::numeric_limits<size_t>::max() - nA ? eastl::numeric_limits<size_t>::max() : nA + nB;
-}
-
-static size_t t3dInstancerSaturatingMul( const size_t nA, const size_t nB ) {
+static size_t t3dInstancerSaturatingMul(
+	const size_t nA,
+	const size_t nB ) {
 	if ( nA == 0u || nB == 0u ) {
 		return 0u;
 	}
-	return nA > eastl::numeric_limits<size_t>::max() / nB ? eastl::numeric_limits<size_t>::max() : nA * nB;
+	return nA > eastl::numeric_limits< size_t >::max() / nB ? eastl::numeric_limits< size_t >::max() : nA * nB;
 }
 
-static Basis t3dInstancerTerrainAlignedBasis( const Basis &rBasis, const Vector3 &rTerrainNormal ) {
+static Basis t3dInstancerTerrainAlignedBasis(
+	const Basis	  &rBasis,
+	const Vector3 &rTerrainNormal ) {
 	Vector3 target_up = rTerrainNormal;
 	if ( !target_up.is_finite() || target_up.length_squared() < 0.000001f ) {
 		target_up = s_v3Up;
@@ -79,7 +80,11 @@ static Basis t3dInstancerTerrainAlignedBasis( const Basis &rBasis, const Vector3
 	return rBasis.rotated( rotation_axis, Math::acos( fAlignment ) );
 }
 
-static bool t3dInstancerListWalkGuard( const char *const pListName, const uint32_t nNode, const size_t nNodeCount, size_t &nVisited ) {
+static bool t3dInstancerListWalkGuard(
+	const char *const pListName,
+	const uint32_t	  nNode,
+	const size_t	  nNodeCount,
+	size_t			 &nVisited ) {
 	if ( nNode >= nNodeCount || nVisited >= nNodeCount ) {
 		UtilityFunctions::push_error( "Terrain3DInstancer: corrupted linked list detected: ", pListName );
 		return false;
@@ -88,7 +93,10 @@ static bool t3dInstancerListWalkGuard( const char *const pListName, const uint32
 	return true;
 }
 
-static void t3dInstancerInsertLargestCount( uint32_t *const pCounts, const size_t nCapacity, const uint32_t nValue ) {
+static void t3dInstancerInsertLargestCount(
+	uint32_t *const pCounts,
+	const size_t	nCapacity,
+	const uint32_t	nValue ) {
 	if ( !pCounts || nCapacity == 0u || nValue <= pCounts[0] ) {
 		return;
 	}
@@ -101,7 +109,10 @@ static void t3dInstancerInsertLargestCount( uint32_t *const pCounts, const size_
 }
 
 static bool t3dBeginInstancePageAccess(
-        Terrain3DInstancer *pInstancer, Terrain3DData *pData, const Vector2i &rLocation, bool &bTemporary ) {
+	Terrain3DInstancer *pInstancer,
+	Terrain3DData	   *pData,
+	const Vector2i	   &rLocation,
+	bool			   &bTemporary ) {
 	bTemporary = false;
 	if ( !pData ) {
 		return false;
@@ -123,13 +134,19 @@ static bool t3dBeginInstancePageAccess(
 	return true;
 }
 
-static void t3dEndInstancePageAccess( Terrain3DData *pData, const Vector2i &rLocation, const bool bTemporary ) {
+static void t3dEndInstancePageAccess(
+	Terrain3DData  *pData,
+	const Vector2i &rLocation,
+	const bool		bTemporary ) {
 	if ( bTemporary && pData ) {
 		pData->evictInstanceRegion( rLocation );
 	}
 }
 
-static bool t3dRetainMutatedInstancePage( Terrain3DData *pData, Terrain3DRegion *pRegion, bool &bTemporary ) {
+static bool t3dRetainMutatedInstancePage(
+	Terrain3DData	*pData,
+	Terrain3DRegion *pRegion,
+	bool			&bTemporary ) {
 	if ( !bTemporary || !pData || !pRegion || !pRegion->hasInstances() ) {
 		return !bTemporary;
 	}
@@ -146,59 +163,73 @@ static bool t3dRetainMutatedInstancePage( Terrain3DData *pData, Terrain3DRegion 
 }
 
 static bool t3dInstancerReadEditableHandle(
-        const Dictionary &rHandle, Vector2i &rRegion, Vector2i &rCell, int &rMeshId, size_t &rInstanceIndex, uint32_t &rRevision ) {
-	if ( !rHandle.has( "region" ) || !rHandle.has( "cell" ) || !rHandle.has( "mesh_id" ) || !rHandle.has( "instance_index" )
-	        || !rHandle.has( "revision" ) ) {
+	const Dictionary &rHandle,
+	Vector2i		 &rRegion,
+	Vector2i		 &rCell,
+	int				 &rMeshId,
+	size_t			 &rInstanceIndex,
+	uint32_t		 &rRevision ) {
+	if ( !rHandle.has( "region" ) || !rHandle.has( "cell" ) || !rHandle.has( "mesh_id" ) ||
+		 !rHandle.has( "instance_index" ) || !rHandle.has( "revision" ) ) {
 		return false;
 	}
-	const int64_t instance_index = ( int64_t )( rHandle.get( "instance_index", -1 ) );
-	const int64_t revision = ( int64_t )( rHandle.get( "revision", 0 ) );
-	rRegion = ( Vector2i )( rHandle.get( "region", Vector2i( INT32_MAX, INT32_MAX ) ) );
-	rCell = ( Vector2i )( rHandle.get( "cell", Vector2i( INT32_MAX, INT32_MAX ) ) );
-	rMeshId = ( int )( rHandle.get( "mesh_id", -1 ) );
+	const int64_t instance_index = ( int64_t ) ( rHandle.get( "instance_index", -1 ) );
+	const int64_t revision = ( int64_t ) ( rHandle.get( "revision", 0 ) );
+	rRegion = ( Vector2i ) ( rHandle.get( "region", Vector2i( INT32_MAX, INT32_MAX ) ) );
+	rCell = ( Vector2i ) ( rHandle.get( "cell", Vector2i( INT32_MAX, INT32_MAX ) ) );
+	rMeshId = ( int ) ( rHandle.get( "mesh_id", -1 ) );
 	if ( instance_index < 0 || revision <= 0 || rMeshId < 0 || rMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return false;
 	}
-	rInstanceIndex = ( size_t )( instance_index );
-	rRevision = revision > ( int64_t )( UINT32_MAX ) ? UINT32_MAX : ( uint32_t )( revision );
+	rInstanceIndex = ( size_t ) ( instance_index );
+	rRevision = revision > ( int64_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( revision );
 	return true;
 }
 
-static Dictionary t3dInstancerBuildEditableHandle( const Vector2i &rRegion,
-        const Vector2i &rCell,
-        const int nMeshId,
-        const size_t iInstance,
-        const uint32_t nRevision,
-        const t3dInstanceCategory_t eCategory,
-        const Transform3D &rGlobalTransform,
-        const real_t fHitDistance = 0.0f ) {
+static Dictionary t3dInstancerBuildEditableHandle(
+	const Vector2i			   &rRegion,
+	const Vector2i			   &rCell,
+	const int					nMeshId,
+	const size_t				iInstance,
+	const uint32_t				nRevision,
+	const t3dInstanceCategory_t eCategory,
+	const Transform3D		   &rGlobalTransform,
+	const real_t				fHitDistance = 0.0f ) {
 	Dictionary result;
 	result["valid"] = true;
 	result["region"] = rRegion;
 	result["cell"] = rCell;
 	result["mesh_id"] = nMeshId;
-	result["instance_index"] = ( int64_t )( iInstance );
-	result["revision"] = ( int64_t )( nRevision );
-	result["category"] = ( int )( eCategory );
+	result["instance_index"] = ( int64_t ) ( iInstance );
+	result["revision"] = ( int64_t ) ( nRevision );
+	result["category"] = ( int ) ( eCategory );
 	result["transform"] = rGlobalTransform;
 	result["hit_distance"] = fHitDistance;
 	return result;
 }
 
-static bool t3dInstancerEraseEditableRecord( t3dInstanceCell_s &rCell, const size_t iInstance ) {
+static bool t3dInstancerEraseEditableRecord(
+	t3dInstanceCell_s &rCell,
+	const size_t	   iInstance ) {
 	const size_t count = rCell.m_transforms.size();
-	if ( iInstance >= count || ( rCell.usesColors() && rCell.m_colors.size() != count )
-	        || ( rCell.usesOwners() && rCell.m_owners.size() != count ) ) {
+	if ( iInstance >= count || ( rCell.usesColors() && rCell.m_colors.size() != count ) ||
+		 ( rCell.usesOwners() && rCell.m_owners.size() != count ) ) {
 		return false;
 	}
 	const size_t tail = count - iInstance - 1u;
 	if ( tail > 0u ) {
-		memmove( rCell.m_transforms.data() + iInstance, rCell.m_transforms.data() + iInstance + 1u, tail * sizeof( t3dPackedTransform_s ) );
+		memmove( rCell.m_transforms.data() + iInstance,
+				 rCell.m_transforms.data() + iInstance + 1u,
+				 tail * sizeof( t3dPackedTransform_s ) );
 		if ( rCell.usesColors() ) {
-			memmove( rCell.m_colors.data() + iInstance, rCell.m_colors.data() + iInstance + 1u, tail * sizeof( uint32_t ) );
+			memmove( rCell.m_colors.data() + iInstance,
+					 rCell.m_colors.data() + iInstance + 1u,
+					 tail * sizeof( uint32_t ) );
 		}
 		if ( rCell.usesOwners() ) {
-			memmove( rCell.m_owners.data() + iInstance, rCell.m_owners.data() + iInstance + 1u, tail * sizeof( uint32_t ) );
+			memmove( rCell.m_owners.data() + iInstance,
+					 rCell.m_owners.data() + iInstance + 1u,
+					 tail * sizeof( uint32_t ) );
 		}
 	}
 	rCell.m_transforms.resize( count - 1u );
@@ -212,14 +243,15 @@ static bool t3dInstancerEraseEditableRecord( t3dInstanceCell_s &rCell, const siz
 	return true;
 }
 
-static bool t3dInstancerAppendEditableRecord( t3dInstanceCell_s &rCell,
-        const Transform3D &rTransform,
-        const Color &rColor,
-        const uint32_t nOwner,
-        const uint16_t nBehaviorFlags,
-        size_t &rNewIndex ) {
-	const bool bColorData = rColor != s_colorWhite;
-	const bool bOwnerData = nOwner != 0u;
+static bool t3dInstancerAppendEditableRecord(
+	t3dInstanceCell_s &rCell,
+	const Transform3D &rTransform,
+	const Color		  &rColor,
+	const uint32_t	   nOwner,
+	const uint16_t	   nBehaviorFlags,
+	size_t			  &rNewIndex ) {
+	const bool	 bColorData = rColor != s_colorWhite;
+	const bool	 bOwnerData = nOwner != 0u;
 	const size_t old_transforms = rCell.m_transforms.size();
 	const size_t old_colors = rCell.m_colors.size();
 	const size_t old_owners = rCell.m_owners.size();
@@ -227,8 +259,9 @@ static bool t3dInstancerAppendEditableRecord( t3dInstanceCell_s &rCell,
 		return false;
 	}
 	rNewIndex = old_transforms;
-	if ( !rCell.m_transforms.pushBack( rTransform, nBehaviorFlags ) || ( !rCell.m_colors.empty() && !rCell.pushColor( rColor ) )
-	        || ( !rCell.m_owners.empty() && !rCell.m_owners.pushBack( nOwner ) ) ) {
+	if ( !rCell.m_transforms.pushBack( rTransform, nBehaviorFlags ) ||
+		 ( !rCell.m_colors.empty() && !rCell.pushColor( rColor ) ) ||
+		 ( !rCell.m_owners.empty() && !rCell.m_owners.pushBack( nOwner ) ) ) {
 		rCell.m_transforms.resize( old_transforms );
 		rCell.m_colors.resize( old_colors );
 		rCell.m_owners.resize( old_owners );
@@ -237,18 +270,20 @@ static bool t3dInstancerAppendEditableRecord( t3dInstanceCell_s &rCell,
 	return true;
 }
 
-static uint64_t t3dRepositoryMeshInstanceCount( const Terrain3DData *pData, const int nMeshId ) {
+static uint64_t t3dRepositoryMeshInstanceCount(
+	const Terrain3DData *pData,
+	const int			 nMeshId ) {
 	if ( !pData || nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return 0u;
 	}
-	uint64_t total = 0u;
+	uint64_t				total = 0u;
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
 		const Terrain3DRegion *pRegion = ppRegionPtrs[region_index];
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		const uint64_t count = ( uint64_t )( pRegion->getInstanceCount( nMeshId ) );
+		const uint64_t count = ( uint64_t ) ( pRegion->getInstanceCount( nMeshId ) );
 		total = UINT64_MAX - total < count ? UINT64_MAX : total + count;
 	}
 	return total;
@@ -257,8 +292,9 @@ static uint64_t t3dRepositoryMeshInstanceCount( const Terrain3DData *pData, cons
 // -----------------------------------------------------------------------------
 // Private functions
 
-bool Terrain3DInstancer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy )
-{
+bool Terrain3DInstancer::bindRuntimeAllocator(
+	Terrain3DMemoryZone *const		   pZone,
+	const t3dAllocatorOverflowPolicy_t ePolicy ) {
 	if ( !pZone ) {
 		return false;
 	}
@@ -281,19 +317,27 @@ bool Terrain3DInstancer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone,
 	return true;
 }
 
-t3dRenderCellKey_t Terrain3DInstancer::makeRenderKey( const t3dRenderCell_t& rCell )
-{
+t3dRenderCellKey_t Terrain3DInstancer::makeRenderKey(
+	const t3dRenderCell_t &rCell ) {
 	return t3dRenderCellKey_t{ rCell.m_region, rCell.m_cell, rCell.m_nMeshId, rCell.m_nLod };
 }
 
-void Terrain3DInstanceSnapshotBuilder::markRdPublicationDirty( void ) {
+void Terrain3DInstanceSnapshotBuilder::markRdPublicationDirty(
+	void ) {
 	m_nRdPublicationGeneration = t3dNextGeneration( m_nRdPublicationGeneration );
 }
 
-void Terrain3DInstancer::markRdPublicationDirty( void ) { m_snapshotBuilder.markRdPublicationDirty(); }
+void Terrain3DInstancer::markRdPublicationDirty(
+	void ) {
+	m_snapshotBuilder.markRdPublicationDirty();
+}
 
 void Terrain3DInstancer::emitDerivedMutation(
-        const Vector2i &rRegion, const Vector2i &rCell, const int nMeshId, const uint32_t nFlags, const uint32_t nSourceRevision ) {
+	const Vector2i &rRegion,
+	const Vector2i &rCell,
+	const int		nMeshId,
+	const uint32_t	nFlags,
+	const uint32_t	nSourceRevision ) {
 	markRdPublicationDirty();
 	m_nDerivedMutationGeneration = t3dNextGeneration( m_nDerivedMutationGeneration );
 	if ( !m_pTerrain ) {
@@ -309,29 +353,31 @@ void Terrain3DInstancer::emitDerivedMutation(
 	m_pTerrain->onInstanceDerivedMutation( event );
 }
 
-void Terrain3DInstancer::onAssetPolicyChanged( const int nMeshId ) {
+void Terrain3DInstancer::onAssetPolicyChanged(
+	const int nMeshId ) {
 	emitDerivedMutation( Vector2i( INT32_MAX, INT32_MAX ),
-	        Vector2i( INT32_MAX, INT32_MAX ),
-	        nMeshId,
-	        T3D_INSTANCE_MUTATION_POLICY | T3D_INSTANCE_MUTATION_BULK );
+						 Vector2i( INT32_MAX, INT32_MAX ),
+						 nMeshId,
+						 T3D_INSTANCE_MUTATION_POLICY | T3D_INSTANCE_MUTATION_BULK );
 }
 
-bool Terrain3DInstancer::requestRuntimeCapacityForMutation( const size_t nAdditionalRecords ) {
+bool Terrain3DInstancer::requestRuntimeCapacityForMutation(
+	const size_t nAdditionalRecords ) {
 	if ( nAdditionalRecords == 0u ) {
 		return true;
 	}
 	size_t logical_records = 0u;
 	for ( size_t iMesh = 0u; iMesh < T3D_ARRAY_COUNT( m_szLogicalMeshInstanceTotals ); ++iMesh ) {
 		const uint64_t mesh_records = m_szLogicalMeshInstanceTotals[iMesh];
-		if ( mesh_records > ( uint64_t )( eastl::numeric_limits<size_t>::max() - logical_records ) ) {
-			logical_records = eastl::numeric_limits<size_t>::max();
+		if ( mesh_records > ( uint64_t ) ( eastl::numeric_limits< size_t >::max() - logical_records ) ) {
+			logical_records = eastl::numeric_limits< size_t >::max();
 			break;
 		}
-		logical_records += ( size_t )( mesh_records );
+		logical_records += ( size_t ) ( mesh_records );
 	}
-	const size_t required = nAdditionalRecords > eastl::numeric_limits<size_t>::max() - logical_records
-	        ? eastl::numeric_limits<size_t>::max()
-	        : logical_records + nAdditionalRecords;
+	const size_t required = nAdditionalRecords > eastl::numeric_limits< size_t >::max() - logical_records
+								? eastl::numeric_limits< size_t >::max()
+								: logical_records + nAdditionalRecords;
 	if ( required <= m_nLogicalCellCapacity ) {
 		return true;
 	}
@@ -345,9 +391,9 @@ bool Terrain3DInstancer::requestRuntimeCapacityForMutation( const size_t nAdditi
 	if ( !rebuildRuntimeStorageCapacities() || m_nLogicalCellCapacity < required ) {
 		++m_nOwnerGrowthDeniedCount;
 		LOG( WARN,
-		        "Instancer mutation rejected because synchronous cold capacity growth could not satisfy ",
-		        ( uint64_t )( required ),
-		        " logical records" );
+			 "Instancer mutation rejected because synchronous cold capacity growth could not satisfy ",
+			 ( uint64_t ) ( required ),
+			 " logical records" );
 		return false;
 	}
 	m_bRuntimeStorageRebuildPending = false;
@@ -355,25 +401,29 @@ bool Terrain3DInstancer::requestRuntimeCapacityForMutation( const size_t nAdditi
 	return true;
 }
 
-bool Terrain3DInstancer::reportRuntimeCapacityExceeded( const char *const pszStorage, const size_t nRequired, const size_t nCapacity ) {
+bool Terrain3DInstancer::reportRuntimeCapacityExceeded(
+	const char *const pszStorage,
+	const size_t	  nRequired,
+	const size_t	  nCapacity ) {
 	++m_nCapacityMissCount;
 	++m_nOwnerGrowthDeniedCount;
 	const bool already_pending = m_bRuntimeStorageRebuildPending;
 	m_bRuntimeStorageRebuildPending = true;
 	if ( !already_pending ) {
 		LOG( WARN,
-		        "Instancer fixed runtime capacity miss for ",
-		        pszStorage,
-		        ": required ",
-		        ( uint64_t )( nRequired ),
-		        ", configured ",
-		        ( uint64_t )( nCapacity ),
-		        ". Cold capacity rebuild queued." );
+			 "Instancer fixed runtime capacity miss for ",
+			 pszStorage,
+			 ": required ",
+			 ( uint64_t ) ( nRequired ),
+			 ", configured ",
+			 ( uint64_t ) ( nCapacity ),
+			 ". Cold capacity rebuild queued." );
 	}
 	return false;
 }
 
-bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
+bool Terrain3DInstancer::rebuildRuntimeStorageCapacities(
+	void ) {
 	Terrain3DColdPhaseScope cold_phase_scope;
 	++m_nColdRebuildCount;
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
@@ -381,7 +431,7 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 	}
 
 	Terrain3DRegion *const *ppRegions = m_pTerrain->dataObject()->getRegionPtrMapInternal();
-	size_t authored_logical_capacity = 0u;
+	size_t					authored_logical_capacity = 0u;
 	if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() ) {
 		uint32_t szLargestCounts[T3D_INSTANCE_CACHE_MAX_PAGES];
 		memset( szLargestCounts, 0, sizeof( szLargestCounts ) );
@@ -390,11 +440,13 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 			if ( !pRegion || pRegion->isDeleted() ) {
 				continue;
 			}
-			t3dInstancerInsertLargestCount( szLargestCounts, T3D_INSTANCE_CACHE_MAX_PAGES, pRegion->getInstanceCount() );
+			t3dInstancerInsertLargestCount( szLargestCounts,
+											T3D_INSTANCE_CACHE_MAX_PAGES,
+											pRegion->getInstanceCount() );
 		}
-		for ( size_t iPage = 0u; iPage < ( size_t )( T3D_INSTANCE_CACHE_MAX_PAGES ); iPage++ ) {
+		for ( size_t iPage = 0u; iPage < ( size_t ) ( T3D_INSTANCE_CACHE_MAX_PAGES ); iPage++ ) {
 			const uint32_t count = szLargestCounts[iPage];
-			authored_logical_capacity = t3dInstancerSaturatingAdd( authored_logical_capacity, ( size_t )( count ) );
+			authored_logical_capacity = t3dSaturatingAddUnsigned( authored_logical_capacity, ( size_t ) ( count ) );
 		}
 	} else {
 		for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
@@ -402,12 +454,13 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 			if ( !pRegion || pRegion->isDeleted() ) {
 				continue;
 			}
-			authored_logical_capacity = t3dInstancerSaturatingAdd( authored_logical_capacity, ( size_t )( pRegion->getInstanceCount() ) );
+			authored_logical_capacity =
+				t3dSaturatingAddUnsigned( authored_logical_capacity, ( size_t ) ( pRegion->getInstanceCount() ) );
 		}
 	}
 
-	const size_t mutation_headroom = MAX<size_t>( 1u, ( size_t )( m_nUpdateCellBudget ) );
-	size_t logical_capacity = t3dInstancerSaturatingAdd( authored_logical_capacity, mutation_headroom );
+	const size_t mutation_headroom = MAX< size_t >( 1u, ( size_t ) ( m_nUpdateCellBudget ) );
+	size_t		 logical_capacity = t3dSaturatingAddUnsigned( authored_logical_capacity, mutation_headroom );
 	logical_capacity = MAX( logical_capacity, m_nRequestedMutationLogicalCapacity );
 	logical_capacity = MAX( logical_capacity, m_logicalCellCounts.size() );
 	logical_capacity = MAX( logical_capacity, m_logicalRegionNodes.size() );
@@ -417,27 +470,27 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 	logical_capacity = MAX( logical_capacity, m_pendingCellUpdates.size() );
 	logical_capacity = MAX( logical_capacity, m_buildingCellUpdates.size() );
 
-	const size_t render_multiplier = m_bSingleLodInstanceBuffers ? 1u : ( size_t )( T3D_MESH_MAX_LOD_COUNT );
-	size_t render_capacity = t3dInstancerSaturatingMul( logical_capacity, render_multiplier );
+	const size_t render_multiplier = m_bSingleLodInstanceBuffers ? 1u : ( size_t ) ( T3D_MESH_MAX_LOD_COUNT );
+	size_t		 render_capacity = t3dInstancerSaturatingMul( logical_capacity, render_multiplier );
 	render_capacity = MAX( render_capacity, m_renderCells.size() );
 	render_capacity = MAX( render_capacity, m_renderRegionNodes.size() );
 	render_capacity = MAX( render_capacity, m_iRenderCellIndex.size() );
 
-	if ( !t3dContainerReserveCold( m_iRenderCellIndex, render_capacity )
-	        || !t3dContainerReserveCold( m_logicalCellCounts, logical_capacity )
-	        || !t3dContainerReserveCold( m_singleLodTransitionBuckets, logical_capacity )
-	        || !t3dContainerReserveCold( m_streamingUpdates, logical_capacity )
-	        || !t3dContainerReserveCold( m_activeStreamingUpdates, logical_capacity ) ) {
+	if ( !t3dContainerReserveCold( m_iRenderCellIndex, render_capacity ) ||
+		 !t3dContainerReserveCold( m_logicalCellCounts, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_singleLodTransitionBuckets, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_streamingUpdates, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_activeStreamingUpdates, logical_capacity ) ) {
 		LOG( ERROR, "Could not establish EASTL instancer index capacity" );
 		return false;
 	}
 
-	if ( !t3dContainerReserveCold( m_renderCells, render_capacity )
-	        || !t3dContainerReserveCold( m_renderRegionNodes, render_capacity )
-	        || !t3dContainerReserveCold( m_logicalRegionNodes, logical_capacity )
-	        || !t3dContainerReserveCold( m_transitionCellNodes, logical_capacity )
-	        || !t3dContainerReserveCold( m_pendingCellUpdates, logical_capacity )
-	        || !t3dContainerReserveCold( m_buildingCellUpdates, logical_capacity ) ) {
+	if ( !t3dContainerReserveCold( m_renderCells, render_capacity ) ||
+		 !t3dContainerReserveCold( m_renderRegionNodes, render_capacity ) ||
+		 !t3dContainerReserveCold( m_logicalRegionNodes, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_transitionCellNodes, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_pendingCellUpdates, logical_capacity ) ||
+		 !t3dContainerReserveCold( m_buildingCellUpdates, logical_capacity ) ) {
 		LOG( ERROR, "Could not establish fixed instancer runtime storage" );
 		return false;
 	}
@@ -452,57 +505,66 @@ bool Terrain3DInstancer::rebuildRuntimeStorageCapacities( void ) {
 	return true;
 }
 
-bool Terrain3DInstancer::appendBuildingCellUpdate( const t3dCellUpdateKey_t &rKey ) {
+bool Terrain3DInstancer::appendBuildingCellUpdate(
+	const t3dCellUpdateKey_t &rKey ) {
 	if ( m_buildingCellUpdates.size() >= m_nCellUpdateQueueCapacity ) {
-		return reportRuntimeCapacityExceeded(
-		        "cell update queue", m_buildingCellUpdates.size() + 1u, m_nCellUpdateQueueCapacity );
+		return reportRuntimeCapacityExceeded( "cell update queue",
+											  m_buildingCellUpdates.size() + 1u,
+											  m_nCellUpdateQueueCapacity );
 	}
 	if ( !t3dVectorPushBackWithinCapacity( m_buildingCellUpdates, rKey ) ) {
-		return reportRuntimeCapacityExceeded(
-		        "cell update queue", m_buildingCellUpdates.size() + 1u, m_nCellUpdateQueueCapacity );
+		return reportRuntimeCapacityExceeded( "cell update queue",
+											  m_buildingCellUpdates.size() + 1u,
+											  m_nCellUpdateQueueCapacity );
 	}
 	return true;
 }
 
-bool Terrain3DInstancer::insertStreamingUpdate( const t3dCellUpdateKey_t &rKey ) {
+bool Terrain3DInstancer::insertStreamingUpdate(
+	const t3dCellUpdateKey_t &rKey ) {
 	if ( t3dContainerContains( m_streamingUpdates, rKey ) ) {
 		return false;
 	}
 	if ( !t3dSetInsertWithinCapacity( m_streamingUpdates, rKey ) ) {
-		reportRuntimeCapacityExceeded(
-		        "streaming update set", m_streamingUpdates.size() + 1u, m_streamingUpdates.capacity() );
+		reportRuntimeCapacityExceeded( "streaming update set",
+									   m_streamingUpdates.size() + 1u,
+									   m_streamingUpdates.capacity() );
 		return false;
 	}
 	return true;
 }
 
-int Terrain3DInstancer::getRegionTableIndex( const Vector2i &vRegion ) {
+int Terrain3DInstancer::getRegionTableIndex(
+	const Vector2i &vRegion ) {
 	return Terrain3DData::getRegionMapIndex( vRegion );
 }
 
-uint32_t Terrain3DInstancer::allocateRenderRegionNode( const size_t iRenderCell, const uint16_t nRegionIndex ) {
+uint32_t Terrain3DInstancer::allocateRenderRegionNode(
+	const size_t   iRenderCell,
+	const uint16_t nRegionIndex ) {
 	uint32_t node_index = UINT32_MAX;
 	if ( m_nRenderRegionFreeHead != UINT32_MAX ) {
 		node_index = m_nRenderRegionFreeHead;
-		m_nRenderRegionFreeHead = m_renderRegionNodes[( size_t )( node_index )].m_nNext;
+		m_nRenderRegionFreeHead = m_renderRegionNodes[( size_t ) ( node_index )].m_nNext;
 	} else {
 		if ( m_renderRegionNodes.size() >= m_nRenderCellCapacity ) {
-			reportRuntimeCapacityExceeded(
-			        "render region node pool", m_renderRegionNodes.size() + 1u, m_nRenderCellCapacity );
+			reportRuntimeCapacityExceeded( "render region node pool",
+										   m_renderRegionNodes.size() + 1u,
+										   m_nRenderCellCapacity );
 			return UINT32_MAX;
 		}
-		node_index = ( uint32_t )( m_renderRegionNodes.size() );
+		node_index = ( uint32_t ) ( m_renderRegionNodes.size() );
 		if ( !t3dVectorPushBackWithinCapacity( m_renderRegionNodes, t3dRenderRegionNode_t{} ) ) {
 			return UINT32_MAX;
 		}
 	}
-	t3dRegionList_t &list = m_szRegionRenderLists[nRegionIndex];
-	t3dRenderRegionNode_t &node = m_renderRegionNodes[( size_t )( node_index )];
+	t3dRegionList_t		  &list = m_szRegionRenderLists[nRegionIndex];
+	t3dRenderRegionNode_t &node = m_renderRegionNodes[( size_t ) ( node_index )];
 	node.m_iRenderCell = iRenderCell;
 	node.m_nPrev = UINT32_MAX;
 	node.m_nNext = list.m_nHead;
 	if ( list.m_nHead != UINT32_MAX ) {
-		m_renderRegionNodes[( size_t )( list.m_nHead )].m_nPrev = node_index;
+		m_renderRegionNodes[( size_t ) ( list.m_nHead )].m_nPrev = node_index;
 	}
 	list.m_nHead = node_index;
 	++list.m_nCount;
@@ -510,19 +572,22 @@ uint32_t Terrain3DInstancer::allocateRenderRegionNode( const size_t iRenderCell,
 	return node_index;
 }
 
-void Terrain3DInstancer::releaseRenderRegionNode( const uint32_t nNode, const uint16_t nRegionIndex ) {
-	if ( nNode == UINT32_MAX || nNode >= m_renderRegionNodes.size() || nRegionIndex >= T3D_INSTANCE_REGION_TABLE_CAPACITY ) {
+void Terrain3DInstancer::releaseRenderRegionNode(
+	const uint32_t nNode,
+	const uint16_t nRegionIndex ) {
+	if ( nNode == UINT32_MAX || nNode >= m_renderRegionNodes.size() ||
+		 nRegionIndex >= T3D_INSTANCE_REGION_TABLE_CAPACITY ) {
 		return;
 	}
-	t3dRegionList_t &list = m_szRegionRenderLists[nRegionIndex];
-	t3dRenderRegionNode_t &node = m_renderRegionNodes[( size_t )( nNode )];
+	t3dRegionList_t		  &list = m_szRegionRenderLists[nRegionIndex];
+	t3dRenderRegionNode_t &node = m_renderRegionNodes[( size_t ) ( nNode )];
 	if ( node.m_nPrev != UINT32_MAX ) {
-		m_renderRegionNodes[( size_t )( node.m_nPrev )].m_nNext = node.m_nNext;
+		m_renderRegionNodes[( size_t ) ( node.m_nPrev )].m_nNext = node.m_nNext;
 	} else if ( list.m_nHead == nNode ) {
 		list.m_nHead = node.m_nNext;
 	}
 	if ( node.m_nNext != UINT32_MAX ) {
-		m_renderRegionNodes[( size_t )( node.m_nNext )].m_nPrev = node.m_nPrev;
+		m_renderRegionNodes[( size_t ) ( node.m_nNext )].m_nPrev = node.m_nPrev;
 	}
 	if ( list.m_nCount > 0u ) {
 		--list.m_nCount;
@@ -536,30 +601,32 @@ void Terrain3DInstancer::releaseRenderRegionNode( const uint32_t nNode, const ui
 	m_nRenderRegionFreeHead = nNode;
 }
 
-uint32_t Terrain3DInstancer::allocateLogicalRegionNode( const t3dCellUpdateKey_t& rKey, const uint16_t nRegionIndex )
-{
+uint32_t Terrain3DInstancer::allocateLogicalRegionNode(
+	const t3dCellUpdateKey_t &rKey,
+	const uint16_t			  nRegionIndex ) {
 	uint32_t node_index = UINT32_MAX;
 	if ( m_nLogicalRegionFreeHead != UINT32_MAX ) {
 		node_index = m_nLogicalRegionFreeHead;
-		m_nLogicalRegionFreeHead = m_logicalRegionNodes[( size_t )( node_index )].m_nNext;
+		m_nLogicalRegionFreeHead = m_logicalRegionNodes[( size_t ) ( node_index )].m_nNext;
 	} else {
 		if ( m_logicalRegionNodes.size() >= m_nLogicalCellCapacity ) {
-			reportRuntimeCapacityExceeded(
-			        "logical region node pool", m_logicalRegionNodes.size() + 1u, m_nLogicalCellCapacity );
+			reportRuntimeCapacityExceeded( "logical region node pool",
+										   m_logicalRegionNodes.size() + 1u,
+										   m_nLogicalCellCapacity );
 			return UINT32_MAX;
 		}
-		node_index = ( uint32_t )( m_logicalRegionNodes.size() );
+		node_index = ( uint32_t ) ( m_logicalRegionNodes.size() );
 		if ( !t3dVectorPushBackWithinCapacity( m_logicalRegionNodes, t3dLogicalRegionNode_t{} ) ) {
 			return UINT32_MAX;
 		}
 	}
-	t3dRegionList_t &list = m_szRegionLogicalLists[nRegionIndex];
-	t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t )( node_index )];
+	t3dRegionList_t		   &list = m_szRegionLogicalLists[nRegionIndex];
+	t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t ) ( node_index )];
 	node.m_key = rKey;
 	node.m_nPrev = UINT32_MAX;
 	node.m_nNext = list.m_nHead;
 	if ( list.m_nHead != UINT32_MAX ) {
-		m_logicalRegionNodes[( size_t )( list.m_nHead )].m_nPrev = node_index;
+		m_logicalRegionNodes[( size_t ) ( list.m_nHead )].m_nPrev = node_index;
 	}
 	list.m_nHead = node_index;
 	++list.m_nCount;
@@ -567,19 +634,22 @@ uint32_t Terrain3DInstancer::allocateLogicalRegionNode( const t3dCellUpdateKey_t
 	return node_index;
 }
 
-void Terrain3DInstancer::releaseLogicalRegionNode( const uint32_t nNode, const uint16_t nRegionIndex ) {
-	if ( nNode == UINT32_MAX || nNode >= m_logicalRegionNodes.size() || nRegionIndex >= T3D_INSTANCE_REGION_TABLE_CAPACITY ) {
+void Terrain3DInstancer::releaseLogicalRegionNode(
+	const uint32_t nNode,
+	const uint16_t nRegionIndex ) {
+	if ( nNode == UINT32_MAX || nNode >= m_logicalRegionNodes.size() ||
+		 nRegionIndex >= T3D_INSTANCE_REGION_TABLE_CAPACITY ) {
 		return;
 	}
-	t3dRegionList_t &list = m_szRegionLogicalLists[nRegionIndex];
-	t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t )( nNode )];
+	t3dRegionList_t		   &list = m_szRegionLogicalLists[nRegionIndex];
+	t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t ) ( nNode )];
 	if ( node.m_nPrev != UINT32_MAX ) {
-		m_logicalRegionNodes[( size_t )( node.m_nPrev )].m_nNext = node.m_nNext;
+		m_logicalRegionNodes[( size_t ) ( node.m_nPrev )].m_nNext = node.m_nNext;
 	} else if ( list.m_nHead == nNode ) {
 		list.m_nHead = node.m_nNext;
 	}
 	if ( node.m_nNext != UINT32_MAX ) {
-		m_logicalRegionNodes[( size_t )( node.m_nNext )].m_nPrev = node.m_nPrev;
+		m_logicalRegionNodes[( size_t ) ( node.m_nNext )].m_nPrev = node.m_nPrev;
 	}
 	if ( list.m_nCount > 0u ) {
 		--list.m_nCount;
@@ -593,38 +663,42 @@ void Terrain3DInstancer::releaseLogicalRegionNode( const uint32_t nNode, const u
 	m_nLogicalRegionFreeHead = nNode;
 }
 
-uint32_t Terrain3DInstancer::allocateTransitionCellNode( const t3dCellUpdateKey_t &rKey, const uint32_t nNext ) {
+uint32_t Terrain3DInstancer::allocateTransitionCellNode(
+	const t3dCellUpdateKey_t &rKey,
+	const uint32_t			  nNext ) {
 	uint32_t node_index = UINT32_MAX;
 	if ( m_nTransitionCellFreeHead != UINT32_MAX ) {
 		node_index = m_nTransitionCellFreeHead;
-		m_nTransitionCellFreeHead = m_transitionCellNodes[( size_t )( node_index )].m_nNext;
+		m_nTransitionCellFreeHead = m_transitionCellNodes[( size_t ) ( node_index )].m_nNext;
 	} else {
 		if ( m_transitionCellNodes.size() >= m_nLogicalCellCapacity ) {
 			reportRuntimeCapacityExceeded( "transition cell node pool",
-			        m_transitionCellNodes.size() + 1u,
-			        m_nLogicalCellCapacity );
+										   m_transitionCellNodes.size() + 1u,
+										   m_nLogicalCellCapacity );
 			return UINT32_MAX;
 		}
-		node_index = ( uint32_t )( m_transitionCellNodes.size() );
+		node_index = ( uint32_t ) ( m_transitionCellNodes.size() );
 		if ( !t3dVectorPushBackWithinCapacity( m_transitionCellNodes, t3dTransitionCellNode_t{} ) ) {
 			return UINT32_MAX;
 		}
 	}
-	t3dTransitionCellNode_t &node = m_transitionCellNodes[( size_t )( node_index )];
+	t3dTransitionCellNode_t &node = m_transitionCellNodes[( size_t ) ( node_index )];
 	node.m_key = rKey;
 	node.m_nNext = nNext;
 	return node_index;
 }
 
-void Terrain3DInstancer::releaseTransitionCellNode( const uint32_t nNode ) {
+void Terrain3DInstancer::releaseTransitionCellNode(
+	const uint32_t nNode ) {
 	if ( nNode == UINT32_MAX || nNode >= m_transitionCellNodes.size() ) {
 		return;
 	}
-	m_transitionCellNodes[( size_t )( nNode )].m_nNext = m_nTransitionCellFreeHead;
+	m_transitionCellNodes[( size_t ) ( nNode )].m_nNext = m_nTransitionCellFreeHead;
 	m_nTransitionCellFreeHead = nNode;
 }
 
-void Terrain3DInstancer::clearRegionRenderLists( void ) {
+void Terrain3DInstancer::clearRegionRenderLists(
+	void ) {
 	for ( size_t index = 0; index < T3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
 		m_szRegionRenderLists[index].m_nHead = UINT32_MAX;
 		m_szRegionRenderLists[index].m_nCount = 0u;
@@ -634,7 +708,8 @@ void Terrain3DInstancer::clearRegionRenderLists( void ) {
 	m_regionRenderMask.reset();
 }
 
-void Terrain3DInstancer::clearRegionLogicalLists( void ) {
+void Terrain3DInstancer::clearRegionLogicalLists(
+	void ) {
 	for ( size_t index = 0; index < T3D_INSTANCE_REGION_TABLE_CAPACITY; ++index ) {
 		m_szRegionLogicalLists[index].m_nHead = UINT32_MAX;
 		m_szRegionLogicalLists[index].m_nCount = 0u;
@@ -644,9 +719,13 @@ void Terrain3DInstancer::clearRegionLogicalLists( void ) {
 	m_regionLogicalMask.reset();
 }
 
-t3dRenderCell_t *Terrain3DInstancer::findRenderCell( const Vector2i &region, const int nMeshId, const int nLod, const Vector2i &cell ) {
+t3dRenderCell_t *Terrain3DInstancer::findRenderCell(
+	const Vector2i &region,
+	const int		nMeshId,
+	const int		nLod,
+	const Vector2i &cell ) {
 	const t3dRenderCellKey_t key{ region, cell, nMeshId, nLod };
-	const size_t *const pIndex = t3dMapFind( m_iRenderCellIndex, key );
+	const size_t *const		 pIndex = t3dMapFind( m_iRenderCellIndex, key );
 	if ( !pIndex || *pIndex >= m_renderCells.size() ) {
 		return NULL;
 	}
@@ -654,13 +733,16 @@ t3dRenderCell_t *Terrain3DInstancer::findRenderCell( const Vector2i &region, con
 }
 
 t3dRenderCell_t *Terrain3DInstancer::getOrCreateRenderCell(
-        const Vector2i &region, const int nMeshId, const int nLod, const Vector2i &cell ) {
+	const Vector2i &region,
+	const int		nMeshId,
+	const int		nLod,
+	const Vector2i &cell ) {
 	const t3dRenderCellKey_t key{ region, cell, nMeshId, nLod };
 	if ( const size_t *const pIndex = t3dMapFind( m_iRenderCellIndex, key ) ) {
 		return *pIndex < m_renderCells.size() ? &m_renderCells[*pIndex] : NULL;
 	}
 	const int region_index = getRegionTableIndex( region );
-	if ( region_index < 0 || region_index >= ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+	if ( region_index < 0 || region_index >= ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 		LOG( ERROR, "Instance cell region is outside the fixed terrain map: ", region );
 		return NULL;
 	}
@@ -670,26 +752,25 @@ t3dRenderCell_t *Terrain3DInstancer::getOrCreateRenderCell(
 	value.m_nMeshId = nMeshId;
 	value.m_nLod = nLod;
 	if ( m_renderCells.size() >= m_nRenderCellCapacity ) {
-		reportRuntimeCapacityExceeded(
-		        "render cell storage", m_renderCells.size() + 1u, m_nRenderCellCapacity );
+		reportRuntimeCapacityExceeded( "render cell storage", m_renderCells.size() + 1u, m_nRenderCellCapacity );
 		return NULL;
 	}
 	const size_t index = m_renderCells.size();
 	if ( !t3dVectorPushBackWithinCapacity( m_renderCells, eastl::move( value ) ) ) {
-		reportRuntimeCapacityExceeded(
-		        "render cell storage", m_renderCells.size() + 1u, m_nRenderCellCapacity );
+		reportRuntimeCapacityExceeded( "render cell storage", m_renderCells.size() + 1u, m_nRenderCellCapacity );
 		return NULL;
 	}
 	t3dRenderCell_t &render_cell = m_renderCells.back();
-	render_cell.m_nRegionListNode = allocateRenderRegionNode( index, ( uint16_t )( region_index ) );
+	render_cell.m_nRegionListNode = allocateRenderRegionNode( index, ( uint16_t ) ( region_index ) );
 	if ( render_cell.m_nRegionListNode == UINT32_MAX ) {
 		m_renderCells.pop_back();
 		return NULL;
 	}
 	if ( !t3dMapInsertOrAssignWithinCapacity( m_iRenderCellIndex, key, index ) ) {
-		reportRuntimeCapacityExceeded(
-		        "render cell index", m_iRenderCellIndex.size() + 1u, m_iRenderCellIndex.capacity() );
-		releaseRenderRegionNode( render_cell.m_nRegionListNode, ( uint16_t )( region_index ) );
+		reportRuntimeCapacityExceeded( "render cell index",
+									   m_iRenderCellIndex.size() + 1u,
+									   m_iRenderCellIndex.capacity() );
+		releaseRenderRegionNode( render_cell.m_nRegionListNode, ( uint16_t ) ( region_index ) );
 		m_renderCells.pop_back();
 		return NULL;
 	}
@@ -697,39 +778,44 @@ t3dRenderCell_t *Terrain3DInstancer::getOrCreateRenderCell(
 	return &render_cell;
 }
 
-void Terrain3DInstancer::eraseRenderCellAt( const size_t iIndex ) {
+void Terrain3DInstancer::eraseRenderCellAt(
+	const size_t iIndex ) {
 	if ( iIndex >= m_renderCells.size() ) {
 		return;
 	}
 	t3dRenderCell_t &dead = m_renderCells[iIndex];
 	m_iRenderCellIndex.erase( makeRenderKey( dead ) );
 	const int dead_region_index = getRegionTableIndex( dead.m_region );
-	if ( dead_region_index >= 0 && dead_region_index < ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		releaseRenderRegionNode( dead.m_nRegionListNode, ( uint16_t )( dead_region_index ) );
+	if ( dead_region_index >= 0 && dead_region_index < ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		releaseRenderRegionNode( dead.m_nRegionListNode, ( uint16_t ) ( dead_region_index ) );
 	}
 
 	const size_t last = m_renderCells.size() - 1u;
 	if ( iIndex != last ) {
 		m_renderCells[iIndex] = eastl::move( m_renderCells[last] );
-		t3dMapInsertOrAssignWithinCapacity(
-		        m_iRenderCellIndex, makeRenderKey( m_renderCells[iIndex] ), iIndex );
+		t3dMapInsertOrAssignWithinCapacity( m_iRenderCellIndex, makeRenderKey( m_renderCells[iIndex] ), iIndex );
 		const uint32_t moved_node = m_renderCells[iIndex].m_nRegionListNode;
 		if ( moved_node != UINT32_MAX && moved_node < m_renderRegionNodes.size() ) {
-			m_renderRegionNodes[( size_t )( moved_node )].m_iRenderCell = iIndex;
+			m_renderRegionNodes[( size_t ) ( moved_node )].m_iRenderCell = iIndex;
 		}
 	}
 	m_renderCells.pop_back();
 	markRdPublicationDirty();
 }
 
-void Terrain3DInstancer::eraseRenderCell( const Vector2i &region, const int nMeshId, const int nLod, const Vector2i &cell ) {
+void Terrain3DInstancer::eraseRenderCell(
+	const Vector2i &region,
+	const int		nMeshId,
+	const int		nLod,
+	const Vector2i &cell ) {
 	const t3dRenderCellKey_t key{ region, cell, nMeshId, nLod };
 	if ( const size_t *const pIndex = t3dMapFind( m_iRenderCellIndex, key ) ) {
 		eraseRenderCellAt( *pIndex );
 	}
 }
 
-void Terrain3DInstancer::destroyRenderCells( void ) {
+void Terrain3DInstancer::destroyRenderCells(
+	void ) {
 	while ( !m_renderCells.empty() ) {
 		eraseRenderCellAt( m_renderCells.size() - 1 );
 	}
@@ -738,37 +824,39 @@ void Terrain3DInstancer::destroyRenderCells( void ) {
 	clearSingleLodTransitionBuckets();
 }
 
-void Terrain3DInstancer::markLogicalMeshCountDirty( const int nMeshId ) {
+void Terrain3DInstancer::markLogicalMeshCountDirty(
+	const int nMeshId ) {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS || !m_pTerrain || !m_pTerrain->assetsResource().is_valid() ) {
 		return;
 	}
-	m_dirtyLogicalMeshCounts.set( ( size_t )( nMeshId ) );
+	m_dirtyLogicalMeshCounts.set( ( size_t ) ( nMeshId ) );
 }
 
-void Terrain3DInstancer::flushLogicalMeshCounts( void ) {
-	if ( m_bPublishingLogicalMeshCounts || m_dirtyLogicalMeshCounts.none() || !m_pTerrain
-	        || !m_pTerrain->assetsResource().is_valid() ) {
+void Terrain3DInstancer::flushLogicalMeshCounts(
+	void ) {
+	if ( m_bPublishingLogicalMeshCounts || m_dirtyLogicalMeshCounts.none() || !m_pTerrain ||
+		 !m_pTerrain->assetsResource().is_valid() ) {
 		return;
 	}
 	// Reset before emitting. A synchronous callback may mutate instance storage
 	// and mark a count dirty again; that follow-up publication remains queued for
 	// the next safe flush instead of recursively re-entering this loop.
-	const eastl::bitset<T3D_MAX_MESH_ASSETS> dirty_counts = m_dirtyLogicalMeshCounts;
+	const eastl::bitset< T3D_MAX_MESH_ASSETS > dirty_counts = m_dirtyLogicalMeshCounts;
 	m_dirtyLogicalMeshCounts.reset();
 	m_bPublishingLogicalMeshCounts = true;
 	for ( int mesh_id = 0; mesh_id < T3D_MAX_MESH_ASSETS; ++mesh_id ) {
-		if ( !dirty_counts.test( ( size_t )( mesh_id ) ) ) {
+		if ( !dirty_counts.test( ( size_t ) ( mesh_id ) ) ) {
 			continue;
 		}
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+		const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
 		if ( pAsset.is_null() ) {
 			continue;
 		}
 		const Terrain3DData *pData = m_pTerrain->dataObject();
-		const uint64_t total = pData && pData->isInstanceRegionCacheEnabled()
-		        ? t3dRepositoryMeshInstanceCount( pData, mesh_id )
-		        : m_szLogicalMeshInstanceTotals[( size_t )( mesh_id )];
-		pAsset->setInstanceCount( total > ( uint64_t )( UINT32_MAX ) ? UINT32_MAX : ( uint32_t )( total ) );
+		const uint64_t		 total = pData && pData->isInstanceRegionCacheEnabled()
+										 ? t3dRepositoryMeshInstanceCount( pData, mesh_id )
+										 : m_szLogicalMeshInstanceTotals[( size_t ) ( mesh_id )];
+		pAsset->setInstanceCount( total > ( uint64_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( total ) );
 	}
 	m_bPublishingLogicalMeshCounts = false;
 	if ( m_dirtyLogicalMeshCounts.any() ) {
@@ -776,15 +864,19 @@ void Terrain3DInstancer::flushLogicalMeshCounts( void ) {
 	}
 }
 
-void Terrain3DInstancer::publishLogicalMeshCount( const int nMeshId ) {
+void Terrain3DInstancer::publishLogicalMeshCount(
+	const int nMeshId ) {
 	markLogicalMeshCountDirty( nMeshId );
-	if ( !m_bMaterializingUpdates && !m_bProcessingPendingUpdates
-	        && !m_bPublishingLogicalMeshCounts ) {
+	if ( !m_bMaterializingUpdates && !m_bProcessingPendingUpdates && !m_bPublishingLogicalMeshCounts ) {
 		flushLogicalMeshCounts();
 	}
 }
 
-void Terrain3DInstancer::setLogicalCellCount( const Vector2i &vRegion, const int nMeshId, const Vector2i &vCell, const size_t nCount ) {
+void Terrain3DInstancer::setLogicalCellCount(
+	const Vector2i &vRegion,
+	const int		nMeshId,
+	const Vector2i &vCell,
+	const size_t	nCount ) {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return;
 	}
@@ -793,21 +885,20 @@ void Terrain3DInstancer::setLogicalCellCount( const Vector2i &vRegion, const int
 		return;
 	}
 	const int region_index = getRegionTableIndex( vRegion );
-	if ( region_index < 0 || region_index >= ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+	if ( region_index < 0 || region_index >= ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 		LOG( ERROR, "Logical instance cell region is outside the fixed terrain map: ", vRegion );
 		return;
 	}
-	const uint32_t new_count = nCount > ( size_t )( UINT32_MAX ) ? UINT32_MAX : ( uint32_t )( nCount );
+	const uint32_t			 new_count = nCount > ( size_t ) ( UINT32_MAX ) ? UINT32_MAX : ( uint32_t ) ( nCount );
 	const t3dCellUpdateKey_t key{ vRegion, vCell, nMeshId };
-	t3dLogicalCellState_t *pState = t3dMapFind( m_logicalCellCounts, key );
-	const uint32_t old_count = pState ? pState->m_nCount : 0u;
+	t3dLogicalCellState_t	*pState = t3dMapFind( m_logicalCellCounts, key );
+	const uint32_t			 old_count = pState ? pState->m_nCount : 0u;
 	if ( old_count == new_count ) {
 		publishLogicalMeshCount( nMeshId );
 		return;
 	}
-	if ( !pState
-	        && ( m_logicalCellCounts.size() >= m_nLogicalCellCapacity
-	                || m_logicalRegionNodes.size() >= m_nLogicalCellCapacity ) ) {
+	if ( !pState && ( m_logicalCellCounts.size() >= m_nLogicalCellCapacity ||
+					  m_logicalRegionNodes.size() >= m_nLogicalCellCapacity ) ) {
 		// A mutation can legitimately outgrow the sealed runtime image. The owner
 		// has already queued a cold rebuild; do not turn the transient pre-rebuild
 		// state into a hard placement failure. rebuildAll reconstructs these counts
@@ -819,41 +910,47 @@ void Terrain3DInstancer::setLogicalCellCount( const Vector2i &vRegion, const int
 	if ( !pState ) {
 		t3dLogicalCellState_t state;
 		state.m_nCount = new_count;
-		state.m_nRegionListNode = allocateLogicalRegionNode( key, ( uint16_t )( region_index ) );
+		state.m_nRegionListNode = allocateLogicalRegionNode( key, ( uint16_t ) ( region_index ) );
 		if ( state.m_nRegionListNode == UINT32_MAX ) {
 			return;
 		}
 		pState = t3dMapInsertOrAssignWithinCapacity( m_logicalCellCounts, key, state );
 		if ( !pState ) {
-			reportRuntimeCapacityExceeded(
-			        "logical cell index", m_logicalCellCounts.size() + 1u, m_logicalCellCounts.capacity() );
-			releaseLogicalRegionNode( state.m_nRegionListNode, ( uint16_t )( region_index ) );
+			reportRuntimeCapacityExceeded( "logical cell index",
+										   m_logicalCellCounts.size() + 1u,
+										   m_logicalCellCounts.capacity() );
+			releaseLogicalRegionNode( state.m_nRegionListNode, ( uint16_t ) ( region_index ) );
 			return;
 		}
 	} else {
 		pState->m_nCount = new_count;
 	}
-	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t )( nMeshId )];
-	mesh_total = mesh_total >= ( uint64_t )( old_count ) ? mesh_total - ( uint64_t )( old_count ) : 0u;
-	mesh_total = UINT64_MAX - mesh_total < ( uint64_t )( new_count ) ? UINT64_MAX : mesh_total + ( uint64_t )( new_count );
+	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t ) ( nMeshId )];
+	mesh_total = mesh_total >= ( uint64_t ) ( old_count ) ? mesh_total - ( uint64_t ) ( old_count ) : 0u;
+	mesh_total =
+		UINT64_MAX - mesh_total < ( uint64_t ) ( new_count ) ? UINT64_MAX : mesh_total + ( uint64_t ) ( new_count );
 	publishLogicalMeshCount( nMeshId );
 }
 
-void Terrain3DInstancer::eraseLogicalCellCount( const Vector2i &vRegion, const int nMeshId, const Vector2i &vCell ) {
+void Terrain3DInstancer::eraseLogicalCellCount(
+	const Vector2i &vRegion,
+	const int		nMeshId,
+	const Vector2i &vCell ) {
 	const t3dCellUpdateKey_t key{ vRegion, vCell, nMeshId };
 	untrackSingleLodCell( key );
 	t3dLogicalCellState_t *const pState = t3dMapFind( m_logicalCellCounts, key );
-	const int region_index = getRegionTableIndex( vRegion );
-	uint32_t node_index = pState ? pState->m_nRegionListNode : UINT32_MAX;
-	if ( node_index == UINT32_MAX && region_index >= 0 && region_index < ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
-		size_t visited = 0u;
-		uint32_t node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
+	const int					 region_index = getRegionTableIndex( vRegion );
+	uint32_t					 node_index = pState ? pState->m_nRegionListNode : UINT32_MAX;
+	if ( node_index == UINT32_MAX && region_index >= 0 &&
+		 region_index < ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		size_t	 visited = 0u;
+		uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
 		while ( node != UINT32_MAX ) {
 			if ( !t3dInstancerListWalkGuard( "logical region lookup", node, m_logicalRegionNodes.size(), visited ) ) {
 				break;
 			}
-			const uint32_t next = m_logicalRegionNodes[( size_t )( node )].m_nNext;
-			if ( m_logicalRegionNodes[( size_t )( node )].m_key == key ) {
+			const uint32_t next = m_logicalRegionNodes[( size_t ) ( node )].m_nNext;
+			if ( m_logicalRegionNodes[( size_t ) ( node )].m_key == key ) {
 				node_index = node;
 				break;
 			}
@@ -861,47 +958,50 @@ void Terrain3DInstancer::eraseLogicalCellCount( const Vector2i &vRegion, const i
 		}
 	}
 	if ( node_index != UINT32_MAX && region_index >= 0 ) {
-		releaseLogicalRegionNode( node_index, ( uint16_t )( region_index ) );
+		releaseLogicalRegionNode( node_index, ( uint16_t ) ( region_index ) );
 	}
 	if ( !pState ) {
 		return;
 	}
 	const uint32_t old_count = pState->m_nCount;
 	m_logicalCellCounts.erase( key );
-	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t )( nMeshId )];
-	mesh_total = mesh_total >= ( uint64_t )( old_count ) ? mesh_total - ( uint64_t )( old_count ) : 0u;
+	uint64_t &mesh_total = m_szLogicalMeshInstanceTotals[( size_t ) ( nMeshId )];
+	mesh_total = mesh_total >= ( uint64_t ) ( old_count ) ? mesh_total - ( uint64_t ) ( old_count ) : 0u;
 	publishLogicalMeshCount( nMeshId );
 }
 
-void Terrain3DInstancer::eraseLogicalCellsByRegion( const Vector2i &vRegion ) {
+void Terrain3DInstancer::eraseLogicalCellsByRegion(
+	const Vector2i &vRegion ) {
 	const int region_index = getRegionTableIndex( vRegion );
-	if ( region_index < 0 || region_index >= ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+	if ( region_index < 0 || region_index >= ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 		return;
 	}
 	size_t visited = 0u;
-	while ( m_szRegionLogicalLists[( size_t )( region_index )].m_nHead != UINT32_MAX ) {
-		const uint32_t node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
+	while ( m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead != UINT32_MAX ) {
+		const uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
 		if ( !t3dInstancerListWalkGuard( "logical region erase", node, m_logicalRegionNodes.size(), visited ) ) {
 			return;
 		}
-		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t )( node )].m_key;
+		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( node )].m_key;
 		eraseLogicalCellCount( key.m_region, key.m_nMeshId, key.m_cell );
 	}
 }
 
-void Terrain3DInstancer::eraseLogicalCellsByLocation( const Vector2i &vRegion, const int nMeshId ) {
+void Terrain3DInstancer::eraseLogicalCellsByLocation(
+	const Vector2i &vRegion,
+	const int		nMeshId ) {
 	const int region_index = getRegionTableIndex( vRegion );
-	if ( region_index < 0 || region_index >= ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+	if ( region_index < 0 || region_index >= ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 		return;
 	}
-	uint32_t node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
-	size_t visited = 0u;
+	uint32_t node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
+	size_t	 visited = 0u;
 	while ( node != UINT32_MAX ) {
 		if ( !t3dInstancerListWalkGuard( "logical region mesh erase", node, m_logicalRegionNodes.size(), visited ) ) {
 			return;
 		}
-		const uint32_t next = m_logicalRegionNodes[( size_t )( node )].m_nNext;
-		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t )( node )].m_key;
+		const uint32_t			 next = m_logicalRegionNodes[( size_t ) ( node )].m_nNext;
+		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( node )].m_key;
 		if ( key.m_nMeshId == nMeshId ) {
 			eraseLogicalCellCount( key.m_region, key.m_nMeshId, key.m_cell );
 		}
@@ -909,7 +1009,8 @@ void Terrain3DInstancer::eraseLogicalCellsByLocation( const Vector2i &vRegion, c
 	}
 }
 
-void Terrain3DInstancer::clearLogicalCellCounts( void ) {
+void Terrain3DInstancer::clearLogicalCellCounts(
+	void ) {
 	m_logicalCellCounts.clear();
 	clearRegionLogicalLists();
 	memset( m_szLogicalMeshInstanceTotals, 0, sizeof( m_szLogicalMeshInstanceTotals ) );
@@ -924,7 +1025,8 @@ void Terrain3DInstancer::clearLogicalCellCounts( void ) {
 	}
 }
 
-void Terrain3DInstancer::rebuildLogicalCountsFromStore( void ) {
+void Terrain3DInstancer::rebuildLogicalCountsFromStore(
+	void ) {
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
 		return;
 	}
@@ -938,19 +1040,20 @@ void Terrain3DInstancer::rebuildLogicalCountsFromStore( void ) {
 			continue;
 		}
 		const Vector2i regionLocation = pRegion->getLocation();
-		if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() && !m_pTerrain->dataObject()->isInstanceRegionResident( regionLocation ) ) {
+		if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() &&
+			 !m_pTerrain->dataObject()->isInstanceRegionResident( regionLocation ) ) {
 			continue;
 		}
 		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
 		if ( !pStore ) {
 			continue;
 		}
-		for ( size_t iMesh = 0u; iMesh < ( size_t )( ( pStore->meshes() ).size() ); iMesh++ ) {
+		for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( pStore->meshes() ).size() ); iMesh++ ) {
 			const t3dInstanceMesh_t &mesh = ( pStore->meshes() )[iMesh];
 			if ( mesh.m_nId < 0 || mesh.m_nId >= T3D_MAX_MESH_ASSETS ) {
 				continue;
 			}
-			for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+			for ( size_t iCell = 0u; iCell < ( size_t ) ( ( mesh.m_cells ).size() ); iCell++ ) {
 				const t3dInstanceCell_s &cell = ( mesh.m_cells )[iCell];
 				setLogicalCellCount( regionLocation, mesh.m_nId, cell.m_location, cell.m_transforms.size() );
 			}
@@ -962,7 +1065,9 @@ void Terrain3DInstancer::rebuildLogicalCountsFromStore( void ) {
 	}
 }
 
-void Terrain3DInstancer::reconcileLogicalRegion( Terrain3DRegion *const pRegion, const int nMeshId ) {
+void Terrain3DInstancer::reconcileLogicalRegion(
+	Terrain3DRegion *const pRegion,
+	const int			   nMeshId ) {
 	const bool bWasMaterializing = m_bMaterializingUpdates;
 	m_bMaterializingUpdates = true;
 	if ( !pRegion || pRegion->isDeleted() ) {
@@ -973,15 +1078,15 @@ void Terrain3DInstancer::reconcileLogicalRegion( Terrain3DRegion *const pRegion,
 				eraseLogicalCellsByRegion( pRegion->getLocation() );
 			}
 		}
-	} else if ( m_pTerrain && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
-	        && !m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
+	} else if ( m_pTerrain && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() &&
+				!m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
 		if ( nMeshId >= 0 ) {
 			eraseLogicalCellsByLocation( pRegion->getLocation(), nMeshId );
 		} else {
 			eraseLogicalCellsByRegion( pRegion->getLocation() );
 		}
 	} else {
-		const Vector2i regionLocation = pRegion->getLocation();
+		const Vector2i						regionLocation = pRegion->getLocation();
 		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
 		if ( !pStore ) {
 			if ( nMeshId >= 0 ) {
@@ -1000,19 +1105,19 @@ void Terrain3DInstancer::reconcileLogicalRegion( Terrain3DRegion *const pRegion,
 			eraseLogicalCellsByLocation( regionLocation, nMeshId );
 			const t3dInstanceMesh_t *pMesh = store.findMesh( nMeshId );
 			if ( pMesh ) {
-				for ( size_t iCell = 0u; iCell < ( size_t )( ( pMesh->m_cells ).size() ); iCell++ ) {
+				for ( size_t iCell = 0u; iCell < ( size_t ) ( ( pMesh->m_cells ).size() ); iCell++ ) {
 					const t3dInstanceCell_s &cell = ( pMesh->m_cells )[iCell];
 					setLogicalCellCount( regionLocation, nMeshId, cell.m_location, cell.m_transforms.size() );
 				}
 			}
 		} else {
 			eraseLogicalCellsByRegion( regionLocation );
-			for ( size_t iMesh = 0u; iMesh < ( size_t )( ( store.meshes() ).size() ); iMesh++ ) {
+			for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( store.meshes() ).size() ); iMesh++ ) {
 				const t3dInstanceMesh_t &pMesh = ( store.meshes() )[iMesh];
 				if ( pMesh.m_nId < 0 || pMesh.m_nId >= T3D_MAX_MESH_ASSETS ) {
 					continue;
 				}
-				for ( size_t iCell = 0u; iCell < ( size_t )( ( pMesh.m_cells ).size() ); iCell++ ) {
+				for ( size_t iCell = 0u; iCell < ( size_t ) ( ( pMesh.m_cells ).size() ); iCell++ ) {
 					const t3dInstanceCell_s &cell = ( pMesh.m_cells )[iCell];
 					setLogicalCellCount( regionLocation, pMesh.m_nId, cell.m_location, cell.m_transforms.size() );
 				}
@@ -1025,13 +1130,16 @@ void Terrain3DInstancer::reconcileLogicalRegion( Terrain3DRegion *const pRegion,
 	}
 }
 
-bool Terrain3DInstancer::swapLogicalMeshIds( const int nSrcId, const int nDstId ) {
-	if ( nSrcId == nDstId || nSrcId < 0 || nDstId < 0 || nSrcId >= T3D_MAX_MESH_ASSETS || nDstId >= T3D_MAX_MESH_ASSETS ) {
+bool Terrain3DInstancer::swapLogicalMeshIds(
+	const int nSrcId,
+	const int nDstId ) {
+	if ( nSrcId == nDstId || nSrcId < 0 || nDstId < 0 || nSrcId >= T3D_MAX_MESH_ASSETS ||
+		 nDstId >= T3D_MAX_MESH_ASSETS ) {
 		return false;
 	}
 	if ( m_logicalCellCounts.empty() ) {
-		eastl::swap( m_szLogicalMeshInstanceTotals[( size_t )( nSrcId )],
-		        m_szLogicalMeshInstanceTotals[( size_t )( nDstId )] );
+		eastl::swap( m_szLogicalMeshInstanceTotals[( size_t ) ( nSrcId )],
+					 m_szLogicalMeshInstanceTotals[( size_t ) ( nDstId )] );
 		publishLogicalMeshCount( nSrcId );
 		publishLogicalMeshCount( nDstId );
 		return true;
@@ -1042,22 +1150,22 @@ bool Terrain3DInstancer::swapLogicalMeshIds( const int nSrcId, const int nDstId 
 	// succeeded; commit is then allocation-free container/array replacement.
 	t3dLogicalCellMap_t replacement_counts;
 	replacement_counts.set_allocator( m_logicalCellCounts.get_allocator() );
-	eastl::vector<t3dLogicalRegionNode_t, Terrain3DEastlAllocator> replacement_nodes;
+	eastl::vector< t3dLogicalRegionNode_t, Terrain3DEastlAllocator > replacement_nodes;
 	replacement_nodes.set_allocator( m_logicalRegionNodes.get_allocator() );
-	if ( !t3dContainerReserveCold( replacement_counts, m_logicalCellCounts.size() )
-	        || !t3dContainerReserveCold( replacement_nodes, m_logicalCellCounts.size() ) ) {
+	if ( !t3dContainerReserveCold( replacement_counts, m_logicalCellCounts.size() ) ||
+		 !t3dContainerReserveCold( replacement_nodes, m_logicalCellCounts.size() ) ) {
 		return false;
 	}
 	t3dRegionList_t replacement_lists[T3D_INSTANCE_REGION_TABLE_CAPACITY];
-	memset( replacement_lists, 0, sizeof( replacement_lists ) );
+	t3dClearTrivialArrayBytes( replacement_lists );
 	for ( size_t i = 0u; i < T3D_INSTANCE_REGION_TABLE_CAPACITY; ++i ) {
 		replacement_lists[i].m_nHead = UINT32_MAX;
 	}
-	eastl::bitset<T3D_INSTANCE_REGION_TABLE_CAPACITY> replacement_mask;
+	eastl::bitset< T3D_INSTANCE_REGION_TABLE_CAPACITY > replacement_mask;
 
 	for ( t3dLogicalCellMap_t::const_iterator itLogical = m_logicalCellCounts.begin();
-	        itLogical != m_logicalCellCounts.end();
-	        ++itLogical ) {
+		  itLogical != m_logicalCellCounts.end();
+		  ++itLogical ) {
 		t3dCellUpdateKey_t key = itLogical->first;
 		if ( key.m_nMeshId == nSrcId ) {
 			key.m_nMeshId = nDstId;
@@ -1065,23 +1173,24 @@ bool Terrain3DInstancer::swapLogicalMeshIds( const int nSrcId, const int nDstId 
 			key.m_nMeshId = nSrcId;
 		}
 		const int region_index = getRegionTableIndex( key.m_region );
-		if ( region_index < 0 || region_index >= ( int )( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
+		if ( region_index < 0 || region_index >= ( int ) ( T3D_INSTANCE_REGION_TABLE_CAPACITY ) ) {
 			return false;
 		}
-		const uint32_t node_index = ( uint32_t )( replacement_nodes.size() );
+		const uint32_t		   node_index = ( uint32_t ) ( replacement_nodes.size() );
 		t3dLogicalRegionNode_t node;
 		node.m_key = key;
 		node.m_nPrev = UINT32_MAX;
-		node.m_nNext = replacement_lists[( size_t )( region_index )].m_nHead;
+		node.m_nNext = replacement_lists[( size_t ) ( region_index )].m_nHead;
 		if ( !t3dVectorPushBackWithinCapacity( replacement_nodes, eastl::move( node ) ) ) {
 			return false;
 		}
-		if ( replacement_lists[( size_t )( region_index )].m_nHead != UINT32_MAX ) {
-			replacement_nodes[( size_t )( replacement_lists[( size_t )( region_index )].m_nHead )].m_nPrev = node_index;
+		if ( replacement_lists[( size_t ) ( region_index )].m_nHead != UINT32_MAX ) {
+			replacement_nodes[( size_t ) ( replacement_lists[( size_t ) ( region_index )].m_nHead )].m_nPrev =
+				node_index;
 		}
-		replacement_lists[( size_t )( region_index )].m_nHead = node_index;
-		++replacement_lists[( size_t )( region_index )].m_nCount;
-		replacement_mask.set( ( size_t )( region_index ) );
+		replacement_lists[( size_t ) ( region_index )].m_nHead = node_index;
+		++replacement_lists[( size_t ) ( region_index )].m_nCount;
+		replacement_mask.set( ( size_t ) ( region_index ) );
 
 		t3dLogicalCellState_t state;
 		state.m_nCount = itLogical->second.m_nCount;
@@ -1096,24 +1205,26 @@ bool Terrain3DInstancer::swapLogicalMeshIds( const int nSrcId, const int nDstId 
 	memcpy( m_szRegionLogicalLists, replacement_lists, sizeof( replacement_lists ) );
 	m_regionLogicalMask = replacement_mask;
 	m_nLogicalRegionFreeHead = UINT32_MAX;
-	eastl::swap( m_szLogicalMeshInstanceTotals[( size_t )( nSrcId )],
-	        m_szLogicalMeshInstanceTotals[( size_t )( nDstId )] );
+	eastl::swap( m_szLogicalMeshInstanceTotals[( size_t ) ( nSrcId )],
+				 m_szLogicalMeshInstanceTotals[( size_t ) ( nDstId )] );
 	publishLogicalMeshCount( nSrcId );
 	publishLogicalMeshCount( nDstId );
 	return true;
 }
 
-void Terrain3DInstancer::reconcileRegionRenderCells( Terrain3DRegion *const pRegion, const int nMeshId ) {
+void Terrain3DInstancer::reconcileRegionRenderCells(
+	Terrain3DRegion *const pRegion,
+	const int			   nMeshId ) {
 	if ( !pRegion ) {
 		return;
 	}
-	if ( m_pTerrain && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
-	        && !m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
+	if ( m_pTerrain && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() &&
+		 !m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
 		destroyMmisByRegion( pRegion->getLocation() );
 		return;
 	}
 	const Vector2i regionLocation = pRegion->getLocation();
-	const int region_index = getRegionTableIndex( regionLocation );
+	const int	   region_index = getRegionTableIndex( regionLocation );
 	if ( region_index < 0 ) {
 		return;
 	}
@@ -1123,15 +1234,17 @@ void Terrain3DInstancer::reconcileRegionRenderCells( Terrain3DRegion *const pReg
 		return;
 	}
 	const Terrain3DInstanceStore &store = *pStore;
-	uint32_t logical_node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
-	size_t logical_visited = 0u;
+	uint32_t					  logical_node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
+	size_t						  logical_visited = 0u;
 	while ( logical_node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard(
-		             "logical region reconcile", logical_node, m_logicalRegionNodes.size(), logical_visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "logical region reconcile",
+										 logical_node,
+										 m_logicalRegionNodes.size(),
+										 logical_visited ) ) {
 			break;
 		}
-		const uint32_t next = m_logicalRegionNodes[( size_t )( logical_node )].m_nNext;
-		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t )( logical_node )].m_key;
+		const uint32_t			 next = m_logicalRegionNodes[( size_t ) ( logical_node )].m_nNext;
+		const t3dCellUpdateKey_t key = m_logicalRegionNodes[( size_t ) ( logical_node )].m_key;
 		if ( nMeshId < 0 || key.m_nMeshId == nMeshId ) {
 			const t3dInstanceCell_s *pCell = store.findCell( key.m_nMeshId, key.m_cell );
 			if ( !pCell || pCell->m_transforms.empty() ) {
@@ -1140,17 +1253,19 @@ void Terrain3DInstancer::reconcileRegionRenderCells( Terrain3DRegion *const pReg
 		}
 		logical_node = next;
 	}
-	uint32_t render_node = m_szRegionRenderLists[( size_t )( region_index )].m_nHead;
-	size_t render_visited = 0u;
+	uint32_t render_node = m_szRegionRenderLists[( size_t ) ( region_index )].m_nHead;
+	size_t	 render_visited = 0u;
 	while ( render_node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard(
-		             "render region reconcile", render_node, m_renderRegionNodes.size(), render_visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "render region reconcile",
+										 render_node,
+										 m_renderRegionNodes.size(),
+										 render_visited ) ) {
 			break;
 		}
-		const uint32_t next = m_renderRegionNodes[( size_t )( render_node )].m_nNext;
-		const size_t render_index = m_renderRegionNodes[( size_t )( render_node )].m_iRenderCell;
+		const uint32_t next = m_renderRegionNodes[( size_t ) ( render_node )].m_nNext;
+		const size_t   render_index = m_renderRegionNodes[( size_t ) ( render_node )].m_iRenderCell;
 		if ( render_index >= m_renderCells.size() ) {
-			releaseRenderRegionNode( render_node, ( uint16_t )( region_index ) );
+			releaseRenderRegionNode( render_node, ( uint16_t ) ( region_index ) );
 			render_node = next;
 			continue;
 		}
@@ -1165,109 +1280,113 @@ void Terrain3DInstancer::reconcileRegionRenderCells( Terrain3DRegion *const pReg
 	}
 }
 
-void Terrain3DInstancer::clearRegionUpdates( const bool bActive ) {
+void Terrain3DInstancer::clearRegionUpdates(
+	const bool bActive ) {
 	t3dRegionUpdateState_t *pStates = bActive ? m_szActiveRegionUpdates : m_szRegionUpdates;
-	eastl::bitset<T3D_INSTANCE_REGION_UPDATE_CAPACITY> &mask =
-	        bActive ? m_activeRegionUpdateMask : m_regionUpdateMask;
-	eastl::fixed_vector<uint16_t, T3D_INSTANCE_REGION_UPDATE_CAPACITY, false> &indices =
-	        bActive ? m_activeRegionUpdateIndices : m_regionUpdateIndices;
-	for ( size_t iIndex = 0u; iIndex < ( size_t )( ( indices ).size() ); iIndex++ ) {
+	eastl::bitset< T3D_INSTANCE_REGION_UPDATE_CAPACITY > &mask =
+		bActive ? m_activeRegionUpdateMask : m_regionUpdateMask;
+	eastl::fixed_vector< uint16_t, T3D_INSTANCE_REGION_UPDATE_CAPACITY, false > &indices =
+		bActive ? m_activeRegionUpdateIndices : m_regionUpdateIndices;
+	for ( size_t iIndex = 0u; iIndex < ( size_t ) ( ( indices ).size() ); iIndex++ ) {
 		const uint16_t index = ( indices )[iIndex];
-		pStates[( size_t )( index )].m_bAllMeshes = false;
-		pStates[( size_t )( index )].m_meshes.reset();
+		pStates[( size_t ) ( index )].m_bAllMeshes = false;
+		pStates[( size_t ) ( index )].m_meshes.reset();
 	}
 	indices.clear();
 	mask.reset();
 }
 
-void Terrain3DInstancer::snapshotRegionUpdates( void )
-{
+void Terrain3DInstancer::snapshotRegionUpdates(
+	void ) {
 	clearRegionUpdates( true );
-	for ( size_t iUpdate = 0u; iUpdate < ( size_t )( ( m_regionUpdateIndices ).size() ); iUpdate++ ) {
+	for ( size_t iUpdate = 0u; iUpdate < ( size_t ) ( ( m_regionUpdateIndices ).size() ); iUpdate++ ) {
 		const uint16_t index = ( m_regionUpdateIndices )[iUpdate];
-		m_szActiveRegionUpdates[( size_t )( index )] = m_szRegionUpdates[( size_t )( index )];
-		m_activeRegionUpdateMask.set( ( size_t )( index ) );
+		m_szActiveRegionUpdates[( size_t ) ( index )] = m_szRegionUpdates[( size_t ) ( index )];
+		m_activeRegionUpdateMask.set( ( size_t ) ( index ) );
 		if ( m_activeRegionUpdateIndices.full() ) {
 			UtilityFunctions::push_error( "Active region update snapshot exceeded fixed terrain region capacity" );
 			break;
 		}
 		m_activeRegionUpdateIndices.push_back( index );
-		m_szRegionUpdates[( size_t )( index )].m_bAllMeshes = false;
-		m_szRegionUpdates[( size_t )( index )].m_meshes.reset();
+		m_szRegionUpdates[( size_t ) ( index )].m_bAllMeshes = false;
+		m_szRegionUpdates[( size_t ) ( index )].m_meshes.reset();
 	}
 	m_regionUpdateIndices.clear();
 	m_regionUpdateMask.reset();
 }
 
-t3dRegionUpdateState_t *Terrain3DInstancer::getRegionUpdate( const Vector2i& vRegion )
-{
+t3dRegionUpdateState_t *Terrain3DInstancer::getRegionUpdate(
+	const Vector2i &vRegion ) {
 	const int index = Terrain3DData::getRegionMapIndex( vRegion );
 	if ( index < 0 ) {
 		return NULL;
 	}
-	if ( !m_regionUpdateMask.test( ( size_t )( index ) ) ) {
+	if ( !m_regionUpdateMask.test( ( size_t ) ( index ) ) ) {
 		if ( m_regionUpdateIndices.full() ) {
 			UtilityFunctions::push_error( "Region update queue exceeded fixed terrain region capacity" );
 			return NULL;
 		}
-		m_regionUpdateIndices.push_back( ( uint16_t )( index ) );
-		m_regionUpdateMask.set( ( size_t )( index ) );
+		m_regionUpdateIndices.push_back( ( uint16_t ) ( index ) );
+		m_regionUpdateMask.set( ( size_t ) ( index ) );
 	}
-	return &m_szRegionUpdates[( size_t )( index )];
+	return &m_szRegionUpdates[( size_t ) ( index )];
 }
 
-const t3dRegionUpdateState_t *Terrain3DInstancer::findActiveRegionUpdate( const Vector2i &vRegion ) const {
+const t3dRegionUpdateState_t *Terrain3DInstancer::findActiveRegionUpdate(
+	const Vector2i &vRegion ) const {
 	const int index = Terrain3DData::getRegionMapIndex( vRegion );
-	return index >= 0 && m_activeRegionUpdateMask.test( ( size_t )( index ) )
-	        ? &m_szActiveRegionUpdates[( size_t )( index )]
-	        : NULL;
+	return index >= 0 && m_activeRegionUpdateMask.test( ( size_t ) ( index ) )
+			   ? &m_szActiveRegionUpdates[( size_t ) ( index )]
+			   : NULL;
 }
 
-Vector2i Terrain3DInstancer::regionLocationFromUpdateIndex( const uint16_t iIndex ) {
-	const int x = ( int )( iIndex ) % T3D_REGION_MAP_SIZE - T3D_REGION_MAP_SIZE / 2;
-	const int y = ( int )( iIndex ) / T3D_REGION_MAP_SIZE - T3D_REGION_MAP_SIZE / 2;
+Vector2i Terrain3DInstancer::regionLocationFromUpdateIndex(
+	const uint16_t iIndex ) {
+	const int x = ( int ) ( iIndex ) % T3D_REGION_MAP_SIZE - T3D_REGION_MAP_SIZE / 2;
+	const int y = ( int ) ( iIndex ) / T3D_REGION_MAP_SIZE - T3D_REGION_MAP_SIZE / 2;
 	return Vector2i( x, y );
 }
 
-bool Terrain3DInstancer::hasPendingUpdates( void ) const {
-	return m_iPendingCellUpdateCursor < m_pendingCellUpdates.size() || m_bRebuildAll
-	        || m_bUpdateAll || m_globalMeshUpdates.any()
-	        || !m_regionUpdateIndices.empty() || !m_streamingUpdates.empty();
+bool Terrain3DInstancer::hasPendingUpdates(
+	void ) const {
+	return m_iPendingCellUpdateCursor < m_pendingCellUpdates.size() || m_bRebuildAll || m_bUpdateAll ||
+		   m_globalMeshUpdates.any() || !m_regionUpdateIndices.empty() || !m_streamingUpdates.empty();
 }
 
-void Terrain3DInstancer::markPendingRegionWork( const Vector2i& rRegion )
-{
+void Terrain3DInstancer::markPendingRegionWork(
+	const Vector2i &rRegion ) {
 	const int region_index = Terrain3DData::getRegionMapIndex( rRegion );
 	if ( region_index >= 0 ) {
-		m_pendingRegionWorkMask.set( ( size_t )( region_index ) );
+		m_pendingRegionWorkMask.set( ( size_t ) ( region_index ) );
 	}
 }
 
-void Terrain3DInstancer::rebuildPendingRegionWorkMask( void ) {
+void Terrain3DInstancer::rebuildPendingRegionWorkMask(
+	void ) {
 	m_pendingRegionWorkMask.reset();
 	for ( t3dCellUpdateSet_t::const_iterator itUpdate = m_streamingUpdates.begin();
-	        itUpdate != m_streamingUpdates.end();
-	        ++itUpdate ) {
+		  itUpdate != m_streamingUpdates.end();
+		  ++itUpdate ) {
 		const t3dCellUpdateKey_t &rKey = *itUpdate;
 		markPendingRegionWork( rKey.m_region );
 	}
 	for ( t3dCellUpdateSet_t::const_iterator itUpdate = m_activeStreamingUpdates.begin();
-	        itUpdate != m_activeStreamingUpdates.end();
-	        ++itUpdate ) {
+		  itUpdate != m_activeStreamingUpdates.end();
+		  ++itUpdate ) {
 		const t3dCellUpdateKey_t &rKey = *itUpdate;
 		markPendingRegionWork( rKey.m_region );
 	}
 	for ( size_t i = m_iPendingCellUpdateCursor; i < m_pendingCellUpdates.size(); ++i ) {
 		markPendingRegionWork( m_pendingCellUpdates[i].m_region );
 	}
-	for ( size_t iUpdate = 0u; iUpdate < ( size_t )( ( m_buildingCellUpdates ).size() ); iUpdate++ ) {
+	for ( size_t iUpdate = 0u; iUpdate < ( size_t ) ( ( m_buildingCellUpdates ).size() ); iUpdate++ ) {
 		const t3dCellUpdateKey_t &key = ( m_buildingCellUpdates )[iUpdate];
 		markPendingRegionWork( key.m_region );
 	}
 }
 
-bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i& rRegion ) const
-{
+bool Terrain3DInstancer::hasPendingUpdatesForRegion(
+	const Vector2i &rRegion ) const {
 	// Global renderer changes can affect every detailed HLOD source. For ordinary
 	// streaming churn, however, readiness must be scoped to the region being
 	// handed off or a moving camera elsewhere could prevent a proxy from ever
@@ -1279,20 +1398,22 @@ bool Terrain3DInstancer::hasPendingUpdatesForRegion( const Vector2i& rRegion ) c
 	if ( region_index < 0 ) {
 		return false;
 	}
-	if ( m_regionUpdateMask.test( ( size_t )region_index )
-	        || m_activeRegionUpdateMask.test( ( size_t )region_index ) ) {
+	if ( m_regionUpdateMask.test( ( size_t ) region_index ) ||
+		 m_activeRegionUpdateMask.test( ( size_t ) region_index ) ) {
 		return true;
 	}
-	return m_pendingRegionWorkMask.test( ( size_t )region_index );
+	return m_pendingRegionWorkMask.test( ( size_t ) region_index );
 }
 
-void Terrain3DInstancer::scheduleUpdateProcessing( void ) {
+void Terrain3DInstancer::scheduleUpdateProcessing(
+	void ) {
 	// Pending work is serviced from Terrain3D::physicsProcess(). The instance
 	// subsystem no longer depends on renderer frame callbacks; this keeps
 	// update ordering explicit and independent from the removed native renderer.
 }
 
-void Terrain3DInstancer::refreshStreamingCache( void ) {
+void Terrain3DInstancer::refreshStreamingCache(
+	void ) {
 	if ( !m_bStreamingCacheDirty || !m_pTerrain || !m_pTerrain->assetsResource().is_valid() ) {
 		return;
 	}
@@ -1300,9 +1421,9 @@ void Terrain3DInstancer::refreshStreamingCache( void ) {
 	m_finiteStreamingMeshIds.clear();
 	m_fMaxStreamingRadius = 0.0f;
 	const real_t fCellWorldSize = m_nCellSize * s_fRegionVertexSpacing;
-	const int mesh_count = MIN( m_pTerrain->assetsResource()->getMeshCount(), T3D_MAX_MESH_ASSETS );
+	const int	 mesh_count = MIN( m_pTerrain->assetsResource()->getMeshCount(), T3D_MAX_MESH_ASSETS );
 	for ( int mesh_id = 0; mesh_id < mesh_count; ++mesh_id ) {
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+		const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
 		if ( pAsset.is_null() || pAsset->getLastLod() < 0 ) {
 			continue;
 		}
@@ -1318,13 +1439,16 @@ void Terrain3DInstancer::refreshStreamingCache( void ) {
 			LOG( ERROR, "Finite streaming mesh list exceeded asset capacity" );
 			break;
 		}
-		m_finiteStreamingMeshIds.push_back( ( uint16_t )( mesh_id ) );
+		m_finiteStreamingMeshIds.push_back( ( uint16_t ) ( mesh_id ) );
 		m_fMaxStreamingRadius = MAX( m_fMaxStreamingRadius, fRadius );
 	}
 	m_bStreamingCacheDirty = false;
 }
 
-bool Terrain3DInstancer::cellShouldBeResident( const Vector2i &region, const Vector2i &cell, const int nMeshId ) const {
+bool Terrain3DInstancer::cellShouldBeResident(
+	const Vector2i &region,
+	const Vector2i &cell,
+	const int		nMeshId ) const {
 	if ( !m_bStreamPositionValid ) {
 		return true;
 	}
@@ -1332,7 +1456,10 @@ bool Terrain3DInstancer::cellShouldBeResident( const Vector2i &region, const Vec
 }
 
 bool Terrain3DInstancer::cellShouldBeResidentAt(
-        const Vector2i &region, const Vector2i &cell, const int nMeshId, const Vector3 &rTargetPosition ) const {
+	const Vector2i &region,
+	const Vector2i &cell,
+	const int		nMeshId,
+	const Vector3  &rTargetPosition ) const {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return true;
 	}
@@ -1349,6 +1476,9 @@ bool Terrain3DInstancer::cellShouldBeResidentAt(
 	if ( !m_bCellStreamingEnabled ) {
 		return true;
 	}
+	if ( !m_pTerrain ) {
+		return false;
+	}
 	// Asset visibility still decides which cells inside a resident region are
 	// worth drawing, but the region streaming map is the authoritative outer
 	// residency envelope. Ordinary instances do not survive into COLD/UNLOADED.
@@ -1359,29 +1489,32 @@ bool Terrain3DInstancer::cellShouldBeResidentAt(
 	if ( fConservativeRadius <= 0.0f ) {
 		return true;
 	}
-	const real_t fRegionWorldSize = ( real_t )( T3D_REGION_WORLD_SIZE_METERS );
-	const real_t fCellWorldSize = m_nCellSize;
+	const real_t  fRegionWorldSize = ( real_t ) ( T3D_REGION_WORLD_SIZE_METERS );
+	const real_t  fCellWorldSize = m_nCellSize;
 	const Vector2 center( region.x * fRegionWorldSize + ( cell.x + 0.5f ) * fCellWorldSize,
-	        region.y * fRegionWorldSize + ( cell.y + 0.5f ) * fCellWorldSize );
+						  region.y * fRegionWorldSize + ( cell.y + 0.5f ) * fCellWorldSize );
 	const Vector2 target( rTargetPosition.x, rTargetPosition.z );
 	return center.distance_squared_to( target ) <= fConservativeRadius * fConservativeRadius;
 }
 
 int Terrain3DInstancer::selectCellLod(
-        const Vector2i &vRegion, const Vector2i &vCell, const Ref<Terrain3DMeshAsset> &rAsset, const Vector3 &rTargetPosition ) const {
+	const Vector2i					&vRegion,
+	const Vector2i					&vCell,
+	const Ref< Terrain3DMeshAsset > &rAsset,
+	const Vector3					&rTargetPosition ) const {
 	if ( rAsset.is_null() || rAsset->getLastLod() < 0 ) {
 		return -1;
 	}
-	const real_t fRegionWorldSize = ( real_t )( T3D_REGION_WORLD_SIZE_METERS );
-	const real_t fCellWorldSize = m_nCellSize;
+	const real_t  fRegionWorldSize = ( real_t ) ( T3D_REGION_WORLD_SIZE_METERS );
+	const real_t  fCellWorldSize = m_nCellSize;
 	const Vector2 cellCenter( vRegion.x * fRegionWorldSize + ( vCell.x + 0.5f ) * fCellWorldSize,
-	        vRegion.y * fRegionWorldSize + ( vCell.y + 0.5f ) * fCellWorldSize );
+							  vRegion.y * fRegionWorldSize + ( vCell.y + 0.5f ) * fCellWorldSize );
 	const Vector2 target( rTargetPosition.x, rTargetPosition.z );
-	const real_t fDistanceSquared = cellCenter.distance_squared_to( target );
-	int fallback_lod = -1;
+	const real_t  fDistanceSquared = cellCenter.distance_squared_to( target );
+	int			  fallback_lod = -1;
 	for ( int lod = 0; lod <= rAsset->getLastLod(); ++lod ) {
-		if ( rAsset->getCastShadows() == s_shadowCastingOnly
-		        && ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
+		if ( rAsset->getCastShadows() == s_shadowCastingOnly &&
+			 ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
 			continue;
 		}
 		fallback_lod = lod;
@@ -1393,7 +1526,9 @@ int Terrain3DInstancer::selectCellLod(
 	return fallback_lod;
 }
 
-Vector2i Terrain3DInstancer::getGlobalCell( const Vector2i &vRegion, const Vector2i &vCell ) const {
+Vector2i Terrain3DInstancer::getGlobalCell(
+	const Vector2i &vRegion,
+	const Vector2i &vCell ) const {
 	const int cells_per_region = getCellsPerRegionAxis();
 	if ( cells_per_region <= 0 ) {
 		return vCell;
@@ -1401,33 +1536,40 @@ Vector2i Terrain3DInstancer::getGlobalCell( const Vector2i &vRegion, const Vecto
 	return Vector2i( vRegion.x * cells_per_region + vCell.x, vRegion.y * cells_per_region + vCell.y );
 }
 
-t3dTransitionBucketKey_t Terrain3DInstancer::getTransitionBucketKey( const t3dCellUpdateKey_t &rKey ) const {
+t3dTransitionBucketKey_t Terrain3DInstancer::getTransitionBucketKey(
+	const t3dCellUpdateKey_t &rKey ) const {
 	const Vector2i global_cell = getGlobalCell( rKey.m_region, rKey.m_cell );
-	return t3dTransitionBucketKey_t{ Vector2i( floorDivCell( global_cell.x, T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ),
-		                                     floorDivCell( global_cell.y, T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ) ),
+	return t3dTransitionBucketKey_t{
+		Vector2i( floorDivCell( global_cell.x, T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ),
+				  floorDivCell( global_cell.y, T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN ) ),
 		rKey.m_nMeshId };
 }
 
-void Terrain3DInstancer::trackSingleLodCell( const t3dCellUpdateKey_t &rKey ) {
+void Terrain3DInstancer::trackSingleLodCell(
+	const t3dCellUpdateKey_t &rKey ) {
 	if ( !m_bSingleLodInstanceBuffers || rKey.m_nMeshId < 0 || rKey.m_nMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return;
 	}
 	const t3dTransitionBucketKey_t bucket_key = getTransitionBucketKey( rKey );
-	const bool bExistingBucket = t3dContainerContains( m_singleLodTransitionBuckets, bucket_key );
-	t3dTransitionBucketState_t *const pBucket = t3dMapGetOrInsertWithinCapacity( m_singleLodTransitionBuckets, bucket_key );
+	const bool					   bExistingBucket = t3dContainerContains( m_singleLodTransitionBuckets, bucket_key );
+	t3dTransitionBucketState_t *const pBucket =
+		t3dMapGetOrInsertWithinCapacity( m_singleLodTransitionBuckets, bucket_key );
 	if ( !pBucket ) {
 		reportRuntimeCapacityExceeded( "transition bucket index",
-		        m_singleLodTransitionBuckets.size() + 1u,
-		        m_nTransitionBucketCapacity );
+									   m_singleLodTransitionBuckets.size() + 1u,
+									   m_nTransitionBucketCapacity );
 		return;
 	}
-	size_t visited = 0u;
+	size_t	 visited = 0u;
 	uint32_t scan_node = pBucket->m_nHead;
 	while ( scan_node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard( "transition bucket track", scan_node, m_transitionCellNodes.size(), visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "transition bucket track",
+										 scan_node,
+										 m_transitionCellNodes.size(),
+										 visited ) ) {
 			return;
 		}
-		const t3dTransitionCellNode_t &node = m_transitionCellNodes[( size_t )( scan_node )];
+		const t3dTransitionCellNode_t &node = m_transitionCellNodes[( size_t ) ( scan_node )];
 		if ( node.m_key == rKey ) {
 			return;
 		}
@@ -1444,25 +1586,26 @@ void Terrain3DInstancer::trackSingleLodCell( const t3dCellUpdateKey_t &rKey ) {
 	++pBucket->m_nCount;
 }
 
-void Terrain3DInstancer::untrackSingleLodCell( const t3dCellUpdateKey_t &rKey ) {
-	const t3dTransitionBucketKey_t bucket_key = getTransitionBucketKey( rKey );
+void Terrain3DInstancer::untrackSingleLodCell(
+	const t3dCellUpdateKey_t &rKey ) {
+	const t3dTransitionBucketKey_t	  bucket_key = getTransitionBucketKey( rKey );
 	t3dTransitionBucketState_t *const pBucket = t3dMapFind( m_singleLodTransitionBuckets, bucket_key );
 	if ( !pBucket ) {
 		return;
 	}
 	uint32_t previous = UINT32_MAX;
 	uint32_t node = pBucket->m_nHead;
-	size_t visited = 0u;
+	size_t	 visited = 0u;
 	while ( node != UINT32_MAX ) {
 		if ( !t3dInstancerListWalkGuard( "transition bucket untrack", node, m_transitionCellNodes.size(), visited ) ) {
 			return;
 		}
-		const uint32_t next = m_transitionCellNodes[( size_t )( node )].m_nNext;
-		if ( m_transitionCellNodes[( size_t )( node )].m_key == rKey ) {
+		const uint32_t next = m_transitionCellNodes[( size_t ) ( node )].m_nNext;
+		if ( m_transitionCellNodes[( size_t ) ( node )].m_key == rKey ) {
 			if ( previous == UINT32_MAX ) {
 				pBucket->m_nHead = next;
 			} else {
-				m_transitionCellNodes[( size_t )( previous )].m_nNext = next;
+				m_transitionCellNodes[( size_t ) ( previous )].m_nNext = next;
 			}
 			releaseTransitionCellNode( node );
 			if ( pBucket->m_nCount > 0u ) {
@@ -1478,49 +1621,59 @@ void Terrain3DInstancer::untrackSingleLodCell( const t3dCellUpdateKey_t &rKey ) 
 	}
 }
 
-void Terrain3DInstancer::clearSingleLodTransitionBuckets( void ) {
+void Terrain3DInstancer::clearSingleLodTransitionBuckets(
+	void ) {
 	m_singleLodTransitionBuckets.clear();
 	m_transitionCellNodes.clear();
 	m_nTransitionCellFreeHead = UINT32_MAX;
 }
 
-EA_FORCE_INLINE static real_t t3dPointRectMinDistanceSquared( const Vector2 &rPoint, const Vector2 &rMin, const Vector2 &rMax ) {
+EA_FORCE_INLINE static real_t t3dPointRectMinDistanceSquared(
+	const Vector2 &rPoint,
+	const Vector2 &rMin,
+	const Vector2 &rMax ) {
 	const real_t fDx = rPoint.x < rMin.x ? rMin.x - rPoint.x : ( rPoint.x > rMax.x ? rPoint.x - rMax.x : 0.0f );
 	const real_t fDy = rPoint.y < rMin.y ? rMin.y - rPoint.y : ( rPoint.y > rMax.y ? rPoint.y - rMax.y : 0.0f );
 	return fDx * fDx + fDy * fDy;
 }
 
-EA_FORCE_INLINE static real_t t3dPointRectMaxDistanceSquared( const Vector2 &rPoint, const Vector2 &rMin, const Vector2 &rMax ) {
+EA_FORCE_INLINE static real_t t3dPointRectMaxDistanceSquared(
+	const Vector2 &rPoint,
+	const Vector2 &rMin,
+	const Vector2 &rMax ) {
 	const real_t fDx = MAX( Math::abs( rPoint.x - rMin.x ), Math::abs( rPoint.x - rMax.x ) );
 	const real_t fDy = MAX( Math::abs( rPoint.y - rMin.y ), Math::abs( rPoint.y - rMax.y ) );
 	return fDx * fDx + fDy * fDy;
 }
 
-bool Terrain3DInstancer::transitionBucketMayCrossBoundary( const t3dTransitionBucketKey_t &rBucket,
-        const Ref<Terrain3DMeshAsset> &rAsset,
-        const Vector3 &rPreviousPosition,
-        const Vector3 &rTargetPosition ) const {
+bool Terrain3DInstancer::transitionBucketMayCrossBoundary(
+	const t3dTransitionBucketKey_t	&rBucket,
+	const Ref< Terrain3DMeshAsset > &rAsset,
+	const Vector3					&rPreviousPosition,
+	const Vector3					&rTargetPosition ) const {
 	if ( rAsset.is_null() || rAsset->getLastLod() <= 0 || !m_pTerrain ) {
 		return false;
 	}
-	const real_t fCellWorldSize = ( real_t )( m_nCellSize ) * s_fRegionVertexSpacing;
-	const int first_x = rBucket.m_bucket.x * T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN;
-	const int first_z = rBucket.m_bucket.y * T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN;
-	const int last_x = first_x + T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN - 1;
-	const int last_z = first_z + T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN - 1;
-	const Vector2 bucketMin( ( ( real_t )( first_x ) + 0.5f ) * fCellWorldSize, ( ( real_t )( first_z ) + 0.5f ) * fCellWorldSize );
-	const Vector2 bucketMax( ( ( real_t )( last_x ) + 0.5f ) * fCellWorldSize, ( ( real_t )( last_z ) + 0.5f ) * fCellWorldSize );
+	const real_t  fCellWorldSize = ( real_t ) ( m_nCellSize ) *s_fRegionVertexSpacing;
+	const int	  first_x = rBucket.m_bucket.x * T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN;
+	const int	  first_z = rBucket.m_bucket.y * T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN;
+	const int	  last_x = first_x + T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN - 1;
+	const int	  last_z = first_z + T3D_INSTANCE_TRANSITION_BUCKET_CELL_SPAN - 1;
+	const Vector2 bucketMin( ( ( real_t ) ( first_x ) + 0.5f ) * fCellWorldSize,
+							 ( ( real_t ) ( first_z ) + 0.5f ) * fCellWorldSize );
+	const Vector2 bucketMax( ( ( real_t ) ( last_x ) + 0.5f ) * fCellWorldSize,
+							 ( ( real_t ) ( last_z ) + 0.5f ) * fCellWorldSize );
 	const Vector2 previous( rPreviousPosition.x, rPreviousPosition.z );
 	const Vector2 target( rTargetPosition.x, rTargetPosition.z );
-	const real_t fPreviousMin = t3dPointRectMinDistanceSquared( previous, bucketMin, bucketMax );
-	const real_t fPreviousMax = t3dPointRectMaxDistanceSquared( previous, bucketMin, bucketMax );
-	const real_t fTargetMin = t3dPointRectMinDistanceSquared( target, bucketMin, bucketMax );
-	const real_t fTargetMax = t3dPointRectMaxDistanceSquared( target, bucketMin, bucketMax );
+	const real_t  fPreviousMin = t3dPointRectMinDistanceSquared( previous, bucketMin, bucketMax );
+	const real_t  fPreviousMax = t3dPointRectMaxDistanceSquared( previous, bucketMin, bucketMax );
+	const real_t  fTargetMin = t3dPointRectMinDistanceSquared( target, bucketMin, bucketMax );
+	const real_t  fTargetMax = t3dPointRectMaxDistanceSquared( target, bucketMin, bucketMax );
 
-	eastl::fixed_vector<int, T3D_MESH_MAX_LOD_COUNT, false> valid_lods;
+	eastl::fixed_vector< int, T3D_MESH_MAX_LOD_COUNT, false > valid_lods;
 	for ( int lod = 0; lod <= rAsset->getLastLod(); ++lod ) {
-		if ( rAsset->getCastShadows() == s_shadowCastingOnly
-		        && ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
+		if ( rAsset->getCastShadows() == s_shadowCastingOnly &&
+			 ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
 			continue;
 		}
 		valid_lods.push_back( lod );
@@ -1531,18 +1684,19 @@ bool Terrain3DInstancer::transitionBucketMayCrossBoundary( const t3dTransitionBu
 			break;
 		}
 		const real_t fRadiusSquared = fRangeEnd * fRangeEnd;
-		if ( ( fPreviousMin <= fRadiusSquared && fTargetMax > fRadiusSquared )
-		        || ( fTargetMin <= fRadiusSquared && fPreviousMax > fRadiusSquared ) ) {
+		if ( ( fPreviousMin <= fRadiusSquared && fTargetMax > fRadiusSquared ) ||
+			 ( fTargetMin <= fRadiusSquared && fPreviousMax > fRadiusSquared ) ) {
 			return true;
 		}
 	}
 	return false;
 }
 
-const t3dRenderCell_t *Terrain3DInstancer::findSingleLodRenderCell( const t3dCellUpdateKey_t &rKey ) const {
+const t3dRenderCell_t *Terrain3DInstancer::findSingleLodRenderCell(
+	const t3dCellUpdateKey_t &rKey ) const {
 	for ( int lod = 0; lod < T3D_MESH_MAX_LOD_COUNT; ++lod ) {
 		const t3dRenderCellKey_t render_key{ rKey.m_region, rKey.m_cell, rKey.m_nMeshId, lod };
-		const size_t *const pIndex = t3dMapFind( m_iRenderCellIndex, render_key );
+		const size_t *const		 pIndex = t3dMapFind( m_iRenderCellIndex, render_key );
 		if ( pIndex && *pIndex < m_renderCells.size() ) {
 			return &m_renderCells[*pIndex];
 		}
@@ -1550,7 +1704,9 @@ const t3dRenderCell_t *Terrain3DInstancer::findSingleLodRenderCell( const t3dCel
 	return NULL;
 }
 
-void Terrain3DInstancer::queueSingleLodTransitions( const Vector3 &rPreviousPosition, const Vector3 &rTargetPosition ) {
+void Terrain3DInstancer::queueSingleLodTransitions(
+	const Vector3 &rPreviousPosition,
+	const Vector3 &rTargetPosition ) {
 	m_nTransitionCellsExaminedLastScan = 0u;
 	m_nTransitionLodEvaluationsLastScan = 0u;
 	m_nTransitionsQueuedLastScan = 0u;
@@ -1562,27 +1718,27 @@ void Terrain3DInstancer::queueSingleLodTransitions( const Vector3 &rPreviousPosi
 		return;
 	}
 	for ( t3dTransitionBucketMap_t::const_iterator itBucket = m_singleLodTransitionBuckets.begin();
-	        itBucket != m_singleLodTransitionBuckets.end();
-	        ++itBucket ) {
-		const t3dTransitionBucketKey_t &bucket_key = itBucket->first;
+		  itBucket != m_singleLodTransitionBuckets.end();
+		  ++itBucket ) {
+		const t3dTransitionBucketKey_t	 &bucket_key = itBucket->first;
 		const t3dTransitionBucketState_t &rBucketState = itBucket->second;
 		++m_nTransitionBucketsExaminedLastScan;
 		if ( bucket_key.m_nMeshId < 0 || bucket_key.m_nMeshId >= T3D_MAX_MESH_ASSETS ) {
 			continue;
 		}
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( bucket_key.m_nMeshId );
+		const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( bucket_key.m_nMeshId );
 		if ( !transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
 			continue;
 		}
 		++m_nTransitionCandidateBucketsLastScan;
-		size_t visited = 0u;
+		size_t	 visited = 0u;
 		uint32_t node = rBucketState.m_nHead;
 		while ( node != UINT32_MAX ) {
 			if ( !t3dInstancerListWalkGuard( "transition bucket scan", node, m_transitionCellNodes.size(), visited ) ) {
 				break;
 			}
-			const t3dTransitionCellNode_t &transition_node = m_transitionCellNodes[( size_t )( node )];
-			const t3dCellUpdateKey_t &cell_key = transition_node.m_key;
+			const t3dTransitionCellNode_t &transition_node = m_transitionCellNodes[( size_t ) ( node )];
+			const t3dCellUpdateKey_t	  &cell_key = transition_node.m_key;
 			++m_nTransitionCellsExaminedLastScan;
 			const t3dRenderCell_t *pRender = findSingleLodRenderCell( cell_key );
 			if ( !pRender ) {
@@ -1600,7 +1756,8 @@ void Terrain3DInstancer::queueSingleLodTransitions( const Vector3 &rPreviousPosi
 	m_nTransitionScanUsecLastScan = Time::get_singleton()->get_ticks_usec() - scan_started_usec;
 }
 
-void Terrain3DInstancer::cancelPendingCellUpdates( void ) {
+void Terrain3DInstancer::cancelPendingCellUpdates(
+	void ) {
 	if ( m_bMaterializingUpdates || m_bProcessingPendingUpdates ) {
 		m_bPendingCancelRequested = true;
 		return;
@@ -1612,15 +1769,17 @@ void Terrain3DInstancer::cancelPendingCellUpdates( void ) {
 	rebuildPendingRegionWorkMask();
 }
 
-void Terrain3DInstancer::enqueueRegionMeshUpdates( Terrain3DRegion *const pRegion, const int nMeshId ) {
-	const Vector2i regionLocation = pRegion->getLocation();
+void Terrain3DInstancer::enqueueRegionMeshUpdates(
+	Terrain3DRegion *const pRegion,
+	const int			   nMeshId ) {
+	const Vector2i				  regionLocation = pRegion->getLocation();
 	Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternalMut();
 	if ( !pStore ) {
 		destroyMmiByLocation( regionLocation, nMeshId );
 		return;
 	}
 	Terrain3DInstanceStore &store = *pStore;
-	const int mesh_count = MIN( m_pTerrain->assetsResource()->getMeshCount(), T3D_MAX_MESH_ASSETS );
+	const int				mesh_count = MIN( m_pTerrain->assetsResource()->getMeshCount(), T3D_MAX_MESH_ASSETS );
 	reconcileRegionRenderCells( pRegion, nMeshId );
 	t3dInstanceMesh_t *const pNativeMesh = store.findMesh( nMeshId );
 	if ( !pNativeMesh ) {
@@ -1628,17 +1787,18 @@ void Terrain3DInstancer::enqueueRegionMeshUpdates( Terrain3DRegion *const pRegio
 		destroyMmiByLocation( regionLocation, nMeshId );
 		return;
 	}
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
 		const t3dInstanceCell_s &cell = ( pNativeMesh->m_cells )[iCell];
 		setLogicalCellCount( regionLocation, nMeshId, cell.m_location, cell.m_transforms.size() );
 	}
-	const Ref<Terrain3DMeshAsset> pAsset =
-	        nMeshId >= 0 && nMeshId < mesh_count ? m_pTerrain->assetsResource()->getMeshAsset( nMeshId ) : Ref<Terrain3DMeshAsset>();
+	const Ref< Terrain3DMeshAsset > pAsset = nMeshId >= 0 && nMeshId < mesh_count
+												 ? m_pTerrain->assetsResource()->getMeshAsset( nMeshId )
+												 : Ref< Terrain3DMeshAsset >();
 	if ( pAsset.is_null() || !pAsset->isEnabled() || pAsset->getLodCount() == 0 ) {
 		destroyMmiByLocation( regionLocation, nMeshId );
 		return;
 	}
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( pNativeMesh->m_cells ).size() ); iCell++ ) {
 		const t3dInstanceCell_s &cell = ( pNativeMesh->m_cells )[iCell];
 		if ( !appendBuildingCellUpdate( t3dCellUpdateKey_t{ regionLocation, cell.m_location, nMeshId } ) ) {
 			break;
@@ -1649,12 +1809,14 @@ void Terrain3DInstancer::enqueueRegionMeshUpdates( Terrain3DRegion *const pRegio
 	}
 }
 
-void Terrain3DInstancer::enqueueRegionCellUpdates( Terrain3DRegion *const pRegion, const int nMeshId ) {
+void Terrain3DInstancer::enqueueRegionCellUpdates(
+	Terrain3DRegion *const pRegion,
+	const int			   nMeshId ) {
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return;
 	}
-	if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
-	        && !m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
+	if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() &&
+		 !m_pTerrain->dataObject()->isInstanceRegionResident( pRegion->getLocation() ) ) {
 		return;
 	}
 	const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
@@ -1665,30 +1827,33 @@ void Terrain3DInstancer::enqueueRegionCellUpdates( Terrain3DRegion *const pRegio
 		enqueueRegionMeshUpdates( pRegion, nMeshId );
 		return;
 	}
-	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( pStore->meshes() ).size() ); iMesh++ ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( pStore->meshes() ).size() ); iMesh++ ) {
 		const t3dInstanceMesh_t &mesh = ( pStore->meshes() )[iMesh];
 		enqueueRegionMeshUpdates( pRegion, mesh.m_nId );
 	}
 }
 
-void Terrain3DInstancer::enqueueAllRegions( Terrain3DData *const pData, const int nMeshId ) {
+void Terrain3DInstancer::enqueueAllRegions(
+	Terrain3DData *const pData,
+	const int			 nMeshId ) {
 	const t3dRegionCoord_t *pSlots = pData->getRegionSlotsInternal();
-	const int slot_count = pData->getRegionSlotCountInternal();
+	const int				slot_count = pData->getRegionSlotCountInternal();
 	for ( int slot = 0; slot < slot_count; ++slot ) {
 		const Vector2i location = t3dUnpackRegionCoord( pSlots[slot] );
 		if ( location == s_v2iMax ) {
 			continue;
 		}
 		Terrain3DRegion *const pRegion = pData->getRegionPtr( location );
-		if ( pRegion && !pRegion->isDeleted()
-		        && ( !pData->isInstanceRegionCacheEnabled() || pData->isInstanceRegionResident( location ) ) ) {
+		if ( pRegion && !pRegion->isDeleted() &&
+			 ( !pData->isInstanceRegionCacheEnabled() || pData->isInstanceRegionResident( location ) ) ) {
 			enqueueRegionCellUpdates( pRegion, nMeshId );
 		}
 	}
 }
 
-void Terrain3DInstancer::processPendingCellUpdate( const t3dCellUpdateKey_t &rUpdate ) {
-	Terrain3DData *const pData = m_pTerrain->dataObject();
+void Terrain3DInstancer::processPendingCellUpdate(
+	const t3dCellUpdateKey_t &rUpdate ) {
+	Terrain3DData *const   pData = m_pTerrain->dataObject();
 	Terrain3DRegion *const region = pData->getRegionPtr( rUpdate.m_region );
 	if ( !region || region->isDeleted() || pData->getRegionId( rUpdate.m_region ) < 0 ) {
 		++m_nSkippedCellUpdatesLastFrame;
@@ -1707,8 +1872,8 @@ void Terrain3DInstancer::processPendingCellUpdate( const t3dCellUpdateKey_t &rUp
 		destroyMmiByCell( rUpdate.m_region, rUpdate.m_nMeshId, rUpdate.m_cell );
 		return;
 	}
-	t3dInstanceCell_s *const pCell = pStore->findCell( rUpdate.m_nMeshId, rUpdate.m_cell );
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( rUpdate.m_nMeshId );
+	t3dInstanceCell_s *const		pCell = pStore->findCell( rUpdate.m_nMeshId, rUpdate.m_cell );
+	const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( rUpdate.m_nMeshId );
 	if ( !pCell ) {
 		++m_nSkippedCellUpdatesLastFrame;
 		eraseLogicalCellCount( rUpdate.m_region, rUpdate.m_nMeshId, rUpdate.m_cell );
@@ -1725,12 +1890,14 @@ void Terrain3DInstancer::processPendingCellUpdate( const t3dCellUpdateKey_t &rUp
 }
 
 #ifdef DEBUG_ENABLED
-bool Terrain3DInstancer::reportInvariantFailure( const String &rMessage ) {
+bool Terrain3DInstancer::reportInvariantFailure(
+	const String &rMessage ) {
 	UtilityFunctions::push_error( "Terrain3DInstancer: invariant failure: ", rMessage );
 	return false;
 }
 
-bool Terrain3DInstancer::validateInternalState( void ) const {
+bool Terrain3DInstancer::validateInternalState(
+	void ) const {
 	if ( m_iPendingCellUpdateCursor > m_pendingCellUpdates.size() ) {
 		return reportInvariantFailure( "pending cell cursor exceeds queue size" );
 	}
@@ -1739,33 +1906,36 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 	}
 	for ( size_t index = 0; index < m_renderCells.size(); ++index ) {
 		const t3dRenderCell_t &render = m_renderCells[index];
-		const size_t *const pDenseIndex = t3dMapFind( m_iRenderCellIndex, makeRenderKey( render ) );
+		const size_t *const	   pDenseIndex = t3dMapFind( m_iRenderCellIndex, makeRenderKey( render ) );
 		if ( !pDenseIndex || *pDenseIndex != index ) {
-			return reportInvariantFailure( vformat( "render key does not resolve to dense index %d", ( int64_t )( index ) ) );
+			return reportInvariantFailure(
+				vformat( "render key does not resolve to dense index %d", ( int64_t ) ( index ) ) );
 		}
-		if ( render.m_nRegionListNode == UINT32_MAX || render.m_nRegionListNode >= m_renderRegionNodes.size()
-		        || m_renderRegionNodes[( size_t )( render.m_nRegionListNode )].m_iRenderCell != index ) {
-			return reportInvariantFailure( vformat( "render region node is stale at dense index %d", ( int64_t )( index ) ) );
+		if ( render.m_nRegionListNode == UINT32_MAX || render.m_nRegionListNode >= m_renderRegionNodes.size() ||
+			 m_renderRegionNodes[( size_t ) ( render.m_nRegionListNode )].m_iRenderCell != index ) {
+			return reportInvariantFailure(
+				vformat( "render region node is stale at dense index %d", ( int64_t ) ( index ) ) );
 		}
 	}
 	for ( size_t region_index = 0; region_index < T3D_INSTANCE_REGION_TABLE_CAPACITY; ++region_index ) {
 		if ( !m_regionRenderMask.test( region_index ) ) {
 			continue;
 		}
-		const Vector2i regionLocation = regionLocationFromUpdateIndex( ( uint16_t )( region_index ) );
+		const Vector2i		   regionLocation = regionLocationFromUpdateIndex( ( uint16_t ) ( region_index ) );
 		const t3dRegionList_t &list = m_szRegionRenderLists[region_index];
 		if ( list.m_nCount == 0u || list.m_nHead == UINT32_MAX ) {
 			return reportInvariantFailure( "active region render slot is empty" );
 		}
 		uint32_t seen = 0u;
-		for ( uint32_t node = list.m_nHead; node != UINT32_MAX; node = m_renderRegionNodes[( size_t )( node )].m_nNext ) {
+		for ( uint32_t node = list.m_nHead; node != UINT32_MAX;
+			  node = m_renderRegionNodes[( size_t ) ( node )].m_nNext ) {
 			if ( seen >= list.m_nCount || seen >= m_renderRegionNodes.size() ) {
 				return reportInvariantFailure( "region render list cycle/cardinality overrun" );
 			}
 			if ( node >= m_renderRegionNodes.size() ) {
 				return reportInvariantFailure( "region render node points outside pool" );
 			}
-			const size_t render_index = m_renderRegionNodes[( size_t )( node )].m_iRenderCell;
+			const size_t render_index = m_renderRegionNodes[( size_t ) ( node )].m_iRenderCell;
 			if ( render_index >= m_renderCells.size() ) {
 				return reportInvariantFailure( "region render node points outside dense storage" );
 			}
@@ -1787,17 +1957,17 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 			if ( !region || region->isDeleted() ) {
 				continue;
 			}
-			if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
-			        && !m_pTerrain->dataObject()->isInstanceRegionResident( region->getLocation() ) ) {
+			if ( m_pTerrain->dataObject()->isInstanceRegionCacheEnabled() &&
+				 !m_pTerrain->dataObject()->isInstanceRegionResident( region->getLocation() ) ) {
 				continue;
 			}
 			const Terrain3DInstanceStore *const pStore = region->getResidentInstanceStoreInternal();
 			if ( !pStore ) {
 				continue;
 			}
-			for ( size_t iMesh = 0u; iMesh < ( size_t )( ( pStore->meshes() ).size() ); iMesh++ ) {
+			for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( pStore->meshes() ).size() ); iMesh++ ) {
 				const t3dInstanceMesh_t &mesh = ( pStore->meshes() )[iMesh];
-				for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+				for ( size_t iCell = 0u; iCell < ( size_t ) ( ( mesh.m_cells ).size() ); iCell++ ) {
 					const t3dInstanceCell_s &cell = ( mesh.m_cells )[iCell];
 					if ( cell.usesColors() && cell.m_colors.size() != cell.m_transforms.size() ) {
 						return reportInvariantFailure( "instance color sidecar length differs from transform count" );
@@ -1812,12 +1982,12 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 
 	uint64_t szCalculatedTotals[T3D_MAX_MESH_ASSETS];
 	memset( szCalculatedTotals, 0, sizeof( szCalculatedTotals ) );
-	bool logical_valid = true;
+	bool   logical_valid = true;
 	String logical_error;
 	for ( t3dLogicalCellMap_t::const_iterator itLogical = m_logicalCellCounts.begin();
-	        itLogical != m_logicalCellCounts.end();
-	        ++itLogical ) {
-		const t3dCellUpdateKey_t &key = itLogical->first;
+		  itLogical != m_logicalCellCounts.end();
+		  ++itLogical ) {
+		const t3dCellUpdateKey_t	&key = itLogical->first;
 		const t3dLogicalCellState_t &state = itLogical->second;
 		if ( !logical_valid ) {
 			break;
@@ -1827,16 +1997,16 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 			logical_error = "logical cell contains an invalid mesh ID";
 			break;
 		}
-		if ( state.m_nRegionListNode == UINT32_MAX || state.m_nRegionListNode >= m_logicalRegionNodes.size()
-		        || !( m_logicalRegionNodes[( size_t )( state.m_nRegionListNode )].m_key == key ) ) {
+		if ( state.m_nRegionListNode == UINT32_MAX || state.m_nRegionListNode >= m_logicalRegionNodes.size() ||
+			 !( m_logicalRegionNodes[( size_t ) ( state.m_nRegionListNode )].m_key == key ) ) {
 			logical_valid = false;
 			logical_error = "logical cell region node is stale";
 			break;
 		}
-		uint64_t &calculated_total = szCalculatedTotals[( size_t )( key.m_nMeshId )];
-		calculated_total = UINT64_MAX - calculated_total < ( uint64_t )( state.m_nCount )
-		        ? UINT64_MAX
-		        : calculated_total + ( uint64_t )( state.m_nCount );
+		uint64_t &calculated_total = szCalculatedTotals[( size_t ) ( key.m_nMeshId )];
+		calculated_total = UINT64_MAX - calculated_total < ( uint64_t ) ( state.m_nCount )
+							   ? UINT64_MAX
+							   : calculated_total + ( uint64_t ) ( state.m_nCount );
 	}
 	if ( !logical_valid ) {
 		return reportInvariantFailure( logical_error );
@@ -1845,20 +2015,21 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 		if ( !m_regionLogicalMask.test( region_index ) ) {
 			continue;
 		}
-		const Vector2i regionLocation = regionLocationFromUpdateIndex( ( uint16_t )( region_index ) );
+		const Vector2i		   regionLocation = regionLocationFromUpdateIndex( ( uint16_t ) ( region_index ) );
 		const t3dRegionList_t &list = m_szRegionLogicalLists[region_index];
 		if ( list.m_nCount == 0u || list.m_nHead == UINT32_MAX ) {
 			return reportInvariantFailure( "active logical region slot is empty" );
 		}
 		uint32_t seen = 0u;
-		for ( uint32_t node = list.m_nHead; node != UINT32_MAX; node = m_logicalRegionNodes[( size_t )( node )].m_nNext ) {
+		for ( uint32_t node = list.m_nHead; node != UINT32_MAX;
+			  node = m_logicalRegionNodes[( size_t ) ( node )].m_nNext ) {
 			if ( seen >= list.m_nCount || seen >= m_logicalRegionNodes.size() ) {
 				return reportInvariantFailure( "logical region list cycle/cardinality overrun" );
 			}
 			if ( node >= m_logicalRegionNodes.size() ) {
 				return reportInvariantFailure( "logical region node points outside pool" );
 			}
-			const t3dCellUpdateKey_t &key = m_logicalRegionNodes[( size_t )( node )].m_key;
+			const t3dCellUpdateKey_t		  &key = m_logicalRegionNodes[( size_t ) ( node )].m_key;
 			const t3dLogicalCellState_t *const pState = t3dMapFind( m_logicalCellCounts, key );
 			if ( key.m_region != regionLocation || !pState || pState->m_nRegionListNode != node ) {
 				return reportInvariantFailure( "logical region reverse index is inconsistent" );
@@ -1870,54 +2041,56 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 		}
 	}
 	for ( t3dTransitionBucketMap_t::const_iterator itBucket = m_singleLodTransitionBuckets.begin();
-	        itBucket != m_singleLodTransitionBuckets.end();
-	        ++itBucket ) {
-		const t3dTransitionBucketKey_t &bucket_key = itBucket->first;
+		  itBucket != m_singleLodTransitionBuckets.end();
+		  ++itBucket ) {
+		const t3dTransitionBucketKey_t	 &bucket_key = itBucket->first;
 		const t3dTransitionBucketState_t &bucket = itBucket->second;
 		if ( bucket.m_nCount == 0u || bucket.m_nHead == UINT32_MAX ) {
 			return reportInvariantFailure( "active transition bucket is empty" );
 		}
-		size_t seen = 0u;
+		size_t	 seen = 0u;
 		uint32_t node = bucket.m_nHead;
 		while ( node != UINT32_MAX ) {
-			if ( node >= m_transitionCellNodes.size() || seen >= ( size_t )( bucket.m_nCount )
-			        || seen >= m_transitionCellNodes.size() ) {
+			if ( node >= m_transitionCellNodes.size() || seen >= ( size_t ) ( bucket.m_nCount ) ||
+				 seen >= m_transitionCellNodes.size() ) {
 				return reportInvariantFailure( "transition bucket cycle/cardinality overrun" );
 			}
-			const t3dTransitionCellNode_t &transition_node = m_transitionCellNodes[( size_t )( node )];
+			const t3dTransitionCellNode_t &transition_node = m_transitionCellNodes[( size_t ) ( node )];
 			if ( !( getTransitionBucketKey( transition_node.m_key ) == bucket_key ) ) {
 				return reportInvariantFailure( "transition bucket contains a mismatched cell" );
 			}
 			node = transition_node.m_nNext;
 			++seen;
 		}
-		if ( seen != ( size_t )( bucket.m_nCount ) ) {
+		if ( seen != ( size_t ) ( bucket.m_nCount ) ) {
 			return reportInvariantFailure( "transition bucket count is inconsistent" );
 		}
 	}
 	{
-		size_t seen = 0u;
+		size_t	 seen = 0u;
 		uint32_t node = m_nTransitionCellFreeHead;
 		while ( node != UINT32_MAX ) {
 			if ( node >= m_transitionCellNodes.size() || seen >= m_transitionCellNodes.size() ) {
 				return reportInvariantFailure( "transition free-list cycle/out-of-range node" );
 			}
-			node = m_transitionCellNodes[( size_t )( node )].m_nNext;
+			node = m_transitionCellNodes[( size_t ) ( node )].m_nNext;
 			++seen;
 		}
 	}
 
 	for ( int mesh_id = 0; mesh_id < T3D_MAX_MESH_ASSETS; ++mesh_id ) {
-		if ( szCalculatedTotals[( size_t )( mesh_id )] != m_szLogicalMeshInstanceTotals[( size_t )( mesh_id )] ) {
+		if ( szCalculatedTotals[( size_t ) ( mesh_id )] != m_szLogicalMeshInstanceTotals[( size_t ) ( mesh_id )] ) {
 			return reportInvariantFailure( vformat( "logical aggregate differs for mesh %d", mesh_id ) );
 		}
 		if ( m_pTerrain && m_pTerrain->assetsResource().is_valid() ) {
-			const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+			const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
 			if ( pAsset.is_valid() ) {
-				const uint64_t published_total = m_pTerrain->dataObject() && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
-				        ? t3dRepositoryMeshInstanceCount( m_pTerrain->dataObject(), mesh_id )
-				        : szCalculatedTotals[( size_t )( mesh_id )];
-				const uint32_t expected = ( uint32_t )( MIN<uint64_t>( published_total, eastl::numeric_limits<uint32_t>::max() ) );
+				const uint64_t published_total =
+					m_pTerrain->dataObject() && m_pTerrain->dataObject()->isInstanceRegionCacheEnabled()
+						? t3dRepositoryMeshInstanceCount( m_pTerrain->dataObject(), mesh_id )
+						: szCalculatedTotals[( size_t ) ( mesh_id )];
+				const uint32_t expected =
+					( uint32_t ) ( MIN< uint64_t >( published_total, eastl::numeric_limits< uint32_t >::max() ) );
 				if ( pAsset->getInstanceCount() != expected ) {
 					return reportInvariantFailure( vformat( "published instance count differs for mesh %d", mesh_id ) );
 				}
@@ -1928,13 +2101,14 @@ bool Terrain3DInstancer::validateInternalState( void ) const {
 }
 #endif
 
-void Terrain3DInstancer::materializePendingUpdates( void ) {
+void Terrain3DInstancer::materializePendingUpdates(
+	void ) {
 	if ( m_iPendingCellUpdateCursor < m_pendingCellUpdates.size() ) {
 		return;
 	}
 	cancelPendingCellUpdates();
-	if ( !m_bRebuildAll && !m_bUpdateAll && !m_globalMeshUpdates.any()
-	        && m_regionUpdateIndices.empty() && m_streamingUpdates.empty() ) {
+	if ( !m_bRebuildAll && !m_bUpdateAll && !m_globalMeshUpdates.any() && m_regionUpdateIndices.empty() &&
+		 m_streamingUpdates.empty() ) {
 		return;
 	}
 
@@ -1942,9 +2116,9 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 	// emit synchronous signals whose callbacks schedule more work. Those requests
 	// must remain in the live dirty containers for the next batch rather than
 	// invalidating this iteration or being cleared at its end.
-	const bool bRebuildAll = m_bRebuildAll;
-	const bool bUpdateAll = bRebuildAll || m_bUpdateAll;
-	const eastl::bitset<T3D_MAX_MESH_ASSETS> global_mesh_updates = m_globalMeshUpdates;
+	const bool								   bRebuildAll = m_bRebuildAll;
+	const bool								   bUpdateAll = bRebuildAll || m_bUpdateAll;
+	const eastl::bitset< T3D_MAX_MESH_ASSETS > global_mesh_updates = m_globalMeshUpdates;
 	snapshotRegionUpdates();
 	m_activeStreamingUpdates.clear();
 	m_activeStreamingUpdates.swap( m_streamingUpdates );
@@ -1966,7 +2140,7 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 			if ( !m_regionRenderMask.test( region_index ) ) {
 				continue;
 			}
-			const Vector2i regionLocation = regionLocationFromUpdateIndex( ( uint16_t )( region_index ) );
+			const Vector2i		   regionLocation = regionLocationFromUpdateIndex( ( uint16_t ) ( region_index ) );
 			Terrain3DRegion *const region = pData->getRegionPtr( regionLocation );
 			if ( !region || region->isDeleted() || pData->getRegionId( regionLocation ) < 0 ) {
 				destroyMmisByRegion( regionLocation );
@@ -1978,7 +2152,7 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 			if ( !m_regionLogicalMask.test( region_index ) ) {
 				continue;
 			}
-			const Vector2i region_location = regionLocationFromUpdateIndex( ( uint16_t )region_index );
+			const Vector2i		   region_location = regionLocationFromUpdateIndex( ( uint16_t ) region_index );
 			Terrain3DRegion *const pRegion = pData->getRegionPtr( region_location );
 			if ( !pRegion || pRegion->isDeleted() || pData->getRegionId( region_location ) < 0 ) {
 				eraseLogicalCellsByRegion( region_location );
@@ -1995,11 +2169,11 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 			}
 		}
 
-		for ( size_t iUpdate = 0u; iUpdate < ( size_t )( ( m_activeRegionUpdateIndices ).size() ); iUpdate++ ) {
-			const uint16_t region_index = ( m_activeRegionUpdateIndices )[iUpdate];
-			const Vector2i regionLocation = regionLocationFromUpdateIndex( region_index );
-			const t3dRegionUpdateState_t &state = m_szActiveRegionUpdates[( size_t )( region_index )];
-			Terrain3DRegion *const region = pData->getRegionPtr( regionLocation );
+		for ( size_t iUpdate = 0u; iUpdate < ( size_t ) ( ( m_activeRegionUpdateIndices ).size() ); iUpdate++ ) {
+			const uint16_t				  region_index = ( m_activeRegionUpdateIndices )[iUpdate];
+			const Vector2i				  regionLocation = regionLocationFromUpdateIndex( region_index );
+			const t3dRegionUpdateState_t &state = m_szActiveRegionUpdates[( size_t ) ( region_index )];
+			Terrain3DRegion *const		  region = pData->getRegionPtr( regionLocation );
 			if ( !region || region->isDeleted() ) {
 				if ( state.m_bAllMeshes ) {
 					eraseLogicalCellsByRegion( regionLocation );
@@ -2028,9 +2202,10 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 					continue;
 				}
 				reconcileRegionRenderCells( region, -1 );
-				for ( size_t iMesh = 0u; iMesh < ( size_t )( ( pStore->meshes() ).size() ); iMesh++ ) {
+				for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( pStore->meshes() ).size() ); iMesh++ ) {
 					const t3dInstanceMesh_t &mesh = ( pStore->meshes() )[iMesh];
-					if ( mesh.m_nId >= 0 && mesh.m_nId < T3D_MAX_MESH_ASSETS && !global_mesh_updates.test( mesh.m_nId ) ) {
+					if ( mesh.m_nId >= 0 && mesh.m_nId < T3D_MAX_MESH_ASSETS &&
+						 !global_mesh_updates.test( mesh.m_nId ) ) {
 						enqueueRegionCellUpdates( region, mesh.m_nId );
 					}
 				}
@@ -2045,8 +2220,8 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 	}
 
 	for ( t3dCellUpdateSet_t::const_iterator itUpdate = m_activeStreamingUpdates.begin();
-	        itUpdate != m_activeStreamingUpdates.end();
-	        ++itUpdate ) {
+		  itUpdate != m_activeStreamingUpdates.end();
+		  ++itUpdate ) {
 		const t3dCellUpdateKey_t &update = *itUpdate;
 		if ( bUpdateAll || global_mesh_updates.test( update.m_nMeshId ) ) {
 			continue;
@@ -2079,12 +2254,13 @@ void Terrain3DInstancer::materializePendingUpdates( void ) {
 // Creates MMIs based on native data stored in Terrain3DRegions. Authoritative
 // teardown/reconciliation is immediate; expensive cell creation and upload is
 // amortized over pre-draw frames according to update_cell_budget.
-void Terrain3DInstancer::processUpdates( void ) {
+void Terrain3DInstancer::processUpdates(
+	void ) {
 	m_nCellUpdateUsecLastFrame = 0u;
 	m_nMaterializeUsecLastFrame = 0u;
 	m_nMultimeshUploadBytesLastFrame = 0u;
 	m_nInstanceRecordsUploadedLastFrame = 0u;
-	m_nQueueBeforeLastFrame = ( uint32_t )( MAX( getPendingStreamingUpdateCount(), 0 ) );
+	m_nQueueBeforeLastFrame = ( uint32_t ) ( MAX( getPendingStreamingUpdateCount(), 0 ) );
 	m_nQueueAfterLastFrame = m_nQueueBeforeLastFrame;
 	m_nProcessedCellUpdatesLastFrame = 0u;
 	m_nSkippedCellUpdatesLastFrame = 0u;
@@ -2094,8 +2270,42 @@ void Terrain3DInstancer::processUpdates( void ) {
 	if ( !hasPendingUpdates() ) {
 		return;
 	}
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return; }
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return;
+	}
 	if ( !m_pTerrain->sceneNode().is_inside_tree() ) {
+		return;
+	}
+
+	// Pure camera/LOD residency updates do not require a global snapshot or
+	// logical-region reconciliation. Consume a bounded tail of the ordered set
+	// directly, avoiding an O(N) queue materialization before the cell budget.
+	if ( !m_bRebuildAll && !m_bUpdateAll && !m_globalMeshUpdates.any() && m_regionUpdateIndices.empty() &&
+		 m_activeRegionUpdateIndices.empty() && m_pendingCellUpdates.empty() && !m_streamingUpdates.empty() ) {
+		const int	   configured_budget = getEffectiveUpdateCellBudget();
+		const int	   streaming_budget = configured_budget > 0 ? configured_budget : 32;
+		const uint64_t streaming_deadline_usec = Time::get_singleton()->get_ticks_usec() + 1500u;
+		m_bProcessingPendingUpdates = true;
+		while ( !m_streamingUpdates.empty() && ( int ) m_nProcessedCellUpdatesLastFrame < streaming_budget &&
+				!m_bPendingCancelRequested &&
+				( m_nProcessedCellUpdatesLastFrame == 0u ||
+				  Time::get_singleton()->get_ticks_usec() < streaming_deadline_usec ) ) {
+			const t3dCellUpdateKey_t update = *( m_streamingUpdates.end() - 1 );
+			m_streamingUpdates.erase( m_streamingUpdates.end() - 1 );
+			processPendingCellUpdate( update );
+			++m_nProcessedCellUpdatesLastFrame;
+		}
+		m_bProcessingPendingUpdates = false;
+		if ( m_bPendingCancelRequested ) {
+			m_bPendingCancelRequested = false;
+		}
+		rebuildPendingRegionWorkMask();
+		flushLogicalMeshCounts();
+		if ( !hasPendingUpdates() ) {
+			m_pTerrain->assetsResource()->loadPendingMeshes();
+		}
+		m_nQueueAfterLastFrame = ( uint32_t ) ( MAX( getPendingStreamingUpdateCount(), 0 ) );
+		m_nCellUpdateUsecLastFrame = Time::get_singleton()->get_ticks_usec() - update_started_usec;
 		return;
 	}
 
@@ -2103,8 +2313,9 @@ void Terrain3DInstancer::processUpdates( void ) {
 	materializePendingUpdates();
 	m_nMaterializeUsecLastFrame = Time::get_singleton()->get_ticks_usec() - materialize_started_usec;
 	const size_t remaining = m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor;
-	const int effective_update_budget = getEffectiveUpdateCellBudget();
-	const size_t budget = effective_update_budget == 0 ? remaining : MIN( remaining, ( size_t )( effective_update_budget ) );
+	const int	 effective_update_budget = getEffectiveUpdateCellBudget();
+	const size_t budget =
+		effective_update_budget == 0 ? remaining : MIN( remaining, ( size_t ) ( effective_update_budget ) );
 	const size_t end = m_iPendingCellUpdateCursor + budget;
 	m_bProcessingPendingUpdates = true;
 	while ( m_iPendingCellUpdateCursor < end && !m_bPendingCancelRequested ) {
@@ -2136,11 +2347,12 @@ void Terrain3DInstancer::processUpdates( void ) {
 		}
 #endif
 	}
-	m_nQueueAfterLastFrame = ( uint32_t )( MAX( getPendingStreamingUpdateCount(), 0 ) );
+	m_nQueueAfterLastFrame = ( uint32_t ) ( MAX( getPendingStreamingUpdateCount(), 0 ) );
 	m_nCellUpdateUsecLastFrame = Time::get_singleton()->get_ticks_usec() - update_started_usec;
 }
 
-void Terrain3DInstancer::serviceColdCapacity( const bool bForce ) {
+void Terrain3DInstancer::serviceColdCapacity(
+	const bool bForce ) {
 	if ( bForce ) {
 		m_bRuntimeStorageRebuildPending = true;
 	}
@@ -2154,17 +2366,20 @@ void Terrain3DInstancer::serviceColdCapacity( const bool bForce ) {
 	}
 }
 
-void Terrain3DInstancer::servicePendingUpdates( void ) {
+void Terrain3DInstancer::servicePendingUpdates(
+	void ) {
 	if ( hasPendingUpdates() ) {
 		processUpdates();
 	}
 }
 
 void Terrain3DInstancer::updateMmiCell(
-    Terrain3DRegion *const pRegion, const int nMeshId, t3dInstanceCell_s& rCell, const Ref<Terrain3DMeshAsset>& rAsset )
-{
-	const Vector2i region_location = pRegion->getLocation();
-	const Vector2i cell_location = rCell.m_location;
+	Terrain3DRegion *const			 pRegion,
+	const int						 nMeshId,
+	t3dInstanceCell_s				&rCell,
+	const Ref< Terrain3DMeshAsset > &rAsset ) {
+	const Vector2i			 region_location = pRegion->getLocation();
+	const Vector2i			 cell_location = rCell.m_location;
 	const t3dCellUpdateKey_t transition_key{ region_location, cell_location, nMeshId };
 	if ( rCell.m_transforms.empty() ) {
 		eraseLogicalCellCount( region_location, nMeshId, cell_location );
@@ -2179,10 +2394,9 @@ void Terrain3DInstancer::updateMmiCell(
 		return;
 	}
 
-	const Vector3 lod_target =
-	        m_bStreamPositionValid ? m_lastStreamPosition : m_pTerrain->getClipmapTargetPosition();
-	const int selected_lod =
-	        m_bSingleLodInstanceBuffers ? selectCellLod( region_location, cell_location, rAsset, lod_target ) : INT32_MAX;
+	const Vector3 lod_target = m_bStreamPositionValid ? m_lastStreamPosition : m_pTerrain->getClipmapTargetPosition();
+	const int	  selected_lod =
+		m_bSingleLodInstanceBuffers ? selectCellLod( region_location, cell_location, rAsset, lod_target ) : INT32_MAX;
 	if ( m_bSingleLodInstanceBuffers && selected_lod < 0 ) {
 		untrackSingleLodCell( transition_key );
 		destroyMmiByCell( region_location, nMeshId, cell_location );
@@ -2193,23 +2407,24 @@ void Terrain3DInstancer::updateMmiCell(
 	}
 
 	for ( int lod = 0; lod < T3D_MESH_MAX_LOD_COUNT; ++lod ) {
-		const bool invalid_legacy_lod = lod > rAsset->getLastLod()
-		        || ( rAsset->getCastShadows() == s_shadowCastingOnly
-		                && ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) );
-		if ( ( m_bSingleLodInstanceBuffers && lod != selected_lod )
-		        || ( !m_bSingleLodInstanceBuffers && invalid_legacy_lod ) ) {
+		const bool invalid_legacy_lod =
+			lod > rAsset->getLastLod() || ( rAsset->getCastShadows() == s_shadowCastingOnly &&
+											( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) );
+		if ( ( m_bSingleLodInstanceBuffers && lod != selected_lod ) ||
+			 ( !m_bSingleLodInstanceBuffers && invalid_legacy_lod ) ) {
 			destroyMmiByCell( region_location, nMeshId, cell_location, lod );
 		}
 	}
-	const bool shadow_disabled = m_bSingleLodInstanceBuffers || rAsset->getShadowImpostor() == 0
-	        || rAsset->getCastShadows() == s_shadowCastingOff;
+	const bool shadow_disabled = m_bSingleLodInstanceBuffers || rAsset->getShadowImpostor() == 0 ||
+								 rAsset->getCastShadows() == s_shadowCastingOff;
 	if ( shadow_disabled ) {
 		destroyMmiByCell( region_location, nMeshId, cell_location, T3D_MESH_SHADOW_LOD_ID );
 	}
 
-	const Ref<Mesh> master_mesh = rAsset->getMesh( getMasterLod( rAsset ) );
-	const AABB source_mesh_aabb = master_mesh.is_valid() ? master_mesh->get_aabb() : AABB();
-	const bool source_changed = !rCell.m_bCachedAabbValid || !rCell.m_cachedSourceMeshAabb.is_equal_approx( source_mesh_aabb );
+	const Ref< Mesh > master_mesh = rAsset->getMesh( getMasterLod( rAsset ) );
+	const AABB		  source_mesh_aabb = master_mesh.is_valid() ? master_mesh->get_aabb() : AABB();
+	const bool		  source_changed =
+		!rCell.m_bCachedAabbValid || !rCell.m_cachedSourceMeshAabb.is_equal_approx( source_mesh_aabb );
 	if ( !rCell.m_bCachedAabbValid || rCell.m_nCachedAabbRevision != rCell.m_nRevision || source_changed ) {
 		ensureCellAabb( rCell, source_mesh_aabb );
 	}
@@ -2221,8 +2436,8 @@ void Terrain3DInstancer::updateMmiCell(
 		if ( lod == T3D_MESH_SHADOW_LOD_ID && shadow_disabled ) {
 			continue;
 		}
-		if ( rAsset->getCastShadows() == s_shadowCastingOnly && lod >= 0
-		        && ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
+		if ( rAsset->getCastShadows() == s_shadowCastingOnly && lod >= 0 &&
+			 ( lod > rAsset->getLastShadowLod() || lod < rAsset->getShadowImpostor() ) ) {
 			continue;
 		}
 		const int source_lod = lod == T3D_MESH_SHADOW_LOD_ID ? rAsset->getShadowImpostor() : lod;
@@ -2234,89 +2449,101 @@ void Terrain3DInstancer::updateMmiCell(
 		if ( !render ) {
 			continue;
 		}
-		const bool changed = render->m_nUploadedCount != ( int )( rCell.m_transforms.size() )
-		        || render->m_nUploadedRevision != rCell.m_nRevision
-		        || render->m_nSettingsRevision != m_szMeshSettingsRevision[nMeshId]
-		        || render->m_nAabbGeneration != rCell.m_nCachedAabbGeneration || render->m_bUsesColors != rCell.usesColors();
-		render->m_nUploadedCount = ( int )( rCell.m_transforms.size() );
+		const bool changed = render->m_nUploadedCount != ( int ) ( rCell.m_transforms.size() ) ||
+							 render->m_nUploadedRevision != rCell.m_nRevision ||
+							 render->m_nSettingsRevision != m_szMeshSettingsRevision[nMeshId] ||
+							 render->m_nAabbGeneration != rCell.m_nCachedAabbGeneration ||
+							 render->m_bUsesColors != rCell.usesColors();
+		render->m_nUploadedCount = ( int ) ( rCell.m_transforms.size() );
 		render->m_nUploadedRevision = rCell.m_nRevision;
 		render->m_nSettingsRevision = m_szMeshSettingsRevision[nMeshId];
 		render->m_nAabbGeneration = rCell.m_nCachedAabbGeneration;
 		render->m_bUsesColors = rCell.usesColors();
 		if ( changed ) {
 			++m_nMultimeshUploadsLastFrame;
-			m_nInstanceRecordsUploadedLastFrame += ( uint64_t )( rCell.m_transforms.size() );
+			m_nInstanceRecordsUploadedLastFrame += ( uint64_t ) ( rCell.m_transforms.size() );
 			m_nMultimeshUploadBytesLastFrame +=
-			        ( uint64_t )( rCell.m_transforms.size() ) * sizeof( t3dRdInstanceRecord_t );
+				( uint64_t ) ( rCell.m_transforms.size() ) * sizeof( t3dRdInstanceRecord_t );
 			markRdPublicationDirty();
 		}
 	}
 	rCell.m_bModified = false;
 }
 
-void Terrain3DInstancer::ensureCellAabb( t3dInstanceCell_s &rCell, const AABB &rSourceMeshAabb ) {
+void Terrain3DInstancer::ensureCellAabb(
+	t3dInstanceCell_s &rCell,
+	const AABB		  &rSourceMeshAabb ) {
 	t3dRefreshInstanceCellBounds( rCell, rSourceMeshAabb );
 }
 
-void Terrain3DInstancer::destroyMmisByRegion( const Vector2i &rRegionLoc ) {
+void Terrain3DInstancer::destroyMmisByRegion(
+	const Vector2i &rRegionLoc ) {
 	const int region_index = getRegionTableIndex( rRegionLoc );
 	if ( region_index < 0 ) {
 		return;
 	}
-	size_t logical_visited = 0u;
-	uint32_t logical_node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
+	size_t	 logical_visited = 0u;
+	uint32_t logical_node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
 	while ( logical_node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard(
-		             "logical region destroy", logical_node, m_logicalRegionNodes.size(), logical_visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "logical region destroy",
+										 logical_node,
+										 m_logicalRegionNodes.size(),
+										 logical_visited ) ) {
 			break;
 		}
-		const t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t )( logical_node )];
+		const t3dLogicalRegionNode_t &node = m_logicalRegionNodes[( size_t ) ( logical_node )];
 		untrackSingleLodCell( node.m_key );
 		logical_node = node.m_nNext;
 	}
 	size_t render_visited = 0u;
-	while ( m_szRegionRenderLists[( size_t )( region_index )].m_nHead != UINT32_MAX ) {
-		const uint32_t node = m_szRegionRenderLists[( size_t )( region_index )].m_nHead;
+	while ( m_szRegionRenderLists[( size_t ) ( region_index )].m_nHead != UINT32_MAX ) {
+		const uint32_t node = m_szRegionRenderLists[( size_t ) ( region_index )].m_nHead;
 		if ( !t3dInstancerListWalkGuard( "render region destroy", node, m_renderRegionNodes.size(), render_visited ) ) {
 			break;
 		}
-		const size_t render_index = m_renderRegionNodes[( size_t )( node )].m_iRenderCell;
+		const size_t render_index = m_renderRegionNodes[( size_t ) ( node )].m_iRenderCell;
 		if ( render_index >= m_renderCells.size() ) {
-			releaseRenderRegionNode( node, ( uint16_t )( region_index ) );
+			releaseRenderRegionNode( node, ( uint16_t ) ( region_index ) );
 			continue;
 		}
 		eraseRenderCellAt( render_index );
 	}
 }
 
-void Terrain3DInstancer::destroyMmiByLocation( const Vector2i &rRegionLoc, const int nMeshId ) {
+void Terrain3DInstancer::destroyMmiByLocation(
+	const Vector2i &rRegionLoc,
+	const int		nMeshId ) {
 	const int region_index = getRegionTableIndex( rRegionLoc );
 	if ( region_index < 0 ) {
 		return;
 	}
-	size_t logical_visited = 0u;
-	uint32_t logical_node = m_szRegionLogicalLists[( size_t )( region_index )].m_nHead;
+	size_t	 logical_visited = 0u;
+	uint32_t logical_node = m_szRegionLogicalLists[( size_t ) ( region_index )].m_nHead;
 	while ( logical_node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard(
-		             "logical region mesh destroy", logical_node, m_logicalRegionNodes.size(), logical_visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "logical region mesh destroy",
+										 logical_node,
+										 m_logicalRegionNodes.size(),
+										 logical_visited ) ) {
 			break;
 		}
-		const t3dLogicalRegionNode_t &logical = m_logicalRegionNodes[( size_t )( logical_node )];
-		const t3dCellUpdateKey_t &key = logical.m_key;
+		const t3dLogicalRegionNode_t &logical = m_logicalRegionNodes[( size_t ) ( logical_node )];
+		const t3dCellUpdateKey_t	 &key = logical.m_key;
 		if ( key.m_nMeshId == nMeshId ) {
 			untrackSingleLodCell( key );
 		}
 		logical_node = logical.m_nNext;
 	}
-	uint32_t node = m_szRegionRenderLists[( size_t )( region_index )].m_nHead;
-	size_t render_visited = 0u;
+	uint32_t node = m_szRegionRenderLists[( size_t ) ( region_index )].m_nHead;
+	size_t	 render_visited = 0u;
 	while ( node != UINT32_MAX ) {
-		if ( !t3dInstancerListWalkGuard(
-		             "render region mesh destroy", node, m_renderRegionNodes.size(), render_visited ) ) {
+		if ( !t3dInstancerListWalkGuard( "render region mesh destroy",
+										 node,
+										 m_renderRegionNodes.size(),
+										 render_visited ) ) {
 			break;
 		}
-		const uint32_t next = m_renderRegionNodes[( size_t )( node )].m_nNext;
-		const size_t render_index = m_renderRegionNodes[( size_t )( node )].m_iRenderCell;
+		const uint32_t next = m_renderRegionNodes[( size_t ) ( node )].m_nNext;
+		const size_t   render_index = m_renderRegionNodes[( size_t ) ( node )].m_iRenderCell;
 		if ( render_index < m_renderCells.size() && m_renderCells[render_index].m_nMeshId == nMeshId ) {
 			eraseRenderCellAt( render_index );
 		}
@@ -2324,13 +2551,21 @@ void Terrain3DInstancer::destroyMmiByLocation( const Vector2i &rRegionLoc, const
 	}
 }
 
-void Terrain3DInstancer::eraseMmiLod( const Vector2i &rRegionLoc, const int nMeshId, const Vector2i &vCell, const int nLod ) {
+void Terrain3DInstancer::eraseMmiLod(
+	const Vector2i &rRegionLoc,
+	const int		nMeshId,
+	const Vector2i &vCell,
+	const int		nLod ) {
 	if ( findRenderCell( rRegionLoc, nMeshId, nLod, vCell ) ) {
 		eraseRenderCell( rRegionLoc, nMeshId, nLod, vCell );
 	}
 }
 
-void Terrain3DInstancer::destroyMmiByCell( const Vector2i &rRegionLoc, const int nMeshId, const Vector2i vCell, const int nLod ) {
+void Terrain3DInstancer::destroyMmiByCell(
+	const Vector2i &rRegionLoc,
+	const int		nMeshId,
+	const Vector2i	vCell,
+	const int		nLod ) {
 	if ( nLod != INT32_MAX ) {
 		eraseMmiLod( rRegionLoc, nMeshId, vCell, nLod );
 		return;
@@ -2341,26 +2576,31 @@ void Terrain3DInstancer::destroyMmiByCell( const Vector2i &rRegionLoc, const int
 	}
 }
 
-void Terrain3DInstancer::backupRegion( const Ref<Terrain3DRegion> &rRegion ) {
+void Terrain3DInstancer::backupRegion(
+	const Ref< Terrain3DRegion > &rRegion ) {
 	if ( rRegion.is_null() ) {
 		return;
 	}
-	if ( m_pTerrain && m_pTerrain->editorObject() && m_pTerrain->editorObject()->isOperating() ) {
-		m_pTerrain->editorObject()->backupRegion( rRegion );
+	Terrain3DAuthoringHooks *const pHooks = m_pTerrain ? m_pTerrain->authoringHooks() : NULL;
+	if ( pHooks && pHooks->isOperating() ) {
+		pHooks->backupRegion( rRegion, false );
 	} else {
 		rRegion->setModified( true );
 	}
 }
 
 bool Terrain3DInstancer::fillMultimeshBuffer(
-        const t3dInstanceCell_s &rCell, PackedFloat32Array &rBuffer, const AABB *pSourceMeshAabb, AABB *pCellAabb ) const {
-	const int stride = rCell.usesColors() ? 16 : 12;
+	const t3dInstanceCell_s &rCell,
+	PackedFloat32Array		&rBuffer,
+	const AABB				*pSourceMeshAabb,
+	AABB					*pCellAabb ) const {
+	const int	 stride = rCell.usesColors() ? 16 : 12;
 	const size_t transform_count = rCell.m_transforms.size();
-	if ( transform_count > ( size_t )( INT64_MAX / stride ) ) {
+	if ( transform_count > ( size_t ) ( INT64_MAX / stride ) ) {
 		rBuffer.clear();
 		return false;
 	}
-	const int64_t float_count = ( int64_t )( transform_count )*stride;
+	const int64_t float_count = ( int64_t ) ( transform_count ) *stride;
 	if ( rBuffer.resize( float_count ) != 0 || rBuffer.size() != float_count ) {
 		rBuffer.clear();
 		return false;
@@ -2371,18 +2611,19 @@ bool Terrain3DInstancer::fillMultimeshBuffer(
 		return false;
 	}
 	const t3dPackedTransform_s *packed = rCell.m_transforms.data();
-	const uint32_t *pColors = rCell.m_colors.empty() ? NULL : rCell.m_colors.data();
+	const uint32_t			   *pColors = rCell.m_colors.empty() ? NULL : rCell.m_colors.data();
 	t3dSimdPackedTransformsToMultimesh( packed, pColors, transform_count, stride, pWrite );
 
 	bool bAabbInitialized = false;
 	if ( pSourceMeshAabb && pCellAabb ) {
 		for ( size_t i = 0u; i < transform_count; ++i ) {
-			const float *pRecord = pWrite + i * ( size_t )( stride );
-			Basis basis;
+			const float *pRecord = pWrite + i * ( size_t ) ( stride );
+			Basis		 basis;
 			basis[0] = Vector3( pRecord[0], pRecord[1], pRecord[2] );
 			basis[1] = Vector3( pRecord[4], pRecord[5], pRecord[6] );
 			basis[2] = Vector3( pRecord[8], pRecord[9], pRecord[10] );
-			const AABB transformed = Transform3D( basis, Vector3( pRecord[3], pRecord[7], pRecord[11] ) ).xform( *pSourceMeshAabb );
+			const AABB transformed =
+				Transform3D( basis, Vector3( pRecord[3], pRecord[7], pRecord[11] ) ).xform( *pSourceMeshAabb );
 			if ( !bAabbInitialized ) {
 				*pCellAabb = transformed;
 				bAabbInitialized = true;
@@ -2398,15 +2639,16 @@ bool Terrain3DInstancer::fillMultimeshBuffer(
 }
 
 PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
-    const TypedArray<Transform3D>& rXforms, const PackedColorArray& rColors ) const
-{
-	Terrain3DInstanceStore temporary_store;
-	t3dInstanceCell_s *const pCell = temporary_store.tryGetOrCreateCell( 0, s_v2iZero, ( size_t )rXforms.size(), false, false );
+	const TypedArray< Transform3D > &rXforms,
+	const PackedColorArray			&rColors ) const {
+	Terrain3DInstanceStore	 temporary_store;
+	t3dInstanceCell_s *const pCell =
+		temporary_store.tryGetOrCreateCell( 0, s_v2iZero, ( size_t ) rXforms.size(), false, false );
 	if ( !pCell ) {
 		return PackedFloat32Array();
 	}
 	t3dInstanceCell_s &cell = *pCell;
-	if ( !cell.prepareAppend( ( size_t )rXforms.size(), false, false ) ) {
+	if ( !cell.prepareAppend( ( size_t ) rXforms.size(), false, false ) ) {
 		return PackedFloat32Array();
 	}
 	for ( int i = 0; i < rXforms.size(); ++i ) {
@@ -2428,8 +2670,8 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
 		for ( size_t color_index = 0u; color_index < cell.m_colors.size(); ++color_index ) {
 			cell.m_colors[color_index] = T3D_INSTANCE_WHITE_RGBA8;
 		}
-		for ( int i = 0; i < rColors.size() && i < ( int )( cell.m_colors.size() ); ++i ) {
-			cell.setColor( ( size_t )( i ), rColors[i] );
+		for ( int i = 0; i < rColors.size() && i < ( int ) ( cell.m_colors.size() ); ++i ) {
+			cell.setColor( ( size_t ) ( i ), rColors[i] );
 		}
 	}
 	PackedFloat32Array result;
@@ -2439,53 +2681,58 @@ PackedFloat32Array Terrain3DInstancer::buildMultimeshBuffer(
 	return result;
 }
 
-bool Terrain3DInstanceSnapshotBuilder::build( const t3dInstancePublicationBuildContext_t &rContext,
-	        t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+bool Terrain3DInstanceSnapshotBuilder::build(
+	const t3dInstancePublicationBuildContext_t &rContext,
+	t3dRdInstanceSceneSnapshot_t			   &rSnapshot ) const {
 	t3dInstancePublicationBuildContext_t context = rContext;
 	context.m_nGeneration = m_nRdPublicationGeneration;
-	const uint64_t hlod_representation_generation = context.m_pHlodStreamer ? context.m_pHlodStreamer->getRepresentationGeneration() : 0u;
+	const uint64_t hlod_representation_generation =
+		context.m_pHlodStreamer ? context.m_pHlodStreamer->getRepresentationGeneration() : 0u;
 	if ( !Terrain3DInstancePublicationBuilder::build( context, rSnapshot, m_rdPublicationDiagnostics ) ) {
 		return false;
 	}
-	const uint64_t hard_unavailable_records = m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords
-	        + m_rdPublicationDiagnostics.m_nMissingAssetRecords
-	        + m_rdPublicationDiagnostics.m_nNoLodAssetRecords;
-	if ( m_rdPublicationDiagnostics.m_nResidentSourceRecords > 0u
-	        && m_rdPublicationDiagnostics.m_nRenderableAssetSourceRecords == 0u && hard_unavailable_records > 0u ) {
-		uint64_t signature = 1469598103934665603ULL;
-		const uint64_t values[] = { m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords,
+	const uint64_t hard_unavailable_records = m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords +
+											  m_rdPublicationDiagnostics.m_nMissingAssetRecords +
+											  m_rdPublicationDiagnostics.m_nNoLodAssetRecords;
+	if ( m_rdPublicationDiagnostics.m_nResidentSourceRecords > 0u &&
+		 m_rdPublicationDiagnostics.m_nRenderableAssetSourceRecords == 0u && hard_unavailable_records > 0u ) {
+		uint64_t	   signature = 1469598103934665603ULL;
+		const uint64_t values[] = {
+			m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords,
 			m_rdPublicationDiagnostics.m_nMissingAssetRecords,
 			m_rdPublicationDiagnostics.m_nNoLodAssetRecords,
-			( uint64_t )( ( int64_t )( m_rdPublicationDiagnostics.m_nFirstInvalidAssetId ) + 1 ),
-			( uint64_t )( ( int64_t )( m_rdPublicationDiagnostics.m_nFirstMissingAssetId ) + 1 ),
-			( uint64_t )( ( int64_t )( m_rdPublicationDiagnostics.m_nFirstNoLodAssetId ) + 1 ) };
+			( uint64_t ) ( ( int64_t ) ( m_rdPublicationDiagnostics.m_nFirstInvalidAssetId ) + 1 ),
+			( uint64_t ) ( ( int64_t ) ( m_rdPublicationDiagnostics.m_nFirstMissingAssetId ) + 1 ),
+			( uint64_t ) ( ( int64_t ) ( m_rdPublicationDiagnostics.m_nFirstNoLodAssetId ) + 1 ) };
 		for ( size_t iValue = 0u; iValue < T3D_ARRAY_COUNT( values ); ++iValue ) {
 			signature ^= values[iValue];
 			signature *= 1099511628211ULL;
 		}
 		if ( signature != m_nLastAssetSourceFailureSignature ) {
 			m_nLastAssetSourceFailureSignature = signature;
-			const Ref<Terrain3DAssets> assets = context.m_pTerrain ? context.m_pTerrain->assetsResource() : Ref<Terrain3DAssets>();
+			const Ref< Terrain3DAssets > assets =
+				context.m_pTerrain ? context.m_pTerrain->assetsResource() : Ref< Terrain3DAssets >();
 			LOG( ERROR,
-			        "Terrain3DInstancePublicationBuilder: resident instances cannot resolve a renderable mesh asset source; "
-			        "resident_records=",
-			        m_rdPublicationDiagnostics.m_nResidentSourceRecords,
-			        "; invalid_id_records=",
-			        m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords,
-			        "; first_invalid_id=",
-			        m_rdPublicationDiagnostics.m_nFirstInvalidAssetId,
-			        "; missing_asset_records=",
-			        m_rdPublicationDiagnostics.m_nMissingAssetRecords,
-			        "; first_missing_id=",
-			        m_rdPublicationDiagnostics.m_nFirstMissingAssetId,
-			        "; no_lod_records=",
-			        m_rdPublicationDiagnostics.m_nNoLodAssetRecords,
-			        "; first_no_lod_id=",
-			        m_rdPublicationDiagnostics.m_nFirstNoLodAssetId,
-			        "; disabled_records=",
-			        m_rdPublicationDiagnostics.m_nDisabledAssetRecords,
-			        "; asset_slots=",
-			        assets.is_valid() ? assets->getMeshCount() : 0 );
+				 "Terrain3DInstancePublicationBuilder: resident instances cannot resolve a renderable mesh asset "
+				 "source; "
+				 "resident_records=",
+				 m_rdPublicationDiagnostics.m_nResidentSourceRecords,
+				 "; invalid_id_records=",
+				 m_rdPublicationDiagnostics.m_nInvalidAssetIdRecords,
+				 "; first_invalid_id=",
+				 m_rdPublicationDiagnostics.m_nFirstInvalidAssetId,
+				 "; missing_asset_records=",
+				 m_rdPublicationDiagnostics.m_nMissingAssetRecords,
+				 "; first_missing_id=",
+				 m_rdPublicationDiagnostics.m_nFirstMissingAssetId,
+				 "; no_lod_records=",
+				 m_rdPublicationDiagnostics.m_nNoLodAssetRecords,
+				 "; first_no_lod_id=",
+				 m_rdPublicationDiagnostics.m_nFirstNoLodAssetId,
+				 "; disabled_records=",
+				 m_rdPublicationDiagnostics.m_nDisabledAssetRecords,
+				 "; asset_slots=",
+				 assets.is_valid() ? assets->getMeshCount() : 0 );
 		}
 	} else {
 		m_nLastAssetSourceFailureSignature = 0u;
@@ -2494,53 +2741,60 @@ bool Terrain3DInstanceSnapshotBuilder::build( const t3dInstancePublicationBuildC
 	return true;
 }
 
-bool Terrain3DInstancer::buildAuthoritativeRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t& rSnapshot ) const
-{
+bool Terrain3DInstancer::buildAuthoritativeRdInstanceSnapshot(
+	t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
 	t3dInstancePublicationBuildContext_t context;
 	context.m_pTerrain = m_pTerrain;
 	context.m_pHlodStreamer = m_pTerrain ? m_pTerrain->hlodObject() : NULL;
-	context.m_targetPosition = m_bStreamPositionValid ? m_lastStreamPosition
-	                                                                  : ( m_pTerrain ? m_pTerrain->getClipmapTargetPosition() : s_v3Zero );
+	context.m_targetPosition = m_bStreamPositionValid
+								   ? m_lastStreamPosition
+								   : ( m_pTerrain ? m_pTerrain->getClipmapTargetPosition() : s_v3Zero );
 	context.m_nCellSize = m_nCellSize;
 	context.m_pMeshSettingsRevision = m_szMeshSettingsRevision;
 	context.m_bRespectRegionResidency = m_bCellStreamingEnabled;
 	return m_snapshotBuilder.build( context, rSnapshot );
 }
 
-bool Terrain3DInstancer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
+bool Terrain3DInstancer::buildRdInstanceSnapshot(
+	t3dRdInstanceSceneSnapshot_t &rSnapshot ) const {
 	return buildAuthoritativeRdInstanceSnapshot( rSnapshot );
 }
 
-Vector2i Terrain3DInstancer::getCellForLocalPosition( const Vector3 &rLocalPosition, const uint8_t nCellShift ) const {
+Vector2i Terrain3DInstancer::getCellForLocalPosition(
+	const Vector3 &rLocalPosition,
+	const uint8_t  nCellShift ) const {
 	IS_INIT( s_v2iZero );
 	const int32_t grid_x = UtilityFunctions::floori( rLocalPosition.x );
 	const int32_t grid_z = UtilityFunctions::floori( rLocalPosition.z );
 	return Vector2i( t3dRegionLocalFromGrid( grid_x ) >> nCellShift, t3dRegionLocalFromGrid( grid_z ) >> nCellShift );
 }
 
-Vector2i Terrain3DInstancer::getCell( const Vector3 &rGlobalPosition ) const {
+Vector2i Terrain3DInstancer::getCell(
+	const Vector3 &rGlobalPosition ) const {
 	return getCellForLocalPosition( rGlobalPosition, m_nCellShift );
 }
 
-t3dUsableHeight_t Terrain3DInstancer::getUsableHeight( Terrain3DSampler &rSampler,
-        const Vector3 &rGlobalPosition,
-        const Vector2 &rSlopeRange,
-        const bool bOnCollision,
-        const real_t fRaycastStart,
-        const bool bSampleNormal ) const {
+t3dUsableHeight_t Terrain3DInstancer::getUsableHeight(
+	Terrain3DSampler &rSampler,
+	const Vector3	 &rGlobalPosition,
+	const Vector2	 &rSlopeRange,
+	const bool		  bOnCollision,
+	const real_t	  fRaycastStart,
+	const bool		  bSampleNormal ) const {
 	t3dUsableHeight_t result;
 	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
 		return result;
 	}
 	const Terrain3DData *pData = m_pTerrain->dataObject();
-	real_t fHeight = rSampler.sampleHeight( rGlobalPosition );
-	bool raycast_hit = false;
-	real_t fRaycastHeight = -FLT_MAX;
-	Vector3 raycast_normal = s_v3Up;
+	real_t				 fHeight = rSampler.sampleHeight( rGlobalPosition );
+	bool				 raycast_hit = false;
+	real_t				 fRaycastHeight = -FLT_MAX;
+	Vector3				 raycast_normal = s_v3Up;
 	if ( bOnCollision ) {
-		const real_t fBaseHeight = isnan( fHeight ) ? rGlobalPosition.y : fHeight;
-		const Vector3 start( rGlobalPosition.x, fBaseHeight + fRaycastStart, rGlobalPosition.z );
-		const Dictionary hit = m_pTerrain->getRaycastResult( start, Vector3( 0, -fRaycastStart - 1, 0 ), 0xFFFFFFFF, true );
+		const real_t	 fBaseHeight = isnan( fHeight ) ? rGlobalPosition.y : fHeight;
+		const Vector3	 start( rGlobalPosition.x, fBaseHeight + fRaycastStart, rGlobalPosition.z );
+		const Dictionary hit =
+			m_pTerrain->getRaycastResult( start, Vector3( 0, -fRaycastStart - 1, 0 ), 0xFFFFFFFF, true );
 		if ( hit.has( "position" ) ) {
 			raycast_hit = true;
 			fRaycastHeight = Vector3( hit["position"] ).y;
@@ -2555,10 +2809,10 @@ t3dUsableHeight_t Terrain3DInstancer::getUsableHeight( Terrain3DSampler &rSample
 	} else if ( raycast_hit && fRaycastHeight > fHeight ) {
 		fHeight = fRaycastHeight;
 	}
-	Vector3 terrain_normal = s_v3Zero;
-	Vector3 slope_normal = raycast_hit ? raycast_normal : s_v3Zero;
+	Vector3		  terrain_normal = s_v3Zero;
+	Vector3		  slope_normal = raycast_hit ? raycast_normal : s_v3Zero;
 	const Vector2 slope_range = CLAMP( rSlopeRange, s_v2Zero, V2( 90.0f ) );
-	const bool bNeedsTerrainNormal = !raycast_hit && ( bSampleNormal || slope_range.y - slope_range.x <= 89.99f );
+	const bool	  bNeedsTerrainNormal = !raycast_hit && ( bSampleNormal || slope_range.y - slope_range.x <= 89.99f );
 	if ( bNeedsTerrainNormal ) {
 		uint32_t control = UINT32_MAX;
 		if ( !rSampler.sampleControlAndSlopeNormal( rGlobalPosition, control, terrain_normal ) ) {
@@ -2576,22 +2830,27 @@ t3dUsableHeight_t Terrain3DInstancer::getUsableHeight( Terrain3DSampler &rSample
 	return result;
 }
 
-bool Terrain3DInstancer::pendingPlacementRegionCellLess( const t3dPendingPlacement_t &rA, const t3dPendingPlacement_t &rB ) {
+bool Terrain3DInstancer::pendingPlacementRegionCellLess(
+	const t3dPendingPlacement_t &rA,
+	const t3dPendingPlacement_t &rB ) {
 	if ( rA.m_pRegion != rB.m_pRegion ) {
-		return ( uintptr_t )( rA.m_pRegion ) < ( uintptr_t )( rB.m_pRegion );
+		return ( uintptr_t ) ( rA.m_pRegion ) < ( uintptr_t ) ( rB.m_pRegion );
 	}
 	return pendingPlacementCellLess( rA, rB );
 }
 
-bool Terrain3DInstancer::pendingPlacementCellLess( const t3dPendingPlacement_t &rA, const t3dPendingPlacement_t &rB ) {
+bool Terrain3DInstancer::pendingPlacementCellLess(
+	const t3dPendingPlacement_t &rA,
+	const t3dPendingPlacement_t &rB ) {
 	return rA.m_cell.x != rB.m_cell.x ? rA.m_cell.x < rB.m_cell.x : rA.m_cell.y < rB.m_cell.y;
 }
 
-static bool t3dInstancerAppendPendingCellPayload( t3dInstanceCell_s &rCell,
-        const t3dPendingPlacement_t *const pPlacements,
-        const size_t nCount,
-        const bool bColorData,
-        const bool bOwnerData ) {
+static bool t3dInstancerAppendPendingCellPayload(
+	t3dInstanceCell_s				  &rCell,
+	const t3dPendingPlacement_t *const pPlacements,
+	const size_t					   nCount,
+	const bool						   bColorData,
+	const bool						   bOwnerData ) {
 	if ( !pPlacements || nCount == 0u ) {
 		return true;
 	}
@@ -2603,9 +2862,9 @@ static bool t3dInstancerAppendPendingCellPayload( t3dInstanceCell_s &rCell,
 	}
 	for ( size_t i = 0u; i < nCount; ++i ) {
 		const t3dPendingPlacement_t &placement = pPlacements[i];
-		if ( !rCell.m_transforms.pushBack( placement.m_transform, placement.m_nBehaviorFlags )
-		        || ( !rCell.m_colors.empty() && !rCell.pushColor( placement.m_color ) )
-		        || ( !rCell.m_owners.empty() && !rCell.m_owners.pushBack( placement.m_nOwner ) ) ) {
+		if ( !rCell.m_transforms.pushBack( placement.m_transform, placement.m_nBehaviorFlags ) ||
+			 ( !rCell.m_colors.empty() && !rCell.pushColor( placement.m_color ) ) ||
+			 ( !rCell.m_owners.empty() && !rCell.m_owners.pushBack( placement.m_nOwner ) ) ) {
 			// prepareAppend() preflights all three planes, so this is an invariant
 			// failure. Restore logical counts before exposing the cell again.
 			rCell.m_transforms.resize( old_transforms );
@@ -2619,27 +2878,28 @@ static bool t3dInstancerAppendPendingCellPayload( t3dInstanceCell_s &rCell,
 
 typedef struct t3dPreparedRegionMutation_s
 {
-
-	Terrain3DRegion *m_pRegion = NULL;
+	Terrain3DRegion		   *m_pRegion = NULL;
 	Terrain3DInstanceStore *m_pCommitStore = NULL;
-	Vector2i m_location = s_v2iMax;
-	bool m_bTemporaryPage = false;
-	Terrain3DInstanceStore m_store;
+	Vector2i				m_location = s_v2iMax;
+	bool					m_bTemporaryPage = false;
+	Terrain3DInstanceStore	m_store;
 
 	t3dPreparedRegionMutation_s( void ) = default;
 	t3dPreparedRegionMutation_s( const t3dPreparedRegionMutation_s & ) = delete;
 	t3dPreparedRegionMutation_s &operator=( const t3dPreparedRegionMutation_s & ) = delete;
-	t3dPreparedRegionMutation_s( t3dPreparedRegionMutation_s &&rOther ) noexcept :
-	        m_pRegion( rOther.m_pRegion ),
-	        m_pCommitStore( rOther.m_pCommitStore ),
-	        m_location( rOther.m_location ),
-	        m_bTemporaryPage( rOther.m_bTemporaryPage ),
-	        m_store( eastl::move( rOther.m_store ) ) {
+	t3dPreparedRegionMutation_s(
+		t3dPreparedRegionMutation_s &&rOther ) noexcept :
+		m_pRegion( rOther.m_pRegion ),
+		m_pCommitStore( rOther.m_pCommitStore ),
+		m_location( rOther.m_location ),
+		m_bTemporaryPage( rOther.m_bTemporaryPage ),
+		m_store( eastl::move( rOther.m_store ) ) {
 		rOther.m_pRegion = NULL;
 		rOther.m_pCommitStore = NULL;
 		rOther.m_bTemporaryPage = false;
 	}
-	t3dPreparedRegionMutation_s &operator=( t3dPreparedRegionMutation_s &&rOther ) noexcept {
+	t3dPreparedRegionMutation_s &operator=(
+		t3dPreparedRegionMutation_s &&rOther ) noexcept {
 		if ( this != &rOther ) {
 			m_pRegion = rOther.m_pRegion;
 			m_pCommitStore = rOther.m_pCommitStore;
@@ -2654,13 +2914,16 @@ typedef struct t3dPreparedRegionMutation_s
 	}
 } t3dPreparedRegionMutation_t;
 
-static bool t3dInstancerStoreCloneMatches( const Terrain3DInstanceStore &rSource, const Terrain3DInstanceStore &rClone ) {
-	if ( !rSource.validateDeep() || !rClone.validateDeep() || rSource.meshCount() != rClone.meshCount()
-	        || rSource.instanceCount() != rClone.instanceCount() || rSource.getLayout().m_nCellSize != rClone.getLayout().m_nCellSize ) {
+static bool t3dInstancerStoreCloneMatches(
+	const Terrain3DInstanceStore &rSource,
+	const Terrain3DInstanceStore &rClone ) {
+	if ( !rSource.validateDeep() || !rClone.validateDeep() || rSource.meshCount() != rClone.meshCount() ||
+		 rSource.instanceCount() != rClone.instanceCount() ||
+		 rSource.getLayout().m_nCellSize != rClone.getLayout().m_nCellSize ) {
 		return false;
 	}
 	for ( size_t iMesh = 0u; iMesh < rSource.meshes().size(); ++iMesh ) {
-		const t3dInstanceMesh_t &source_mesh = rSource.meshes()[iMesh];
+		const t3dInstanceMesh_t		  &source_mesh = rSource.meshes()[iMesh];
 		const t3dInstanceMesh_t *const pCloneMesh = rClone.findMesh( source_mesh.m_nId );
 		if ( !pCloneMesh || pCloneMesh->m_cells.size() != source_mesh.m_cells.size() ) {
 			return false;
@@ -2668,27 +2931,26 @@ static bool t3dInstancerStoreCloneMatches( const Terrain3DInstanceStore &rSource
 		for ( size_t iCell = 0u; iCell < source_mesh.m_cells.size(); ++iCell ) {
 			const t3dInstanceCell_s &source_cell = source_mesh.m_cells[iCell];
 			const t3dInstanceCell_s &clone_cell = pCloneMesh->m_cells[iCell];
-			if ( source_cell.m_location != clone_cell.m_location || source_cell.m_nRevision != clone_cell.m_nRevision
-			        || source_cell.m_transforms.size() != clone_cell.m_transforms.size()
-			        || source_cell.m_colors.size() != clone_cell.m_colors.size()
-			        || source_cell.m_owners.size() != clone_cell.m_owners.size() ) {
+			if ( source_cell.m_location != clone_cell.m_location || source_cell.m_nRevision != clone_cell.m_nRevision ||
+				 source_cell.m_transforms.size() != clone_cell.m_transforms.size() ||
+				 source_cell.m_colors.size() != clone_cell.m_colors.size() ||
+				 source_cell.m_owners.size() != clone_cell.m_owners.size() ) {
 				return false;
 			}
-			if ( !source_cell.m_transforms.empty()
-			        && memcmp( source_cell.m_transforms.data(),
-			                   clone_cell.m_transforms.data(),
-			                   source_cell.m_transforms.size() * sizeof( t3dPackedTransform_s ) )
-			                != 0 ) {
+			if ( !source_cell.m_transforms.empty() &&
+				 memcmp( source_cell.m_transforms.data(),
+						 clone_cell.m_transforms.data(),
+						 source_cell.m_transforms.size() * sizeof( t3dPackedTransform_s ) ) != 0 ) {
 				return false;
 			}
-			if ( !source_cell.m_colors.empty()
-			        && memcmp( source_cell.m_colors.data(), clone_cell.m_colors.data(), source_cell.m_colors.size() * sizeof( uint32_t ) )
-			                != 0 ) {
+			if ( !source_cell.m_colors.empty() && memcmp( source_cell.m_colors.data(),
+														  clone_cell.m_colors.data(),
+														  source_cell.m_colors.size() * sizeof( uint32_t ) ) != 0 ) {
 				return false;
 			}
-			if ( !source_cell.m_owners.empty()
-			        && memcmp( source_cell.m_owners.data(), clone_cell.m_owners.data(), source_cell.m_owners.size() * sizeof( uint32_t ) )
-			                != 0 ) {
+			if ( !source_cell.m_owners.empty() && memcmp( source_cell.m_owners.data(),
+														  clone_cell.m_owners.data(),
+														  source_cell.m_owners.size() * sizeof( uint32_t ) ) != 0 ) {
 				return false;
 			}
 		}
@@ -2696,32 +2958,40 @@ static bool t3dInstancerStoreCloneMatches( const Terrain3DInstanceStore &rSource
 	return true;
 }
 
-static bool t3dInstancerAppendPlacementsToPreparedStore( Terrain3DInstanceStore &rPrepared,
-        const int nMeshId,
-        const t3dPendingPlacement_t *const pPlacements,
-        const size_t nPlacementCount ) {
+static bool t3dInstancerAppendPlacementsToPreparedStore(
+	Terrain3DInstanceStore			  &rPrepared,
+	const int						   nMeshId,
+	const t3dPendingPlacement_t *const pPlacements,
+	const size_t					   nPlacementCount ) {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS || !pPlacements || nPlacementCount == 0u ) {
 		return false;
 	}
 	size_t begin = 0u;
 	while ( begin < nPlacementCount ) {
 		const Vector2i cell_location = pPlacements[begin].m_cell;
-		size_t end = begin + 1u;
-		bool bColorData = pPlacements[begin].m_color != s_colorWhite;
-		bool bOwnerData = pPlacements[begin].m_nOwner != 0u;
+		size_t		   end = begin + 1u;
+		bool		   bColorData = pPlacements[begin].m_color != s_colorWhite;
+		bool		   bOwnerData = pPlacements[begin].m_nOwner != 0u;
 		while ( end < nPlacementCount && pPlacements[end].m_cell == cell_location ) {
 			bColorData = bColorData || pPlacements[end].m_color != s_colorWhite;
 			bOwnerData = bOwnerData || pPlacements[end].m_nOwner != 0u;
 			++end;
 		}
 		t3dInstanceCell_s *const pExisting = rPrepared.findCell( nMeshId, cell_location );
-		const size_t existing_count = pExisting ? pExisting->m_transforms.size() : 0u;
-		if ( end - begin > eastl::numeric_limits<size_t>::max() - existing_count ) {
+		const size_t			 existing_count = pExisting ? pExisting->m_transforms.size() : 0u;
+		if ( end - begin > eastl::numeric_limits< size_t >::max() - existing_count ) {
 			return false;
 		}
-		t3dInstanceCell_s *const pCell =
-		        rPrepared.tryGetOrCreateCell( nMeshId, cell_location, existing_count + ( end - begin ), bColorData, bOwnerData );
-		if ( !pCell || !t3dInstancerAppendPendingCellPayload( *pCell, pPlacements + begin, end - begin, bColorData, bOwnerData ) ) {
+		t3dInstanceCell_s *const pCell = rPrepared.tryGetOrCreateCell( nMeshId,
+																	   cell_location,
+																	   existing_count + ( end - begin ),
+																	   bColorData,
+																	   bOwnerData );
+		if ( !pCell || !t3dInstancerAppendPendingCellPayload( *pCell,
+															  pPlacements + begin,
+															  end - begin,
+															  bColorData,
+															  bOwnerData ) ) {
 			return false;
 		}
 		pCell->touch();
@@ -2730,17 +3000,18 @@ static bool t3dInstancerAppendPlacementsToPreparedStore( Terrain3DInstanceStore 
 	return rPrepared.validateDeep();
 }
 
-static bool t3dInstancerPrepareStoreAppend( const Terrain3DInstanceStore &rSource,
-        const int nMeshId,
-        const t3dPendingPlacement_t *const pPlacements,
-        const size_t nPlacementCount,
-        Terrain3DInstanceStore &rReplacement ) {
+static bool t3dInstancerPrepareStoreAppend(
+	const Terrain3DInstanceStore	  &rSource,
+	const int						   nMeshId,
+	const t3dPendingPlacement_t *const pPlacements,
+	const size_t					   nPlacementCount,
+	Terrain3DInstanceStore			  &rReplacement ) {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS || !pPlacements || nPlacementCount == 0u ) {
 		return false;
 	}
 	Terrain3DInstanceStore replacement( rSource );
-	if ( !t3dInstancerStoreCloneMatches( rSource, replacement )
-	        || !t3dInstancerAppendPlacementsToPreparedStore( replacement, nMeshId, pPlacements, nPlacementCount ) ) {
+	if ( !t3dInstancerStoreCloneMatches( rSource, replacement ) ||
+		 !t3dInstancerAppendPlacementsToPreparedStore( replacement, nMeshId, pPlacements, nPlacementCount ) ) {
 		return false;
 	}
 	rReplacement = eastl::move( replacement );
@@ -2748,19 +3019,24 @@ static bool t3dInstancerPrepareStoreAppend( const Terrain3DInstanceStore &rSourc
 }
 
 static bool t3dInstancerPrepareStoreEraseMesh(
-        const Terrain3DInstanceStore &rSource, const int nMeshId, Terrain3DInstanceStore &rReplacement ) {
+	const Terrain3DInstanceStore &rSource,
+	const int					  nMeshId,
+	Terrain3DInstanceStore		 &rReplacement ) {
 	if ( nMeshId < 0 || nMeshId >= T3D_MAX_MESH_ASSETS || !rSource.hasMesh( nMeshId ) ) {
 		return false;
 	}
 	Terrain3DInstanceStore replacement( rSource );
-	if ( !t3dInstancerStoreCloneMatches( rSource, replacement ) || !replacement.eraseMesh( nMeshId ) || !replacement.validateDeep() ) {
+	if ( !t3dInstancerStoreCloneMatches( rSource, replacement ) || !replacement.eraseMesh( nMeshId ) ||
+		 !replacement.validateDeep() ) {
 		return false;
 	}
 	rReplacement = eastl::move( replacement );
 	return true;
 }
 
-static void t3dInstancerRefreshCommittedResidentBytes( Terrain3DData *const pData, const Vector2i &rLocation ) {
+static void t3dInstancerRefreshCommittedResidentBytes(
+	Terrain3DData *const pData,
+	const Vector2i		&rLocation ) {
 	if ( !pData || !pData->isInstanceRegionCacheEnabled() || !pData->isInstanceRegionResident( rLocation ) ) {
 		return;
 	}
@@ -2773,47 +3049,49 @@ static void t3dInstancerRefreshCommittedResidentBytes( Terrain3DData *const pDat
 	}
 	// For an already resident slot ensureResident() takes WG-C's O(1)
 	// attachResidentStore()->refreshResidentBytes(location) path.
-	( void )pData->ensureInstanceRegionResident( rLocation );
+	( void ) pData->ensureInstanceRegionResident( rLocation );
 }
 
 static void t3dInstancerClosePreparedPages(
-        Terrain3DData *const pData, eastl::vector<t3dPreparedRegionMutation_t, Terrain3DEastlAllocator> &rPrepared ) {
+	Terrain3DData *const												   pData,
+	eastl::vector< t3dPreparedRegionMutation_t, Terrain3DEastlAllocator > &rPrepared ) {
 	for ( size_t i = 0u; i < rPrepared.size(); ++i ) {
 		t3dEndInstancePageAccess( pData, rPrepared[i].m_location, rPrepared[i].m_bTemporaryPage );
 		rPrepared[i].m_bTemporaryPage = false;
 	}
 }
 
-bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
-        const Transform3D *pTransforms,
-        const size_t nTransformCount,
-        const Color *pColors,
-        const size_t nColorCount,
-        const bool bUpdate,
-        const uint32_t owner,
-        const bool bBackup,
-        const uint16_t nBehaviorFlags,
-        const uint16_t *pBehaviorFlags,
-        const size_t nBehaviorCount ) {
+bool Terrain3DInstancer::appendGlobalNative(
+	const int		   nMeshId,
+	const Transform3D *pTransforms,
+	const size_t	   nTransformCount,
+	const Color		  *pColors,
+	const size_t	   nColorCount,
+	const bool		   bUpdate,
+	const uint32_t	   owner,
+	const bool		   bBackup,
+	const uint16_t	   nBehaviorFlags,
+	const uint16_t	  *pBehaviorFlags,
+	const size_t	   nBehaviorCount ) {
 	if ( !pTransforms || nTransformCount == 0u || ( pBehaviorFlags && nBehaviorCount != nTransformCount ) ) {
 		return false;
 	}
-	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( nMeshId );
+	Terrain3DData *const			pData = m_pTerrain->dataObject();
+	const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( nMeshId );
 	if ( pAsset.is_null() ) {
 		return false;
 	}
 	const real_t fHeightOffset = pAsset->getHeightOffset();
 	m_placementPending.clear();
-	if ( m_placementPending.capacity() < nTransformCount
-	        && !t3dContainerReserveCold( m_placementPending, nTransformCount ) ) {
+	if ( m_placementPending.capacity() < nTransformCount &&
+		 !t3dContainerReserveCold( m_placementPending, nTransformCount ) ) {
 		return false;
 	}
 
 	for ( size_t i = 0u; i < nTransformCount; ++i ) {
 		Transform3D transform = pTransforms[i];
 		transform.origin += transform.basis.get_column( 1 ) * fHeightOffset;
-		const Vector2i regionLocation = pData->getRegionLocation( transform.origin );
+		const Vector2i		   regionLocation = pData->getRegionLocation( transform.origin );
 		Terrain3DRegion *const region = pData->getRegionPtr( regionLocation );
 		if ( !region || region->isDeleted() ) {
 			continue;
@@ -2822,14 +3100,14 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 		transform.origin.x -= regionLocation.x * region_size;
 		transform.origin.z -= regionLocation.y * region_size;
 		if ( !t3dVectorPushBackWithinCapacity( m_placementPending,
-		             t3dPendingPlacement_t{
-		                     region,
-		                     getCell( transform.origin ),
-		                     transform,
-		                     pColors && i < nColorCount ? pColors[i] : s_colorWhite,
-		                     owner,
-		                     pBehaviorFlags ? pBehaviorFlags[i] : nBehaviorFlags,
-		             } ) ) {
+											   t3dPendingPlacement_t{
+												   region,
+												   getCell( transform.origin ),
+												   transform,
+												   pColors && i < nColorCount ? pColors[i] : s_colorWhite,
+												   owner,
+												   pBehaviorFlags ? pBehaviorFlags[i] : nBehaviorFlags,
+											   } ) ) {
 			m_placementPending.clear();
 			return false;
 		}
@@ -2849,7 +3127,7 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 			++region_count;
 		}
 	}
-	eastl::vector<t3dPreparedRegionMutation_t, Terrain3DEastlAllocator> prepared;
+	eastl::vector< t3dPreparedRegionMutation_t, Terrain3DEastlAllocator > prepared;
 	prepared.set_allocator( m_placementPending.get_allocator() );
 	if ( !t3dContainerReserveCold( prepared, region_count ) ) {
 		return false;
@@ -2858,12 +3136,12 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	size_t region_begin = 0u;
 	while ( region_begin < m_placementPending.size() ) {
 		Terrain3DRegion *const pRegion = m_placementPending[region_begin].m_pRegion;
-		size_t region_end = region_begin + 1u;
+		size_t				   region_end = region_begin + 1u;
 		while ( region_end < m_placementPending.size() && m_placementPending[region_end].m_pRegion == pRegion ) {
 			++region_end;
 		}
 		const Vector2i region_location = pRegion->getLocation();
-		bool bTemporaryPage = false;
+		bool		   bTemporaryPage = false;
 		if ( !t3dBeginInstancePageAccess( this, pData, region_location, bTemporaryPage ) ) {
 			t3dInstancerClosePreparedPages( pData, prepared );
 			return false;
@@ -2872,13 +3150,13 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 		stage.m_pRegion = pRegion;
 		stage.m_location = region_location;
 		stage.m_bTemporaryPage = bTemporaryPage;
-		if ( !pRegion->tryGetInstanceStoreInternal( stage.m_pCommitStore ) || !stage.m_pCommitStore
-		        || !t3dInstancerPrepareStoreAppend( *stage.m_pCommitStore,
-		                nMeshId,
-		                m_placementPending.data() + region_begin,
-		                region_end - region_begin,
-		                stage.m_store )
-		        || !t3dVectorPushBackWithinCapacity( prepared, eastl::move( stage ) ) ) {
+		if ( !pRegion->tryGetInstanceStoreInternal( stage.m_pCommitStore ) || !stage.m_pCommitStore ||
+			 !t3dInstancerPrepareStoreAppend( *stage.m_pCommitStore,
+											  nMeshId,
+											  m_placementPending.data() + region_begin,
+											  region_end - region_begin,
+											  stage.m_store ) ||
+			 !t3dVectorPushBackWithinCapacity( prepared, eastl::move( stage ) ) ) {
 			if ( stage.m_bTemporaryPage ) {
 				t3dEndInstancePageAccess( pData, region_location, true );
 			}
@@ -2893,7 +3171,7 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	for ( size_t i = 0u; i < prepared.size(); ++i ) {
 		t3dPreparedRegionMutation_t &stage = prepared[i];
 		if ( bBackup ) {
-			backupRegion( Ref<Terrain3DRegion>( stage.m_pRegion ) );
+			backupRegion( Ref< Terrain3DRegion >( stage.m_pRegion ) );
 		} else {
 			stage.m_pRegion->setModified( true );
 		}
@@ -2908,22 +3186,22 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	size_t prepared_index = 0u;
 	while ( region_begin < m_placementPending.size() ) {
 		Terrain3DRegion *const pRegion = m_placementPending[region_begin].m_pRegion;
-		const Vector2i region_location = pRegion->getLocation();
-		if ( prepared_index >= prepared.size() || prepared[prepared_index].m_pRegion != pRegion
-		        || !prepared[prepared_index].m_pCommitStore ) {
+		const Vector2i		   region_location = pRegion->getLocation();
+		if ( prepared_index >= prepared.size() || prepared[prepared_index].m_pRegion != pRegion ||
+			 !prepared[prepared_index].m_pCommitStore ) {
 			m_bMaterializingUpdates = bWasMaterializing;
 			t3dInstancerClosePreparedPages( pData, prepared );
 			return false;
 		}
 		const Terrain3DInstanceStore &committed_store = *prepared[prepared_index].m_pCommitStore;
-		size_t region_end = region_begin + 1u;
+		size_t						  region_end = region_begin + 1u;
 		while ( region_end < m_placementPending.size() && m_placementPending[region_end].m_pRegion == pRegion ) {
 			++region_end;
 		}
 		size_t begin = region_begin;
 		while ( begin < region_end ) {
 			const Vector2i cell_location = m_placementPending[begin].m_cell;
-			size_t end = begin + 1u;
+			size_t		   end = begin + 1u;
 			while ( end < region_end && m_placementPending[end].m_cell == cell_location ) {
 				++end;
 			}
@@ -2931,10 +3209,10 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 			if ( pCell ) {
 				setLogicalCellCount( region_location, nMeshId, cell_location, pCell->m_transforms.size() );
 				emitDerivedMutation( region_location,
-				        cell_location,
-				        nMeshId,
-				        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-				        pCell->m_nRevision );
+									 cell_location,
+									 nMeshId,
+									 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+									 pCell->m_nRevision );
 			}
 			begin = end;
 		}
@@ -2949,8 +3227,8 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	m_touchedRegions.clear();
 	for ( size_t i = 0u; i < prepared.size(); ++i ) {
 		t3dPreparedRegionMutation_t &stage = prepared[i];
-		if ( stage.m_bTemporaryPage && bUpdate && stage.m_pRegion->hasInstances()
-		        && !t3dRetainMutatedInstancePage( pData, stage.m_pRegion, stage.m_bTemporaryPage ) ) {
+		if ( stage.m_bTemporaryPage && bUpdate && stage.m_pRegion->hasInstances() &&
+			 !t3dRetainMutatedInstancePage( pData, stage.m_pRegion, stage.m_bTemporaryPage ) ) {
 			LOG( ERROR, "Could not retain newly populated instance region for rendering: ", stage.m_location );
 		}
 		if ( bUpdate && !stage.m_bTemporaryPage && !m_touchedRegions.full() ) {
@@ -2968,37 +3246,38 @@ bool Terrain3DInstancer::appendGlobalNative( const int nMeshId,
 	return true;
 }
 
-bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rRequest ) {
-	Terrain3DRegion *const pRegion = rRequest.m_pRegion;
-	const int nMeshId = rRequest.m_nMeshId;
+bool Terrain3DInstancer::appendRegionNative(
+	const t3dInstanceRegionAppend_t &rRequest ) {
+	Terrain3DRegion *const	 pRegion = rRequest.m_pRegion;
+	const int				 nMeshId = rRequest.m_nMeshId;
 	const Transform3D *const pTransforms = rRequest.m_pTransforms;
-	const size_t nTransformCount = rRequest.m_nTransformCount;
-	const Color *const pColors = rRequest.m_pColors;
-	const size_t nColorCount = rRequest.m_nColorCount;
-	const bool bGlobalSpace = rRequest.m_bGlobalSpace;
-	const bool bUpdate = rRequest.m_bUpdate;
-	const bool bBackup = rRequest.m_bBackup;
-	const uint32_t nOwner = rRequest.m_nOwner;
-	const uint16_t nBehaviorFlags = rRequest.m_nBehaviorFlags;
-	const uint16_t *const pBehaviorFlags = rRequest.m_pBehaviorFlags;
-	const size_t nBehaviorCount = rRequest.m_nBehaviorCount;
-	if ( !pRegion || pRegion->isDeleted() || !pTransforms || nTransformCount == 0u
-	        || ( pBehaviorFlags && nBehaviorCount != nTransformCount ) ) {
+	const size_t			 nTransformCount = rRequest.m_nTransformCount;
+	const Color *const		 pColors = rRequest.m_pColors;
+	const size_t			 nColorCount = rRequest.m_nColorCount;
+	const bool				 bGlobalSpace = rRequest.m_bGlobalSpace;
+	const bool				 bUpdate = rRequest.m_bUpdate;
+	const bool				 bBackup = rRequest.m_bBackup;
+	const uint32_t			 nOwner = rRequest.m_nOwner;
+	const uint16_t			 nBehaviorFlags = rRequest.m_nBehaviorFlags;
+	const uint16_t *const	 pBehaviorFlags = rRequest.m_pBehaviorFlags;
+	const size_t			 nBehaviorCount = rRequest.m_nBehaviorCount;
+	if ( !pRegion || pRegion->isDeleted() || !pTransforms || nTransformCount == 0u ||
+		 ( pBehaviorFlags && nBehaviorCount != nTransformCount ) ) {
 		return false;
 	}
 	if ( !requestRuntimeCapacityForMutation( nTransformCount ) ) {
 		return false;
 	}
 	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const Vector2i regionLocation = pRegion->getLocation();
-	bool bTemporaryPage = false;
+	const Vector2i		 regionLocation = pRegion->getLocation();
+	bool				 bTemporaryPage = false;
 	if ( !t3dBeginInstancePageAccess( this, pData, regionLocation, bTemporaryPage ) ) {
 		return false;
 	}
 	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
 	m_placementPending.clear();
-	if ( m_placementPending.capacity() < nTransformCount
-	        && !t3dContainerReserveCold( m_placementPending, nTransformCount ) ) {
+	if ( m_placementPending.capacity() < nTransformCount &&
+		 !t3dContainerReserveCold( m_placementPending, nTransformCount ) ) {
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 		return false;
 	}
@@ -3009,14 +3288,14 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 			transform.origin.z -= regionLocation.y * region_size;
 		}
 		if ( !t3dVectorPushBackWithinCapacity( m_placementPending,
-		             t3dPendingPlacement_t{
-		                     pRegion,
-		                     getCell( transform.origin ),
-		                     transform,
-		                     pColors && i < nColorCount ? pColors[i] : s_colorWhite,
-		                     nOwner,
-		                     pBehaviorFlags ? pBehaviorFlags[i] : nBehaviorFlags,
-		             } ) ) {
+											   t3dPendingPlacement_t{
+												   pRegion,
+												   getCell( transform.origin ),
+												   transform,
+												   pColors && i < nColorCount ? pColors[i] : s_colorWhite,
+												   nOwner,
+												   pBehaviorFlags ? pBehaviorFlags[i] : nBehaviorFlags,
+											   } ) ) {
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			return false;
 		}
@@ -3024,19 +3303,19 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 	eastl::sort( m_placementPending.begin(), m_placementPending.end(), pendingPlacementCellLess );
 
 	Terrain3DInstanceStore *pCommitStore = NULL;
-	Terrain3DInstanceStore replacement;
-	if ( !pRegion->tryGetInstanceStoreInternal( pCommitStore ) || !pCommitStore
-	        || !t3dInstancerPrepareStoreAppend( *pCommitStore,
-	                nMeshId,
-	                m_placementPending.data(),
-	                m_placementPending.size(),
-	                replacement ) ) {
+	Terrain3DInstanceStore	replacement;
+	if ( !pRegion->tryGetInstanceStoreInternal( pCommitStore ) || !pCommitStore ||
+		 !t3dInstancerPrepareStoreAppend( *pCommitStore,
+										  nMeshId,
+										  m_placementPending.data(),
+										  m_placementPending.size(),
+										  replacement ) ) {
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 		return false;
 	}
 
 	if ( bBackup ) {
-		backupRegion( Ref<Terrain3DRegion>( pRegion ) );
+		backupRegion( Ref< Terrain3DRegion >( pRegion ) );
 	} else {
 		pRegion->setModified( true );
 	}
@@ -3049,7 +3328,7 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 	size_t begin = 0u;
 	while ( begin < m_placementPending.size() ) {
 		const Vector2i cell_location = m_placementPending[begin].m_cell;
-		size_t end = begin + 1u;
+		size_t		   end = begin + 1u;
 		while ( end < m_placementPending.size() && m_placementPending[end].m_cell == cell_location ) {
 			++end;
 		}
@@ -3057,10 +3336,10 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 		if ( pCell ) {
 			setLogicalCellCount( regionLocation, nMeshId, cell_location, pCell->m_transforms.size() );
 			emitDerivedMutation( regionLocation,
-			        cell_location,
-			        nMeshId,
-			        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-			        pCell->m_nRevision );
+								 cell_location,
+								 nMeshId,
+								 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+								 pCell->m_nRevision );
 		}
 		begin = end;
 	}
@@ -3068,7 +3347,8 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 	if ( !bWasMaterializing && !m_bProcessingPendingUpdates ) {
 		flushLogicalMeshCounts();
 	}
-	if ( bTemporaryPage && bUpdate && pRegion->hasInstances() && !t3dRetainMutatedInstancePage( pData, pRegion, bTemporaryPage ) ) {
+	if ( bTemporaryPage && bUpdate && pRegion->hasInstances() &&
+		 !t3dRetainMutatedInstancePage( pData, pRegion, bTemporaryPage ) ) {
 		LOG( ERROR, "Could not retain newly populated instance region for rendering: ", regionLocation );
 	}
 	if ( bUpdate && !bTemporaryPage ) {
@@ -3079,16 +3359,19 @@ bool Terrain3DInstancer::appendRegionNative( const t3dInstanceRegionAppend_t &rR
 }
 
 #if defined( TERRAIN3D_INSTANCER_TRANSACTION_TEST_ACCESS )
-bool Terrain3DInstancer::testPrepareStoreAppend( const Terrain3DInstanceStore &rSource,
-        const int nMeshId,
-        const t3dPendingPlacement_t *const pPlacements,
-        const size_t nPlacementCount,
-        Terrain3DInstanceStore &rReplacement ) {
+bool Terrain3DInstancer::testPrepareStoreAppend(
+	const Terrain3DInstanceStore	  &rSource,
+	const int						   nMeshId,
+	const t3dPendingPlacement_t *const pPlacements,
+	const size_t					   nPlacementCount,
+	Terrain3DInstanceStore			  &rReplacement ) {
 	return t3dInstancerPrepareStoreAppend( rSource, nMeshId, pPlacements, nPlacementCount, rReplacement );
 }
 
 bool Terrain3DInstancer::testPrepareStoreEraseMesh(
-        const Terrain3DInstanceStore &rSource, const int nMeshId, Terrain3DInstanceStore &rReplacement ) {
+	const Terrain3DInstanceStore &rSource,
+	const int					  nMeshId,
+	Terrain3DInstanceStore		 &rReplacement ) {
 	return t3dInstancerPrepareStoreEraseMesh( rSource, nMeshId, rReplacement );
 }
 #endif
@@ -3096,17 +3379,24 @@ bool Terrain3DInstancer::testPrepareStoreEraseMesh(
 // -----------------------------------------------------------------------------
 // Public functions
 
-void Terrain3DInstancer::initialize( Terrain3DOwner *const pTerrain ) {
+void Terrain3DInstancer::initialize(
+	Terrain3DOwner *const pTerrain ) {
 	if ( pTerrain ) {
 		m_pTerrain = pTerrain;
 	}
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Terrain3D not initialized yet" ); return; }
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Terrain3D not initialized yet" );
+		return;
+	}
 	LOG( INFO, "Initializing Instancer" );
-	LOG( INFO, "Instancer RD authoritative publication enabled: resident store -> category/LOD policy -> production RD scene" );
+	LOG( INFO,
+		 "Instancer RD authoritative publication enabled: resident store -> category/LOD policy -> production RD "
+		 "scene" );
 	LOG( INFO, "Instancer GPU visibility enabled: compute cull -> visible indices + indexed-indirect instance counts" );
 	LOG( INFO,
-	        "Instancer RD production enabled: authoritative publication -> standalone surface buffers -> GPU-visible indexed-indirect "
-	        "Forward+" );
+		 "Instancer RD production enabled: authoritative publication -> standalone surface buffers -> GPU-visible "
+		 "indexed-indirect "
+		 "Forward+" );
 	t3dInstanceLayout_t active_layout;
 	if ( !t3dInstanceLayoutForCellSize( m_nCellSize, active_layout ) ) {
 		LOG( ERROR, "Instancer cell layout is incompatible with region size" );
@@ -3123,10 +3413,9 @@ void Terrain3DInstancer::initialize( Terrain3DOwner *const pTerrain ) {
 	m_bRuntimeStorageRebuildPending = false;
 	m_bStreamingCacheDirty = true;
 	refreshStreamingCache();
-	if ( !t3dContainerReserveCold( m_placementTransforms, 256 )
-	        || !t3dContainerReserveCold( m_placementColors, 256 )
-	        || !t3dContainerReserveCold( m_placementBehaviorFlags, 256 )
-	        || !t3dContainerReserveCold( m_placementPending, 256 ) ) {
+	if ( !t3dContainerReserveCold( m_placementTransforms, 256 ) || !t3dContainerReserveCold( m_placementColors, 256 ) ||
+		 !t3dContainerReserveCold( m_placementBehaviorFlags, 256 ) ||
+		 !t3dContainerReserveCold( m_placementPending, 256 ) ) {
 		LOG( ERROR, "Could not reserve instancer authoring placement scratch" );
 		return;
 	}
@@ -3138,7 +3427,8 @@ void Terrain3DInstancer::initialize( Terrain3DOwner *const pTerrain ) {
 	updateMmis();
 }
 
-void Terrain3DInstancer::resetRuntimeState( const bool bClearLogicalCounts ) {
+void Terrain3DInstancer::resetRuntimeState(
+	const bool bClearLogicalCounts ) {
 	if ( !m_pTerrain ) {
 		return;
 	}
@@ -3165,15 +3455,18 @@ void Terrain3DInstancer::resetRuntimeState( const bool bClearLogicalCounts ) {
 	}
 }
 
-void Terrain3DInstancer::destroy( void ) {
+void Terrain3DInstancer::destroy(
+	void ) {
 	resetRuntimeState( true );
 }
 
-void Terrain3DInstancer::suspendRendering( void ) {
+void Terrain3DInstancer::suspendRendering(
+	void ) {
 	resetRuntimeState( false );
 }
 
-void Terrain3DInstancer::clearByMesh( const int nMeshId ) {
+void Terrain3DInstancer::clearByMesh(
+	const int nMeshId ) {
 	LOG( INFO, "Deleting Multimeshes in all regions with mesh_id: ", nMeshId );
 	Terrain3DRegion *const *ppRegionPtrs = m_pTerrain->dataObject()->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
@@ -3181,26 +3474,30 @@ void Terrain3DInstancer::clearByMesh( const int nMeshId ) {
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
-		clearByRegion( Ref<Terrain3DRegion>( pRegion ), nMeshId );
+		clearByRegion( Ref< Terrain3DRegion >( pRegion ), nMeshId );
 	}
-	Ref<Terrain3DMeshAsset> pMa = m_pTerrain->assetsResource()->getMeshAsset( nMeshId );
-	pMa.is_valid() ? pMa->setInstanceCount( 0 ) : ( void )0; // Reset count for this mesh
+	Ref< Terrain3DMeshAsset > pMa = m_pTerrain->assetsResource()->getMeshAsset( nMeshId );
+	pMa.is_valid() ? pMa->setInstanceCount( 0 ) : ( void ) 0; // Reset count for this mesh
 }
 
-void Terrain3DInstancer::clearByLocation( const Vector2i &rRegionLoc, const int nMeshId ) {
+void Terrain3DInstancer::clearByLocation(
+	const Vector2i &rRegionLoc,
+	const int		nMeshId ) {
 	LOG( INFO, "Deleting Multimeshes w/ mesh_id: ", nMeshId, " in region: ", rRegionLoc );
-	const Ref<Terrain3DRegion> pRegion = m_pTerrain->dataObject()->getRegion( rRegionLoc );
+	const Ref< Terrain3DRegion > pRegion = m_pTerrain->dataObject()->getRegion( rRegionLoc );
 	clearByRegion( pRegion, nMeshId );
 }
 
-void Terrain3DInstancer::clearByRegion( const Ref<Terrain3DRegion> &rRegion, const int nMeshId ) {
+void Terrain3DInstancer::clearByRegion(
+	const Ref< Terrain3DRegion > &rRegion,
+	const int					  nMeshId ) {
 	if ( rRegion.is_null() ) {
 		return;
 	}
 	const Vector2i location = rRegion->getLocation();
 	if ( rRegion->getInstanceCount( nMeshId ) > 0u ) {
 		Terrain3DData *const pData = m_pTerrain->dataObject();
-		bool bTemporaryPage = false;
+		bool				 bTemporaryPage = false;
 		if ( !t3dBeginInstancePageAccess( this, pData, location, bTemporaryPage ) ) {
 			return;
 		}
@@ -3224,49 +3521,69 @@ void Terrain3DInstancer::clearByRegion( const Ref<Terrain3DRegion> &rRegion, con
 	}
 	eraseLogicalCellsByLocation( location, nMeshId );
 	destroyMmiByLocation( location, nMeshId );
-	emitDerivedMutation( location, Vector2i( INT32_MAX, INT32_MAX ), nMeshId, T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_BULK );
+	emitDerivedMutation( location,
+						 Vector2i( INT32_MAX, INT32_MAX ),
+						 nMeshId,
+						 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_BULK );
 }
 
-void Terrain3DInstancer::destroyRegionMmis( const Vector2i &rRegionLoc ) {
+void Terrain3DInstancer::destroyRegionMmis(
+	const Vector2i &rRegionLoc ) {
 	eraseLogicalCellsByRegion( rRegionLoc );
 	if ( m_mode != INSTANCER_DISABLED ) {
 		destroyMmisByRegion( rRegionLoc );
 	}
-	emitDerivedMutation(
-	        rRegionLoc, Vector2i( INT32_MAX, INT32_MAX ), -1, T3D_INSTANCE_MUTATION_REGION_UNLOAD | T3D_INSTANCE_MUTATION_TOPOLOGY );
+	emitDerivedMutation( rRegionLoc,
+						 Vector2i( INT32_MAX, INT32_MAX ),
+						 -1,
+						 T3D_INSTANCE_MUTATION_REGION_UNLOAD | T3D_INSTANCE_MUTATION_TOPOLOGY );
 }
 
-void Terrain3DInstancer::setMode( const t3dInstancerMode_t mode ) {
+void Terrain3DInstancer::setMode(
+	const t3dInstancerMode_t mode ) {
 	LOG( INFO, "Setting instancer mode: ", mode );
 	if ( mode != m_mode ) {
 		m_mode = mode;
 		switch ( m_mode ) {
-			case NORMAL:
-				updateMmis( -1, s_v2iMax, true );
-				break;
-			default:
-				suspendRendering();
-				break;
+		case NORMAL:
+			updateMmis( -1, s_v2iMax, true );
+			break;
+		default:
+			suspendRendering();
+			break;
 		}
 	}
 }
 
-void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
+void Terrain3DInstancer::addInstances(
+	const Vector3	 &rGlobalPosition,
+	const Dictionary &rParams ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
 	const int mesh_id = rParams.get( "asset_id", 0 );
 	if ( mesh_id < 0 || mesh_id >= m_pTerrain->assetsResource()->getMeshCount() ) {
-		LOG( ERROR, "Mesh ID out of range: ", mesh_id, ", valid: 0 to ", m_pTerrain->assetsResource()->getMeshCount() - 1 );
+		LOG( ERROR,
+			 "Mesh ID out of range: ",
+			 mesh_id,
+			 ", valid: 0 to ",
+			 m_pTerrain->assetsResource()->getMeshCount() - 1 );
 		return;
 	}
 
-	const real_t fBrushSize = CLAMP( ( real_t )( rParams.get( "size", 10.f ) ), 0.1f, 4096.f ); // Meters
+	const real_t fBrushSize = CLAMP( ( real_t ) ( rParams.get( "size", 10.f ) ), 0.1f, 4096.f ); // Meters
 	const real_t radius = fBrushSize * .5f;
-	const real_t fStrength = CLAMP( ( real_t )( rParams.get( "strength", .1f ) ), .01f, 100.f );               // (premul) 1-10k%
-	const real_t fFixedScale = CLAMP( ( real_t )( rParams.get( "fixed_scale", 100.f ) ) * .01f, .01f, 100.f ); // 1-10k%
-	const real_t fRandomScale = CLAMP( ( real_t )( rParams.get( "random_scale", 0.f ) ) * .01f, 0.f, 10.f );   // +/- 1000%
-	const Ref<Terrain3DMeshAsset> pMeshAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
-	const real_t fDensity = CLAMP(
-	        .1f * fBrushSize * fStrength * pMeshAsset->getDensity() / MAX( 0.01f, fFixedScale + .5f * fRandomScale ), .001f, 1000.f );
+	const real_t fStrength = CLAMP( ( real_t ) ( rParams.get( "strength", .1f ) ), .01f, 100.f ); // (premul) 1-10k%
+	const real_t fFixedScale =
+		CLAMP( ( real_t ) ( rParams.get( "fixed_scale", 100.f ) ) * .01f, .01f, 100.f ); // 1-10k%
+	const real_t fRandomScale =
+		CLAMP( ( real_t ) ( rParams.get( "random_scale", 0.f ) ) * .01f, 0.f, 10.f ); // +/- 1000%
+	const Ref< Terrain3DMeshAsset > pMeshAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+	const real_t					fDensity =
+		CLAMP( .1f * fBrushSize * fStrength * pMeshAsset->getDensity() / MAX( 0.01f, fFixedScale + .5f * fRandomScale ),
+			   .001f,
+			   1000.f );
 	// Density based on strength, mesh AABB and input scale determines how many to place, even fractional
 	const uint32_t count = getDensityCount( fDensity );
 	if ( count <= 0 ) {
@@ -3274,49 +3591,49 @@ void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dic
 	}
 	LOG( EXTREME, "Adding ", count, " instances at ", rGlobalPosition );
 
-	const real_t fFixedSpin = CLAMP( ( real_t )( rParams.get( "fixed_spin", 0.f ) ), .0f, 360.f );     // degrees
-	const real_t fRandomSpin = CLAMP( ( real_t )( rParams.get( "random_spin", 360.f ) ), 0.f, 360.f ); // degrees
-	const real_t fFixedTilt = CLAMP( ( real_t )( rParams.get( "fixed_tilt", 0.f ) ), -180.f, 180.f );  // degrees
-	const real_t fRandomTilt = CLAMP( ( real_t )( rParams.get( "random_tilt", 10.f ) ), 0.f, 180.f );  // degrees
-	const bool bBrushAlignToNormal = ( bool )( rParams.get( "align_to_normal", false ) );
-	const bool bAlignToNormal = bBrushAlignToNormal || pMeshAsset->alignsToTerrainNormal();
-	const uint16_t nPlacementBehavior = bAlignToNormal ? ( uint16_t )( FOLLOW_TERRAIN_HEIGHT | FOLLOW_TERRAIN_NORMAL )
-	                                                   : ( uint16_t )( FOLLOW_TERRAIN_HEIGHT | MANUAL_ORIENTATION );
+	const real_t   fFixedSpin = CLAMP( ( real_t ) ( rParams.get( "fixed_spin", 0.f ) ), .0f, 360.f );	  // degrees
+	const real_t   fRandomSpin = CLAMP( ( real_t ) ( rParams.get( "random_spin", 360.f ) ), 0.f, 360.f ); // degrees
+	const real_t   fFixedTilt = CLAMP( ( real_t ) ( rParams.get( "fixed_tilt", 0.f ) ), -180.f, 180.f );  // degrees
+	const real_t   fRandomTilt = CLAMP( ( real_t ) ( rParams.get( "random_tilt", 10.f ) ), 0.f, 180.f );  // degrees
+	const bool	   bBrushAlignToNormal = ( bool ) ( rParams.get( "align_to_normal", false ) );
+	const bool	   bAlignToNormal = bBrushAlignToNormal || pMeshAsset->alignsToTerrainNormal();
+	const uint16_t nPlacementBehavior = bAlignToNormal ? ( uint16_t ) ( FOLLOW_TERRAIN_HEIGHT | FOLLOW_TERRAIN_NORMAL )
+													   : ( uint16_t ) ( FOLLOW_TERRAIN_HEIGHT | MANUAL_ORIENTATION );
 
-	const real_t fHeightOffset = CLAMP( ( real_t )( rParams.get( "height_offset", 0.f ) ), -100.0f, 100.f ); // meters
-	const real_t fRandomHeight = CLAMP( ( real_t )( rParams.get( "random_height", 0.f ) ), 0.f, 100.f );     // meters
+	const real_t fHeightOffset = CLAMP( ( real_t ) ( rParams.get( "height_offset", 0.f ) ), -100.0f, 100.f ); // meters
+	const real_t fRandomHeight = CLAMP( ( real_t ) ( rParams.get( "random_height", 0.f ) ), 0.f, 100.f );	  // meters
 
-	const Color vertex_color = Color( rParams.get( "vertex_color", s_colorWhite ) );
-	const real_t fRandomHue = CLAMP( ( real_t )( rParams.get( "random_hue", 0.f ) ) / 360.f, 0.f, 1.f );      // degrees -> 0-1
-	const real_t fRandomDarken = CLAMP( ( real_t )( rParams.get( "random_darken", 0.f ) ) * .01f, 0.f, 1.f ); // 0-100%
+	const Color	 vertex_color = Color( rParams.get( "vertex_color", s_colorWhite ) );
+	const real_t fRandomHue =
+		CLAMP( ( real_t ) ( rParams.get( "random_hue", 0.f ) ) / 360.f, 0.f, 1.f ); // degrees -> 0-1
+	const real_t fRandomDarken = CLAMP( ( real_t ) ( rParams.get( "random_darken", 0.f ) ) * .01f, 0.f, 1.f ); // 0-100%
 
 	Vector2 slope_range = rParams.get( "slope", Vector2( 0.f, 90.f ) ); // 0-90 degrees
 	slope_range.x = CLAMP( slope_range.x, 0.f, 90.f );
 	slope_range.y = CLAMP( slope_range.y, 0.f, 90.f );
-	const bool bOnCollision = ( bool )( rParams.get( "on_collision", false ) );
-	const real_t fRaycastHeight = rParams.get( "raycast_height", 10.f );
+	const bool			 bOnCollision = ( bool ) ( rParams.get( "on_collision", false ) );
+	const real_t		 fRaycastHeight = rParams.get( "raycast_height", 10.f );
 	Terrain3DData *const pData = m_pTerrain->dataObject();
-	Terrain3DSampler sampler( pData->getSamplingSourceInternal() );
+	Terrain3DSampler	 sampler( pData->getSamplingSourceInternal() );
 
 	m_placementTransforms.clear();
 	m_placementColors.clear();
-	if ( ( m_placementTransforms.capacity() < count && !t3dContainerReserveCold( m_placementTransforms, count ) )
-	        || ( m_placementColors.capacity() < count
-	                && !t3dContainerReserveCold( m_placementColors, count ) ) ) {
+	if ( ( m_placementTransforms.capacity() < count && !t3dContainerReserveCold( m_placementTransforms, count ) ) ||
+		 ( m_placementColors.capacity() < count && !t3dContainerReserveCold( m_placementColors, count ) ) ) {
 		return;
 	}
 	for ( uint32_t i = 0; i < count; ++i ) {
 		Transform3D t;
 
 		// Get random XZ position and height in a circle
-		const real_t fRadius = radius * sqrt( UtilityFunctions::randf() );
-		const real_t fTheta = UtilityFunctions::randf() * Math::TAU;
+		const real_t  fRadius = radius * sqrt( UtilityFunctions::randf() );
+		const real_t  fTheta = UtilityFunctions::randf() * Math::TAU;
 		const Vector3 rand_vec = Vector3( fRadius * cos( fTheta ), 0.f, fRadius * sin( fTheta ) );
-		Vector3 position = rGlobalPosition + rand_vec;
+		Vector3		  position = rGlobalPosition + rand_vec;
 
 		// Get height
 		const t3dUsableHeight_t height_data =
-		        getUsableHeight( sampler, position, slope_range, bOnCollision, fRaycastHeight, bAlignToNormal );
+			getUsableHeight( sampler, position, slope_range, bOnCollision, fRaycastHeight, bAlignToNormal );
 		if ( !height_data.m_bValid ) {
 			continue;
 		}
@@ -3337,13 +3654,15 @@ void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dic
 		if ( abs( fSpin ) > 0.001f ) {
 			t.basis = t.basis.rotated( normal, fSpin );
 		}
-		const real_t fTilt = ( fFixedTilt + fRandomTilt * ( 2.f * UtilityFunctions::randf() - 1.f ) ) * Math::PI / 180.f;
+		const real_t fTilt =
+			( fFixedTilt + fRandomTilt * ( 2.f * UtilityFunctions::randf() - 1.f ) ) * Math::PI / 180.f;
 		if ( abs( fTilt ) > 0.001f ) {
 			t.basis = t.basis.rotated( t.basis.get_column( 0 ), fTilt ); // Rotate pitch, X-axis
 		}
 
 		// Scale
-		const real_t fTScale = CLAMP( fFixedScale + fRandomScale * ( 2.f * UtilityFunctions::randf() - 1.f ), 0.01f, 10.f );
+		const real_t fTScale =
+			CLAMP( fFixedScale + fRandomScale * ( 2.f * UtilityFunctions::randf() - 1.f ), 0.01f, 10.f );
 		t = t.scaled( Vector3( fTScale, fTScale, fTScale ) );
 
 		// Applies the mesh-asset height offset added by addTransforms().
@@ -3356,44 +3675,49 @@ void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dic
 		col.set_v( CLAMP( col.get_v() - fRandomDarken * UtilityFunctions::randf(), 0.f, 1.f ) );
 		col.set_h( fmod( col.get_h() + fRandomHue * ( 2.f * UtilityFunctions::randf() - 1.f ), 1.f ) );
 
-		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, t )
-		        || !t3dVectorPushBackWithinCapacity( m_placementColors, col ) ) {
+		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, t ) ||
+			 !t3dVectorPushBackWithinCapacity( m_placementColors, col ) ) {
 			m_placementTransforms.clear();
 			m_placementColors.clear();
 			return;
 		}
 	}
 	appendGlobalNative( mesh_id,
-	        m_placementTransforms.data(),
-	        m_placementTransforms.size(),
-	        m_placementColors.data(),
-	        m_placementColors.size(),
-	        true,
-	        0u,
-	        true,
-	        nPlacementBehavior );
+						m_placementTransforms.data(),
+						m_placementTransforms.size(),
+						m_placementColors.data(),
+						m_placementColors.size(),
+						true,
+						0u,
+						true,
+						nPlacementBehavior );
 }
 
-void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const Dictionary &rParams ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
+void Terrain3DInstancer::removeInstances(
+	const Vector3	 &rGlobalPosition,
+	const Dictionary &rParams ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
 	const int selected_mesh = rParams.get( "asset_id", 0 );
 	const int mesh_count = m_pTerrain->assetsResource()->getMeshCount();
 	if ( selected_mesh < 0 || selected_mesh >= mesh_count ) {
 		return;
 	}
-	const bool bAllMeshes = ( bool )( rParams.get( "modifier_shift", false ) );
-	const real_t fBrushSize = CLAMP( ( real_t )( rParams.get( "size", 10.f ) ), .1f, 4096.f );
+	const bool	 bAllMeshes = ( bool ) ( rParams.get( "modifier_shift", false ) );
+	const real_t fBrushSize = CLAMP( ( real_t ) ( rParams.get( "size", 10.f ) ), .1f, 4096.f );
 	const real_t fRadius = fBrushSize * .5f;
-	const real_t fStrength = CLAMP( ( real_t )( rParams.get( "strength", .1f ) ), .01f, 100.f );
-	Vector2 slope = rParams.get( "slope", Vector2( 0, 90 ) );
+	const real_t fStrength = CLAMP( ( real_t ) ( rParams.get( "strength", .1f ) ), .01f, 100.f );
+	Vector2		 slope = rParams.get( "slope", Vector2( 0, 90 ) );
 	slope.x = CLAMP( slope.x, 0.f, 90.f );
 	slope.y = CLAMP( slope.y, 0.f, 90.f );
-	const bool bOnCollision = ( bool )( rParams.get( "on_collision", false ) );
-	const real_t fRaycastHeight = rParams.get( "raycast_height", 10.f );
-	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
+	const bool			 bOnCollision = ( bool ) ( rParams.get( "on_collision", false ) );
+	const real_t		 fRaycastHeight = rParams.get( "raycast_height", 10.f );
+	const int			 region_size = T3D_REGION_WORLD_SIZE_METERS;
 	Terrain3DData *const pData = m_pTerrain->dataObject();
-	Terrain3DSampler sampler( pData->getSamplingSourceInternal() );
-	const bool bWasMaterializing = m_bMaterializingUpdates;
+	Terrain3DSampler	 sampler( pData->getSamplingSourceInternal() );
+	const bool			 bWasMaterializing = m_bMaterializingUpdates;
 	m_bMaterializingUpdates = true;
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
@@ -3402,63 +3726,65 @@ void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const 
 			continue;
 		}
 		const Vector2i regionLocation = pRegionPtr->getLocation();
-		const Vector3 regionOrigin( regionLocation.x * region_size, 0, regionLocation.y * region_size );
-		const real_t fExtent = region_size;
-		if ( rGlobalPosition.x + fRadius < regionOrigin.x || rGlobalPosition.x - fRadius > regionOrigin.x + fExtent
-		        || rGlobalPosition.z + fRadius < regionOrigin.z || rGlobalPosition.z - fRadius > regionOrigin.z + fExtent ) {
+		const Vector3  regionOrigin( regionLocation.x * region_size, 0, regionLocation.y * region_size );
+		const real_t   fExtent = region_size;
+		if ( rGlobalPosition.x + fRadius < regionOrigin.x || rGlobalPosition.x - fRadius > regionOrigin.x + fExtent ||
+			 rGlobalPosition.z + fRadius < regionOrigin.z || rGlobalPosition.z - fRadius > regionOrigin.z + fExtent ) {
 			continue;
 		}
 		bool bTemporaryPage = false;
 		if ( !t3dBeginInstancePageAccess( this, pData, regionLocation, bTemporaryPage ) ) {
 			continue;
 		}
-		Ref<Terrain3DRegion> region( pRegionPtr );
+		Ref< Terrain3DRegion >	region( pRegionPtr );
 		Terrain3DInstanceStore *pCommitStore = NULL;
 		if ( !pRegionPtr->tryGetInstanceStoreInternal( pCommitStore ) || !pCommitStore ) {
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			continue;
 		}
 		const Terrain3DInstanceStore &source_store = *pCommitStore;
-		Terrain3DInstanceStore replacement( source_store );
+		Terrain3DInstanceStore		  replacement( source_store );
 		if ( !t3dInstancerStoreCloneMatches( source_store, replacement ) ) {
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			continue;
 		}
 
 		size_t maximum_changed_cells = 0u;
-		for ( int mesh_id = bAllMeshes ? 0 : selected_mesh; mesh_id <= ( bAllMeshes ? mesh_count - 1 : selected_mesh ); ++mesh_id ) {
+		for ( int mesh_id = bAllMeshes ? 0 : selected_mesh; mesh_id <= ( bAllMeshes ? mesh_count - 1 : selected_mesh );
+			  ++mesh_id ) {
 			const t3dInstanceMesh_t *const pMesh = source_store.findMesh( mesh_id );
 			if ( pMesh ) {
-				maximum_changed_cells = t3dInstancerSaturatingAdd( maximum_changed_cells, pMesh->m_cells.size() );
+				maximum_changed_cells = t3dSaturatingAddUnsigned( maximum_changed_cells, pMesh->m_cells.size() );
 			}
 		}
-		eastl::vector<t3dCellUpdateKey_t, Terrain3DEastlAllocator> changed_keys;
+		eastl::vector< t3dCellUpdateKey_t, Terrain3DEastlAllocator > changed_keys;
 		changed_keys.set_allocator( m_placementPending.get_allocator() );
 		if ( maximum_changed_cells > 0u && !t3dContainerReserveCold( changed_keys, maximum_changed_cells ) ) {
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			continue;
 		}
-		eastl::bitset<T3D_MAX_MESH_ASSETS> changed_meshes;
-		bool bRegionChanged = false;
-		bool bStageFailed = false;
-		for ( int mesh_id = bAllMeshes ? 0 : selected_mesh; mesh_id <= ( bAllMeshes ? mesh_count - 1 : selected_mesh ); ++mesh_id ) {
+		eastl::bitset< T3D_MAX_MESH_ASSETS > changed_meshes;
+		bool								 bRegionChanged = false;
+		bool								 bStageFailed = false;
+		for ( int mesh_id = bAllMeshes ? 0 : selected_mesh; mesh_id <= ( bAllMeshes ? mesh_count - 1 : selected_mesh );
+			  ++mesh_id ) {
 			t3dInstanceMesh_t *pMesh = replacement.findMesh( mesh_id );
 			if ( !pMesh ) {
 				continue;
 			}
-			const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
-			const real_t fHeightOffset = pAsset.is_valid() ? pAsset->getHeightOffset() : 0.f;
-			for ( int cell_index = ( int )( pMesh->m_cells.size() ) - 1; cell_index >= 0; --cell_index ) {
-				t3dInstanceCell_s &cell = pMesh->m_cells[( size_t )( cell_index )];
-				size_t write = 0u;
-				bool bChanged = false;
+			const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+			const real_t					fHeightOffset = pAsset.is_valid() ? pAsset->getHeightOffset() : 0.f;
+			for ( int cell_index = ( int ) ( pMesh->m_cells.size() ) - 1; cell_index >= 0; --cell_index ) {
+				t3dInstanceCell_s &cell = pMesh->m_cells[( size_t ) ( cell_index )];
+				size_t			   write = 0u;
+				bool			   bChanged = false;
 				for ( size_t i = 0u; i < cell.m_transforms.size(); ++i ) {
 					const Transform3D transform = cell.getTransform( i );
-					const Vector3 global = transform.origin + regionOrigin;
-					const real_t fDx = global.x - rGlobalPosition.x;
-					const real_t fDz = global.z - rGlobalPosition.z;
-					bool bRemove =
-					        fDx * fDx + fDz * fDz < fRadius * fRadius && UtilityFunctions::randf() < CLAMP( .175f * fStrength, .005f, 1.f );
+					const Vector3	  global = transform.origin + regionOrigin;
+					const real_t	  fDx = global.x - rGlobalPosition.x;
+					const real_t	  fDz = global.z - rGlobalPosition.z;
+					bool			  bRemove = fDx * fDx + fDz * fDz < fRadius * fRadius &&
+								   UtilityFunctions::randf() < CLAMP( .175f * fStrength, .005f, 1.f );
 					if ( bRemove ) {
 						const Vector3 sample = global - transform.basis.get_column( 1 ) * fHeightOffset;
 						bRemove = getUsableHeight( sampler, sample, slope, bOnCollision, fRaycastHeight ).m_bValid;
@@ -3481,8 +3807,8 @@ void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const 
 				if ( !bChanged ) {
 					continue;
 				}
-				if ( !cell.m_transforms.resize( write ) || ( cell.usesColors() && !cell.m_colors.resize( write ) )
-				        || ( cell.usesOwners() && !cell.m_owners.resize( write ) ) ) {
+				if ( !cell.m_transforms.resize( write ) || ( cell.usesColors() && !cell.m_colors.resize( write ) ) ||
+					 ( cell.usesOwners() && !cell.m_owners.resize( write ) ) ) {
 					bStageFailed = true;
 					break;
 				}
@@ -3491,14 +3817,15 @@ void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const 
 				}
 				cell.touch();
 				const Vector2i changed_cell = cell.m_location;
-				if ( !t3dVectorPushBackWithinCapacity( changed_keys, t3dCellUpdateKey_t{ regionLocation, changed_cell, mesh_id } ) ) {
+				if ( !t3dVectorPushBackWithinCapacity( changed_keys,
+													   t3dCellUpdateKey_t{ regionLocation, changed_cell, mesh_id } ) ) {
 					bStageFailed = true;
 					break;
 				}
 				bRegionChanged = true;
-				changed_meshes.set( ( size_t )( mesh_id ) );
+				changed_meshes.set( ( size_t ) ( mesh_id ) );
 				if ( write == 0u ) {
-					t3dVectorEraseOrdered( pMesh->m_cells, ( size_t )( cell_index ) );
+					t3dVectorEraseOrdered( pMesh->m_cells, ( size_t ) ( cell_index ) );
 				}
 			}
 			if ( bStageFailed ) {
@@ -3522,23 +3849,23 @@ void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const 
 		region->markInstanceStoreModifiedInternal();
 		const Terrain3DInstanceStore &committed_store = *pCommitStore;
 		for ( size_t i = 0u; i < changed_keys.size(); ++i ) {
-			const t3dCellUpdateKey_t &key = changed_keys[i];
+			const t3dCellUpdateKey_t	  &key = changed_keys[i];
 			const t3dInstanceCell_s *const pCell = committed_store.findCell( key.m_nMeshId, key.m_cell );
-			const size_t count = pCell ? pCell->m_transforms.size() : 0u;
+			const size_t				   count = pCell ? pCell->m_transforms.size() : 0u;
 			setLogicalCellCount( regionLocation, key.m_nMeshId, key.m_cell, count );
 			if ( count == 0u ) {
 				destroyMmiByCell( regionLocation, key.m_nMeshId, key.m_cell );
 			}
 			emitDerivedMutation( regionLocation,
-			        key.m_cell,
-			        key.m_nMeshId,
-			        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-			        pCell ? pCell->m_nRevision : 0u );
+								 key.m_cell,
+								 key.m_nMeshId,
+								 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+								 pCell ? pCell->m_nRevision : 0u );
 		}
 		t3dInstancerRefreshCommittedResidentBytes( pData, regionLocation );
 		if ( !bTemporaryPage ) {
 			for ( int mesh_id = 0; mesh_id < T3D_MAX_MESH_ASSETS; ++mesh_id ) {
-				if ( changed_meshes.test( ( size_t )( mesh_id ) ) ) {
+				if ( changed_meshes.test( ( size_t ) ( mesh_id ) ) ) {
 					updateMmis( mesh_id, regionLocation );
 				}
 			}
@@ -3551,8 +3878,14 @@ void Terrain3DInstancer::removeInstances( const Vector3 &rGlobalPosition, const 
 	}
 }
 void Terrain3DInstancer::addMultimesh(
-        const int nMeshId, const Ref<MultiMesh> &rMultimesh, const Transform3D &rXform, const bool bUpdate ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
+	const int				nMeshId,
+	const Ref< MultiMesh > &rMultimesh,
+	const Transform3D	   &rXform,
+	const bool				bUpdate ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
 	if ( rMultimesh.is_null() || nMeshId < 0 || nMeshId >= m_pTerrain->assetsResource()->getMeshCount() ) {
 		return;
 	}
@@ -3562,117 +3895,134 @@ void Terrain3DInstancer::addMultimesh(
 	}
 	LOG( INFO, "Extracting ", instance_count, " transforms from multimesh" );
 	const bool bUsesColors = rMultimesh->is_using_colors();
-	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t )( instance_count ) )
-	        || !t3dVectorResizeCold( m_placementColors, ( size_t )( instance_count ) ) ) {
+	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t ) ( instance_count ) ) ||
+		 !t3dVectorResizeCold( m_placementColors, ( size_t ) ( instance_count ) ) ) {
 		m_placementTransforms.clear();
 		m_placementColors.clear();
 		return;
 	}
-	const bool bCanDecodeBuffer = rMultimesh->get_transform_format() == MultiMesh::TRANSFORM_3D;
-	const int stride = 12 + ( bUsesColors ? 4 : 0 ) + ( rMultimesh->is_using_custom_data() ? 4 : 0 );
+	const bool				 bCanDecodeBuffer = rMultimesh->get_transform_format() == MultiMesh::TRANSFORM_3D;
+	const int				 stride = 12 + ( bUsesColors ? 4 : 0 ) + ( rMultimesh->is_using_custom_data() ? 4 : 0 );
 	const PackedFloat32Array buffer = bCanDecodeBuffer ? rMultimesh->get_buffer() : PackedFloat32Array();
 	if ( bCanDecodeBuffer && buffer.size() >= instance_count * stride ) {
 		const float *pRead = buffer.ptr();
 		for ( int i = 0; i < instance_count; ++i ) {
-			const int offset = i * stride;
+			const int	offset = i * stride;
 			Transform3D transform;
 			transform.basis[0] = Vector3( pRead[offset + 0], pRead[offset + 1], pRead[offset + 2] );
 			transform.basis[1] = Vector3( pRead[offset + 4], pRead[offset + 5], pRead[offset + 6] );
 			transform.basis[2] = Vector3( pRead[offset + 8], pRead[offset + 9], pRead[offset + 10] );
 			transform.origin = Vector3( pRead[offset + 3], pRead[offset + 7], pRead[offset + 11] );
-			m_placementTransforms[( size_t )( i )] = rXform * transform;
-			m_placementColors[( size_t )( i )] =
-			        bUsesColors ? Color( pRead[offset + 12], pRead[offset + 13], pRead[offset + 14], pRead[offset + 15] ) : s_colorWhite;
+			m_placementTransforms[( size_t ) ( i )] = rXform * transform;
+			m_placementColors[( size_t ) ( i )] =
+				bUsesColors ? Color( pRead[offset + 12], pRead[offset + 13], pRead[offset + 14], pRead[offset + 15] )
+							: s_colorWhite;
 		}
 	} else {
 		// Keep compatibility with 2D or backend-specific layouts while avoiding
 		// the per-instance API path for the normal 3D terrain use case.
 		for ( int i = 0; i < instance_count; ++i ) {
-			m_placementTransforms[( size_t )( i )] = rXform * rMultimesh->get_instance_transform( i );
-			m_placementColors[( size_t )( i )] = bUsesColors ? rMultimesh->get_instance_color( i ) : s_colorWhite;
+			m_placementTransforms[( size_t ) ( i )] = rXform * rMultimesh->get_instance_transform( i );
+			m_placementColors[( size_t ) ( i )] = bUsesColors ? rMultimesh->get_instance_color( i ) : s_colorWhite;
 		}
 	}
 	appendGlobalNative( nMeshId,
-	        m_placementTransforms.data(),
-	        m_placementTransforms.size(),
-	        m_placementColors.data(),
-	        m_placementColors.size(),
-	        bUpdate );
+						m_placementTransforms.data(),
+						m_placementTransforms.size(),
+						m_placementColors.data(),
+						m_placementColors.size(),
+						bUpdate );
 }
 
 // Expects transforms in global space
 void Terrain3DInstancer::addTransforms(
-        const int nMeshId, const TypedArray<Transform3D> &rXforms, const PackedColorArray &rColors, const bool bUpdate ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
+	const int						 nMeshId,
+	const TypedArray< Transform3D > &rXforms,
+	const PackedColorArray			&rColors,
+	const bool						 bUpdate ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
 	if ( rXforms.is_empty() || nMeshId < 0 || nMeshId >= m_pTerrain->assetsResource()->getMeshCount() ) {
 		return;
 	}
 	m_placementTransforms.clear();
 	m_placementColors.clear();
-	if ( !t3dContainerReserveCold( m_placementTransforms, rXforms.size() )
-	        || !t3dContainerReserveCold( m_placementColors, rXforms.size() ) ) {
+	if ( !t3dContainerReserveCold( m_placementTransforms, rXforms.size() ) ||
+		 !t3dContainerReserveCold( m_placementColors, rXforms.size() ) ) {
 		return;
 	}
 	for ( int i = 0; i < rXforms.size(); ++i ) {
-		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, rXforms[i] )
-		        || !t3dVectorPushBackWithinCapacity( m_placementColors, i < rColors.size() ? rColors[i] : s_colorWhite ) ) {
+		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, rXforms[i] ) ||
+			 !t3dVectorPushBackWithinCapacity( m_placementColors, i < rColors.size() ? rColors[i] : s_colorWhite ) ) {
 			m_placementTransforms.clear();
 			m_placementColors.clear();
 			return;
 		}
 	}
 	appendGlobalNative( nMeshId,
-	        m_placementTransforms.data(),
-	        m_placementTransforms.size(),
-	        m_placementColors.data(),
-	        m_placementColors.size(),
-	        bUpdate );
+						m_placementTransforms.data(),
+						m_placementTransforms.size(),
+						m_placementColors.data(),
+						m_placementColors.size(),
+						bUpdate );
 }
 
-void Terrain3DInstancer::addOwnedTransforms( const int nMeshId,
-        const TypedArray<Transform3D> &rXforms,
-        const int64_t nOwnerId,
-        const PackedColorArray &rColors,
-        const bool bUpdate,
-        const bool bBackup ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
-	if ( rXforms.is_empty() || nOwnerId <= 0 || nOwnerId > ( int64_t )( INT32_MAX ) || nMeshId < 0
-	        || nMeshId >= m_pTerrain->assetsResource()->getMeshCount() ) {
+void Terrain3DInstancer::addOwnedTransforms(
+	const int						 nMeshId,
+	const TypedArray< Transform3D > &rXforms,
+	const int64_t					 nOwnerId,
+	const PackedColorArray			&rColors,
+	const bool						 bUpdate,
+	const bool						 bBackup ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
+	if ( rXforms.is_empty() || nOwnerId <= 0 || nOwnerId > ( int64_t ) ( INT32_MAX ) || nMeshId < 0 ||
+		 nMeshId >= m_pTerrain->assetsResource()->getMeshCount() ) {
 		return;
 	}
 	m_placementTransforms.clear();
 	m_placementColors.clear();
-	if ( !t3dContainerReserveCold( m_placementTransforms, rXforms.size() )
-	        || !t3dContainerReserveCold( m_placementColors, rXforms.size() ) ) {
+	if ( !t3dContainerReserveCold( m_placementTransforms, rXforms.size() ) ||
+		 !t3dContainerReserveCold( m_placementColors, rXforms.size() ) ) {
 		return;
 	}
 	for ( int i = 0; i < rXforms.size(); ++i ) {
-		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, rXforms[i] )
-		        || !t3dVectorPushBackWithinCapacity( m_placementColors, i < rColors.size() ? rColors[i] : s_colorWhite ) ) {
+		if ( !t3dVectorPushBackWithinCapacity( m_placementTransforms, rXforms[i] ) ||
+			 !t3dVectorPushBackWithinCapacity( m_placementColors, i < rColors.size() ? rColors[i] : s_colorWhite ) ) {
 			m_placementTransforms.clear();
 			m_placementColors.clear();
 			return;
 		}
 	}
 	appendGlobalNative( nMeshId,
-	        m_placementTransforms.data(),
-	        m_placementTransforms.size(),
-	        m_placementColors.data(),
-	        m_placementColors.size(),
-	        bUpdate,
-	        ( uint32_t )( nOwnerId ),
-	        bBackup );
+						m_placementTransforms.data(),
+						m_placementTransforms.size(),
+						m_placementColors.data(),
+						m_placementColors.size(),
+						bUpdate,
+						( uint32_t ) ( nOwnerId ),
+						bBackup );
 }
 
-int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool bUpdate, const bool bBackup ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return 0; }
-	if ( nOwnerId <= 0 || nOwnerId > ( int64_t )( INT32_MAX ) ) {
+int Terrain3DInstancer::removeOwnedInstances(
+	const int64_t nOwnerId,
+	const bool	  bUpdate,
+	const bool	  bBackup ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
 		return 0;
 	}
-	const uint32_t owner_id = ( uint32_t )( nOwnerId );
-	Terrain3DData *const pData = m_pTerrain->dataObject();
+	if ( nOwnerId <= 0 || nOwnerId > ( int64_t ) ( INT32_MAX ) ) {
+		return 0;
+	}
+	const uint32_t			owner_id = ( uint32_t ) ( nOwnerId );
+	Terrain3DData *const	pData = m_pTerrain->dataObject();
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
-	const bool bWasMaterializing = m_bMaterializingUpdates;
+	const bool				bWasMaterializing = m_bMaterializingUpdates;
 	m_bMaterializingUpdates = true;
 	int removed_count = 0;
 
@@ -3682,18 +4032,18 @@ int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool
 			continue;
 		}
 		const Vector2i location = pRegionPtr->getLocation();
-		bool bTemporaryPage = false;
+		bool		   bTemporaryPage = false;
 		if ( !t3dBeginInstancePageAccess( this, pData, location, bTemporaryPage ) ) {
 			continue;
 		}
-		const Ref<Terrain3DRegion> region( pRegionPtr );
-		Terrain3DInstanceStore *pCommitStore = NULL;
+		const Ref< Terrain3DRegion > region( pRegionPtr );
+		Terrain3DInstanceStore		*pCommitStore = NULL;
 		if ( !pRegionPtr->tryGetInstanceStoreInternal( pCommitStore ) || !pCommitStore ) {
 			t3dEndInstancePageAccess( pData, location, bTemporaryPage );
 			continue;
 		}
 		const Terrain3DInstanceStore &source_store = *pCommitStore;
-		Terrain3DInstanceStore replacement( source_store );
+		Terrain3DInstanceStore		  replacement( source_store );
 		if ( !t3dInstancerStoreCloneMatches( source_store, replacement ) ) {
 			t3dEndInstancePageAccess( pData, location, bTemporaryPage );
 			continue;
@@ -3701,30 +4051,31 @@ int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool
 
 		size_t maximum_changed_cells = 0u;
 		for ( size_t iMesh = 0u; iMesh < source_store.meshes().size(); ++iMesh ) {
-			maximum_changed_cells = t3dInstancerSaturatingAdd( maximum_changed_cells, source_store.meshes()[iMesh].m_cells.size() );
+			maximum_changed_cells =
+				t3dSaturatingAddUnsigned( maximum_changed_cells, source_store.meshes()[iMesh].m_cells.size() );
 		}
-		eastl::vector<t3dCellUpdateKey_t, Terrain3DEastlAllocator> changed_keys;
+		eastl::vector< t3dCellUpdateKey_t, Terrain3DEastlAllocator > changed_keys;
 		changed_keys.set_allocator( m_placementPending.get_allocator() );
 		if ( maximum_changed_cells > 0u && !t3dContainerReserveCold( changed_keys, maximum_changed_cells ) ) {
 			t3dEndInstancePageAccess( pData, location, bTemporaryPage );
 			continue;
 		}
-		eastl::bitset<T3D_MAX_MESH_ASSETS> changed_meshes;
-		int region_removed_count = 0;
-		bool bStageFailed = false;
-		for ( int mesh_index = ( int )( replacement.meshesMut().size() ) - 1; mesh_index >= 0; --mesh_index ) {
-			const int mesh_id = replacement.meshesMut()[( size_t )( mesh_index )].m_nId;
+		eastl::bitset< T3D_MAX_MESH_ASSETS > changed_meshes;
+		int									 region_removed_count = 0;
+		bool								 bStageFailed = false;
+		for ( int mesh_index = ( int ) ( replacement.meshesMut().size() ) - 1; mesh_index >= 0; --mesh_index ) {
+			const int		   mesh_id = replacement.meshesMut()[( size_t ) ( mesh_index )].m_nId;
 			t3dInstanceMesh_t *pMesh = replacement.findMesh( mesh_id );
 			if ( !pMesh ) {
 				continue;
 			}
-			for ( int cell_index = ( int )( pMesh->m_cells.size() ) - 1; cell_index >= 0; --cell_index ) {
-				t3dInstanceCell_s &cell = pMesh->m_cells[( size_t )( cell_index )];
+			for ( int cell_index = ( int ) ( pMesh->m_cells.size() ) - 1; cell_index >= 0; --cell_index ) {
+				t3dInstanceCell_s &cell = pMesh->m_cells[( size_t ) ( cell_index )];
 				if ( !cell.usesOwners() ) {
 					continue;
 				}
 				size_t write = 0u;
-				int cell_removed = 0;
+				int	   cell_removed = 0;
 				for ( size_t read = 0u; read < cell.m_transforms.size(); ++read ) {
 					if ( cell.getOwner( read ) == owner_id ) {
 						++cell_removed;
@@ -3742,22 +4093,23 @@ int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool
 				if ( cell_removed == 0 ) {
 					continue;
 				}
-				if ( !cell.m_transforms.resize( write ) || ( cell.usesColors() && !cell.m_colors.resize( write ) )
-				        || !cell.m_owners.resize( write ) ) {
+				if ( !cell.m_transforms.resize( write ) || ( cell.usesColors() && !cell.m_colors.resize( write ) ) ||
+					 !cell.m_owners.resize( write ) ) {
 					bStageFailed = true;
 					break;
 				}
 				cell.compactOwnerSidecar();
 				cell.touch();
 				const Vector2i changed_cell = cell.m_location;
-				if ( !t3dVectorPushBackWithinCapacity( changed_keys, t3dCellUpdateKey_t{ location, changed_cell, mesh_id } ) ) {
+				if ( !t3dVectorPushBackWithinCapacity( changed_keys,
+													   t3dCellUpdateKey_t{ location, changed_cell, mesh_id } ) ) {
 					bStageFailed = true;
 					break;
 				}
 				region_removed_count += cell_removed;
-				changed_meshes.set( ( size_t )( mesh_id ) );
+				changed_meshes.set( ( size_t ) ( mesh_id ) );
 				if ( write == 0u ) {
-					t3dVectorEraseOrdered( pMesh->m_cells, ( size_t )( cell_index ) );
+					t3dVectorEraseOrdered( pMesh->m_cells, ( size_t ) ( cell_index ) );
 				}
 			}
 			if ( bStageFailed ) {
@@ -3786,23 +4138,23 @@ int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool
 		removed_count += region_removed_count;
 		const Terrain3DInstanceStore &committed_store = *pCommitStore;
 		for ( size_t i = 0u; i < changed_keys.size(); ++i ) {
-			const t3dCellUpdateKey_t &key = changed_keys[i];
+			const t3dCellUpdateKey_t	  &key = changed_keys[i];
 			const t3dInstanceCell_s *const pCell = committed_store.findCell( key.m_nMeshId, key.m_cell );
-			const size_t count = pCell ? pCell->m_transforms.size() : 0u;
+			const size_t				   count = pCell ? pCell->m_transforms.size() : 0u;
 			setLogicalCellCount( location, key.m_nMeshId, key.m_cell, count );
 			if ( count == 0u ) {
 				destroyMmiByCell( location, key.m_nMeshId, key.m_cell );
 			}
 			emitDerivedMutation( location,
-			        key.m_cell,
-			        key.m_nMeshId,
-			        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-			        pCell ? pCell->m_nRevision : 0u );
+								 key.m_cell,
+								 key.m_nMeshId,
+								 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+								 pCell ? pCell->m_nRevision : 0u );
 		}
 		t3dInstancerRefreshCommittedResidentBytes( pData, location );
 		if ( bUpdate && !bTemporaryPage ) {
 			for ( int mesh_id = 0; mesh_id < T3D_MAX_MESH_ASSETS; ++mesh_id ) {
-				if ( changed_meshes.test( ( size_t )( mesh_id ) ) ) {
+				if ( changed_meshes.test( ( size_t ) ( mesh_id ) ) ) {
 					updateMmis( mesh_id, location );
 				}
 			}
@@ -3815,25 +4167,292 @@ int Terrain3DInstancer::removeOwnedInstances( const int64_t nOwnerId, const bool
 	}
 	return removed_count;
 }
-void Terrain3DInstancer::appendLocation( const Vector2i &rRegionLoc,
-        const int nMeshId,
-        const TypedArray<Transform3D> &rXforms,
-        const PackedColorArray &rColors,
-        const bool bUpdate ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
+
+bool Terrain3DInstancer::isOwnerIdUsed(
+	const int64_t nOwnerId ) {
+	if ( nOwnerId <= 0 || nOwnerId > INT32_MAX || !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return true;
+	}
+	Terrain3DData *const	pData = m_pTerrain->dataObject();
+	Terrain3DRegion *const *ppRegions = pData->getRegionPtrMapInternal();
+	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
+		Terrain3DRegion *const pRegion = ppRegions[i];
+		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasInstances() ) {
+			continue;
+		}
+		const Vector2i location = pRegion->getLocation();
+		bool		   temporary = false;
+		if ( !t3dBeginInstancePageAccess( this, pData, location, temporary ) ) {
+			return true;
+		}
+		Terrain3DInstanceStore *pStore = NULL;
+		if ( !pRegion->tryGetInstanceStoreInternal( pStore ) || !pStore ) {
+			t3dEndInstancePageAccess( pData, location, temporary );
+			return true;
+		}
+		bool used = false;
+		for ( size_t mi = 0; mi < pStore->meshes().size() && !used; ++mi ) {
+			const t3dInstanceMesh_t &mesh = pStore->meshes()[mi];
+			for ( size_t ci = 0; ci < mesh.m_cells.size() && !used; ++ci ) {
+				const t3dInstanceCell_s &cell = mesh.m_cells[ci];
+				if ( !cell.usesOwners() ) {
+					continue;
+				}
+				for ( size_t k = 0; k < cell.m_owners.size(); ++k ) {
+					if ( cell.m_owners[k] == ( uint32_t ) nOwnerId ) {
+						used = true;
+						break;
+					}
+				}
+			}
+		}
+		t3dEndInstancePageAccess( pData, location, temporary );
+		if ( used ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Editor-only all-or-nothing replacement of owner-tagged region records.
+// Batches: { region: Vector2i, owner: int, mesh_id: int, transforms: Array[Transform3D] }.
+// Empty transforms remove only the specified owner from the specified region.
+Dictionary Terrain3DInstancer::replaceFoliageOwnedRegions(
+	const Array &rBatches,
+	const bool	 bBackup ) {
+	Dictionary result;
+	result["ok"] = false;
+	result["error"] = "Invalid foliage replacement";
+	if ( !m_pTerrain || !m_pTerrain->dataObject() || !m_pTerrain->assetsResource().is_valid() || rBatches.is_empty() ) {
+		return result;
+	}
+	Terrain3DData *const												  pData = m_pTerrain->dataObject();
+	eastl::vector< t3dPreparedRegionMutation_t, Terrain3DEastlAllocator > stages;
+	stages.set_allocator( m_placementPending.get_allocator() );
+	if ( !t3dContainerReserveCold( stages, ( size_t ) rBatches.size() ) ) {
+		result["error"] = "No region staging memory";
+		return result;
+	}
+	// Acquire and clone every affected region before touching any live state.
+	for ( int i = 0; i < rBatches.size(); ++i ) {
+		const Dictionary				batch = rBatches[i];
+		const Vector2i					region = batch.get( "region", Vector2i( INT32_MAX, INT32_MAX ) );
+		const int64_t					owner = batch.get( "owner", ( int64_t ) 0 );
+		const int						mesh = batch.get( "mesh_id", -1 );
+		const TypedArray< Transform3D > transforms = batch.get( "transforms", TypedArray< Transform3D >() );
+		if ( owner <= 0 || owner > INT32_MAX || mesh < 0 || mesh >= m_pTerrain->assetsResource()->getMeshCount() ||
+			 transforms.size() > 1048576 || !pData->hasRegion( region ) ) {
+			result["error"] = "Invalid owner, mesh, region or batch capacity";
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		bool exists = false;
+		for ( size_t j = 0; j < stages.size(); ++j ) {
+			if ( stages[j].m_location == region ) {
+				exists = true;
+				break;
+			}
+		}
+		if ( exists ) {
+			continue;
+		}
+		Terrain3DRegion *const pRegion = pData->getRegionPtr( region );
+		if ( !pRegion || pRegion->isDeleted() ) {
+			result["error"] = "Region removed during staging";
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		t3dPreparedRegionMutation_t stage;
+		stage.m_pRegion = pRegion;
+		stage.m_location = region;
+		if ( !t3dBeginInstancePageAccess( this, pData, region, stage.m_bTemporaryPage ) ) {
+			result["error"] = "Cannot materialize instance page";
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		if ( !pRegion->tryGetInstanceStoreInternal( stage.m_pCommitStore ) || !stage.m_pCommitStore ) {
+			t3dEndInstancePageAccess( pData, region, stage.m_bTemporaryPage );
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		stage.m_store = *stage.m_pCommitStore;
+		if ( !t3dInstancerStoreCloneMatches( *stage.m_pCommitStore, stage.m_store ) ||
+			 !t3dVectorPushBackWithinCapacity( stages, eastl::move( stage ) ) ) {
+			t3dEndInstancePageAccess( pData, region, stage.m_bTemporaryPage );
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+	}
+	// Drop only matching owner records, never owner 0 or unrelated generated owners.
+	for ( int i = 0; i < rBatches.size(); ++i ) {
+		const Dictionary batch = rBatches[i];
+		const Vector2i	 region = batch["region"];
+		const uint32_t	 owner = ( uint32_t ) ( ( int64_t ) batch["owner"] );
+		for ( size_t j = 0; j < stages.size(); ++j ) {
+			if ( stages[j].m_location != region ) {
+				continue;
+			}
+			Terrain3DInstanceStore &store = stages[j].m_store;
+			for ( int mi = ( int ) store.meshesMut().size() - 1; mi >= 0; --mi ) {
+				const int				 mesh_id = store.meshesMut()[( size_t ) mi].m_nId;
+				t3dInstanceMesh_t *const pMesh = store.findMesh( mesh_id );
+				if ( !pMesh ) {
+					continue;
+				}
+				for ( int ci = ( int ) pMesh->m_cells.size() - 1; ci >= 0; --ci ) {
+					t3dInstanceCell_s &cell = pMesh->m_cells[( size_t ) ci];
+					if ( !cell.usesOwners() ) {
+						continue;
+					}
+					size_t write = 0u;
+					for ( size_t read = 0u; read < cell.m_transforms.size(); ++read ) {
+						if ( cell.getOwner( read ) == owner ) {
+							continue;
+						}
+						if ( write != read ) {
+							cell.m_transforms[write] = cell.m_transforms[read];
+							if ( cell.usesColors() ) {
+								cell.m_colors[write] = cell.m_colors[read];
+							}
+							cell.m_owners[write] = cell.m_owners[read];
+						}
+						++write;
+					}
+					if ( write == cell.m_transforms.size() ) {
+						continue;
+					}
+					if ( !cell.m_transforms.resize( write ) ||
+						 ( cell.usesColors() && !cell.m_colors.resize( write ) ) || !cell.m_owners.resize( write ) ) {
+						result["error"] = "Owner compaction failed";
+						t3dInstancerClosePreparedPages( pData, stages );
+						return result;
+					}
+					cell.compactOwnerSidecar();
+					cell.touch();
+					if ( write == 0u ) {
+						t3dVectorEraseOrdered( pMesh->m_cells, ( size_t ) ci );
+					}
+				}
+				if ( pMesh->m_cells.empty() ) {
+					store.eraseMesh( mesh_id );
+				}
+			}
+			break;
+		}
+	}
+	int added = 0;
+	for ( int i = 0; i < rBatches.size(); ++i ) {
+		const Dictionary				batch = rBatches[i];
+		const Vector2i					region = batch["region"];
+		const uint32_t					owner = ( uint32_t ) ( ( int64_t ) batch["owner"] );
+		const int						mesh_id = batch["mesh_id"];
+		const TypedArray< Transform3D > transforms = batch.get( "transforms", TypedArray< Transform3D >() );
+		if ( transforms.is_empty() ) {
+			continue;
+		}
+		m_placementPending.clear();
+		if ( !t3dContainerReserveCold( m_placementPending, ( size_t ) transforms.size() ) ) {
+			result["error"] = "Placement staging allocation failed";
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+		for ( int k = 0; k < transforms.size(); ++k ) {
+			Transform3D	   transform = transforms[k];
+			const Vector2i actual_region = pData->getRegionLocation( transform.origin );
+			if ( actual_region != region || !transform.origin.is_finite() ) {
+				result["error"] = "Placement outside owning region";
+				t3dInstancerClosePreparedPages( pData, stages );
+				return result;
+			}
+			transform.origin.x -= ( real_t ) region.x * T3D_REGION_WORLD_SIZE_METERS;
+			transform.origin.z -= ( real_t ) region.y * T3D_REGION_WORLD_SIZE_METERS;
+			if ( !t3dVectorPushBackWithinCapacity( m_placementPending,
+												   t3dPendingPlacement_t{ pData->getRegionPtr( region ),
+																		  getCell( transform.origin ),
+																		  transform,
+																		  s_colorWhite,
+																		  owner,
+																		  ( uint16_t ) ( MANUAL_ORIENTATION ) } ) ) {
+				result["error"] = "Placement queue capacity";
+				t3dInstancerClosePreparedPages( pData, stages );
+				return result;
+			}
+		}
+		eastl::sort( m_placementPending.begin(), m_placementPending.end(), pendingPlacementCellLess );
+		for ( size_t j = 0; j < stages.size(); ++j ) {
+			if ( stages[j].m_location != region ) {
+				continue;
+			}
+			if ( !t3dInstancerAppendPlacementsToPreparedStore( stages[j].m_store,
+															   mesh_id,
+															   m_placementPending.data(),
+															   m_placementPending.size() ) ) {
+				result["error"] = "Insufficient instance storage";
+				t3dInstancerClosePreparedPages( pData, stages );
+				return result;
+			}
+			added += transforms.size();
+			break;
+		}
+	}
+	for ( size_t j = 0; j < stages.size(); ++j ) {
+		if ( !stages[j].m_store.validateDeep() ) {
+			result["error"] = "Staged instance store validation failed";
+			t3dInstancerClosePreparedPages( pData, stages );
+			return result;
+		}
+	}
+	// No fallible allocations after this point; every affected store is ready to publish.
+	for ( size_t j = 0; j < stages.size(); ++j ) {
+		t3dPreparedRegionMutation_t &stage = stages[j];
+		if ( bBackup ) {
+			backupRegion( Ref< Terrain3DRegion >( stage.m_pRegion ) );
+		} else {
+			stage.m_pRegion->setModified( true );
+		}
+		*stage.m_pCommitStore = eastl::move( stage.m_store );
+		stage.m_pRegion->markInstanceStoreModifiedInternal();
+		t3dInstancerRefreshCommittedResidentBytes( pData, stage.m_location );
+	}
+	rebuildLogicalCountsFromStore();
+	for ( size_t j = 0; j < stages.size(); ++j ) {
+		t3dPreparedRegionMutation_t &stage = stages[j];
+		if ( stage.m_bTemporaryPage && stage.m_pRegion->hasInstances() ) {
+			( void ) t3dRetainMutatedInstancePage( pData, stage.m_pRegion, stage.m_bTemporaryPage );
+		}
+		updateMmis( -1, stage.m_location );
+	}
+	t3dInstancerClosePreparedPages( pData, stages );
+	result["ok"] = true;
+	result["error"] = "";
+	result["regions"] = ( int ) stages.size();
+	result["instances"] = added;
+	return result;
+}
+
+void Terrain3DInstancer::appendLocation(
+	const Vector2i					&rRegionLoc,
+	const int						 nMeshId,
+	const TypedArray< Transform3D > &rXforms,
+	const PackedColorArray			&rColors,
+	const bool						 bUpdate ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
+		return;
+	}
 	Terrain3DRegion *const pRegion = m_pTerrain->dataObject()->getRegionPtr( rRegionLoc );
 	if ( !pRegion || pRegion->isDeleted() || rXforms.is_empty() ) {
 		return;
 	}
-	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t )( rXforms.size() ) )
-	        || !t3dVectorResizeCold( m_placementColors, ( size_t )( rXforms.size() ) ) ) {
+	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t ) ( rXforms.size() ) ) ||
+		 !t3dVectorResizeCold( m_placementColors, ( size_t ) ( rXforms.size() ) ) ) {
 		m_placementTransforms.clear();
 		m_placementColors.clear();
 		return;
 	}
 	for ( int i = 0; i < rXforms.size(); ++i ) {
-		m_placementTransforms[( size_t )( i )] = rXforms[i];
-		m_placementColors[( size_t )( i )] = i < rColors.size() ? rColors[i] : s_colorWhite;
+		m_placementTransforms[( size_t ) ( i )] = rXforms[i];
+		m_placementColors[( size_t ) ( i )] = i < rColors.size() ? rColors[i] : s_colorWhite;
 	}
 	t3dInstanceRegionAppend_t request;
 	request.m_pRegion = pRegion;
@@ -3847,23 +4466,24 @@ void Terrain3DInstancer::appendLocation( const Vector2i &rRegionLoc,
 	appendRegionNative( request );
 }
 
-void Terrain3DInstancer::appendRegion( const Ref<Terrain3DRegion> &rRegion,
-        const int nMeshId,
-        const TypedArray<Transform3D> &rXforms,
-        const PackedColorArray &rColors,
-        const bool bUpdate ) {
+void Terrain3DInstancer::appendRegion(
+	const Ref< Terrain3DRegion >	&rRegion,
+	const int						 nMeshId,
+	const TypedArray< Transform3D > &rXforms,
+	const PackedColorArray			&rColors,
+	const bool						 bUpdate ) {
 	if ( rRegion.is_null() || rXforms.is_empty() ) {
 		return;
 	}
-	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t )( rXforms.size() ) )
-	        || !t3dVectorResizeCold( m_placementColors, ( size_t )( rXforms.size() ) ) ) {
+	if ( !t3dVectorResizeCold( m_placementTransforms, ( size_t ) ( rXforms.size() ) ) ||
+		 !t3dVectorResizeCold( m_placementColors, ( size_t ) ( rXforms.size() ) ) ) {
 		m_placementTransforms.clear();
 		m_placementColors.clear();
 		return;
 	}
 	for ( int i = 0; i < rXforms.size(); ++i ) {
-		m_placementTransforms[( size_t )( i )] = rXforms[i];
-		m_placementColors[( size_t )( i )] = i < rColors.size() ? rColors[i] : s_colorWhite;
+		m_placementTransforms[( size_t ) ( i )] = rXforms[i];
+		m_placementColors[( size_t ) ( i )] = i < rColors.size() ? rColors[i] : s_colorWhite;
 	}
 	t3dInstanceRegionAppend_t request;
 	request.m_pRegion = rRegion.ptr();
@@ -3877,15 +4497,20 @@ void Terrain3DInstancer::appendRegion( const Ref<Terrain3DRegion> &rRegion,
 }
 
 // Review all transforms in one area and adjust their transforms with persistent terrain-follow policy.
-int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool bUseEditorCollision ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return 0; }
-	Terrain3DData *const pData = m_pTerrain->dataObject();
-	Terrain3DSampler sampler( pData->getSamplingSourceInternal() );
-	const Dictionary params = bUseEditorCollision && m_pTerrain->editorObject() ? m_pTerrain->editorObject()->getBrushData() : Dictionary();
-	const bool bOnCollision = bUseEditorCollision && ( bool )( params.get( "on_collision", false ) );
-	const real_t fRaycastHeight = bUseEditorCollision ? ( real_t )( params.get( "raycast_height", 10.f ) ) : 10.f;
-	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
-	int nChanged = 0;
+int Terrain3DInstancer::resnapInstancesToTerrain(
+	const AABB &rAabb,
+	const bool	bUseEditorCollision ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return 0;
+	}
+	Terrain3DData *const		   pData = m_pTerrain->dataObject();
+	Terrain3DSampler			   sampler( pData->getSamplingSourceInternal() );
+	Terrain3DAuthoringHooks *const pHooks = bUseEditorCollision ? m_pTerrain->authoringHooks() : NULL;
+	const Dictionary			   params = pHooks ? pHooks->getBrushData() : Dictionary();
+	const bool	 bOnCollision = bUseEditorCollision && ( bool ) ( params.get( "on_collision", false ) );
+	const real_t fRaycastHeight = bUseEditorCollision ? ( real_t ) ( params.get( "raycast_height", 10.f ) ) : 10.f;
+	const int	 region_size = T3D_REGION_WORLD_SIZE_METERS;
+	int			 nChanged = 0;
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
 		Terrain3DRegion *const pRegionPtr = ppRegionPtrs[region_index];
@@ -3893,10 +4518,10 @@ int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool 
 			continue;
 		}
 		const Vector2i regionLocation = pRegionPtr->getLocation();
-		const Vector3 regionOrigin( regionLocation.x * region_size, 0.f, regionLocation.y * region_size );
-		const real_t fExtent = ( real_t )( region_size );
-		if ( rAabb.position.x + rAabb.size.x < regionOrigin.x || rAabb.position.x > regionOrigin.x + fExtent
-		        || rAabb.position.z + rAabb.size.z < regionOrigin.z || rAabb.position.z > regionOrigin.z + fExtent ) {
+		const Vector3  regionOrigin( regionLocation.x * region_size, 0.f, regionLocation.y * region_size );
+		const real_t   fExtent = ( real_t ) ( region_size );
+		if ( rAabb.position.x + rAabb.size.x < regionOrigin.x || rAabb.position.x > regionOrigin.x + fExtent ||
+			 rAabb.position.z + rAabb.size.z < regionOrigin.z || rAabb.position.z > regionOrigin.z + fExtent ) {
 			continue;
 		}
 		bool bTemporaryPage = false;
@@ -3908,36 +4533,40 @@ int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool 
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			continue;
 		}
-		Ref<Terrain3DRegion> region( pRegionPtr );
-		bool bBackedUp = false;
+		Ref< Terrain3DRegion > region( pRegionPtr );
+		bool				   bBackedUp = false;
 		for ( size_t iMesh = 0u; iMesh < pStore->meshesMut().size(); ++iMesh ) {
-			t3dInstanceMesh_t &mesh = pStore->meshesMut()[iMesh];
-			const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh.m_nId );
-			const real_t fOffset = pAsset.is_valid() ? pAsset->getHeightOffset() : 0.f;
-			bool bMeshChanged = false;
-			for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); ++iCell ) {
+			t3dInstanceMesh_t			   &mesh = pStore->meshesMut()[iMesh];
+			const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh.m_nId );
+			const real_t					fOffset = pAsset.is_valid() ? pAsset->getHeightOffset() : 0.f;
+			bool							bMeshChanged = false;
+			for ( size_t iCell = 0u; iCell < ( size_t ) ( ( mesh.m_cells ).size() ); ++iCell ) {
 				t3dInstanceCell_s &cell = ( mesh.m_cells )[iCell];
-				bool bCellChanged = false;
+				bool			   bCellChanged = false;
 				for ( size_t i = 0u; i < cell.m_transforms.size(); ++i ) {
 					uint16_t nBehaviorFlags = cell.getTransformBehaviorFlags( i );
 					if ( nBehaviorFlags == 0u ) {
 						nBehaviorFlags = T3D_INSTANCE_LEGACY_BEHAVIOR;
 					}
-					const bool bFollowNormal =
-					        ( nBehaviorFlags & FOLLOW_TERRAIN_NORMAL ) != 0u && ( nBehaviorFlags & MANUAL_ORIENTATION ) == 0u;
+					const bool bFollowNormal = ( nBehaviorFlags & FOLLOW_TERRAIN_NORMAL ) != 0u &&
+											   ( nBehaviorFlags & MANUAL_ORIENTATION ) == 0u;
 					const bool bFollowHeight = ( nBehaviorFlags & FOLLOW_TERRAIN_HEIGHT ) != 0u;
 					if ( !bFollowHeight && !bFollowNormal ) {
 						continue;
 					}
 
-					Transform3D transform = cell.getTransform( i );
+					Transform3D	  transform = cell.getTransform( i );
 					const Vector3 global = transform.origin + regionOrigin;
 					if ( !rAabb.has_point( global ) ) {
 						continue;
 					}
-					const Vector3 height_offset = transform.basis.get_column( 1 ) * fOffset;
-					const t3dUsableHeight_t sample = getUsableHeight(
-					        sampler, global - height_offset, Vector2( 0.f, 90.f ), bOnCollision, fRaycastHeight, bFollowNormal );
+					const Vector3			height_offset = transform.basis.get_column( 1 ) * fOffset;
+					const t3dUsableHeight_t sample = getUsableHeight( sampler,
+																	  global - height_offset,
+																	  Vector2( 0.f, 90.f ),
+																	  bOnCollision,
+																	  fRaycastHeight,
+																	  bFollowNormal );
 					if ( !sample.m_bValid ) {
 						continue;
 					}
@@ -3959,7 +4588,11 @@ int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool 
 				if ( bCellChanged ) {
 					cell.touch();
 					setLogicalCellCount( regionLocation, mesh.m_nId, cell.m_location, cell.m_transforms.size() );
-					emitDerivedMutation( regionLocation, cell.m_location, mesh.m_nId, T3D_INSTANCE_MUTATION_TRANSFORM, cell.m_nRevision );
+					emitDerivedMutation( regionLocation,
+										 cell.m_location,
+										 mesh.m_nId,
+										 T3D_INSTANCE_MUTATION_TRANSFORM,
+										 cell.m_nRevision );
 				}
 			}
 			if ( bMeshChanged && !bTemporaryPage ) {
@@ -3969,8 +4602,8 @@ int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool 
 		if ( bBackedUp ) {
 			region->markInstanceStoreModifiedInternal();
 		}
-		if ( bTemporaryPage && bBackedUp && region->hasInstances()
-		        && !t3dRetainMutatedInstancePage( pData, region.ptr(), bTemporaryPage ) ) {
+		if ( bTemporaryPage && bBackedUp && region->hasInstances() &&
+			 !t3dRetainMutatedInstancePage( pData, region.ptr(), bTemporaryPage ) ) {
 			LOG( ERROR, "Could not retain terrain-resnapped instance region for rendering: ", regionLocation );
 		}
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
@@ -3978,17 +4611,25 @@ int Terrain3DInstancer::resnapInstancesToTerrain( const AABB &rAabb, const bool 
 	return nChanged;
 }
 
-void Terrain3DInstancer::updateTransforms( const AABB &rAabb ) {
+void Terrain3DInstancer::updateTransforms(
+	const AABB &rAabb ) {
 	resnapInstancesToTerrain( rAabb, true );
 }
 
-int Terrain3DInstancer::snapInstancesToTerrain( const AABB &rAabb ) {
+int Terrain3DInstancer::snapInstancesToTerrain(
+	const AABB &rAabb ) {
 	return resnapInstancesToTerrain( rAabb, false );
 }
 
 int Terrain3DInstancer::setInstanceFollowPolicy(
-        const AABB &rAabb, const bool bFollowHeight, const bool bFollowNormal, const bool bManualOrientation, const int nMeshId ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return 0; }
+	const AABB &rAabb,
+	const bool	bFollowHeight,
+	const bool	bFollowNormal,
+	const bool	bManualOrientation,
+	const int	nMeshId ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return 0;
+	}
 	if ( nMeshId >= T3D_MAX_MESH_ASSETS ) {
 		return 0;
 	}
@@ -4003,9 +4644,9 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 		nBehaviorFlags |= MANUAL_ORIENTATION;
 	}
 
-	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
-	int nChanged = 0;
+	Terrain3DData *const	pData = m_pTerrain->dataObject();
+	const int				region_size = T3D_REGION_WORLD_SIZE_METERS;
+	int						nChanged = 0;
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
 		Terrain3DRegion *const pRegionPtr = ppRegionPtrs[region_index];
@@ -4013,10 +4654,10 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 			continue;
 		}
 		const Vector2i regionLocation = pRegionPtr->getLocation();
-		const Vector3 regionOrigin( regionLocation.x * region_size, 0.f, regionLocation.y * region_size );
-		const real_t fExtent = ( real_t )( region_size );
-		if ( rAabb.position.x + rAabb.size.x < regionOrigin.x || rAabb.position.x > regionOrigin.x + fExtent
-		        || rAabb.position.z + rAabb.size.z < regionOrigin.z || rAabb.position.z > regionOrigin.z + fExtent ) {
+		const Vector3  regionOrigin( regionLocation.x * region_size, 0.f, regionLocation.y * region_size );
+		const real_t   fExtent = ( real_t ) ( region_size );
+		if ( rAabb.position.x + rAabb.size.x < regionOrigin.x || rAabb.position.x > regionOrigin.x + fExtent ||
+			 rAabb.position.z + rAabb.size.z < regionOrigin.z || rAabb.position.z > regionOrigin.z + fExtent ) {
 			continue;
 		}
 		bool bTemporaryPage = false;
@@ -4028,8 +4669,8 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 			t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 			continue;
 		}
-		Ref<Terrain3DRegion> region( pRegionPtr );
-		bool bBackedUp = false;
+		Ref< Terrain3DRegion > region( pRegionPtr );
+		bool				   bBackedUp = false;
 		for ( size_t iMesh = 0u; iMesh < pStore->meshesMut().size(); ++iMesh ) {
 			t3dInstanceMesh_t &mesh = pStore->meshesMut()[iMesh];
 			if ( nMeshId >= 0 && mesh.m_nId != nMeshId ) {
@@ -4037,10 +4678,11 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 			}
 			for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
 				t3dInstanceCell_s &cell = mesh.m_cells[iCell];
-				bool bCellChanged = false;
+				bool			   bCellChanged = false;
 				for ( size_t iTransform = 0u; iTransform < cell.m_transforms.size(); ++iTransform ) {
 					const Vector3 global = cell.getTransformOrigin( iTransform ) + regionOrigin;
-					if ( !rAabb.has_point( global ) || cell.getTransformBehaviorFlags( iTransform ) == nBehaviorFlags ) {
+					if ( !rAabb.has_point( global ) ||
+						 cell.getTransformBehaviorFlags( iTransform ) == nBehaviorFlags ) {
 						continue;
 					}
 					if ( !bBackedUp ) {
@@ -4053,15 +4695,19 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 				}
 				if ( bCellChanged ) {
 					cell.touch();
-					emitDerivedMutation( regionLocation, cell.m_location, mesh.m_nId, T3D_INSTANCE_MUTATION_TRANSFORM, cell.m_nRevision );
+					emitDerivedMutation( regionLocation,
+										 cell.m_location,
+										 mesh.m_nId,
+										 T3D_INSTANCE_MUTATION_TRANSFORM,
+										 cell.m_nRevision );
 				}
 			}
 		}
 		if ( bBackedUp ) {
 			region->markInstanceStoreModifiedInternal();
 		}
-		if ( bTemporaryPage && bBackedUp && region->hasInstances()
-		        && !t3dRetainMutatedInstancePage( pData, region.ptr(), bTemporaryPage ) ) {
+		if ( bTemporaryPage && bBackedUp && region->hasInstances() &&
+			 !t3dRetainMutatedInstancePage( pData, region.ptr(), bTemporaryPage ) ) {
 			LOG( ERROR, "Could not retain instance follow-policy mutation region: ", regionLocation );
 		}
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
@@ -4070,7 +4716,9 @@ int Terrain3DInstancer::setInstanceFollowPolicy(
 }
 
 bool Terrain3DInstancer::buildRepartitionedStore(
-        const Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout, Terrain3DInstanceStore &rStore ) const {
+	const Terrain3DRegion	  *pRegion,
+	const t3dInstanceLayout_t &rLayout,
+	Terrain3DInstanceStore	  &rStore ) const {
 	if ( !pRegion || pRegion->isDeleted() || !rLayout.isValid() || !pRegion->isInstanceStoreResident() ) {
 		return false;
 	}
@@ -4079,11 +4727,11 @@ bool Terrain3DInstancer::buildRepartitionedStore(
 		return false;
 	}
 	const Terrain3DInstanceStore &source = *pSource;
-	Terrain3DInstanceStore rebuilt;
+	Terrain3DInstanceStore		  rebuilt;
 	rebuilt.setLayout( rLayout );
-	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( source.meshes() ).size() ); iMesh++ ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( source.meshes() ).size() ); iMesh++ ) {
 		const t3dInstanceMesh_t &mesh = ( source.meshes() )[iMesh];
-		for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+		for ( size_t iCell = 0u; iCell < ( size_t ) ( ( mesh.m_cells ).size() ); iCell++ ) {
 			const t3dInstanceCell_s &cell = ( mesh.m_cells )[iCell];
 			if ( cell.usesColors() && cell.m_colors.size() != cell.m_transforms.size() ) {
 				return false;
@@ -4093,30 +4741,34 @@ bool Terrain3DInstancer::buildRepartitionedStore(
 			}
 			for ( size_t index = 0; index < cell.m_transforms.size(); ++index ) {
 				const Transform3D transform = cell.getTransform( index );
-				const Vector2i destination_cell = getCellForLocalPosition( transform.origin, rLayout.m_nCellShift );
+				const Vector2i	  destination_cell = getCellForLocalPosition( transform.origin, rLayout.m_nCellShift );
 				if ( !rLayout.contains( destination_cell.x, destination_cell.y ) ) {
 					return false;
 				}
 				t3dInstanceCell_s *const pExisting = rebuilt.findCell( mesh.m_nId, destination_cell );
-				const size_t existing_count = pExisting ? pExisting->m_transforms.size() : 0u;
-				if ( existing_count == eastl::numeric_limits<size_t>::max() ) {
+				const size_t			 existing_count = pExisting ? pExisting->m_transforms.size() : 0u;
+				if ( existing_count == eastl::numeric_limits< size_t >::max() ) {
 					return false;
 				}
-				t3dInstanceCell_s *const pDestination = rebuilt.tryGetOrCreateCell(
-				        mesh.m_nId, destination_cell, existing_count + 1u, cell.usesColors(), cell.usesOwners() );
+				t3dInstanceCell_s *const pDestination = rebuilt.tryGetOrCreateCell( mesh.m_nId,
+																					destination_cell,
+																					existing_count + 1u,
+																					cell.usesColors(),
+																					cell.usesOwners() );
 				if ( !pDestination ) {
 					return false;
 				}
 				t3dInstanceCell_s &destination = *pDestination;
-				const size_t old_transforms = destination.m_transforms.size();
-				const size_t old_colors = destination.m_colors.size();
-				const size_t old_owners = destination.m_owners.size();
-				if ( !destination.prepareAppend( 1, cell.usesColors(), cell.usesOwners() )
-				        || !destination.m_transforms.pushBack( transform, cell.getTransformBehaviorFlags( index ) )
-				        || ( !destination.m_colors.empty()
-				                && !destination.m_colors.pushBack( cell.usesColors() ? cell.m_colors[index] : T3D_INSTANCE_WHITE_RGBA8 ) )
-				        || ( !destination.m_owners.empty()
-				                && !destination.m_owners.pushBack( cell.usesOwners() ? cell.m_owners[index] : 0u ) ) ) {
+				const size_t	   old_transforms = destination.m_transforms.size();
+				const size_t	   old_colors = destination.m_colors.size();
+				const size_t	   old_owners = destination.m_owners.size();
+				if ( !destination.prepareAppend( 1, cell.usesColors(), cell.usesOwners() ) ||
+					 !destination.m_transforms.pushBack( transform, cell.getTransformBehaviorFlags( index ) ) ||
+					 ( !destination.m_colors.empty() &&
+					   !destination.m_colors.pushBack( cell.usesColors() ? cell.m_colors[index]
+																		 : T3D_INSTANCE_WHITE_RGBA8 ) ) ||
+					 ( !destination.m_owners.empty() &&
+					   !destination.m_owners.pushBack( cell.usesOwners() ? cell.m_owners[index] : 0u ) ) ) {
 					destination.m_transforms.resize( old_transforms );
 					destination.m_colors.resize( old_colors );
 					destination.m_owners.resize( old_owners );
@@ -4125,9 +4777,9 @@ bool Terrain3DInstancer::buildRepartitionedStore(
 			}
 		}
 	}
-	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( rebuilt.meshesMut() ).size() ); iMesh++ ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( rebuilt.meshesMut() ).size() ); iMesh++ ) {
 		t3dInstanceMesh_t &mesh = ( rebuilt.meshesMut() )[iMesh];
-		for ( size_t iCell = 0u; iCell < ( size_t )( ( mesh.m_cells ).size() ); iCell++ ) {
+		for ( size_t iCell = 0u; iCell < ( size_t ) ( ( mesh.m_cells ).size() ); iCell++ ) {
 			t3dInstanceCell_s &cell = ( mesh.m_cells )[iCell];
 			cell.touch();
 		}
@@ -4136,7 +4788,9 @@ bool Terrain3DInstancer::buildRepartitionedStore(
 	return true;
 }
 
-bool Terrain3DInstancer::repartitionRegionStore( Terrain3DRegion *pRegion, const t3dInstanceLayout_t &rLayout ) {
+bool Terrain3DInstancer::repartitionRegionStore(
+	Terrain3DRegion			  *pRegion,
+	const t3dInstanceLayout_t &rLayout ) {
 	if ( !pRegion || pRegion->isDeleted() || !rLayout.isValid() ) {
 		return false;
 	}
@@ -4145,7 +4799,8 @@ bool Terrain3DInstancer::repartitionRegionStore( Terrain3DRegion *pRegion, const
 		return false;
 	}
 	const Terrain3DInstanceStore &source = *pCommitStore;
-	if ( source.getLayout().m_nCellSize == rLayout.m_nCellSize && source.getLayout().m_nCellsPerAxis == rLayout.m_nCellsPerAxis ) {
+	if ( source.getLayout().m_nCellSize == rLayout.m_nCellSize &&
+		 source.getLayout().m_nCellsPerAxis == rLayout.m_nCellsPerAxis ) {
 		return true;
 	}
 	Terrain3DInstanceStore rebuilt;
@@ -4155,24 +4810,26 @@ bool Terrain3DInstancer::repartitionRegionStore( Terrain3DRegion *pRegion, const
 	*pCommitStore = eastl::move( rebuilt );
 	pRegion->markInstanceStoreModifiedInternal();
 	emitDerivedMutation( pRegion->getLocation(),
-	        s_v2iMax,
-	        -1,
-	        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM | T3D_INSTANCE_MUTATION_BULK );
+						 s_v2iMax,
+						 -1,
+						 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM |
+							 T3D_INSTANCE_MUTATION_BULK );
 	return true;
 }
 
-bool Terrain3DInstancer::repartitionResidentRegions( const t3dInstanceLayout_t &rLayout ) {
+bool Terrain3DInstancer::repartitionResidentRegions(
+	const t3dInstanceLayout_t &rLayout ) {
 	if ( !m_pTerrain || !m_pTerrain->dataObject() || !rLayout.isValid() ) {
 		return false;
 	}
-	typedef struct t3dResidentMigration_s {
-
-		Terrain3DRegion *m_pRegion = NULL;
+	typedef struct t3dResidentMigration_s
+	{
+		Terrain3DRegion		   *m_pRegion = NULL;
 		Terrain3DInstanceStore *m_pCommitStore = NULL;
-		Terrain3DInstanceStore m_store;
+		Terrain3DInstanceStore	m_store;
 	} t3dResidentMigration_t;
 
-	eastl::vector<t3dResidentMigration_t, Terrain3DEastlAllocator> migrations;
+	eastl::vector< t3dResidentMigration_t, Terrain3DEastlAllocator > migrations;
 	if ( !t3dContainerReserveCold( migrations, T3D_REGION_SLOTS ) ) {
 		return false;
 	}
@@ -4187,7 +4844,8 @@ bool Terrain3DInstancer::repartitionResidentRegions( const t3dInstanceLayout_t &
 			return false;
 		}
 		const Terrain3DInstanceStore &source = *pResidentStore;
-		if ( source.getLayout().m_nCellSize == rLayout.m_nCellSize && source.getLayout().m_nCellsPerAxis == rLayout.m_nCellsPerAxis ) {
+		if ( source.getLayout().m_nCellSize == rLayout.m_nCellSize &&
+			 source.getLayout().m_nCellsPerAxis == rLayout.m_nCellsPerAxis ) {
 			continue;
 		}
 		t3dResidentMigration_t migration;
@@ -4200,7 +4858,7 @@ bool Terrain3DInstancer::repartitionResidentRegions( const t3dInstanceLayout_t &
 			return false;
 		}
 	}
-	for ( size_t iMigration = 0u; iMigration < ( size_t )( ( migrations ).size() ); iMigration++ ) {
+	for ( size_t iMigration = 0u; iMigration < ( size_t ) ( ( migrations ).size() ); iMigration++ ) {
 		t3dResidentMigration_t &migration = ( migrations )[iMigration];
 		if ( !migration.m_pCommitStore ) {
 			return false;
@@ -4208,14 +4866,16 @@ bool Terrain3DInstancer::repartitionResidentRegions( const t3dInstanceLayout_t &
 		*migration.m_pCommitStore = eastl::move( migration.m_store );
 		migration.m_pRegion->markInstanceStoreModifiedInternal();
 		emitDerivedMutation( migration.m_pRegion->getLocation(),
-		        s_v2iMax,
-		        -1,
-		        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM | T3D_INSTANCE_MUTATION_BULK );
+							 s_v2iMax,
+							 -1,
+							 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM |
+								 T3D_INSTANCE_MUTATION_BULK );
 	}
 	return true;
 }
 
-bool Terrain3DInstancer::ensureRegionLayout( Terrain3DRegion *pRegion ) {
+bool Terrain3DInstancer::ensureRegionLayout(
+	Terrain3DRegion *pRegion ) {
 	if ( !pRegion || pRegion->isDeleted() ) {
 		return false;
 	}
@@ -4226,10 +4886,15 @@ bool Terrain3DInstancer::ensureRegionLayout( Terrain3DRegion *pRegion ) {
 	return repartitionRegionStore( pRegion, layout );
 }
 
-void Terrain3DInstancer::setCellSize( const int nCellSize ) {
+void Terrain3DInstancer::setCellSize(
+	const int nCellSize ) {
 	const int cell_size = CLAMP( nCellSize, T3D_INSTANCE_MIN_CELL_SIZE, T3D_INSTANCE_MAX_CELL_SIZE );
 	if ( cell_size != nCellSize || ( cell_size & ( cell_size - 1 ) ) != 0 ) {
-		LOG( ERROR, "Instance cell size must be a power of two from ", T3D_INSTANCE_MIN_CELL_SIZE, " through ", T3D_INSTANCE_MAX_CELL_SIZE );
+		LOG( ERROR,
+			 "Instance cell size must be a power of two from ",
+			 T3D_INSTANCE_MIN_CELL_SIZE,
+			 " through ",
+			 T3D_INSTANCE_MAX_CELL_SIZE );
 		return;
 	}
 	t3dInstanceLayout_t layout;
@@ -4253,11 +4918,13 @@ void Terrain3DInstancer::setCellSize( const int nCellSize ) {
 	updateMmis( -1, s_v2iMax, true );
 }
 
-int Terrain3DInstancer::getCellsPerRegionAxis( void ) const {
+int Terrain3DInstancer::getCellsPerRegionAxis(
+	void ) const {
 	return T3D_REGION_SIZE >> m_nCellShift;
 }
 
-void Terrain3DInstancer::setCellStreamingEnabled( const bool bEnabled ) {
+void Terrain3DInstancer::setCellStreamingEnabled(
+	const bool bEnabled ) {
 	if ( m_bCellStreamingEnabled == bEnabled ) {
 		return;
 	}
@@ -4268,7 +4935,8 @@ void Terrain3DInstancer::setCellStreamingEnabled( const bool bEnabled ) {
 	updateMmis( -1, s_v2iMax, false );
 }
 
-void Terrain3DInstancer::setSingleLodInstanceBuffers( const bool bEnabled ) {
+void Terrain3DInstancer::setSingleLodInstanceBuffers(
+	const bool bEnabled ) {
 	if ( m_bSingleLodInstanceBuffers == bEnabled ) {
 		return;
 	}
@@ -4280,8 +4948,9 @@ void Terrain3DInstancer::setSingleLodInstanceBuffers( const bool bEnabled ) {
 	m_bStreamPositionValid = m_pTerrain != NULL;
 }
 
-void Terrain3DInstancer::setUpdateCellBudget( const int nBudget ) {
-	const uint32_t budget = ( uint32_t )( CLAMP( nBudget, 0, 65536 ) );
+void Terrain3DInstancer::setUpdateCellBudget(
+	const int nBudget ) {
+	const uint32_t budget = ( uint32_t ) ( CLAMP( nBudget, 0, 65536 ) );
 	if ( m_nUpdateCellBudget == budget ) {
 		return;
 	}
@@ -4289,7 +4958,8 @@ void Terrain3DInstancer::setUpdateCellBudget( const int nBudget ) {
 	m_bRuntimeStorageRebuildPending = m_pTerrain && m_pTerrain->dataObject();
 }
 
-void Terrain3DInstancer::setCellStreamingMargin( const real_t fMargin ) {
+void Terrain3DInstancer::setCellStreamingMargin(
+	const real_t fMargin ) {
 	const real_t margin = CLAMP( fMargin, 0.0f, 1024.0f );
 	if ( Math::is_equal_approx( m_fCellStreamingMargin, margin ) ) {
 		return;
@@ -4301,18 +4971,21 @@ void Terrain3DInstancer::setCellStreamingMargin( const real_t fMargin ) {
 	updateMmis( -1, s_v2iMax, false );
 }
 
-int Terrain3DInstancer::floorDivCell( const int nValue, const int nDivisor ) {
+int Terrain3DInstancer::floorDivCell(
+	const int nValue,
+	const int nDivisor ) {
 	const int quotient = nValue / nDivisor;
 	return quotient - ( nValue % nDivisor < 0 ? 1 : 0 );
 }
 
-t3dCellInterval_t Terrain3DInstancer::streamingRowInterval( const Vector3 &rPosition,
-        const real_t fRadius,
-        const int iGlobalZ,
-        const real_t fCellWorldSize,
-        const int nMinGlobalCell,
-        const int nMaxGlobalCell ) const {
-	const real_t fCenterZ = ( ( real_t )( iGlobalZ ) + 0.5f ) * fCellWorldSize;
+t3dCellInterval_t Terrain3DInstancer::streamingRowInterval(
+	const Vector3 &rPosition,
+	const real_t   fRadius,
+	const int	   iGlobalZ,
+	const real_t   fCellWorldSize,
+	const int	   nMinGlobalCell,
+	const int	   nMaxGlobalCell ) const {
+	const real_t fCenterZ = ( ( real_t ) ( iGlobalZ ) + 0.5f ) * fCellWorldSize;
 	const real_t fDz = fCenterZ - rPosition.z;
 	const real_t fRemaining = fRadius * fRadius - fDz * fDz;
 	if ( fRemaining < 0.0f ) {
@@ -4321,9 +4994,9 @@ t3dCellInterval_t Terrain3DInstancer::streamingRowInterval( const Vector3 &rPosi
 		result.m_nLast = 0;
 		return result;
 	}
-	const real_t fHalfWidth = Math::sqrt( fRemaining );
-	const int first = ( int )( Math::ceil( ( rPosition.x - fHalfWidth ) / fCellWorldSize - 0.5f ) );
-	const int last = ( int )( Math::floor( ( rPosition.x + fHalfWidth ) / fCellWorldSize - 0.5f ) );
+	const real_t	  fHalfWidth = Math::sqrt( fRemaining );
+	const int		  first = ( int ) ( Math::ceil( ( rPosition.x - fHalfWidth ) / fCellWorldSize - 0.5f ) );
+	const int		  last = ( int ) ( Math::floor( ( rPosition.x + fHalfWidth ) / fCellWorldSize - 0.5f ) );
 	t3dCellInterval_t result;
 	result.m_nFirst = MAX( first, nMinGlobalCell );
 	result.m_nLast = MIN( last, nMaxGlobalCell );
@@ -4331,13 +5004,17 @@ t3dCellInterval_t Terrain3DInstancer::streamingRowInterval( const Vector3 &rPosi
 }
 
 void Terrain3DInstancer::queueStreamingCell(
-        Terrain3DData *const pData, const int nMeshId, const int iGlobalX, const int iGlobalZ, const int nCellsPerRegion ) {
-	const int region_x = floorDivCell( iGlobalX, nCellsPerRegion );
-	const int region_z = floorDivCell( iGlobalZ, nCellsPerRegion );
-	const Vector2i regionLocation( region_x, region_z );
+	Terrain3DData *const pData,
+	const int			 nMeshId,
+	const int			 iGlobalX,
+	const int			 iGlobalZ,
+	const int			 nCellsPerRegion ) {
+	const int			   region_x = floorDivCell( iGlobalX, nCellsPerRegion );
+	const int			   region_z = floorDivCell( iGlobalZ, nCellsPerRegion );
+	const Vector2i		   regionLocation( region_x, region_z );
 	Terrain3DRegion *const pRegion = pData->getRegionPtr( regionLocation );
-	if ( !pRegion || pRegion->isDeleted()
-	        || ( pData->isInstanceRegionCacheEnabled() && !pData->isInstanceRegionResident( regionLocation ) ) ) {
+	if ( !pRegion || pRegion->isDeleted() ||
+		 ( pData->isInstanceRegionCacheEnabled() && !pData->isInstanceRegionResident( regionLocation ) ) ) {
 		return;
 	}
 	const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
@@ -4353,18 +5030,24 @@ void Terrain3DInstancer::queueStreamingCell(
 }
 
 void Terrain3DInstancer::queueStreamingInterval(
-        Terrain3DData *const pData, const int nMeshId, const int iGlobalZ, const int nFirst, const int nLast, const int nCellsPerRegion ) {
+	Terrain3DData *const pData,
+	const int			 nMeshId,
+	const int			 iGlobalZ,
+	const int			 nFirst,
+	const int			 nLast,
+	const int			 nCellsPerRegion ) {
 	for ( int global_x = nFirst; global_x <= nLast; ++global_x ) {
 		queueStreamingCell( pData, nMeshId, global_x, iGlobalZ, nCellsPerRegion );
 	}
 }
 
-void Terrain3DInstancer::queueStreamingDifference( Terrain3DData *const pData,
-        const int nMeshId,
-        const int iGlobalZ,
-        const t3dCellInterval_t &rSource,
-        const t3dCellInterval_t &rOther,
-        const int nCellsPerRegion ) {
+void Terrain3DInstancer::queueStreamingDifference(
+	Terrain3DData *const	 pData,
+	const int				 nMeshId,
+	const int				 iGlobalZ,
+	const t3dCellInterval_t &rSource,
+	const t3dCellInterval_t &rOther,
+	const int				 nCellsPerRegion ) {
 	if ( !rSource.valid() ) {
 		return;
 	}
@@ -4373,22 +5056,32 @@ void Terrain3DInstancer::queueStreamingDifference( Terrain3DData *const pData,
 		return;
 	}
 	if ( rSource.m_nFirst < rOther.m_nFirst ) {
-		queueStreamingInterval( pData, nMeshId, iGlobalZ, rSource.m_nFirst, MIN( rSource.m_nLast, rOther.m_nFirst - 1 ), nCellsPerRegion );
+		queueStreamingInterval( pData,
+								nMeshId,
+								iGlobalZ,
+								rSource.m_nFirst,
+								MIN( rSource.m_nLast, rOther.m_nFirst - 1 ),
+								nCellsPerRegion );
 	}
 	if ( rSource.m_nLast > rOther.m_nLast ) {
-		queueStreamingInterval( pData, nMeshId, iGlobalZ, MAX( rSource.m_nFirst, rOther.m_nLast + 1 ), rSource.m_nLast, nCellsPerRegion );
+		queueStreamingInterval( pData,
+								nMeshId,
+								iGlobalZ,
+								MAX( rSource.m_nFirst, rOther.m_nLast + 1 ),
+								rSource.m_nLast,
+								nCellsPerRegion );
 	}
 }
 
-void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition ) {
+void Terrain3DInstancer::updateStreaming(
+	const Vector3 &rTargetPosition ) {
 	m_bStreamingSelectionDeferredLastFrame = false;
-	if ( !m_pTerrain || !m_pTerrain->assetsResource().is_valid()
-	        || ( !m_bCellStreamingEnabled && !m_bSingleLodInstanceBuffers ) ) {
+	if ( !m_pTerrain || !m_pTerrain->assetsResource().is_valid() ||
+		 ( !m_bCellStreamingEnabled && !m_bSingleLodInstanceBuffers ) ) {
 		return;
 	}
-	if ( m_bStreamPositionValid
-	        && m_lastStreamPosition.distance_squared_to( rTargetPosition )
-	                < m_fCellStreamingStep * m_fCellStreamingStep ) {
+	if ( m_bStreamPositionValid &&
+		 m_lastStreamPosition.distance_squared_to( rTargetPosition ) < m_fCellStreamingStep * m_fCellStreamingStep ) {
 		return;
 	}
 
@@ -4418,28 +5111,43 @@ void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition ) {
 	}
 
 	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const int cells_per_region = T3D_REGION_SIZE >> m_nCellShift;
-	const real_t fCellWorldSize = ( real_t )( m_nCellSize );
-	const int region_map_size = pData->getRegionMapSizeInternal();
-	const int min_global_cell = -( region_map_size / 2 ) * cells_per_region;
-	const int max_global_cell = ( region_map_size / 2 ) * cells_per_region - 1;
+	const int			 cells_per_region = T3D_REGION_SIZE >> m_nCellShift;
+	const real_t		 fCellWorldSize = ( real_t ) ( m_nCellSize );
+	const int			 region_map_size = pData->getRegionMapSizeInternal();
+	const int			 min_global_cell = -( region_map_size / 2 ) * cells_per_region;
+	const int			 max_global_cell = ( region_map_size / 2 ) * cells_per_region - 1;
 
-	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( m_finiteStreamingMeshIds ).size() ); iMesh++ ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( m_finiteStreamingMeshIds ).size() ); iMesh++ ) {
 		const uint16_t mesh_id = ( m_finiteStreamingMeshIds )[iMesh];
-		const real_t fRadius = m_szMeshStreamingRadius[mesh_id];
-		const int old_first_z = MAX( ( int )( Math::ceil( ( previous_position.z - fRadius ) / fCellWorldSize - 0.5f ) ), min_global_cell );
-		const int old_last_z = MIN( ( int )( Math::floor( ( previous_position.z + fRadius ) / fCellWorldSize - 0.5f ) ), max_global_cell );
-		const int new_first_z = MAX( ( int )( Math::ceil( ( rTargetPosition.z - fRadius ) / fCellWorldSize - 0.5f ) ), min_global_cell );
-		const int new_last_z = MIN( ( int )( Math::floor( ( rTargetPosition.z + fRadius ) / fCellWorldSize - 0.5f ) ), max_global_cell );
+		const real_t   fRadius = m_szMeshStreamingRadius[mesh_id];
+		const int	   old_first_z =
+			MAX( ( int ) ( Math::ceil( ( previous_position.z - fRadius ) / fCellWorldSize - 0.5f ) ), min_global_cell );
+		const int old_last_z =
+			MIN( ( int ) ( Math::floor( ( previous_position.z + fRadius ) / fCellWorldSize - 0.5f ) ),
+				 max_global_cell );
+		const int new_first_z =
+			MAX( ( int ) ( Math::ceil( ( rTargetPosition.z - fRadius ) / fCellWorldSize - 0.5f ) ), min_global_cell );
+		const int new_last_z =
+			MIN( ( int ) ( Math::floor( ( rTargetPosition.z + fRadius ) / fCellWorldSize - 0.5f ) ), max_global_cell );
 		const int first_z = MIN( old_first_z, new_first_z );
 		const int last_z = MAX( old_last_z, new_last_z );
 		for ( int global_z = first_z; global_z <= last_z; ++global_z ) {
 			const t3dCellInterval_t old_interval = global_z >= old_first_z && global_z <= old_last_z
-			        ? streamingRowInterval( previous_position, fRadius, global_z, fCellWorldSize, min_global_cell, max_global_cell )
-			        : t3dCellInterval_t{};
+													   ? streamingRowInterval( previous_position,
+																			   fRadius,
+																			   global_z,
+																			   fCellWorldSize,
+																			   min_global_cell,
+																			   max_global_cell )
+													   : t3dCellInterval_t{};
 			const t3dCellInterval_t new_interval = global_z >= new_first_z && global_z <= new_last_z
-			        ? streamingRowInterval( rTargetPosition, fRadius, global_z, fCellWorldSize, min_global_cell, max_global_cell )
-			        : t3dCellInterval_t{};
+													   ? streamingRowInterval( rTargetPosition,
+																			   fRadius,
+																			   global_z,
+																			   fCellWorldSize,
+																			   min_global_cell,
+																			   max_global_cell )
+													   : t3dCellInterval_t{};
 			queueStreamingDifference( pData, mesh_id, global_z, old_interval, new_interval, cells_per_region );
 			queueStreamingDifference( pData, mesh_id, global_z, new_interval, old_interval, cells_per_region );
 		}
@@ -4449,9 +5157,9 @@ void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition ) {
 	}
 }
 
-void Terrain3DInstancer::synchronizeStreamingTarget( const Vector3 &rTargetPosition ) {
-	const bool bTargetChanged =
-	        !m_bStreamPositionValid || !m_lastStreamPosition.is_equal_approx( rTargetPosition );
+void Terrain3DInstancer::synchronizeStreamingTarget(
+	const Vector3 &rTargetPosition ) {
+	const bool bTargetChanged = !m_bStreamPositionValid || !m_lastStreamPosition.is_equal_approx( rTargetPosition );
 	m_lastStreamPosition = rTargetPosition;
 	m_bStreamPositionValid = true;
 	m_bStreamingSelectionDeferredLastFrame = false;
@@ -4467,30 +5175,37 @@ void Terrain3DInstancer::synchronizeStreamingTarget( const Vector3 &rTargetPosit
 	updateMmis( -1, s_v2iMax, false );
 }
 
-int Terrain3DInstancer::getClosestMeshId( const Vector3 &rGlobalPosition ) const {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return -1; }
-	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const Vector2i regionLocation = pData->getRegionLocation( rGlobalPosition );
+int Terrain3DInstancer::getClosestMeshId(
+	const Vector3 &rGlobalPosition ) const {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return -1;
+	}
+	Terrain3DData *const   pData = m_pTerrain->dataObject();
+	const Vector2i		   regionLocation = pData->getRegionLocation( rGlobalPosition );
 	Terrain3DRegion *const pRegion = pData->getRegionPtr( regionLocation );
 	if ( !pRegion || pRegion->isDeleted() || !pRegion->hasInstances() ) {
 		return -1;
 	}
 	bool bTemporaryPage = false;
-	if ( !t3dBeginInstancePageAccess( const_cast<Terrain3DInstancer *>( this ), pData, regionLocation, bTemporaryPage ) ) {
+	if ( !t3dBeginInstancePageAccess( const_cast< Terrain3DInstancer * >( this ),
+									  pData,
+									  regionLocation,
+									  bTemporaryPage ) ) {
 		return -1;
 	}
-	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
-	const Vector3 local = rGlobalPosition - Vector3( regionLocation.x * region_size, 0, regionLocation.y * region_size );
-	const Vector2i center_cell = getCell( local );
-	real_t fClosest = FLT_MAX;
-	int closest_id = -1;
+	const int	  region_size = T3D_REGION_WORLD_SIZE_METERS;
+	const Vector3 local =
+		rGlobalPosition - Vector3( regionLocation.x * region_size, 0, regionLocation.y * region_size );
+	const Vector2i				  center_cell = getCell( local );
+	real_t						  fClosest = FLT_MAX;
+	int							  closest_id = -1;
 	const Terrain3DInstanceStore *pStore = NULL;
 	if ( !pRegion->tryGetInstanceStore( pStore ) || !pStore ) {
 		t3dEndInstancePageAccess( pData, regionLocation, bTemporaryPage );
 		return -1;
 	}
 	const Terrain3DInstanceStore &store = *pStore;
-	for ( size_t iMesh = 0u; iMesh < ( size_t )( ( store.meshes() ).size() ); iMesh++ ) {
+	for ( size_t iMesh = 0u; iMesh < ( size_t ) ( ( store.meshes() ).size() ); iMesh++ ) {
 		const t3dInstanceMesh_t &mesh = ( store.meshes() )[iMesh];
 		for ( int y = center_cell.y - 1; y <= center_cell.y + 1; ++y ) {
 			for ( int x = center_cell.x - 1; x <= center_cell.x + 1; ++x ) {
@@ -4500,7 +5215,7 @@ int Terrain3DInstancer::getClosestMeshId( const Vector3 &rGlobalPosition ) const
 				}
 				for ( size_t i = 0; i < pCell->m_transforms.size(); ++i ) {
 					const Transform3D transform = pCell->getTransform( i );
-					const real_t fDistance = transform.origin.distance_squared_to( local );
+					const real_t	  fDistance = transform.origin.distance_squared_to( local );
 					if ( fDistance < fClosest ) {
 						fClosest = fDistance;
 						closest_id = mesh.m_nId;
@@ -4514,37 +5229,41 @@ int Terrain3DInstancer::getClosestMeshId( const Vector3 &rGlobalPosition ) const
 }
 
 Dictionary Terrain3DInstancer::pickEditableInstance(
-        const Vector3 &rRayOrigin, const Vector3 &rRayDirection, const real_t fMaxDistance ) const {
+	const Vector3 &rRayOrigin,
+	const Vector3 &rRayDirection,
+	const real_t   fMaxDistance ) const {
 	Dictionary result;
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return result; }
-	if ( !m_pTerrain->assetsResource().is_valid() || fMaxDistance <= 0.0f || !rRayOrigin.is_finite() || !rRayDirection.is_finite()
-	        || rRayDirection.length_squared() < 0.000001f ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
 		return result;
 	}
-	const Vector3 ray_direction = rRayDirection.normalized();
-	Terrain3DData *const pData = m_pTerrain->dataObject();
+	if ( !m_pTerrain->assetsResource().is_valid() || fMaxDistance <= 0.0f || !rRayOrigin.is_finite() ||
+		 !rRayDirection.is_finite() || rRayDirection.length_squared() < 0.000001f ) {
+		return result;
+	}
+	const Vector3			ray_direction = rRayDirection.normalized();
+	Terrain3DData *const	pData = m_pTerrain->dataObject();
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
-	const int region_size = T3D_REGION_WORLD_SIZE_METERS;
-	real_t closest_distance = fMaxDistance;
+	const int				region_size = T3D_REGION_WORLD_SIZE_METERS;
+	real_t					closest_distance = fMaxDistance;
 	for ( int iRegion = 0; iRegion < T3D_REGION_SLOTS; ++iRegion ) {
 		const Terrain3DRegion *const pRegion = ppRegionPtrs[iRegion];
 		if ( !pRegion || pRegion->isDeleted() || !pRegion->hasInstances() || !pRegion->isInstanceStoreResident() ) {
 			continue;
 		}
 		const Vector2i region_location = pRegion->getLocation();
-		const Vector3 region_origin( region_location.x * region_size, 0.0f, region_location.y * region_size );
+		const Vector3  region_origin( region_location.x * region_size, 0.0f, region_location.y * region_size );
 		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
 		if ( !pStore ) {
 			continue;
 		}
 		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-			const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh.m_nId );
+			const t3dInstanceMesh_t		   &mesh = pStore->meshes()[iMesh];
+			const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh.m_nId );
 			if ( pAsset.is_null() || !pAsset->isEnabled() || !pAsset->isIndividuallyEditable() ) {
 				continue;
 			}
-			const Ref<Mesh> pMesh = pAsset->getMesh( getMasterLod( pAsset ) );
-			AABB source_aabb = pMesh.is_valid() ? pMesh->get_aabb() : AABB();
+			const Ref< Mesh > pMesh = pAsset->getMesh( getMasterLod( pAsset ) );
+			AABB			  source_aabb = pMesh.is_valid() ? pMesh->get_aabb() : AABB();
 			if ( source_aabb.size.length_squared() < 0.000001f ) {
 				source_aabb = AABB( Vector3( -0.25f, -0.25f, -0.25f ), Vector3( 0.5f, 0.5f, 0.5f ) );
 			}
@@ -4554,8 +5273,8 @@ Dictionary Terrain3DInstancer::pickEditableInstance(
 					Transform3D global_transform = cell.getTransform( iInstance );
 					global_transform.origin += region_origin;
 					const AABB world_aabb = global_transform.xform( source_aabb ).grow( 0.05f );
-					bool inside = false;
-					Vector3 hit_point;
+					bool	   inside = false;
+					Vector3	   hit_point;
 					if ( !world_aabb.find_intersects_ray( rRayOrigin, ray_direction, inside, &hit_point ) ) {
 						continue;
 					}
@@ -4565,13 +5284,13 @@ Dictionary Terrain3DInstancer::pickEditableInstance(
 					}
 					closest_distance = hit_distance;
 					result = t3dInstancerBuildEditableHandle( region_location,
-					        cell.m_location,
-					        mesh.m_nId,
-					        iInstance,
-					        cell.m_nRevision,
-					        pAsset->getInstanceCategory(),
-					        global_transform,
-					        hit_distance );
+															  cell.m_location,
+															  mesh.m_nId,
+															  iInstance,
+															  cell.m_nRevision,
+															  pAsset->getInstanceCategory(),
+															  global_transform,
+															  hit_distance );
 				}
 			}
 		}
@@ -4579,53 +5298,76 @@ Dictionary Terrain3DInstancer::pickEditableInstance(
 	return result;
 }
 
-Dictionary Terrain3DInstancer::getEditableInstance( const Dictionary &rHandle ) const {
+Dictionary Terrain3DInstancer::getEditableInstance(
+	const Dictionary &rHandle ) const {
 	Dictionary result;
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return result; }
-	Vector2i region_location;
-	Vector2i cell_location;
-	int mesh_id = -1;
-	size_t instance_index = 0u;
-	uint32_t revision = 0u;
-	if ( !t3dInstancerReadEditableHandle( rHandle, region_location, cell_location, mesh_id, instance_index, revision ) ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
 		return result;
 	}
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
-	Terrain3DRegion *const pRegion = m_pTerrain->dataObject()->getRegionPtr( region_location );
-	if ( pAsset.is_null() || !pAsset->isIndividuallyEditable() || !pRegion || pRegion->isDeleted()
-	        || !pRegion->isInstanceStoreResident() ) {
+	Vector2i region_location;
+	Vector2i cell_location;
+	int		 mesh_id = -1;
+	size_t	 instance_index = 0u;
+	uint32_t revision = 0u;
+	if ( !t3dInstancerReadEditableHandle( rHandle,
+										  region_location,
+										  cell_location,
+										  mesh_id,
+										  instance_index,
+										  revision ) ) {
+		return result;
+	}
+	const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+	Terrain3DRegion *const			pRegion = m_pTerrain->dataObject()->getRegionPtr( region_location );
+	if ( pAsset.is_null() || !pAsset->isIndividuallyEditable() || !pRegion || pRegion->isDeleted() ||
+		 !pRegion->isInstanceStoreResident() ) {
 		return result;
 	}
 	const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-	const t3dInstanceCell_s *const pCell = pStore ? pStore->findCell( mesh_id, cell_location ) : NULL;
+	const t3dInstanceCell_s *const		pCell = pStore ? pStore->findCell( mesh_id, cell_location ) : NULL;
 	if ( !pCell || pCell->m_nRevision != revision || instance_index >= pCell->m_transforms.size() ) {
 		return result;
 	}
 	Transform3D global_transform = pCell->getTransform( instance_index );
-	global_transform.origin += Vector3( region_location.x * T3D_REGION_WORLD_SIZE_METERS, 0.0f, region_location.y * T3D_REGION_WORLD_SIZE_METERS );
-	return t3dInstancerBuildEditableHandle(
-	        region_location, cell_location, mesh_id, instance_index, revision, pAsset->getInstanceCategory(), global_transform );
+	global_transform.origin += Vector3( region_location.x * T3D_REGION_WORLD_SIZE_METERS,
+										0.0f,
+										region_location.y * T3D_REGION_WORLD_SIZE_METERS );
+	return t3dInstancerBuildEditableHandle( region_location,
+											cell_location,
+											mesh_id,
+											instance_index,
+											revision,
+											pAsset->getInstanceCategory(),
+											global_transform );
 }
 
 Dictionary Terrain3DInstancer::setEditableInstanceTransform(
-        const Dictionary &rHandle, const Transform3D &rGlobalTransform, const bool bManualize ) {
+	const Dictionary  &rHandle,
+	const Transform3D &rGlobalTransform,
+	const bool		   bManualize ) {
 	Dictionary result;
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { return result; }
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		return result;
+	}
 	if ( !rGlobalTransform.origin.is_finite() || !rGlobalTransform.basis.is_finite() ) {
 		return result;
 	}
 	Vector2i source_region_location;
 	Vector2i source_cell_location;
-	int mesh_id = -1;
-	size_t source_instance_index = 0u;
+	int		 mesh_id = -1;
+	size_t	 source_instance_index = 0u;
 	uint32_t source_revision = 0u;
-	if ( !t3dInstancerReadEditableHandle(
-	             rHandle, source_region_location, source_cell_location, mesh_id, source_instance_index, source_revision ) ) {
+	if ( !t3dInstancerReadEditableHandle( rHandle,
+										  source_region_location,
+										  source_cell_location,
+										  mesh_id,
+										  source_instance_index,
+										  source_revision ) ) {
 		return result;
 	}
-	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
-	Terrain3DRegion *const pSourceRegion = pData->getRegionPtr( source_region_location );
+	Terrain3DData *const			pData = m_pTerrain->dataObject();
+	const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( mesh_id );
+	Terrain3DRegion *const			pSourceRegion = pData->getRegionPtr( source_region_location );
 	if ( pAsset.is_null() || !pAsset->isIndividuallyEditable() || !pSourceRegion || pSourceRegion->isDeleted() ) {
 		return result;
 	}
@@ -4639,16 +5381,16 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		return result;
 	}
 	const Terrain3DInstanceStore *const pSourceStoreRead = pSourceCommitStore;
-	const t3dInstanceCell_s *pSourceCellRead = pSourceStoreRead->findCell( mesh_id, source_cell_location );
-	if ( !pSourceCellRead || pSourceCellRead->m_nRevision != source_revision
-	        || source_instance_index >= pSourceCellRead->m_transforms.size() ) {
+	const t3dInstanceCell_s			   *pSourceCellRead = pSourceStoreRead->findCell( mesh_id, source_cell_location );
+	if ( !pSourceCellRead || pSourceCellRead->m_nRevision != source_revision ||
+		 source_instance_index >= pSourceCellRead->m_transforms.size() ) {
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
 	}
 
-	const Color source_color = pSourceCellRead->getColor( source_instance_index );
+	const Color	   source_color = pSourceCellRead->getColor( source_instance_index );
 	const uint32_t source_owner = pSourceCellRead->getOwner( source_instance_index );
-	uint16_t behavior_flags = pSourceCellRead->getTransformBehaviorFlags( source_instance_index );
+	uint16_t	   behavior_flags = pSourceCellRead->getTransformBehaviorFlags( source_instance_index );
 	if ( behavior_flags == 0u ) {
 		behavior_flags = T3D_INSTANCE_LEGACY_BEHAVIOR;
 	}
@@ -4656,9 +5398,9 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		behavior_flags = MANUAL_ORIENTATION;
 	}
 
-	const Vector2i destination_region_location = pData->getRegionLocation( rGlobalTransform.origin );
+	const Vector2i		   destination_region_location = pData->getRegionLocation( rGlobalTransform.origin );
 	Terrain3DRegion *const pDestinationRegion = pData->getRegionPtr( destination_region_location );
-	const bool bSameRegion = destination_region_location == source_region_location;
+	const bool			   bSameRegion = destination_region_location == source_region_location;
 	if ( !pDestinationRegion || pDestinationRegion->isDeleted() ) {
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
@@ -4666,7 +5408,7 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 	Transform3D destination_local = rGlobalTransform;
 	destination_local.origin.x -= destination_region_location.x * T3D_REGION_WORLD_SIZE_METERS;
 	destination_local.origin.z -= destination_region_location.y * T3D_REGION_WORLD_SIZE_METERS;
-	const Vector2i destination_cell_location = getCell( destination_local.origin );
+	const Vector2i			destination_cell_location = getCell( destination_local.origin );
 	Terrain3DInstanceStore *pDestinationCommitStore = bSameRegion ? pSourceCommitStore : NULL;
 	if ( bSameRegion && !pDestinationCommitStore->isValidCell( destination_cell_location ) ) {
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
@@ -4683,7 +5425,11 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		pCell->touch();
 		pSourceRegion->markInstanceStoreModifiedInternal();
 		setLogicalCellCount( source_region_location, mesh_id, source_cell_location, pCell->m_transforms.size() );
-		emitDerivedMutation( source_region_location, source_cell_location, mesh_id, T3D_INSTANCE_MUTATION_TRANSFORM, pCell->m_nRevision );
+		emitDerivedMutation( source_region_location,
+							 source_cell_location,
+							 mesh_id,
+							 T3D_INSTANCE_MUTATION_TRANSFORM,
+							 pCell->m_nRevision );
 		if ( bSourceTemporary && pSourceRegion->hasInstances() ) {
 			t3dRetainMutatedInstancePage( pData, pSourceRegion, bSourceTemporary );
 		}
@@ -4691,12 +5437,12 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 			updateMmis( mesh_id, source_region_location );
 		}
 		result = t3dInstancerBuildEditableHandle( source_region_location,
-		        source_cell_location,
-		        mesh_id,
-		        source_instance_index,
-		        pCell->m_nRevision,
-		        pAsset->getInstanceCategory(),
-		        rGlobalTransform );
+												  source_cell_location,
+												  mesh_id,
+												  source_instance_index,
+												  pCell->m_nRevision,
+												  pAsset->getInstanceCategory(),
+												  rGlobalTransform );
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
 	}
@@ -4709,9 +5455,9 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 	}
 	bool bDestinationTemporary = false;
 	if ( !bSameRegion ) {
-		if ( !t3dBeginInstancePageAccess( this, pData, destination_region_location, bDestinationTemporary )
-		        || !pDestinationRegion->tryGetInstanceStoreInternal( pDestinationCommitStore ) || !pDestinationCommitStore
-		        || !pDestinationCommitStore->isValidCell( destination_cell_location ) ) {
+		if ( !t3dBeginInstancePageAccess( this, pData, destination_region_location, bDestinationTemporary ) ||
+			 !pDestinationRegion->tryGetInstanceStoreInternal( pDestinationCommitStore ) || !pDestinationCommitStore ||
+			 !pDestinationCommitStore->isValidCell( destination_cell_location ) ) {
 			if ( bDestinationTemporary ) {
 				t3dEndInstancePageAccess( pData, destination_region_location, true );
 			}
@@ -4731,7 +5477,7 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
 	}
-	Terrain3DInstanceStore destination_replacement;
+	Terrain3DInstanceStore	destination_replacement;
 	Terrain3DInstanceStore *pDestinationReplacement = &source_replacement;
 	if ( !bSameRegion ) {
 		destination_replacement = Terrain3DInstanceStore( *pDestinationCommitStore );
@@ -4744,16 +5490,19 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 	}
 
 	t3dInstanceCell_s *pDestinationCell = pDestinationReplacement->findCell( mesh_id, destination_cell_location );
-	const size_t destination_count = pDestinationCell ? pDestinationCell->m_transforms.size() : 0u;
-	if ( destination_count == eastl::numeric_limits<size_t>::max() ) {
+	const size_t	   destination_count = pDestinationCell ? pDestinationCell->m_transforms.size() : 0u;
+	if ( destination_count == eastl::numeric_limits< size_t >::max() ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, destination_region_location, bDestinationTemporary );
 		}
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
 	}
-	pDestinationCell = pDestinationReplacement->tryGetOrCreateCell(
-	        mesh_id, destination_cell_location, destination_count + 1u, source_color != s_colorWhite, source_owner != 0u );
+	pDestinationCell = pDestinationReplacement->tryGetOrCreateCell( mesh_id,
+																	destination_cell_location,
+																	destination_count + 1u,
+																	source_color != s_colorWhite,
+																	source_owner != 0u );
 	if ( !pDestinationCell ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, destination_region_location, bDestinationTemporary );
@@ -4762,8 +5511,12 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		return result;
 	}
 	size_t destination_instance_index = 0u;
-	if ( !t3dInstancerAppendEditableRecord(
-	             *pDestinationCell, destination_local, source_color, source_owner, behavior_flags, destination_instance_index ) ) {
+	if ( !t3dInstancerAppendEditableRecord( *pDestinationCell,
+											destination_local,
+											source_color,
+											source_owner,
+											behavior_flags,
+											destination_instance_index ) ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, destination_region_location, bDestinationTemporary );
 		}
@@ -4776,8 +5529,9 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 	// Creating the destination cell can move the mesh cell array, so re-find the
 	// source cell in the staged replacement before erasing it.
 	t3dInstanceCell_s *pSourceCell = source_replacement.findCell( mesh_id, source_cell_location );
-	if ( !pSourceCell || pSourceCell->m_nRevision != source_revision || source_instance_index >= pSourceCell->m_transforms.size()
-	        || !t3dInstancerEraseEditableRecord( *pSourceCell, source_instance_index ) ) {
+	if ( !pSourceCell || pSourceCell->m_nRevision != source_revision ||
+		 source_instance_index >= pSourceCell->m_transforms.size() ||
+		 !t3dInstancerEraseEditableRecord( *pSourceCell, source_instance_index ) ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, destination_region_location, bDestinationTemporary );
 		}
@@ -4785,7 +5539,7 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		return result;
 	}
 	const bool bSourceCellEmpty = pSourceCell->m_transforms.empty();
-	uint32_t source_changed_revision = 0u;
+	uint32_t   source_changed_revision = 0u;
 	if ( bSourceCellEmpty ) {
 		source_replacement.eraseCell( mesh_id, source_cell_location );
 	} else {
@@ -4810,10 +5564,11 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		pDestinationRegion->markInstanceStoreModifiedInternal();
 	}
 
-	const Terrain3DInstanceStore &committed_source = *pSourceCommitStore;
-	const Terrain3DInstanceStore &committed_destination = *pDestinationCommitStore;
+	const Terrain3DInstanceStore  &committed_source = *pSourceCommitStore;
+	const Terrain3DInstanceStore  &committed_destination = *pDestinationCommitStore;
 	const t3dInstanceCell_s *const pCommittedSourceCell = committed_source.findCell( mesh_id, source_cell_location );
-	const t3dInstanceCell_s *const pCommittedDestinationCell = committed_destination.findCell( mesh_id, destination_cell_location );
+	const t3dInstanceCell_s *const pCommittedDestinationCell =
+		committed_destination.findCell( mesh_id, destination_cell_location );
 	if ( !pCommittedDestinationCell ) {
 		// This is an impossible post-commit invariant violation; do not publish a
 		// fabricated editor handle if the authoritative replacement is inconsistent.
@@ -4823,19 +5578,24 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 		t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 		return result;
 	}
-	setLogicalCellCount(
-	        source_region_location, mesh_id, source_cell_location, pCommittedSourceCell ? pCommittedSourceCell->m_transforms.size() : 0u );
-	setLogicalCellCount( destination_region_location, mesh_id, destination_cell_location, pCommittedDestinationCell->m_transforms.size() );
+	setLogicalCellCount( source_region_location,
+						 mesh_id,
+						 source_cell_location,
+						 pCommittedSourceCell ? pCommittedSourceCell->m_transforms.size() : 0u );
+	setLogicalCellCount( destination_region_location,
+						 mesh_id,
+						 destination_cell_location,
+						 pCommittedDestinationCell->m_transforms.size() );
 	emitDerivedMutation( source_region_location,
-	        source_cell_location,
-	        mesh_id,
-	        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-	        source_changed_revision );
+						 source_cell_location,
+						 mesh_id,
+						 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+						 source_changed_revision );
 	emitDerivedMutation( destination_region_location,
-	        destination_cell_location,
-	        mesh_id,
-	        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-	        destination_revision );
+						 destination_cell_location,
+						 mesh_id,
+						 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+						 destination_revision );
 	if ( !m_bMaterializingUpdates && !m_bProcessingPendingUpdates ) {
 		flushLogicalMeshCounts();
 	}
@@ -4860,53 +5620,56 @@ Dictionary Terrain3DInstancer::setEditableInstanceTransform(
 	}
 
 	result = t3dInstancerBuildEditableHandle( destination_region_location,
-	        destination_cell_location,
-	        mesh_id,
-	        destination_instance_index,
-	        destination_revision,
-	        pAsset->getInstanceCategory(),
-	        rGlobalTransform );
+											  destination_cell_location,
+											  mesh_id,
+											  destination_instance_index,
+											  destination_revision,
+											  pAsset->getInstanceCategory(),
+											  rGlobalTransform );
 	if ( !bSameRegion ) {
 		t3dEndInstancePageAccess( pData, destination_region_location, bDestinationTemporary );
 	}
 	t3dEndInstancePageAccess( pData, source_region_location, bSourceTemporary );
 	return result;
 }
-void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const Rect2i &rSrcRect, const Terrain3DRegion *pDstRegion ) {
+void Terrain3DInstancer::copyPasteDfr(
+	const Terrain3DRegion *pSrcRegion,
+	const Rect2i		  &rSrcRect,
+	const Terrain3DRegion *pDstRegion ) {
 	if ( !pSrcRegion || !pDstRegion ) {
 		LOG( ERROR, "Source (", pSrcRegion, ") or destination (", pDstRegion, ") regions are null" );
 		return;
 	}
 	Terrain3DData *const pData = m_pTerrain->dataObject();
-	const Vector2i src_region_loc = pSrcRegion->getLocation();
-	const Vector2i dst_region_loc = pDstRegion->getLocation();
-	bool bTemporarySource = false;
+	const Vector2i		 src_region_loc = pSrcRegion->getLocation();
+	const Vector2i		 dst_region_loc = pDstRegion->getLocation();
+	bool				 bTemporarySource = false;
 	if ( !t3dBeginInstancePageAccess( this, pData, src_region_loc, bTemporarySource ) ) {
 		return;
 	}
 	const bool bSameRegion = src_region_loc == dst_region_loc;
-	bool bTemporaryDestination = false;
+	bool	   bTemporaryDestination = false;
 	if ( !bSameRegion && !t3dBeginInstancePageAccess( this, pData, dst_region_loc, bTemporaryDestination ) ) {
 		t3dEndInstancePageAccess( pData, src_region_loc, bTemporarySource );
 		return;
 	}
 	LOG( INFO, "Copying foliage data from src ", src_region_loc, " to dest ", dst_region_loc );
 
-	const Vector2i srcOffset( src_region_loc.x * T3D_REGION_WORLD_SIZE_METERS, src_region_loc.y * T3D_REGION_WORLD_SIZE_METERS );
-	const Vector2i dst_offset =
-	        srcOffset - Vector2i( dst_region_loc.x * T3D_REGION_WORLD_SIZE_METERS, dst_region_loc.y * T3D_REGION_WORLD_SIZE_METERS );
-	const Vector3 dst_translate( dst_offset.x, 0.0f, dst_offset.y );
+	const Vector2i srcOffset( src_region_loc.x * T3D_REGION_WORLD_SIZE_METERS,
+							  src_region_loc.y * T3D_REGION_WORLD_SIZE_METERS );
+	const Vector2i dst_offset = srcOffset - Vector2i( dst_region_loc.x * T3D_REGION_WORLD_SIZE_METERS,
+													  dst_region_loc.y * T3D_REGION_WORLD_SIZE_METERS );
+	const Vector3  dst_translate( dst_offset.x, 0.0f, dst_offset.y );
 	const Vector2i cell_start = V2I_DIVIDE_FLOOR( rSrcRect.get_position(), m_nCellSize );
 	const Vector2i cell_end = V2I_DIVIDE_CEIL( rSrcRect.get_end(), m_nCellSize );
-	const bool bCellAligned = rSrcRect.position.x % m_nCellSize == 0
-	        && rSrcRect.position.y % m_nCellSize == 0 && rSrcRect.size.x % m_nCellSize == 0
-	        && rSrcRect.size.y % m_nCellSize == 0;
+	const bool	   bCellAligned = rSrcRect.position.x % m_nCellSize == 0 && rSrcRect.position.y % m_nCellSize == 0 &&
+							  rSrcRect.size.x % m_nCellSize == 0 && rSrcRect.size.y % m_nCellSize == 0;
 
-	Terrain3DRegion *const pDestinationRegion = const_cast<Terrain3DRegion *>( pDstRegion );
+	Terrain3DRegion *const		  pDestinationRegion = const_cast< Terrain3DRegion * >( pDstRegion );
 	const Terrain3DInstanceStore *pSourceStore = NULL;
-	Terrain3DInstanceStore *pDestinationCommitStore = NULL;
-	if ( !pSrcRegion->tryGetInstanceStore( pSourceStore ) || !pSourceStore
-	        || !pDestinationRegion->tryGetInstanceStoreInternal( pDestinationCommitStore ) || !pDestinationCommitStore ) {
+	Terrain3DInstanceStore		 *pDestinationCommitStore = NULL;
+	if ( !pSrcRegion->tryGetInstanceStore( pSourceStore ) || !pSourceStore ||
+		 !pDestinationRegion->tryGetInstanceStoreInternal( pDestinationCommitStore ) || !pDestinationCommitStore ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 		}
@@ -4915,7 +5678,7 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 	}
 	const Terrain3DInstanceStore &src_store = *pSourceStore;
 	const Terrain3DInstanceStore &dst_store = *pDestinationCommitStore;
-	Terrain3DInstanceStore replacement( dst_store );
+	Terrain3DInstanceStore		  replacement( dst_store );
 	if ( !t3dInstancerStoreCloneMatches( dst_store, replacement ) ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
@@ -4937,7 +5700,7 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 				if ( !pCell ) {
 					continue;
 				}
-				if ( pCell->m_transforms.size() > eastl::numeric_limits<size_t>::max() - maximum_records ) {
+				if ( pCell->m_transforms.size() > eastl::numeric_limits< size_t >::max() - maximum_records ) {
 					if ( !bSameRegion ) {
 						t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 					}
@@ -4963,7 +5726,7 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 		t3dEndInstancePageAccess( pData, src_region_loc, bTemporarySource );
 		return;
 	}
-	eastl::vector<t3dCellUpdateKey_t, Terrain3DEastlAllocator> changed_keys;
+	eastl::vector< t3dCellUpdateKey_t, Terrain3DEastlAllocator > changed_keys;
 	changed_keys.set_allocator( m_placementPending.get_allocator() );
 	if ( !t3dContainerReserveCold( changed_keys, maximum_records ) ) {
 		if ( !bSameRegion ) {
@@ -4986,21 +5749,22 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 				for ( size_t i = 0u; i < pCell->m_transforms.size(); ++i ) {
 					Transform3D transform = pCell->getTransform( i );
 					if ( !bCellAligned ) {
-						const Vector2i sourcePosition( Math::floor( transform.origin.x ), Math::floor( transform.origin.z ) );
+						const Vector2i sourcePosition( Math::floor( transform.origin.x ),
+													   Math::floor( transform.origin.z ) );
 						if ( !rSrcRect.has_point( sourcePosition ) ) {
 							continue;
 						}
 					}
 					transform.origin += dst_translate;
 					if ( !t3dVectorPushBackWithinCapacity( m_placementPending,
-					             t3dPendingPlacement_t{
-					                     pDestinationRegion,
-					                     getCell( transform.origin ),
-					                     transform,
-					                     pCell->getColor( i ),
-					                     pCell->getOwner( i ),
-					                     pCell->getTransformBehaviorFlags( i ),
-					             } ) ) {
+														   t3dPendingPlacement_t{
+															   pDestinationRegion,
+															   getCell( transform.origin ),
+															   transform,
+															   pCell->getColor( i ),
+															   pCell->getOwner( i ),
+															   pCell->getTransformBehaviorFlags( i ),
+														   } ) ) {
 						if ( !bSameRegion ) {
 							t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 						}
@@ -5014,15 +5778,17 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 			continue;
 		}
 		eastl::sort( m_placementPending.begin(), m_placementPending.end(), pendingPlacementCellLess );
-		if ( !t3dInstancerAppendPlacementsToPreparedStore(
-		             replacement, mesh.m_nId, m_placementPending.data(), m_placementPending.size() ) ) {
+		if ( !t3dInstancerAppendPlacementsToPreparedStore( replacement,
+														   mesh.m_nId,
+														   m_placementPending.data(),
+														   m_placementPending.size() ) ) {
 			if ( !bSameRegion ) {
 				t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 			}
 			t3dEndInstancePageAccess( pData, src_region_loc, bTemporarySource );
 			return;
 		}
-		if ( m_placementPending.size() > eastl::numeric_limits<size_t>::max() - total_additions ) {
+		if ( m_placementPending.size() > eastl::numeric_limits< size_t >::max() - total_additions ) {
 			if ( !bSameRegion ) {
 				t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 			}
@@ -5033,7 +5799,8 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 		size_t begin = 0u;
 		while ( begin < m_placementPending.size() ) {
 			const Vector2i cell = m_placementPending[begin].m_cell;
-			if ( !t3dVectorPushBackWithinCapacity( changed_keys, t3dCellUpdateKey_t{ dst_region_loc, cell, mesh.m_nId } ) ) {
+			if ( !t3dVectorPushBackWithinCapacity( changed_keys,
+												   t3dCellUpdateKey_t{ dst_region_loc, cell, mesh.m_nId } ) ) {
 				if ( !bSameRegion ) {
 					t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 				}
@@ -5046,7 +5813,8 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 			}
 		}
 	}
-	if ( total_additions == 0u || !replacement.validateDeep() || !requestRuntimeCapacityForMutation( total_additions ) ) {
+	if ( total_additions == 0u || !replacement.validateDeep() ||
+		 !requestRuntimeCapacityForMutation( total_additions ) ) {
 		if ( !bSameRegion ) {
 			t3dEndInstancePageAccess( pData, dst_region_loc, bTemporaryDestination );
 		}
@@ -5054,7 +5822,7 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 		return;
 	}
 
-	backupRegion( Ref<Terrain3DRegion>( pDestinationRegion ) );
+	backupRegion( Ref< Terrain3DRegion >( pDestinationRegion ) );
 	*pDestinationCommitStore = eastl::move( replacement );
 	pDestinationRegion->markInstanceStoreModifiedInternal();
 
@@ -5062,17 +5830,17 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 	m_bMaterializingUpdates = true;
 	const Terrain3DInstanceStore &committed_store = *pDestinationCommitStore;
 	for ( size_t i = 0u; i < changed_keys.size(); ++i ) {
-		const t3dCellUpdateKey_t &key = changed_keys[i];
+		const t3dCellUpdateKey_t	  &key = changed_keys[i];
 		const t3dInstanceCell_s *const pCell = committed_store.findCell( key.m_nMeshId, key.m_cell );
 		if ( !pCell ) {
 			continue;
 		}
 		setLogicalCellCount( key.m_region, key.m_nMeshId, key.m_cell, pCell->m_transforms.size() );
 		emitDerivedMutation( key.m_region,
-		        key.m_cell,
-		        key.m_nMeshId,
-		        T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
-		        pCell->m_nRevision );
+							 key.m_cell,
+							 key.m_nMeshId,
+							 T3D_INSTANCE_MUTATION_TOPOLOGY | T3D_INSTANCE_MUTATION_TRANSFORM,
+							 pCell->m_nRevision );
 	}
 	m_bMaterializingUpdates = bWasMaterializing;
 	if ( !bWasMaterializing && !m_bProcessingPendingUpdates ) {
@@ -5083,7 +5851,8 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 	if ( bTemporaryDestination && pDestinationRegion->hasInstances() ) {
 		t3dRetainMutatedInstancePage( pData, pDestinationRegion, bTemporaryDestination );
 	}
-	if ( !bTemporaryDestination && ( !pData->isInstanceRegionCacheEnabled() || pData->isInstanceRegionResident( dst_region_loc ) ) ) {
+	if ( !bTemporaryDestination &&
+		 ( !pData->isInstanceRegionCacheEnabled() || pData->isInstanceRegionResident( dst_region_loc ) ) ) {
 		updateMmis( -1, dst_region_loc, false );
 	}
 	if ( !bSameRegion ) {
@@ -5093,17 +5862,23 @@ void Terrain3DInstancer::copyPasteDfr( const Terrain3DRegion *pSrcRegion, const 
 }
 // Changes the ID of a mesh, without changing the mesh on the ground
 // Called when the mesh asset id has changed. Updates Multimeshes and MMIs dictionary keys
-void Terrain3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
-	if ( !m_pTerrain || !m_pTerrain->dataObject() ) { LOG( ERROR, "Instancer isn't initialized." ); return; }
-	if ( nSrcId == nDstId || nSrcId < 0 || nDstId < 0 || nSrcId >= T3D_MAX_MESH_ASSETS || nDstId >= T3D_MAX_MESH_ASSETS ) {
+void Terrain3DInstancer::swapIds(
+	const int nSrcId,
+	const int nDstId ) {
+	if ( !m_pTerrain || !m_pTerrain->dataObject() ) {
+		LOG( ERROR, "Instancer isn't initialized." );
 		return;
 	}
-	Terrain3DData *const pData = m_pTerrain->dataObject();
+	if ( nSrcId == nDstId || nSrcId < 0 || nDstId < 0 || nSrcId >= T3D_MAX_MESH_ASSETS ||
+		 nDstId >= T3D_MAX_MESH_ASSETS ) {
+		return;
+	}
+	Terrain3DData *const	pData = m_pTerrain->dataObject();
 	Terrain3DRegion *const *ppRegionPtrs = pData->getRegionPtrMapInternal();
-	Terrain3DRegion *szAffected[T3D_REGION_SLOTS];
+	Terrain3DRegion		   *szAffected[T3D_REGION_SLOTS];
 	Terrain3DInstanceStore *szStores[T3D_REGION_SLOTS];
-	bool szTemporary[T3D_REGION_SLOTS];
-	size_t affected_count = 0u;
+	bool					szTemporary[T3D_REGION_SLOTS];
+	size_t					affected_count = 0u;
 	memset( szAffected, 0, sizeof( szAffected ) );
 	memset( szStores, 0, sizeof( szStores ) );
 	memset( szTemporary, 0, sizeof( szTemporary ) );
@@ -5112,8 +5887,8 @@ void Terrain3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
 	// store ID swap. Page acquisition failure therefore rejects the whole command.
 	for ( int region_index = 0; region_index < T3D_REGION_SLOTS; ++region_index ) {
 		Terrain3DRegion *const pRegion = ppRegionPtrs[region_index];
-		if ( !pRegion || pRegion->isDeleted()
-		        || ( pRegion->getInstanceCount( nSrcId ) == 0u && pRegion->getInstanceCount( nDstId ) == 0u ) ) {
+		if ( !pRegion || pRegion->isDeleted() ||
+			 ( pRegion->getInstanceCount( nSrcId ) == 0u && pRegion->getInstanceCount( nDstId ) == 0u ) ) {
 			continue;
 		}
 		bool bTemporaryPage = false;
@@ -5143,12 +5918,12 @@ void Terrain3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
 		return;
 	}
 	for ( size_t i = 0u; i < affected_count; ++i ) {
-		Terrain3DRegion *const pRegion = szAffected[i];
+		Terrain3DRegion *const		  pRegion = szAffected[i];
 		Terrain3DInstanceStore *const pStore = szStores[i];
-		const bool bHasSrc = pStore->hasMesh( nSrcId );
-		const bool bHasDst = pStore->hasMesh( nDstId );
+		const bool					  bHasSrc = pStore->hasMesh( nSrcId );
+		const bool					  bHasDst = pStore->hasMesh( nDstId );
 		if ( bHasSrc || bHasDst ) {
-			backupRegion( Ref<Terrain3DRegion>( pRegion ) );
+			backupRegion( Ref< Terrain3DRegion >( pRegion ) );
 			pStore->swapMeshIds( nSrcId, nDstId );
 			pRegion->markInstanceStoreModifiedInternal();
 		}
@@ -5157,14 +5932,18 @@ void Terrain3DInstancer::swapIds( const int nSrcId, const int nDstId ) {
 	updateMmis( -1, s_v2iMax, true );
 }
 
-void Terrain3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionLoc, const bool bRebuild ) {
+void Terrain3DInstancer::updateMmis(
+	const int		nMeshId,
+	const Vector2i &rRegionLoc,
+	const bool		bRebuild ) {
 	// RD publication no longer derives from m_renderCells, so invalidate it at
 	// the authoritative mutation boundary even if streaming/HLOD materialization
 	// later rejects or defers every render cell.
 	markRdPublicationDirty();
 
-	const int mesh_id = CLAMP( nMeshId, -1, T3D_MAX_MESH_ASSETS - 1 );
-	const bool bRendererSuspended = m_mode == INSTANCER_DISABLED || !m_pTerrain || !m_pTerrain->sceneNode().is_visible_in_tree();
+	const int  mesh_id = CLAMP( nMeshId, -1, T3D_MAX_MESH_ASSETS - 1 );
+	const bool bRendererSuspended =
+		m_mode == INSTANCER_DISABLED || !m_pTerrain || !m_pTerrain->sceneNode().is_visible_in_tree();
 	if ( bRendererSuspended ) {
 		if ( rRegionLoc == s_v2iMax ) {
 			if ( mesh_id < 0 ) {
@@ -5235,7 +6014,8 @@ void Terrain3DInstancer::updateMmis( const int nMeshId, const Vector2i &rRegionL
 // -----------------------------------------------------------------------------
 // Protected functions
 
-size_t Terrain3DInstancer::getRetainedContainerBytes( void ) const {
+size_t Terrain3DInstancer::getRetainedContainerBytes(
+	void ) const {
 	size_t bytes = m_renderCells.capacity() * sizeof( t3dRenderCell_t );
 	bytes += m_pendingCellUpdates.capacity() * sizeof( t3dCellUpdateKey_t );
 	bytes += m_buildingCellUpdates.capacity() * sizeof( t3dCellUpdateKey_t );
@@ -5253,97 +6033,104 @@ size_t Terrain3DInstancer::getRetainedContainerBytes( void ) const {
 	return bytes;
 }
 
-size_t Terrain3DInstancer::getActiveMultimeshBytes( void ) const {
+size_t Terrain3DInstancer::getActiveMultimeshBytes(
+	void ) const {
 	size_t bytes = 0u;
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( m_renderCells ).size() ); iCell++ ) {
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( m_renderCells ).size() ); iCell++ ) {
 		const t3dRenderCell_t &cell = ( m_renderCells )[iCell];
-		bytes += ( size_t )( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
+		bytes += ( size_t ) ( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
 	}
 	return bytes;
 }
 
 Dictionary Terrain3DInstancer::debugValidateSingleLodTransitionCandidates(
-        const Vector3 &rPreviousPosition, const Vector3 &rTargetPosition ) const {
+	const Vector3 &rPreviousPosition,
+	const Vector3 &rTargetPosition ) const {
 	Dictionary result;
-	uint64_t reference_cells = 0u;
-	uint64_t reference_transitions = 0u;
-	uint64_t missed_transitions = 0u;
-	uint64_t candidate_cells = 0u;
+	uint64_t   reference_cells = 0u;
+	uint64_t   reference_transitions = 0u;
+	uint64_t   missed_transitions = 0u;
+	uint64_t   candidate_cells = 0u;
 	if ( !m_bSingleLodInstanceBuffers || !m_pTerrain || !m_pTerrain->assetsResource().is_valid() ) {
-		result["reference_cells"] = ( int64_t )( reference_cells );
-		result["reference_transitions"] = ( int64_t )( reference_transitions );
-		result["missed_transitions"] = ( int64_t )( missed_transitions );
-		result["candidate_cells"] = ( int64_t )( candidate_cells );
+		result["reference_cells"] = ( int64_t ) ( reference_cells );
+		result["reference_transitions"] = ( int64_t ) ( reference_transitions );
+		result["missed_transitions"] = ( int64_t ) ( missed_transitions );
+		result["candidate_cells"] = ( int64_t ) ( candidate_cells );
 		return result;
 	}
 	for ( t3dTransitionBucketMap_t::const_iterator itBucket = m_singleLodTransitionBuckets.begin();
-	        itBucket != m_singleLodTransitionBuckets.end();
-	        ++itBucket ) {
-		const t3dTransitionBucketKey_t &bucket_key = itBucket->first;
+		  itBucket != m_singleLodTransitionBuckets.end();
+		  ++itBucket ) {
+		const t3dTransitionBucketKey_t	 &bucket_key = itBucket->first;
 		const t3dTransitionBucketState_t &rState = itBucket->second;
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( bucket_key.m_nMeshId );
+		const Ref< Terrain3DMeshAsset >	  pAsset = m_pTerrain->assetsResource()->getMeshAsset( bucket_key.m_nMeshId );
 		if ( transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
 			candidate_cells += rState.m_nCount;
 		}
 	}
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( m_renderCells ).size() ); iCell++ ) {
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( m_renderCells ).size() ); iCell++ ) {
 		const t3dRenderCell_t &render = ( m_renderCells )[iCell];
 		if ( render.m_nLod < 0 || render.m_nMeshId < 0 || render.m_nMeshId >= T3D_MAX_MESH_ASSETS ) {
 			continue;
 		}
 		++reference_cells;
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( render.m_nMeshId );
+		const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( render.m_nMeshId );
 		const int previous_lod = selectCellLod( render.m_region, render.m_cell, pAsset, rPreviousPosition );
 		const int selected_lod = selectCellLod( render.m_region, render.m_cell, pAsset, rTargetPosition );
 		if ( selected_lod == previous_lod ) {
 			continue;
 		}
 		++reference_transitions;
-		const t3dCellUpdateKey_t key{ render.m_region, render.m_cell, render.m_nMeshId };
-		const t3dTransitionBucketKey_t bucket_key = getTransitionBucketKey( key );
+		const t3dCellUpdateKey_t				key{ render.m_region, render.m_cell, render.m_nMeshId };
+		const t3dTransitionBucketKey_t			bucket_key = getTransitionBucketKey( key );
 		const t3dTransitionBucketState_t *const pBucket = t3dMapFind( m_singleLodTransitionBuckets, bucket_key );
 		if ( !pBucket || !transitionBucketMayCrossBoundary( bucket_key, pAsset, rPreviousPosition, rTargetPosition ) ) {
 			++missed_transitions;
 		}
 	}
-	result["reference_cells"] = ( int64_t )( reference_cells );
-	result["reference_transitions"] = ( int64_t )( reference_transitions );
-	result["missed_transitions"] = ( int64_t )( missed_transitions );
-	result["candidate_cells"] = ( int64_t )( candidate_cells );
+	result["reference_cells"] = ( int64_t ) ( reference_cells );
+	result["reference_transitions"] = ( int64_t ) ( reference_transitions );
+	result["missed_transitions"] = ( int64_t ) ( missed_transitions );
+	result["candidate_cells"] = ( int64_t ) ( candidate_cells );
 	return result;
 }
 
-Dictionary Terrain3DInstancer::debugValidateSingleLodState( const Vector3 &rTargetPosition ) const {
+Dictionary Terrain3DInstancer::debugValidateSingleLodState(
+	const Vector3 &rTargetPosition ) const {
 	Dictionary result;
-	uint64_t cells = 0u;
-	uint64_t mismatches = 0u;
+	uint64_t   cells = 0u;
+	uint64_t   mismatches = 0u;
 	if ( !m_bSingleLodInstanceBuffers || !m_pTerrain || !m_pTerrain->assetsResource().is_valid() ) {
-		result["cells"] = ( int64_t )( cells );
-		result["mismatches"] = ( int64_t )( mismatches );
+		result["cells"] = ( int64_t ) ( cells );
+		result["mismatches"] = ( int64_t ) ( mismatches );
 		return result;
 	}
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( m_renderCells ).size() ); iCell++ ) {
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( m_renderCells ).size() ); iCell++ ) {
 		const t3dRenderCell_t &render = ( m_renderCells )[iCell];
 		if ( render.m_nLod < 0 || render.m_nMeshId < 0 || render.m_nMeshId >= T3D_MAX_MESH_ASSETS ) {
 			continue;
 		}
 		++cells;
-		const Ref<Terrain3DMeshAsset> pAsset = m_pTerrain->assetsResource()->getMeshAsset( render.m_nMeshId );
+		const Ref< Terrain3DMeshAsset > pAsset = m_pTerrain->assetsResource()->getMeshAsset( render.m_nMeshId );
 		if ( selectCellLod( render.m_region, render.m_cell, pAsset, rTargetPosition ) != render.m_nLod ) {
 			++mismatches;
 		}
 	}
-	result["cells"] = ( int64_t )( cells );
-	result["mismatches"] = ( int64_t )( mismatches );
+	result["cells"] = ( int64_t ) ( cells );
+	result["mismatches"] = ( int64_t ) ( mismatches );
 	return result;
 }
 
-void Terrain3DInstancer::onHlodRepresentationChanged( const Vector2i &rRegion, const uint64_t nRepresentationGeneration ) {
-	( void )( rRegion );
+void Terrain3DInstancer::onHlodRepresentationChanged(
+	const Vector2i &rRegion,
+	const uint64_t	nRepresentationGeneration ) {
+	( void ) ( rRegion );
 	m_snapshotBuilder.requireHlodRepresentation( nRepresentationGeneration );
 }
 
-bool Terrain3DInstancer::areHlodDetailRegionsReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const {
+bool Terrain3DInstancer::areHlodDetailRegionsReady(
+	const Vector2i &rRegionMin,
+	const Vector2i &rRegionMax ) const {
 	if ( !m_snapshotBuilder.isHlodRepresentationReady() ) {
 		return false;
 	}
@@ -5357,17 +6144,18 @@ bool Terrain3DInstancer::areHlodDetailRegionsReady( const Vector2i &rRegionMin, 
 	return true;
 }
 
-Dictionary Terrain3DInstancer::getStats( void ) const {
+Dictionary Terrain3DInstancer::getStats(
+	void ) const {
 	Dictionary stats;
-	uint64_t uploaded_instances = 0u;
-	uint64_t active_multimesh_bytes = 0u;
-	int lod0_cells = 0;
-	int lod1_cells = 0;
-	int higher_lod_cells = 0;
-	for ( size_t iCell = 0u; iCell < ( size_t )( ( m_renderCells ).size() ); iCell++ ) {
+	uint64_t   uploaded_instances = 0u;
+	uint64_t   active_multimesh_bytes = 0u;
+	int		   lod0_cells = 0;
+	int		   lod1_cells = 0;
+	int		   higher_lod_cells = 0;
+	for ( size_t iCell = 0u; iCell < ( size_t ) ( ( m_renderCells ).size() ); iCell++ ) {
 		const t3dRenderCell_t &cell = ( m_renderCells )[iCell];
-		uploaded_instances += ( uint64_t )( MAX( cell.m_nUploadedCount, 0 ) );
-		active_multimesh_bytes += ( uint64_t )( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
+		uploaded_instances += ( uint64_t ) ( MAX( cell.m_nUploadedCount, 0 ) );
+		active_multimesh_bytes += ( uint64_t ) ( MAX( cell.m_nUploadedCount, 0 ) ) * sizeof( t3dRdInstanceRecord_t );
 		if ( cell.m_nLod <= 0 ) {
 			++lod0_cells;
 		} else if ( cell.m_nLod == 1 ) {
@@ -5376,39 +6164,39 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 			++higher_lod_cells;
 		}
 	}
-	uint64_t logical_instances = 0u;
-	uint64_t clutter_logical_instances = 0u;
-	uint64_t ground_cover_logical_instances = 0u;
-	uint64_t occluder_logical_instances = 0u;
-	const Ref<Terrain3DAssets> stat_assets = m_pTerrain ? m_pTerrain->assetsResource() : Ref<Terrain3DAssets>();
+	uint64_t					 logical_instances = 0u;
+	uint64_t					 clutter_logical_instances = 0u;
+	uint64_t					 ground_cover_logical_instances = 0u;
+	uint64_t					 occluder_logical_instances = 0u;
+	const Ref< Terrain3DAssets > stat_assets = m_pTerrain ? m_pTerrain->assetsResource() : Ref< Terrain3DAssets >();
 	for ( int mesh_id = 0; mesh_id < T3D_MAX_MESH_ASSETS; ++mesh_id ) {
 		const uint64_t count = m_szLogicalMeshInstanceTotals[mesh_id];
 		logical_instances += count;
 		if ( count == 0u || stat_assets.is_null() ) {
 			continue;
 		}
-		const Ref<Terrain3DMeshAsset> asset = stat_assets->getMeshAsset( mesh_id );
+		const Ref< Terrain3DMeshAsset > asset = stat_assets->getMeshAsset( mesh_id );
 		if ( asset.is_null() ) {
 			continue;
 		}
 		switch ( asset->getInstanceCategory() ) {
-			case INSTANCE_CATEGORY_CLUTTER:
-				clutter_logical_instances += count;
-				break;
-			case INSTANCE_CATEGORY_OCCLUDER:
-				occluder_logical_instances += count;
-				break;
-			case INSTANCE_CATEGORY_GROUND_COVER:
-			default:
-				ground_cover_logical_instances += count;
-				break;
+		case INSTANCE_CATEGORY_CLUTTER:
+			clutter_logical_instances += count;
+			break;
+		case INSTANCE_CATEGORY_OCCLUDER:
+			occluder_logical_instances += count;
+			break;
+		case INSTANCE_CATEGORY_GROUND_COVER:
+		default:
+			ground_cover_logical_instances += count;
+			break;
 		}
 	}
 	const size_t materialized_pending = m_pendingCellUpdates.size() > m_iPendingCellUpdateCursor
-	        ? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor
-	        : 0u;
+											? m_pendingCellUpdates.size() - m_iPendingCellUpdateCursor
+											: 0u;
 	stats["enabled"] = isEnabled();
-	stats["mode"] = ( int )( m_mode );
+	stats["mode"] = ( int ) ( m_mode );
 	uint64_t rd_authoritative_records = 0u;
 	uint64_t rd_authoritative_cells = 0u;
 	uint64_t clutter_rd_authoritative_records = 0u;
@@ -5429,63 +6217,63 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 				continue;
 			}
 			for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-				const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-				const Ref<Terrain3DMeshAsset> asset =
-				        stat_assets.is_valid() ? stat_assets->getMeshAsset( mesh.m_nId ) : Ref<Terrain3DMeshAsset>();
+				const t3dInstanceMesh_t		   &mesh = pStore->meshes()[iMesh];
+				const Ref< Terrain3DMeshAsset > asset =
+					stat_assets.is_valid() ? stat_assets->getMeshAsset( mesh.m_nId ) : Ref< Terrain3DMeshAsset >();
 				for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
 					const size_t count = mesh.m_cells[iCell].m_transforms.size();
 					if ( count == 0u ) {
 						continue;
 					}
-					rd_authoritative_records += ( uint64_t )( count );
+					rd_authoritative_records += ( uint64_t ) ( count );
 					++rd_authoritative_cells;
 					if ( asset.is_null() ) {
 						continue;
 					}
 					switch ( asset->getInstanceCategory() ) {
-						case INSTANCE_CATEGORY_CLUTTER:
-							clutter_rd_authoritative_records += ( uint64_t )( count );
-							++clutter_rd_authoritative_cells;
-							break;
-						case INSTANCE_CATEGORY_OCCLUDER:
-							occluder_rd_authoritative_records += ( uint64_t )( count );
-							++occluder_rd_authoritative_cells;
-							break;
-						case INSTANCE_CATEGORY_GROUND_COVER:
-						default:
-							ground_cover_rd_authoritative_records += ( uint64_t )( count );
-							++ground_cover_rd_authoritative_cells;
-							break;
+					case INSTANCE_CATEGORY_CLUTTER:
+						clutter_rd_authoritative_records += ( uint64_t ) ( count );
+						++clutter_rd_authoritative_cells;
+						break;
+					case INSTANCE_CATEGORY_OCCLUDER:
+						occluder_rd_authoritative_records += ( uint64_t ) ( count );
+						++occluder_rd_authoritative_cells;
+						break;
+					case INSTANCE_CATEGORY_GROUND_COVER:
+					default:
+						ground_cover_rd_authoritative_records += ( uint64_t ) ( count );
+						++ground_cover_rd_authoritative_cells;
+						break;
 					}
 				}
 			}
 		}
 	}
-	stats["rd_authoritative_records"] = ( int64_t )( rd_authoritative_records );
-	stats["rd_authoritative_cells"] = ( int64_t )( rd_authoritative_cells );
-	stats["clutter_rd_authoritative_records"] = ( int64_t )( clutter_rd_authoritative_records );
-	stats["ground_cover_rd_authoritative_records"] = ( int64_t )( ground_cover_rd_authoritative_records );
-	stats["occluder_rd_authoritative_records"] = ( int64_t )( occluder_rd_authoritative_records );
-	stats["clutter_rd_authoritative_cells"] = ( int64_t )( clutter_rd_authoritative_cells );
-	stats["ground_cover_rd_authoritative_cells"] = ( int64_t )( ground_cover_rd_authoritative_cells );
-	stats["occluder_rd_authoritative_cells"] = ( int64_t )( occluder_rd_authoritative_cells );
-	uint64_t published_lod0_cells = 0u;
-	uint64_t published_lod1_cells = 0u;
-	uint64_t published_higher_lod_cells = 0u;
-	uint64_t lod_fallbacks = 0u;
-	uint64_t lod_missing_source_skips = 0u;
-	uint64_t visibility_layer_filtered_cells = 0u;
-	uint64_t fade_active_cells = 0u;
-	uint64_t hlod_eligible_sources = 0u;
-	uint64_t hlod_active_replacements = 0u;
-	uint64_t hlod_detail_suppressed_cells = 0u;
-	uint64_t hlod_detail_retained_missing_proxy = 0u;
-	uint64_t hlod_transition_overlap_cells = 0u;
-	uint64_t hlod_transition_gap_errors = 0u;
+	stats["rd_authoritative_records"] = ( int64_t ) ( rd_authoritative_records );
+	stats["rd_authoritative_cells"] = ( int64_t ) ( rd_authoritative_cells );
+	stats["clutter_rd_authoritative_records"] = ( int64_t ) ( clutter_rd_authoritative_records );
+	stats["ground_cover_rd_authoritative_records"] = ( int64_t ) ( ground_cover_rd_authoritative_records );
+	stats["occluder_rd_authoritative_records"] = ( int64_t ) ( occluder_rd_authoritative_records );
+	stats["clutter_rd_authoritative_cells"] = ( int64_t ) ( clutter_rd_authoritative_cells );
+	stats["ground_cover_rd_authoritative_cells"] = ( int64_t ) ( ground_cover_rd_authoritative_cells );
+	stats["occluder_rd_authoritative_cells"] = ( int64_t ) ( occluder_rd_authoritative_cells );
+	uint64_t				 published_lod0_cells = 0u;
+	uint64_t				 published_lod1_cells = 0u;
+	uint64_t				 published_higher_lod_cells = 0u;
+	uint64_t				 lod_fallbacks = 0u;
+	uint64_t				 lod_missing_source_skips = 0u;
+	uint64_t				 visibility_layer_filtered_cells = 0u;
+	uint64_t				 fade_active_cells = 0u;
+	uint64_t				 hlod_eligible_sources = 0u;
+	uint64_t				 hlod_active_replacements = 0u;
+	uint64_t				 hlod_detail_suppressed_cells = 0u;
+	uint64_t				 hlod_detail_retained_missing_proxy = 0u;
+	uint64_t				 hlod_transition_overlap_cells = 0u;
+	uint64_t				 hlod_transition_gap_errors = 0u;
 	static const char *const category_names[3] = { "clutter", "ground_cover", "occluder" };
 	for ( int category_index = 0; category_index < 3; ++category_index ) {
 		const t3dInstancePublicationCategoryDiagnostics_t &category =
-		        m_snapshotBuilder.diagnostics().m_categories[category_index];
+			m_snapshotBuilder.diagnostics().m_categories[category_index];
 		published_lod0_cells += category.m_nPublishedLod0Cells;
 		published_lod1_cells += category.m_nPublishedLod1Cells;
 		published_higher_lod_cells += category.m_nPublishedHigherLodCells;
@@ -5500,102 +6288,112 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 		hlod_transition_overlap_cells += category.m_nHlodTransitionOverlapCells;
 		hlod_transition_gap_errors += category.m_nHlodTransitionGapErrors;
 		const String prefix = String( category_names[category_index] ) + String( "_" );
-		stats[prefix + String( "published_lod0_cells" )] = ( int64_t )( category.m_nPublishedLod0Cells );
-		stats[prefix + String( "published_lod1_cells" )] = ( int64_t )( category.m_nPublishedLod1Cells );
-		stats[prefix + String( "published_higher_lod_cells" )] = ( int64_t )( category.m_nPublishedHigherLodCells );
-		stats[prefix + String( "lod_fallbacks" )] = ( int64_t )( category.m_nLodFallbacks );
-		stats[prefix + String( "lod_missing_source_skips" )] = ( int64_t )( category.m_nLodMissingSourceSkips );
-		stats[prefix + String( "visibility_layer_filtered_cells" )] = ( int64_t )( category.m_nVisibilityLayerFilteredCells );
-		stats[prefix + String( "fade_active_cells" )] = ( int64_t )( category.m_nFadeActiveCells );
-		stats[prefix + String( "hlod_eligible_sources" )] = ( int64_t )( category.m_nHlodEligibleSources );
-		stats[prefix + String( "hlod_active_replacements" )] = ( int64_t )( category.m_nHlodActiveReplacements );
-		stats[prefix + String( "hlod_detail_suppressed_cells" )] = ( int64_t )( category.m_nHlodDetailSuppressedCells );
-		stats[prefix + String( "hlod_detail_retained_missing_proxy" )] = ( int64_t )( category.m_nHlodDetailRetainedMissingProxy );
-		stats[prefix + String( "hlod_transition_overlap_cells" )] = ( int64_t )( category.m_nHlodTransitionOverlapCells );
-		stats[prefix + String( "hlod_transition_gap_errors" )] = ( int64_t )( category.m_nHlodTransitionGapErrors );
+		stats[prefix + String( "published_lod0_cells" )] = ( int64_t ) ( category.m_nPublishedLod0Cells );
+		stats[prefix + String( "published_lod1_cells" )] = ( int64_t ) ( category.m_nPublishedLod1Cells );
+		stats[prefix + String( "published_higher_lod_cells" )] = ( int64_t ) ( category.m_nPublishedHigherLodCells );
+		stats[prefix + String( "lod_fallbacks" )] = ( int64_t ) ( category.m_nLodFallbacks );
+		stats[prefix + String( "lod_missing_source_skips" )] = ( int64_t ) ( category.m_nLodMissingSourceSkips );
+		stats[prefix + String( "visibility_layer_filtered_cells" )] =
+			( int64_t ) ( category.m_nVisibilityLayerFilteredCells );
+		stats[prefix + String( "fade_active_cells" )] = ( int64_t ) ( category.m_nFadeActiveCells );
+		stats[prefix + String( "hlod_eligible_sources" )] = ( int64_t ) ( category.m_nHlodEligibleSources );
+		stats[prefix + String( "hlod_active_replacements" )] = ( int64_t ) ( category.m_nHlodActiveReplacements );
+		stats[prefix + String( "hlod_detail_suppressed_cells" )] =
+			( int64_t ) ( category.m_nHlodDetailSuppressedCells );
+		stats[prefix + String( "hlod_detail_retained_missing_proxy" )] =
+			( int64_t ) ( category.m_nHlodDetailRetainedMissingProxy );
+		stats[prefix + String( "hlod_transition_overlap_cells" )] =
+			( int64_t ) ( category.m_nHlodTransitionOverlapCells );
+		stats[prefix + String( "hlod_transition_gap_errors" )] = ( int64_t ) ( category.m_nHlodTransitionGapErrors );
 	}
-	stats["published_lod0_cells"] = ( int64_t )( published_lod0_cells );
-	stats["published_lod1_cells"] = ( int64_t )( published_lod1_cells );
-	stats["published_higher_lod_cells"] = ( int64_t )( published_higher_lod_cells );
-	stats["lod_fallbacks"] = ( int64_t )( lod_fallbacks );
-	stats["lod_missing_source_skips"] = ( int64_t )( lod_missing_source_skips );
-	stats["visibility_layer_filtered_cells"] = ( int64_t )( visibility_layer_filtered_cells );
-	stats["fade_active_cells"] = ( int64_t )( fade_active_cells );
-	stats["hlod_eligible_sources"] = ( int64_t )( hlod_eligible_sources );
-	stats["hlod_active_replacements"] = ( int64_t )( hlod_active_replacements );
-	stats["hlod_detail_suppressed_cells"] = ( int64_t )( hlod_detail_suppressed_cells );
-	stats["hlod_detail_retained_missing_proxy"] = ( int64_t )( hlod_detail_retained_missing_proxy );
-	stats["hlod_transition_overlap_cells"] = ( int64_t )( hlod_transition_overlap_cells );
-	stats["hlod_transition_gap_errors"] = ( int64_t )( hlod_transition_gap_errors );
-	stats["hlod_representation_required_generation"] = ( int64_t )( m_snapshotBuilder.requiredHlodGeneration() );
-	stats["hlod_representation_built_generation"] = ( int64_t )( m_snapshotBuilder.builtHlodGeneration() );
+	stats["published_lod0_cells"] = ( int64_t ) ( published_lod0_cells );
+	stats["published_lod1_cells"] = ( int64_t ) ( published_lod1_cells );
+	stats["published_higher_lod_cells"] = ( int64_t ) ( published_higher_lod_cells );
+	stats["lod_fallbacks"] = ( int64_t ) ( lod_fallbacks );
+	stats["lod_missing_source_skips"] = ( int64_t ) ( lod_missing_source_skips );
+	stats["visibility_layer_filtered_cells"] = ( int64_t ) ( visibility_layer_filtered_cells );
+	stats["fade_active_cells"] = ( int64_t ) ( fade_active_cells );
+	stats["hlod_eligible_sources"] = ( int64_t ) ( hlod_eligible_sources );
+	stats["hlod_active_replacements"] = ( int64_t ) ( hlod_active_replacements );
+	stats["hlod_detail_suppressed_cells"] = ( int64_t ) ( hlod_detail_suppressed_cells );
+	stats["hlod_detail_retained_missing_proxy"] = ( int64_t ) ( hlod_detail_retained_missing_proxy );
+	stats["hlod_transition_overlap_cells"] = ( int64_t ) ( hlod_transition_overlap_cells );
+	stats["hlod_transition_gap_errors"] = ( int64_t ) ( hlod_transition_gap_errors );
+	stats["hlod_representation_required_generation"] = ( int64_t ) ( m_snapshotBuilder.requiredHlodGeneration() );
+	stats["hlod_representation_built_generation"] = ( int64_t ) ( m_snapshotBuilder.builtHlodGeneration() );
 	stats["publication_region_residency_filtered_cells"] =
-	        ( int64_t )( m_snapshotBuilder.diagnostics().m_nRegionResidencyFilteredCells );
-	stats["publication_resident_source_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nResidentSourceRecords );
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nRegionResidencyFilteredCells );
+	stats["publication_resident_source_records"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nResidentSourceRecords );
 	stats["publication_renderable_asset_source_records"] =
-	        ( int64_t )( m_snapshotBuilder.diagnostics().m_nRenderableAssetSourceRecords );
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nRenderableAssetSourceRecords );
 	stats["publication_skipped_missing_asset_records"] =
-	        ( int64_t )( m_snapshotBuilder.diagnostics().m_nSkippedMissingAssetRecords );
-	stats["publication_invalid_asset_id_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nInvalidAssetIdRecords );
-	stats["publication_missing_asset_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nMissingAssetRecords );
-	stats["publication_disabled_asset_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nDisabledAssetRecords );
-	stats["publication_no_lod_asset_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nNoLodAssetRecords );
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nSkippedMissingAssetRecords );
+	stats["publication_invalid_asset_id_records"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nInvalidAssetIdRecords );
+	stats["publication_missing_asset_records"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nMissingAssetRecords );
+	stats["publication_disabled_asset_records"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nDisabledAssetRecords );
+	stats["publication_no_lod_asset_records"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nNoLodAssetRecords );
 	stats["publication_asset_registry_deferred_builds"] =
-	        ( int64_t )( m_snapshotBuilder.diagnostics().m_nAssetRegistryDeferredBuilds );
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nAssetRegistryDeferredBuilds );
 	stats["publication_first_invalid_asset_id"] = m_snapshotBuilder.diagnostics().m_nFirstInvalidAssetId;
 	stats["publication_first_missing_asset_id"] = m_snapshotBuilder.diagnostics().m_nFirstMissingAssetId;
 	stats["publication_first_disabled_asset_id"] = m_snapshotBuilder.diagnostics().m_nFirstDisabledAssetId;
 	stats["publication_first_no_lod_asset_id"] = m_snapshotBuilder.diagnostics().m_nFirstNoLodAssetId;
-	stats["publication_records"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nPublishedRecords );
-	stats["publication_cells"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nPublishedCells );
-	stats["publication_packed_records_reused"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nPackedRecordsReused );
-	stats["publication_packed_records_rebuilt"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nPackedRecordsRebuilt );
-	stats["publication_bounds_reused"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nBoundsReused );
-	stats["publication_bounds_rebuilt"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nBoundsRebuilt );
-	stats["publication_policy_only_cell_updates"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nPolicyOnlyCellUpdates );
-	stats["publication_dirty_record_ranges"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nDirtyRecordRanges );
-	stats["publication_instance_layout_changes"] = ( int64_t )( m_snapshotBuilder.diagnostics().m_nInstanceLayoutChanges );
-	stats["render_cells"] = ( int )( m_renderCells.size() );
+	stats["publication_records"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nPublishedRecords );
+	stats["publication_cells"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nPublishedCells );
+	stats["publication_packed_records_reused"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nPackedRecordsReused );
+	stats["publication_packed_records_rebuilt"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nPackedRecordsRebuilt );
+	stats["publication_bounds_reused"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nBoundsReused );
+	stats["publication_bounds_rebuilt"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nBoundsRebuilt );
+	stats["publication_policy_only_cell_updates"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nPolicyOnlyCellUpdates );
+	stats["publication_dirty_record_ranges"] = ( int64_t ) ( m_snapshotBuilder.diagnostics().m_nDirtyRecordRanges );
+	stats["publication_instance_layout_changes"] =
+		( int64_t ) ( m_snapshotBuilder.diagnostics().m_nInstanceLayoutChanges );
+	stats["render_cells"] = ( int ) ( m_renderCells.size() );
 	stats["render_cells_lod0"] = lod0_cells;
 	stats["render_cells_lod1"] = lod1_cells;
 	stats["render_cells_higher_lod"] = higher_lod_cells;
-	stats["uploaded_instances"] = ( int64_t )( uploaded_instances );
-	stats["active_multimesh_bytes"] = ( int64_t )( active_multimesh_bytes );
-	stats["active_rd_instance_bytes"] = ( int64_t )( active_multimesh_bytes );
-	stats["logical_cells"] = ( int64_t )( m_logicalCellCounts.size() );
-	stats["logical_instances"] = ( int64_t )( logical_instances );
-	stats["clutter_logical_instances"] = ( int64_t )( clutter_logical_instances );
-	stats["ground_cover_logical_instances"] = ( int64_t )( ground_cover_logical_instances );
-	stats["occluder_logical_instances"] = ( int64_t )( occluder_logical_instances );
-	stats["region_updates"] = ( int64_t )( m_regionUpdateIndices.size() );
-	stats["active_region_updates"] = ( int64_t )( m_activeRegionUpdateIndices.size() );
-	stats["streaming_updates"] = ( int64_t )( m_streamingUpdates.size() );
-	stats["active_streaming_updates"] = ( int64_t )( m_activeStreamingUpdates.size() );
-	stats["materialized_pending_updates"] = ( int64_t )( materialized_pending );
+	stats["uploaded_instances"] = ( int64_t ) ( uploaded_instances );
+	stats["active_multimesh_bytes"] = ( int64_t ) ( active_multimesh_bytes );
+	stats["active_rd_instance_bytes"] = ( int64_t ) ( active_multimesh_bytes );
+	stats["logical_cells"] = ( int64_t ) ( m_logicalCellCounts.size() );
+	stats["logical_instances"] = ( int64_t ) ( logical_instances );
+	stats["clutter_logical_instances"] = ( int64_t ) ( clutter_logical_instances );
+	stats["ground_cover_logical_instances"] = ( int64_t ) ( ground_cover_logical_instances );
+	stats["occluder_logical_instances"] = ( int64_t ) ( occluder_logical_instances );
+	stats["region_updates"] = ( int64_t ) ( m_regionUpdateIndices.size() );
+	stats["active_region_updates"] = ( int64_t ) ( m_activeRegionUpdateIndices.size() );
+	stats["streaming_updates"] = ( int64_t ) ( m_streamingUpdates.size() );
+	stats["active_streaming_updates"] = ( int64_t ) ( m_activeStreamingUpdates.size() );
+	stats["materialized_pending_updates"] = ( int64_t ) ( materialized_pending );
 	stats["pending_updates_total"] = getPendingStreamingUpdateCount();
-	stats["queue_before_last_frame"] = ( int64_t )( m_nQueueBeforeLastFrame );
-	stats["queue_after_last_frame"] = ( int64_t )( m_nQueueAfterLastFrame );
-	stats["processed_cell_updates_last_frame"] = ( int64_t )( m_nProcessedCellUpdatesLastFrame );
-	stats["skipped_cell_updates_last_frame"] = ( int64_t )( m_nSkippedCellUpdatesLastFrame );
-	stats["multimesh_uploads_last_frame"] = ( int64_t )( m_nMultimeshUploadsLastFrame );
-	stats["rd_instance_publications_last_frame"] = ( int64_t )( m_nMultimeshUploadsLastFrame );
-	stats["multimesh_upload_bytes_last_frame"] = ( int64_t )( m_nMultimeshUploadBytesLastFrame );
-	stats["rd_instance_publication_bytes_last_frame"] = ( int64_t )( m_nMultimeshUploadBytesLastFrame );
-	stats["instance_records_uploaded_last_frame"] = ( int64_t )( m_nInstanceRecordsUploadedLastFrame );
-	stats["new_render_instances_last_frame"] = ( int64_t )( m_nNewRenderInstancesLastFrame );
-	stats["materialize_usec_last_frame"] = ( int64_t )( m_nMaterializeUsecLastFrame );
-	stats["cell_update_usec_last_frame"] = ( int64_t )( m_nCellUpdateUsecLastFrame );
+	stats["queue_before_last_frame"] = ( int64_t ) ( m_nQueueBeforeLastFrame );
+	stats["queue_after_last_frame"] = ( int64_t ) ( m_nQueueAfterLastFrame );
+	stats["processed_cell_updates_last_frame"] = ( int64_t ) ( m_nProcessedCellUpdatesLastFrame );
+	stats["skipped_cell_updates_last_frame"] = ( int64_t ) ( m_nSkippedCellUpdatesLastFrame );
+	stats["multimesh_uploads_last_frame"] = ( int64_t ) ( m_nMultimeshUploadsLastFrame );
+	stats["rd_instance_publications_last_frame"] = ( int64_t ) ( m_nMultimeshUploadsLastFrame );
+	stats["multimesh_upload_bytes_last_frame"] = ( int64_t ) ( m_nMultimeshUploadBytesLastFrame );
+	stats["rd_instance_publication_bytes_last_frame"] = ( int64_t ) ( m_nMultimeshUploadBytesLastFrame );
+	stats["instance_records_uploaded_last_frame"] = ( int64_t ) ( m_nInstanceRecordsUploadedLastFrame );
+	stats["new_render_instances_last_frame"] = ( int64_t ) ( m_nNewRenderInstancesLastFrame );
+	stats["materialize_usec_last_frame"] = ( int64_t ) ( m_nMaterializeUsecLastFrame );
+	stats["cell_update_usec_last_frame"] = ( int64_t ) ( m_nCellUpdateUsecLastFrame );
 	const int effective_update_budget = getEffectiveUpdateCellBudget();
-	stats["update_budget_saturated_last_frame"] = effective_update_budget > 0
-	        && m_nProcessedCellUpdatesLastFrame >= ( uint32_t )( effective_update_budget )
-	        && m_nQueueAfterLastFrame > 0u;
+	stats["update_budget_saturated_last_frame"] =
+		effective_update_budget > 0 && m_nProcessedCellUpdatesLastFrame >= ( uint32_t ) ( effective_update_budget ) &&
+		m_nQueueAfterLastFrame > 0u;
 	stats["materializing_updates"] = m_bMaterializingUpdates;
 	stats["processing_pending_updates"] = m_bProcessingPendingUpdates;
 	stats["cancel_requested"] = m_bPendingCancelRequested;
-	stats["global_mesh_updates"] = ( int64_t )( m_globalMeshUpdates.count() );
+	stats["global_mesh_updates"] = ( int64_t ) ( m_globalMeshUpdates.count() );
 	stats["update_all"] = m_bUpdateAll;
 	stats["rebuild_all"] = m_bRebuildAll;
-	stats["finite_streaming_meshes"] = ( int64_t )( m_finiteStreamingMeshIds.size() );
+	stats["finite_streaming_meshes"] = ( int64_t ) ( m_finiteStreamingMeshIds.size() );
 	stats["maximum_streaming_radius"] = m_fMaxStreamingRadius;
 	stats["cell_size"] = m_nCellSize;
 	stats["cells_per_region_axis"] = getCellsPerRegionAxis();
@@ -5608,102 +6406,156 @@ Dictionary Terrain3DInstancer::getStats( void ) const {
 	stats["stream_position_valid"] = m_bStreamPositionValid;
 	stats["stream_position"] = m_lastStreamPosition;
 	stats["streaming_selection_deferred_last_frame"] = m_bStreamingSelectionDeferredLastFrame;
-	stats["transition_cells_examined"] = ( int64_t )( m_nTransitionCellsExaminedLastScan );
-	stats["transition_lod_evaluations"] = ( int64_t )( m_nTransitionLodEvaluationsLastScan );
-	stats["transitions_queued"] = ( int64_t )( m_nTransitionsQueuedLastScan );
-	stats["transition_scan_cpu_usec"] = ( int64_t )( m_nTransitionScanUsecLastScan );
-	stats["transition_full_rescan_fallback_count"] = ( int64_t )( m_nTransitionFullRescanFallbackCount );
-	stats["transition_buckets_examined"] = ( int64_t )( m_nTransitionBucketsExaminedLastScan );
-	stats["transition_candidate_buckets"] = ( int64_t )( m_nTransitionCandidateBucketsLastScan );
-	stats["transition_bucket_count"] = ( int64_t )( m_singleLodTransitionBuckets.size() );
-	stats["owner_capacity_misses"] = ( int64_t )( m_nCapacityMissCount );
-	stats["owner_growth_denied"] = ( int64_t )( m_nOwnerGrowthDeniedCount );
-	stats["owner_cold_rebuilds"] = ( int64_t )( m_nColdRebuildCount );
+	stats["transition_cells_examined"] = ( int64_t ) ( m_nTransitionCellsExaminedLastScan );
+	stats["transition_lod_evaluations"] = ( int64_t ) ( m_nTransitionLodEvaluationsLastScan );
+	stats["transitions_queued"] = ( int64_t ) ( m_nTransitionsQueuedLastScan );
+	stats["transition_scan_cpu_usec"] = ( int64_t ) ( m_nTransitionScanUsecLastScan );
+	stats["transition_full_rescan_fallback_count"] = ( int64_t ) ( m_nTransitionFullRescanFallbackCount );
+	stats["transition_buckets_examined"] = ( int64_t ) ( m_nTransitionBucketsExaminedLastScan );
+	stats["transition_candidate_buckets"] = ( int64_t ) ( m_nTransitionCandidateBucketsLastScan );
+	stats["transition_bucket_count"] = ( int64_t ) ( m_singleLodTransitionBuckets.size() );
+	stats["owner_capacity_misses"] = ( int64_t ) ( m_nCapacityMissCount );
+	stats["owner_growth_denied"] = ( int64_t ) ( m_nOwnerGrowthDeniedCount );
+	stats["owner_cold_rebuilds"] = ( int64_t ) ( m_nColdRebuildCount );
 	stats["owner_rebuild_pending"] = m_bRuntimeStorageRebuildPending;
 	return stats;
 }
 
-void Terrain3DInstancer::_bind_methods( void ) {
+void Terrain3DInstancer::_bind_methods(
+	void ) {
 	BIND_ENUM_CONSTANT( NORMAL );
 	BIND_ENUM_CONSTANT( INSTANCER_DISABLED );
 
 	ClassDB::bind_method( D_METHOD( "clear_by_mesh", "mesh_id" ), &Terrain3DInstancer::clearByMesh );
-	ClassDB::bind_method( D_METHOD( "clear_by_location", "region_location", "mesh_id" ), &Terrain3DInstancer::clearByLocation );
+	ClassDB::bind_method( D_METHOD( "clear_by_location", "region_location", "mesh_id" ),
+						  &Terrain3DInstancer::clearByLocation );
 	ClassDB::bind_method( D_METHOD( "clear_by_region", "region", "mesh_id" ), &Terrain3DInstancer::clearByRegion );
 	ClassDB::bind_method( D_METHOD( "is_enabled" ), &Terrain3DInstancer::isEnabled );
 	ClassDB::bind_method( D_METHOD( "add_instances", "global_position", "params" ), &Terrain3DInstancer::addInstances );
-	ClassDB::bind_method( D_METHOD( "remove_instances", "global_position", "params" ), &Terrain3DInstancer::removeInstances );
+	ClassDB::bind_method( D_METHOD( "remove_instances", "global_position", "params" ),
+						  &Terrain3DInstancer::removeInstances );
 	ClassDB::bind_method( D_METHOD( "add_multimesh", "mesh_id", "multimesh", "transform", "update" ),
-	        &Terrain3DInstancer::addMultimesh,
-	        DEFVAL( Transform3D() ),
-	        DEFVAL( true ) );
+						  &Terrain3DInstancer::addMultimesh,
+						  DEFVAL( Transform3D() ),
+						  DEFVAL( true ) );
 	ClassDB::bind_method( D_METHOD( "add_transforms", "mesh_id", "transforms", "colors", "update" ),
-	        &Terrain3DInstancer::addTransforms,
-	        DEFVAL( PackedColorArray() ),
-	        DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "add_owned_transforms", "mesh_id", "transforms", "owner_id", "colors", "update", "backup" ),
-	        &Terrain3DInstancer::addOwnedTransforms,
-	        DEFVAL( PackedColorArray() ),
-	        DEFVAL( true ),
-	        DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "remove_owned_instances", "owner_id", "update", "backup" ),
-	        &Terrain3DInstancer::removeOwnedInstances,
-	        DEFVAL( true ),
-	        DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "append_location", "region_location", "mesh_id", "transforms", "colors", "update" ),
-	        &Terrain3DInstancer::appendLocation,
-	        DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "append_region", "region", "mesh_id", "transforms", "colors", "update" ),
-	        &Terrain3DInstancer::appendRegion,
-	        DEFVAL( true ) );
-	ClassDB::bind_method( D_METHOD( "update_transforms", "aabb" ), &Terrain3DInstancer::updateTransforms );
-	ClassDB::bind_method( D_METHOD( "snap_instances_to_terrain", "aabb" ), &Terrain3DInstancer::snapInstancesToTerrain );
+						  &Terrain3DInstancer::addTransforms,
+						  DEFVAL( PackedColorArray() ),
+						  DEFVAL( true ) );
 	ClassDB::bind_method(
-	        D_METHOD( "set_instance_follow_policy", "aabb", "follow_height", "follow_normal", "manual_orientation", "mesh_id" ),
-	        &Terrain3DInstancer::setInstanceFollowPolicy,
-	        DEFVAL( -1 ) );
+		D_METHOD( "add_owned_transforms", "mesh_id", "transforms", "owner_id", "colors", "update", "backup" ),
+		&Terrain3DInstancer::addOwnedTransforms,
+		DEFVAL( PackedColorArray() ),
+		DEFVAL( true ),
+		DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "is_owner_id_used", "owner_id" ), &Terrain3DInstancer::isOwnerIdUsed );
+	ClassDB::bind_method( D_METHOD( "replace_foliage_owned_regions", "batches", "backup" ),
+						  &Terrain3DInstancer::replaceFoliageOwnedRegions,
+						  DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "remove_owned_instances", "owner_id", "update", "backup" ),
+						  &Terrain3DInstancer::removeOwnedInstances,
+						  DEFVAL( true ),
+						  DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "append_location", "region_location", "mesh_id", "transforms", "colors", "update" ),
+						  &Terrain3DInstancer::appendLocation,
+						  DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "append_region", "region", "mesh_id", "transforms", "colors", "update" ),
+						  &Terrain3DInstancer::appendRegion,
+						  DEFVAL( true ) );
+	ClassDB::bind_method( D_METHOD( "update_transforms", "aabb" ), &Terrain3DInstancer::updateTransforms );
+	ClassDB::bind_method( D_METHOD( "snap_instances_to_terrain", "aabb" ),
+						  &Terrain3DInstancer::snapInstancesToTerrain );
+	ClassDB::bind_method( D_METHOD( "set_instance_follow_policy",
+									"aabb",
+									"follow_height",
+									"follow_normal",
+									"manual_orientation",
+									"mesh_id" ),
+						  &Terrain3DInstancer::setInstanceFollowPolicy,
+						  DEFVAL( -1 ) );
 	ClassDB::bind_method( D_METHOD( "get_closest_mesh_id", "global_position" ), &Terrain3DInstancer::getClosestMeshId );
 	ClassDB::bind_method( D_METHOD( "pick_editable_instance", "ray_origin", "ray_direction", "max_distance" ),
-	        &Terrain3DInstancer::pickEditableInstance,
-	        DEFVAL( 4096.0f ) );
+						  &Terrain3DInstancer::pickEditableInstance,
+						  DEFVAL( 4096.0f ) );
 	ClassDB::bind_method( D_METHOD( "get_editable_instance", "handle" ), &Terrain3DInstancer::getEditableInstance );
 	ClassDB::bind_method( D_METHOD( "set_editable_instance_transform", "handle", "global_transform", "manualize" ),
-	        &Terrain3DInstancer::setEditableInstanceTransform,
-	        DEFVAL( false ) );
+						  &Terrain3DInstancer::setEditableInstanceTransform,
+						  DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "update_mmis", "mesh_id", "region_location", "rebuild_all" ),
-	        &Terrain3DInstancer::updateMmis,
-	        DEFVAL( -1 ),
-	        DEFVAL( s_v2iMax ),
-	        DEFVAL( false ) );
+						  &Terrain3DInstancer::updateMmis,
+						  DEFVAL( -1 ),
+						  DEFVAL( s_v2iMax ),
+						  DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "swap_ids", "src_id", "dest_id" ), &Terrain3DInstancer::swapIds );
 	ClassDB::bind_method( D_METHOD( "build_multimesh_buffer", "transforms", "colors" ),
-	        &Terrain3DInstancer::buildMultimeshBuffer,
-	        DEFVAL( PackedColorArray() ) );
+						  &Terrain3DInstancer::buildMultimeshBuffer,
+						  DEFVAL( PackedColorArray() ) );
 	ClassDB::bind_method( D_METHOD( "get_cells_per_region_axis" ), &Terrain3DInstancer::getCellsPerRegionAxis );
 
 	ClassDB::bind_method( D_METHOD( "get_stats" ), &Terrain3DInstancer::getStats );
-	ClassDB::bind_method( D_METHOD( "debug_validate_single_lod_transition_candidates", "previous_position", "target_position" ),
-	        &Terrain3DInstancer::debugValidateSingleLodTransitionCandidates );
 	ClassDB::bind_method(
-	        D_METHOD( "debug_validate_single_lod_state", "target_position" ), &Terrain3DInstancer::debugValidateSingleLodState );
+		D_METHOD( "debug_validate_single_lod_transition_candidates", "previous_position", "target_position" ),
+		&Terrain3DInstancer::debugValidateSingleLodTransitionCandidates );
+	ClassDB::bind_method( D_METHOD( "debug_validate_single_lod_state", "target_position" ),
+						  &Terrain3DInstancer::debugValidateSingleLodState );
 
 	ADD_GROUP( "Streaming Policy", "" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setMode, getMode, "mode",
-	                   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Normal" ), "set_mode", "get_mode" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellSize, getCellSize, "cell_size",
-	                   PropertyInfo( Variant::INT, "cell_size", PROPERTY_HINT_ENUM, "8,16,32,64,128,suffix: samples" ), "set_cell_size", "get_cell_size" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingEnabled, isCellStreamingEnabled, "enabled",
-	                   PropertyInfo( Variant::BOOL, "cell_streaming_enabled" ), "set_cell_streaming_enabled", "is_cell_streaming_enabled" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingMargin, getCellStreamingMargin, "margin",
-	                   PropertyInfo( Variant::FLOAT, "cell_streaming_margin", PROPERTY_HINT_RANGE, "0,1024,1,suffix:m" ), "set_cell_streaming_margin", "get_cell_streaming_margin" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setCellStreamingStep, getCellStreamingStep, "distance",
-	                   PropertyInfo( Variant::FLOAT, "cell_streaming_update_distance", PROPERTY_HINT_RANGE, "1,256,1,suffix:m" ), "set_cell_streaming_step", "get_cell_streaming_step" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setUpdateCellBudget, getUpdateCellBudget, "cells_per_frame",
-	                   PropertyInfo( Variant::INT, "update_cell_budget", PROPERTY_HINT_RANGE, "0,65536,1,or_greater,suffix: cells/frame" ), "set_update_cell_budget", "get_update_cell_budget" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer,
+					   setMode,
+					   getMode,
+					   "mode",
+					   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Normal" ),
+					   "set_mode",
+					   "get_mode" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer,
+					   setCellSize,
+					   getCellSize,
+					   "cell_size",
+					   PropertyInfo( Variant::INT, "cell_size", PROPERTY_HINT_ENUM, "8,16,32,64,128,suffix: samples" ),
+					   "set_cell_size",
+					   "get_cell_size" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer,
+					   setCellStreamingEnabled,
+					   isCellStreamingEnabled,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "cell_streaming_enabled" ),
+					   "set_cell_streaming_enabled",
+					   "is_cell_streaming_enabled" );
+	T3D_BIND_PROPERTY(
+		Terrain3DInstancer,
+		setCellStreamingMargin,
+		getCellStreamingMargin,
+		"margin",
+		PropertyInfo( Variant::FLOAT, "cell_streaming_margin", PROPERTY_HINT_RANGE, "0,1024,1,suffix:m" ),
+		"set_cell_streaming_margin",
+		"get_cell_streaming_margin" );
+	T3D_BIND_PROPERTY(
+		Terrain3DInstancer,
+		setCellStreamingStep,
+		getCellStreamingStep,
+		"distance",
+		PropertyInfo( Variant::FLOAT, "cell_streaming_update_distance", PROPERTY_HINT_RANGE, "1,256,1,suffix:m" ),
+		"set_cell_streaming_step",
+		"get_cell_streaming_step" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer,
+					   setUpdateCellBudget,
+					   getUpdateCellBudget,
+					   "cells_per_frame",
+					   PropertyInfo( Variant::INT,
+									 "update_cell_budget",
+									 PROPERTY_HINT_RANGE,
+									 "0,65536,1,or_greater,suffix: cells/frame" ),
+					   "set_update_cell_budget",
+					   "get_update_cell_budget" );
 
 	ADD_GROUP( "LOD / Buffer Policy", "" );
-	T3D_BIND_PROPERTY( Terrain3DInstancer, setSingleLodInstanceBuffers, isSingleLodInstanceBuffers, "enabled",
-	                   PropertyInfo( Variant::BOOL, "single_lod_instance_buffers" ), "set_single_lod_instance_buffers", "is_single_lod_instance_buffers" );
+	T3D_BIND_PROPERTY( Terrain3DInstancer,
+					   setSingleLodInstanceBuffers,
+					   isSingleLodInstanceBuffers,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "single_lod_instance_buffers" ),
+					   "set_single_lod_instance_buffers",
+					   "is_single_lod_instance_buffers" );
 
 	ADD_GROUP( "Runtime Status", "" );
 	// Runtime counters remain available through getStats(); status fields are read-only.

@@ -13,20 +13,23 @@
 
 using namespace godot;
 
-static uint64_t t3d_world_material_stable_key( const Ref<Resource> &pMaterial ) {
+static uint64_t t3d_world_material_stable_key(
+	const Ref< Resource > &pMaterial ) {
 	return pMaterial.is_valid() ? t3d_vt_material_stable_key_from_resource_path( pMaterial->get_path() ) : 0u;
 }
 
-static bool t3d_world_material_has_vt_sources( const Terrain3DWorldMaterial *pMaterial ) {
-	return pMaterial != NULL
-	        && ( pMaterial->getAlbedoTexture().is_valid() || pMaterial->getNormalTexture().is_valid()
-	                || pMaterial->getSurfaceTexture().is_valid() || pMaterial->getHeightTexture().is_valid() );
+static bool t3d_world_material_has_vt_sources(
+	const Terrain3DWorldMaterial *pMaterial ) {
+	return pMaterial != NULL &&
+		   ( pMaterial->getAlbedoTexture().is_valid() || pMaterial->getNormalTexture().is_valid() ||
+			 pMaterial->getSurfaceTexture().is_valid() || pMaterial->getHeightTexture().is_valid() );
 }
 
-static bool t3d_world_material_resolve_page_set( const t3dWorldGodotMaterialResolver_t &rResolver,
-        const uint64_t nStableKey,
-        const bool bRequiresAllocation,
-        t3dRenderingMaterialVTBindings_t &rBindings ) {
+static bool t3d_world_material_resolve_page_set(
+	const t3dWorldGodotMaterialResolver_t &rResolver,
+	const uint64_t						   nStableKey,
+	const bool							   bRequiresAllocation,
+	t3dRenderingMaterialVTBindings_t	  &rBindings ) {
 	rBindings.m_nVtAllocation = T3D_VT_INVALID_ALLOCATION;
 	rBindings.m_nOverlayVtAllocation = T3D_VT_INVALID_ALLOCATION;
 	if ( !bRequiresAllocation ) {
@@ -36,19 +39,21 @@ static bool t3d_world_material_resolve_page_set( const t3dWorldGodotMaterialReso
 		return false;
 	}
 	uint32_t nAllocation = T3D_VT_INVALID_ALLOCATION;
-	if ( !rResolver.pResolveMaterialVT( rResolver.pUser, nStableKey, nAllocation ) || nAllocation == T3D_VT_INVALID_ALLOCATION ) {
+	if ( !rResolver.pResolveMaterialVT( rResolver.pUser, nStableKey, nAllocation ) ||
+		 nAllocation == T3D_VT_INVALID_ALLOCATION ) {
 		return false;
 	}
 	rBindings.m_nVtAllocation = nAllocation;
 	return true;
 }
 
-bool Terrain3DWorldGodotConverter::analyzeMaterialsCold( MeshInstance3D *pMeshInstance,
-        uint32_t pTier,
-        const Ref<Terrain3DWorldMaterial> &pExplicitMaterial,
-        bool &rSupported,
-        bool &rSortedTransparency,
-        bool &rTwoSided ) const {
+bool Terrain3DWorldGodotConverter::analyzeMaterialsCold(
+	MeshInstance3D						*pMeshInstance,
+	uint32_t							 pTier,
+	const Ref< Terrain3DWorldMaterial > &pExplicitMaterial,
+	bool								&rSupported,
+	bool								&rSortedTransparency,
+	bool								&rTwoSided ) const {
 	rSupported = true;
 	rSortedTransparency = false;
 	rTwoSided = false;
@@ -57,58 +62,60 @@ bool Terrain3DWorldGodotConverter::analyzeMaterialsCold( MeshInstance3D *pMeshIn
 		return true;
 	}
 
-	Ref<ArrayMesh> Mesh = pMeshInstance->get_mesh();
+	Ref< ArrayMesh > Mesh = pMeshInstance->get_mesh();
 	if ( Mesh.is_null() ) {
 		rSupported = false;
 		return false;
 	}
 
 	for ( int32_t s = 0; s < Mesh->get_surface_count(); ++s ) {
-		Ref<Material> Material = pMeshInstance->get_surface_override_material( s );
+		Ref< Material > Material = pMeshInstance->get_surface_override_material( s );
 		if ( Material.is_null() ) {
 			Material = Mesh->surface_get_material( s );
 		}
 		if ( Material.is_null() ) {
 			continue;
 		}
-		BaseMaterial3D *pBase = Object::cast_to<BaseMaterial3D>( *Material );
+		BaseMaterial3D *pBase = Object::cast_to< BaseMaterial3D >( *Material );
 		if ( pBase == NULL ) {
 			rSupported = false;
 			return false;
 		}
 		const BaseMaterial3D::Transparency eTransparency = pBase->get_transparency();
-		if ( eTransparency != BaseMaterial3D::TRANSPARENCY_DISABLED && eTransparency != BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR ) {
+		if ( eTransparency != BaseMaterial3D::TRANSPARENCY_DISABLED &&
+			 eTransparency != BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR ) {
 			rSortedTransparency = true;
 		}
 		if ( pBase->get_cull_mode() == BaseMaterial3D::CULL_DISABLED ) {
 			rTwoSided = true;
 		}
 	}
-	( void )pTier;
+	( void ) pTier;
 	return true;
 }
 
-bool Terrain3DWorldGodotConverter::compileStandardMaterialCold( const Ref<Material> &pMaterial,
-        const uint32_t pTier,
-        t3dRenderingMaterialGpu_t &rRecord,
-        bool &rSortedTransparency,
-        bool &rTwoSided ) const {
+bool Terrain3DWorldGodotConverter::compileStandardMaterialCold(
+	const Ref< Material >	  &pMaterial,
+	const uint32_t			   pTier,
+	t3dRenderingMaterialGpu_t &rRecord,
+	bool					  &rSortedTransparency,
+	bool					  &rTwoSided ) const {
 	rSortedTransparency = false;
 	rTwoSided = false;
 
-	Ref<Terrain3DRenderingMaterial> Canonical;
+	Ref< Terrain3DRenderingMaterial > Canonical;
 	Canonical.instantiate();
 	if ( Canonical.is_null() ) {
 		return false;
 	}
 	if ( pMaterial.is_valid() ) {
-		BaseMaterial3D *const pBase = Object::cast_to<BaseMaterial3D>( pMaterial.ptr() );
+		BaseMaterial3D *const pBase = Object::cast_to< BaseMaterial3D >( pMaterial.ptr() );
 		if ( pBase == NULL ) {
 			return false;
 		}
 		const BaseMaterial3D::Transparency eTransparency = pBase->get_transparency();
-		rSortedTransparency =
-		        eTransparency != BaseMaterial3D::TRANSPARENCY_DISABLED && eTransparency != BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR;
+		rSortedTransparency = eTransparency != BaseMaterial3D::TRANSPARENCY_DISABLED &&
+							  eTransparency != BaseMaterial3D::TRANSPARENCY_ALPHA_SCISSOR;
 		rTwoSided = pBase->get_cull_mode() == BaseMaterial3D::CULL_DISABLED;
 		if ( rSortedTransparency || !Canonical->importBaseMaterialCold( pMaterial ) ) {
 			return false;
@@ -120,9 +127,12 @@ bool Terrain3DWorldGodotConverter::compileStandardMaterialCold( const Ref<Materi
 	Canonical->setFoliage( pTier == T3D_WORLD_TIER_FOLIAGE );
 
 	t3dRenderingMaterialVTBindings_t Bindings;
-	const uint64_t nStableKey = t3d_world_material_stable_key( pMaterial );
-	if ( !t3d_world_material_resolve_page_set( m_materialResolver, nStableKey, t3d_world_material_has_vt_sources( Canonical.ptr() ), Bindings )
-	        || !Canonical->compileVtRecordCold( Bindings, rRecord ) ) {
+	const uint64_t					 nStableKey = t3d_world_material_stable_key( pMaterial );
+	if ( !t3d_world_material_resolve_page_set( m_materialResolver,
+											   nStableKey,
+											   t3d_world_material_has_vt_sources( Canonical.ptr() ),
+											   Bindings ) ||
+		 !Canonical->compileVtRecordCold( Bindings, rRecord ) ) {
 		return false;
 	}
 	if ( Bindings.m_nVtAllocation != T3D_VT_INVALID_ALLOCATION ) {
@@ -131,18 +141,19 @@ bool Terrain3DWorldGodotConverter::compileStandardMaterialCold( const Ref<Materi
 	return true;
 }
 
-bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold( const Ref<Material> &pMaterial,
-        const Ref<Terrain3DWorldMaterial> &pExplicitMaterial,
-        uint32_t pTier,
-        uint32_t &rMaterialId,
-        t3dWorldConversionReason_t &rReason ) {
+bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold(
+	const Ref< Material >				&pMaterial,
+	const Ref< Terrain3DWorldMaterial > &pExplicitMaterial,
+	uint32_t							 pTier,
+	uint32_t							&rMaterialId,
+	t3dWorldConversionReason_t			&rReason ) {
 	const uint64_t nStableKey = pExplicitMaterial.is_valid()
-	        ? t3d_vt_material_stable_key_from_resource_path( pExplicitMaterial->get_path() )
-	        : t3d_world_material_stable_key( pMaterial );
-	uint64_t nKey = nStableKey;
+									? t3d_vt_material_stable_key_from_resource_path( pExplicitMaterial->get_path() )
+									: t3d_world_material_stable_key( pMaterial );
+	uint64_t	   nKey = nStableKey;
 	if ( nKey == 0u ) {
-		nKey = pExplicitMaterial.is_valid() ? ( uint64_t )pExplicitMaterial->get_instance_id()
-		                                    : ( pMaterial.is_valid() ? ( uint64_t )pMaterial->get_instance_id() : 1u );
+		nKey = pExplicitMaterial.is_valid() ? ( uint64_t ) pExplicitMaterial->get_instance_id()
+											: ( pMaterial.is_valid() ? ( uint64_t ) pMaterial->get_instance_id() : 1u );
 	}
 	nKey = t3dHashCombine64( nKey, pTier );
 
@@ -152,8 +163,8 @@ bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold( const Ref<Material
 			return true;
 		}
 	}
-	if ( m_pBuffers->nMaterialCount >= m_pBuffers->nMaterialCapacity
-	        || m_pBuffers->nMaterialEntryCount >= m_pBuffers->nMaterialEntryCapacity ) {
+	if ( m_pBuffers->nMaterialCount >= m_pBuffers->nMaterialCapacity ||
+		 m_pBuffers->nMaterialEntryCount >= m_pBuffers->nMaterialEntryCapacity ) {
 		rReason = T3D_WORLD_CONVERSION_CAPACITY_EXCEEDED;
 		return false;
 	}
@@ -162,8 +173,10 @@ bool Terrain3DWorldGodotConverter::findOrCompileMaterialCold( const Ref<Material
 	memset( &Record, 0, sizeof( Record ) );
 	if ( pExplicitMaterial.is_valid() ) {
 		t3dRenderingMaterialVTBindings_t Bindings;
-		if ( !t3d_world_material_resolve_page_set(
-		             m_materialResolver, nStableKey, t3d_world_material_has_vt_sources( pExplicitMaterial.ptr() ), Bindings ) ) {
+		if ( !t3d_world_material_resolve_page_set( m_materialResolver,
+												   nStableKey,
+												   t3d_world_material_has_vt_sources( pExplicitMaterial.ptr() ),
+												   Bindings ) ) {
 			rReason = T3D_WORLD_CONVERSION_UNSUPPORTED_MATERIAL;
 			return false;
 		}

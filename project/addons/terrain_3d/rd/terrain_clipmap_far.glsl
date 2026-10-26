@@ -60,7 +60,72 @@ depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3
 compat_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
 editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
 
-// Shared clipmap source revision 2: bump when either clipmap include changes.
+feedback_color_native = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING";
+feedback_color_native_vt_hints = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1";
+feedback_color_native_vt_hints_prepared_bias = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1\n#define T3D_PREPARED_MIP_BIAS 1";
+feedback_color_specular = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
+feedback_color_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
+feedback_color_specular_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+feedback_color_native_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_native_one_sun = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN";
+feedback_color_specular_one_sun = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_SPECULAR";
+feedback_color_motion_one_sun = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_MOTION";
+feedback_color_specular_motion_one_sun = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+feedback_color_native_one_sun_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_one_sun_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_motion_one_sun_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_motion_one_sun_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_ONE_SUN\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+
+// Shared clipmap source revision 3: bump when either clipmap include changes.
+
+color_native_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_native_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_native_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_specular_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_specular_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_specular_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_specular_motion_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_native_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_native_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_native_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_specular_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_specular_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+compat_color_specular_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 1\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+editor_color_specular_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 2\n#define T3D_TERRAIN_MATERIAL_BACKEND 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+
+
+// Optional shader variants, selected explicitly by the host renderer.
+silhouette_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_SILHOUETTE_FAST_PATH 1";
+silhouette_only_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_SILHOUETTE_FAST_PATH 2";
+control_nearest_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_CONTROL_FILTER_CLASS 1";
+control_bilinear_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_CONTROL_FILTER_CLASS 2";
+control_adaptive_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_CONTROL_FILTER_CLASS 3";
+authored_exact_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_AUTHORED_FILTER_CLASS 1";
+authored_hardware_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_AUTHORED_FILTER_CLASS 2";
+planar_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_MATERIAL_PROJECTION_CLASS 1";
+two_key_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_COLOR_TWO_KEY_SPECIALIZATION 1";
+active_key_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_MATERIAL_ACTIVE_KEY_LOOP 1";
+fixed_taps_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_FIXED_FILTER_TAPS 1";
+transform_reuse_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_CONTROL_TRANSFORM_REUSE 1";
+authored_corner_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_AUTHORED_BILINEAR_CORNER_REUSE 1";
+megavt_early_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_MEGAVT_EARLY_COLOR_OVERRIDE 1";
+
+prepared_mip_bias_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_PREPARED_MIP_BIAS 1";
+vt_ancestor_hints_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1";
+vt_ancestor_hints_prepared_bias_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1\n#define T3D_PREPARED_MIP_BIAS 1";
 
 #[vertex]
 #version 450
@@ -68,6 +133,7 @@ editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#de
 #VERSION_DEFINES
 #define T3D_TIER 2
 #include "terrain_strip_topology_inc.glslinc"
+#include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
 #include "terrain_clipmap_vertex_inc.glslinc"
 
@@ -76,6 +142,12 @@ editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#de
 #extension GL_EXT_control_flow_attributes : require
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
+// Subgroup extension declarations follow RDShaderFile variant definitions.
+#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING) && T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_vote : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#endif
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "vt/terrain_vt_filter_math_inc.glslinc"
 #include "vt/terrain_vt_tail_filter_inc.glslinc"
@@ -89,7 +161,16 @@ editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#de
 #endif
 #include "terrain_forward_lighting_inc.glslinc"
 #define T3D_TIER 2
+#include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_fragment_interface.glslinc"
+// Keep includes at the RDShaderFile stage root: nested includes are not expanded.
+// Mesh-specialized world-raster variants do not compile terrain material helpers.
+#ifndef T3D_WORLD_RASTER_MESH
+#include "terrain_composed_material_math.glslinc"
+// The decoding implementation is supplied later by terrain_clipmap_fragment_inc.
+vec3 decode_surface_normal(vec2 encoded_xy);
+#include "terrain_composed_surface_sampling.glslinc"
+#endif
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \
     T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
@@ -106,7 +187,13 @@ editor_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 2\n#de
         terrain_vt_page_table[index].generation,                                                                                           \
         terrain_vt_page_table[index].packed_resolved_mip_flags)
 #define T3D_VT_RESOLVE_TAIL_ENTRY(index) terrain_vt_tails[index]
+#if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
+#define T3D_VT_RESOLVE_HINT(index) terrain_vt_ancestor_hints[index]
+#endif
 #include "vt/terrain_vt_resolve_core.glslinc"
+#ifdef T3D_VT_RESOLVE_HINT
+#undef T3D_VT_RESOLVE_HINT
+#endif
 #undef T3D_VT_RESOLVE_TAIL_ENTRY
 #undef T3D_VT_RESOLVE_PAGE_ENTRY
 #undef T3D_VT_RESOLVE_ALLOCATION

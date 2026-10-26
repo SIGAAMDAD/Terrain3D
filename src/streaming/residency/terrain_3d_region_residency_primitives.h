@@ -11,12 +11,13 @@
 #include <EASTL/numeric_limits.h>
 #include <stdint.h>
 
-template <typename TMapEntry, typename TSlotPredicate>
-EA_FORCE_INLINE int t3dRegionResidencyFindMappedSlot( const Vector2i &rLocation,
-        const TMapEntry *const pRegionMap,
-        const t3dRegionCoord_t *const pLocations,
-        const int nCapacity,
-        TSlotPredicate slotPredicate ) {
+template< typename TMapEntry, typename TSlotPredicate >
+EA_FORCE_INLINE int t3dRegionResidencyFindMappedSlot(
+	const Vector2i				 &rLocation,
+	const TMapEntry *const		  pRegionMap,
+	const t3dRegionCoord_t *const pLocations,
+	const int					  nCapacity,
+	TSlotPredicate				  slotPredicate ) {
 	if ( !pRegionMap || !pLocations || nCapacity <= 0 ) {
 		return -1;
 	}
@@ -24,15 +25,18 @@ EA_FORCE_INLINE int t3dRegionResidencyFindMappedSlot( const Vector2i &rLocation,
 	if ( map_index < 0 ) {
 		return -1;
 	}
-	const int slot = ( int )( pRegionMap[map_index] ) - 1;
-	if ( slot < 0 || slot >= nCapacity || !slotPredicate( slot ) || !t3dRegionCoordEquals( pLocations[slot], rLocation ) ) {
+	const int slot = ( int ) ( pRegionMap[map_index] ) - 1;
+	if ( slot < 0 || slot >= nCapacity || !slotPredicate( slot ) ||
+		 !t3dRegionCoordEquals( pLocations[slot], rLocation ) ) {
 		return -1;
 	}
 	return slot;
 }
 
-template <typename TSlotPredicate>
-EA_FORCE_INLINE int t3dRegionResidencyFindFirstSlot( const int nCapacity, TSlotPredicate slotPredicate ) {
+template< typename TSlotPredicate >
+EA_FORCE_INLINE int t3dRegionResidencyFindFirstSlot(
+	const int	   nCapacity,
+	TSlotPredicate slotPredicate ) {
 	for ( int slot = 0; slot < nCapacity; ++slot ) {
 		if ( slotPredicate( slot ) ) {
 			return slot;
@@ -42,7 +46,10 @@ EA_FORCE_INLINE int t3dRegionResidencyFindFirstSlot( const int nCapacity, TSlotP
 }
 
 EA_FORCE_INLINE void t3dRegionResidencyBuildDesiredMap(
-        const Vector2i *const pDesired, const int nDesiredCount, uint8_t *const pMap, const size_t nMapCount ) {
+	const Vector2i *const pDesired,
+	const int			  nDesiredCount,
+	uint8_t *const		  pMap,
+	const size_t		  nMapCount ) {
 	if ( !pMap || nMapCount == 0u ) {
 		return;
 	}
@@ -54,26 +61,30 @@ EA_FORCE_INLINE void t3dRegionResidencyBuildDesiredMap(
 	}
 	for ( int index = 0; index < nDesiredCount; ++index ) {
 		const int map_index = Terrain3DRegionRepository::getRegionMapIndex( pDesired[index] );
-		if ( map_index >= 0 && ( size_t )( map_index ) < nMapCount ) {
+		if ( map_index >= 0 && ( size_t ) ( map_index ) < nMapCount ) {
 			pMap[map_index] = 1u;
 		}
 	}
 }
 
-EA_FORCE_INLINE int t3dRegionResidencyDistance( const Vector2i &rA, const Vector2i &rB ) {
-	const int64_t dx = ( int64_t )( rA.x ) - ( int64_t )( rB.x );
-	const int64_t dy = ( int64_t )( rA.y ) - ( int64_t )( rB.y );
-	const uint64_t abs_x = dx < 0 ? ( uint64_t )( -dx ) : ( uint64_t )( dx );
-	const uint64_t abs_y = dy < 0 ? ( uint64_t )( -dy ) : ( uint64_t )( dy );
+EA_FORCE_INLINE int t3dRegionResidencyDistance(
+	const Vector2i &rA,
+	const Vector2i &rB ) {
+	const int64_t  dx = ( int64_t ) ( rA.x ) - ( int64_t ) ( rB.x );
+	const int64_t  dy = ( int64_t ) ( rA.y ) - ( int64_t ) ( rB.y );
+	const uint64_t abs_x = dx < 0 ? ( uint64_t ) ( -dx ) : ( uint64_t ) ( dx );
+	const uint64_t abs_y = dy < 0 ? ( uint64_t ) ( -dy ) : ( uint64_t ) ( dy );
 	const uint64_t distance = abs_x > abs_y ? abs_x : abs_y;
-	return distance > ( uint64_t )( eastl::numeric_limits<int>::max() ) ? eastl::numeric_limits<int>::max() : ( int )( distance );
+	return distance > ( uint64_t ) ( eastl::numeric_limits< int >::max() ) ? eastl::numeric_limits< int >::max()
+																		   : ( int ) ( distance );
 }
 
-template <typename TSlotPredicate>
-EA_FORCE_INLINE int t3dRegionResidencySelectFarthestSlot( const t3dRegionCoord_t *const pLocations,
-        const int nCapacity,
-        const Vector2i &rCenter,
-        TSlotPredicate slotPredicate ) {
+template< typename TSlotPredicate >
+EA_FORCE_INLINE int t3dRegionResidencySelectFarthestSlot(
+	const t3dRegionCoord_t *const pLocations,
+	const int					  nCapacity,
+	const Vector2i				 &rCenter,
+	TSlotPredicate				  slotPredicate ) {
 	if ( !pLocations || nCapacity <= 0 ) {
 		return -1;
 	}

@@ -1,0 +1,89 @@
+// CS06: optional composed result lookup. Included after normal decoding.
+// The CPU publishing owner hashes exactly the same (signed) world page cells.
+// This source has no effect on shipping shader variants without T3D_CS_ACTIVE.
+#ifdef T3D_CS_ACTIVE
+struct T3DComposedSample {
+    vec3 albedo;
+    vec3 tangent_normal;
+    float roughness;
+    float ao;
+    float metallic;
+    float ao_affect;
+};
+
+uint t3d_cs_hash(ivec2 cell, uint mip) {
+    uint h = uint(cell.x) * 0x9e3779b9u;
+    h ^= uint(cell.y) * 0x85ebca6bu;
+    h ^= mip * 0xc2b2ae35u;
+    h ^= h >> 16u;
+    h *= 0x7feb352du;
+    return h ^ (h >> 15u);
+}
+
+bool t3d_cs_resolve(vec2 world_texel, out uint slot) {
+    slot = 0xffffffffu;
+    uint count = uint(terrain_cs_pages.length());
+    if (count < 64u || (count & (count - 1u)) != 0u) return false;
+    ivec2 cell = ivec2(floor(world_texel * (1.0 / 128.0)));
+    uint start = t3d_cs_hash(cell, 0u) & (count - 1u);
+    for (uint probe = 0u; probe < 16u; ++probe) {
+        uint index = (start + probe) & (count - 1u);
+        T3DComposedGpuEntry entry = terrain_cs_pages[index];
+        if (entry.state == 0u) return false;
+        if (entry.state == 1u && entry.world_page == cell && entry.mip == 0u &&
+            entry.generation != 0u && entry.device_generation != 0u &&
+            (entry.revision_lo | entry.revision_hi) != 0u && entry.channels == 7u &&
+            entry.physical_slot < uint(textureSize(terrain_cs_albedo, 0).z)) {
+            slot = entry.physical_slot;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Gradients are evaluated in the caller before per-fragment residency branches.
+// Evaluating dFdx/dFdy after a divergent page hit is undefined in GLSL.
+bool t3d_cs_sample(vec2 world_texel, vec2 world_grad_x, vec2 world_grad_y,
+                   out T3DComposedSample result) {
+    uint physical_slot;
+    if (!t3d_cs_resolve(world_texel, physical_slot)) return false;
+    // Gutters are four texels; coordinates and gradients map one-to-one to
+    // the page interior.  No sampling outside the resident physical tile.
+    vec2 page_uv = (fract(world_texel * (1.0 / 128.0)) * 128.0 + vec2(4.0)) * (1.0 / 136.0);
+    vec2 grad_x = world_grad_x * (1.0 / 136.0);
+    vec2 grad_y = world_grad_y * (1.0 / 136.0);
+    vec3 uv = vec3(page_uv, float(physical_slot));
+    result.albedo = t3d_vt_decode_srgb_albedo(textureGrad(terrain_cs_albedo, uv, grad_x, grad_y)).rgb;
+    result.tangent_normal = decode_surface_normal(textureGrad(terrain_cs_normal, uv, grad_x, grad_y).rg);
+    vec4 orm = textureGrad(terrain_cs_surface, uv, grad_x, grad_y);
+    result.ao = orm.r;
+    result.roughness = orm.g;
+    result.metallic = orm.b;
+    result.ao_affect = orm.a;
+    return true;
+}
+#endif
+
+#ifdef T3D_CS_ACTIVE
+// The depth/normal/roughness pass consumes only these two channels.
+// Keep the same residency/gradient contract as the full color sampler,
+// but skip ALBEDO entirely and skip unused channels for disabled outputs.
+bool t3d_cs_sample_normal_roughness(vec2 world_texel, vec2 world_grad_x, vec2 world_grad_y,
+                                    bool need_normal, bool need_roughness,
+                                    out vec3 tangent_normal, out float roughness) {
+    tangent_normal = vec3(0.0, 1.0, 0.0);
+    roughness = 1.0;
+    uint physical_slot;
+    if (!t3d_cs_resolve(world_texel, physical_slot)) return false;
+    if (!need_normal && !need_roughness) return true;
+    vec2 page_uv = (fract(world_texel * (1.0 / 128.0)) * 128.0 + vec2(4.0)) * (1.0 / 136.0);
+    vec2 grad_x = world_grad_x * (1.0 / 136.0);
+    vec2 grad_y = world_grad_y * (1.0 / 136.0);
+    vec3 uv = vec3(page_uv, float(physical_slot));
+    if (need_normal)
+        tangent_normal = decode_surface_normal(textureGrad(terrain_cs_normal, uv, grad_x, grad_y).rg);
+    if (need_roughness)
+        roughness = textureGrad(terrain_cs_surface, uv, grad_x, grad_y).g;
+    return true;
+}
+#endif

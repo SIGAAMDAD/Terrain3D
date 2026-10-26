@@ -1,5 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Semantic landform stroke controller for Terrain3D.
+@tool
 extends Node
 
 const ToolSettings = preload("res://addons/terrain_3d/src/tool_settings.gd")

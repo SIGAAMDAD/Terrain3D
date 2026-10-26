@@ -210,6 +210,16 @@ struct T3DVTPageEntry {
     uint packedResolvedMipFlags;
 };
 
+// Optional BR20, 16-byte std430 record. Entry zero is a validity/epoch header.
+struct T3DVTAncestorHint {
+    uint resolvedPage;
+    uint physicalSlot;
+    uint generation;
+    uint packedMipDepthFlags;
+};
+#define T3D_VT_HINT_RECORD_PHYSICAL 1u
+#define T3D_VT_HINT_ENABLED 0x54334831u
+
 // GPU-only P02 table: allocationId * T3D_VT_MAX_MIPS + mip.
 // packedExtent stores width in the low 16 bits and height in the high 16 bits.
 struct T3DVTMipLayout {
@@ -340,11 +350,22 @@ uint t3d_vt_request_hash_slot_from_seed(uint hash_seed, uint probe, uint hash_ca
     return (hash_seed + probe) % hash_capacity;
 }
 
+// The tail atlas stores each mip at max(first_width >> mip, 1) texels
+// along X. Summing the truncated widths by popcount avoids a bounded
+// dynamic loop in both the color and filtering paths. Caller supplies a
+// nonzero width and a delta bounded by T3D_VT_MAX_MIPS - 1.
+uint t3d_vt_tail_mip_offset(uint first_width, uint tail_delta) {
+    uint remaining = first_width >> tail_delta;
+    uint bits = uint(findMSB(first_width)) + 1u;
+    uint excess = tail_delta > bits ? tail_delta - bits : 0u;
+    return 2u * (first_width - remaining) - uint(bitCount(first_width)) + uint(bitCount(remaining)) + excess;
+}
+
+// Ceil-dividing by two repeatedly, without a per-level integer loop.
+// Prediction callers clamp mip to the allocation's <=16-mip range.
 uint t3d_vt_prediction_mip_extent(uint extent, uint mip) {
-    for (uint level = 0u; level < mip; ++level) {
-        extent = extent > 1u ? (extent + 1u) >> 1u : 1u;
-    }
-    return max(extent, 1u);
+    uint safe_extent = max(extent, 1u);
+    return ((safe_extent - 1u) >> mip) + 1u;
 }
 
 uint t3d_vt_prediction_relative_mip_base(T3DVTAllocation allocation, uint mip) {

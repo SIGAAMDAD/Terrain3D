@@ -18,7 +18,8 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-void t3dStagedRepository_s::reset( void ) {
+void t3dStagedRepository_s::reset(
+	void ) {
 	m_regions.clear();
 	m_resources.clear();
 	memset( m_pRegionPtrs.data(), 0, sizeof( m_pRegionPtrs[0] ) * m_pRegionPtrs.size() );
@@ -29,21 +30,26 @@ void t3dStagedRepository_s::reset( void ) {
 	m_bBoundedCpuLoad = false;
 }
 
-Terrain3DRegionPersistence::Terrain3DRegionPersistence( Terrain3DRegionRepository *const pRepository ) : m_pRepository( pRepository ) {
+Terrain3DRegionPersistence::Terrain3DRegionPersistence(
+	Terrain3DRegionRepository *const pRepository ) :
+	m_pRepository( pRepository ) {
 }
 
-void Terrain3DRegionPersistence::resetLoadStats( void ) {
+void Terrain3DRegionPersistence::resetLoadStats(
+	void ) {
 	m_startupLoadStats = t3dStartupLoadStats_t{};
 	m_nLoadStartedUsec = Time::get_singleton()->get_ticks_usec();
 	m_nPublishStartedUsec = 0u;
 	m_nFinalizeStartedUsec = 0u;
 }
 
-bool Terrain3DRegionPersistence::validateHeightPayload( const Ref<Terrain3DRegion> &rRegion, const String &rPath ) {
+bool Terrain3DRegionPersistence::validateHeightPayload(
+	const Ref< Terrain3DRegion > &rRegion,
+	const String				 &rPath ) {
 	if ( rRegion.is_null() ) {
 		return false;
 	}
-	const Ref<Image> pHeight = rRegion->getHeightMap();
+	const Ref< Image > pHeight = rRegion->getHeightMap();
 	if ( pHeight.is_null() ) {
 		return true;
 	}
@@ -54,16 +60,24 @@ bool Terrain3DRegionPersistence::validateHeightPayload( const Ref<Terrain3DRegio
 	if ( t3dRegionCodecHasValidHeightPayload( pHeight, rRegion->getRegionSize() ) ) {
 		return true;
 	}
-	LOG( ERROR, "Malformed height payload in file: ", rPath, ". Format: ", format, ", bytes: ", pHeight->get_data().size() );
+	LOG( ERROR,
+		 "Malformed height payload in file: ",
+		 rPath,
+		 ". Format: ",
+		 format,
+		 ", bytes: ",
+		 pHeight->get_data().size() );
 	return false;
 }
 
 void Terrain3DRegionPersistence::normalizeLoadedRegion(
-        const Vector2i &rLocation, const Ref<Terrain3DRegion> &rRegion, bool &rStorageUpgrade ) const {
-	const Ref<Image> pLoadedHeight = rRegion->getHeightMap();
-	rStorageUpgrade = rRegion->getVersion() < s_fDataCurrentVersion || pLoadedHeight.is_null()
-	        || pLoadedHeight->get_format() != Image::FORMAT_R16
-	        || ( rRegion->getColorMap().is_valid() && rRegion->getColorMap()->has_mipmaps() );
+	const Vector2i				 &rLocation,
+	const Ref< Terrain3DRegion > &rRegion,
+	bool						 &rStorageUpgrade ) const {
+	const Ref< Image > pLoadedHeight = rRegion->getHeightMap();
+	rStorageUpgrade = rRegion->getVersion() < s_fDataCurrentVersion || pLoadedHeight.is_null() ||
+					  pLoadedHeight->get_format() != Image::FORMAT_R16 ||
+					  ( rRegion->getColorMap().is_valid() && rRegion->getColorMap()->has_mipmaps() );
 
 	// Resource property setters are mutation-oriented and may dirty freshly
 	// deserialized resources. Establish the serialized state as the clean baseline
@@ -78,7 +92,10 @@ void Terrain3DRegionPersistence::normalizeLoadedRegion(
 	rRegion->setModified( rStorageUpgrade || rRegion->isModified() );
 }
 
-Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, const bool bBoundedCpuLoad, t3dStagedRepository_s &rStaged ) {
+Error Terrain3DRegionPersistence::stageDirectory(
+	const String		  &rDirectory,
+	const bool			   bBoundedCpuLoad,
+	t3dStagedRepository_s &rStaged ) {
 	rStaged.reset();
 	resetLoadStats();
 	if ( rDirectory.is_empty() ) {
@@ -100,14 +117,18 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 	}
 
 	rStaged.m_bBoundedCpuLoad = bBoundedCpuLoad;
-	rStaged.m_regions.reserve( ( size_t )( files.size() ) );
+	rStaged.m_regions.reserve( ( size_t ) ( files.size() ) );
 	if ( files.size() > T3D_REGION_SLOTS ) {
-		LOG( ERROR, "Directory contains ", files.size(), " regions, exceeding the fixed region-slot capacity of ", T3D_REGION_SLOTS );
+		LOG( ERROR,
+			 "Directory contains ",
+			 files.size(),
+			 " regions, exceeding the fixed region-slot capacity of ",
+			 T3D_REGION_SLOTS );
 		return ERR_OUT_OF_MEMORY;
 	}
 
-	for ( size_t iFile = 0u; iFile < ( size_t )( ( files ).size() ); iFile++ ) {
-		const String &fname = ( files )[iFile];
+	for ( size_t iFile = 0u; iFile < ( size_t ) ( ( files ).size() ); iFile++ ) {
+		const String	 &fname = ( files )[iFile];
 		t3dStagedRegion_t entry;
 		entry.m_location = Terrain3DUtil::filenameToLocation( fname );
 		entry.m_path = rDirectory.path_join( fname );
@@ -121,12 +142,12 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 
 	LOG( DEBUG, "[terrain-data] Phase 1/4: synchronous region deserialization and validation" );
 	const uint64_t deserializeStartedUsec = Time::get_singleton()->get_ticks_usec();
-	eastl::bitset<T3D_REGION_MAP_SIZE * T3D_REGION_MAP_SIZE> occupied;
+	eastl::bitset< T3D_REGION_MAP_SIZE * T3D_REGION_MAP_SIZE > occupied;
 
 	for ( int fileIndex = 0; fileIndex < files.size(); ++fileIndex ) {
-		const String &fname = files[fileIndex];
-		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( fileIndex )];
-		const Ref<FileAccess> pSourceFile = FileAccess::open( entry.m_path, FileAccess::READ );
+		const String		   &fname = files[fileIndex];
+		t3dStagedRegion_t	   &entry = rStaged.m_regions[( size_t ) ( fileIndex )];
+		const Ref< FileAccess > pSourceFile = FileAccess::open( entry.m_path, FileAccess::READ );
 		if ( pSourceFile.is_valid() ) {
 			m_startupLoadStats.m_nBytesReadLast += pSourceFile->get_length();
 		}
@@ -135,19 +156,23 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 			LOG( ERROR, "Invalid or out-of-bounds region file name: ", fname );
 			return ERR_FILE_CORRUPT;
 		}
-		if ( occupied.test( ( size_t )( mapIndex ) ) ) {
+		if ( occupied.test( ( size_t ) ( mapIndex ) ) ) {
 			LOG( ERROR, "Duplicate region location in directory: ", entry.m_location );
 			return ERR_ALREADY_EXISTS;
 		}
-		occupied.set( ( size_t )( mapIndex ) );
+		occupied.set( ( size_t ) ( mapIndex ) );
 
-		Ref<Terrain3DRegion> region = pLoader->load( entry.m_path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+		Ref< Terrain3DRegion > region =
+			pLoader->load( entry.m_path, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
 		if ( region.is_null() ) {
 			LOG( ERROR, "Cannot load region at ", entry.m_path );
 			return ERR_FILE_CORRUPT;
 		}
 		if ( !region->hasValidGeometryContractInternal() ) {
-			LOG( ERROR, "Rejected legacy region geometry in file: ", entry.m_path, ". Expected exactly 128 samples at 1.0 metre spacing." );
+			LOG( ERROR,
+				 "Rejected legacy region geometry in file: ",
+				 entry.m_path,
+				 ". Expected exactly 128 samples at 1.0 metre spacing." );
 			return ERR_FILE_CORRUPT;
 		}
 		const int regionSize = region->getRegionSize();
@@ -161,26 +186,26 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 		const int targetMapSize = T3D_REGION_MAP_SIZE;
 		if ( !t3dRegionLocationValid( entry.m_location, targetMapSize ) ) {
 			LOG( ERROR,
-			        "Region ",
-			        entry.m_location,
-			        " is outside the fixed ",
-			        T3D_ACTIVE_WORLD_TEXELS,
-			        "-texel world for region size ",
-			        T3D_REGION_SIZE );
+				 "Region ",
+				 entry.m_location,
+				 " is outside the fixed ",
+				 T3D_ACTIVE_WORLD_TEXELS,
+				 "-texel world for region size ",
+				 T3D_REGION_SIZE );
 			return ERR_FILE_CORRUPT;
 		}
 
 		bool storageUpgrade = false;
 		normalizeLoadedRegion( entry.m_location, region, storageUpgrade );
 		if ( bBoundedCpuLoad ) {
-			const Ref<Image> pStagedHeight = region->getHeightMap();
+			const Ref< Image > pStagedHeight = region->getHeightMap();
 			if ( pStagedHeight.is_null() || pStagedHeight->get_format() != Image::FORMAT_R16 ) {
 				LOG( ERROR, "Unable to stage R16 height payload from: ", entry.m_path );
 				return ERR_FILE_CORRUPT;
 			}
 			entry.m_stagedHeight = pStagedHeight->get_data();
 			const size_t expectedHeightBytes = T3D_REGION_HEIGHT_BYTES;
-			if ( ( size_t )( entry.m_stagedHeight.size() ) < expectedHeightBytes ) {
+			if ( ( size_t ) ( entry.m_stagedHeight.size() ) < expectedHeightBytes ) {
 				LOG( ERROR, "Truncated staged height payload in: ", entry.m_path );
 				return ERR_FILE_CORRUPT;
 			}
@@ -196,20 +221,24 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 	}
 
 	m_startupLoadStats.m_nDeserializeUsecLast = Time::get_singleton()->get_ticks_usec() - deserializeStartedUsec;
-	LOG( DEBUG, "[terrain-data] Phase 1/4 complete: validated ", rStaged.m_regions.size(), " regions at size ", T3D_REGION_SIZE );
+	LOG( DEBUG,
+		 "[terrain-data] Phase 1/4 complete: validated ",
+		 rStaged.m_regions.size(),
+		 " regions at size ",
+		 T3D_REGION_SIZE );
 	LOG( DEBUG, "[terrain-data] Phase 2/4: staging replacement repository tables" );
 	const uint64_t stagingStartedUsec = Time::get_singleton()->get_ticks_usec();
 
-	for ( int slot = 0; slot < ( int )( rStaged.m_regions.size() ); ++slot ) {
-		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t )( slot )];
-		const int mapIndex = Terrain3DRegionRepository::getRegionMapIndex( entry.m_location );
+	for ( int slot = 0; slot < ( int ) ( rStaged.m_regions.size() ); ++slot ) {
+		t3dStagedRegion_t &entry = rStaged.m_regions[( size_t ) ( slot )];
+		const int		   mapIndex = Terrain3DRegionRepository::getRegionMapIndex( entry.m_location );
 		if ( mapIndex < 0 ) {
 			return ERR_FILE_CORRUPT;
 		}
 		rStaged.m_resources[entry.m_location] = entry.m_region;
-		rStaged.m_pRegionPtrs[( size_t )( mapIndex )] = entry.m_region.ptr();
-		rStaged.m_regionLocations[( size_t )( slot )] = t3dPackRegionCoord( entry.m_location );
-		rStaged.m_logicalRegionMap[( size_t )( mapIndex )] = ( uint16_t )( slot + 1 );
+		rStaged.m_pRegionPtrs[( size_t ) ( mapIndex )] = entry.m_region.ptr();
+		rStaged.m_regionLocations[( size_t ) ( slot )] = t3dPackRegionCoord( entry.m_location );
+		rStaged.m_logicalRegionMap[( size_t ) ( mapIndex )] = ( uint16_t ) ( slot + 1 );
 	}
 
 	m_startupLoadStats.m_nStagingUsecLast = Time::get_singleton()->get_ticks_usec() - stagingStartedUsec;
@@ -217,22 +246,26 @@ Error Terrain3DRegionPersistence::stageDirectory( const String &rDirectory, cons
 	return OK;
 }
 
-void Terrain3DRegionPersistence::beginPublication( void ) {
+void Terrain3DRegionPersistence::beginPublication(
+	void ) {
 	m_nPublishStartedUsec = Time::get_singleton()->get_ticks_usec();
 }
 
-void Terrain3DRegionPersistence::finishPublication( const int nPublishedRegions ) {
+void Terrain3DRegionPersistence::finishPublication(
+	const int nPublishedRegions ) {
 	if ( m_nPublishStartedUsec != 0u ) {
 		m_startupLoadStats.m_nPublishUsecLast = Time::get_singleton()->get_ticks_usec() - m_nPublishStartedUsec;
 	}
 	m_startupLoadStats.m_nRegionsPublishedLast = MAX( 0, nPublishedRegions );
 }
 
-void Terrain3DRegionPersistence::beginFinalize( void ) {
+void Terrain3DRegionPersistence::beginFinalize(
+	void ) {
 	m_nFinalizeStartedUsec = Time::get_singleton()->get_ticks_usec();
 }
 
-void Terrain3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
+void Terrain3DRegionPersistence::finishDirectoryLoad(
+	const bool bSucceeded ) {
 	if ( m_nFinalizeStartedUsec != 0u ) {
 		m_startupLoadStats.m_nFinalizeUsecLast = Time::get_singleton()->get_ticks_usec() - m_nFinalizeStartedUsec;
 	}
@@ -242,8 +275,9 @@ void Terrain3DRegionPersistence::finishDirectoryLoad( const bool bSucceeded ) {
 	m_startupLoadStats.m_bSucceededLast = bSucceeded;
 }
 
-void Terrain3DRegionPersistence::publishStagedPaths( t3dStagedRepository_s &rStaged ) const {
-	for ( size_t iRegion = 0u; iRegion < ( size_t )( ( rStaged.m_regions ).size() ); iRegion++ ) {
+void Terrain3DRegionPersistence::publishStagedPaths(
+	t3dStagedRepository_s &rStaged ) const {
+	for ( size_t iRegion = 0u; iRegion < ( size_t ) ( ( rStaged.m_regions ).size() ); iRegion++ ) {
 		t3dStagedRegion_t &entry = ( rStaged.m_regions )[iRegion];
 		if ( entry.m_region.is_valid() ) {
 			entry.m_region->take_over_path( entry.m_path );
@@ -251,7 +285,9 @@ void Terrain3DRegionPersistence::publishStagedPaths( t3dStagedRepository_s &rSta
 	}
 }
 
-t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rLocation, const String &rDirectory ) const {
+t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion(
+	const Vector2i &rLocation,
+	const String   &rDirectory ) const {
 	t3dRegionLoadResult_t result;
 	result.m_location = rLocation;
 	if ( !m_pRepository || rDirectory.is_empty() ) {
@@ -285,7 +321,10 @@ t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rL
 	}
 
 	if ( !result.m_region->hasValidGeometryContractInternal() ) {
-		LOG( ERROR, "Rejected legacy region geometry in file: ", result.m_path, ". Expected exactly 128 samples at 1.0 metre spacing." );
+		LOG( ERROR,
+			 "Rejected legacy region geometry in file: ",
+			 result.m_path,
+			 ". Expected exactly 128 samples at 1.0 metre spacing." );
 		result.m_region.unref();
 		result.m_error = ERR_FILE_CORRUPT;
 		return result;
@@ -299,12 +338,12 @@ t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rL
 	}
 	if ( !m_pRepository->isEmpty() && m_pRepository->getRegionSize() != regionSize ) {
 		LOG( ERROR,
-		        "Region size mismatch. First loaded: ",
-		        m_pRepository->getRegionSize(),
-		        " next: ",
-		        regionSize,
-		        " in file: ",
-		        result.m_path );
+			 "Region size mismatch. First loaded: ",
+			 m_pRepository->getRegionSize(),
+			 " next: ",
+			 regionSize,
+			 " in file: ",
+			 result.m_path );
 		result.m_region.unref();
 		result.m_error = ERR_INVALID_DATA;
 		return result;
@@ -315,14 +354,17 @@ t3dRegionLoadResult_t Terrain3DRegionPersistence::loadRegion( const Vector2i &rL
 	return result;
 }
 
-bool Terrain3DRegionPersistence::prepareRuntimeRegionSource( const Ref<Terrain3DRegion> &rCandidate, Ref<Terrain3DRegion> &rSource ) const {
+bool Terrain3DRegionPersistence::prepareRuntimeRegionSource(
+	const Ref< Terrain3DRegion > &rCandidate,
+	Ref< Terrain3DRegion >		 &rSource ) const {
 	rSource.unref();
-	if ( rCandidate.is_null() || !rCandidate->hasValidGeometryContractInternal() || rCandidate->getRegionSize() != T3D_REGION_SIZE ) {
+	if ( rCandidate.is_null() || !rCandidate->hasValidGeometryContractInternal() ||
+		 rCandidate->getRegionSize() != T3D_REGION_SIZE ) {
 		return false;
 	}
-	const Ref<Image> pHeight = rCandidate->getHeightMap();
-	if ( pHeight.is_null() || pHeight->get_format() != Image::FORMAT_R16
-	        || !t3dRegionCodecHasValidHeightPayload( pHeight, T3D_REGION_SIZE ) ) {
+	const Ref< Image > pHeight = rCandidate->getHeightMap();
+	if ( pHeight.is_null() || pHeight->get_format() != Image::FORMAT_R16 ||
+		 !t3dRegionCodecHasValidHeightPayload( pHeight, T3D_REGION_SIZE ) ) {
 		return false;
 	}
 	rCandidate->setModified( false );
@@ -332,7 +374,9 @@ bool Terrain3DRegionPersistence::prepareRuntimeRegionSource( const Ref<Terrain3D
 	return true;
 }
 
-bool Terrain3DRegionPersistence::loadRuntimeRegionSource( const String &rPath, Ref<Terrain3DRegion> &rSource ) const {
+bool Terrain3DRegionPersistence::loadRuntimeRegionSource(
+	const String		   &rPath,
+	Ref< Terrain3DRegion > &rSource ) const {
 	rSource.unref();
 	if ( rPath.is_empty() || !FileAccess::file_exists( rPath ) ) {
 		return false;
@@ -341,18 +385,20 @@ bool Terrain3DRegionPersistence::loadRuntimeRegionSource( const String &rPath, R
 	if ( !pLoader ) {
 		return false;
 	}
-	const Ref<Resource> pResource = pLoader->load( rPath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
-	const Ref<Terrain3DRegion> pLoaded = pResource;
+	const Ref< Resource > pResource = pLoader->load( rPath, "Terrain3DRegion", ResourceLoader::CACHE_MODE_IGNORE );
+	const Ref< Terrain3DRegion > pLoaded = pResource;
 	return prepareRuntimeRegionSource( pLoaded, rSource );
 }
 
-void Terrain3DRegionPersistence::publishLoadedRegionPath( const t3dRegionLoadResult_t &rResult ) const {
+void Terrain3DRegionPersistence::publishLoadedRegionPath(
+	const t3dRegionLoadResult_t &rResult ) const {
 	if ( rResult.succeeded() ) {
 		rResult.m_region->take_over_path( rResult.m_path );
 	}
 }
 
-void Terrain3DRegionPersistence::updateEditorFile( const String &rPath ) {
+void Terrain3DRegionPersistence::updateEditorFile(
+	const String &rPath ) {
 	if ( !IS_EDITOR || !rPath.begins_with( "res://" ) ) {
 		return;
 	}
@@ -366,18 +412,19 @@ void Terrain3DRegionPersistence::updateEditorFile( const String &rPath ) {
 	}
 }
 
-t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion( const Vector2i &rLocation,
-        const String &rDirectory,
-        const bool b16Bit,
-        t3dRegionPersistenceEnsureResidentFn_t pEnsureResident,
-        void *pResidentContext ) {
+t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion(
+	const Vector2i						  &rLocation,
+	const String						  &rDirectory,
+	const bool							   b16Bit,
+	t3dRegionPersistenceEnsureResidentFn_t pEnsureResident,
+	void								  *pResidentContext ) {
 	t3dRegionSaveResult_t result;
 	result.m_location = rLocation;
 	if ( !m_pRepository ) {
 		result.m_error = ERR_UNCONFIGURED;
 		return result;
 	}
-	const Ref<Terrain3DRegion> pRegion = m_pRepository->getRegion( rLocation );
+	const Ref< Terrain3DRegion > pRegion = m_pRepository->getRegion( rLocation );
 	if ( pRegion.is_null() ) {
 		LOG( ERROR, "No region found at: ", rLocation );
 		result.m_error = ERR_DOES_NOT_EXIST;
@@ -393,9 +440,13 @@ t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion( const Vector2i &rL
 		m_pRepository->eraseRegionResource( rLocation );
 		LOG( DEBUG, "File to be deleted: ", result.m_path );
 		if ( FileAccess::file_exists( result.m_path ) ) {
-			Ref<DirAccess> pDirectory = DirAccess::open( rDirectory );
+			Ref< DirAccess > pDirectory = DirAccess::open( rDirectory );
 			if ( pDirectory.is_null() ) {
-				LOG( ERROR, "Cannot open directory for writing: ", rDirectory, " error: ", DirAccess::get_open_error() );
+				LOG( ERROR,
+					 "Cannot open directory for writing: ",
+					 rDirectory,
+					 " error: ",
+					 DirAccess::get_open_error() );
 				result.m_error = DirAccess::get_open_error();
 				return result;
 			}
@@ -430,13 +481,13 @@ t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion( const Vector2i &rL
 	result.m_error = pRegion->save( result.m_path, b16Bit );
 	if ( !( result.m_error == OK || result.m_error == ERR_SKIP ) ) {
 		LOG( ERROR,
-		        "Could not save file: ",
-		        result.m_path,
-		        ", error: ",
-		        UtilityFunctions::error_string( result.m_error ),
-		        " (",
-		        result.m_error,
-		        ")" );
+			 "Could not save file: ",
+			 result.m_path,
+			 ", error: ",
+			 UtilityFunctions::error_string( result.m_error ),
+			 " (",
+			 result.m_error,
+			 ")" );
 		return result;
 	}
 	if ( result.m_error == ERR_SKIP ) {
@@ -451,16 +502,20 @@ t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion( const Vector2i &rL
 }
 
 t3dDirectorySaveResult_t Terrain3DRegionPersistence::saveDirectory(
-        const String &rDirectory, const bool b16Bit, t3dRegionPersistenceEnsureResidentFn_t pEnsureResident, void *pResidentContext ) {
+	const String						  &rDirectory,
+	const bool							   b16Bit,
+	t3dRegionPersistenceEnsureResidentFn_t pEnsureResident,
+	void								  *pResidentContext ) {
 	t3dDirectorySaveResult_t result;
 	if ( !m_pRepository ) {
 		return result;
 	}
 	const Array locations = m_pRepository->getRegionKeys();
-	result.m_regions.reserve( ( size_t )( locations.size() ) );
-	for ( size_t iLocation = 0u; iLocation < ( size_t )( ( locations ).size() ); iLocation++ ) {
-		const Vector2i location = ( locations )[iLocation];
-		t3dRegionSaveResult_t saveResult = saveRegion( location, rDirectory, b16Bit, pEnsureResident, pResidentContext );
+	result.m_regions.reserve( ( size_t ) ( locations.size() ) );
+	for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( locations ).size() ); iLocation++ ) {
+		const Vector2i		  location = ( locations )[iLocation];
+		t3dRegionSaveResult_t saveResult =
+			saveRegion( location, rDirectory, b16Bit, pEnsureResident, pResidentContext );
 		if ( saveResult.m_bDeleted && saveResult.succeeded() ) {
 			++result.m_nDeleted;
 		} else if ( saveResult.m_bSaved ) {
@@ -475,20 +530,115 @@ t3dDirectorySaveResult_t Terrain3DRegionPersistence::saveDirectory(
 	return result;
 }
 
-Dictionary Terrain3DRegionPersistence::getStartupLoadStatsDictionary( void ) const {
+Dictionary Terrain3DRegionPersistence::getStartupLoadStatsDictionary(
+	void ) const {
 	Dictionary stats;
-	stats["total_usec_last"] = ( int64_t )( m_startupLoadStats.m_nTotalUsecLast );
-	stats["enumeration_usec_last"] = ( int64_t )( m_startupLoadStats.m_nEnumerationUsecLast );
-	stats["deserialize_usec_last"] = ( int64_t )( m_startupLoadStats.m_nDeserializeUsecLast );
-	stats["staging_usec_last"] = ( int64_t )( m_startupLoadStats.m_nStagingUsecLast );
-	stats["publish_usec_last"] = ( int64_t )( m_startupLoadStats.m_nPublishUsecLast );
-	stats["finalize_usec_last"] = ( int64_t )( m_startupLoadStats.m_nFinalizeUsecLast );
+	stats["total_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nTotalUsecLast );
+	stats["enumeration_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nEnumerationUsecLast );
+	stats["deserialize_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nDeserializeUsecLast );
+	stats["staging_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nStagingUsecLast );
+	stats["publish_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nPublishUsecLast );
+	stats["finalize_usec_last"] = ( int64_t ) ( m_startupLoadStats.m_nFinalizeUsecLast );
 	stats["region_files_last"] = m_startupLoadStats.m_nRegionFilesLast;
 	stats["regions_published_last"] = m_startupLoadStats.m_nRegionsPublishedLast;
-	stats["bytes_read_last"] = ( int64_t )( m_startupLoadStats.m_nBytesReadLast );
+	stats["bytes_read_last"] = ( int64_t ) ( m_startupLoadStats.m_nBytesReadLast );
 	stats["succeeded_last"] = m_startupLoadStats.m_bSucceededLast;
 	stats["format"] = "legacy_godot_resources";
 	stats["world_manifest_used"] = false;
 	stats["resource_deserialize_thread"] = "caller/main";
 	return stats;
+}
+
+// -------- Consolidated from data/persistence/terrain_3d_region_codec.cpp --------
+Ref< Image > t3dRegionCodecConvertHeightToR16(
+	const Ref< Image > &rSource,
+	const int			nSize,
+	uint32_t		   &nClampedCount,
+	uint32_t		   &nNonFiniteCount ) {
+	nClampedCount = 0u;
+	nNonFiniteCount = 0u;
+	if ( nSize <= 0 ) {
+		return Ref< Image >();
+	}
+	if ( rSource.is_valid() && rSource->get_width() == nSize && rSource->get_height() == nSize &&
+		 rSource->get_format() == Image::FORMAT_R16 ) {
+		return t3dRegionCodecHasValidHeightPayload( rSource, nSize ) ? rSource : Ref< Image >();
+	}
+	Ref< Image > pReadableSource = rSource;
+	if ( pReadableSource.is_valid() && pReadableSource->is_compressed() ) {
+		pReadableSource = pReadableSource->duplicate();
+		if ( pReadableSource->decompress() != OK ) {
+			pReadableSource.unref();
+		}
+	}
+
+	const size_t	texel_count = ( size_t ) ( nSize ) * ( size_t ) ( nSize );
+	PackedByteArray output;
+	output.resize( ( int64_t ) ( texel_count * sizeof( uint16_t ) ) );
+	uint8_t *pWrite = output.ptrw();
+
+	const bool bDirectRf32 = pReadableSource.is_valid() && pReadableSource->get_width() == nSize &&
+							 pReadableSource->get_height() == nSize &&
+							 pReadableSource->get_format() == Image::FORMAT_RF &&
+							 t3dRegionCodecHasValidHeightPayload( pReadableSource, nSize );
+	PackedByteArray source_bytes;
+	const uint8_t  *pRead = NULL;
+	if ( bDirectRf32 ) {
+		source_bytes = pReadableSource->get_data();
+		pRead = source_bytes.ptr();
+	}
+
+	for ( size_t index = 0; index < texel_count; ++index ) {
+		float fHeight = 0.0f;
+		if ( bDirectRf32 ) {
+			memcpy( &fHeight, pRead + index * sizeof( float ), sizeof( float ) );
+		} else if ( pReadableSource.is_valid() ) {
+			const int x = ( int ) ( index % ( size_t ) ( nSize ) );
+			const int y = ( int ) ( index / ( size_t ) ( nSize ) );
+			if ( x < pReadableSource->get_width() && y < pReadableSource->get_height() ) {
+				fHeight = pReadableSource->get_pixel( x, y ).r;
+			}
+		}
+
+		if ( !isfinite( fHeight ) ) {
+			fHeight = 0.0f;
+			++nNonFiniteCount;
+		} else if ( fHeight < s_fRegionHeightMin || fHeight > s_fRegionHeightMax ) {
+			fHeight = CLAMP( fHeight, s_fRegionHeightMin, s_fRegionHeightMax );
+			++nClampedCount;
+		}
+
+		const uint16_t encoded = t3dRegionCodecEncodeHeightU16( fHeight );
+		memcpy( pWrite + index * sizeof( uint16_t ), &encoded, sizeof( uint16_t ) );
+	}
+	return Image::create_from_data( nSize, nSize, false, Image::FORMAT_R16, output );
+}
+
+Vector2 t3dRegionCodecGetHeightMinMax(
+	const Ref< Image > &rImage ) {
+	if ( rImage.is_null() || rImage->is_empty() ) {
+		return s_v2Zero;
+	}
+	float	  fMinimum = FLT_MAX;
+	float	  fMaximum = -FLT_MAX;
+	const int width = rImage->get_width();
+	const int height = rImage->get_height();
+	for ( int y = 0; y < height; ++y ) {
+		for ( int x = 0; x < width; ++x ) {
+			const float fValue = t3dRegionCodecReadHeightPixel( *rImage, Vector2i( x, y ) );
+			if ( isfinite( fValue ) ) {
+				fMinimum = MIN( fMinimum, fValue );
+				fMaximum = MAX( fMaximum, fValue );
+			}
+		}
+	}
+	return isfinite( fMinimum ) && isfinite( fMaximum ) ? Vector2( fMinimum, fMaximum ) : s_v2Zero;
+}
+
+Ref< Image > t3dRegionCodecConvertHeightToR16(
+	const Ref< Image > &rSource,
+	const int			nSize ) {
+	uint32_t clamped_count = 0u;
+	uint32_t non_finite_count = 0u;
+	return t3dRegionCodecConvertHeightToR16( rSource, nSize, clamped_count, non_finite_count );
 }

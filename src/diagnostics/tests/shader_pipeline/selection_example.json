@@ -1,0 +1,7 @@
+{
+  "schema": "terrain3d-spirv-selection-v1",
+  "variants": [
+    {"shader": "terrain_ocean.glsl", "version": "color_native"},
+    {"shader": "terrain_ocean.glsl", "version": "shadow"}
+  ]
+}

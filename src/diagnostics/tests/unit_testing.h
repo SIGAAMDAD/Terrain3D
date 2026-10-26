@@ -6,22 +6,22 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-#define EXPECT_FALSE( cond )                                                                                                               \
-	do {                                                                                                                                   \
-		if ( cond ) {                                                                                                                      \
-			UtilityFunctions::print( "FAILED: ", #cond );                                                                                  \
-		} else {                                                                                                                           \
-			UtilityFunctions::print( "PASSED: ", #cond );                                                                                  \
-		}                                                                                                                                  \
+#define EXPECT_FALSE( cond )                                                                                           \
+	do {                                                                                                               \
+		if ( cond ) {                                                                                                  \
+			UtilityFunctions::print( "FAILED: ", #cond );                                                              \
+		} else {                                                                                                       \
+			UtilityFunctions::print( "PASSED: ", #cond );                                                              \
+		}                                                                                                              \
 	} while ( 0 )
 
-#define EXPECT_TRUE( cond )                                                                                                                \
-	do {                                                                                                                                   \
-		if ( cond ) {                                                                                                                      \
-			UtilityFunctions::print( "PASSED: ", #cond );                                                                                  \
-		} else {                                                                                                                           \
-			UtilityFunctions::print( "FAILED: ", #cond );                                                                                  \
-		}                                                                                                                                  \
+#define EXPECT_TRUE( cond )                                                                                            \
+	do {                                                                                                               \
+		if ( cond ) {                                                                                                  \
+			UtilityFunctions::print( "PASSED: ", #cond );                                                              \
+		} else {                                                                                                       \
+			UtilityFunctions::print( "FAILED: ", #cond );                                                              \
+		}                                                                                                              \
 	} while ( 0 )
 
 void t3dTestDiffers( void );
@@ -38,7 +38,7 @@ bool t3dRunMegaVTCacheTests( void );
 bool t3dRunVTWarmRepublishTests( void );
 bool t3dRunVTWarmGpuTests( void );
 
-godot::Dictionary t3dRunSystemUnitTests( const godot::String &suiteFilter,
-		const godot::String &caseFilter, bool listOnly );
+godot::Dictionary
+t3dRunSystemUnitTests( const godot::String &suiteFilter, const godot::String &caseFilter, bool listOnly );
 
 #endif // TERRAIN3D_UNIT_TESTING_H

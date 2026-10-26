@@ -6,7 +6,8 @@
 
 #define T3D_BIND_DIAG_METHOD( cls, method ) ClassDB::bind_method( D_METHOD( #method ), &cls::method )
 
-void Terrain3DMemoryStats::_bind_methods( void ) {
+void Terrain3DMemoryStats::_bind_methods(
+	void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DMemoryStats, getDiagnosticsVersion );
 	T3D_BIND_DIAG_METHOD( Terrain3DMemoryStats, getConfiguredBudgetBytes );
 	T3D_BIND_DIAG_METHOD( Terrain3DMemoryStats, getCurrentKnownBytes );
@@ -20,7 +21,8 @@ void Terrain3DMemoryStats::_bind_methods( void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DMemoryStats, toDictionary );
 }
 
-void Terrain3DShaderTierStats::_bind_methods( void ) {
+void Terrain3DShaderTierStats::_bind_methods(
+	void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DShaderTierStats, getDiagnosticsVersion );
 	T3D_BIND_DIAG_METHOD( Terrain3DShaderTierStats, getTier );
 	T3D_BIND_DIAG_METHOD( Terrain3DShaderTierStats, getVariantSignature );
@@ -35,7 +37,8 @@ void Terrain3DShaderTierStats::_bind_methods( void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DShaderTierStats, toDictionary );
 }
 
-void Terrain3DCacheStats::_bind_methods( void ) {
+void Terrain3DCacheStats::_bind_methods(
+	void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DCacheStats, getDiagnosticsVersion );
 	T3D_BIND_DIAG_METHOD( Terrain3DCacheStats, getCacheName );
 	T3D_BIND_DIAG_METHOD( Terrain3DCacheStats, getResident );
@@ -49,7 +52,8 @@ void Terrain3DCacheStats::_bind_methods( void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DCacheStats, toDictionary );
 }
 
-void Terrain3DFrameStats::_bind_methods( void ) {
+void Terrain3DFrameStats::_bind_methods(
+	void ) {
 	T3D_BIND_DIAG_METHOD( Terrain3DFrameStats, getDiagnosticsVersion );
 	T3D_BIND_DIAG_METHOD( Terrain3DFrameStats, getSequence );
 	T3D_BIND_DIAG_METHOD( Terrain3DFrameStats, getPhysicsTotalUsec );

@@ -1,5 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Tool settings bar for Terrain3D
+@tool
 extends PanelContainer
 
 signal picking(type: int, callback: Callable)
@@ -507,85 +508,96 @@ func _on_show_submenu(p_toggled: bool, p_button: Button) -> void:
 	EditorUI.position_popup_near_control(popup, p_button, true)
 
 
+# Brush masks are optional user assets. Keep one compact procedural brush available
+# even when the external EXR library is deliberately excluded from the addon.
+func _create_default_brush() -> Image:
+	const SIZE: int = 256
+	var image: Image = Image.create_empty(SIZE, SIZE, false, Image.FORMAT_RF)
+	for y: int in range(SIZE):
+		var fy: float = (float(y) + 0.5) * 2.0 / float(SIZE) - 1.0
+		for x: int in range(SIZE):
+			var fx: float = (float(x) + 0.5) * 2.0 / float(SIZE) - 1.0
+			var radius: float = sqrt(fx * fx + fy * fy)
+			var fade: float = clampf((1.0 - radius) / 0.30, 0.0, 1.0)
+			var alpha: float = fade * fade * (3.0 - 2.0 * fade)
+			image.set_pixel(x, y, Color(alpha, 0.0, 0.0, 1.0))
+	return image
+
+
+func _append_brush_button(p_list: GridContainer, p_group: ButtonGroup, p_image: Image, p_name: String) -> Button:
+	# Gallery icons use a small thumbnail; only the selected brush is sent to the painter.
+	var thumbimg: Image = p_image.duplicate()
+	if thumbimg.get_width() != 84 or thumbimg.get_height() != 84:
+		thumbimg.resize(84, 84, Image.INTERPOLATE_CUBIC)
+	thumbimg = Terrain3DUtil.black_to_alpha(thumbimg)
+	thumbimg.convert(Image.FORMAT_LA8)
+	var thumb_data: PackedByteArray = thumbimg.get_data()
+	for pixel_index: int in range(0, thumb_data.size(), 2):
+		var mask: float = float(thumb_data[pixel_index + 1]) / 255.0
+		thumb_data[pixel_index] = 255
+		thumb_data[pixel_index + 1] = int(round(pow(mask, 0.666) * 255.0))
+	thumbimg.set_data(thumbimg.get_width(), thumbimg.get_height(), false, Image.FORMAT_LA8, thumb_data)
+
+	var button: Button = Button.new()
+	button.name = p_name
+	button.set_custom_minimum_size(Vector2.ONE * EditorUI.scaled(84.0))
+	button.set_button_icon(ImageTexture.create_from_image(thumbimg))
+	button.set_meta("image", p_image)
+	button.set_expand_icon(true)
+	button.set_toggle_mode(true)
+	button.set_button_group(p_group)
+	button.mouse_entered.connect(_on_brush_hover.bind(true, button))
+	button.mouse_exited.connect(_on_brush_hover.bind(false, button))
+	button.tooltip_text = "Select the %s brush mask. Bright pixels apply more of the active painter operation." % p_name
+	p_list.add_child(button, true)
+
+	var label: Label = Label.new()
+	button.add_child(label, true)
+	label.text = p_name
+	label.tooltip_text = button.tooltip_text
+	label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	label.offset_top = -EditorUI.scaled(24.0)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	label.add_theme_font_size_override("font_size", int(EditorUI.scaled(11.0)))
+	return button
+
+
 func add_brushes(p_parent: Control) -> void:
 	var brush_list: GridContainer = create_submenu(p_parent, "Brush", Layout.GRID)
 	brush_list.name = "BrushList"
+	brush_list.columns = 5
 
 	var brush_button_group: ButtonGroup = ButtonGroup.new()
 	brush_button_group.pressed.connect(_on_brush_selected)
-	var default_brush_btn: Button
+	var default_brush_btn: Button = _append_brush_button(
+		brush_list, brush_button_group, _create_default_brush(), "Soft Circle")
 
+	# A missing optional brush directory is a valid, asset-free installation.
 	var dir: DirAccess = DirAccess.open(BRUSH_PATH)
 	if dir:
-		dir.list_dir_begin()
-		var file_name: String = dir.get_next()
-		while file_name != "":
-			if !dir.current_is_dir() and file_name.ends_with(".exr"):
-				var img: Image = Image.load_from_file(BRUSH_PATH + "/" + file_name)
-				if img:
-					var value_range: Vector2 = Terrain3DUtil.get_min_max(img)
-					if value_range.y - value_range.x < 0.333:
-						push_warning("'%s' has a low value range and may not be visible in the brush gallery or cursor" % file_name)
-					var thumbimg: Image = img.duplicate()
-					img.convert(Image.FORMAT_RF)
-
-					if thumbimg.get_width() != 84 or thumbimg.get_height() != 84:
-						thumbimg.resize(84, 84, Image.INTERPOLATE_CUBIC)
-					thumbimg = Terrain3DUtil.black_to_alpha(thumbimg)
-					thumbimg.convert(Image.FORMAT_LA8)
-					# Bake the former preview shader's alpha response into the thumbnail once.
-					# LA8 luminance is forced white so the normal CanvasItem draw path can
-					# supply button/theme modulation without a custom preview material.
-					var thumb_data: PackedByteArray = thumbimg.get_data()
-					for pixel_index: int in range(0, thumb_data.size(), 2):
-						var mask: float = float(thumb_data[pixel_index + 1]) / 255.0
-						thumb_data[pixel_index] = 255
-						thumb_data[pixel_index + 1] = int(round(pow(mask, 0.666) * 255.0))
-					thumbimg.set_data(thumbimg.get_width(), thumbimg.get_height(), false, Image.FORMAT_LA8, thumb_data)
-					var thumbtex: ImageTexture = ImageTexture.create_from_image(thumbimg)
-
-					var brush_btn: Button = Button.new()
-					brush_btn.set_custom_minimum_size(Vector2.ONE * EditorUI.scaled(84.0))
-					brush_btn.set_button_icon(thumbtex)
-					brush_btn.set_meta("image", img)
-					brush_btn.set_expand_icon(true)
-					brush_btn.set_toggle_mode(true)
-					brush_btn.set_button_group(brush_button_group)
-					brush_btn.mouse_entered.connect(_on_brush_hover.bind(true, brush_btn))
-					brush_btn.mouse_exited.connect(_on_brush_hover.bind(false, brush_btn))
-					brush_list.add_child(brush_btn, true)
-					if file_name == DEFAULT_BRUSH:
-						default_brush_btn = brush_btn
-
-					var lbl: Label = Label.new()
-					brush_btn.name = file_name.get_basename().to_pascal_case()
-					brush_btn.tooltip_text = "Select the %s brush mask. Brighter pixels apply more of the active painter operation; transparent/black pixels apply none." % brush_btn.name
-					brush_btn.add_child(lbl, true)
-					lbl.text = brush_btn.name
-					lbl.tooltip_text = brush_btn.tooltip_text
-					lbl.visible = true
-					lbl.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-					lbl.offset_top = -EditorUI.scaled(24.0)
-					lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-					lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-					lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
-					lbl.add_theme_constant_override("shadow_offset_x", 1)
-					lbl.add_theme_constant_override("shadow_offset_y", 1)
-					lbl.add_theme_font_size_override("font_size", int(EditorUI.scaled(11.0)))
-
-			file_name = dir.get_next()
-
-	brush_list.columns = 5
-
-	if not default_brush_btn:
-		default_brush_btn = brush_button_group.get_buttons()[0]
-	default_brush_btn.set_pressed(true)
-	_generate_brush_texture(default_brush_btn)
+		var filenames: PackedStringArray = dir.get_files()
+		filenames.sort()
+		for file_name: String in filenames:
+			if not file_name.to_lower().ends_with(".exr"):
+				continue
+			var image: Image = Image.load_from_file(BRUSH_PATH.path_join(file_name))
+			if image == null or image.is_empty():
+				continue
+			image.convert(Image.FORMAT_RF)
+			var button: Button = _append_brush_button(
+				brush_list, brush_button_group, image, file_name.get_basename().to_pascal_case())
+			if file_name == DEFAULT_BRUSH:
+				default_brush_btn = button
 
 	settings["brush"] = brush_button_group
+	default_brush_btn.set_pressed_no_signal(true)
+	_generate_brush_texture(default_brush_btn)
 
 	select_brush_button = brush_list.get_meta("terrain3d_menu_button") as Button
-	# Optionally erase the main brush button text and replace it with the texture
 	select_brush_button.set_text("")
 	select_brush_button.set_button_icon(default_brush_btn.get_button_icon())
 	select_brush_button.set_custom_minimum_size(EditorUI.icon_button_size())
@@ -998,12 +1010,11 @@ func _notify_setting_changed() -> void:
 
 func _generate_brush_texture(p_btn: Button) -> void:
 	if p_btn is Button:
-		var img := p_btn.get_meta("image") as Image
-		if img.get_width() < 1024 and img.get_height() < 1024:
-			img = img.duplicate()
-			img.resize(1024, 1024, Image.INTERPOLATE_CUBIC)
+		var img: Image = p_btn.get_meta("image") as Image
+		# Preserve native mask resolution. Upscaling every brush to 1024 x 1024
+		# needlessly creates CPU and GPU copies and does not add mask detail.
 		var tex: ImageTexture = ImageTexture.create_from_image(img)
-		selected_brush_imgs = [ img, tex ]
+		selected_brush_imgs = [img, tex]
 
 
 func _on_drawable_toggled(p_button_pressed: bool) -> void:

@@ -13,7 +13,9 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/time.hpp>
 
-void Terrain3DRuntimeFrameScheduler::serviceColdRuntimeOwners( const t3dRuntimeFrameServices_t &rServices, const Vector3 &rTargetPosition ) {
+void Terrain3DRuntimeFrameScheduler::serviceColdRuntimeOwners(
+	const t3dRuntimeFrameServices_t &rServices,
+	const Vector3					&rTargetPosition ) {
 	if ( rServices.m_pData ) {
 		rServices.m_pData->serviceColdInstanceResidency( rTargetPosition, false );
 	}
@@ -39,41 +41,49 @@ void Terrain3DRuntimeFrameScheduler::serviceColdRuntimeOwners( const t3dRuntimeF
 }
 
 void Terrain3DRuntimeFrameScheduler::updateRuntimeBoundaryPhasing(
-        const t3dRuntimeFrameServices_t &rServices, const Vector3 &rTargetPosition, t3dRuntimeProfileSample_t *const pProfileSample ) {
+	const t3dRuntimeFrameServices_t &rServices,
+	const Vector3					&rTargetPosition,
+	t3dRuntimeProfileSample_t *const pProfileSample ) {
 	++rServices.m_iRuntimePhysicsFrameIndex;
-	const Vector2i target_region = rServices.m_pData ? rServices.m_pData->getRegionLocation( rTargetPosition ) : s_v2iMax;
+	const Vector2i target_region =
+		rServices.m_pData ? rServices.m_pData->getRegionLocation( rTargetPosition ) : s_v2iMax;
 	if ( target_region != rServices.m_runtimeBoundaryTargetRegion ) {
 		rServices.m_runtimeBoundaryTargetRegion = target_region;
 		rServices.m_nRuntimeBoundaryTransitionFrame = rServices.m_iRuntimePhysicsFrameIndex;
 	}
-	const uint64_t boundary_age_frames = rServices.m_iRuntimePhysicsFrameIndex - rServices.m_nRuntimeBoundaryTransitionFrame;
-	rServices.m_bRuntimeBoundaryNodeDeferredLastTick = t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
-	        rServices.m_host.effectiveDynamicNodeStreamingEnabled(),
-	        boundary_age_frames,
-	        rServices.m_nRuntimeBoundaryNodeDelayFrames,
-	        rServices.m_nRuntimeBoundaryNodeDeferralStreak );
-	rServices.m_bRuntimeBoundaryInstancerDeferredLastTick = t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
-	        rServices.m_host.effectiveInstancerCellStreamingEnabled(),
-	        boundary_age_frames,
-	        rServices.m_nRuntimeBoundaryInstancerDelayFrames,
-	        rServices.m_nRuntimeBoundaryInstancerDeferralStreak );
-	rServices.m_bRuntimeBoundaryWorldDeferredLastTick = t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
-	        true,
-	        boundary_age_frames,
-	        rServices.m_nRuntimeBoundaryWorldDelayFrames,
-	        rServices.m_nRuntimeBoundaryWorldDeferralStreak );
+	const uint64_t boundary_age_frames =
+		rServices.m_iRuntimePhysicsFrameIndex - rServices.m_nRuntimeBoundaryTransitionFrame;
+	rServices.m_bRuntimeBoundaryNodeDeferredLastTick =
+		t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
+								rServices.m_host.effectiveDynamicNodeStreamingEnabled(),
+								boundary_age_frames,
+								rServices.m_nRuntimeBoundaryNodeDelayFrames,
+								rServices.m_nRuntimeBoundaryNodeDeferralStreak );
+	rServices.m_bRuntimeBoundaryInstancerDeferredLastTick =
+		t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
+								rServices.m_host.effectiveInstancerCellStreamingEnabled(),
+								boundary_age_frames,
+								rServices.m_nRuntimeBoundaryInstancerDelayFrames,
+								rServices.m_nRuntimeBoundaryInstancerDeferralStreak );
+	rServices.m_bRuntimeBoundaryWorldDeferredLastTick =
+		t3dBoundaryShouldDefer( rServices.m_bRuntimeBoundaryWorkPhasingEnabled,
+								true,
+								boundary_age_frames,
+								rServices.m_nRuntimeBoundaryWorldDelayFrames,
+								rServices.m_nRuntimeBoundaryWorldDeferralStreak );
 	rServices.m_nRuntimeBoundaryNodeDeferralStreak =
-	        rServices.m_bRuntimeBoundaryNodeDeferredLastTick ? rServices.m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
-	rServices.m_nRuntimeBoundaryInstancerDeferralStreak =
-	        rServices.m_bRuntimeBoundaryInstancerDeferredLastTick ? rServices.m_nRuntimeBoundaryInstancerDeferralStreak + 1 : 0;
+		rServices.m_bRuntimeBoundaryNodeDeferredLastTick ? rServices.m_nRuntimeBoundaryNodeDeferralStreak + 1 : 0;
+	rServices.m_nRuntimeBoundaryInstancerDeferralStreak = rServices.m_bRuntimeBoundaryInstancerDeferredLastTick
+															  ? rServices.m_nRuntimeBoundaryInstancerDeferralStreak + 1
+															  : 0;
 	rServices.m_nRuntimeBoundaryWorldDeferralStreak =
-	        rServices.m_bRuntimeBoundaryWorldDeferredLastTick ? rServices.m_nRuntimeBoundaryWorldDeferralStreak + 1 : 0;
+		rServices.m_bRuntimeBoundaryWorldDeferredLastTick ? rServices.m_nRuntimeBoundaryWorldDeferralStreak + 1 : 0;
 	if ( rServices.m_bRuntimeBoundaryWorldDeferredLastTick ) {
 		++rServices.m_nRuntimeBoundaryWorldDeferralsTotal;
 	}
 	if ( pProfileSample ) {
-		pProfileSample->m_fTargetX = ( float )( rTargetPosition.x );
-		pProfileSample->m_fTargetZ = ( float )( rTargetPosition.z );
+		pProfileSample->m_fTargetX = ( float ) ( rTargetPosition.x );
+		pProfileSample->m_fTargetZ = ( float ) ( rTargetPosition.z );
 		if ( rServices.m_nRuntimeProfileSampleCount > 0u ) {
 			pProfileSample->m_fMovementX = pProfileSample->m_fTargetX - rServices.m_runtimeProfileLastSample.m_fTargetX;
 			pProfileSample->m_fMovementZ = pProfileSample->m_fTargetZ - rServices.m_runtimeProfileLastSample.m_fTargetZ;
@@ -83,10 +93,11 @@ void Terrain3DRuntimeFrameScheduler::updateRuntimeBoundaryPhasing(
 	}
 }
 
-void Terrain3DRuntimeFrameScheduler::updateRuntimeStreamingOwners( const t3dRuntimeFrameServices_t &rServices,
-        const Vector3 &rTargetPosition,
-        t3dRuntimeProfileSample_t *const pProfileSample,
-        uint64_t &rPhaseStartedUsec ) {
+void Terrain3DRuntimeFrameScheduler::updateRuntimeStreamingOwners(
+	const t3dRuntimeFrameServices_t &rServices,
+	const Vector3					&rTargetPosition,
+	t3dRuntimeProfileSample_t *const pProfileSample,
+	uint64_t						&rPhaseStartedUsec ) {
 	if ( rServices.m_pData ) {
 		rServices.m_pData->updateRegionResidency( rTargetPosition, false );
 	}
@@ -98,8 +109,9 @@ void Terrain3DRuntimeFrameScheduler::updateRuntimeStreamingOwners( const t3dRunt
 	if ( rServices.m_pInstanceOcclusion ) {
 		rServices.m_pInstanceOcclusion->updateResidency( rTargetPosition, false );
 	}
-	const bool hlod_active = rServices.m_bHlodEnabled
-	        && ( !Engine::get_singleton()->is_editor_hint() || !rServices.m_host.isEditorAuthoringModeInternal() || rServices.m_bEditorHlodPreview );
+	const bool hlod_active = rServices.m_bHlodEnabled &&
+							 ( !Engine::get_singleton()->is_editor_hint() ||
+							   !rServices.m_host.isEditorAuthoringModeInternal() || rServices.m_bEditorHlodPreview );
 	if ( rServices.m_pHlodStreamer ) {
 		if ( hlod_active ) {
 			rServices.m_pHlodStreamer->updateResidency( rTargetPosition, false );
@@ -135,17 +147,20 @@ void Terrain3DRuntimeFrameScheduler::updateRuntimeStreamingOwners( const t3dRunt
 	}
 }
 
-void Terrain3DRuntimeFrameScheduler::updateRuntimeClipmap( const t3dRuntimeFrameServices_t &rServices, const Vector3 &rTargetPosition ) {
+void Terrain3DRuntimeFrameScheduler::updateRuntimeClipmap(
+	const t3dRuntimeFrameServices_t &rServices,
+	const Vector3					&rTargetPosition ) {
 	if ( rServices.m_nTessellationLevel > 0 ) {
 		if ( rServices.m_pTerrainMesher && rServices.m_material.is_valid() ) {
 			const Vector2 target_position_2d = t3dVector3ToVector2( rTargetPosition );
-			const real_t fTessellationDensity = 1.0f / ( real_t )( 1u << ( uint32_t )rServices.m_nTessellationLevel );
+			const real_t fTessellationDensity = 1.0f / ( real_t ) ( 1u << ( uint32_t ) rServices.m_nTessellationLevel );
 			const real_t fBufferVertexSpacing = s_fRegionVertexSpacing * fTessellationDensity;
 			const real_t fUpdateDistance = MAX( fBufferVertexSpacing, rServices.m_fDisplacementUpdateDistance );
-			const bool bMoved = MAX( abs( rServices.m_lastBufferPosition.x - target_position_2d.x ),
-			                            abs( rServices.m_lastBufferPosition.y - target_position_2d.y ) )
-			        >= fUpdateDistance;
-			const uint64_t nPageTableGeneration = rServices.m_pData ? rServices.m_pData->getPhysicalRegionMapGenerationInternal() : 0u;
+			const bool	 bMoved =
+				MAX( abs( rServices.m_lastBufferPosition.x - target_position_2d.x ),
+					 abs( rServices.m_lastBufferPosition.y - target_position_2d.y ) ) >= fUpdateDistance;
+			const uint64_t nPageTableGeneration =
+				rServices.m_pData ? rServices.m_pData->getPhysicalRegionMapGenerationInternal() : 0u;
 			const bool bPageTableChanged = nPageTableGeneration != rServices.m_nComputeDisplacementPageTableGeneration;
 			const bool bDisplacementDirty = rServices.m_bComputeDisplacementDirty.load( T3D_MEMORY_ORDER_ACQUIRE );
 
@@ -170,7 +185,9 @@ void Terrain3DRuntimeFrameScheduler::updateRuntimeClipmap( const t3dRuntimeFrame
 	}
 }
 
-void Terrain3DRuntimeFrameScheduler::updateRuntimeInstancer( const t3dRuntimeFrameServices_t &rServices, const Vector3 &rTargetPosition ) {
+void Terrain3DRuntimeFrameScheduler::updateRuntimeInstancer(
+	const t3dRuntimeFrameServices_t &rServices,
+	const Vector3					&rTargetPosition ) {
 	const bool bInstanceCellStreaming = rServices.m_host.effectiveInstancerCellStreamingEnabled();
 	const bool bInstanceTargetTracking = bInstanceCellStreaming || rServices.m_bInstancerSingleLodBuffers;
 	if ( rServices.m_pInstancer && bInstanceTargetTracking ) {
@@ -186,11 +203,16 @@ void Terrain3DRuntimeFrameScheduler::updateRuntimeInstancer( const t3dRuntimeFra
 	}
 }
 
-void Terrain3DRuntimeFrameScheduler::tick( const t3dRuntimeFrameServices_t &rServices, const double fDelta ) {
+void Terrain3DRuntimeFrameScheduler::tick(
+	const t3dRuntimeFrameServices_t &rServices,
+	const double					 fDelta ) {
 	if ( !rServices.m_bInitialized ) {
 		return;
 	}
-	rServices.m_host.serviceMemoryBudgetPolicy( false );
+	const bool	   bProfileFrame = rServices.m_bRuntimeProfilingEnabled;
+	const bool	   bAdaptiveFrame = rServices.m_bRuntimeAdaptiveWorkBudgetsEnabled;
+	const bool	   bMeasureFrame = bProfileFrame || bAdaptiveFrame;
+	const uint64_t frame_started_usec = bMeasureFrame ? Time::get_singleton()->get_ticks_usec() : 0u;
 	if ( !rServices.m_hCamera.isValid() ) {
 		LOG( DEBUG, "Camera is null, getting the current one" );
 		rServices.m_host.grabCamera();
@@ -198,22 +220,23 @@ void Terrain3DRuntimeFrameScheduler::tick( const t3dRuntimeFrameServices_t &rSer
 	const Vector3 clipmap_target_position = rServices.m_host.getClipmapTargetPosition();
 	rServices.m_host.updateRegionStreamingPolicy( clipmap_target_position, fDelta, false );
 	serviceColdRuntimeOwners( rServices, clipmap_target_position );
+	const uint64_t cold_streaming_usec =
+		bMeasureFrame ? Time::get_singleton()->get_ticks_usec() - frame_started_usec : 0u;
 	Terrain3DAllocationPhaseScope allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME );
 	if ( rServices.m_bComputeDisplacementFallbackRequested.exchange( false, T3D_MEMORY_ORDER_ACQ_REL ) ) {
 		rServices.m_lastBufferPosition = s_v2Max;
 	}
 
 	t3dRuntimeProfileSample_t profile_sample;
-	const bool bProfileFrame = rServices.m_bRuntimeProfilingEnabled;
-	const bool bAdaptiveFrame = rServices.m_bRuntimeAdaptiveWorkBudgetsEnabled;
-	const bool bMeasureFrame = bProfileFrame || bAdaptiveFrame;
-	const uint64_t frame_started_usec = bMeasureFrame ? Time::get_singleton()->get_ticks_usec() : 0u;
-	uint64_t phase_started_usec = frame_started_usec;
+	// Runtime selection and cold owner publication run before the hot phase, but
+	// must still be reflected in the adaptive controller's full-frame timing.
+	uint64_t phase_started_usec = bMeasureFrame ? Time::get_singleton()->get_ticks_usec() : 0u;
 	rServices.m_nRuntimeAdaptiveControllerUsecLast = 0u;
 	if ( bAdaptiveFrame ) {
+		const uint64_t adaptive_started_usec = Time::get_singleton()->get_ticks_usec();
 		rServices.m_host.updateRuntimeAdaptiveWorkBudgets();
 		const uint64_t adaptive_completed_usec = Time::get_singleton()->get_ticks_usec();
-		rServices.m_nRuntimeAdaptiveControllerUsecLast = adaptive_completed_usec - frame_started_usec;
+		rServices.m_nRuntimeAdaptiveControllerUsecLast = adaptive_completed_usec - adaptive_started_usec;
 		if ( bProfileFrame ) {
 			phase_started_usec = adaptive_completed_usec;
 		}
@@ -222,7 +245,10 @@ void Terrain3DRuntimeFrameScheduler::tick( const t3dRuntimeFrameServices_t &rSer
 	updateRuntimeBoundaryPhasing( rServices, clipmap_target_position, bProfileFrame ? &profile_sample : NULL );
 	// Boundary state is part of the same frame policy as adaptive budgets.
 	rServices.m_host.applyRuntimeAdaptiveWorkBudgets();
-	updateRuntimeStreamingOwners( rServices, clipmap_target_position, bProfileFrame ? &profile_sample : NULL, phase_started_usec );
+	updateRuntimeStreamingOwners( rServices,
+								  clipmap_target_position,
+								  bProfileFrame ? &profile_sample : NULL,
+								  phase_started_usec );
 	updateRuntimeClipmap( rServices, clipmap_target_position );
 	if ( bProfileFrame ) {
 		const uint64_t now = Time::get_singleton()->get_ticks_usec();
@@ -262,10 +288,13 @@ void Terrain3DRuntimeFrameScheduler::tick( const t3dRuntimeFrameServices_t &rSer
 			rServices.m_nRuntimeAdaptiveLastMeasuredUsec = measured_usec;
 		}
 		if ( bProfileFrame ) {
+			profile_sample.m_nPreHotUsec = cold_streaming_usec;
 			profile_sample.m_nCollisionUsec = now - phase_started_usec;
 			profile_sample.m_nPhysicsTotalUsec = measured_usec;
-			profile_sample.m_nStreamingUsec = profile_sample.m_nDataResidencyUsec + profile_sample.m_nHlodStreamingUsec
-			        + profile_sample.m_nNodeStreamingUsec + profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
+			profile_sample.m_nStreamingUsec = cold_streaming_usec + profile_sample.m_nDataResidencyUsec +
+											  profile_sample.m_nHlodStreamingUsec +
+											  profile_sample.m_nNodeStreamingUsec +
+											  profile_sample.m_nLightmapStreamingUsec + profile_sample.m_nInstancerUsec;
 			rServices.m_host.sampleRuntimeProfile( profile_sample );
 		}
 	}

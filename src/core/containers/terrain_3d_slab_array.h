@@ -17,25 +17,30 @@
 // High-water contiguous storage shared by many small logical arrays. Backing
 // ownership/allocation is centralized in Terrain3DNativeBacking; this type owns
 // only the high-water suballocation cursor and logical slab policy.
-template <typename T>
-class Terrain3DHighWaterSlab {
-	static_assert( eastl::is_trivially_copyable_v<T>, "Runtime slab storage requires trivially copyable values." );
+template< typename T > class Terrain3DHighWaterSlab
+{
+	static_assert( eastl::is_trivially_copyable_v< T >, "Runtime slab storage requires trivially copyable values." );
 
-	Terrain3DNativeBacking<T> m_backing;
-	size_t m_nUsed = 0u;
+	Terrain3DNativeBacking< T > m_backing;
+	size_t						m_nUsed = 0u;
 
 public:
 	Terrain3DHighWaterSlab( void ) = default;
-	explicit Terrain3DHighWaterSlab( const Terrain3DEastlAllocator &rAllocator ) : m_backing( rAllocator ) {
+	explicit Terrain3DHighWaterSlab(
+		const Terrain3DEastlAllocator &rAllocator ) :
+		m_backing( rAllocator ) {
 	}
 	~Terrain3DHighWaterSlab( void ) = default;
 	Terrain3DHighWaterSlab( const Terrain3DHighWaterSlab & ) = delete;
 	Terrain3DHighWaterSlab &operator=( const Terrain3DHighWaterSlab & ) = delete;
-	Terrain3DHighWaterSlab( Terrain3DHighWaterSlab &&rOther ) noexcept :
-	        m_backing( eastl::move( rOther.m_backing ) ), m_nUsed( rOther.m_nUsed ) {
+	Terrain3DHighWaterSlab(
+		Terrain3DHighWaterSlab &&rOther ) noexcept :
+		m_backing( eastl::move( rOther.m_backing ) ),
+		m_nUsed( rOther.m_nUsed ) {
 		rOther.m_nUsed = 0u;
 	}
-	Terrain3DHighWaterSlab &operator=( Terrain3DHighWaterSlab &&rOther ) noexcept {
+	Terrain3DHighWaterSlab &operator=(
+		Terrain3DHighWaterSlab &&rOther ) noexcept {
 		if ( this != &rOther ) {
 			m_backing = eastl::move( rOther.m_backing );
 			m_nUsed = rOther.m_nUsed;
@@ -44,17 +49,23 @@ public:
 		return *this;
 	}
 
-	EA_FORCE_INLINE bool requireRuntimeZone( void ) {
+	EA_FORCE_INLINE bool requireRuntimeZone(
+		void ) {
 		return m_backing.requireRuntimeZone();
 	}
-	EA_FORCE_INLINE bool canBindAllocatorZone( Terrain3DMemoryZone *const pZone ) const {
+	EA_FORCE_INLINE bool canBindAllocatorZone(
+		Terrain3DMemoryZone *const pZone ) const {
 		return m_backing.canBindAllocatorZone( pZone );
 	}
 	EA_FORCE_INLINE bool bindAllocatorZone(
-	        Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
+		Terrain3DMemoryZone *const		   pZone,
+		const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
 		return m_backing.bindAllocatorZone( pZone, eOverflowPolicy );
 	}
-	EA_FORCE_INLINE bool bind( T *const pData, const size_t nCapacity, const size_t nUsed = 0u ) {
+	EA_FORCE_INLINE bool bind(
+		T *const	 pData,
+		const size_t nCapacity,
+		const size_t nUsed = 0u ) {
 		if ( nUsed > nCapacity || ( nCapacity > 0u && !pData ) ) {
 			return false;
 		}
@@ -66,25 +77,31 @@ public:
 		return true;
 	}
 
-	EA_FORCE_INLINE bool reserveCold( const size_t nCount ) {
+	EA_FORCE_INLINE bool reserveCold(
+		const size_t nCount ) {
 		return nCount <= m_backing.capacity() ? true : m_backing.growCold( nCount, m_nUsed, true );
 	}
-	EA_FORCE_INLINE bool reserve( const size_t nCount ) {
+	EA_FORCE_INLINE bool reserve(
+		const size_t nCount ) {
 		return nCount <= m_backing.capacity() ? true : reserveCold( nCount );
 	}
-	EA_FORCE_INLINE bool seal( void ) {
+	EA_FORCE_INLINE bool seal(
+		void ) {
 		return m_backing.seal();
 	}
-	EA_FORCE_INLINE void beginColdRebuild( void ) {
+	EA_FORCE_INLINE void beginColdRebuild(
+		void ) {
 		m_backing.unsealCold();
 		m_nUsed = 0u;
 	}
-	EA_FORCE_INLINE bool sealed( void ) const {
+	EA_FORCE_INLINE bool sealed(
+		void ) const {
 		return m_backing.sealed();
 	}
 
-	EA_FORCE_INLINE size_t allocate( const size_t nCount ) {
-		if ( nCount == 0u || nCount > eastl::numeric_limits<size_t>::max() - m_nUsed ) {
+	EA_FORCE_INLINE size_t allocate(
+		const size_t nCount ) {
+		if ( nCount == 0u || nCount > eastl::numeric_limits< size_t >::max() - m_nUsed ) {
 			return SIZE_MAX;
 		}
 		const size_t offset = m_nUsed;
@@ -97,56 +114,73 @@ public:
 		return offset;
 	}
 
-	EA_FORCE_INLINE void reset( void ) {
+	EA_FORCE_INLINE void reset(
+		void ) {
 		m_nUsed = 0u;
 	}
-	EA_FORCE_INLINE void release( void ) {
+	EA_FORCE_INLINE void release(
+		void ) {
 		m_nUsed = 0u;
 		m_backing.release();
 	}
-	EA_FORCE_INLINE bool compactBacking( void ) {
+	EA_FORCE_INLINE bool compactBacking(
+		void ) {
 		return m_nUsed == m_backing.capacity();
 	}
-	EA_FORCE_INLINE T *data( void ) {
+	EA_FORCE_INLINE T *data(
+		void ) {
 		return m_backing.data();
 	}
-	EA_FORCE_INLINE const T *data( void ) const {
+	EA_FORCE_INLINE const T *data(
+		void ) const {
 		return m_backing.data();
 	}
-	EA_FORCE_INLINE size_t used( void ) const {
+	EA_FORCE_INLINE size_t used(
+		void ) const {
 		return m_nUsed;
 	}
-	EA_FORCE_INLINE size_t size( void ) const {
+	EA_FORCE_INLINE size_t size(
+		void ) const {
 		return m_backing.capacity();
 	}
-	EA_FORCE_INLINE size_t capacity( void ) const {
+	EA_FORCE_INLINE size_t capacity(
+		void ) const {
 		return m_backing.capacity();
 	}
-	EA_FORCE_INLINE size_t growCount( void ) const {
+	EA_FORCE_INLINE size_t growCount(
+		void ) const {
 		return m_backing.growCount();
 	}
-	EA_FORCE_INLINE t3dNativeAllocationDomain_t allocationDomain( void ) const {
+	EA_FORCE_INLINE t3dNativeAllocationDomain_t allocationDomain(
+		void ) const {
 		return m_backing.allocationDomain();
 	}
-	EA_FORCE_INLINE bool runtimeBindingSatisfied( void ) const {
+	EA_FORCE_INLINE bool runtimeBindingSatisfied(
+		void ) const {
 		return m_backing.runtimeBindingSatisfied();
 	}
-	EA_FORCE_INLINE bool ownsBacking( void ) const {
+	EA_FORCE_INLINE bool ownsBacking(
+		void ) const {
 		return m_backing.ownsBacking();
 	}
-	EA_FORCE_INLINE size_t residentBytes( void ) const {
+	EA_FORCE_INLINE size_t residentBytes(
+		void ) const {
 		return m_backing.residentBytes();
 	}
-	EA_FORCE_INLINE uint64_t growthRequests( void ) const {
+	EA_FORCE_INLINE uint64_t growthRequests(
+		void ) const {
 		return m_backing.growthRequests();
 	}
-	EA_FORCE_INLINE uint64_t growthDenied( void ) const {
+	EA_FORCE_INLINE uint64_t growthDenied(
+		void ) const {
 		return m_backing.growthDenied();
 	}
-	EA_FORCE_INLINE uint64_t capacityMisses( void ) const {
+	EA_FORCE_INLINE uint64_t capacityMisses(
+		void ) const {
 		return m_backing.capacityMisses();
 	}
-	EA_FORCE_INLINE void swap( Terrain3DHighWaterSlab<T> &rOther ) {
+	EA_FORCE_INLINE void swap(
+		Terrain3DHighWaterSlab< T > &rOther ) {
 		m_backing.swap( rOther.m_backing );
 		using eastl::swap;
 		swap( m_nUsed, rOther.m_nUsed );
@@ -157,14 +191,15 @@ public:
 // logical array into a new high-water segment and copies its live elements.
 // Old segments are reclaimed wholesale by owner reset/compaction; normal
 // runtime mutation never performs per-cell frees.
-template <typename T>
-class Terrain3DSlabArray {
-	Terrain3DHighWaterSlab<T> *m_pSlab = NULL;
-	size_t m_iOffset = 0u;
-	size_t m_nCount = 0u;
-	size_t m_nCapacity = 0u;
+template< typename T > class Terrain3DSlabArray
+{
+	Terrain3DHighWaterSlab< T > *m_pSlab = NULL;
+	size_t						 m_iOffset = 0u;
+	size_t						 m_nCount = 0u;
+	size_t						 m_nCapacity = 0u;
 
-	EA_FORCE_INLINE size_t growthCapacity( const size_t nRequired ) const {
+	EA_FORCE_INLINE size_t growthCapacity(
+		const size_t nRequired ) const {
 		if ( nRequired <= m_nCapacity ) {
 			return m_nCapacity;
 		}
@@ -176,14 +211,19 @@ public:
 	Terrain3DSlabArray( void ) = default;
 	Terrain3DSlabArray( const Terrain3DSlabArray & ) = delete;
 	Terrain3DSlabArray &operator=( const Terrain3DSlabArray & ) = delete;
-	EA_FORCE_INLINE Terrain3DSlabArray( Terrain3DSlabArray &&rOther ) noexcept :
-	        m_pSlab( rOther.m_pSlab ), m_iOffset( rOther.m_iOffset ), m_nCount( rOther.m_nCount ), m_nCapacity( rOther.m_nCapacity ) {
+	EA_FORCE_INLINE		Terrain3DSlabArray(
+			Terrain3DSlabArray &&rOther ) noexcept :
+		m_pSlab( rOther.m_pSlab ),
+		m_iOffset( rOther.m_iOffset ),
+		m_nCount( rOther.m_nCount ),
+		m_nCapacity( rOther.m_nCapacity ) {
 		rOther.m_pSlab = NULL;
 		rOther.m_iOffset = 0u;
 		rOther.m_nCount = 0u;
 		rOther.m_nCapacity = 0u;
 	}
-	EA_FORCE_INLINE Terrain3DSlabArray &operator=( Terrain3DSlabArray &&rOther ) noexcept {
+	EA_FORCE_INLINE Terrain3DSlabArray &operator=(
+		Terrain3DSlabArray &&rOther ) noexcept {
 		if ( this != &rOther ) {
 			m_pSlab = rOther.m_pSlab;
 			m_iOffset = rOther.m_iOffset;
@@ -197,20 +237,24 @@ public:
 		return *this;
 	}
 
-	EA_FORCE_INLINE void bind( Terrain3DHighWaterSlab<T> *const pSlab ) {
+	EA_FORCE_INLINE void bind(
+		Terrain3DHighWaterSlab< T > *const pSlab ) {
 		m_pSlab = pSlab;
 		m_iOffset = 0u;
 		m_nCount = 0u;
 		m_nCapacity = 0u;
 	}
-	EA_FORCE_INLINE void rebind( Terrain3DHighWaterSlab<T> *const pSlab ) {
+	EA_FORCE_INLINE void rebind(
+		Terrain3DHighWaterSlab< T > *const pSlab ) {
 		m_pSlab = pSlab;
 	}
-	EA_FORCE_INLINE bool isBound( void ) const {
+	EA_FORCE_INLINE bool isBound(
+		void ) const {
 		return m_pSlab != NULL;
 	}
 
-	bool reserve( const size_t nCount ) {
+	bool reserve(
+		const size_t nCount ) {
 		if ( nCount <= m_nCapacity ) {
 			return true;
 		}
@@ -233,7 +277,8 @@ public:
 		return true;
 	}
 
-	bool reserveExact( const size_t nCount ) {
+	bool reserveExact(
+		const size_t nCount ) {
 		if ( nCount <= m_nCapacity ) {
 			return true;
 		}
@@ -255,7 +300,8 @@ public:
 		return true;
 	}
 
-	bool resizeUninitialized( const size_t nCount ) {
+	bool resizeUninitialized(
+		const size_t nCount ) {
 		if ( !reserve( nCount ) ) {
 			return false;
 		}
@@ -263,7 +309,8 @@ public:
 		return true;
 	}
 
-	bool resizeZeroed( const size_t nCount ) {
+	bool resizeZeroed(
+		const size_t nCount ) {
 		const size_t old_count = m_nCount;
 		if ( !reserve( nCount ) ) {
 			return false;
@@ -275,11 +322,14 @@ public:
 		return true;
 	}
 
-	EA_FORCE_INLINE bool resize( const size_t nCount ) {
+	EA_FORCE_INLINE bool resize(
+		const size_t nCount ) {
 		return resizeZeroed( nCount );
 	}
 
-	bool resize( const size_t nCount, const T &rValue ) {
+	bool resize(
+		const size_t nCount,
+		const T		&rValue ) {
 		const size_t old_count = m_nCount;
 		if ( !reserve( nCount ) ) {
 			return false;
@@ -291,10 +341,12 @@ public:
 		return true;
 	}
 
-	EA_FORCE_INLINE void clear( void ) {
+	EA_FORCE_INLINE void clear(
+		void ) {
 		m_nCount = 0u;
 	}
-	EA_FORCE_INLINE bool pushBack( const T &rValue ) {
+	EA_FORCE_INLINE bool pushBack(
+		const T &rValue ) {
 		const size_t index = m_nCount;
 		if ( !reserve( index + 1u ) ) {
 			return false;
@@ -303,7 +355,8 @@ public:
 		m_nCount = index + 1u;
 		return true;
 	}
-	EA_FORCE_INLINE bool pushBack( T &&rValue ) {
+	EA_FORCE_INLINE bool pushBack(
+		T &&rValue ) {
 		const size_t index = m_nCount;
 		if ( !reserve( index + 1u ) ) {
 			return false;
@@ -312,46 +365,60 @@ public:
 		m_nCount = index + 1u;
 		return true;
 	}
-	EA_FORCE_INLINE size_t size( void ) const {
+	EA_FORCE_INLINE size_t size(
+		void ) const {
 		return m_nCount;
 	}
-	EA_FORCE_INLINE size_t capacity( void ) const {
+	EA_FORCE_INLINE size_t capacity(
+		void ) const {
 		return m_nCapacity;
 	}
-	EA_FORCE_INLINE bool empty( void ) const {
+	EA_FORCE_INLINE bool empty(
+		void ) const {
 		return m_nCount == 0u;
 	}
-	EA_FORCE_INLINE T *data( void ) {
+	EA_FORCE_INLINE T *data(
+		void ) {
 		return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_iOffset : NULL;
 	}
-	EA_FORCE_INLINE const T *data( void ) const {
+	EA_FORCE_INLINE const T *data(
+		void ) const {
 		return m_pSlab && m_nCapacity > 0u ? m_pSlab->data() + m_iOffset : NULL;
 	}
-	EA_FORCE_INLINE T &operator[]( const size_t nIndex ) {
+	EA_FORCE_INLINE T &operator[](
+		const size_t nIndex ) {
 		return data()[nIndex];
 	}
-	EA_FORCE_INLINE const T &operator[]( const size_t nIndex ) const {
+	EA_FORCE_INLINE const T &operator[](
+		const size_t nIndex ) const {
 		return data()[nIndex];
 	}
-	EA_FORCE_INLINE T *begin( void ) {
+	EA_FORCE_INLINE T *begin(
+		void ) {
 		return data();
 	}
-	EA_FORCE_INLINE const T *begin( void ) const {
+	EA_FORCE_INLINE const T *begin(
+		void ) const {
 		return data();
 	}
-	EA_FORCE_INLINE T *end( void ) {
+	EA_FORCE_INLINE T *end(
+		void ) {
 		return data() ? data() + m_nCount : NULL;
 	}
-	EA_FORCE_INLINE const T *end( void ) const {
+	EA_FORCE_INLINE const T *end(
+		void ) const {
 		return data() ? data() + m_nCount : NULL;
 	}
-	EA_FORCE_INLINE size_t offset( void ) const {
+	EA_FORCE_INLINE size_t offset(
+		void ) const {
 		return m_iOffset;
 	}
-	EA_FORCE_INLINE bool isBoundTo( const Terrain3DHighWaterSlab<T> *const pSlab ) const {
+	EA_FORCE_INLINE bool isBoundTo(
+		const Terrain3DHighWaterSlab< T > *const pSlab ) const {
 		return m_pSlab == pSlab;
 	}
-	EA_FORCE_INLINE bool validateBinding( const Terrain3DHighWaterSlab<T> *const pSlab ) const {
+	EA_FORCE_INLINE bool validateBinding(
+		const Terrain3DHighWaterSlab< T > *const pSlab ) const {
 		if ( m_pSlab != pSlab || m_nCount > m_nCapacity ) {
 			return false;
 		}
@@ -364,7 +431,8 @@ public:
 		return m_nCapacity <= m_pSlab->used() - m_iOffset && m_nCapacity <= m_pSlab->capacity() - m_iOffset;
 	}
 
-	bool relocateExact( Terrain3DHighWaterSlab<T> *const pDestination ) {
+	bool relocateExact(
+		Terrain3DHighWaterSlab< T > *const pDestination ) {
 		if ( !pDestination ) {
 			return false;
 		}
@@ -373,8 +441,8 @@ public:
 			return true;
 		}
 		const T *const pSource = data();
-		const size_t count = m_nCount;
-		const size_t offset = pDestination->allocate( count );
+		const size_t   count = m_nCount;
+		const size_t   offset = pDestination->allocate( count );
 		if ( offset == SIZE_MAX ) {
 			return false;
 		}

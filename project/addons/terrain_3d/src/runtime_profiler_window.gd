@@ -5,11 +5,21 @@ extends Terrain3DRuntimeProfilerWindowBase
 const SettingMetadata = preload("res://addons/terrain_3d/src/setting_metadata.gd")
 const SettingControlFactory = preload("res://addons/terrain_3d/src/setting_control_factory.gd")
 
+# Manual residency requests are read-only while the matching Auto policy is active.
+const AUTO_BUDGET_CONTROLS = {
+	"gpu_region_cache_budget_mb": "gpu_region_cache_budget_auto",
+	"cpu_region_cache_budget_mb": "cpu_region_cache_budget_auto",
+	"instance_region_cache_budget_mb": "instance_region_cache_budget_auto",
+	"lightmap_residency_budget_mb": "lightmap_residency_budget_auto",
+	"hlod_memory_budget_mb": "hlod_memory_budget_auto",
+}
+
 const CONTROL_GROUP_PREFIXES = [
 	"Performance Profile",
 	"Terrain Rendering / Shader Tier Ranges",
 	"Streaming & Residency",
 	"Runtime Scheduling - Advanced",
+	"Unified World Runtime",
 	"Memory",
 ]
 
@@ -26,6 +36,16 @@ var _status: Label
 var _pause: CheckButton
 var _refresh_rate: OptionButton
 var _tabs: TabContainer
+var _streaming_tree: Tree
+var _streaming_summary: Label
+var _streaming_enabled: CheckButton
+var _streaming_sample_rate: OptionButton
+var _restore_streaming_profiling_on_close: bool = false
+# Rolling streaming-stage estimate: CPU milliseconds per rendered editor frame.
+# The native counters remain cumulative for export and diagnostics.
+var _streaming_previous_drawn_frames: int = -1
+var _streaming_previous_sample_every: int = -1
+var _streaming_previous_stages: Dictionary = {}
 var _metrics_tree: Tree
 var _problems_tree: Tree
 var _pressure_tree: Tree
@@ -106,6 +126,7 @@ func _ready() -> void:
 	root.add_child(_tabs)
 	_build_overview_tab()
 	_build_diagnostics_tab()
+	_build_streaming_tab()
 	_build_timeline_tab()
 	_build_spatial_tab()
 	_build_settings_tab()
@@ -463,6 +484,182 @@ func _update_rd_renderer_product() -> void:
 		item.set_text(2, str(row[2]))
 
 
+func _build_streaming_tab() -> void:
+	var panel: VBoxContainer = VBoxContainer.new()
+	panel.name = "Streaming"
+	panel.add_theme_constant_override("separation", 8)
+	_tabs.add_child(panel)
+
+	var toolbar: HBoxContainer = HBoxContainer.new()
+	panel.add_child(toolbar)
+	_streaming_enabled = CheckButton.new()
+	_streaming_enabled.text = "Collect streaming timings"
+	_streaming_enabled.tooltip_text = "Enable sampled streaming CPU stage timings while the profiler is open."
+	_streaming_enabled.toggled.connect(_on_streaming_enabled_toggled)
+	toolbar.add_child(_streaming_enabled)
+
+	var rate_label: Label = Label.new()
+	rate_label.text = "Sample every"
+	toolbar.add_child(rate_label)
+	_streaming_sample_rate = OptionButton.new()
+	for interval: int in [1, 4, 8, 16, 32]:
+		_streaming_sample_rate.add_item("%d calls" % interval, interval)
+	_streaming_sample_rate.select(2)
+	_streaming_sample_rate.item_selected.connect(_on_streaming_sample_rate_selected)
+	toolbar.add_child(_streaming_sample_rate)
+
+	var reset_streaming: Button = Button.new()
+	reset_streaming.text = "Reset streaming counters"
+	reset_streaming.pressed.connect(_reset_streaming_counters)
+	toolbar.add_child(reset_streaming)
+	var export_hint: Label = Label.new()
+	export_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	export_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	export_hint.text = "Export... includes stage metrics"
+	toolbar.add_child(export_hint)
+
+	_streaming_summary = Label.new()
+	_streaming_summary.text = "Streaming timings are disabled."
+	_streaming_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(_streaming_summary)
+
+	_streaming_tree = Tree.new()
+	_streaming_tree.columns = 10
+	_streaming_tree.hide_root = true
+	_streaming_tree.column_titles_visible = true
+	_streaming_tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_streaming_tree.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var headers: PackedStringArray = PackedStringArray([
+		"Stage (CPU)", "Calls", "Samples", "Mean us", "P50 <= us", "P95 <= us",
+		"P99 <= us", "Peak us", "Est CPU ms/frame", "Bytes"])
+	for column: int in range(headers.size()):
+		_streaming_tree.set_column_title(column, headers[column])
+		_streaming_tree.set_column_expand(column, column == 0)
+		if column != 0:
+			_streaming_tree.set_column_custom_minimum_width(column, 95)
+	_streaming_tree.set_column_custom_minimum_width(0, 220)
+	panel.add_child(_streaming_tree)
+
+
+func _streaming_sample_interval() -> int:
+	if not is_instance_valid(_streaming_sample_rate):
+		return 8
+	return _streaming_sample_rate.get_item_id(_streaming_sample_rate.selected)
+
+
+func _open_streaming_profiler() -> void:
+	if not is_instance_valid(terrain) or not terrain.has_method("get_streaming_profiler_stats"):
+		return
+	var state: Dictionary = terrain.call("get_streaming_profiler_stats")
+	var already_enabled: bool = bool(state.get("enabled", false))
+	if already_enabled and _streaming_enabled.button_pressed:
+		return
+	_restore_streaming_profiling_on_close = not already_enabled
+	if already_enabled:
+		var selected_index: int = _streaming_sample_rate.get_item_index(int(state.get("sample_every", 8)))
+		if selected_index >= 0:
+			_streaming_sample_rate.select(selected_index)
+	else:
+		terrain.call("set_streaming_profiler_enabled", true, _streaming_sample_interval())
+	_streaming_enabled.set_pressed_no_signal(true)
+
+
+func _on_streaming_enabled_toggled(p_enabled: bool) -> void:
+	_reset_streaming_interval()
+	if is_instance_valid(terrain) and terrain.has_method("set_streaming_profiler_enabled"):
+		terrain.call("set_streaming_profiler_enabled", p_enabled, _streaming_sample_interval())
+	refresh_now()
+
+
+func _on_streaming_sample_rate_selected(_p_index: int) -> void:
+	_reset_streaming_interval()
+	if is_instance_valid(terrain) and _streaming_enabled.button_pressed:
+		terrain.call("set_streaming_profiler_enabled", true, _streaming_sample_interval())
+	refresh_now()
+
+
+func _reset_streaming_counters() -> void:
+	_reset_streaming_interval()
+	if is_instance_valid(terrain) and terrain.has_method("reset_streaming_profiler"):
+		terrain.call("reset_streaming_profiler")
+	refresh_now()
+
+
+func _reset_streaming_interval() -> void:
+	_streaming_previous_drawn_frames = -1
+	_streaming_previous_sample_every = -1
+	_streaming_previous_stages.clear()
+
+
+func _update_streaming_profiler(p_snapshot: Terrain3DRuntimeValueMap) -> void:
+	if not is_instance_valid(_streaming_tree):
+		return
+	_streaming_tree.clear()
+	var profile: Terrain3DRuntimeValueMap = p_snapshot.map_value("streaming_profile")
+	var active: bool = profile.bool_value("enabled")
+	_streaming_enabled.set_pressed_no_signal(active)
+	if not active:
+		_reset_streaming_interval()
+		_streaming_summary.text = "Streaming timings are disabled. Enable collection above."
+		return
+	var stages: Dictionary = profile.map_value("stages").duplicate_values()
+	var sample_every: int = profile.int_value("sample_every", 8)
+	var drawn_frames: int = Engine.get_frames_drawn()
+	var interval_frames: int = drawn_frames - _streaming_previous_drawn_frames
+	var interval_valid: bool = _streaming_previous_drawn_frames >= 0 and interval_frames > 0 and sample_every == _streaming_previous_sample_every
+	var ranked: Array[Dictionary] = []
+	for name: Variant in stages.keys():
+		var values: Dictionary = stages[name] as Dictionary
+		var calls: int = int(values.get("calls", 0))
+		var samples: int = int(values.get("timed_samples", 0))
+		var estimated_ms_per_frame: float = -1.0
+		var previous: Dictionary = _streaming_previous_stages.get(name, {}) as Dictionary
+		if interval_valid and not previous.is_empty():
+			var previous_calls: int = int(previous.get("calls", 0))
+			var previous_samples: int = int(previous.get("timed_samples", 0))
+			var previous_total_usec: float = float(previous.get("total_usec_sampled", 0.0))
+			var total_usec: float = float(values.get("total_usec_sampled", 0.0))
+			# A counter reset invalidates the interval rather than creating a negative cost.
+			if calls >= previous_calls and samples >= previous_samples and total_usec >= previous_total_usec:
+				var interval_calls: int = calls - previous_calls
+				var interval_samples: int = samples - previous_samples
+				var mean_usec: float = float(values.get("avg_usec_sampled", 0.0))
+				if interval_samples > 0:
+					mean_usec = (total_usec - previous_total_usec) / float(interval_samples)
+				# Unsampled calls use the latest known sample mean. No timings yet => N/A.
+				if interval_calls == 0:
+					estimated_ms_per_frame = 0.0
+				elif samples > 0:
+					estimated_ms_per_frame = mean_usec * float(interval_calls) / (1000.0 * float(interval_frames))
+		ranked.append({"name": str(name), "values": values, "estimated_ms_per_frame": estimated_ms_per_frame})
+	_streaming_previous_stages = stages.duplicate(true)
+	_streaming_previous_drawn_frames = drawn_frames
+	_streaming_previous_sample_every = sample_every
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if float(a["estimated_ms_per_frame"]) == float(b["estimated_ms_per_frame"]):
+			return str(a["name"]) < str(b["name"])
+		return float(a["estimated_ms_per_frame"]) > float(b["estimated_ms_per_frame"]))
+	var root: TreeItem = _streaming_tree.create_item()
+	for entry: Dictionary in ranked:
+		var row: TreeItem = _streaming_tree.create_item(root)
+		var values: Dictionary = entry["values"] as Dictionary
+		row.set_text(0, str(entry["name"]))
+		row.set_text(1, str(int(values.get("calls", 0))))
+		row.set_text(2, str(int(values.get("timed_samples", 0))))
+		row.set_text(3, "%.1f" % float(values.get("avg_usec_sampled", 0.0)))
+		row.set_text(4, str(int(values.get("p50_usec_upper", 0))))
+		row.set_text(5, str(int(values.get("p95_usec_upper", 0))))
+		row.set_text(6, str(int(values.get("p99_usec_upper", 0))))
+		row.set_text(7, "%.1f" % float(values.get("peak_usec_sampled", 0.0)))
+		var ms_per_frame: float = float(entry["estimated_ms_per_frame"])
+		row.set_text(8, "%.3f" % ms_per_frame if ms_per_frame >= 0.0 else "—")
+		row.set_tooltip_text(8, "Estimated CPU milliseconds per rendered frame over the latest profiler refresh interval. Derived from interval call counts and sampled call times; nested scopes overlap. — means no usable interval yet.")
+		row.set_text(9, str(int(values.get("bytes", 0))))
+		row.set_tooltip_text(0, "Sampled CPU wall time, including GPU submission on the CPU; no hardware GPU timing. Nested stages may overlap.")
+	_streaming_summary.text = "%d stages, sampling 1/%d calls. Ranked by recent estimated CPU ms/frame (not lifetime cumulative). Nested scopes overlap; GPU upload/readback measurements are CPU submission time, not GPU execution." % [
+		ranked.size(), sample_every]
+
+
 func _build_timeline_tab() -> void:
 	var root: VBoxContainer = VBoxContainer.new()
 	root.name = "Timeline"
@@ -734,6 +931,8 @@ func set_terrain(p_terrain: Terrain3D) -> void:
 	_refresh_accumulator = _refresh_interval_sec
 	_reset_ui_state()
 	if is_node_ready():
+		if visible:
+			_open_streaming_profiler()
 		refresh_now()
 
 
@@ -745,6 +944,7 @@ func open_for_terrain(p_terrain: Terrain3D) -> void:
 	if is_instance_valid(terrain) and not terrain.is_runtime_profiling_enabled():
 		terrain.set_runtime_profiling_enabled(true)
 		_restore_profiling_on_close = true
+	_open_streaming_profiler()
 	popup_centered()
 	refresh_now()
 
@@ -753,6 +953,11 @@ func _restore_previous_profiling_state() -> void:
 	if _restore_profiling_on_close and is_instance_valid(terrain):
 		terrain.set_runtime_profiling_enabled(false)
 	_restore_profiling_on_close = false
+	if _restore_streaming_profiling_on_close and is_instance_valid(terrain):
+		terrain.call("set_streaming_profiler_enabled", false, _streaming_sample_interval())
+	_restore_streaming_profiling_on_close = false
+	if is_instance_valid(_streaming_enabled):
+		_streaming_enabled.set_pressed_no_signal(false)
 
 
 func _close_profiler() -> void:
@@ -857,6 +1062,7 @@ func refresh_now() -> void:
 		_status.text += " — boundary phase deferred %s" % ", ".join(deferred)
 	_update_overview(terrain_snapshot)
 	_update_diagnostics_products(terrain_snapshot)
+	_update_streaming_profiler(terrain_snapshot)
 	_update_subsystems(terrain_snapshot)
 	_update_timeline(sequence)
 	_update_spatial(terrain_snapshot)
@@ -1215,6 +1421,9 @@ func _update_settings(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	_updating_controls = true
 	for property_name: String in _control_bindings:
 		SettingControlFactory.sync_control(_control_bindings[property_name], _control_descriptors[property_name], terrain.get(property_name))
+		var auto_flag: String = str(AUTO_BUDGET_CONTROLS.get(property_name, ""))
+		var enabled: bool = auto_flag.is_empty() or not bool(terrain.get(auto_flag))
+		SettingControlFactory.set_control_enabled(_control_bindings[property_name], enabled)
 	_updating_controls = false
 	var clipmap: Terrain3DRuntimeValueMap = p_snapshot.map_value("clipmap")
 	var configuration: Terrain3DRuntimeValueMap = p_snapshot.map_value("configuration")
@@ -1478,6 +1687,8 @@ func _on_refresh_rate_selected(p_index: int) -> void:
 func _reset_counters() -> void:
 	if is_instance_valid(terrain):
 		terrain.reset_runtime_diagnostics()
+		if terrain.has_method("reset_streaming_profiler"):
+			terrain.call("reset_streaming_profiler")
 	_reset_ui_state()
 	refresh_now()
 
@@ -1533,6 +1744,7 @@ func _clear_history_state(p_after_sequence: int = -1) -> void:
 
 func _reset_ui_state() -> void:
 	_clear_history_state()
+	_reset_streaming_interval()
 	_raw_items.clear()
 	_problem_items.clear()
 	_pressure_items.clear()
@@ -1540,6 +1752,8 @@ func _reset_ui_state() -> void:
 	_adaptive_items.clear()
 	_priority_items.clear()
 	_subsystem_items.clear()
+	if is_instance_valid(_streaming_tree):
+		_streaming_tree.clear()
 	if is_instance_valid(_raw_tree):
 		_raw_tree.clear()
 	if is_instance_valid(_problems_tree):

@@ -5,7 +5,8 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-static inline int32_t t3dErosionSettingsSanitizeResolutionScale( int32_t nValue ) {
+static inline int32_t t3dErosionSettingsSanitizeResolutionScale(
+	int32_t nValue ) {
 	if ( nValue <= 1 ) {
 		return 1;
 	}
@@ -21,8 +22,11 @@ static inline int32_t t3dErosionSettingsSanitizeResolutionScale( int32_t nValue 
 	return 16;
 }
 
-Ref<Curve> Terrain3DErosionSettings::makeFlatCurve( const float fValue, const float fMin, const float fMax ) {
-	Ref<Curve> pCurve;
+Ref< Curve > Terrain3DErosionSettings::makeFlatCurve(
+	const float fValue,
+	const float fMin,
+	const float fMax ) {
+	Ref< Curve > pCurve;
 	pCurve.instantiate();
 	pCurve->set_min_value( fMin );
 	pCurve->set_max_value( fMax );
@@ -31,7 +35,9 @@ Ref<Curve> Terrain3DErosionSettings::makeFlatCurve( const float fValue, const fl
 	return pCurve;
 }
 
-void Terrain3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Curve> &rSourceCurve ) {
+void Terrain3DErosionSettings::setCurve(
+	Ref< Curve >	   &rTargetCurve,
+	const Ref< Curve > &rSourceCurve ) {
 	if ( rTargetCurve == rSourceCurve ) {
 		return;
 	}
@@ -39,7 +45,8 @@ void Terrain3DErosionSettings::setCurve( Ref<Curve> &rTargetCurve, const Ref<Cur
 	emit_changed();
 }
 
-Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
+Terrain3DErosionSettings::Terrain3DErosionSettings(
+	void ) {
 	m_masterIntensityCurve = makeFlatCurve( 1.0f );
 	m_rainfallCurve = makeFlatCurve( 1.0f );
 	m_weatheringCurve = makeFlatCurve( 1.0f );
@@ -54,46 +61,47 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 	m_debrisFlowCurve = makeFlatCurve( 1.0f );
 }
 
-#define SET_CLAMPED( methodName, methodSymbol, field_name, value_type, min_value, max_value )                                              \
-	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) {                                                                   \
-		value_type value = CLAMP( valueArg, value_type( min_value ), value_type( max_value ) );                                            \
-		if ( field_name == value ) {                                                                                                       \
-			return;                                                                                                                        \
-		}                                                                                                                                  \
-		field_name = value;                                                                                                                \
-		emit_changed();                                                                                                                    \
+#define SET_CLAMPED( methodName, methodSymbol, field_name, value_type, min_value, max_value )                          \
+	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) {                                               \
+		value_type value = CLAMP( valueArg, value_type( min_value ), value_type( max_value ) );                        \
+		if ( field_name == value ) {                                                                                   \
+			return;                                                                                                    \
+		}                                                                                                              \
+		field_name = value;                                                                                            \
+		emit_changed();                                                                                                \
 	}
 
-#define SET_VALUE( methodName, methodSymbol, field_name, value_type )                                                                      \
-	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) {                                                                   \
-		if ( field_name == valueArg ) {                                                                                                    \
-			return;                                                                                                                        \
-		}                                                                                                                                  \
-		field_name = valueArg;                                                                                                             \
-		emit_changed();                                                                                                                    \
+#define SET_VALUE( methodName, methodSymbol, field_name, value_type )                                                  \
+	void Terrain3DErosionSettings::methodSymbol( value_type valueArg ) {                                               \
+		if ( field_name == valueArg ) {                                                                                \
+			return;                                                                                                    \
+		}                                                                                                              \
+		field_name = valueArg;                                                                                         \
+		emit_changed();                                                                                                \
 	}
 
-#define SET_REF_VALUE( methodName, methodSymbol, field_name, value_type )                                                                  \
-	void Terrain3DErosionSettings::methodSymbol( const value_type &valueArg ) {                                                            \
-		if ( field_name == valueArg ) {                                                                                                    \
-			return;                                                                                                                        \
-		}                                                                                                                                  \
-		field_name = valueArg;                                                                                                             \
-		emit_changed();                                                                                                                    \
+#define SET_REF_VALUE( methodName, methodSymbol, field_name, value_type )                                              \
+	void Terrain3DErosionSettings::methodSymbol( const value_type &valueArg ) {                                        \
+		if ( field_name == valueArg ) {                                                                                \
+			return;                                                                                                    \
+		}                                                                                                              \
+		field_name = valueArg;                                                                                         \
+		emit_changed();                                                                                                \
 	}
 
-#define SET_INSPECTOR_TOGGLE( methodName, methodSymbol, field_name )                                                                       \
-	void Terrain3DErosionSettings::methodSymbol( bool bValueArg ) {                                                                        \
-		if ( field_name == bValueArg ) {                                                                                                   \
-			return;                                                                                                                        \
-		}                                                                                                                                  \
-		field_name = bValueArg;                                                                                                            \
-		emit_changed();                                                                                                                    \
-		notify_property_list_changed();                                                                                                    \
+#define SET_INSPECTOR_TOGGLE( methodName, methodSymbol, field_name )                                                   \
+	void Terrain3DErosionSettings::methodSymbol( bool bValueArg ) {                                                    \
+		if ( field_name == bValueArg ) {                                                                               \
+			return;                                                                                                    \
+		}                                                                                                              \
+		field_name = bValueArg;                                                                                        \
+		emit_changed();                                                                                                \
+		notify_property_list_changed();                                                                                \
 	}
 
 // Normalization rules remain explicit rather than becoming assignment policies.
-void Terrain3DErosionSettings::setResolutionScale( const int32_t nValue ) {
+void Terrain3DErosionSettings::setResolutionScale(
+	const int32_t nValue ) {
 	const int32_t value = t3dErosionSettingsSanitizeResolutionScale( nValue );
 	if ( m_config.m_nResolutionScale != value ) {
 		m_config.m_nResolutionScale = value;
@@ -101,16 +109,19 @@ void Terrain3DErosionSettings::setResolutionScale( const int32_t nValue ) {
 	}
 }
 
-void Terrain3DErosionSettings::setBoundaryMode( const t3dBoundaryMode_t eValue ) {
-	const t3dBoundaryMode_t value =
-	        ( t3dBoundaryMode_t )( CLAMP( ( int32_t )( eValue ), ( int32_t )( BOUNDARY_CLOSED ), ( int32_t )( BOUNDARY_OPEN ) ) );
+void Terrain3DErosionSettings::setBoundaryMode(
+	const t3dBoundaryMode_t eValue ) {
+	const t3dBoundaryMode_t value = ( t3dBoundaryMode_t ) ( CLAMP( ( int32_t ) ( eValue ),
+																   ( int32_t ) ( BOUNDARY_CLOSED ),
+																   ( int32_t ) ( BOUNDARY_OPEN ) ) );
 	if ( m_config.m_boundaryMode != value ) {
 		m_config.m_boundaryMode = value;
 		emit_changed();
 	}
 }
 
-void Terrain3DErosionSettings::setWindDirection( const Vector2 &vValue ) {
+void Terrain3DErosionSettings::setWindDirection(
+	const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
 	if ( !m_config.m_windDirection.is_equal_approx( value ) ) {
 		m_config.m_windDirection = value;
@@ -118,7 +129,8 @@ void Terrain3DErosionSettings::setWindDirection( const Vector2 &vValue ) {
 	}
 }
 
-void Terrain3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
+void Terrain3DErosionSettings::setWaveDirection(
+	const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
 	if ( !m_config.m_waveDirection.is_equal_approx( value ) ) {
 		m_config.m_waveDirection = value;
@@ -126,17 +138,22 @@ void Terrain3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
 	}
 }
 
-#define T3D_EROSION_SETTER_CLAMPED( type, symbol, name, field, minimum, maximum ) \
+#define T3D_EROSION_SETTER_CLAMPED( type, symbol, name, field, minimum, maximum )                                      \
 	SET_CLAMPED( name, set##symbol, field, type, minimum, maximum )
-#define T3D_EROSION_SETTER_VALUE( type, symbol, name, field, minimum, maximum ) SET_VALUE( name, set##symbol, field, type )
-#define T3D_EROSION_SETTER_REF( type, symbol, name, field, minimum, maximum ) SET_REF_VALUE( name, set##symbol, field, type )
-#define T3D_EROSION_SETTER_TOGGLE( type, symbol, name, field, minimum, maximum ) SET_INSPECTOR_TOGGLE( name, set##symbol, field )
-#define T3D_EROSION_SETTER_CURVE( type, symbol, name, field, minimum, maximum ) \
-	void Terrain3DErosionSettings::set##symbol( const type &value ) { setCurve( field, value ); }
+#define T3D_EROSION_SETTER_VALUE( type, symbol, name, field, minimum, maximum )                                        \
+	SET_VALUE( name, set##symbol, field, type )
+#define T3D_EROSION_SETTER_REF( type, symbol, name, field, minimum, maximum )                                          \
+	SET_REF_VALUE( name, set##symbol, field, type )
+#define T3D_EROSION_SETTER_TOGGLE( type, symbol, name, field, minimum, maximum )                                       \
+	SET_INSPECTOR_TOGGLE( name, set##symbol, field )
+#define T3D_EROSION_SETTER_CURVE( type, symbol, name, field, minimum, maximum )                                        \
+	void Terrain3DErosionSettings::set##symbol( const type &value ) {                                                  \
+		setCurve( field, value );                                                                                      \
+	}
 #define T3D_EROSION_SETTER_CUSTOM_VALUE( type, symbol, name, field, minimum, maximum )
 #define T3D_EROSION_SETTER_CUSTOM_REF( type, symbol, name, field, minimum, maximum )
 #define T3D_EROSION_GROUP( name, prefix )
-#define T3D_EROSION_PROPERTY( policy, type, symbol, name, field, minimum, maximum, variant, hint, hint_string ) \
+#define T3D_EROSION_PROPERTY( policy, type, symbol, name, field, minimum, maximum, variant, hint, hint_string )        \
 	T3D_EROSION_SETTER_##policy( type, symbol, name, field, minimum, maximum )
 #include "authoring/erosion/terrain_3d_erosion_properties.inc"
 #undef T3D_EROSION_PROPERTY
@@ -156,12 +173,14 @@ void Terrain3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
 
 // Inspector dependencies are data, not a branch for every property.  Literal
 // names keep the table independent of Godot object initialization order.
-typedef struct t3dErosionPropertyRule_s {
+typedef struct t3dErosionPropertyRule_s
+{
 	const char *m_pName;
 	bool t3dErosionConfigSnapshot_t::*m_pEnabled;
 } t3dErosionPropertyRule_t;
 
-void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) const {
+void Terrain3DErosionSettings::_validate_property(
+	PropertyInfo &rProperty ) const {
 	static const t3dErosionPropertyRule_t rules[] = {
 		{ "height_output_strength", &t3dErosionConfigSnapshot_t::m_bApplyHeight },
 		{ "minimum_height_m", &t3dErosionConfigSnapshot_t::m_bHeightRangeEnabled },
@@ -299,19 +318,26 @@ void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) con
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
 	} else if ( !m_config.m_bDesertPavementEnabled && name.begins_with( "pavement_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_config.m_bTrafficEnabled && name != StringName( "traffic_enabled" ) && name.begins_with( "traffic_" ) ) {
+	} else if ( !m_config.m_bTrafficEnabled && name != StringName( "traffic_enabled" ) &&
+				name.begins_with( "traffic_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
 }
 
-void Terrain3DErosionSettings::_bind_methods( void ) {
+void Terrain3DErosionSettings::_bind_methods(
+	void ) {
 	BIND_ENUM_CONSTANT( BOUNDARY_CLOSED );
 	BIND_ENUM_CONSTANT( BOUNDARY_OPEN );
 
 #define T3D_EROSION_GROUP( name, prefix ) ADD_GROUP( name, prefix );
-#define T3D_EROSION_PROPERTY( policy, type, symbol, name, field, minimum, maximum, variant, hint, hint_string ) \
-	T3D_BIND_PROPERTY( Terrain3DErosionSettings, set##symbol, get##symbol, "value", \
-	        PropertyInfo( variant, #name, hint, hint_string ), "set_" #name, "get_" #name );
+#define T3D_EROSION_PROPERTY( policy, type, symbol, name, field, minimum, maximum, variant, hint, hint_string )        \
+	T3D_BIND_PROPERTY( Terrain3DErosionSettings,                                                                       \
+					   set##symbol,                                                                                    \
+					   get##symbol,                                                                                    \
+					   "value",                                                                                        \
+					   PropertyInfo( variant, #name, hint, hint_string ),                                              \
+					   "set_" #name,                                                                                   \
+					   "get_" #name );
 #include "authoring/erosion/terrain_3d_erosion_properties.inc"
 #undef T3D_EROSION_PROPERTY
 #undef T3D_EROSION_GROUP

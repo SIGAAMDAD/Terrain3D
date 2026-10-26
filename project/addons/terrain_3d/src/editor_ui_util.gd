@@ -7,8 +7,8 @@ const BASE_CONTROL_HEIGHT: float = 34.0
 const BASE_ICON_BUTTON_SIZE: float = 38.0
 const BASE_TOOLBAR_WIDTH_COMPACT: float = 48.0
 const BASE_TOOLBAR_WIDTH_EXPANDED: float = 188.0
-const BASE_FORM_LABEL_WIDTH: float = 220.0
-const BASE_FORM_FIELD_WIDTH: float = 240.0
+const BASE_FORM_LABEL_WIDTH: float = 112.0
+const BASE_FORM_FIELD_WIDTH: float = 144.0
 const SCREEN_MARGIN: int = 18
 
 
@@ -54,14 +54,14 @@ static func configure_action_button(p_button: BaseButton) -> void:
 
 
 static func configure_field_control(p_control: Control, p_minimum_width: float = BASE_FORM_FIELD_WIDTH) -> void:
-	p_control.custom_minimum_size.x = scaled(p_minimum_width)
+	p_control.custom_minimum_size.x = scaled(minf(p_minimum_width, 144.0))
 	configure_compact_control(p_control)
 	p_control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p_control.size_flags_stretch_ratio = 0.58
 
 
 static func configure_form_label(p_label: Label, p_minimum_width: float = BASE_FORM_LABEL_WIDTH) -> void:
-	p_label.custom_minimum_size.x = scaled(p_minimum_width)
+	p_label.custom_minimum_size.x = scaled(minf(p_minimum_width, 112.0))
 	p_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	p_label.size_flags_stretch_ratio = 0.42
@@ -73,7 +73,7 @@ static func configure_form_grid(p_grid: GridContainer) -> void:
 	p_grid.columns = 2
 	p_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p_grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	p_grid.add_theme_constant_override("h_separation", int(scaled(18.0)))
+	p_grid.add_theme_constant_override("h_separation", int(scaled(8.0)))
 	p_grid.add_theme_constant_override("v_separation", int(scaled(8.0)))
 
 

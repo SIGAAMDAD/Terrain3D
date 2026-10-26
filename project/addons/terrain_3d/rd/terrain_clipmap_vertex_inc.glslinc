@@ -8,6 +8,7 @@ const uint T3D_FEATURE_WORLD_NOISE_CACHE = 1u << 12u;
 const uint T3D_FEATURE_MACRO_NOISE = 1u << 13u;
 const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
 const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
+const uint T3D_FEATURE_FLAT_TERRAIN_NORMALS_VERTEX = 1u << 16u;
 const uint T3D_FEATURE_MIDDLE_HEIGHT = 1u << 9u;
 const uint T3D_FEATURE_FAR_ATLAS = 1u << 10u;
 const int T3D_REGION_SIZE = 128;
@@ -55,7 +56,7 @@ uint packed_region_cell(ivec2 region_cell) {
     ivec2 map_pos = region_cell + ivec2(T3D_REGION_MAP_HALF);
     if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= T3D_REGION_MAP_SIZE || map_pos.y >= T3D_REGION_MAP_SIZE)
         return 0u;
-    return region_map[(map_pos.y << 5) + map_pos.x].packed_physical_flags;
+    return region_map[T3D_CLIPMAP_REGION_BASE + (map_pos.y << 5) + map_pos.x].packed_physical_flags;
 }
 int region_layer(ivec2 region_cell) {
     return int(packed_region_cell(region_cell) & 0xFFFFu) - 1;
@@ -76,7 +77,7 @@ bool terrain_megavt_region_record(ivec2 region_cell, out TerrainRegionRecord rec
         record.megavt_world_to_uv = vec4(0.0);
         return false;
     }
-    record = region_map[(map_pos.y << 5) + map_pos.x];
+    record = region_map[T3D_CLIPMAP_REGION_BASE + (map_pos.y << 5) + map_pos.x];
     return (record.packed_physical_flags & 0x80000000u) != 0u && record.megavt_allocation != 0xffffffffu;
 }
 uint terrain_megavt_allocation(ivec2 region_cell) {
@@ -419,27 +420,28 @@ float sample_height_interpolated_texel(vec2 world_texel, ivec2 base) {
     return mix(mix(h.h0, h.h1, f.x), mix(h.h2, h.h3, f.x), f.y);
 }
 
-vec3 sample_derived_normal(ivec2 texel, vec3 fallback_normal) {
+bool try_sample_derived_normal(ivec2 texel, int layer, out vec3 normal) {
+    normal = vec3(0.0, 1.0, 0.0);
 #if T3D_TIER == 0 || defined(T3D_RUNTIME_TIER)
 #ifdef T3D_RUNTIME_TIER
     if (t3d_runtime_patch_tier != 0u)
-        return fallback_normal;
+        return false;
 #endif
     if ((material_config.feature_flags & T3D_FEATURE_DERIVED_MAPS) == 0u || material_config.tier[0].normal_mode != 3u)
-        return fallback_normal;
-    ivec2 region_cell = ivec2(floor_region_i(texel.x), floor_region_i(texel.y));
-    int layer = region_layer(region_cell);
+        return false;
     if (layer < 0)
-        return fallback_normal;
+        return false;
     ivec2 local = ivec2(local_region_i(texel.x), local_region_i(texel.y));
     ivec3 size3 = textureSize(derived_maps, 0);
+    if (layer >= size3.z) return false;
     vec2 uv = (vec2(local) + vec2(0.5)) * T3D_REGION_INV_SIZE_F;
     vec2 encoded = textureLod(derived_maps, vec3(uv, float(layer)), 0.0).rg;
     vec2 xz = encoded * 2.0 - 1.0;
     float yy = sqrt(max(1.0 - dot(xz, xz), 0.0));
-    return normalize(vec3(xz.x, yy, xz.y));
+    normal = normalize(vec3(xz.x, yy, xz.y));
+    return true;
 #else
-    return fallback_normal;
+    return false;
 #endif
 }
 
@@ -516,6 +518,7 @@ void t3d_terrain_vertex_evaluate(ivec2 t3d_grid, uint t3d_part_code, PatchData p
     vec2 world_xz = mix(start_world_xz, end_world_xz, morph.z);
     vec2 height_world_texel = world_xz * frame_data.target_params.w;
     ivec2 terrain_texel = ivec2(floor(height_world_texel));
+    int terrain_layer = region_layer(ivec2(floor_region_i(terrain_texel.x), floor_region_i(terrain_texel.y)));
     float height;
     if (patch_data.scale < frame_data.mesh_params.x) {
         height = sample_height_interpolated_texel(height_world_texel, terrain_texel);
@@ -525,6 +528,14 @@ void t3d_terrain_vertex_evaluate(ivec2 t3d_grid, uint t3d_part_code, PatchData p
         height = mix(sample_height_nearest_texel(start_world_texel), sample_height_nearest_texel(end_world_texel), morph.z);
     }
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+    uint normal_tier = patch_data.tier;
+#ifndef T3D_RUNTIME_TIER
+    normal_tier = uint(T3D_TIER);
+#endif
+    bool fragment_normal = material_config.tier[min(normal_tier, 2u)].normal_mode == 2u
+        || (normal_tier == 0u && (material_config.feature_flags & T3D_FEATURE_FLAT_TERRAIN_NORMALS_VERTEX) != 0u);
+    world_normal = vec3(0.0, 1.0, 0.0);
+    if (!fragment_normal && !try_sample_derived_normal(terrain_texel, terrain_layer, world_normal)) {
     float normal_step_texel = patch_data.padding_1;
     float normal_step = normal_step_texel * frame_data.mesh_params.x;
     ivec2 t_l = ivec2(round(height_world_texel - vec2(normal_step_texel, 0.0)));
@@ -532,8 +543,8 @@ void t3d_terrain_vertex_evaluate(ivec2 t3d_grid, uint t3d_part_code, PatchData p
     ivec2 t_d = ivec2(round(height_world_texel - vec2(0.0, normal_step_texel)));
     ivec2 t_u = ivec2(round(height_world_texel + vec2(0.0, normal_step_texel)));
     HeightSamples4 normal_heights = sample_height_texels4(t_l, t_r, t_d, t_u, true);
-    vec3 geometry_normal = normalize(vec3(normal_heights.h0 - normal_heights.h1, 2.0 * normal_step, normal_heights.h2 - normal_heights.h3));
-    world_normal = sample_derived_normal(terrain_texel, geometry_normal);
+    world_normal = normalize(vec3(normal_heights.h0 - normal_heights.h1, 2.0 * normal_step, normal_heights.h2 - normal_heights.h3));
+    }
 #else
     world_normal = vec3(0.0, 1.0, 0.0);
 #endif
@@ -548,7 +559,7 @@ void t3d_terrain_vertex_evaluate(ivec2 t3d_grid, uint t3d_part_code, PatchData p
     }
     world_position = vec3(world_xz.x, height, world_xz.y) + displacement;
     terrain_world_texel = height_world_texel;
-    terrain_region_layer = region_layer(ivec2(floor_region_i(terrain_texel.x), floor_region_i(terrain_texel.y)));
+    terrain_region_layer = terrain_layer;
     patch_tier = patch_data.tier;
     vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world_position, 1.0);
     gl_Position = current_clip;
@@ -567,7 +578,7 @@ void main() {
     uint descriptor_index = draw_data.padding_1 + part_slot;
     uint word_base = descriptor_index * T3D_CLIPMAP_STRIP_PART_WORD_COUNT;
     T3DClipmapStripPart part = t3d_clipmap_strip_part_decode(
-        clipmap_strip_part_words[word_base + 0u], clipmap_strip_part_words[word_base + 1u], clipmap_strip_part_words[word_base + 2u]);
+        clipmap_strip_part_words[T3D_CLIPMAP_STRIP_WORD_BASE + word_base + 0u], clipmap_strip_part_words[T3D_CLIPMAP_STRIP_WORD_BASE + word_base + 1u], clipmap_strip_part_words[T3D_CLIPMAP_STRIP_WORD_BASE + word_base + 2u]);
     uint actual_vertex_count = t3d_terrain_strip_actual_vertex_count(part.cell_width, part.cell_height);
     T3DTerrainStripVertex strip_vertex = t3d_terrain_strip_vertex_hot(
         local_vertex,
@@ -576,8 +587,8 @@ void main() {
         part.part_code,
         part.flags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS,
         0u);
-    uint patch_index = draw_data.direct_mode != 0u ? draw_data.direct_patch_index : visible_indices[gl_InstanceIndex];
-    t3d_terrain_vertex_evaluate(strip_vertex.grid + part.origin, strip_vertex.part_code, patches[patch_index]);
+    uint patch_index = draw_data.direct_mode != 0u ? draw_data.direct_patch_index : visible_indices[t3d_hot_records[T3D_HOT_INDEX].scratch_bases[0].x + gl_InstanceIndex];
+    t3d_terrain_vertex_evaluate(strip_vertex.grid + part.origin, strip_vertex.part_code, patches[T3D_CLIPMAP_PATCH_BASE + patch_index]);
 }
 #endif
 

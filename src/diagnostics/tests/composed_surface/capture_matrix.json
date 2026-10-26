@@ -1,0 +1,87 @@
+{
+  "stage": "CS00/SA00/P00-P09 candidate (P09 opt-in only)",
+  "type": "required Vulkan A/B capture matrix",
+  "measurement_status": "NOT_CAPTURED",
+  "environment": {
+    "render_backend": "Vulkan",
+    "gpu": null,
+    "driver": null,
+    "godot_build": null,
+    "terrain_scene_content_hash": null,
+    "screen_resolution": null,
+    "capture_timestamp": null
+  },
+  "repeated_modes": [
+    "cold_start",
+    "warm_steady_state"
+  ],
+  "resolution_modes": [
+    "full",
+    "half"
+  ],
+  "camera_cases": [
+    "looking_down",
+    "stationary_horizon",
+    "distant_detail_visible",
+    "occluded_horizon",
+    "camera_rotation",
+    "camera_translation",
+    "vt_cold_start",
+    "editor_brush",
+    "editor_undo_redo",
+    "terrain_hole_edge",
+    "material_four_corner",
+    "instance_foliage"
+  ],
+  "shipping_paths": [
+    "canonical_vt_v3",
+    "compatibility_mixed",
+    "editor_debug_mixed"
+  ],
+  "passes_usec": [
+    "terrain_depth",
+    "terrain_dnr",
+    "terrain_color",
+    "instances",
+    "visibility",
+    "texture_transfer",
+    "frame_gpu"
+  ],
+  "stream_counters": [
+    "vt_requests",
+    "vt_misses",
+    "resident_pages",
+    "upload_bytes",
+    "upload_calls",
+    "feedback_readback_bytes",
+    "vt_feedback_grid_valid_samples",
+    "vt_feedback_grid_direct_unique_pages",
+    "vt_feedback_grid_selected_candidates",
+    "vt_feedback_resident_rescues",
+    "vt_feedback_staged_requests",
+    "vt_page_table_batch_count",
+    "vt_page_table_batch_entries",
+    "vt_upload_preflight_rejections",
+    "vt_neutral_staging_copy_bytes_saved"
+  ],
+  "comparison_statistics": [
+    "n",
+    "p50",
+    "p95",
+    "p99"
+  ],
+  "supported_by_current_files": "Shader-variant and synthetic comparison tools included. No measured GPU timestamps or real captured images included.",
+  "fragment_capture_required_attachments": [
+    "hdr_color",
+    "dnr",
+    "depth",
+    "coverage",
+    "vt_page_ids"
+  ],
+  "fragment_capture_schema": "src/diagnostics/tests/shaders/FRAGMENT_SHADER_CAPTURE.md",
+  "fragment_capture_comparator": "src/diagnostics/tests/shaders/compare_fragment_captures.py",
+  "gpu_capture_comparator": "src/diagnostics/tests/shaders/compare_fragment_gpu_times.py",
+  "release_gate": "src/diagnostics/tests/shaders/run_fragment_release_gate.py",
+  "composed_surface_reference_capture": "src/diagnostics/tests/composed_surface/export_cs21_reference.py",
+  "composed_surface_triple_stage_comparison": "src/diagnostics/tests/composed_surface/compare_cs21_cache_stages.py"
+}

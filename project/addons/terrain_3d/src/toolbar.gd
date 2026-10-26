@@ -1,5 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # Toolbar for Terrain3D
+@tool
 extends VFlowContainer
 
 signal tool_changed(p_tool: int, p_operation: int)

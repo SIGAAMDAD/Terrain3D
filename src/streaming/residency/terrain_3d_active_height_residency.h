@@ -17,53 +17,53 @@
 #include "data/sampling/terrain_3d_sampling_storage.h"
 #include "streaming/runtime/terrain_3d_runtime_page_store.h"
 
-
-// t3dActiveHeightResidencyStats_s centralized in Terrain3DTypes.h.
-
-
-typedef struct t3dActiveHeightResidencyResult_s {
-
+typedef struct t3dActiveHeightResidencyResult_s
+{
 	t3dRegionCoord_t m_szCpuSourceRequests[T3D_CPU_REQUEST_CAPACITY]{};
-	int m_nCpuSourceRequestCount = 0;
+	int				 m_nCpuSourceRequestCount = 0;
 
-	void requestCpuSource( const Vector2i &rLocation ) {
+	void requestCpuSource(
+		const Vector2i &rLocation ) {
 		if ( m_nCpuSourceRequestCount < T3D_CPU_REQUEST_CAPACITY ) {
-			m_szCpuSourceRequests[( size_t )( m_nCpuSourceRequestCount++ )] = t3dPackRegionCoord( rLocation );
+			m_szCpuSourceRequests[( size_t ) ( m_nCpuSourceRequestCount++ )] = t3dPackRegionCoord( rLocation );
 		}
 	}
 } t3dActiveHeightResidencyResult_t;
-
 
 // Owns only the spatial policy for the fixed active-height sampling bank.
 // Terrain3DSamplingStorage owns publication/leases; Terrain3DRuntimePageStore owns cooked
 // page preparation. Missing authoritative CPU sources are returned to the
 // region-residency coordinator instead of introducing a cache/facade back-edge.
-class Terrain3DActiveHeightResidency {
+class Terrain3DActiveHeightResidency
+{
 public:
 	Terrain3DActiveHeightResidency( Terrain3DRegionRepository *pRepository,
-	        Terrain3DSamplingStorage *pSamplingStorage,
-	        Terrain3DRuntimePageStore *pRuntimePageStore );
+									Terrain3DSamplingStorage  *pSamplingStorage,
+									Terrain3DRuntimePageStore *pRuntimePageStore );
 
-	void reset( void );
-	EA_FORCE_INLINE void markDirty( void ) {
+	void				 reset( void );
+	EA_FORCE_INLINE void markDirty(
+		void ) {
 		m_bDirty = true;
 	}
-	EA_FORCE_INLINE bool isDirty( void ) const {
+	EA_FORCE_INLINE bool isDirty(
+		void ) const {
 		return m_bDirty;
 	}
 	t3dActiveHeightResidencyResult_t update( const t3dResidencyFrameState_s &rFrame, bool bForce );
-	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats( void ) const {
+	EA_FORCE_INLINE const t3dActiveHeightResidencyStats_t &getStats(
+		void ) const {
 		return m_stats;
 	}
 
 private:
-	Terrain3DRegionRepository *m_pRepository = NULL;
-	Terrain3DSamplingStorage *m_pSamplingStorage = NULL;
-	Terrain3DRuntimePageStore *m_pRuntimePageStore = NULL;
-	bool m_bDirty = true;
-	uint64_t m_nStreamingGenerationLast = 0u;
-	uint64_t m_nTopologyGenerationLast = 0u;
-	Vector2i m_center = s_v2iMax;
+	Terrain3DRegionRepository	   *m_pRepository = NULL;
+	Terrain3DSamplingStorage	   *m_pSamplingStorage = NULL;
+	Terrain3DRuntimePageStore	   *m_pRuntimePageStore = NULL;
+	bool							m_bDirty = true;
+	uint64_t						m_nStreamingGenerationLast = 0u;
+	uint64_t						m_nTopologyGenerationLast = 0u;
+	Vector2i						m_center = s_v2iMax;
 	t3dActiveHeightResidencyStats_t m_stats;
 };
 

@@ -10,30 +10,32 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct t3dMemoryArenaSlice_s {
-
+typedef struct t3dMemoryArenaSlice_s
+{
 	size_t m_iOffset = 0u;
 	size_t m_nSize = 0u;
 	size_t m_nAlignment = 1u;
-	bool m_bReserved = false;
+	bool   m_bReserved = false;
 
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid(
+		void ) const {
 		return m_bReserved;
 	}
 } t3dMemoryArenaSlice_t;
 
 typedef struct t3dMemoryArenaSpan_s
 {
-
 	uint8_t *m_pData = NULL;
-	size_t m_nSize = 0u;
+	size_t	 m_nSize = 0u;
 
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid(
+		void ) const {
 		return m_pData != NULL || m_nSize == 0u;
 	}
 } t3dMemoryArenaSpan_t;
 
-class Terrain3DMemoryArenaLayout {
+class Terrain3DMemoryArenaLayout
+{
 public:
 	Terrain3DMemoryArenaLayout( void ) = default;
 	explicit Terrain3DMemoryArenaLayout( size_t nCapacityBytes );
@@ -42,22 +44,28 @@ public:
 	bool reserveLow( size_t nBytes, size_t nAlignment, t3dMemoryArenaSlice_t &rSlice );
 	bool seal( void );
 
-	EA_FORCE_INLINE size_t capacity( void ) const {
+	EA_FORCE_INLINE size_t capacity(
+		void ) const {
 		return m_nCapacity;
 	}
-	EA_FORCE_INLINE size_t lowUsed( void ) const {
+	EA_FORCE_INLINE size_t lowUsed(
+		void ) const {
 		return m_nLowCursor;
 	}
-	EA_FORCE_INLINE size_t remaining( void ) const {
+	EA_FORCE_INLINE size_t remaining(
+		void ) const {
 		return m_nCapacity >= m_nLowCursor ? m_nCapacity - m_nLowCursor : 0u;
 	}
-	EA_FORCE_INLINE size_t maxAlignment( void ) const {
+	EA_FORCE_INLINE size_t maxAlignment(
+		void ) const {
 		return m_nMaxAlignment;
 	}
-	EA_FORCE_INLINE bool valid( void ) const {
+	EA_FORCE_INLINE bool valid(
+		void ) const {
 		return m_bValid;
 	}
-	EA_FORCE_INLINE bool sealed( void ) const {
+	EA_FORCE_INLINE bool sealed(
+		void ) const {
 		return m_bSealed;
 	}
 
@@ -65,12 +73,12 @@ private:
 	size_t m_nCapacity = 0u;
 	size_t m_nLowCursor = 0u;
 	size_t m_nMaxAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT;
-	bool m_bValid = true;
-	bool m_bSealed = false;
-
+	bool   m_bValid = true;
+	bool   m_bSealed = false;
 };
 
-class Terrain3DMemoryArena {
+class Terrain3DMemoryArena
+{
 public:
 	Terrain3DMemoryArena( void ) = default;
 	~Terrain3DMemoryArena( void ) = default;
@@ -88,28 +96,33 @@ public:
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice );
 	t3dMemoryArenaSpan_t resolve( const t3dMemoryArenaSlice_t &rSlice ) const;
 
-	EA_FORCE_INLINE size_t capacity( void ) const {
+	EA_FORCE_INLINE size_t capacity(
+		void ) const {
 		return m_backing.capacity();
 	}
-	EA_FORCE_INLINE size_t baseAlignment( void ) const {
+	EA_FORCE_INLINE size_t baseAlignment(
+		void ) const {
 		return m_nBaseAlignment;
 	}
-	EA_FORCE_INLINE bool initialized( void ) const {
+	EA_FORCE_INLINE bool initialized(
+		void ) const {
 		return m_bInitialized;
 	}
-	EA_FORCE_INLINE bool committed( void ) const {
+	EA_FORCE_INLINE bool committed(
+		void ) const {
 		return m_bCommitted;
 	}
-	EA_FORCE_INLINE bool sealed( void ) const {
+	EA_FORCE_INLINE bool sealed(
+		void ) const {
 		return m_bSealed;
 	}
 
 private:
 	Terrain3DAlignedBacking m_backing;
-	size_t m_nBaseAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT;
-	bool m_bInitialized = false;
-	bool m_bCommitted = false;
-	bool m_bSealed = false;
+	size_t					m_nBaseAlignment = T3D_ARENA_DEFAULT_BASE_ALIGNMENT;
+	bool					m_bInitialized = false;
+	bool					m_bCommitted = false;
+	bool					m_bSealed = false;
 
 	bool sliceInBounds( const t3dMemoryArenaSlice_t &rSlice ) const;
 };

@@ -90,10 +90,9 @@ struct T3DWorldCluster {
 struct T3DWorldTerrainCluster {
     uvec4 strip0; // patchId, packedGridOrigin, packedGridExtent, packedVertexCountLod
     uint flags;
-    float originX;
-    float originZ;
-    float scale;
-    uvec4 materialAndReserved;
+    uint reserved0;
+    uint reserved1;
+    uint reserved2;
 };
 
 struct T3DWorldTransform {

@@ -10,18 +10,28 @@
 
 // One writer owns each path. Keep the previous file until the caller accepts
 // the published artifact. Recovery never discards an ambiguous previous file.
-class Terrain3DFilePublication {
+class Terrain3DFilePublication
+{
 public:
-	Terrain3DFilePublication( const godot::String &rPath, const godot::String &rStaged, const godot::String &rPrevious ) :
-	        m_path( rPath ), m_staged( rStaged ), m_previous( rPrevious ) {}
+	Terrain3DFilePublication(
+		const godot::String &rPath,
+		const godot::String &rStaged,
+		const godot::String &rPrevious ) :
+		m_path( rPath ),
+		m_staged( rStaged ),
+		m_previous( rPrevious ) {
+	}
+	Terrain3DFilePublication( Terrain3DFilePublication && ) = default;
+	Terrain3DFilePublication &operator=( Terrain3DFilePublication && ) = default;
 	Terrain3DFilePublication( const Terrain3DFilePublication & ) = delete;
 	Terrain3DFilePublication &operator=( const Terrain3DFilePublication & ) = delete;
 
-	godot::Error prepare( void ) {
-		if ( m_path.is_empty() || m_staged.is_empty() || m_previous.is_empty()
-		        || canonicalPath( m_path ) == canonicalPath( m_staged )
-		        || canonicalPath( m_path ) == canonicalPath( m_previous )
-		        || canonicalPath( m_staged ) == canonicalPath( m_previous ) ) {
+	godot::Error prepare(
+		void ) {
+		if ( m_path.is_empty() || m_staged.is_empty() || m_previous.is_empty() ||
+			 canonicalPath( m_path ) == canonicalPath( m_staged ) ||
+			 canonicalPath( m_path ) == canonicalPath( m_previous ) ||
+			 canonicalPath( m_staged ) == canonicalPath( m_previous ) ) {
 			return fail( godot::ERR_INVALID_PARAMETER, "Invalid publication paths." );
 		}
 		if ( godot::FileAccess::file_exists( m_previous ) ) {
@@ -37,7 +47,8 @@ public:
 		return godot::OK;
 	}
 
-	godot::Error publish( void ) {
+	godot::Error publish(
+		void ) {
 		if ( !m_bPrepared || m_bPublished || m_bBackedUp ) {
 			return fail( godot::ERR_UNCONFIGURED, "Publication is not prepared." );
 		}
@@ -60,7 +71,8 @@ public:
 		return godot::OK;
 	}
 
-	godot::Error rollback( void ) {
+	godot::Error rollback(
+		void ) {
 		if ( m_bPublished ) {
 			const godot::Error error = godot::DirAccess::remove_absolute( m_path );
 			if ( error != godot::OK ) {
@@ -75,11 +87,15 @@ public:
 			}
 			m_bBackedUp = false;
 		}
+		if ( godot::FileAccess::file_exists( m_staged ) ) {
+			( void ) godot::DirAccess::remove_absolute( m_staged );
+		}
 		m_bPrepared = false;
 		return godot::OK;
 	}
 
-	godot::Error commit( void ) {
+	godot::Error commit(
+		void ) {
 		if ( !m_bPublished ) {
 			return fail( godot::ERR_UNCONFIGURED, "No publication to commit." );
 		}
@@ -95,12 +111,15 @@ public:
 		return godot::OK;
 	}
 
-	const godot::String &getError( void ) const { return m_error; }
+	const godot::String &getError(
+		void ) const {
+		return m_error;
+	}
 
 	// Serialization stays with the format owner. These operations only own the
 	// staged stream; callers may validate the published file before committing.
-	godot::Error openStaged( godot::Ref<godot::FileAccess>& rFile )
-	{
+	godot::Error openStaged(
+		godot::Ref< godot::FileAccess > &rFile ) {
 		const godot::Error error = prepare();
 		if ( error != godot::OK ) {
 			return error;
@@ -112,8 +131,9 @@ public:
 		return rFile.is_valid() ? godot::OK : fail( godot::ERR_CANT_OPEN, "Could not open staged artifact." );
 	}
 
-	godot::Error finishStaged( godot::Ref<godot::FileAccess>& rFile, uint64_t nExpectedBytes = UINT64_MAX )
-	{
+	godot::Error finishStaged(
+		godot::Ref< godot::FileAccess > &rFile,
+		uint64_t						 nExpectedBytes = UINT64_MAX ) {
 		if ( rFile.is_null() ) {
 			return fail( godot::ERR_UNCONFIGURED, "No staged artifact stream." );
 		}
@@ -133,28 +153,31 @@ public:
 		return godot::OK;
 	}
 
-	godot::Error stagePacked( const godot::PackedByteArray& rBytes )
-	{
-		godot::Ref<godot::FileAccess> file;
-		const godot::Error error = openStaged( file );
+	godot::Error stagePacked(
+		const godot::PackedByteArray &rBytes ) {
+		godot::Ref< godot::FileAccess > file;
+		const godot::Error				error = openStaged( file );
 		if ( error != godot::OK ) {
 			return error;
 		}
 		file->store_buffer( rBytes );
-		return finishStaged( file, (uint64_t)rBytes.size() );
+		return finishStaged( file, ( uint64_t ) rBytes.size() );
 	}
 
 private:
-	static godot::String canonicalPath( const godot::String &rPath ) {
+	static godot::String canonicalPath(
+		const godot::String &rPath ) {
 		godot::ProjectSettings *const pSettings = godot::ProjectSettings::get_singleton();
-		godot::String path = ( pSettings ? pSettings->globalize_path( rPath ) : rPath ).simplify_path();
+		godot::String				  path = ( pSettings ? pSettings->globalize_path( rPath ) : rPath ).simplify_path();
 #ifdef _WIN32
 		path = path.to_lower();
 #endif
 		return path;
 	}
 
-	godot::Error fail( const godot::Error eError, const godot::String &rMessage ) {
+	godot::Error fail(
+		const godot::Error	 eError,
+		const godot::String &rMessage ) {
 		m_error = rMessage + godot::String( " Path: " ) + m_path + godot::String( "; previous: " ) + m_previous;
 		godot::UtilityFunctions::push_error( m_error );
 		return eError;
@@ -164,20 +187,29 @@ private:
 	godot::String m_staged;
 	godot::String m_previous;
 	godot::String m_error;
-	bool m_bPrepared = false;
-	bool m_bBackedUp = false;
-	bool m_bPublished = false;
+	bool		  m_bPrepared = false;
+	bool		  m_bBackedUp = false;
+	bool		  m_bPublished = false;
 };
 
 // Common packed artifact writer. Explicit errors preserve the previous file.
-inline godot::Error t3dPublishPackedFile( const godot::String &rPath, const godot::PackedByteArray &rBytes, godot::String *pError ) {
-	Terrain3DFilePublication publication( rPath, rPath + godot::String( ".staged" ), rPath + godot::String( ".previous" ) );
-	godot::Error error = publication.stagePacked( rBytes );
+inline godot::Error t3dPublishPackedFile(
+	const godot::String			 &rPath,
+	const godot::PackedByteArray &rBytes,
+	godot::String				 *pError ) {
+	Terrain3DFilePublication publication( rPath,
+										  rPath + godot::String( ".staged" ),
+										  rPath + godot::String( ".previous" ) );
+	godot::Error			 error = publication.stagePacked( rBytes );
 	if ( error == godot::OK ) {
 		error = publication.publish();
 	}
-	if ( error == godot::OK ) { error = publication.commit(); }
-	if ( error != godot::OK && pError ) { *pError = publication.getError(); }
+	if ( error == godot::OK ) {
+		error = publication.commit();
+	}
+	if ( error != godot::OK && pError ) {
+		*pError = publication.getError();
+	}
 	return error;
 }
 

@@ -12,25 +12,56 @@
 #include "data/model/terrain_3d_region.h"
 #include "data/persistence/terrain_3d_region_repository.h"
 #include "streaming/residency/terrain_3d_residency_state.h"
-#include "streaming/utility/terrain_3d_square_ring.h"
+template< typename TVector2i, typename TCallback >
+static bool t3dForEachSquareRing(
+	const TVector2i &rCenter,
+	const int		 nMaxRadius,
+	TCallback		 pCallback,
+	void *const		 pContext ) {
+	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
+		if ( radius == 0 ) {
+			if ( !pCallback( pContext, rCenter ) ) {
+				return false;
+			}
+			continue;
+		}
+		for ( int x = -radius; x <= radius; ++x ) {
+			if ( !pCallback( pContext, rCenter + TVector2i( x, -radius ) ) ||
+				 !pCallback( pContext, rCenter + TVector2i( x, radius ) ) ) {
+				return false;
+			}
+		}
+		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
+			if ( !pCallback( pContext, rCenter + TVector2i( -radius, y ) ) ||
+				 !pCallback( pContext, rCenter + TVector2i( radius, y ) ) ) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
 
-typedef bool ( *t3dRegionCandidatePredicate_t )( const Terrain3DRegion *pRegion, const Vector2i &rLocation, void *pUserData );
+typedef bool ( *t3dRegionCandidatePredicate_t )( const Terrain3DRegion *pRegion,
+												 const Vector2i		   &rLocation,
+												 void				   *pUserData );
 
-typedef struct t3dRegionCandidateCollectContext_s {
+typedef struct t3dRegionCandidateCollectContext_s
+{
 	const Terrain3DRegionRepository *m_pRepository;
-	const t3dResidencyFrameState_s *m_pFrame;
-	Vector2i *m_pLocations;
-	uint8_t *m_pSelectedMap;
-	t3dRegionStreamingState_t m_eWanted;
-	t3dRegionCandidatePredicate_t m_pPredicate;
-	void *m_pPredicateUserData;
-	int m_nCapacity;
-	int m_nOutputCount;
+	const t3dResidencyFrameState_s	*m_pFrame;
+	Vector2i						*m_pLocations;
+	uint8_t							*m_pSelectedMap;
+	t3dRegionStreamingState_t		 m_eWanted;
+	t3dRegionCandidatePredicate_t	 m_pPredicate;
+	void							*m_pPredicateUserData;
+	int								 m_nCapacity;
+	int								 m_nOutputCount;
 } t3dRegionCandidateCollectContext_t;
 
-
-static bool t3dCollectRegionCandidateVisit( void *const pContext, const Vector2i &rLocation ) {
-	t3dRegionCandidateCollectContext_t *const pState = ( t3dRegionCandidateCollectContext_t * )( pContext );
+static bool t3dCollectRegionCandidateVisit(
+	void *const		pContext,
+	const Vector2i &rLocation ) {
+	t3dRegionCandidateCollectContext_t *const pState = ( t3dRegionCandidateCollectContext_t * ) ( pContext );
 	if ( pState->m_nOutputCount >= pState->m_nCapacity ) {
 		return false;
 	}
@@ -55,17 +86,18 @@ static bool t3dCollectRegionCandidateVisit( void *const pContext, const Vector2i
 	return pState->m_nOutputCount < pState->m_nCapacity;
 }
 
-static int t3dCollectDesiredRegionsForState( const Terrain3DRegionRepository &rRepository,
-        const t3dResidencyFrameState_s &rFrame,
-        const Vector2i &rCenter,
-        const int nMaxRadius,
-        const t3dRegionStreamingState_t eWanted,
-        Vector2i *const pLocations,
-        const int nCapacity,
-        const int nOutputCount,
-        uint8_t *const pSelectedMap = NULL,
-        const t3dRegionCandidatePredicate_t pPredicate = NULL,
-        void *const pPredicateUserData = NULL ) {
+static int t3dCollectDesiredRegionsForState(
+	const Terrain3DRegionRepository	   &rRepository,
+	const t3dResidencyFrameState_s	   &rFrame,
+	const Vector2i					   &rCenter,
+	const int							nMaxRadius,
+	const t3dRegionStreamingState_t		eWanted,
+	Vector2i *const						pLocations,
+	const int							nCapacity,
+	const int							nOutputCount,
+	uint8_t *const						pSelectedMap = NULL,
+	const t3dRegionCandidatePredicate_t pPredicate = NULL,
+	void *const							pPredicateUserData = NULL ) {
 	if ( !pLocations || nCapacity <= 0 || nOutputCount >= nCapacity ) {
 		return nOutputCount;
 	}
@@ -83,20 +115,22 @@ static int t3dCollectDesiredRegionsForState( const Terrain3DRegionRepository &rR
 	return context.m_nOutputCount;
 }
 
-static int t3dAppendPrefetchRegionsFromRepositorySlots( const Terrain3DRegionRepository &rRepository,
-        const t3dResidencyFrameState_s &rFrame,
-        Vector2i *const pLocations,
-        const int nCapacity,
-        const int nOutputCount,
-        uint8_t *const pSelectedMap ) {
+static int t3dAppendPrefetchRegionsFromRepositorySlots(
+	const Terrain3DRegionRepository &rRepository,
+	const t3dResidencyFrameState_s	&rFrame,
+	Vector2i *const					 pLocations,
+	const int						 nCapacity,
+	const int						 nOutputCount,
+	uint8_t *const					 pSelectedMap ) {
 	if ( !pLocations || !pSelectedMap || nCapacity <= 0 || nOutputCount >= nCapacity ) {
 		return nOutputCount;
 	}
 	int outputCount = nOutputCount;
 	for ( int slot = 0; slot < rRepository.getSlotCount() && outputCount < nCapacity; ++slot ) {
 		const Vector2i location = t3dUnpackRegionCoord( rRepository.getSlotsData()[slot] );
-		const int mapIndex = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
-		if ( mapIndex < 0 || pSelectedMap[mapIndex] != 0u || !rRepository.getRegionPtr( location ) || !rFrame.isPrefetch( location ) ) {
+		const int	   mapIndex = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
+		if ( mapIndex < 0 || pSelectedMap[mapIndex] != 0u || !rRepository.getRegionPtr( location ) ||
+			 !rFrame.isPrefetch( location ) ) {
 			continue;
 		}
 		pLocations[outputCount++] = location;

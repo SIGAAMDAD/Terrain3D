@@ -1,5 +1,6 @@
 #[versions]
 color_native = "";
+color_prepared = "#define T3D_OCEAN_PREPARED_FRAGMENT";
 shadow = "#define T3D_OCEAN_SHADOW";
 
 #[vertex]
@@ -217,9 +218,18 @@ void main() {
     if (normal.y < 0.0)
         normal = -normal;
     vec3 view_dir = normalize(frame_data.camera_time.xyz - world_position);
-    float fresnel =
-        clamp(frame_data.wave_params.w * pow(max(1.0 - dot(normal, view_dir), 0.0), max(frame_data.surface_params.x, 0.01)), 0.0, 1.0);
+    // P53: Fresnel amplitude at zero or below makes the entire expression
+    // zero; avoid a per-pixel transcendental in those authored water modes.
+    float fresnel = 0.0;
+    if (frame_data.wave_params.w > 0.0) {
+        fresnel = clamp(frame_data.wave_params.w
+            * pow(max(1.0 - dot(normal, view_dir), 0.0), max(frame_data.surface_params.x, 0.01)), 0.0, 1.0);
+    }
+#ifdef T3D_OCEAN_PREPARED_FRAGMENT
+    vec3 light_dir = frame_data.scatter_params.xyz;
+#else
     vec3 light_dir = normalize(-frame_data.light_direction.xyz);
+#endif
     float ndl = max(dot(normal, light_dir), 0.0);
     vec3 color = frame_data.water_color.rgb * (0.35 + 0.65 * ndl);
     int refraction_mode = clamp(int(frame_data.mode_params.z + 0.5), 0, 2);
@@ -231,21 +241,36 @@ void main() {
     int foam_mode = packed & 3;
     int scatter_mode = (packed >> 2) & 3;
     int shading_mode = (packed >> 4) & 3;
-    if (shading_mode > 0) {
-        float spec = pow(max(dot(reflect(-light_dir, normal), view_dir), 0.0), mix(8.0, 96.0, 1.0 - fresnel))
-            * max(frame_data.surface_params.y, 0.0);
-        color += vec3(spec);
+    if (shading_mode > 0 && frame_data.surface_params.y > 0.0) {
+        // P61: a zero-facing highlight raised to an exponent >= 8 is zero.
+        // Skip pow on back-facing light/view configurations.
+        float highlight = max(dot(reflect(-light_dir, normal), view_dir), 0.0);
+        if (highlight > 0.0) {
+            float spec = pow(highlight, mix(8.0, 96.0, 1.0 - fresnel)) * frame_data.surface_params.y;
+            color += vec3(spec);
+        }
     }
-    if (scatter_mode > 0) {
+    if (scatter_mode > 0 && frame_data.foam_params0.w != 0.0) {
         float scatter = max(normal.y - frame_data.foam_params1.x, 0.0) * frame_data.foam_params0.w * 0.03;
         color += frame_data.water_color.rgb * scatter;
     }
     if (foam_mode > 0) {
-        float n = noise21(ocean_uv * 0.1 * max(frame_data.foam_params0.z, 0.1) + frame_data.target_time.w * 0.05);
+        // P53: no visible foam means no hash/noise evaluation. Both the
+        // crest and the view fade are nonnegative by construction.
         float crest = clamp((1.0 - normal.y) * frame_data.surface_params.w - frame_data.surface_params.z * 0.1, 0.0, 1.0);
-        float fade = 1.0 - smoothstep(0.0, max(frame_data.foam_params0.x, 1.0), view_distance);
-        float foam = crest * n * fade;
-        color = mix(color, vec3(0.8), clamp(foam, 0.0, 1.0));
+        if (crest > 0.0) {
+            // P61: do not calculate distance fade for completely flat water.
+            float fade = 1.0 - smoothstep(0.0, max(frame_data.foam_params0.x, 1.0), view_distance);
+            if (fade > 0.0) {
+#ifdef T3D_OCEAN_PREPARED_FRAGMENT
+                float n = noise21(ocean_uv * frame_data.scatter_params.w + frame_data.target_time.w * 0.05);
+#else
+                float n = noise21(ocean_uv * 0.1 * max(frame_data.foam_params0.z, 0.1) + frame_data.target_time.w * 0.05);
+#endif
+                float foam = crest * n * fade;
+                color = mix(color, vec3(0.8), clamp(foam, 0.0, 1.0));
+            }
+        }
     }
     color = mix(color, vec3(0.45, 0.62, 0.78), fresnel * 0.35);
     float alpha = clamp(frame_data.water_color.a, 0.0, 1.0);

@@ -12,10 +12,8 @@
 
 using namespace godot;
 
-// t3dRdFrustum_s centralized in Terrain3DTypes.h.
-
-
-EA_FORCE_INLINE static Vector4 t3dRdNormalizeFrustumPlane( const Vector4 &rPlane ) {
+EA_FORCE_INLINE static Vector4 t3dRdNormalizeFrustumPlane(
+	const Vector4 &rPlane ) {
 	const double length_sq = rPlane.x * rPlane.x + rPlane.y * rPlane.y + rPlane.z * rPlane.z;
 	if ( length_sq <= 1.0e-20 ) {
 		return rPlane;
@@ -23,15 +21,16 @@ EA_FORCE_INLINE static Vector4 t3dRdNormalizeFrustumPlane( const Vector4 &rPlane
 	return rPlane * ( 1.0 / sqrt( length_sq ) );
 }
 
-EA_FORCE_INLINE static t3dRdFrustum_t t3dRdExtractFrustum( const Projection &rProjection ) {
-	const Vector4 c0 = rProjection[0];
-	const Vector4 c1 = rProjection[1];
-	const Vector4 c2 = rProjection[2];
-	const Vector4 c3 = rProjection[3];
-	const Vector4 row0( c0.x, c1.x, c2.x, c3.x );
-	const Vector4 row1( c0.y, c1.y, c2.y, c3.y );
-	const Vector4 row2( c0.z, c1.z, c2.z, c3.z );
-	const Vector4 row3( c0.w, c1.w, c2.w, c3.w );
+EA_FORCE_INLINE static t3dRdFrustum_t t3dRdExtractFrustum(
+	const Projection &rProjection ) {
+	const Vector4  c0 = rProjection[0];
+	const Vector4  c1 = rProjection[1];
+	const Vector4  c2 = rProjection[2];
+	const Vector4  c3 = rProjection[3];
+	const Vector4  row0( c0.x, c1.x, c2.x, c3.x );
+	const Vector4  row1( c0.y, c1.y, c2.y, c3.y );
+	const Vector4  row2( c0.z, c1.z, c2.z, c3.z );
+	const Vector4  row3( c0.w, c1.w, c2.w, c3.w );
 	t3dRdFrustum_t result;
 	result.m_szPlanes[0] = t3dRdNormalizeFrustumPlane( row3 + row0 );
 	result.m_szPlanes[1] = t3dRdNormalizeFrustumPlane( row3 - row0 );
@@ -42,12 +41,14 @@ EA_FORCE_INLINE static t3dRdFrustum_t t3dRdExtractFrustum( const Projection &rPr
 	return result;
 }
 
-EA_FORCE_INLINE static void t3dRdStoreFrustumPlanes( const t3dRdFrustum_t &rFrustum, float *const pPlanes ) {
+EA_FORCE_INLINE static void t3dRdStoreFrustumPlanes(
+	const t3dRdFrustum_t &rFrustum,
+	float *const		  pPlanes ) {
 	for ( uint32_t i = 0u; i < 6u; ++i ) {
-		pPlanes[i * 4u + 0u] = ( float )rFrustum.m_szPlanes[i].x;
-		pPlanes[i * 4u + 1u] = ( float )rFrustum.m_szPlanes[i].y;
-		pPlanes[i * 4u + 2u] = ( float )rFrustum.m_szPlanes[i].z;
-		pPlanes[i * 4u + 3u] = ( float )rFrustum.m_szPlanes[i].w;
+		pPlanes[i * 4u + 0u] = ( float ) rFrustum.m_szPlanes[i].x;
+		pPlanes[i * 4u + 1u] = ( float ) rFrustum.m_szPlanes[i].y;
+		pPlanes[i * 4u + 2u] = ( float ) rFrustum.m_szPlanes[i].z;
+		pPlanes[i * 4u + 3u] = ( float ) rFrustum.m_szPlanes[i].w;
 	}
 }
 

@@ -20,17 +20,8 @@
 using namespace godot;
 #endif
 
-
-// t3dMode_e centralized in Terrain3DTypes.h.
-
-
-// t3dMorphologyMode_e centralized in Terrain3DTypes.h.
-
-
-// t3dGeometryMode_e centralized in Terrain3DTypes.h.
-
-
-class Terrain3DLandformBaker : public RefCounted {
+class Terrain3DLandformBaker : public RefCounted
+{
 	GDCLASS( Terrain3DLandformBaker, RefCounted );
 	CLASS_NAME();
 
@@ -38,10 +29,13 @@ class Terrain3DLandformBaker : public RefCounted {
 
 public:
 	Dictionary apply( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings );
-	void restore( Terrain3D *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
-	Ref<ArrayMesh> buildCliffMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
-	Dictionary buildCliffModules( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
-	Ref<ArrayMesh> buildCliffCollisionMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	void	   restore( Terrain3D *pTerrain, const Array &rSnapshots, const AABB &rEditedArea );
+	Ref< ArrayMesh >
+	buildCliffMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Dictionary
+	buildCliffModules( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
+	Ref< ArrayMesh >
+	buildCliffCollisionMesh( Terrain3D *pTerrain, const PackedVector3Array &rPath, const Dictionary &rSettings ) const;
 
 protected:
 	static void _bind_methods( void );

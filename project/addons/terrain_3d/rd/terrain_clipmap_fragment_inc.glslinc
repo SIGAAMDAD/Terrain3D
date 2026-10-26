@@ -3,8 +3,47 @@
 // World mesh variants use the world material evaluator and do not compile terrain material helpers.
 #ifndef T3D_WORLD_RASTER_MESH
 
+#ifndef T3D_DIV_255
 #define T3D_DIV_255 0.0039215686274509803921568627451
+#endif
+
+// fixed-tap filtering: fixed 1/2/4-tap kernels. Cold opt-in pending Vulkan/ISA A/B.
+#ifndef T3D_VT_FIXED_FILTER_TAPS
+#define T3D_VT_FIXED_FILTER_TAPS 0
+#endif
+
 #define T3D_TAU_16 0.39269908169872415480783042290994
+
+// Bounded, opt-in compile-time profiles. The default class
+// (zero) preserves the original runtime-selected material behavior. Trial
+// classes require the draw's published TierMaterialConfig to match the class.
+#ifndef T3D_SILHOUETTE_FAST_PATH
+#define T3D_SILHOUETTE_FAST_PATH 0 // 0 baseline; 1 uniform-gated; 2 draw-class guaranteed
+#endif
+// Skip zero-weight control corners in the selected adaptive material trial.
+// The baseline shader retains its exact original control-fetch structure.
+#ifndef T3D_CONTROL_ACTIVE_CORNER_FETCH
+#define T3D_CONTROL_ACTIVE_CORNER_FETCH 0
+#endif
+
+#ifndef T3D_CONTROL_FILTER_CLASS
+#define T3D_CONTROL_FILTER_CLASS 0 // 0 runtime; 1 nearest; 2 bilinear; 3 adaptive
+#endif
+#ifndef T3D_AUTHORED_FILTER_CLASS
+#define T3D_AUTHORED_FILTER_CLASS 0 // 0 runtime; 1 exact; 2 hardware
+#endif
+#ifndef T3D_MATERIAL_PROJECTION_CLASS
+#define T3D_MATERIAL_PROJECTION_CLASS 0 // 0 runtime; 1 planar
+#endif
+#if T3D_CONTROL_FILTER_CLASS < 0 || T3D_CONTROL_FILTER_CLASS > 3
+#error "Invalid control-filter class"
+#endif
+#if T3D_AUTHORED_FILTER_CLASS < 0 || T3D_AUTHORED_FILTER_CLASS > 2
+#error "Invalid authored-filter class"
+#endif
+#if T3D_MATERIAL_PROJECTION_CLASS < 0 || T3D_MATERIAL_PROJECTION_CLASS > 1
+#error "Invalid material projection class"
+#endif
 
 
 const uint T3D_FEATURE_AUTO_SHADER = 1u << 0u;
@@ -175,6 +214,15 @@ const uint T3D_OUTPUT_SPECULAR = 1u << 2u;
 const uint T3D_OUTPUT_NORMAL = 1u << 3u;
 const uint T3D_OUTPUT_AO = 1u << 4u;
 
+// noise-cache specialization: small bounded cold shader classes. 0 always means the
+// authoritative runtime path; only the clipmap renderer publishes IDs 29/30.
+#if !defined(T3D_WORLD_RASTER_EMBEDDED)
+layout(constant_id = 30) const uint t3d_noise_source_class = 0u;
+#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+layout(constant_id = 29) const uint t3d_editor_diagnostic_class = 0u;
+#endif
+#endif
+
 const uint T3D_DEBUG_REGION_GRID = 1u << 0u;
 const uint T3D_DEBUG_INSTANCER_GRID = 1u << 1u;
 const uint T3D_DEBUG_VERTEX_GRID = 1u << 2u;
@@ -268,6 +316,16 @@ struct TerrainVTAddressPlan {
     float mip_fraction;
     TerrainVTAllocation allocation;
 };
+
+// P03: the renderer's packed allocation ABI uses snake-case fields, while
+// the shared resolver's descriptor-free value struct uses camel-case fields.
+// Construct from an already loaded allocation; do not fetch the SSBO again.
+T3DVTAllocation t3d_vt_loaded_terrain_allocation(TerrainVTAllocation allocation) {
+    return T3DVTAllocation(allocation.base_page, allocation.page_count,
+        allocation.packed_mip0_extent, allocation.packed_mip_count_flags,
+        allocation.tail_index, allocation.generation, allocation.content_id,
+        allocation.reserved);
+}
 
 struct TerrainVTMaterialPageSetAddress {
     TerrainVTResolvedAddress albedo;
@@ -436,13 +494,12 @@ bool terrain_vt_prepare_address_plan(uint allocation_id,
 
 TerrainVTResolvedAddress terrain_vt_finalize_resolve_result(
     uint allocation_id, uint requested_mip, float mip_fraction, TerrainVTSampleFootprint footprint,
-    T3DVTResolveResult result, TerrainVTResolvedAddress reuse) {
+    T3DVTResolveResult result, TerrainVTResolvedAddress reuse, TerrainVTAllocation identity) {
     TerrainVTResolvedAddress address = terrain_vt_invalid_address();
     // Keep the current continuous source-space footprint even when page-local
     // coordinates can be reused from a sibling channel. These derivatives are
     // intentionally never reconstructed from fract() / tile_uv.
     address.allocation_id = allocation_id;
-    TerrainVTAllocation identity = terrain_vt_allocations[allocation_id];
     address.generation = identity.generation;
     address.content_id = identity.content_id;
     address.requested_mip = requested_mip;
@@ -494,11 +551,7 @@ TerrainVTResolvedAddress terrain_vt_finalize_resolve_result(
         uint tail_delta = min(resolved_mip - tail_first_mip, tail_mip_count - 1u);
         uint first_width = max(t3d_vt_tail_width(tail), 1u);
         uint first_height = max(t3d_vt_tail_height(tail), 1u);
-        uint mip_x = 0u;
-        for (uint i = 0u; i < T3D_VT_MAX_MIPS; ++i) {
-            if (i >= tail_delta) break;
-            mip_x += max(first_width >> i, 1u);
-        }
+        uint mip_x = t3d_vt_tail_mip_offset(first_width, tail_delta);
         vec2 extent = vec2(float(max(first_width >> tail_delta, 1u)), float(max(first_height >> tail_delta, 1u)));
         vec2 texel = vec2(float(tail.atlasX + mip_x), float(tail.atlasY)) + vec2(0.5)
             + footprint.wrapped_uv * max(extent - vec2(1.0), vec2(0.0));
@@ -516,14 +569,15 @@ TerrainVTResolvedAddress terrain_vt_resolve_address_plan(
     TerrainVTResolvedAddress address = terrain_vt_invalid_address();
     if (plan.valid == 0u) return address;
     T3DVTResolveResult result;
-    if (!t3d_vt_resolve_page_core(plan.allocation_id,
+    if (!t3d_vt_resolve_page_core_loaded(plan.allocation_id,
             plan.requested_page,
             plan.requested_mip,
             footprint.allocation_count,
             footprint.page_count,
+            t3d_vt_loaded_terrain_allocation(plan.allocation),
             result)) return address;
     return terrain_vt_finalize_resolve_result(
-        plan.allocation_id, plan.requested_mip, plan.mip_fraction, footprint, result, reuse);
+        plan.allocation_id, plan.requested_mip, plan.mip_fraction, footprint, result, reuse, plan.allocation);
 }
 
 TerrainVTResolvedAddress terrain_vt_resolve_prepared_address(
@@ -574,14 +628,15 @@ TerrainVTResolvedAddress terrain_vt_resolve_sibling_address(uint allocation_id,
 
     uint requested_page = requested_layout.baseVirtualPage + shared_plan.requested_page_offset;
     T3DVTResolveResult result;
-    if (!t3d_vt_resolve_page_core(allocation_id,
+    if (!t3d_vt_resolve_page_core_loaded(allocation_id,
             requested_page,
             shared_plan.requested_mip,
             footprint.allocation_count,
             footprint.page_count,
+            t3d_vt_loaded_terrain_allocation(allocation),
             result)) return terrain_vt_invalid_address();
     return terrain_vt_finalize_resolve_result(
-        allocation_id, shared_plan.requested_mip, shared_plan.mip_fraction, footprint, result, reuse);
+        allocation_id, shared_plan.requested_mip, shared_plan.mip_fraction, footprint, result, reuse, allocation);
 }
 
 TerrainVTResolvedAddress terrain_vt_resolve_address(
@@ -620,7 +675,8 @@ TerrainVTMaterialPageSetAddress terrain_vt_resolve_material_page_set_color_v3(
     uint allocation_id,
     TerrainVTSampleFootprint footprint,
     uint expected_generation,
-    bool need_pbr) {
+    bool need_pbr,
+    bool need_height) {
     TerrainVTMaterialPageSetAddress page_set;
     page_set.albedo = terrain_vt_invalid_address();
     page_set.pbr = terrain_vt_invalid_address();
@@ -637,13 +693,17 @@ TerrainVTMaterialPageSetAddress terrain_vt_resolve_material_page_set_color_v3(
         if (page_set.pbr.valid != 0u) {
             reuse = page_set.pbr;
         }
-        page_set.height = terrain_vt_resolve_sibling_address(
-            allocation_id + 2u, footprint, expected_generation, shared_plan, reuse);
+        if (need_height) {
+            page_set.height = terrain_vt_resolve_sibling_address(
+                allocation_id + 2u, footprint, expected_generation, shared_plan, reuse);
+        }
     } else {
         if (need_pbr) {
             page_set.pbr = terrain_vt_resolve_prepared_address(allocation_id + 1u, footprint, expected_generation);
         }
-        page_set.height = terrain_vt_resolve_prepared_address(allocation_id + 2u, footprint, expected_generation);
+        if (need_height) {
+            page_set.height = terrain_vt_resolve_prepared_address(allocation_id + 2u, footprint, expected_generation);
+        }
     }
     return page_set;
 }
@@ -732,11 +792,12 @@ TerrainVTTrilinearPair terrain_vt_resolve_trilinear_pair(TerrainVTResolvedAddres
     T3DVTResolveResult result;
     uint allocation_count = uint(frame_data.terrain_params.x);
     uint page_count = uint(frame_data.terrain_params.y);
-    if (!t3d_vt_resolve_page_core(base_address.allocation_id,
+    if (!t3d_vt_resolve_page_core_loaded(base_address.allocation_id,
             requested_page,
             other_requested_mip,
             allocation_count,
             page_count,
+            t3d_vt_loaded_terrain_allocation(allocation),
             result)) return pair;
 
     TerrainVTSampleFootprint footprint;
@@ -754,7 +815,8 @@ TerrainVTTrilinearPair terrain_vt_resolve_trilinear_pair(TerrainVTResolvedAddres
         0.0,
         footprint,
         result,
-        terrain_vt_invalid_address());
+        terrain_vt_invalid_address(),
+        allocation);
     if (other.valid == 0u || other.allocation_id != base_address.allocation_id
         || other.generation != base_address.generation || other.content_id != base_address.content_id) return pair;
 
@@ -789,10 +851,25 @@ vec4 terrain_vt_sample_albedo_tail_filtered(TerrainVTResolvedAddress address) {
     ivec2 atlas_size = textureSize(terrain_vt_albedo_tail, 0);
     T3DVTBoundedFilterPlan plan = terrain_vt_tail_plan(address, atlas_size);
     vec4 sum = vec4(0.0);
+    #if T3D_VT_FIXED_FILTER_TAPS
+    sum += textureLod(terrain_vt_albedo_tail, t3d_vt_bounded_filter_tap_uv(plan, 0u), 0.0);
+
+    if (plan.tap_count > 1u) {
+        sum += textureLod(terrain_vt_albedo_tail, t3d_vt_bounded_filter_tap_uv(plan, 1u), 0.0);
+
+        if (plan.tap_count > 2u) {
+            sum += textureLod(terrain_vt_albedo_tail, t3d_vt_bounded_filter_tap_uv(plan, 2u), 0.0);
+
+            sum += textureLod(terrain_vt_albedo_tail, t3d_vt_bounded_filter_tap_uv(plan, 3u), 0.0);
+
+        }
+    }
+    #else
     for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
         if (i >= plan.tap_count) break;
         sum += textureLod(terrain_vt_albedo_tail, t3d_vt_bounded_filter_tap_uv(plan, i), 0.0);
     }
+    #endif
     return t3d_vt_decode_srgb_albedo(sum / float(max(plan.tap_count, 1u)));
 }
 
@@ -800,10 +877,25 @@ vec4 terrain_vt_sample_normal_tail_filtered(TerrainVTResolvedAddress address) {
     ivec2 atlas_size = textureSize(terrain_vt_normal_tail, 0);
     T3DVTBoundedFilterPlan plan = terrain_vt_tail_plan(address, atlas_size);
     vec4 sum = vec4(0.0);
+    #if T3D_VT_FIXED_FILTER_TAPS
+    sum += textureLod(terrain_vt_normal_tail, t3d_vt_bounded_filter_tap_uv(plan, 0u), 0.0);
+
+    if (plan.tap_count > 1u) {
+        sum += textureLod(terrain_vt_normal_tail, t3d_vt_bounded_filter_tap_uv(plan, 1u), 0.0);
+
+        if (plan.tap_count > 2u) {
+            sum += textureLod(terrain_vt_normal_tail, t3d_vt_bounded_filter_tap_uv(plan, 2u), 0.0);
+
+            sum += textureLod(terrain_vt_normal_tail, t3d_vt_bounded_filter_tap_uv(plan, 3u), 0.0);
+
+        }
+    }
+    #else
     for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
         if (i >= plan.tap_count) break;
         sum += textureLod(terrain_vt_normal_tail, t3d_vt_bounded_filter_tap_uv(plan, i), 0.0);
     }
+    #endif
     return sum / float(max(plan.tap_count, 1u));
 }
 
@@ -811,10 +903,25 @@ vec4 terrain_vt_sample_surface_tail_filtered(TerrainVTResolvedAddress address) {
     ivec2 atlas_size = textureSize(terrain_vt_surface_tail, 0);
     T3DVTBoundedFilterPlan plan = terrain_vt_tail_plan(address, atlas_size);
     vec4 sum = vec4(0.0);
+    #if T3D_VT_FIXED_FILTER_TAPS
+    sum += textureLod(terrain_vt_surface_tail, t3d_vt_bounded_filter_tap_uv(plan, 0u), 0.0);
+
+    if (plan.tap_count > 1u) {
+        sum += textureLod(terrain_vt_surface_tail, t3d_vt_bounded_filter_tap_uv(plan, 1u), 0.0);
+
+        if (plan.tap_count > 2u) {
+            sum += textureLod(terrain_vt_surface_tail, t3d_vt_bounded_filter_tap_uv(plan, 2u), 0.0);
+
+            sum += textureLod(terrain_vt_surface_tail, t3d_vt_bounded_filter_tap_uv(plan, 3u), 0.0);
+
+        }
+    }
+    #else
     for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
         if (i >= plan.tap_count) break;
         sum += textureLod(terrain_vt_surface_tail, t3d_vt_bounded_filter_tap_uv(plan, i), 0.0);
     }
+    #endif
     return sum / float(max(plan.tap_count, 1u));
 }
 
@@ -822,10 +929,25 @@ float terrain_vt_sample_height_tail_filtered(TerrainVTResolvedAddress address) {
     ivec2 atlas_size = textureSize(terrain_vt_height_tail, 0);
     T3DVTBoundedFilterPlan plan = terrain_vt_tail_plan(address, atlas_size);
     float sum = 0.0;
+    #if T3D_VT_FIXED_FILTER_TAPS
+    sum += textureLod(terrain_vt_height_tail, t3d_vt_bounded_filter_tap_uv(plan, 0u), 0.0).r;
+
+    if (plan.tap_count > 1u) {
+        sum += textureLod(terrain_vt_height_tail, t3d_vt_bounded_filter_tap_uv(plan, 1u), 0.0).r;
+
+        if (plan.tap_count > 2u) {
+            sum += textureLod(terrain_vt_height_tail, t3d_vt_bounded_filter_tap_uv(plan, 2u), 0.0).r;
+
+            sum += textureLod(terrain_vt_height_tail, t3d_vt_bounded_filter_tap_uv(plan, 3u), 0.0).r;
+
+        }
+    }
+    #else
     for (uint i = 0u; i < T3D_VT_MAX_ANISOTROPY; ++i) {
         if (i >= plan.tap_count) break;
         sum += textureLod(terrain_vt_height_tail, t3d_vt_bounded_filter_tap_uv(plan, i), 0.0).r;
     }
+    #endif
     return sum / float(max(plan.tap_count, 1u));
 }
 
@@ -892,41 +1014,51 @@ vec4 terrain_vt_sample_pbr_single(TerrainVTResolvedAddress address) {
 vec4 terrain_vt_sample_albedo(TerrainVTResolvedAddress address) {
     vec4 base_sample = terrain_vt_sample_albedo_single(address);
     TerrainVTTrilinearPair pair = terrain_vt_resolve_trilinear_pair(address);
-    return pair.blend != 0u
-        ? mix(base_sample, terrain_vt_sample_albedo_single(pair.other), pair.other_weight)
-        : base_sample;
+    // P47: only a distinct resident mip requires a second physical sample.
+    // An explicit branch avoids selecting a value computed speculatively.
+    if (pair.blend == 0u) return base_sample;
+    vec4 other_sample = terrain_vt_sample_albedo_single(pair.other);
+    return mix(base_sample, other_sample, pair.other_weight);
 }
 
 vec4 terrain_vt_sample_normal(TerrainVTResolvedAddress address) {
     vec4 base_sample = terrain_vt_sample_normal_single(address);
     TerrainVTTrilinearPair pair = terrain_vt_resolve_trilinear_pair(address);
-    return pair.blend != 0u
-        ? mix(base_sample, terrain_vt_sample_normal_single(pair.other), pair.other_weight)
-        : base_sample;
+    // P47: only a distinct resident mip requires a second physical sample.
+    // An explicit branch avoids selecting a value computed speculatively.
+    if (pair.blend == 0u) return base_sample;
+    vec4 other_sample = terrain_vt_sample_normal_single(pair.other);
+    return mix(base_sample, other_sample, pair.other_weight);
 }
 
 vec4 terrain_vt_sample_surface(TerrainVTResolvedAddress address) {
     vec4 base_sample = terrain_vt_sample_surface_single(address);
     TerrainVTTrilinearPair pair = terrain_vt_resolve_trilinear_pair(address);
-    return pair.blend != 0u
-        ? mix(base_sample, terrain_vt_sample_surface_single(pair.other), pair.other_weight)
-        : base_sample;
+    // P47: only a distinct resident mip requires a second physical sample.
+    // An explicit branch avoids selecting a value computed speculatively.
+    if (pair.blend == 0u) return base_sample;
+    vec4 other_sample = terrain_vt_sample_surface_single(pair.other);
+    return mix(base_sample, other_sample, pair.other_weight);
 }
 
 float terrain_vt_sample_height(TerrainVTResolvedAddress address) {
     float base_sample = terrain_vt_sample_height_single(address);
     TerrainVTTrilinearPair pair = terrain_vt_resolve_trilinear_pair(address);
-    return pair.blend != 0u
-        ? mix(base_sample, terrain_vt_sample_height_single(pair.other), pair.other_weight)
-        : base_sample;
+    // P47: only a distinct resident mip requires a second physical sample.
+    // An explicit branch avoids selecting a value computed speculatively.
+    if (pair.blend == 0u) return base_sample;
+    float other_sample = terrain_vt_sample_height_single(pair.other);
+    return mix(base_sample, other_sample, pair.other_weight);
 }
 
 vec4 terrain_vt_sample_pbr(TerrainVTResolvedAddress address) {
     vec4 base_sample = terrain_vt_sample_pbr_single(address);
     TerrainVTTrilinearPair pair = terrain_vt_resolve_trilinear_pair(address);
-    return pair.blend != 0u
-        ? mix(base_sample, terrain_vt_sample_pbr_single(pair.other), pair.other_weight)
-        : base_sample;
+    // P47: only a distinct resident mip requires a second physical sample.
+    // An explicit branch avoids selecting a value computed speculatively.
+    if (pair.blend == 0u) return base_sample;
+    vec4 other_sample = terrain_vt_sample_pbr_single(pair.other);
+    return mix(base_sample, other_sample, pair.other_weight);
 }
 
 float terrain_camera_distance();
@@ -943,7 +1075,7 @@ uint packed_region_cell(ivec2 region_cell) {
     if (map_pos.x < 0 || map_pos.y < 0 || map_pos.x >= T3D_REGION_MAP_SIZE || map_pos.y >= T3D_REGION_MAP_SIZE) {
         return 0u;
     }
-    return region_map[(map_pos.y << 5) + map_pos.x].packed_physical_flags;
+    return region_map[T3D_CLIPMAP_REGION_BASE + (map_pos.y << 5) + map_pos.x].packed_physical_flags;
 }
 int region_layer(ivec2 region_cell) {
     return int(packed_region_cell(region_cell) & 0xFFFFu) - 1;
@@ -964,7 +1096,7 @@ bool terrain_megavt_region_record(ivec2 region_cell, out TerrainRegionRecord rec
         record.megavt_world_to_uv = vec4(0.0);
         return false;
     }
-    record = region_map[(map_pos.y << 5) + map_pos.x];
+    record = region_map[T3D_CLIPMAP_REGION_BASE + (map_pos.y << 5) + map_pos.x];
     // Cooked data is authoritative only after the owner's publication receipt.
     return (record.packed_physical_flags & 0x80000000u) != 0u && record.megavt_allocation != 0xffffffffu
         && (record.megavt_flags & 2u) != 0u && (record.megavt_flags & 4u) == 0u;
@@ -1017,18 +1149,9 @@ vec3 fragment_world_noise_2d(vec2 x) {
     float k3 = d - (b + k2);
     return vec3(fma(k2, u.y, fma(u.x, fma(k3, u.y, k1), a)), du * fma(vec2(k3), u.yx, vec2(k1, k2)));
 }
-vec3 fragment_world_noise_sample(vec2 world_texel) {
-    float base_scale = material_config.world_noise_scale * (0.1 / 1024.0);
-    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0) * base_scale;
-    float distance_to_target = length(world_texel * frame_data.mesh_params.x - frame_data.target_params.xy);
-    int max_octaves = int(clamp(material_config.world_noise_max_octaves, 0u, 15u));
-    int min_octaves = min(int(material_config.world_noise_min_octaves), max_octaves);
-    int octaves = int(clamp(float(max_octaves) - floor(distance_to_target / max(material_config.world_noise_lod_distance, 1.0)),
-        float(min_octaves),
-        float(max_octaves)));
-    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u
-        || (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
-    if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
+// Cold cache-only class has no analytic octave loop in its reachable code.
+// Fallback remains exact for missing/retired cache resources (class 0).
+vec3 fragment_world_noise_cached(vec2 p, float base_scale, int max_octaves, int octaves) {
         float cache_lod = clamp(float(max_octaves - octaves), 0.0, material_config.world_noise_cache_max_lod);
         float cache_period = max(material_config.world_noise_cache_period, 0.001);
         vec2 cache_uv = p / cache_period;
@@ -1037,7 +1160,9 @@ vec3 fragment_world_noise_sample(vec2 world_texel) {
         float sample_x = textureLod(world_noise_cache, cache_uv + vec2(cache_step.x, 0.0), cache_lod).r * 2.0 - 1.0;
         float sample_z = textureLod(world_noise_cache, cache_uv + vec2(0.0, cache_step.y), cache_lod).r * 2.0 - 1.0;
         return vec3(center, sample_x - center, sample_z - center);
-    }
+}
+
+vec3 fragment_world_noise_analytic(vec2 p, float base_scale, int octaves) {
     float value = 0.0;
     float amplitude = 1.0;
     vec2 erosion_derivative = vec2(0.0);
@@ -1058,6 +1183,30 @@ vec3 fragment_world_noise_sample(vec2 world_texel) {
         octave_basis = octave_rotation * octave_basis * 2.0;
     }
     return vec3(value, value_gradient * base_scale);
+}
+
+vec3 fragment_world_noise_sample(vec2 world_texel) {
+    float base_scale = material_config.world_noise_scale * (0.1 / 1024.0);
+    vec2 p = (world_texel + vec2(material_config.world_noise_offset_x, material_config.world_noise_offset_z) * 1024.0) * base_scale;
+    float distance_to_target = length(world_texel * frame_data.mesh_params.x - frame_data.target_params.xy);
+    int max_octaves = int(clamp(material_config.world_noise_max_octaves, 0u, 15u));
+    int min_octaves = min(int(material_config.world_noise_min_octaves), max_octaves);
+    int octaves = int(clamp(float(max_octaves) - floor(distance_to_target / max(material_config.world_noise_lod_distance, 1.0)),
+        float(min_octaves),
+        float(max_octaves)));
+    bool cache_mode = material_config.world_noise_mode == 1u || material_config.world_noise_mode == 2u
+        || (material_config.world_noise_mode == 0u && material_config.world_noise_cache_enabled != 0u);
+#if !defined(T3D_WORLD_RASTER_EMBEDDED)
+    // The host selects 1 only when a bound noise cache and compatible cache
+    // mode are published in the same material snapshot.
+    if (t3d_noise_source_class == 1u) {
+        return fragment_world_noise_cached(p, base_scale, max_octaves, octaves);
+    }
+#endif
+    if (cache_mode && (material_config.feature_flags & T3D_FEATURE_WORLD_NOISE_CACHE) != 0u) {
+        return fragment_world_noise_cached(p, base_scale, max_octaves, octaves);
+    }
+    return fragment_world_noise_analytic(p, base_scale, octaves);
 }
 vec3 fragment_world_noise_height_sample(vec2 world_texel, float weight) {
     if (weight <= 0.5) {
@@ -1115,9 +1264,31 @@ vec4 sample_far_surface(vec2 world_texel) {
     if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) == 0u || !far_atlas_contains(world_texel)) {
         return vec4(1.0, 1.0, 1.0, 0.0);
     }
+    // Existing packed-region SSBO bits 18..29 carry the 1-based physical slot.
+    // Tile 0 is absent, so empty world space never fetches a nonexistent page.
+    ivec2 world_cell = ivec2(floor(world_texel * T3D_REGION_INV_SIZE_F));
+    // P55: slot and residency flags belong to the same packed region word.
+    // Reuse the single SSBO read for both checks.
+    uint flags = packed_region_cell(world_cell);
+    uint slot_plus_one = (flags >> 18u) & 0xFFFu;
+    if ((flags & 0x80000000u) == 0u) return vec4(1.0, 1.0, 1.0, 0.0);
     ivec2 size2 = textureSize(far_color_map, 0);
-    ivec2 coord = clamp(ivec2(floor(far_atlas_uv(world_texel) * vec2(size2))), ivec2(0), size2 - ivec2(1));
-    return texelFetch(far_color_map, coord, 0);
+    vec2 local = fract(world_texel * T3D_REGION_INV_SIZE_F);
+    ivec2 coord;
+    if (slot_plus_one != 0u) {
+        int tile_side = max(1, int(round(material_config.reserved_2)));
+        int columns = max(size2.x / tile_side, 1);
+        int slot = int(slot_plus_one - 1u);
+        coord = ivec2(slot % columns, slot / columns) * tile_side
+            + clamp(ivec2(floor(local * float(tile_side))), ivec2(0), ivec2(tile_side - 1));
+    } else {
+        // Always-resident coarse visual tier: 16 samples per 128m region,
+        // logically indexed across the 32x32 world in the atlas bottom strip.
+        ivec2 map_pos = world_cell + ivec2(16);
+        ivec2 coarse_local = clamp(ivec2(floor(local * 16.0)), ivec2(0), ivec2(15));
+        coord = ivec2(map_pos.x * 16, size2.y - 512 + map_pos.y * 16) + coarse_local;
+    }
+    return texelFetch(far_color_map, clamp(coord, ivec2(0), size2 - ivec2(1)), 0);
 }
 uint decode_far_surface_bits(float packed_alpha) {
     return uint(round(clamp(packed_alpha, 0.0, 1.0) * 255.0));
@@ -1134,7 +1305,7 @@ float far_surface_alpha(uint bits) {
 
 uint read_control(ivec2 texel) {
     if ((material_config.feature_flags & T3D_FEATURE_CONTROL_IMPLICIT) != 0u) {
-        return 0u;
+        return 1u;
     }
     ivec2 region_cell = ivec2(floor_region_i(texel.x), floor_region_i(texel.y));
     int layer = region_layer(region_cell);
@@ -1169,6 +1340,15 @@ vec4 color_texel(ivec2 texel) {
     local = clamp(local, ivec2(0), size3.xy - ivec2(1));
     return texelFetch(color_maps, ivec3(local, layer), 0);
 }
+// Exact authored bilinear corner deduplication, opt-in.
+// The texel() helper remains unchanged and all blends keep their order.
+#ifndef T3D_AUTHORED_BILINEAR_CORNER_REUSE
+#define T3D_AUTHORED_BILINEAR_CORNER_REUSE 0
+#endif
+#ifndef T3D_MEGAVT_EARLY_COLOR_OVERRIDE
+#define T3D_MEGAVT_EARLY_COLOR_OVERRIDE 0
+#endif
+
 vec4 sample_color_exact(vec2 world_texel) {
     vec2 scale = vec2(textureSize(color_maps, 0).xy) * T3D_REGION_INV_SIZE_F;
     vec2 position = (world_texel + vec2(0.5)) * scale - vec2(0.5);
@@ -1177,9 +1357,16 @@ vec4 sample_color_exact(vec2 world_texel) {
     ivec2 t00 = ivec2(floor((base + vec2(0.5)) / scale));
     ivec2 t11 = ivec2(floor((base + vec2(1.5)) / scale));
     vec4 c00 = color_texel(t00);
+#if T3D_AUTHORED_BILINEAR_CORNER_REUSE
+    vec4 c10 = t11.x == t00.x ? c00 : color_texel(ivec2(t11.x, t00.y));
+    vec4 c01 = t11.y == t00.y ? c00 : color_texel(ivec2(t00.x, t11.y));
+    vec4 c11 = t11.y == t00.y ? c10
+        : (t11.x == t00.x ? c01 : color_texel(t11));
+#else
     vec4 c10 = color_texel(ivec2(t11.x, t00.y));
     vec4 c01 = color_texel(ivec2(t00.x, t11.y));
     vec4 c11 = color_texel(t11);
+#endif
     return mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
 }
 vec4 sample_color_map(vec2 world_texel, TierMaterialConfig tier_config) {
@@ -1189,9 +1376,14 @@ vec4 sample_color_map(vec2 world_texel, TierMaterialConfig tier_config) {
     if (terrain_region_layer < 0) {
         return far_authored_color(world_texel);
     }
+#if T3D_AUTHORED_FILTER_CLASS == 1
+    // Selected only for draw-wide color_mode == 2.
+    return sample_color_exact(world_texel);
+#elif T3D_AUTHORED_FILTER_CLASS == 0
     if (tier_config.color_mode == 2u) {
         return sample_color_exact(world_texel);
     }
+#endif
     ivec2 texel = ivec2(floor(world_texel));
     ivec2 region_cell = ivec2(floor_region_i(texel.x), floor_region_i(texel.y));
     int layer = region_layer(region_cell);
@@ -1202,11 +1394,13 @@ vec4 sample_color_map(vec2 world_texel, TierMaterialConfig tier_config) {
     vec2 uv = (vec2(local) + fract(world_texel) + vec2(0.5)) * T3D_REGION_INV_SIZE_F;
     return textureLod(color_maps, vec3(uv, float(layer)), 0.0);
 }
-float apply_authored_roughness(float roughness, float alpha, TierMaterialConfig tier_config) {
+float authored_wetness_offset(float alpha, TierMaterialConfig tier_config) {
     // Stored alpha is a signed roughness offset: below 0.5 wets, above dries.
-    float wetness = fma(clamp(alpha, 0.0, 1.0), -2.0, 1.0)
+    return (1.0 - 2.0 * clamp(alpha, 0.0, 1.0))
         * clamp(tier_config.wetness_contribution, 0.0, 1.0);
-    return clamp(roughness - wetness, 0.0, 1.0);
+}
+float apply_authored_roughness(float roughness, float alpha, TierMaterialConfig tier_config) {
+    return clamp(roughness - authored_wetness_offset(alpha, tier_config), 0.0, 1.0);
 }
 vec4 sample_middle_composite(vec2 world_texel) {
 #ifdef T3D_RUNTIME_TIER
@@ -1295,7 +1489,11 @@ float terrain_camera_distance();
 
 float terrain_authored_mip_bias() {
     float transition = smoothstep(0.0, 1.0, (terrain_camera_distance() - material_config.bias_distance) / 1024.0);
+#if defined(T3D_PREPARED_MIP_BIAS) && T3D_PREPARED_MIP_BIAS
+    float near_derivative_scale = material_config.reserved_3;
+#else
     float near_derivative_scale = exp2(material_config.mipmap_bias);
+#endif
     float far_derivative_scale = max(material_config.depth_blur + 1.0, 0.0001);
     float derivative_scale = mix(near_derivative_scale, far_derivative_scale, transition);
     return log2(max(derivative_scale, 0.0001));
@@ -1309,10 +1507,10 @@ float terrain_dual_scale_reduction() {
     return reduction;
 }
 
-void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config) {
+void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config, vec3 world_ddx, vec3 world_ddy) {
     terrain_sampling_context.position = world_position;
-    terrain_sampling_context.ddx_position = dFdx(world_position);
-    terrain_sampling_context.ddy_position = dFdy(world_position);
+    terrain_sampling_context.ddx_position = world_ddx;
+    terrain_sampling_context.ddy_position = world_ddy;
     terrain_sampling_context.camera_position = frame_data.camera_params[t3d_view_index()].xyz;
     terrain_sampling_context.side_axis = vec2(0.0);
     terrain_sampling_context.normal_alignment = mat2(1.0);
@@ -1322,6 +1520,7 @@ void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config) 
     terrain_sampling_context.micro_vt_mip_bias_valid = 0u;
     terrain_sampling_context.micro_vt_mip_bias = 0.0;
     terrain_sampling_context.dual_scale_factor = 0.0;
+#if T3D_MATERIAL_PROJECTION_CLASS == 0
     if (material_config.projection_mode != 0u && normal.y <= 0.7071067811865475) {
         terrain_sampling_context.normal_alignment = mat2(vec2(normal.z, -normal.x), vec2(normal.x, normal.z));
         vec2 snapped = round(normalize(-normal.xz) * 1.3065629648763765);
@@ -1329,6 +1528,7 @@ void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config) 
         terrain_sampling_context.side_axis = vec2(-snapped.y, snapped.x);
         terrain_sampling_context.side_projection = 1u;
     }
+#endif // T3D_MATERIAL_PROJECTION_CLASS == 0; planar keeps identity alignment.
 #if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
     // WG-B P04/P07: canonical shipping materials all use the same tier-level
     // micro-VT bias and dual transition factor, so derive both once per fragment.
@@ -1402,35 +1602,37 @@ vec3 decode_surface_normal(vec2 encoded_xy) {
     return vec3(normal_xy.x, sqrt(max(1.0 - len_sq, 0.0)), normal_xy.y);
 }
 
-struct SampledMaterial {
-    vec3 albedo;
-    vec3 tangent_normal;
-    float roughness;
-    float ao;
-    float metallic;
-    float height;
-    float ao_affect;
-};
-SampledMaterial material_zero() {
-    SampledMaterial r;
-    r.albedo = vec3(0.0);
-    r.tangent_normal = vec3(0.0, 0.0, 0.0);
-    r.roughness = 0.0;
-    r.ao = 0.0;
-    r.metallic = 0.0;
-    r.height = 0.0;
-    r.ao_affect = 0.0;
-    return r;
+// Composed material helpers are included by the stage roots directly.
+// Godot RDShaderFile imports do not recursively expand nested GLSL includes.
+// CS11: never apply a baked static V3 page to a dynamic material specialization.
+// This predicate is shared by the color and depth-normal-roughness paths.
+#ifdef T3D_CS_ACTIVE
+bool t3d_cs_static_v3_runtime_eligible(TierMaterialConfig tier_config) {
+#if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
+    bool explicit_controls = tier_config.sampling_mode == 1u || tier_config.sampling_mode == 2u ||
+                             tier_config.sampling_mode == 5u;
+    float far_bias_scale = max(material_config.depth_blur + 1.0, 0.0001);
+#if defined(T3D_PREPARED_MIP_BIAS) && T3D_PREPARED_MIP_BIAS
+    float near_bias_scale = material_config.reserved_3;
+#else
+    float near_bias_scale = exp2(material_config.mipmap_bias);
+#endif
+    return explicit_controls && tier_config.detiling_mode == 2u &&
+           tier_config.surface_response != 0u && material_config.projection_mode == 0u &&
+           !t3d_feature_dual_scale_enabled() && !t3d_feature_auto_shader_enabled() &&
+           (material_config.feature_flags & T3D_FEATURE_CONTROL_IMPLICIT) == 0u &&
+           abs(far_bias_scale - near_bias_scale) < 0.00001;
+#else
+    return false;
+#endif
 }
-void accumulate_material(inout SampledMaterial dst, SampledMaterial src, float weight) {
-    dst.albedo += src.albedo * weight;
-    dst.tangent_normal += src.tangent_normal * weight;
-    dst.roughness += src.roughness * weight;
-    dst.ao += src.ao * weight;
-    dst.metallic += src.metallic * weight;
-    dst.height += src.height * weight;
-    dst.ao_affect += src.ao_affect * weight;
-}
+#endif
+#ifdef T3D_CS_ACTIVE
+#define T3D_CS_LEGACY_COMPOSITE_OK false
+#else
+#define T3D_CS_LEGACY_COMPOSITE_OK true
+#endif
+
 int material_texture_layer_count(uint shift) {
     return max(int((material_config.texture_layer_counts >> shift) & 0xFFu), 1);
 }
@@ -1453,6 +1655,38 @@ ControlSampleState prepare_control_sample(float control_scale, uint angle_index)
     return state;
 }
 
+// Optional one-entry control transform memo. Several different material-pair
+// keys can share the exact seven-bit rotation/scale key. The derived world
+// projection and derivatives are invocation-invariant, so reuse has no VT
+// request or material-order consequences. Disabled pending register/occupancy
+// A/B profiling in two-/four-key transition scenes.
+#ifndef T3D_CONTROL_TRANSFORM_REUSE
+#define T3D_CONTROL_TRANSFORM_REUSE 0
+#endif
+struct T3DControlTransformReuse {
+    uint last_transform;
+    ControlSampleState state;
+};
+
+T3DControlTransformReuse t3d_control_transform_reuse_empty() {
+    T3DControlTransformReuse reuse;
+    reuse.last_transform = 0xffffffffu;
+    return reuse;
+}
+
+ControlSampleState t3d_prepare_control_sample_reusing(inout T3DControlTransformReuse reuse,
+    uint sample_key, float scale, uint angle_index) {
+#if T3D_CONTROL_TRANSFORM_REUSE
+    uint transform_key = (sample_key >> 7u) & 127u;
+    if (reuse.last_transform == transform_key) return reuse.state;
+    ControlSampleState state = prepare_control_sample(scale, angle_index);
+    reuse.last_transform = transform_key;
+    reuse.state = state;
+    return state;
+#else
+    return prepare_control_sample(scale, angle_index);
+#endif
+}
 
 struct MaterialScaleEvalContext {
     vec2 uv;
@@ -1482,7 +1716,10 @@ MaterialEvalContext prepare_canonical_material_eval_context(int id,
     vec2 world_xz,
     MaterialLayer layer,
     ControlSampleState control_state,
-    TierMaterialConfig tier_config) {
+    TierMaterialConfig tier_config,
+    bool filter_nearest,
+    bool filter_anisotropic,
+    bool filter_trilinear) {
     MaterialEvalContext ctx;
     ctx.near_scale = material_scale_context_zero();
     ctx.far_scale = material_scale_context_zero();
@@ -1508,16 +1745,14 @@ MaterialEvalContext prepare_canonical_material_eval_context(int id,
     ctx.near_scale.ddy_uv = near_detile_rotation * layer_ddy_uv;
     ctx.near_scale.material_rotation = near_detile_rotation * control_state.control_rotation;
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-    t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
+    if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
         ctx.near_scale.uv,
         ctx.near_scale.ddx_uv,
         ctx.near_scale.ddy_uv,
         ctx.lod_bias,
         T3D_VT_FRAGMENT_PRIORITY_TERRAIN,
         true,
-        terrain_vt_filter_is_nearest(tier_config.filtering),
-        terrain_vt_filter_is_anisotropic(tier_config.filtering),
-        terrain_vt_filter_is_trilinear(tier_config.filtering));
+        filter_nearest, filter_anisotropic, filter_trilinear);
 #endif
 
     if (dual_eligible) {
@@ -1532,16 +1767,14 @@ MaterialEvalContext prepare_canonical_material_eval_context(int id,
         ctx.far_scale.ddy_uv = far_detile_rotation * far_ddy;
         ctx.far_scale.material_rotation = far_detile_rotation * control_state.control_rotation;
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-        t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
+        if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
             ctx.far_scale.uv,
             ctx.far_scale.ddx_uv,
             ctx.far_scale.ddy_uv,
             ctx.lod_bias,
             T3D_VT_FRAGMENT_PRIORITY_TERRAIN,
             true,
-            terrain_vt_filter_is_nearest(tier_config.filtering),
-            terrain_vt_filter_is_anisotropic(tier_config.filtering),
-            terrain_vt_filter_is_trilinear(tier_config.filtering));
+            filter_nearest, filter_anisotropic, filter_trilinear);
 #endif
     }
     return ctx;
@@ -1550,12 +1783,17 @@ MaterialEvalContext prepare_canonical_material_eval_context(int id,
 SampledMaterial sample_material_canonical_v3(int logical_id,
     vec2 world_xz,
     ControlSampleState control_state,
-    TierMaterialConfig tier_config) {
+    TierMaterialConfig tier_config,
+    bool need_height) {
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
-    MaterialLayer layer = materials[id];
+    MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
     bool need_pbr = tier_config.surface_response != 0u;
-    MaterialEvalContext ctx = prepare_canonical_material_eval_context(id, world_xz, layer, control_state, tier_config);
+    bool filter_nearest = terrain_vt_filter_is_nearest(tier_config.filtering);
+    bool filter_anisotropic = terrain_vt_filter_is_anisotropic(tier_config.filtering);
+    bool filter_trilinear = terrain_vt_filter_is_trilinear(tier_config.filtering);
+    MaterialEvalContext ctx = prepare_canonical_material_eval_context(id, world_xz, layer, control_state, tier_config,
+        filter_nearest, filter_anisotropic, filter_trilinear);
     bool far_only = ctx.dual_factor >= 1.0;
     bool transition = ctx.dual_factor > 0.0 && !far_only;
 
@@ -1566,27 +1804,23 @@ SampledMaterial sample_material_canonical_v3(int logical_id,
         far_only ? ctx.far_scale.material_rotation : ctx.near_scale.material_rotation;
     TerrainVTSampleFootprint primary_footprint =
         terrain_vt_prepare_sample_footprint(primary_uv, primary_ddx, primary_ddy, ctx.lod_bias, true,
-            terrain_vt_filter_is_nearest(tier_config.filtering),
-            terrain_vt_filter_is_anisotropic(tier_config.filtering),
-            terrain_vt_filter_is_trilinear(tier_config.filtering));
+            filter_nearest, filter_anisotropic, filter_trilinear);
     TerrainVTMaterialPageSetAddress primary_pages = terrain_vt_resolve_material_page_set_color_v3(
-        layer.micro_vt_allocation, primary_footprint, 0u, need_pbr);
+        layer.micro_vt_allocation, primary_footprint, 0u, need_pbr, need_height);
 
     vec4 albedo_texel = terrain_vt_sample_albedo(primary_pages.albedo);
-    float height_sample = terrain_vt_sample_height(primary_pages.height);
+    float height_sample = need_height ? terrain_vt_sample_height(primary_pages.height) : 0.0;
     vec4 pbr_primary = vec4(0.5, 0.5, 1.0, 1.0);
     vec4 pbr_far = pbr_primary;
     if (need_pbr) pbr_primary = terrain_vt_sample_pbr(primary_pages.pbr);
     if (transition) {
         TerrainVTSampleFootprint far_footprint = terrain_vt_prepare_sample_footprint(
             ctx.far_scale.uv, ctx.far_scale.ddx_uv, ctx.far_scale.ddy_uv, ctx.lod_bias, true,
-            terrain_vt_filter_is_nearest(tier_config.filtering),
-            terrain_vt_filter_is_anisotropic(tier_config.filtering),
-            terrain_vt_filter_is_trilinear(tier_config.filtering));
+            filter_nearest, filter_anisotropic, filter_trilinear);
         TerrainVTMaterialPageSetAddress far_pages = terrain_vt_resolve_material_page_set_color_v3(
-            layer.micro_vt_allocation, far_footprint, 0u, need_pbr);
+            layer.micro_vt_allocation, far_footprint, 0u, need_pbr, need_height);
         albedo_texel = mix(albedo_texel, terrain_vt_sample_albedo(far_pages.albedo), ctx.dual_factor);
-        height_sample = mix(height_sample, terrain_vt_sample_height(far_pages.height), ctx.dual_factor);
+        if (need_height) height_sample = mix(height_sample, terrain_vt_sample_height(far_pages.height), ctx.dual_factor);
         if (need_pbr) pbr_far = terrain_vt_sample_pbr(far_pages.pbr);
     }
 
@@ -1620,13 +1854,15 @@ SampledMaterial sample_material(int logical_id,
     vec2 world_xz,
     ControlSampleState control_state,
     TierMaterialConfig tier_config,
-    bool use_far_array) {
+    bool use_far_array,
+    bool need_height) {
 #if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
-    return sample_material_canonical_v3(logical_id, world_xz, control_state, tier_config);
+    need_height = need_height || (material_config.debug_flags & T3D_DEBUG_TEX_HEIGHT) != 0u;
+    return sample_material_canonical_v3(logical_id, world_xz, control_state, tier_config, need_height);
 #else
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
-    MaterialLayer layer = materials[id];
+    MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
 #if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
     // Host publication guarantees these predicates before this family is selected.
     const bool resident = false;
@@ -1665,7 +1901,7 @@ SampledMaterial sample_material(int logical_id,
         lod_bias = terrain_micro_vt_mip_bias(tier_config);
     }
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-    t3d_vt_fragment_request_allocation_filtered(
+    if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(
         T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
         uv,
         ddx_uv,
@@ -1722,7 +1958,7 @@ SampledMaterial sample_material(int logical_id,
         dual_far_ddy = far_detile_rotation * dual_far_ddy;
         dual_far_material_rotation = far_detile_rotation * control_rotation;
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-        t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
+        if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
             dual_far_uv,
             dual_far_ddx,
             dual_far_ddy,
@@ -1864,17 +2100,23 @@ SampledMaterial sample_material(int logical_id,
 
 SampledMaterial sample_unrotated_material(int logical_id, vec2 world_xz, TierMaterialConfig tier_config, bool use_far_array) {
     ControlSampleState control_state = prepare_control_sample(1.0, 0u);
-    return sample_material(logical_id, world_xz, control_state, tier_config, use_far_array);
+    return sample_material(logical_id, world_xz, control_state, tier_config, use_far_array, false);
 }
 
-bool sample_megavt_macro(out vec4 color) {
+// Normal/roughness passes only consume authored alpha. Resolve both channel
+// addresses to retain the same residency/validity decision as the color pass,
+// but avoid fetching the albedo texel when it cannot affect the output.
+bool sample_megavt_macro(out vec4 color, bool require_albedo, vec2 world_ddx_xz, vec2 world_ddy_xz) {
     color = vec4(1.0, 1.0, 1.0, 0.5);
     if (!t3d_feature_megavt_enabled()) return false;
     ivec2 region_cell = ivec2(floor(world_position.xz * T3D_REGION_INV_SIZE_F));
     TerrainRegionRecord record;
     if (!terrain_megavt_region_record(region_cell, record)) return false;
     vec2 uv = world_position.xz * record.megavt_world_to_uv.xy + record.megavt_world_to_uv.zw;
-    vec2 ddx_uv = dFdx(uv), ddy_uv = dFdy(uv);
+    // The region UV is affine in world XZ. Reuse derivative-group-safe world
+    // gradients captured before holes and material-dependent discard.
+    vec2 ddx_uv = world_ddx_xz * record.megavt_world_to_uv.xy;
+    vec2 ddy_uv = world_ddy_xz * record.megavt_world_to_uv.xy;
     TerrainVTResolvedAddress albedo =
         terrain_vt_resolve_address(record.megavt_allocation, uv, ddx_uv, ddy_uv, 0.0, false, record.megavt_generation);
     TerrainVTResolvedAddress pbr =
@@ -1882,7 +2124,9 @@ bool sample_megavt_macro(out vec4 color) {
     if (albedo.valid == 0u || pbr.valid == 0u) return false;
     // V3 PackedPBR blue stores painted color-map alpha for this allocation.
     // Material detail, slope classification and macro noise remain live.
-    color.rgb = terrain_vt_sample_albedo(albedo).rgb;
+    if (require_albedo) {
+        color.rgb = terrain_vt_sample_albedo(albedo).rgb;
+    }
     color.a = terrain_vt_sample_pbr(pbr).b;
     return true;
 }
@@ -1905,35 +2149,6 @@ uint auto_control(uint authored_control, vec3 terrain_normal, float height, bool
     float canonical_blend = swap_pair ? 1.0 - auto_blend : auto_blend;
     return (canonical_base << 27u) | (canonical_overlay << 22u) | ((uint(fma(canonical_blend, 255.0, 0.5)) & 0xFFu) << 14u);
 }
-void decode_control(uint control, out int base_id, out int overlay_id, out float blend, out uint angle_index, out float scale) {
-    base_id = int((control >> 27u) & 0x1Fu);
-    overlay_id = int((control >> 22u) & 0x1Fu);
-    blend = float((control >> 14u) & 0xFFu) * T3D_DIV_255;
-    angle_index = (control >> 10u) & 0xFu;
-    uint encoded_scale = (control >> 7u) & 0x7u;
-    scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
-}
-const uint T3D_CONTROL_SAMPLE_KEY_MASK =
-    (0x1Fu << 27u) | (0x1Fu << 22u) | (0xFu << 10u) | (0x7u << 7u);
-
-uint control_sample_key(uint control) {
-    // P08: blend amount and control-only metadata do not alter material source
-    // sampling. Only base/overlay IDs plus rotation/scale identity belong here.
-    return control & T3D_CONTROL_SAMPLE_KEY_MASK;
-}
-
-float control_blend_value(uint control) {
-    return float((control >> 14u) & 0xFFu) * T3D_DIV_255;
-}
-
-void decode_control_sample_key(uint sample_key, out int base_id, out int overlay_id, out uint angle_index, out float scale) {
-    base_id = int((sample_key >> 27u) & 0x1Fu);
-    overlay_id = int((sample_key >> 22u) & 0x1Fu);
-    angle_index = (sample_key >> 10u) & 0xFu;
-    uint encoded_scale = (sample_key >> 7u) & 0x7u;
-    scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
-}
-
 struct ControlPairSamples {
     SampledMaterial base;
     SampledMaterial overlay;
@@ -1951,11 +2166,11 @@ ControlPairSamples sample_control_pair_sources(uint sample_key, vec2 world_xz, T
     ControlSampleState control_state = prepare_control_sample(scale, angle_index);
 
     ControlPairSamples samples;
-    samples.base = sample_material(base_id, world_xz, control_state, tier_config, use_far_array);
     samples.same_material = overlay_id == base_id ? 1u : 0u;
+    samples.base = sample_material(base_id, world_xz, control_state, tier_config, use_far_array, samples.same_material == 0u);
     samples.overlay = samples.base;
     if (samples.same_material == 0u) {
-        samples.overlay = sample_material(overlay_id, world_xz, control_state, tier_config, use_far_array);
+        samples.overlay = sample_material(overlay_id, world_xz, control_state, tier_config, use_far_array, true);
     }
     return samples;
 }
@@ -1968,10 +2183,7 @@ SampledMaterial resolve_control_pair_blend(ControlPairSamples samples, float ble
     }
 
     float sharpness = fma(60.0, material_config.blend_sharpness, 4.0);
-    float base_weight = pow(max((1.0 - blend) + samples.base.height, 0.00000001), sharpness);
-    float overlay_weight = pow(max(blend + samples.overlay.height, 0.00000001), sharpness);
-    float pair_weight_inv = 1.0 / max(base_weight + overlay_weight, 0.00001);
-    float height_blend = overlay_weight * pair_weight_inv;
+    float height_blend = t3d_cs_height_blend(blend, samples.base.height, samples.overlay.height, sharpness);
 
     SampledMaterial result = material_zero();
     accumulate_material(result, samples.base, 1.0 - height_blend);
@@ -1985,11 +2197,6 @@ SampledMaterial sample_resolved_control_pair(uint control, vec2 world_xz, vec3 t
     return resolve_control_pair_blend(samples, control_blend_value(control));
 }
 
-vec4 corner_weights(vec2 world_texel) {
-    vec2 f = fract(world_texel);
-    return vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
-}
-
 bool use_bilinear_controls(TierMaterialConfig tier_config) {
 #ifdef T3D_RUNTIME_TIER
     if (patch_tier == 1u && t3d_middle_use_composite(tier_config)) {
@@ -2000,12 +2207,23 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
         return false;
     }
 #endif
+#if T3D_CONTROL_FILTER_CLASS == 1
+    // Nearest-only draw profile; no per-fragment footprint is required.
+    return false;
+#elif T3D_CONTROL_FILTER_CLASS == 2
+    // Bilinear-only draw profile, never selected for composed middle surfaces.
+    return true;
+#else
+#if T3D_CONTROL_FILTER_CLASS == 0
     if (tier_config.sampling_mode == 2u) {
         return false;
     }
     if (tier_config.sampling_mode == 1u) {
         return true;
     }
+#endif
+    // Class 3 is the adaptive/footprint-only draw profile. It retains
+    // per-fragment derivatives and the mode-4 distance threshold.
     float footprint = max(length(terrain_sampling_context.ddx_position.xz), length(terrain_sampling_context.ddy_position.xz))
         / max(frame_data.mesh_params.x, 0.0001);
     bool adaptive = footprint < 16.0;
@@ -2013,80 +2231,94 @@ bool use_bilinear_controls(TierMaterialConfig tier_config) {
         adaptive = adaptive && terrain_camera_distance() < material_config.bias_distance;
     }
     return adaptive;
+#endif
 }
 
-vec4 select_top_two_control_weights(vec4 weights) {
-    // P09: exact fixed-cardinality translation of the previous four-iteration
-    // selection loop. Strict '>' preserves the previous tie ordering.
-    int first = 0;
-    int second = 1;
-    float first_weight = weights.x;
-    float second_weight = weights.y;
-    if (second_weight > first_weight) {
-        int old_first = first;
-        float old_first_weight = first_weight;
-        first = second;
-        first_weight = second_weight;
-        second = old_first;
-        second_weight = old_first_weight;
-    }
-    if (weights.z > first_weight) {
-        second = first;
-        second_weight = first_weight;
-        first = 2;
-        first_weight = weights.z;
-    } else if (weights.z > second_weight) {
-        second = 2;
-        second_weight = weights.z;
-    }
-    if (weights.w > first_weight) {
-        second = first;
-        second_weight = first_weight;
-        first = 3;
-        first_weight = weights.w;
-    } else if (weights.w > second_weight) {
-        second = 3;
-        second_weight = weights.w;
-    }
-
-    vec4 selected = vec4(0.0);
-    if (first == 0 || second == 0) selected.x = weights.x;
-    if (first == 1 || second == 1) selected.y = weights.y;
-    if (first == 2 || second == 2) selected.z = weights.z;
-    if (first == 3 || second == 3) selected.w = weights.w;
-    return selected / max(dot(selected, vec4(1.0)), 0.00001);
-}
-
-vec4 normalize_active_control_weights(vec4 weights) {
-    // Preserve the previous <= 1e-5 corner skip, but normalize the scalar
-    // weights once before material accumulation instead of carrying total_weight.
-    weights.x = weights.x > 0.00001 ? weights.x : 0.0;
-    weights.y = weights.y > 0.00001 ? weights.y : 0.0;
-    weights.z = weights.z > 0.00001 ? weights.z : 0.0;
-    weights.w = weights.w > 0.00001 ? weights.w : 0.0;
-    return weights / max(dot(weights, vec4(1.0)), 0.00001);
-}
-
-struct ControlBlendSet4 {
-    uvec4 sample_keys;
-    vec4 blends;
-    vec4 weights;
+// P02: the four-corner work list already deduplicates *pair keys*. Distinct
+// pairs can still contain the same material source at the same rotation/scale.
+// Keep two source results at most to bound live registers and shader stack size.
+// All tier, projection, texture backend and detiling inputs are fragment-uniform.
+// Height eligibility is part of the key: a sample lacking height can never be
+// reused in a pair that needs height blending.
+struct T3DFragmentSourceReuse {
+    uint key0;
+    uint key1;
+    uint next_slot;
+    SampledMaterial sample0;
+    SampledMaterial sample1;
 };
 
-ControlBlendSet4 make_control_blend_set4(uint c0, uint c1, uint c2, uint c3, vec4 weights) {
-    ControlBlendSet4 set4;
-    set4.sample_keys = uvec4(
-        control_sample_key(c0), control_sample_key(c1), control_sample_key(c2), control_sample_key(c3));
-    set4.blends = vec4(control_blend_value(c0), control_blend_value(c1), control_blend_value(c2), control_blend_value(c3));
-    set4.weights = normalize_active_control_weights(weights);
-    return set4;
+T3DFragmentSourceReuse t3d_fragment_source_reuse_empty() {
+    T3DFragmentSourceReuse reuse;
+    reuse.key0 = 0xffffffffu;
+    reuse.key1 = 0xffffffffu;
+    reuse.next_slot = 0u;
+    return reuse;
+}
+
+// The reuse path is enabled for color-only material evaluation. Feedback
+// variants must still execute every original source request, since sampling
+// can publish VT page demand as well as produce the material value.
+#ifndef T3D_FRAGMENT_SOURCE_REUSE
+#define T3D_FRAGMENT_SOURCE_REUSE 1
+#endif
+SampledMaterial t3d_sample_material_reusing_source(inout T3DFragmentSourceReuse reuse,
+    int logical_id, uint control_key, vec2 world_xz, ControlSampleState control_state,
+    TierMaterialConfig tier_config, bool use_far_array, bool need_height) {
+#if !T3D_FRAGMENT_SOURCE_REUSE || defined(T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE)
+    return sample_material(logical_id, world_xz, control_state,
+        tier_config, use_far_array, need_height);
+#else
+    bool effective_height = need_height || (material_config.debug_flags & T3D_DEBUG_TEX_HEIGHT) != 0u;
+    // Control bits 7..13 encode exact rotation/scale. Source ID is 5 bits.
+    uint identity = (uint(logical_id) & 31u) | (((control_key >> 7u) & 127u) << 5u)
+        | (effective_height ? (1u << 12u) : 0u);
+    if (identity == reuse.key0) return reuse.sample0;
+    if (identity == reuse.key1) return reuse.sample1;
+    SampledMaterial sampled = sample_material(logical_id, world_xz, control_state,
+        tier_config, use_far_array, need_height);
+    if (reuse.next_slot == 0u) {
+        reuse.key0 = identity;
+        reuse.sample0 = sampled;
+    } else {
+        reuse.key1 = identity;
+        reuse.sample1 = sampled;
+    }
+    reuse.next_slot ^= 1u;
+    return sampled;
+#endif
+}
+
+// Source order and height eligibility match the existing
+// heterogeneous work list. Only the two-key opt-in specialization calls this
+// helper; the previous general loop remains byte-for-byte available.
+#ifndef T3D_COLOR_TWO_KEY_SPECIALIZATION
+#define T3D_COLOR_TWO_KEY_SPECIALIZATION 0
+#endif
+ControlPairSamples t3d_sample_color_pair_reusing(inout T3DFragmentSourceReuse reuse,
+    inout T3DControlTransformReuse transform_reuse, uint key, vec2 world_xz, TierMaterialConfig tier_config) {
+    int base_id, overlay_id;
+    uint angle_index;
+    float scale;
+    decode_control_sample_key(key, base_id, overlay_id, angle_index, scale);
+    bool use_far_array = (T3D_TIER == 2) && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
+    ControlSampleState control_state = t3d_prepare_control_sample_reusing(transform_reuse, key, scale, angle_index);
+    ControlPairSamples samples;
+    samples.same_material = overlay_id == base_id ? 1u : 0u;
+    samples.base = t3d_sample_material_reusing_source(reuse, base_id, key, world_xz,
+        control_state, tier_config, use_far_array, samples.same_material == 0u);
+    samples.overlay = samples.base;
+    if (samples.same_material == 0u) {
+        samples.overlay = t3d_sample_material_reusing_source(reuse, overlay_id, key, world_xz,
+            control_state, tier_config, use_far_array, true);
+    }
+    return samples;
 }
 
 void accumulate_control_key_group(
     inout SampledMaterial result, ControlPairSamples samples, uint group_key, ControlBlendSet4 set4) {
-    // Fixed four-corner expansion: no dynamic cache, no cache search loop and no
-    // variable-size material array. Each unique sampling identity reaches this
-    // helper exactly once.
+    // Pair-key accumulation is unchanged: material source reuse only changes
+    // where the identical sampled values originate, not the blend order.
     if (set4.weights.x > 0.0 && set4.sample_keys.x == group_key) {
         accumulate_material(result, resolve_control_pair_blend(samples, set4.blends.x), set4.weights.x);
     }
@@ -2120,6 +2352,26 @@ SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, 
 
     // P09: the control problem is structurally fixed at four corners. Keep it
     // scalar and explicit so glslang sees the complete bounded graph.
+#if T3D_CONTROL_ACTIVE_CORNER_FETCH
+    // Top-two material mode: only positive-weight corners can affect this
+    // pixel. Preserve exact control decoding and all active blend metadata.
+    vec4 weights = corner_weights(world_texel);
+    bool top_two_controls = tier_config.sampling_mode == 5u;
+    if (top_two_controls) weights = select_top_two_control_weights(weights);
+    uint c0 = auto_control(read_control(base_texel), terrain_normal, world_position.y, terrain_region_layer < 0);
+    uint c1 = c0, c2 = c0, c3 = c0;
+    if (!top_two_controls || weights.y > 0.0)
+        c1 = auto_control(read_control(base_texel + ivec2(1, 0)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    if (!top_two_controls || weights.z > 0.0)
+        c2 = auto_control(read_control(base_texel + ivec2(0, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    if (!top_two_controls || weights.w > 0.0)
+        c3 = auto_control(read_control(base_texel + ivec2(1, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+
+    if (c0 == c1 && c0 == c2 && c0 == c3) {
+        return sample_resolved_control_pair(c0, world_position.xz, terrain_normal, tier_config);
+    }
+    ControlBlendSet4 set4 = make_control_blend_set4(c0, c1, c2, c3, weights);
+#else
     uint c0 = auto_control(read_control(base_texel), terrain_normal, world_position.y, terrain_region_layer < 0);
     uint c1 = auto_control(read_control(base_texel + ivec2(1, 0)), terrain_normal, world_position.y, terrain_region_layer < 0);
     uint c2 = auto_control(read_control(base_texel + ivec2(0, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
@@ -2136,6 +2388,7 @@ SampledMaterial sample_detailed_material(vec2 world_texel, vec3 terrain_normal, 
         weights = select_top_two_control_weights(weights);
     }
     ControlBlendSet4 set4 = make_control_blend_set4(c0, c1, c2, c3, weights);
+#endif
 
     uint k0 = set4.sample_keys.x;
     uint k1 = set4.sample_keys.y;
@@ -2218,18 +2471,54 @@ vec3 apply_macro_variation(vec3 albedo, vec2 world_texel, vec3 terrain_normal) {
     if ((material_config.feature_flags & T3D_FEATURE_MACRO_VARIATION) == 0u) {
         return albedo;
     }
-    vec2 noise_uv =
-        world_texel * material_config.noise1_scale * 0.1 + vec2(material_config.noise1_offset_x, material_config.noise1_offset_y);
-    vec2 rotated = vec2(material_config.noise1_rotation_x * noise_uv.x + material_config.noise1_rotation_y * noise_uv.y,
-        material_config.noise1_rotation_x * noise_uv.y - material_config.noise1_rotation_y * noise_uv.x);
-    bool use_noise_texture = (material_config.feature_flags & T3D_FEATURE_MACRO_NOISE) != 0u;
-    float noise1 = use_noise_texture ? texture(macro_noise_texture, rotated).r : value_noise(rotated);
-    float noise2_uv_scale = material_config.noise2_scale * 0.1;
-    float noise2 =
-        use_noise_texture ? texture(macro_noise_texture, world_texel * noise2_uv_scale).r : value_noise(world_texel * noise2_uv_scale);
     vec3 macro1 = vec3(material_config.macro_variation1_r, material_config.macro_variation1_g, material_config.macro_variation1_b);
     vec3 macro2 = vec3(material_config.macro_variation2_r, material_config.macro_variation2_g, material_config.macro_variation2_b);
-    vec3 macro = mix(macro1, vec3(1.0), noise1) * mix(macro2, vec3(1.0), noise2);
+    // P52: an authored neutral macro layer has no noise-dependent output.
+    // This material-constant gate is derivative-uniform even when the noise
+    // source uses implicit texture gradients.
+    bool sample1 = any(notEqual(macro1, vec3(1.0)));
+    bool sample2 = any(notEqual(macro2, vec3(1.0)));
+    if (!sample1 && !sample2) return albedo;
+    bool use_noise_texture = (material_config.feature_flags & T3D_FEATURE_MACRO_NOISE) != 0u;
+    vec3 macro_factor1 = vec3(1.0);
+    vec3 macro_factor2 = vec3(1.0);
+    if (sample1) {
+        vec2 noise_uv =
+            world_texel * material_config.noise1_scale * 0.1 + vec2(material_config.noise1_offset_x, material_config.noise1_offset_y);
+        vec2 rotated = vec2(material_config.noise1_rotation_x * noise_uv.x + material_config.noise1_rotation_y * noise_uv.y,
+            material_config.noise1_rotation_x * noise_uv.y - material_config.noise1_rotation_y * noise_uv.x);
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+        // Reconstruct the original raster footprint, rather than deriving the
+        // footprint from adjacent visibility-buffer pixels at a disocclusion.
+        vec2 noise_dx = t3d_screen_space_texel_ddx * material_config.noise1_scale * 0.1;
+        vec2 noise_dy = t3d_screen_space_texel_ddy * material_config.noise1_scale * 0.1;
+        vec2 rotated_dx = vec2(material_config.noise1_rotation_x * noise_dx.x + material_config.noise1_rotation_y * noise_dx.y,
+            material_config.noise1_rotation_x * noise_dx.y - material_config.noise1_rotation_y * noise_dx.x);
+        vec2 rotated_dy = vec2(material_config.noise1_rotation_x * noise_dy.x + material_config.noise1_rotation_y * noise_dy.y,
+            material_config.noise1_rotation_x * noise_dy.y - material_config.noise1_rotation_y * noise_dy.x);
+        float noise1 = use_noise_texture
+            ? textureGrad(macro_noise_texture, rotated, rotated_dx, rotated_dy).r : value_noise(rotated);
+#else
+        float noise1 = use_noise_texture ? texture(macro_noise_texture, rotated).r : value_noise(rotated);
+#endif
+        macro_factor1 = mix(macro1, vec3(1.0), noise1);
+    }
+    if (sample2) {
+        float noise2_uv_scale = material_config.noise2_scale * 0.1;
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+        float noise2 = use_noise_texture
+            ? textureGrad(macro_noise_texture, world_texel * noise2_uv_scale,
+                t3d_screen_space_texel_ddx * noise2_uv_scale,
+                t3d_screen_space_texel_ddy * noise2_uv_scale).r
+            : value_noise(world_texel * noise2_uv_scale);
+#else
+        float noise2 = use_noise_texture
+            ? texture(macro_noise_texture, world_texel * noise2_uv_scale).r
+            : value_noise(world_texel * noise2_uv_scale);
+#endif
+        macro_factor2 = mix(macro2, vec3(1.0), noise2);
+    }
+    vec3 macro = macro_factor1 * macro_factor2;
     return albedo * mix(vec3(1.0), macro, clamp(terrain_normal.y + material_config.macro_variation_slope, 0.0, 1.0));
 }
 
@@ -2299,9 +2588,13 @@ NormalRoughnessSource sample_material_normal_roughness_canonical_v3(int logical_
     bool require_roughness) {
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
-    MaterialLayer layer = materials[id];
+    MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
     bool need_pbr = tier_config.surface_response != 0u && (require_normal || require_roughness);
-    MaterialEvalContext ctx = prepare_canonical_material_eval_context(id, world_xz, layer, control_state, tier_config);
+    bool filter_nearest = terrain_vt_filter_is_nearest(tier_config.filtering);
+    bool filter_anisotropic = terrain_vt_filter_is_anisotropic(tier_config.filtering);
+    bool filter_trilinear = terrain_vt_filter_is_trilinear(tier_config.filtering);
+    MaterialEvalContext ctx = prepare_canonical_material_eval_context(id, world_xz, layer, control_state, tier_config,
+        filter_nearest, filter_anisotropic, filter_trilinear);
     bool far_only = ctx.dual_factor >= 1.0;
     bool transition = ctx.dual_factor > 0.0 && !far_only;
 
@@ -2312,9 +2605,7 @@ NormalRoughnessSource sample_material_normal_roughness_canonical_v3(int logical_
         far_only ? ctx.far_scale.material_rotation : ctx.near_scale.material_rotation;
     TerrainVTSampleFootprint primary_footprint =
         terrain_vt_prepare_sample_footprint(primary_uv, primary_ddx, primary_ddy, ctx.lod_bias, true,
-            terrain_vt_filter_is_nearest(tier_config.filtering),
-            terrain_vt_filter_is_anisotropic(tier_config.filtering),
-            terrain_vt_filter_is_trilinear(tier_config.filtering));
+            filter_nearest, filter_anisotropic, filter_trilinear);
     TerrainVTDNRPageSetAddress primary_pages = terrain_vt_resolve_material_page_set_dnr_v3(
         layer.micro_vt_allocation, primary_footprint, 0u, need_pbr, require_height);
 
@@ -2330,9 +2621,7 @@ NormalRoughnessSource sample_material_normal_roughness_canonical_v3(int logical_
     if (transition) {
         TerrainVTSampleFootprint far_footprint = terrain_vt_prepare_sample_footprint(
             ctx.far_scale.uv, ctx.far_scale.ddx_uv, ctx.far_scale.ddy_uv, ctx.lod_bias, true,
-            terrain_vt_filter_is_nearest(tier_config.filtering),
-            terrain_vt_filter_is_anisotropic(tier_config.filtering),
-            terrain_vt_filter_is_trilinear(tier_config.filtering));
+            filter_nearest, filter_anisotropic, filter_trilinear);
         TerrainVTDNRPageSetAddress far_pages = terrain_vt_resolve_material_page_set_dnr_v3(
             layer.micro_vt_allocation, far_footprint, 0u, need_pbr, require_height);
         if (require_height) {
@@ -2373,7 +2662,7 @@ NormalRoughnessSource sample_material_normal_roughness(int logical_id,
 #else
     int count = max(int(frame_data.mesh_params.w + 0.5), 1);
     int id = clamp(logical_id, 0, count - 1);
-    MaterialLayer layer = materials[id];
+    MaterialLayer layer = materials[T3D_CLIPMAP_MATERIAL_BASE + id];
 #if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
     // Host publication guarantees these predicates before this family is selected.
     const bool resident = false;
@@ -2412,7 +2701,7 @@ NormalRoughnessSource sample_material_normal_roughness(int logical_id,
         lod_bias = terrain_micro_vt_mip_bias(tier_config);
     }
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-    t3d_vt_fragment_request_allocation_filtered(
+    if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(
         T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
         uv,
         ddx_uv,
@@ -2463,7 +2752,7 @@ NormalRoughnessSource sample_material_normal_roughness(int logical_id,
         dual_far_ddy = far_detile_rotation * dual_far_ddy;
         dual_far_material_rotation = far_detile_rotation * control_rotation;
 #ifdef T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE
-        t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
+        if (t3d_vt_terrain_feedback_needed(uint(id))) t3d_vt_fragment_request_allocation_filtered(T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(uint(id)),
             dual_far_uv,
             dual_far_ddx,
             dual_far_ddy,
@@ -2675,14 +2964,81 @@ DNRControlPairSamples sample_dnr_control_pair_sources(uint sample_key,
     return samples;
 }
 
+// The DNR path carries only tangent normal, roughness and
+// height, permitting a smaller cache than the full-color material source.
+// Feedback-emitting shader versions must publish every original VT request.
+#ifndef T3D_DNR_SOURCE_REUSE
+#define T3D_DNR_SOURCE_REUSE 0
+#endif
+struct T3DDNRSourceReuse {
+    uint key0;
+    uint key1;
+    uint next_slot;
+    NormalRoughnessSource sample0;
+    NormalRoughnessSource sample1;
+};
+
+T3DDNRSourceReuse t3d_dnr_source_reuse_empty() {
+    T3DDNRSourceReuse reuse;
+    reuse.key0 = 0xffffffffu;
+    reuse.key1 = 0xffffffffu;
+    reuse.next_slot = 0u;
+    return reuse;
+}
+
+NormalRoughnessSource t3d_dnr_sample_reusing(inout T3DDNRSourceReuse reuse,
+    int logical_id, uint control_key, vec2 world_xz, ControlSampleState control_state,
+    TierMaterialConfig tier_config, bool use_far_array, bool require_normal, bool require_roughness) {
+#if !T3D_DNR_SOURCE_REUSE || defined(T3D_VT_TERRAIN_FRAGMENT_FEEDBACK_ACTIVE)
+    return sample_material_normal_roughness(logical_id, world_xz, control_state,
+        tier_config, use_far_array, true, require_normal, require_roughness);
+#else
+    // The flags, tier, page generation and world position are fixed across all
+    // sources within this invocation. All pair sources request height.
+    uint identity = (uint(logical_id) & 31u) | (((control_key >> 7u) & 127u) << 5u);
+    if (identity == reuse.key0) return reuse.sample0;
+    if (identity == reuse.key1) return reuse.sample1;
+    NormalRoughnessSource sampled_source = sample_material_normal_roughness(logical_id, world_xz, control_state,
+        tier_config, use_far_array, true, require_normal, require_roughness);
+    if (reuse.next_slot == 0u) {
+        reuse.key0 = identity;
+        reuse.sample0 = sampled_source;
+    } else {
+        reuse.key1 = identity;
+        reuse.sample1 = sampled_source;
+    }
+    reuse.next_slot ^= 1u;
+    return sampled_source;
+#endif
+}
+
+DNRControlPairSamples t3d_dnr_control_pair_reusing(inout T3DDNRSourceReuse reuse,
+    inout T3DControlTransformReuse transform_reuse,
+    uint key, vec2 world_xz, TierMaterialConfig tier_config, bool require_normal, bool require_roughness) {
+    int base_id, overlay_id;
+    uint angle_index;
+    float scale;
+    decode_control_sample_key(key, base_id, overlay_id, angle_index, scale);
+    bool use_far_array = T3D_TIER == 2 && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
+    ControlSampleState control_state = t3d_prepare_control_sample_reusing(transform_reuse, key, scale, angle_index);
+    DNRControlPairSamples samples;
+    samples.same_material = overlay_id == base_id ? 1u : 0u;
+    samples.base = t3d_dnr_sample_reusing(reuse, base_id, key, world_xz,
+        control_state, tier_config, use_far_array, require_normal, require_roughness);
+    samples.overlay = samples.base;
+    if (samples.same_material == 0u) {
+        samples.overlay = t3d_dnr_sample_reusing(reuse, overlay_id, key, world_xz,
+            control_state, tier_config, use_far_array, require_normal, require_roughness);
+    }
+    return samples;
+}
+
 NormalRoughnessMaterial resolve_dnr_control_pair_blend(DNRControlPairSamples samples, float blend) {
     if (samples.same_material != 0u) {
         return normal_roughness_from_source(samples.base);
     }
     float sharpness = fma(60.0, material_config.blend_sharpness, 4.0);
-    float base_weight = pow(max((1.0 - blend) + samples.base.height, 0.00000001), sharpness);
-    float overlay_weight = pow(max(blend + samples.overlay.height, 0.00000001), sharpness);
-    float height_blend = overlay_weight / max(base_weight + overlay_weight, 0.00001);
+    float height_blend = t3d_cs_height_blend(blend, samples.base.height, samples.overlay.height, sharpness);
     NormalRoughnessMaterial result = normal_roughness_zero();
     accumulate_normal_roughness(result, normal_roughness_from_source(samples.base), 1.0 - height_blend);
     accumulate_normal_roughness(result, normal_roughness_from_source(samples.overlay), height_blend);
@@ -2724,15 +3080,35 @@ void accumulate_dnr_control_key_group(inout NormalRoughnessMaterial result,
 }
 
 NormalRoughnessMaterial sample_detailed_material_normal_roughness(
-    vec2 world_texel, vec3 terrain_normal, TierMaterialConfig tier_config, bool require_normal, bool require_roughness) {
+    vec2 world_texel, uint nearest_control, vec3 terrain_normal,
+    TierMaterialConfig tier_config, bool require_normal, bool require_roughness) {
     ivec2 base_texel = ivec2(floor(world_texel));
     if (!use_bilinear_controls(tier_config)) {
-        uint resolved_control = auto_control(read_control(base_texel), terrain_normal, world_position.y, terrain_region_layer < 0);
+        uint resolved_control = auto_control(nearest_control, terrain_normal, world_position.y, terrain_region_layer < 0);
         return sample_resolved_control_pair_normal_roughness(
             resolved_control, world_position.xz, terrain_normal, tier_config, require_normal, require_roughness);
     }
 
-    uint c0 = auto_control(read_control(base_texel), terrain_normal, world_position.y, terrain_region_layer < 0);
+#if T3D_CONTROL_ACTIVE_CORNER_FETCH
+    // The nearest control was read for hole coverage before this path.
+    vec4 weights = corner_weights(world_texel);
+    bool top_two_controls = tier_config.sampling_mode == 5u;
+    if (top_two_controls) weights = select_top_two_control_weights(weights);
+    uint c0 = auto_control(nearest_control, terrain_normal, world_position.y, terrain_region_layer < 0);
+    uint c1 = c0, c2 = c0, c3 = c0;
+    if (!top_two_controls || weights.y > 0.0)
+        c1 = auto_control(read_control(base_texel + ivec2(1, 0)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    if (!top_two_controls || weights.z > 0.0)
+        c2 = auto_control(read_control(base_texel + ivec2(0, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    if (!top_two_controls || weights.w > 0.0)
+        c3 = auto_control(read_control(base_texel + ivec2(1, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    if (c0 == c1 && c0 == c2 && c0 == c3) {
+        return sample_resolved_control_pair_normal_roughness(
+            c0, world_position.xz, terrain_normal, tier_config, require_normal, require_roughness);
+    }
+    ControlBlendSet4 set4 = make_control_blend_set4(c0, c1, c2, c3, weights);
+#else
+    uint c0 = auto_control(nearest_control, terrain_normal, world_position.y, terrain_region_layer < 0);
     uint c1 = auto_control(read_control(base_texel + ivec2(1, 0)), terrain_normal, world_position.y, terrain_region_layer < 0);
     uint c2 = auto_control(read_control(base_texel + ivec2(0, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
     uint c3 = auto_control(read_control(base_texel + ivec2(1, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
@@ -2746,6 +3122,7 @@ NormalRoughnessMaterial sample_detailed_material_normal_roughness(
         weights = select_top_two_control_weights(weights);
     }
     ControlBlendSet4 set4 = make_control_blend_set4(c0, c1, c2, c3, weights);
+#endif
     uint k0 = set4.sample_keys.x;
     uint k1 = set4.sample_keys.y;
     uint k2 = set4.sample_keys.z;
@@ -2778,13 +3155,15 @@ NormalRoughnessMaterial sample_detailed_material_normal_roughness(
         && (!active1 || k1 == key_a || k1 == key_b)
         && (!active2 || k2 == key_a || k2 == key_b)
         && (!active3 || k3 == key_a || k3 == key_b);
+    T3DDNRSourceReuse dnr_reuse = t3d_dnr_source_reuse_empty();
+    T3DControlTransformReuse transform_reuse = t3d_control_transform_reuse_empty();
     if (only_two_keys) {
         NormalRoughnessMaterial result = normal_roughness_zero();
         DNRControlPairSamples samples_a =
-            sample_dnr_control_pair_sources(key_a, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, key_a, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples_a, key_a, set4);
         DNRControlPairSamples samples_b =
-            sample_dnr_control_pair_sources(key_b, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, key_b, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples_b, key_b, set4);
         return result;
     }
@@ -2796,22 +3175,22 @@ NormalRoughnessMaterial sample_detailed_material_normal_roughness(
     NormalRoughnessMaterial result = normal_roughness_zero();
     if (representative0) {
         DNRControlPairSamples samples0 =
-            sample_dnr_control_pair_sources(k0, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, k0, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples0, k0, set4);
     }
     if (representative1) {
         DNRControlPairSamples samples1 =
-            sample_dnr_control_pair_sources(k1, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, k1, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples1, k1, set4);
     }
     if (representative2) {
         DNRControlPairSamples samples2 =
-            sample_dnr_control_pair_sources(k2, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, k2, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples2, k2, set4);
     }
     if (representative3) {
         DNRControlPairSamples samples3 =
-            sample_dnr_control_pair_sources(k3, world_position.xz, tier_config, require_normal, require_roughness);
+            t3d_dnr_control_pair_reusing(dnr_reuse, transform_reuse, k3, world_position.xz, tier_config, require_normal, require_roughness);
         accumulate_dnr_control_key_group(result, samples3, k3, set4);
     }
     return result;
@@ -2845,7 +3224,9 @@ void light_material(vec3 albedo,
         diffuse_ambient = albedo;
         return;
     }
-    float specular_scale = (material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u ? 1.0 - roughness : 0.0;
+    // Roughness is evaluated by the BRDF once: the Blinn gloss term and
+    // GGX distribution already control highlight strength and shape.
+    float specular_scale = (material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u ? 1.0 : 0.0;
     ivec2 shadow_region = ivec2(floor(terrain_world_texel * T3D_REGION_INV_SIZE_F));
     uint shadowmask_mode = region_shadowmask_mode(shadow_region);
     float shadowmask_visibility = shadowmask_mode != 0u ? sample_terrain_shadowmask(terrain_world_texel, terrain_region_layer) : 1.0;
@@ -2870,7 +3251,7 @@ void light_material(vec3 albedo,
     t3d_forward_environment_lighting(albedo, shading_context, roughness, metallic, ao, specular_scale, ambient, environment_specular);
     float direct_ao = mix(1.0, ao, clamp(ao_affect, 0.0, 1.0));
     diffuse_ambient = ambient + direct_diffuse * direct_ao;
-    specular = (direct_specular + environment_specular) * direct_ao;
+    specular = direct_specular * direct_ao + environment_specular;
 #else
     if (tier_config.lighting_model == 0u) {
         diffuse_ambient = albedo;
@@ -2885,16 +3266,47 @@ void light_material(vec3 albedo,
         diffuse_ambient = ambient + diffuse * direct_ao;
         return;
     }
-    vec3 view_dir = normalize(terrain_sampling_context.camera_position - world_position);
-    vec3 half_dir = normalize(light_dir + view_dir);
-    float gloss = max(1.0 - roughness, 0.0);
-    float specular_term = pow(max(dot(normal, half_dir), 0.0), mix(4.0, 128.0, gloss * gloss)) * gloss;
-    if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) == 0u) {
-        specular_term = 0.0;
+    if (tier_config.lighting_model == 2u) {
+        float gloss = max(1.0 - roughness, 0.0);
+        diffuse_ambient = ambient + diffuse * (1.0 - metallic * 0.6) * direct_ao;
+        // P46: the legacy Blinn specular equation is zero for full
+        // roughness or disabled output. Keep its existing backface behavior.
+        if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u && gloss > 0.0) {
+            vec3 view_dir = normalize(terrain_sampling_context.camera_position - world_position);
+            vec3 half_sum = light_dir + view_dir;
+            vec3 half_dir = half_sum * inversesqrt(max(dot(half_sum, half_sum), 1e-8));
+            vec3 specular_color = mix(vec3(0.04), albedo, metallic);
+            float specular_term = pow(max(dot(normal, half_dir), 0.0), mix(4.0, 128.0, gloss * gloss)) * gloss;
+            specular = specular_color * specular_term * frame_data.light_color.rgb * direct_ao;
+        }
+        return;
     }
+    // P46: GGX diffuse and specular both vanish with zero incoming N.L.
+    if (ndotl <= 0.0) {
+        diffuse_ambient = ambient;
+        return;
+    }
+    vec3 view_dir = normalize(terrain_sampling_context.camera_position - world_position);
+    vec3 half_sum = light_dir + view_dir;
+    vec3 half_dir = half_sum * inversesqrt(max(dot(half_sum, half_sum), 1e-8));
     vec3 specular_color = mix(vec3(0.04), albedo, metallic);
-    diffuse_ambient = ambient + diffuse * (1.0 - metallic * 0.6) * direct_ao;
-    specular = specular_color * specular_term * frame_data.light_color.rgb * direct_ao;
+    float nv = max(dot(normal, view_dir), 0.0);
+    float nh = max(dot(normal, half_dir), 0.0);
+    float vh = max(dot(view_dir, half_dir), 0.0);
+    float r = max(clamp(roughness, 0.0, 1.0), 0.045);
+    float alpha = r * r;
+    float a2 = alpha * alpha;
+    float d = nh * nh * (a2 - 1.0) + 1.0;
+    float distribution = a2 / max(3.141592653589793 * d * d, 1e-7);
+    float k = (r + 1.0) * (r + 1.0) * 0.125;
+    float visibility = 0.25 / max((nv * (1.0 - k) + k) * (ndotl * (1.0 - k) + k), 1e-5);
+    float f = pow(1.0 - vh, 5.0);
+    vec3 fresnel = specular_color + (vec3(1.0) - specular_color) * f;
+    vec3 kd = (vec3(1.0) - fresnel) * (1.0 - metallic);
+    diffuse_ambient = ambient + diffuse * kd * (1.0 / 3.141592653589793) * direct_ao;
+    if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u && nv > 0.0) {
+        specular = fresnel * (distribution * visibility) * (frame_data.light_color.rgb * ndotl) * direct_ao;
+    }
 #endif
 }
 vec3 apply_fog(vec3 lit) {
@@ -2943,13 +3355,13 @@ float fractal_contour_lines(
     return mix(mix(line_a, line_b, fract(depth)), line_c, 4.0 * phase * (1.0 - phase));
 }
 
-float editor_reticle(vec2 world_xz, EditorDecal decal) {
-    float camera_distance = clamp(terrain_camera_distance(), 0.001, 4000.0);
-    float sqrt_distance = sqrt(camera_distance);
-    float view_scale = 16.0 / sqrt_distance;
+// View-distance work is shared across every active reticle in the fragment.
+// Rotation is already prepared on the CPU in the editor overlay state.
+float editor_reticle(vec2 world_xz, EditorDecal decal,
+    float view_scale, float sqrt_distance, float log_camera_distance) {
     vec2 cross_uv = (world_xz - decal.transform.xy) * view_scale;
     float brush_radius = max(decal.transform.z * 0.5 * view_scale, 1.0);
-    float line_start = brush_radius + log2(camera_distance);
+    float line_start = brush_radius + log_camera_distance;
     float line_end = 2.5 * line_start;
     float distance_from_center = length(cross_uv);
     float line_thickness = 0.03 * distance_from_center + 0.03 * sqrt_distance;
@@ -2965,23 +3377,39 @@ float editor_reticle(vec2 world_xz, EditorDecal decal) {
 // Their bound overlay buffer still controls brush/reticle visibility at runtime.
 #if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED || defined(T3D_WORLD_RASTER_TERRAIN_STRIP)
 vec3 apply_editor_decals(vec3 color) {
+    bool reticle_constants_ready = false;
+    float reticle_view_scale = 1.0;
+    float reticle_sqrt_distance = 1.0;
+    float reticle_log_distance = 0.0;
     for (int i = 0; i < 3; ++i) {
         EditorDecal decal = editor_overlay.decals[i];
-        if (decal.state.x == 0u) {
+        if (decal.state.x == 0u || (decal.state.y & 3u) == 0u || decal.color.a == 0.0) {
             continue;
         }
-        float size = max(decal.transform.z, 1e-6);
-        float c = cos(decal.transform.w);
-        float sn = sin(decal.transform.w);
-        vec2 local = world_position.xz - decal.transform.xy;
-        vec2 rotated = vec2(c * local.x - sn * local.y, sn * local.x + c * local.y);
-        vec2 decal_uv = rotated / size;
         float mask = 0.0;
-        if (i == 0 && (decal.state.y & 1u) != 0u && abs(decal_uv.x) <= 0.499 && abs(decal_uv.y) <= 0.499) {
-            mask = texture(editor_brush_texture, decal_uv + vec2(0.5)).r;
+        // Only decal 0 can contain a painted brush. Reticle-only overlays
+        // do not need a rotated UV, division, or a texture fetch.
+        if (i == 0 && (decal.state.y & 1u) != 0u) {
+            float size = max(decal.transform.z, 1e-6);
+            float c = uintBitsToFloat(decal.state.z);
+            float sn = uintBitsToFloat(decal.state.w);
+            vec2 local = world_position.xz - decal.transform.xy;
+            vec2 rotated = vec2(c * local.x - sn * local.y, sn * local.x + c * local.y);
+            vec2 decal_uv = rotated / size;
+            if (abs(decal_uv.x) <= 0.499 && abs(decal_uv.y) <= 0.499) {
+                mask = texture(editor_brush_texture, decal_uv + vec2(0.5)).r;
+            }
         }
         if ((decal.state.y & 2u) != 0u) {
-            mask += editor_reticle(world_position.xz, decal);
+            if (!reticle_constants_ready) {
+                float camera_distance = clamp(terrain_camera_distance(), 0.001, 4000.0);
+                reticle_sqrt_distance = sqrt(camera_distance);
+                reticle_view_scale = 16.0 / reticle_sqrt_distance;
+                reticle_log_distance = log2(camera_distance);
+                reticle_constants_ready = true;
+            }
+            mask += editor_reticle(world_position.xz, decal,
+                reticle_view_scale, reticle_sqrt_distance, reticle_log_distance);
         }
         mask = clamp(mask, 0.0, 1.0);
         color = mix(color, decal.color.rgb, mask * mask * decal.color.a);
@@ -2995,7 +3423,8 @@ vec3 apply_editor_decals(vec3 color) {
 #endif
 
 #if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
-vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto) {
+vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto,
+    float instancer_grid_footprint) {
     uint flags = material_config.debug_flags;
     if ((flags & T3D_DEBUG_GREY) != 0u) {
         color = vec3(dot(color, vec3(0.299, 0.587, 0.114)));
@@ -3067,15 +3496,15 @@ vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMateri
         vec2 cell = abs(fract((world_position.xz + cell_size * 0.5) / cell_size) - 0.5) * cell_size;
         float grid_distance = min(cell.x, cell.y);
         float line_thickness = 0.01 * sqrt(max(terrain_camera_distance(), 0.001));
-        float grid_width = fwidth(grid_distance);
+        float grid_width = instancer_grid_footprint;
         float line = 1.0 - smoothstep(line_thickness - grid_width, line_thickness + grid_width, grid_distance);
         color = mix(color, vec3(0.05), line * material_config.editor_overlay_opacity);
     }
     if ((flags & T3D_DEBUG_CONTOURS) != 0u) {
         float interval = max(editor_overlay.heightmap_contour.z, 0.25);
         float thickness = max(editor_overlay.heightmap_contour.w, 0.0);
-        vec3 base_ddx = dFdx(world_position);
-        vec3 base_ddy = dFdy(world_position);
+        vec3 base_ddx = terrain_sampling_context.ddx_position;
+        vec3 base_ddy = terrain_sampling_context.ddy_position;
         vec3 geometric_normal = normalize(cross(base_ddy, base_ddx));
         float contour_line = fractal_contour_lines(
             thickness, interval, world_position, geometric_normal, base_ddx, base_ddy, terrain_sampling_context.camera_position);
@@ -3090,20 +3519,51 @@ vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMateri
 }
 
 #else
-vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto) {
+vec3 debug_visualization(vec3 color, vec4 color_map, uint control, SampledMaterial material, vec3 terrain_normal, bool used_auto,
+    float instancer_grid_footprint) {
     return color;
 }
 #endif
 
+// active-key material sampling: the original representative loop remains the default until an
+// actual Vulkan ISA and rendering A/B gate has accepted the compact path.
+#ifndef T3D_MATERIAL_ACTIVE_KEY_LOOP
+#define T3D_MATERIAL_ACTIVE_KEY_LOOP 0
+#endif
+
 SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_normal,
     TierMaterialConfig tier_config, uint nearest_control, bool outside_region,
-    vec4 far_surface, uint far_bits, out vec4 color_map) {
+    vec4 far_surface, uint far_bits, bool need_authored_color,
+#ifdef T3D_CS_ACTIVE
+    vec2 composed_grad_x, vec2 composed_grad_y,
+#endif
+    out vec4 color_map) {
 #ifdef T3D_RUNTIME_TIER
     uint tier = patch_tier;
 #else
     uint tier = uint(T3D_TIER);
 #endif
+#ifdef T3D_CS_ACTIVE
+    if (tier == 1u && !outside_region && t3d_cs_static_v3_runtime_eligible(tier_config)) {
+        T3DComposedSample composed;
+        if (t3d_cs_sample(world_texel, composed_grad_x, composed_grad_y, composed)) {
+            SampledMaterial result = material_zero();
+            result.albedo = composed.albedo;
+            result.tangent_normal = composed.tangent_normal;
+            result.roughness = composed.roughness;
+            result.ao = composed.ao;
+            result.metallic = composed.metallic;
+            result.ao_affect = composed.ao_affect;
+            // Retain dynamic macro, authored tint and wetness in existing post path.
+            color_map = need_authored_color ? sample_color_map(world_texel, tier_config) : vec4(1.0, 1.0, 1.0, 0.5);
+            return result;
+        }
+    }
+#endif
     bool composite_mode = tier == 1u && t3d_middle_use_composite(tier_config);
+#ifdef T3D_CS_ACTIVE
+    composite_mode = false; // Miss => full detailed evaluation, not legacy RGB-only cache.
+#endif
     bool far_mode = tier == 2u
         ? (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_surface_solid(far_bits)
         : outside_region && far_surface_solid(far_bits);
@@ -3119,9 +3579,32 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
         color_map = vec4(1.0, 1.0, 1.0, float(bits & 0x7Fu) * (1.0 / 127.0));
         return result;
     }
-    bool detailed = tier != 2u && !composite_mode && !far_mode;
+    if (far_mode) {
+        // The far atlas identifies a single material. Skip control-key
+        // construction, four-corner iteration, and source-pair dispatch.
+        color_map = far_surface;
+        color_map.a = far_surface_alpha(far_bits);
+        bool use_far_array = (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
+        return sample_unrotated_material(far_surface_material(far_bits), world_position.xz, tier_config, use_far_array);
+    }
+    bool detailed = tier != 2u && !composite_mode;
     ivec2 base_texel = ivec2(floor(world_texel));
     uint c0 = auto_control(nearest_control, terrain_normal, world_position.y, terrain_region_layer < 0);
+#if T3D_CONTROL_ACTIVE_CORNER_FETCH
+    uint c1 = c0, c2 = c0, c3 = c0;
+    vec4 weights = vec4(1.0, 0.0, 0.0, 0.0);
+    if (detailed && use_bilinear_controls(tier_config)) {
+        weights = corner_weights(world_texel);
+        bool top_two_controls = tier_config.sampling_mode == 5u;
+        if (top_two_controls) weights = select_top_two_control_weights(weights);
+        if (!top_two_controls || weights.y > 0.0)
+            c1 = auto_control(read_control(base_texel + ivec2(1, 0)), terrain_normal, world_position.y, terrain_region_layer < 0);
+        if (!top_two_controls || weights.z > 0.0)
+            c2 = auto_control(read_control(base_texel + ivec2(0, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+        if (!top_two_controls || weights.w > 0.0)
+            c3 = auto_control(read_control(base_texel + ivec2(1, 1)), terrain_normal, world_position.y, terrain_region_layer < 0);
+    }
+#else
     uint c1 = c0, c2 = c0, c3 = c0;
     vec4 weights = vec4(1.0, 0.0, 0.0, 0.0);
     if (detailed && use_bilinear_controls(tier_config)) {
@@ -3131,8 +3614,15 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
         weights = corner_weights(world_texel);
         if (tier_config.sampling_mode == 5u) weights = select_top_two_control_weights(weights);
     }
+#endif
+    if (c0 == c1 && c0 == c2 && c0 == c3) {
+        // Full-control homogeneous regions dominate most painted surfaces.
+        // Resolve the same base/overlay/height blend once without creating
+        // a four-corner work list or dispatching its material loop.
+        color_map = need_authored_color ? sample_color_map(world_texel, tier_config) : vec4(1.0, 1.0, 1.0, 0.5);
+        return sample_resolved_control_pair(c0, world_position.xz, terrain_normal, tier_config);
+    }
     ControlBlendSet4 set4 = make_control_blend_set4(c0, c1, c2, c3, weights);
-    bool homogeneous_control = c0 == c1 && c0 == c2 && c0 == c3;
     bool homogeneous_key = set4.sample_keys.x == set4.sample_keys.y
         && set4.sample_keys.x == set4.sample_keys.z && set4.sample_keys.x == set4.sample_keys.w;
     uint representatives = set4.weights.x > 0.0 ? 1u : 0u;
@@ -3142,37 +3632,57 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
     if (set4.weights.w > 0.0 && (set4.weights.x <= 0.0 || set4.sample_keys.w != set4.sample_keys.x)
         && (set4.weights.y <= 0.0 || set4.sample_keys.w != set4.sample_keys.y)
         && (set4.weights.z <= 0.0 || set4.sample_keys.w != set4.sample_keys.z)) representatives |= 8u;
-    if (far_mode) {
-        color_map = far_surface;
-        color_map.a = far_surface_alpha(far_bits);
-        representatives = 1u;
-    } else {
-        color_map = sample_color_map(world_texel, tier_config);
-    }
+    color_map = need_authored_color ? sample_color_map(world_texel, tier_config) : vec4(1.0, 1.0, 1.0, 0.5);
     SampledMaterial result = material_zero();
-    // Keep the material source graph inside one bounded loop. Expanding one
-    // call per corner multiplies the driver compiler IR and peak memory.
+    // Keep the source cache local to heterogeneous fragments: the fast homogeneous
+    // path above remains allocation-free and unaffected by cache bookkeeping.
+    T3DFragmentSourceReuse source_reuse = t3d_fragment_source_reuse_empty();
+    T3DControlTransformReuse transform_reuse = t3d_control_transform_reuse_empty();
+#if T3D_COLOR_TWO_KEY_SPECIALIZATION
+    // Exactly two distinct active source-pair keys: sample each once,
+    // accumulating in the same ascending-corner order as the loop.
+    if (bitCount(representatives) == 2) {
+        uint first_corner = uint(findLSB(representatives));
+        uint second_corner = uint(findLSB(representatives & (representatives - 1u)));
+        uint first_key = set4.sample_keys[first_corner];
+        uint second_key = set4.sample_keys[second_corner];
+        ControlPairSamples first = t3d_sample_color_pair_reusing(source_reuse, transform_reuse, first_key, world_position.xz, tier_config);
+        accumulate_control_key_group(result, first, first_key, set4);
+        ControlPairSamples second = t3d_sample_color_pair_reusing(source_reuse, transform_reuse, second_key, world_position.xz, tier_config);
+        accumulate_control_key_group(result, second, second_key, set4);
+        return result;
+    }
+#endif
+#if T3D_MATERIAL_ACTIVE_KEY_LOOP
+    uint remaining_representatives = representatives;
+    while (remaining_representatives != 0u) {
+        // findLSB preserves the original ascending-corner accumulation order.
+        uint corner = uint(findLSB(remaining_representatives));
+        remaining_representatives &= remaining_representatives - 1u;
+#else
     [[dont_unroll]] for (uint corner = 0u; corner < 4u; ++corner) {
         if ((representatives & (1u << corner)) == 0u) continue;
+#endif
         uint key = set4.sample_keys[corner];
+#if T3D_MATERIAL_ACTIVE_KEY_LOOP
+        // Same sampling identity/height eligibility as the original 1/2-source
+        // loop. Feedback variants still issue base and overlay in that order.
+        ControlPairSamples samples = t3d_sample_color_pair_reusing(
+            source_reuse, transform_reuse, key, world_position.xz, tier_config);
+#else
         int base_id, overlay_id;
         uint angle_index;
         float scale;
         decode_control_sample_key(key, base_id, overlay_id, angle_index, scale);
-        if (far_mode) {
-            base_id = far_surface_material(far_bits);
-            overlay_id = base_id;
-            scale = 1.0;
-            angle_index = 0u;
-        }
-        bool use_far_array = (far_mode || T3D_TIER == 2) && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
-        ControlSampleState control_state = prepare_control_sample(scale, angle_index);
+        bool use_far_array = (T3D_TIER == 2) && (material_config.feature_flags & T3D_FEATURE_FAR_ALBEDO) != 0u;
+        ControlSampleState control_state = t3d_prepare_control_sample_reusing(transform_reuse, key, scale, angle_index);
         ControlPairSamples samples;
         samples.same_material = overlay_id == base_id ? 1u : 0u;
         uint source_count = samples.same_material != 0u ? 1u : 2u;
         [[dont_unroll]] for (uint source = 0u; source < source_count; ++source) {
-            SampledMaterial sampled = sample_material(source == 0u ? base_id : overlay_id,
-                world_position.xz, control_state, tier_config, use_far_array);
+            SampledMaterial sampled = t3d_sample_material_reusing_source(source_reuse,
+                source == 0u ? base_id : overlay_id, key, world_position.xz,
+                control_state, tier_config, use_far_array, samples.same_material == 0u);
             if (source == 0u) {
                 samples.base = sampled;
                 samples.overlay = sampled;
@@ -3180,18 +3690,59 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
                 samples.overlay = sampled;
             }
         }
-        if (far_mode) return samples.base;
-        if (homogeneous_control) return resolve_control_pair_blend(samples, set4.blends.x);
+#endif
         if (homogeneous_key && samples.same_material != 0u) return samples.base;
         accumulate_control_key_group(result, samples, key, set4);
     }
     return result;
 }
 
+// P02: all material channels are replaced by the surface-mode silhouette.
+// Preserve authored tint/wetness, far-atlas alpha and legacy composite hole
+// coverage. Never take this shortcut in feedback variants, whose texture
+// requests are part of the streaming contract, or in editor/embedded paths.
+#if T3D_SILHOUETTE_FAST_PATH && !defined(T3D_VT_FRAGMENT_FEEDBACK) && !defined(T3D_WORLD_RASTER_EMBEDDED) \
+    && T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL && !defined(T3D_FORWARD_DEPTH)
+#define T3D_SILHOUETTE_FAST_ACTIVE 1
+vec4 t3d_silhouette_color_map(vec2 world_texel, TierMaterialConfig tier_config,
+    bool outside_region, vec4 far_surface, uint far_bits, bool need_authored_color) {
+#ifdef T3D_RUNTIME_TIER
+    uint tier = patch_tier;
+#else
+    uint tier = uint(T3D_TIER);
+#endif
+    bool composite_mode = tier == 1u && t3d_middle_use_composite(tier_config);
+#ifdef T3D_CS_ACTIVE
+    composite_mode = false; // Composed-cache misses follow the detailed path.
+#endif
+    if (composite_mode && terrain_region_layer >= 0) {
+        vec4 composite = sample_middle_composite(world_texel);
+        uint bits = uint(round(clamp(composite.a, 0.0, 1.0) * 255.0));
+        if ((bits & 0x80u) == 0u) discard;
+        return vec4(1.0, 1.0, 1.0, float(bits & 0x7Fu) * (1.0 / 127.0));
+    }
+    bool far_mode = tier == 2u
+        ? (material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_surface_solid(far_bits)
+        : outside_region && far_surface_solid(far_bits);
+    if (far_mode) {
+        vec4 color = far_surface;
+        color.a = far_surface_alpha(far_bits);
+        return color;
+    }
+    return need_authored_color ? sample_color_map(world_texel, tier_config) : vec4(1.0, 1.0, 1.0, 0.5);
+}
+#else
+#define T3D_SILHOUETTE_FAST_ACTIVE 0
+#endif
+
 #ifdef T3D_WORLD_RASTER_EMBEDDED
 void t3d_terrain_fragment_evaluate() {
 #else
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+void t3d_screen_space_shade_fragment() {
+#else
 void main() {
+#endif
 #endif
 #ifdef T3D_RUNTIME_TIER
     TierMaterialConfig tier_config = material_config.tier[min(patch_tier, 2u)];
@@ -3199,18 +3750,62 @@ void main() {
     TierMaterialConfig tier_config = material_config.tier[T3D_TIER];
 #endif
     vec2 world_texel = terrain_world_texel;
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-    vec3 terrain_normal = normalize(world_normal);
-    if (t3d_feature_flat_terrain_normals_enabled() || tier_config.normal_mode == 2u) {
-        terrain_normal = normalize(cross(dFdy(world_position), dFdx(world_position)));
-    } else if (tier_config.normal_mode < 2u) {
-        terrain_normal = apply_fragment_world_noise_normal(terrain_normal, world_texel);
+    float instancer_grid_footprint = 0.0;
+#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED && !defined(T3D_FORWARD_DEPTH)
+    // Uniform debug bit: no derivative-group divergence. Do this before
+    // any fragment coverage discard rather than inside debug_visualization.
+    if ((material_config.debug_flags & T3D_DEBUG_INSTANCER_GRID) != 0u) {
+        float cell_size = max(editor_overlay.instancer_grid.x, 1.0);
+        vec2 cell = abs(fract((world_position.xz + cell_size * 0.5) / cell_size) - 0.5) * cell_size;
+        float grid_distance = min(cell.x, cell.y);
+        instancer_grid_footprint = fwidth(grid_distance);
     }
 #endif
-
-    vec4 far_surface = sample_far_surface(world_texel);
-    uint far_bits = decode_far_surface_bits(far_surface.a);
+#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS) || (defined(T3D_SCREEN_SPACE_COVERAGE_PASS) && T3D_SCREEN_SPACE_COVERAGE_PASS)
+    // Screen-space shading consumes derivatives captured by the geometry pass,
+    // avoiding quad derivatives across depth/disocclusion boundaries.
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+    vec3 world_ddx = t3d_screen_space_world_ddx;
+    vec3 world_ddy = t3d_screen_space_world_ddy;
+#else
+    vec3 world_ddx = dFdx(world_position);
+    vec3 world_ddy = dFdy(world_position);
+#endif
+#if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_ONE_SUN) && !defined(T3D_WORLD_RASTER_EMBEDDED)
+    t3d_forward_decal_view_ddx = mat3(frame_data.view_matrix) * world_ddx;
+    t3d_forward_decal_view_ddy = mat3(frame_data.view_matrix) * world_ddy;
+#endif
+#endif
+#if defined(T3D_CS_ACTIVE) && (!defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS))
+    // Derivatives must be computed before control holes, tier selection and
+    // resident/missing page branches introduce non-uniform fragment flow.
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+    vec2 t3d_cs_world_grad_x = t3d_screen_space_texel_ddx;
+    vec2 t3d_cs_world_grad_y = t3d_screen_space_texel_ddy;
+#else
+    vec2 t3d_cs_world_grad_x = dFdx(world_texel);
+    vec2 t3d_cs_world_grad_y = dFdy(world_texel);
+#endif
+#endif
+#if defined(T3D_SCREEN_SPACE_COVERAGE_PASS) && T3D_SCREEN_SPACE_COVERAGE_PASS
+    // Capture derivatives before any terrain-coverage discard.
+    vec2 screen_space_texel_dx = dFdx(world_texel);
+    vec2 screen_space_texel_dy = dFdy(world_texel);
+#endif
     bool outside_region = terrain_region_layer < 0;
+    // An occupied near/middle region cannot consume the far atlas. Avoid an
+    // extra texelFetch on every covered pixel in the depth and color passes.
+    bool need_far_surface = outside_region;
+#ifdef T3D_RUNTIME_TIER
+    need_far_surface = need_far_surface || patch_tier == 2u;
+#elif T3D_TIER == 2
+    need_far_surface = true;
+#endif
+    vec4 far_surface = vec4(1.0, 1.0, 1.0, 0.0);
+    if (need_far_surface) {
+        far_surface = sample_far_surface(world_texel);
+    }
+    uint far_bits = decode_far_surface_bits(far_surface.a);
     if (outside_region && material_config.background_mode == 0u && !far_surface_solid(far_bits)) {
         discard;
     }
@@ -3220,13 +3815,29 @@ void main() {
         discard;
     }
 
+#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+    // Coverage is resolved before procedural world-normal noise. Gradients
+    // are still captured at the top of the fragment before any discard.
+    vec3 terrain_normal = normalize(world_normal);
+    if (t3d_feature_flat_terrain_normals_enabled() || tier_config.normal_mode == 2u) {
+        terrain_normal = normalize(cross(world_ddy, world_ddx));
+    } else if (tier_config.normal_mode < 2u) {
+        terrain_normal = apply_fragment_world_noise_normal(terrain_normal, world_texel);
+    }
+#endif
+
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
 #if T3D_TIER == 1 || defined(T3D_RUNTIME_TIER)
     if (
 #ifdef T3D_RUNTIME_TIER
         patch_tier == 1u &&
 #endif
-        t3d_middle_use_composite(tier_config) && terrain_region_layer >= 0) {
+        t3d_middle_use_composite(tier_config) && terrain_region_layer >= 0
+#ifndef T3D_CS_ACTIVE
+        ) {
+#else
+        && false) {
+#endif
         vec4 depth_composite = sample_middle_composite(world_texel);
         uint depth_composite_bits = uint(round(clamp(depth_composite.a, 0.0, 1.0) * 255.0));
         if ((depth_composite_bits & 0x80u) == 0u) {
@@ -3234,16 +3845,49 @@ void main() {
         }
     }
 #endif
+#if defined(T3D_SCREEN_SPACE_COVERAGE_PASS) && T3D_SCREEN_SPACE_COVERAGE_PASS
+    // Five unfiltered float render targets retain the exact interpolated
+    // geometry values and derivatives for later single-sample shading.
+    // Attachment 0.w doubles as a signed region layer / coverage marker;
+    // the visibility framebuffer clears it to -2 (valid region >= -1).
+    t3d_screen_space_position_region = vec4(world_position, float(terrain_region_layer));
+    t3d_screen_space_normal_tier = vec4(world_normal, float(patch_tier));
+    t3d_screen_space_texel_dx = vec4(world_texel, screen_space_texel_dx);
+    t3d_screen_space_texel_dy_world_dx = vec4(screen_space_texel_dy, world_ddx.xy);
+    t3d_screen_space_world_dxz_dy = vec4(world_ddx.z, world_ddy);
+    return;
+#endif
 #elif defined(T3D_FORWARD_DEPTH) && defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     // GPU-P05: the normal/roughness prepass owns a dedicated material path.
     // It preserves material selection, height blending and surface response,
     // but does not reconstruct albedo/AO/metallic or execute lighting/debug work.
-    terrain_sampling_context_init(terrain_normal, tier_config);
+    terrain_sampling_context_init(terrain_normal, tier_config, world_ddx, world_ddy);
     bool require_normal = t3d_dnr_require_normal(tier_config);
     bool require_roughness = t3d_dnr_require_roughness();
     float wetness_alpha = 0.5;
     NormalRoughnessMaterial nr_material = normal_roughness_zero();
-
+    bool composed_hit = false;
+#ifdef T3D_CS_ACTIVE
+#ifdef T3D_RUNTIME_TIER
+    bool composed_eligible = patch_tier == 1u;
+#else
+    bool composed_eligible = T3D_TIER == 1;
+#endif
+    if (composed_eligible && !outside_region && t3d_cs_static_v3_runtime_eligible(tier_config)) {
+        vec3 composed_normal;
+        float composed_roughness;
+        if (t3d_cs_sample_normal_roughness(world_texel, t3d_cs_world_grad_x, t3d_cs_world_grad_y,
+                                           require_normal, require_roughness,
+                                           composed_normal, composed_roughness)) {
+            nr_material.tangent_normal = composed_normal;
+            nr_material.roughness = composed_roughness;
+            if (require_roughness && tier_config.wetness_contribution > 0.0)
+                wetness_alpha = sample_color_map(world_texel, tier_config).a;
+            composed_hit = true;
+        }
+    }
+#endif
+    if (!composed_hit) {
 #ifdef T3D_RUNTIME_TIER
     if (patch_tier == 2u) {
         if ((material_config.feature_flags & T3D_FEATURE_FAR_ATLAS) != 0u && far_surface_solid(far_bits)) {
@@ -3262,7 +3906,7 @@ void main() {
             if (require_roughness && tier_config.wetness_contribution > 0.0)
                 wetness_alpha = sample_color_map(world_texel, tier_config).a;
         }
-    } else if (patch_tier == 1u && t3d_middle_use_composite(tier_config)) {
+    } else if (patch_tier == 1u && T3D_CS_LEGACY_COMPOSITE_OK && t3d_middle_use_composite(tier_config)) {
         if (terrain_region_layer >= 0) {
             vec4 nr_composite = sample_middle_composite(world_texel);
             uint composite_bits = uint(round(clamp(nr_composite.a, 0.0, 1.0) * 255.0));
@@ -3297,7 +3941,7 @@ void main() {
         wetness_alpha = far_surface_alpha(far_bits);
     } else {
         nr_material =
-            sample_detailed_material_normal_roughness(world_texel, terrain_normal, tier_config, require_normal, require_roughness);
+            sample_detailed_material_normal_roughness(world_texel, nearest_control, terrain_normal, tier_config, require_normal, require_roughness);
         if (require_roughness && tier_config.wetness_contribution > 0.0)
             wetness_alpha = sample_color_map(world_texel, tier_config).a;
     }
@@ -3321,7 +3965,7 @@ void main() {
         }
     }
 #elif T3D_TIER == 1
-    if (t3d_middle_use_composite(tier_config)) {
+    if (T3D_CS_LEGACY_COMPOSITE_OK && t3d_middle_use_composite(tier_config)) {
         if (terrain_region_layer >= 0) {
             vec4 nr_composite = sample_middle_composite(world_texel);
             uint composite_bits = uint(round(clamp(nr_composite.a, 0.0, 1.0) * 255.0));
@@ -3358,7 +4002,7 @@ void main() {
         wetness_alpha = far_surface_alpha(far_bits);
     } else {
         nr_material =
-            sample_detailed_material_normal_roughness(world_texel, terrain_normal, tier_config, require_normal, require_roughness);
+            sample_detailed_material_normal_roughness(world_texel, nearest_control, terrain_normal, tier_config, require_normal, require_roughness);
         if (require_roughness && tier_config.wetness_contribution > 0.0) {
             wetness_alpha = sample_color_map(world_texel, tier_config).a;
         }
@@ -3374,7 +4018,7 @@ void main() {
         wetness_alpha = far_surface_alpha(far_bits);
     } else {
         nr_material =
-            sample_detailed_material_normal_roughness(world_texel, terrain_normal, tier_config, require_normal, require_roughness);
+            sample_detailed_material_normal_roughness(world_texel, nearest_control, terrain_normal, tier_config, require_normal, require_roughness);
         if (require_roughness && tier_config.wetness_contribution > 0.0) {
             wetness_alpha = sample_color_map(world_texel, tier_config).a;
         }
@@ -3382,18 +4026,21 @@ void main() {
 #endif
 #endif
 
-    nr_material.tangent_normal = normalize(nr_material.tangent_normal + vec3(0.0, 0.00001, 0.0));
-    nr_material.roughness = clamp(nr_material.roughness, 0.0, 1.0);
+    } // Detailed fallback / legacy composite, when composed sampling misses.
 
-    // MegaVT stores tint and authored alpha, not another material normal/roughness.
+    // P56: the DNR pass can independently disable normal/roughness output.
+    // Do not normalize a tangent that will be overwritten or never used.
     if (tier_config.texture_surface_mode == 1u) {
         nr_material.roughness = 1.0;
         nr_material.tangent_normal = vec3(0.0, 1.0, 0.0);
+    } else if (require_normal) {
+        nr_material.tangent_normal = normalize(nr_material.tangent_normal + vec3(0.0, 0.00001, 0.0));
     }
 
     if (require_roughness) {
+        nr_material.roughness = clamp(nr_material.roughness, 0.0, 1.0);
         vec4 cooked_macro;
-        if (sample_megavt_macro(cooked_macro)) wetness_alpha = cooked_macro.a;
+        if (sample_megavt_macro(cooked_macro, false, world_ddx.xz, world_ddy.xz)) wetness_alpha = cooked_macro.a;
         nr_material.roughness = apply_authored_roughness(nr_material.roughness, wetness_alpha, tier_config);
     } else {
         nr_material.roughness = 1.0;
@@ -3410,22 +4057,108 @@ void main() {
 #endif
 #else
 
-terrain_sampling_context_init(terrain_normal, tier_config);
+#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED \
+    && !defined(T3D_FORWARD_SPECULAR) && !defined(T3D_FORWARD_MOTION) \
+    && !defined(T3D_VT_FRAGMENT_FEEDBACK) && !defined(T3D_WORLD_RASTER_EMBEDDED)
+// Exclusive diagnostic modes replace the entire lit color and do not use
+// material channels. Overlay, fog and coverage must still execute normally.
+const uint exclusive_debug_modes = T3D_DEBUG_CHECKERED | T3D_DEBUG_HEIGHTMAP | T3D_DEBUG_JAGGEDNESS
+    | T3D_DEBUG_AUTOSHADER | T3D_DEBUG_CONTROL_TEXTURE | T3D_DEBUG_CONTROL_BLEND
+    | T3D_DEBUG_CONTROL_ANGLE | T3D_DEBUG_CONTROL_SCALE | T3D_DEBUG_DISPLACEMENT;
+uint debug_modes = material_config.debug_flags;
+#if !defined(T3D_WORLD_RASTER_EMBEDDED)
+if (t3d_editor_diagnostic_class == 1u) {
+    float black_height = editor_overlay.heightmap_contour.x;
+    float white_height = editor_overlay.heightmap_contour.y;
+    float low_height = min(black_height, white_height);
+    float high_height = max(black_height, white_height);
+    float normalized_height = clamp((world_position.y - low_height) / max(high_height - low_height, 1e-6), 0.0, 1.0);
+    normalized_height = mix(normalized_height, 1.0 - normalized_height, float(white_height < black_height));
+    vec3 diagnostic = vec3(smoothstep(0.0, 1.0, normalized_height));
+    out_color = vec4(apply_fog(diagnostic), 1.0);
+    return;
+}
+if (t3d_editor_diagnostic_class == 2u) {
+    vec3 diagnostic = vec3(float((nearest_control >> 27u) & 0x1Fu) / 31.0,
+        float((nearest_control >> 22u) & 0x1Fu) / 31.0, float(nearest_control & 0xFFu) / 255.0);
+    out_color = vec4(apply_fog(diagnostic), 1.0);
+    return;
+}
+#endif
+if (debug_modes != 0u && (debug_modes & ~exclusive_debug_modes) == 0u) {
+    bool diagnostic_auto = t3d_feature_auto_shader_enabled() && (outside_region || (nearest_control & 1u) != 0u);
+    vec3 diagnostic = debug_visualization(vec3(0.0), vec4(1.0), nearest_control,
+        material_zero(), terrain_normal, diagnostic_auto, instancer_grid_footprint);
+    out_color = vec4(apply_fog(apply_editor_decals(diagnostic)), 1.0);
+    return;
+}
+#endif
+
+terrain_sampling_context_init(terrain_normal, tier_config, world_ddx, world_ddy);
 bool used_auto = t3d_feature_auto_shader_enabled() && (outside_region || (nearest_control & 1u) != 0u);
 vec4 color_map = vec4(1.0);
 SampledMaterial material = material_zero();
 
-material = sample_color_material_shared(world_texel, terrain_normal, tier_config, nearest_control, outside_region, far_surface, far_bits, color_map);
+// Neutral authored tint and wetness have no dependency on
+// the color texture. Keep the editor COLORMAP diagnostic's exact sampling.
+bool need_authored_color = tier_config.authored_color_contribution > 0.0
+    || tier_config.wetness_contribution > 0.0;
+#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+need_authored_color = need_authored_color || (material_config.debug_flags & T3D_DEBUG_COLORMAP) != 0u;
+#endif
+vec4 cooked_macro = vec4(1.0, 1.0, 1.0, 0.5);
+#if T3D_MEGAVT_EARLY_COLOR_OVERRIDE
+// P68 (opt-in): resolve the overriding color before the authored lookup.
+// This reorders read-only MegaVT page sampling but preserves source feedback
+// emission and the original fallback on missing or stale pages.
+bool cooked_macro_valid = need_authored_color
+    && sample_megavt_macro(cooked_macro, true, world_ddx.xz, world_ddy.xz);
+bool sample_authored_color = need_authored_color && !cooked_macro_valid;
+#else
+bool sample_authored_color = need_authored_color;
+#endif
+#if T3D_SILHOUETTE_FAST_ACTIVE && T3D_SILHOUETTE_FAST_PATH == 2
+// Only for draws whose entire tier uses silhouette surface mode.
+color_map = t3d_silhouette_color_map(world_texel, tier_config,
+    outside_region, far_surface, far_bits, sample_authored_color);
+#else
+#if T3D_SILHOUETTE_FAST_ACTIVE
+if (tier_config.texture_surface_mode == 1u) {
+    color_map = t3d_silhouette_color_map(world_texel, tier_config,
+        outside_region, far_surface, far_bits, sample_authored_color);
+} else
+#endif
+{
+    material = sample_color_material_shared(world_texel, terrain_normal, tier_config,
+        nearest_control, outside_region, far_surface, far_bits, sample_authored_color,
+#ifdef T3D_CS_ACTIVE
+        t3d_cs_world_grad_x, t3d_cs_world_grad_y,
+#endif
+        color_map);
+}
+#endif
 
 // P10: color-path control weights are normalized before accumulation, so
 // the final material no longer carries or divides by a running weight.
-material.tangent_normal = normalize(material.tangent_normal + vec3(0.0, 0.00001, 0.0));
+// P56: the color fragment needs this normalization only when the authored
+// material normal is actually consumed. Editor TEX_NORMAL also reads it.
+bool need_material_tangent = (material_config.output_flags & T3D_OUTPUT_NORMAL) != 0u
+    && tier_config.surface_response != 0u;
+#if T3D_TERRAIN_SHADER_PATH == T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED
+need_material_tangent = need_material_tangent || (material_config.debug_flags & T3D_DEBUG_TEX_NORMAL) != 0u;
+#endif
+if (tier_config.texture_surface_mode != 1u && need_material_tangent) {
+    material.tangent_normal = normalize(material.tangent_normal + vec3(0.0, 0.00001, 0.0));
+}
 material.roughness = clamp(material.roughness, 0.0, 1.0);
 material.ao = clamp(material.ao, 0.0, 1.0);
 material.metallic = clamp(material.metallic, 0.0, 1.0);
 
-vec4 cooked_macro;
-if (sample_megavt_macro(cooked_macro)) color_map = cooked_macro;
+#if T3D_MEGAVT_EARLY_COLOR_OVERRIDE
+if (cooked_macro_valid) color_map = cooked_macro;
+#else
+if (need_authored_color && sample_megavt_macro(cooked_macro, true, world_ddx.xz, world_ddy.xz)) color_map = cooked_macro;
+#endif
 
 if (tier_config.texture_surface_mode == 1u) {
     material.albedo = vec3(material_config.silhouette_r, material_config.silhouette_g, material_config.silhouette_b);
@@ -3437,6 +4170,10 @@ if (tier_config.texture_surface_mode == 1u) {
 
 material.albedo = apply_macro_variation(material.albedo, world_texel, terrain_normal);
 material.albedo *= mix(vec3(1.0), color_map.rgb, clamp(tier_config.authored_color_contribution, 0.0, 1.0));
+float wetness = max(authored_wetness_offset(color_map.a, tier_config), 0.0);
+// Water in porous terrain darkens the diffuse substrate; roughness provides
+// the glossy response. Neutral paint alpha (0.5) remains an exact no-op.
+material.albedo *= 1.0 - 0.28 * wetness;
 material.roughness = apply_authored_roughness(material.roughness, color_map.a, tier_config);
 
 vec3 final_normal = terrain_normal;
@@ -3488,14 +4225,16 @@ light_material(material.albedo,
     diffuse_ambient,
     specular);
 #ifdef T3D_FORWARD_NATIVE_LIGHTING
-specular +=
-    t3d_forward_reflection(shading_context, material.roughness, material.metallic, material.albedo, t3d_forward_light_frame.scene_params.y);
+if ((material_config.output_flags & T3D_OUTPUT_SPECULAR) != 0u) {
+    specular += material.ao * t3d_forward_reflection(shading_context,
+        material.roughness, material.metallic, material.albedo, t3d_forward_light_frame.scene_params.y);
+}
 #endif
 vec3 lit = diffuse_ambient + scene_emission;
 #ifndef T3D_FORWARD_SPECULAR
 lit += specular;
 #endif
-lit = debug_visualization(lit, color_map, nearest_control, material, terrain_normal, used_auto);
+lit = debug_visualization(lit, color_map, nearest_control, material, terrain_normal, used_auto, instancer_grid_footprint);
 lit = apply_editor_decals(lit);
 out_color = vec4(apply_fog(lit), 1.0);
 #ifdef T3D_FORWARD_SPECULAR

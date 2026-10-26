@@ -11,18 +11,14 @@
 using namespace godot;
 #endif
 
-// t3dInstanceMutationFlags_e centralized in Terrain3DTypes.h.
-
-
-typedef struct t3dInstanceMutationEvent_s {
-
+typedef struct t3dInstanceMutationEvent_s
+{
 	Vector2i m_region = Vector2i( INT32_MAX, INT32_MAX );
 	Vector2i m_cell = Vector2i( INT32_MAX, INT32_MAX );
-	int32_t m_nMeshId = -1;
+	int32_t	 m_nMeshId = -1;
 	uint32_t m_nSourceRevision = 0u;
 	uint32_t m_nFlags = T3D_INSTANCE_MUTATION_NONE;
 	uint64_t m_nGeneration = 0u;
 } t3dInstanceMutationEvent_t;
-
 
 #endif // TERRAIN3D_INSTANCE_MUTATION_H

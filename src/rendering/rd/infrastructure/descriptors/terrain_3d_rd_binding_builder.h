@@ -7,8 +7,11 @@
 class Terrain3DRdBindingBuilder
 {
 public:
-	static godot::Ref<godot::RDUniform> single( int nBinding, godot::RenderingDevice::UniformType type, const godot::RID &rRid ) {
-		godot::Ref<godot::RDUniform> uniform;
+	static godot::Ref< godot::RDUniform > single(
+		int									nBinding,
+		godot::RenderingDevice::UniformType type,
+		const godot::RID				   &rRid ) {
+		godot::Ref< godot::RDUniform > uniform;
 		uniform.instantiate();
 		uniform->set_uniform_type( type );
 		uniform->set_binding( nBinding );
@@ -16,19 +19,25 @@ public:
 		return uniform;
 	}
 
-	static godot::Ref<godot::RDUniform> samplerTexture( int nBinding,
-	        const godot::RID &rSampler,
-	        const godot::RID &rTexture ) {
-		godot::Ref<godot::RDUniform> uniform = single( nBinding, godot::RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, rSampler );
+	static godot::Ref< godot::RDUniform > samplerTexture(
+		int				  nBinding,
+		const godot::RID &rSampler,
+		const godot::RID &rTexture ) {
+		godot::Ref< godot::RDUniform > uniform =
+			single( nBinding, godot::RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, rSampler );
 		uniform->add_id( rTexture );
 		return uniform;
 	}
 
-	static godot::Ref<godot::RDUniform> storage( int nBinding, const godot::RID &rBuffer ) {
+	static godot::Ref< godot::RDUniform > storage(
+		int				  nBinding,
+		const godot::RID &rBuffer ) {
 		return single( nBinding, godot::RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rBuffer );
 	}
 
-	static godot::Ref<godot::RDUniform> image( int nBinding, const godot::RID &rTexture ) {
+	static godot::Ref< godot::RDUniform > image(
+		int				  nBinding,
+		const godot::RID &rTexture ) {
 		return single( nBinding, godot::RenderingDevice::UNIFORM_TYPE_IMAGE, rTexture );
 	}
 };

@@ -33,11 +33,17 @@ var rmb_release_time: int = 0
 
 @abstract func open_shader_performance() -> void
 
+@abstract func open_terrain_settings() -> void
+
+@abstract func open_runtime_dataset_cook_confirmation() -> void
+
 @abstract func open_autoshader_baker() -> void
 
 @abstract func open_region_lightmap_baker() -> void
 
 @abstract func open_hlod_panel() -> void
+
+@abstract func convert_selected_to_region_streaming() -> void
 
 @abstract func convert_selected_to_hlod_visual(_p_min_level: int = 1) -> void
 

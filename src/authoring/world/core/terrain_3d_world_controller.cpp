@@ -16,48 +16,95 @@
 
 using namespace godot;
 
-static uint32_t t3dWorldCapacityFromBytes( const uint64_t nBytes, const uint32_t nStride ) {
-	if ( nStride == 0u || nBytes > UINT32_MAX * ( uint64_t )( nStride ) ) {
+static uint32_t t3dWorldCapacityFromBytes(
+	const uint64_t nBytes,
+	const uint32_t nStride ) {
+	if ( nStride == 0u || nBytes > UINT32_MAX * ( uint64_t ) ( nStride ) ) {
 		return 0u;
 	}
-	return ( uint32_t )( nBytes / nStride );
+	return ( uint32_t ) ( nBytes / nStride );
 }
 
-Terrain3DWorldController::~Terrain3DWorldController( void ) {
+Terrain3DWorldController::~Terrain3DWorldController(
+	void ) {
 	releasePublishedSceneCold();
 	releaseAuthoringImageCold();
 }
 
-void Terrain3DWorldController::_bind_methods( void ) {
-
+void Terrain3DWorldController::_bind_methods(
+	void ) {
 	ClassDB::bind_method( D_METHOD( "request_cold_rebuild" ), &Terrain3DWorldController::requestColdRebuild );
 	ClassDB::bind_method( D_METHOD( "release_world_ownership" ), &Terrain3DWorldController::releaseWorldOwnership );
-	ClassDB::bind_method(
-	        D_METHOD( "get_last_build_stats_reference_debug" ), &Terrain3DWorldController::getLastBuildStatsReferenceDebug );
-	ClassDB::bind_method(
-	        D_METHOD( "get_backend_status_reference_debug" ), &Terrain3DWorldController::getBackendStatusReferenceDebug );
+	ClassDB::bind_method( D_METHOD( "get_last_build_stats_reference_debug" ),
+						  &Terrain3DWorldController::getLastBuildStatsReferenceDebug );
+	ClassDB::bind_method( D_METHOD( "get_backend_status_reference_debug" ),
+						  &Terrain3DWorldController::getBackendStatusReferenceDebug );
 
 	ADD_GROUP( "World", "" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setEnabled, isEnabled, "enabled",
-	                   PropertyInfo( Variant::BOOL, "enabled" ), "set_enabled", "is_enabled" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setMode, getMode, "mode",
-	                   PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Explicit,Eligible Scene,Full Static Scene" ), "set_mode", "get_mode" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setDefaultProfile, getDefaultProfile, "profile",
-	                   PropertyInfo( Variant::OBJECT, "default_profile", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DWorldImportProfile" ), "set_default_profile", "get_default_profile" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setCellSize, getCellSize, "cell_size",
-	                   PropertyInfo( Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "4,256,1,suffix:m" ), "set_cell_size", "get_cell_size" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setAutoRebuildOnReady, isAutoRebuildOnReady, "enabled",
-	                   PropertyInfo( Variant::BOOL, "auto_rebuild_on_ready" ), "set_auto_rebuild_on_ready", "is_auto_rebuild_on_ready" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController,
+					   setEnabled,
+					   isEnabled,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "enabled" ),
+					   "set_enabled",
+					   "is_enabled" );
+	T3D_BIND_PROPERTY(
+		Terrain3DWorldController,
+		setMode,
+		getMode,
+		"mode",
+		PropertyInfo( Variant::INT, "mode", PROPERTY_HINT_ENUM, "Disabled,Explicit,Eligible Scene,Full Static Scene" ),
+		"set_mode",
+		"get_mode" );
+	T3D_BIND_PROPERTY(
+		Terrain3DWorldController,
+		setDefaultProfile,
+		getDefaultProfile,
+		"profile",
+		PropertyInfo( Variant::OBJECT, "default_profile", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DWorldImportProfile" ),
+		"set_default_profile",
+		"get_default_profile" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController,
+					   setCellSize,
+					   getCellSize,
+					   "cell_size",
+					   PropertyInfo( Variant::FLOAT, "cell_size", PROPERTY_HINT_RANGE, "4,256,1,suffix:m" ),
+					   "set_cell_size",
+					   "get_cell_size" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController,
+					   setAutoRebuildOnReady,
+					   isAutoRebuildOnReady,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "auto_rebuild_on_ready" ),
+					   "set_auto_rebuild_on_ready",
+					   "is_auto_rebuild_on_ready" );
 	ADD_GROUP( "Compatibility Ingress", "convert_" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertMeshInstances, isConvertMeshInstances, "enabled",
-	                   PropertyInfo( Variant::BOOL, "convert_mesh_instances" ), "set_convert_mesh_instances", "is_convert_mesh_instances" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertDynamicObjects, isConvertDynamicObjects, "enabled",
-	                   PropertyInfo( Variant::BOOL, "convert_dynamic_objects", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ), "set_convert_dynamic_objects", "is_convert_dynamic_objects" );
-	T3D_BIND_PROPERTY( Terrain3DWorldController, setConvertHiddenObjects, isConvertHiddenObjects, "enabled",
-	                   PropertyInfo( Variant::BOOL, "convert_hidden_objects" ), "set_convert_hidden_objects", "is_convert_hidden_objects" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController,
+					   setConvertMeshInstances,
+					   isConvertMeshInstances,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "convert_mesh_instances" ),
+					   "set_convert_mesh_instances",
+					   "is_convert_mesh_instances" );
+	T3D_BIND_PROPERTY(
+		Terrain3DWorldController,
+		setConvertDynamicObjects,
+		isConvertDynamicObjects,
+		"enabled",
+		PropertyInfo( Variant::BOOL, "convert_dynamic_objects", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+		"set_convert_dynamic_objects",
+		"is_convert_dynamic_objects" );
+	T3D_BIND_PROPERTY( Terrain3DWorldController,
+					   setConvertHiddenObjects,
+					   isConvertHiddenObjects,
+					   "enabled",
+					   PropertyInfo( Variant::BOOL, "convert_hidden_objects" ),
+					   "set_convert_hidden_objects",
+					   "is_convert_hidden_objects" );
 }
 
-void Terrain3DWorldController::_notification( const int32_t nWhat ) {
+void Terrain3DWorldController::_notification(
+	const int32_t nWhat ) {
 	if ( nWhat == NOTIFICATION_INTERNAL_PROCESS ) {
 		completePublishedSceneCold();
 		return;
@@ -73,7 +120,7 @@ void Terrain3DWorldController::_notification( const int32_t nWhat ) {
 	if ( nWhat == NOTIFICATION_ENTER_TREE ) {
 		bindNearestTerrainCold();
 	} else if ( nWhat == NOTIFICATION_READY ) {
-		if ( m_bAutoRebuildOnReady && m_bEnabled && m_iMode != ( int32_t )( T3D_WORLD_MODE_DISABLED ) ) {
+		if ( m_bAutoRebuildOnReady && m_bEnabled && m_iMode != ( int32_t ) ( T3D_WORLD_MODE_DISABLED ) ) {
 			requestColdRebuild();
 		}
 	} else if ( nWhat == NOTIFICATION_EXIT_TREE ) {
@@ -82,11 +129,12 @@ void Terrain3DWorldController::_notification( const int32_t nWhat ) {
 	}
 }
 
-bool Terrain3DWorldController::bindNearestTerrainCold( void ) {
+bool Terrain3DWorldController::bindNearestTerrainCold(
+	void ) {
 	Terrain3D *pTerrain = NULL;
-	Node *pNode = get_parent();
+	Node	  *pNode = get_parent();
 	while ( pNode ) {
-		pTerrain = Object::cast_to<Terrain3D>( pNode );
+		pTerrain = Object::cast_to< Terrain3D >( pNode );
 		if ( pTerrain ) {
 			break;
 		}
@@ -114,9 +162,11 @@ bool Terrain3DWorldController::bindNearestTerrainCold( void ) {
 }
 
 bool Terrain3DWorldController::publishAutoSceneCold(
-        void *const pUser, const t3dWorldSceneBuildBuffers_t &rBuffers, const t3dWorldSceneBuildStats_t &rStats ) {
-	( void )( rStats );
-	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * )( pUser );
+	void *const						   pUser,
+	const t3dWorldSceneBuildBuffers_t &rBuffers,
+	const t3dWorldSceneBuildStats_t	  &rStats ) {
+	( void ) ( rStats );
+	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * ) ( pUser );
 	if ( !pSelf || !pSelf->m_pCoordinator || !rBuffers.pGeometry || !rBuffers.pTransforms ) {
 		return false;
 	}
@@ -133,12 +183,15 @@ bool Terrain3DWorldController::publishAutoSceneCold(
 	if ( !Terrain3DWorldStaticBuilder::buildCold( source, pSelf->m_AuthoringWorldPublication ) ) {
 		return false;
 	}
-	return pSelf->m_pCoordinator->publishStaticWorldCold( ( uint64_t )pSelf->get_instance_id(), pSelf->m_AuthoringWorldPublication );
+	return pSelf->m_pCoordinator->publishStaticWorldCold( ( uint64_t ) pSelf->get_instance_id(),
+														  pSelf->m_AuthoringWorldPublication );
 }
 
 bool Terrain3DWorldController::resolveAutoMaterialVtCold(
-        void *const pUser, const uint64_t nStableMaterialKey, uint32_t &rAllocationId ) {
-	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * )( pUser );
+	void *const	   pUser,
+	const uint64_t nStableMaterialKey,
+	uint32_t	  &rAllocationId ) {
+	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * ) ( pUser );
 	if ( !pSelf || !pSelf->m_pCoordinator ) {
 		rAllocationId = T3D_VT_INVALID_ALLOCATION;
 		return false;
@@ -146,20 +199,23 @@ bool Terrain3DWorldController::resolveAutoMaterialVtCold(
 	return pSelf->m_pCoordinator->resolveVirtualTextureMaterialAllocationCold( nStableMaterialKey, rAllocationId );
 }
 
-bool Terrain3DWorldController::isAutoSceneReadyCold( void *const pUser ) {
-	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * )( pUser );
-	return pSelf && pSelf->m_pCoordinator
-	        && pSelf->m_pCoordinator->isStaticWorldReadyCold( ( uint64_t )pSelf->get_instance_id() );
+bool Terrain3DWorldController::isAutoSceneReadyCold(
+	void *const pUser ) {
+	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * ) ( pUser );
+	return pSelf && pSelf->m_pCoordinator &&
+		   pSelf->m_pCoordinator->isStaticWorldReadyCold( ( uint64_t ) pSelf->get_instance_id() );
 }
 
-void Terrain3DWorldController::releaseAutoSceneCold( void *const pUser ) {
-	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * )( pUser );
+void Terrain3DWorldController::releaseAutoSceneCold(
+	void *const pUser ) {
+	Terrain3DWorldController *const pSelf = ( Terrain3DWorldController * ) ( pUser );
 	if ( pSelf && pSelf->m_pCoordinator ) {
-		pSelf->m_pCoordinator->releaseStaticSceneDatabaseCold( ( uint64_t )pSelf->get_instance_id() );
+		pSelf->m_pCoordinator->releaseStaticSceneDatabaseCold( ( uint64_t ) pSelf->get_instance_id() );
 	}
 }
 
-bool Terrain3DWorldController::initializeAuthoringImageCold( void ) {
+bool Terrain3DWorldController::initializeAuthoringImageCold(
+	void ) {
 	if ( m_bAutoConverterInitialized ) {
 		return true;
 	}
@@ -168,44 +224,47 @@ bool Terrain3DWorldController::initializeAuthoringImageCold( void ) {
 	if ( !t3d_world_validate_limits( Limits ) ) {
 		return false;
 	}
-	const uint32_t nVertexCapacity = t3dWorldCapacityFromBytes( Limits.nGeometryVertexHeapBytes, sizeof( t3dWorldVertex_t ) );
-	const uint32_t nClusterVertexCapacity = t3dWorldCapacityFromBytes( Limits.nGeometryClusterVertexIndexHeapBytes, sizeof( uint32_t ) );
-	const uint32_t nTriangleCapacity = t3dWorldCapacityFromBytes( Limits.nGeometryTriangleHeapBytes, sizeof( t3dWorldPackedClusterTriangle_t ) );
+	const uint32_t nVertexCapacity =
+		t3dWorldCapacityFromBytes( Limits.nGeometryVertexHeapBytes, sizeof( t3dWorldVertex_t ) );
+	const uint32_t nClusterVertexCapacity =
+		t3dWorldCapacityFromBytes( Limits.nGeometryClusterVertexIndexHeapBytes, sizeof( uint32_t ) );
+	const uint32_t nTriangleCapacity =
+		t3dWorldCapacityFromBytes( Limits.nGeometryTriangleHeapBytes, sizeof( t3dWorldPackedClusterTriangle_t ) );
 	if ( nVertexCapacity == 0u || nClusterVertexCapacity == 0u || nTriangleCapacity == 0u ) {
 		return false;
 	}
 
 	Terrain3DLinearArenaLayout Layout;
-	bool valid = true;
-	valid = valid && Layout.addArray<t3dWorldVertex_t>( nVertexCapacity );
-	valid = valid && Layout.addArray<uint32_t>( nClusterVertexCapacity );
-	valid = valid && Layout.addArray<t3dWorldPackedClusterTriangle_t>( nTriangleCapacity );
-	valid = valid && Layout.addArray<t3dWorldMeshRecord_t>( Limits.nMaxMeshes );
-	valid = valid && Layout.addArray<t3dWorldMeshLodRecord_t>( Limits.nMaxMeshLods );
-	valid = valid && Layout.addArray<t3dWorldClusterRecord_t>( Limits.nMaxClusters );
-	valid = valid && Layout.addArray<t3dWorldCluster_t>( Limits.nMaxClusters );
-	valid = valid && Layout.addArray<t3dWorldClusterVTMetadata_t>( Limits.nMaxClusters );
-	valid = valid && Layout.addArray<t3dRenderingMaterialGpu_t>( Limits.nMaxMaterials );
-	valid = valid && Layout.addArray<t3dWorldCell_t>( Limits.nMaxCells );
-	valid = valid && Layout.addArray<t3dWorldInstance_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<t3dWorldTransform_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<uint64_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<t3dWorldOwnershipEntry_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<t3dWorldPrototypeEntry_t>( Limits.nMaxMeshes );
-	valid = valid && Layout.addArray<t3dWorldPrototypeBounds_t>( Limits.nMaxMeshes );
-	valid = valid && Layout.addArray<t3dWorldMaterialEntry_t>( Limits.nMaxMaterials );
-	valid = valid && Layout.addArray<t3dWorldNativeVisualEntry_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<t3dWorldVertex_t>( T3D_WORLD_SCRATCH_VERTEX_CAPACITY );
-	valid = valid && Layout.addArray<uint32_t>( T3D_WORLD_SCRATCH_INDEX_CAPACITY );
-	valid = valid && Layout.addArray<uint32_t>( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
-	valid = valid && Layout.addArray<uint8_t>( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
-	valid = valid && Layout.addArray<t3dWorldInstance_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<t3dWorldTransform_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<uint64_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<uint32_t>( Limits.nMaxInstances );
-	valid = valid && Layout.addArray<uint32_t>( Limits.nMaxCells );
-	valid = valid && Layout.addArray<uint32_t>( Limits.nMaxCells );
-	valid = valid && Layout.addArray<t3dWorldCellHashEntry_t>( T3D_WORLD_CELL_HASH_CAPACITY );
+	bool					   valid = true;
+	valid = valid && Layout.addArray< t3dWorldVertex_t >( nVertexCapacity );
+	valid = valid && Layout.addArray< uint32_t >( nClusterVertexCapacity );
+	valid = valid && Layout.addArray< t3dWorldPackedClusterTriangle_t >( nTriangleCapacity );
+	valid = valid && Layout.addArray< t3dWorldMeshRecord_t >( Limits.nMaxMeshes );
+	valid = valid && Layout.addArray< t3dWorldMeshLodRecord_t >( Limits.nMaxMeshLods );
+	valid = valid && Layout.addArray< t3dWorldClusterRecord_t >( Limits.nMaxClusters );
+	valid = valid && Layout.addArray< t3dWorldCluster_t >( Limits.nMaxClusters );
+	valid = valid && Layout.addArray< t3dWorldClusterVTMetadata_t >( Limits.nMaxClusters );
+	valid = valid && Layout.addArray< t3dRenderingMaterialGpu_t >( Limits.nMaxMaterials );
+	valid = valid && Layout.addArray< t3dWorldCell_t >( Limits.nMaxCells );
+	valid = valid && Layout.addArray< t3dWorldInstance_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< t3dWorldTransform_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< uint64_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< t3dWorldOwnershipEntry_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< t3dWorldPrototypeEntry_t >( Limits.nMaxMeshes );
+	valid = valid && Layout.addArray< t3dWorldPrototypeBounds_t >( Limits.nMaxMeshes );
+	valid = valid && Layout.addArray< t3dWorldMaterialEntry_t >( Limits.nMaxMaterials );
+	valid = valid && Layout.addArray< t3dWorldNativeVisualEntry_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< t3dWorldVertex_t >( T3D_WORLD_SCRATCH_VERTEX_CAPACITY );
+	valid = valid && Layout.addArray< uint32_t >( T3D_WORLD_SCRATCH_INDEX_CAPACITY );
+	valid = valid && Layout.addArray< uint32_t >( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
+	valid = valid && Layout.addArray< uint8_t >( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
+	valid = valid && Layout.addArray< t3dWorldInstance_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< t3dWorldTransform_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< uint64_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< uint32_t >( Limits.nMaxInstances );
+	valid = valid && Layout.addArray< uint32_t >( Limits.nMaxCells );
+	valid = valid && Layout.addArray< uint32_t >( Limits.nMaxCells );
+	valid = valid && Layout.addArray< t3dWorldCellHashEntry_t >( T3D_WORLD_CELL_HASH_CAPACITY );
 	if ( !valid || !Layout.valid() ) {
 		return false;
 	}
@@ -214,85 +273,103 @@ bool Terrain3DWorldController::initializeAuthoringImageCold( void ) {
 	if ( !m_AuthoringArena.configure( Layout.size() ) ) {
 		return false;
 	}
-	m_nAuthoringArenaBytes = ( uint64_t )( Layout.size() );
+	m_nAuthoringArenaBytes = ( uint64_t ) ( Layout.size() );
 	memset( &m_AuthoringGeometry, 0, sizeof( m_AuthoringGeometry ) );
 	memset( &m_AuthoringOwnership, 0, sizeof( m_AuthoringOwnership ) );
 	memset( &m_AuthoringBuffers, 0, sizeof( m_AuthoringBuffers ) );
 
 	t3dWorldGeometryDatabaseBuffers_t &GeometryBuffers = m_AuthoringGeometry.Buffers;
-	GeometryBuffers.pVertexHeap = m_AuthoringArena.allocateArray<t3dWorldVertex_t>( nVertexCapacity );
+	GeometryBuffers.pVertexHeap = m_AuthoringArena.allocateArray< t3dWorldVertex_t >( nVertexCapacity );
 	GeometryBuffers.nVertexCapacity = nVertexCapacity;
-	GeometryBuffers.pClusterVertexIndexHeap = m_AuthoringArena.allocateArray<uint32_t>( nClusterVertexCapacity );
+	GeometryBuffers.pClusterVertexIndexHeap = m_AuthoringArena.allocateArray< uint32_t >( nClusterVertexCapacity );
 	GeometryBuffers.nClusterVertexIndexCapacity = nClusterVertexCapacity;
-	GeometryBuffers.pTriangleHeap = m_AuthoringArena.allocateArray<t3dWorldPackedClusterTriangle_t>( nTriangleCapacity );
+	GeometryBuffers.pTriangleHeap =
+		m_AuthoringArena.allocateArray< t3dWorldPackedClusterTriangle_t >( nTriangleCapacity );
 	GeometryBuffers.nTriangleCapacity = nTriangleCapacity;
-	GeometryBuffers.pMeshRecords = m_AuthoringArena.allocateArray<t3dWorldMeshRecord_t>( Limits.nMaxMeshes );
+	GeometryBuffers.pMeshRecords = m_AuthoringArena.allocateArray< t3dWorldMeshRecord_t >( Limits.nMaxMeshes );
 	GeometryBuffers.nMeshCapacity = Limits.nMaxMeshes;
-	GeometryBuffers.pLodRecords = m_AuthoringArena.allocateArray<t3dWorldMeshLodRecord_t>( Limits.nMaxMeshLods );
+	GeometryBuffers.pLodRecords = m_AuthoringArena.allocateArray< t3dWorldMeshLodRecord_t >( Limits.nMaxMeshLods );
 	GeometryBuffers.nLodCapacity = Limits.nMaxMeshLods;
-	GeometryBuffers.pClusterRecords = m_AuthoringArena.allocateArray<t3dWorldClusterRecord_t>( Limits.nMaxClusters );
-	GeometryBuffers.pWorldClusterRecords = m_AuthoringArena.allocateArray<t3dWorldCluster_t>( Limits.nMaxClusters );
-	GeometryBuffers.pWorldClusterVtMetadata = m_AuthoringArena.allocateArray<t3dWorldClusterVTMetadata_t>( Limits.nMaxClusters );
+	GeometryBuffers.pClusterRecords = m_AuthoringArena.allocateArray< t3dWorldClusterRecord_t >( Limits.nMaxClusters );
+	GeometryBuffers.pWorldClusterRecords = m_AuthoringArena.allocateArray< t3dWorldCluster_t >( Limits.nMaxClusters );
+	GeometryBuffers.pWorldClusterVtMetadata =
+		m_AuthoringArena.allocateArray< t3dWorldClusterVTMetadata_t >( Limits.nMaxClusters );
 	GeometryBuffers.nClusterCapacity = Limits.nMaxClusters;
 
 	m_AuthoringBuffers.pGeometry = &m_AuthoringGeometry;
-	m_AuthoringBuffers.pMaterials = m_AuthoringArena.allocateArray<t3dRenderingMaterialGpu_t>( Limits.nMaxMaterials );
+	m_AuthoringBuffers.pMaterials = m_AuthoringArena.allocateArray< t3dRenderingMaterialGpu_t >( Limits.nMaxMaterials );
 	m_AuthoringBuffers.nMaterialCapacity = Limits.nMaxMaterials;
-	m_AuthoringBuffers.pCells = m_AuthoringArena.allocateArray<t3dWorldCell_t>( Limits.nMaxCells );
+	m_AuthoringBuffers.pCells = m_AuthoringArena.allocateArray< t3dWorldCell_t >( Limits.nMaxCells );
 	m_AuthoringBuffers.nCellCapacity = Limits.nMaxCells;
-	m_AuthoringBuffers.pInstances = m_AuthoringArena.allocateArray<t3dWorldInstance_t>( Limits.nMaxInstances );
-	m_AuthoringBuffers.pTransforms = m_AuthoringArena.allocateArray<t3dWorldTransform_t>( Limits.nMaxInstances );
+	m_AuthoringBuffers.pInstances = m_AuthoringArena.allocateArray< t3dWorldInstance_t >( Limits.nMaxInstances );
+	m_AuthoringBuffers.pTransforms = m_AuthoringArena.allocateArray< t3dWorldTransform_t >( Limits.nMaxInstances );
 	m_AuthoringBuffers.nInstanceCapacity = Limits.nMaxInstances;
-	m_AuthoringBuffers.pInstanceSourceIds = m_AuthoringArena.allocateArray<uint64_t>( Limits.nMaxInstances );
+	m_AuthoringBuffers.pInstanceSourceIds = m_AuthoringArena.allocateArray< uint64_t >( Limits.nMaxInstances );
 	t3dWorldOwnershipEntry_t *const pOwnershipEntries =
-	        m_AuthoringArena.allocateArray<t3dWorldOwnershipEntry_t>( Limits.nMaxInstances );
+		m_AuthoringArena.allocateArray< t3dWorldOwnershipEntry_t >( Limits.nMaxInstances );
 	m_AuthoringBuffers.pOwnership = &m_AuthoringOwnership;
-	m_AuthoringBuffers.pPrototypeEntries = m_AuthoringArena.allocateArray<t3dWorldPrototypeEntry_t>( Limits.nMaxMeshes );
-	m_AuthoringBuffers.pPrototypeBoundsByMeshId = m_AuthoringArena.allocateArray<t3dWorldPrototypeBounds_t>( Limits.nMaxMeshes );
+	m_AuthoringBuffers.pPrototypeEntries =
+		m_AuthoringArena.allocateArray< t3dWorldPrototypeEntry_t >( Limits.nMaxMeshes );
+	m_AuthoringBuffers.pPrototypeBoundsByMeshId =
+		m_AuthoringArena.allocateArray< t3dWorldPrototypeBounds_t >( Limits.nMaxMeshes );
 	m_AuthoringBuffers.nPrototypeBoundsCapacity = Limits.nMaxMeshes;
 	m_AuthoringBuffers.nPrototypeCapacity = Limits.nMaxMeshes;
-	m_AuthoringBuffers.pMaterialEntries = m_AuthoringArena.allocateArray<t3dWorldMaterialEntry_t>( Limits.nMaxMaterials );
+	m_AuthoringBuffers.pMaterialEntries =
+		m_AuthoringArena.allocateArray< t3dWorldMaterialEntry_t >( Limits.nMaxMaterials );
 	m_AuthoringBuffers.nMaterialEntryCapacity = Limits.nMaxMaterials;
-	m_AuthoringBuffers.pNativeVisuals = m_AuthoringArena.allocateArray<t3dWorldNativeVisualEntry_t>( Limits.nMaxInstances );
+	m_AuthoringBuffers.pNativeVisuals =
+		m_AuthoringArena.allocateArray< t3dWorldNativeVisualEntry_t >( Limits.nMaxInstances );
 	m_AuthoringBuffers.nNativeVisualCapacity = Limits.nMaxInstances;
 
-	m_AuthoringBuffers.Scratch.pVertices = m_AuthoringArena.allocateArray<t3dWorldVertex_t>( T3D_WORLD_SCRATCH_VERTEX_CAPACITY );
+	m_AuthoringBuffers.Scratch.pVertices =
+		m_AuthoringArena.allocateArray< t3dWorldVertex_t >( T3D_WORLD_SCRATCH_VERTEX_CAPACITY );
 	m_AuthoringBuffers.Scratch.nVertexCapacity = T3D_WORLD_SCRATCH_VERTEX_CAPACITY;
-	m_AuthoringBuffers.Scratch.pIndices = m_AuthoringArena.allocateArray<uint32_t>( T3D_WORLD_SCRATCH_INDEX_CAPACITY );
+	m_AuthoringBuffers.Scratch.pIndices =
+		m_AuthoringArena.allocateArray< uint32_t >( T3D_WORLD_SCRATCH_INDEX_CAPACITY );
 	m_AuthoringBuffers.Scratch.nIndexCapacity = T3D_WORLD_SCRATCH_INDEX_CAPACITY;
-	m_AuthoringBuffers.Scratch.pTriangleMaterialOffsets = m_AuthoringArena.allocateArray<uint32_t>( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
-	m_AuthoringBuffers.Scratch.pTriangleTiers = m_AuthoringArena.allocateArray<uint8_t>( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
+	m_AuthoringBuffers.Scratch.pTriangleMaterialOffsets =
+		m_AuthoringArena.allocateArray< uint32_t >( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
+	m_AuthoringBuffers.Scratch.pTriangleTiers =
+		m_AuthoringArena.allocateArray< uint8_t >( T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY );
 	m_AuthoringBuffers.Scratch.nTriangleCapacity = T3D_WORLD_SCRATCH_TRIANGLE_CAPACITY;
 
-	m_AuthoringBuffers.CellScratch.pReorderedInstances = m_AuthoringArena.allocateArray<t3dWorldInstance_t>( Limits.nMaxInstances );
-	m_AuthoringBuffers.CellScratch.pReorderedTransforms = m_AuthoringArena.allocateArray<t3dWorldTransform_t>( Limits.nMaxInstances );
-	m_AuthoringBuffers.CellScratch.pReorderedSourceIds = m_AuthoringArena.allocateArray<uint64_t>( Limits.nMaxInstances );
+	m_AuthoringBuffers.CellScratch.pReorderedInstances =
+		m_AuthoringArena.allocateArray< t3dWorldInstance_t >( Limits.nMaxInstances );
+	m_AuthoringBuffers.CellScratch.pReorderedTransforms =
+		m_AuthoringArena.allocateArray< t3dWorldTransform_t >( Limits.nMaxInstances );
+	m_AuthoringBuffers.CellScratch.pReorderedSourceIds =
+		m_AuthoringArena.allocateArray< uint64_t >( Limits.nMaxInstances );
 	m_AuthoringBuffers.CellScratch.nInstanceCapacity = Limits.nMaxInstances;
-	m_AuthoringBuffers.CellScratch.pInstanceCellIds = m_AuthoringArena.allocateArray<uint32_t>( Limits.nMaxInstances );
-	m_AuthoringBuffers.CellScratch.pCellCounts = m_AuthoringArena.allocateArray<uint32_t>( Limits.nMaxCells );
-	m_AuthoringBuffers.CellScratch.pCellWriteCursor = m_AuthoringArena.allocateArray<uint32_t>( Limits.nMaxCells );
+	m_AuthoringBuffers.CellScratch.pInstanceCellIds =
+		m_AuthoringArena.allocateArray< uint32_t >( Limits.nMaxInstances );
+	m_AuthoringBuffers.CellScratch.pCellCounts = m_AuthoringArena.allocateArray< uint32_t >( Limits.nMaxCells );
+	m_AuthoringBuffers.CellScratch.pCellWriteCursor = m_AuthoringArena.allocateArray< uint32_t >( Limits.nMaxCells );
 	m_AuthoringBuffers.CellScratch.nCellScratchCapacity = Limits.nMaxCells;
-	m_AuthoringBuffers.CellScratch.pCellHash = m_AuthoringArena.allocateArray<t3dWorldCellHashEntry_t>( T3D_WORLD_CELL_HASH_CAPACITY );
+	m_AuthoringBuffers.CellScratch.pCellHash =
+		m_AuthoringArena.allocateArray< t3dWorldCellHashEntry_t >( T3D_WORLD_CELL_HASH_CAPACITY );
 	m_AuthoringBuffers.CellScratch.nCellHashCapacity = T3D_WORLD_CELL_HASH_CAPACITY;
 
-	if ( !GeometryBuffers.pVertexHeap || !GeometryBuffers.pClusterVertexIndexHeap || !GeometryBuffers.pTriangleHeap
-	        || !GeometryBuffers.pMeshRecords || !GeometryBuffers.pLodRecords || !GeometryBuffers.pClusterRecords
-	        || !GeometryBuffers.pWorldClusterRecords || !GeometryBuffers.pWorldClusterVtMetadata || !m_AuthoringBuffers.pMaterials
-	        || !m_AuthoringBuffers.pCells || !m_AuthoringBuffers.pInstances || !m_AuthoringBuffers.pTransforms
-	        || !m_AuthoringBuffers.pInstanceSourceIds || !pOwnershipEntries
-	        || !m_AuthoringBuffers.pPrototypeEntries || !m_AuthoringBuffers.pPrototypeBoundsByMeshId || !m_AuthoringBuffers.pMaterialEntries
-	        || !m_AuthoringBuffers.pNativeVisuals || !m_AuthoringBuffers.Scratch.pVertices || !m_AuthoringBuffers.Scratch.pIndices
-	        || !m_AuthoringBuffers.Scratch.pTriangleMaterialOffsets || !m_AuthoringBuffers.Scratch.pTriangleTiers
-	        || !m_AuthoringBuffers.CellScratch.pReorderedInstances || !m_AuthoringBuffers.CellScratch.pReorderedTransforms
-	        || !m_AuthoringBuffers.CellScratch.pReorderedSourceIds
-	        || !m_AuthoringBuffers.CellScratch.pInstanceCellIds || !m_AuthoringBuffers.CellScratch.pCellCounts
-	        || !m_AuthoringBuffers.CellScratch.pCellWriteCursor || !m_AuthoringBuffers.CellScratch.pCellHash ) {
+	if ( !GeometryBuffers.pVertexHeap || !GeometryBuffers.pClusterVertexIndexHeap || !GeometryBuffers.pTriangleHeap ||
+		 !GeometryBuffers.pMeshRecords || !GeometryBuffers.pLodRecords || !GeometryBuffers.pClusterRecords ||
+		 !GeometryBuffers.pWorldClusterRecords || !GeometryBuffers.pWorldClusterVtMetadata ||
+		 !m_AuthoringBuffers.pMaterials || !m_AuthoringBuffers.pCells || !m_AuthoringBuffers.pInstances ||
+		 !m_AuthoringBuffers.pTransforms || !m_AuthoringBuffers.pInstanceSourceIds || !pOwnershipEntries ||
+		 !m_AuthoringBuffers.pPrototypeEntries || !m_AuthoringBuffers.pPrototypeBoundsByMeshId ||
+		 !m_AuthoringBuffers.pMaterialEntries || !m_AuthoringBuffers.pNativeVisuals ||
+		 !m_AuthoringBuffers.Scratch.pVertices || !m_AuthoringBuffers.Scratch.pIndices ||
+		 !m_AuthoringBuffers.Scratch.pTriangleMaterialOffsets || !m_AuthoringBuffers.Scratch.pTriangleTiers ||
+		 !m_AuthoringBuffers.CellScratch.pReorderedInstances || !m_AuthoringBuffers.CellScratch.pReorderedTransforms ||
+		 !m_AuthoringBuffers.CellScratch.pReorderedSourceIds || !m_AuthoringBuffers.CellScratch.pInstanceCellIds ||
+		 !m_AuthoringBuffers.CellScratch.pCellCounts || !m_AuthoringBuffers.CellScratch.pCellWriteCursor ||
+		 !m_AuthoringBuffers.CellScratch.pCellHash ) {
 		releaseAuthoringImageCold();
 		return false;
 	}
 
 	t3d_world_geometry_database_initialize_cold( m_AuthoringGeometry, GeometryBuffers );
-	if ( !t3d_world_ownership_registry_initialize_cold( m_AuthoringOwnership, pOwnershipEntries, Limits.nMaxInstances ) ) {
+	if ( !t3d_world_ownership_registry_initialize_cold( m_AuthoringOwnership,
+														pOwnershipEntries,
+														Limits.nMaxInstances ) ) {
 		releaseAuthoringImageCold();
 		return false;
 	}
@@ -308,7 +385,8 @@ bool Terrain3DWorldController::initializeAuthoringImageCold( void ) {
 	return true;
 }
 
-void Terrain3DWorldController::releaseAuthoringImageCold( void ) {
+void Terrain3DWorldController::releaseAuthoringImageCold(
+	void ) {
 	if ( m_pConverter == &m_AutoConverter ) {
 		m_pConverter = NULL;
 	}
@@ -320,7 +398,8 @@ void Terrain3DWorldController::releaseAuthoringImageCold( void ) {
 	memset( &m_AuthoringBuffers, 0, sizeof( m_AuthoringBuffers ) );
 }
 
-bool Terrain3DWorldController::releasePublishedSceneCold( void ) {
+bool Terrain3DWorldController::releasePublishedSceneCold(
+	void ) {
 	if ( !m_bOwnershipApplied && !m_bPublicationPending ) {
 		return true;
 	}
@@ -336,7 +415,8 @@ bool Terrain3DWorldController::releasePublishedSceneCold( void ) {
 	return true;
 }
 
-void Terrain3DWorldController::completePublishedSceneCold( void ) {
+void Terrain3DWorldController::completePublishedSceneCold(
+	void ) {
 	if ( !m_bPublicationPending || !m_pConverter || !m_backend.pIsSceneReadyCold ) {
 		return;
 	}
@@ -352,7 +432,8 @@ void Terrain3DWorldController::completePublishedSceneCold( void ) {
 	set_process_internal( false );
 }
 
-void Terrain3DWorldController::setEnabled( const bool bEnabled ) {
+void Terrain3DWorldController::setEnabled(
+	const bool bEnabled ) {
 	if ( m_bEnabled == bEnabled ) {
 		return;
 	}
@@ -362,44 +443,54 @@ void Terrain3DWorldController::setEnabled( const bool bEnabled ) {
 	}
 }
 
-void Terrain3DWorldController::setMode( const int32_t iMode ) {
-	const int32_t mode = iMode >= 0 && iMode <= ( int32_t )( T3D_WORLD_MODE_FULL_STATIC_SCENE ) ? iMode : ( int32_t )( T3D_WORLD_MODE_EXPLICIT );
+void Terrain3DWorldController::setMode(
+	const int32_t iMode ) {
+	const int32_t mode = iMode >= 0 && iMode <= ( int32_t ) ( T3D_WORLD_MODE_FULL_STATIC_SCENE )
+							 ? iMode
+							 : ( int32_t ) ( T3D_WORLD_MODE_EXPLICIT );
 	if ( m_iMode == mode ) {
 		return;
 	}
 	m_iMode = mode;
-	if ( m_iMode == ( int32_t )( T3D_WORLD_MODE_DISABLED ) ) {
+	if ( m_iMode == ( int32_t ) ( T3D_WORLD_MODE_DISABLED ) ) {
 		releasePublishedSceneCold();
 	}
 }
 
-void Terrain3DWorldController::setConvertMeshInstances( const bool bEnabled ) {
+void Terrain3DWorldController::setConvertMeshInstances(
+	const bool bEnabled ) {
 	m_bConvertMeshInstances = bEnabled;
 }
 
-void Terrain3DWorldController::setConvertDynamicObjects( const bool bEnabled ) {
+void Terrain3DWorldController::setConvertDynamicObjects(
+	const bool bEnabled ) {
 	m_bConvertDynamicObjects = bEnabled;
 }
 
-void Terrain3DWorldController::setConvertHiddenObjects( const bool bEnabled ) {
+void Terrain3DWorldController::setConvertHiddenObjects(
+	const bool bEnabled ) {
 	m_bConvertHiddenObjects = bEnabled;
 }
 
-void Terrain3DWorldController::setCellSize( const float fCellSize ) {
+void Terrain3DWorldController::setCellSize(
+	const float fCellSize ) {
 	m_fCellSize = fCellSize < 4.0f ? 4.0f : ( fCellSize > 256.0f ? 256.0f : fCellSize );
 }
 
-void Terrain3DWorldController::setDefaultProfile( const Ref<Terrain3DWorldImportProfile> &rProfile ) {
+void Terrain3DWorldController::setDefaultProfile(
+	const Ref< Terrain3DWorldImportProfile > &rProfile ) {
 	m_defaultProfile = rProfile;
 }
 
-void Terrain3DWorldController::setAutoRebuildOnReady( const bool bEnabled ) {
+void Terrain3DWorldController::setAutoRebuildOnReady(
+	const bool bEnabled ) {
 	m_bAutoRebuildOnReady = bEnabled;
 }
 
-t3dWorldConversionPolicy_t Terrain3DWorldController::buildPolicyCold( void ) const {
+t3dWorldConversionPolicy_t Terrain3DWorldController::buildPolicyCold(
+	void ) const {
 	t3dWorldConversionPolicy_t policy = t3d_world_authoring_default_policy();
-	policy.eMode = m_bEnabled ? ( t3dWorldMode_t )( m_iMode ) : T3D_WORLD_MODE_DISABLED;
+	policy.eMode = m_bEnabled ? ( t3dWorldMode_t ) ( m_iMode ) : T3D_WORLD_MODE_DISABLED;
 	policy.bConvertMeshInstances = m_bConvertMeshInstances;
 	policy.bConvertMultiMeshInstances = false;
 	policy.bConvertDynamicObjects = false;
@@ -407,13 +498,14 @@ t3dWorldConversionPolicy_t Terrain3DWorldController::buildPolicyCold( void ) con
 	policy.fCellSize = m_fCellSize;
 	if ( m_defaultProfile.is_valid() ) {
 		policy.nDefaultTier = m_defaultProfile->resolveTier( policy.nDefaultTier );
-		policy.eMaterialPolicy = ( t3dWorldMaterialPolicy_t )( m_defaultProfile->getMaterialPolicy() );
-		policy.eTransparencyPolicy = ( t3dWorldTransparencyPolicy_t )( m_defaultProfile->getTransparencyPolicy() );
+		policy.eMaterialPolicy = ( t3dWorldMaterialPolicy_t ) ( m_defaultProfile->getMaterialPolicy() );
+		policy.eTransparencyPolicy = ( t3dWorldTransparencyPolicy_t ) ( m_defaultProfile->getTransparencyPolicy() );
 	}
 	return policy;
 }
 
-bool Terrain3DWorldController::requestColdRebuild( void ) {
+bool Terrain3DWorldController::requestColdRebuild(
+	void ) {
 	const Engine *const pEngine = Engine::get_singleton();
 	if ( !pEngine || !pEngine->is_editor_hint() ) {
 		return false;
@@ -427,7 +519,7 @@ bool Terrain3DWorldController::requestColdRebuild( void ) {
 	if ( !m_pConverter ) {
 		return false;
 	}
-	if ( !m_bEnabled || m_iMode == ( int32_t )( T3D_WORLD_MODE_DISABLED ) ) {
+	if ( !m_bEnabled || m_iMode == ( int32_t ) ( T3D_WORLD_MODE_DISABLED ) ) {
 		return releasePublishedSceneCold();
 	}
 
@@ -457,11 +549,13 @@ bool Terrain3DWorldController::requestColdRebuild( void ) {
 	return m_bPublicationPending || m_bOwnershipApplied;
 }
 
-bool Terrain3DWorldController::releaseWorldOwnership( void ) {
+bool Terrain3DWorldController::releaseWorldOwnership(
+	void ) {
 	return releasePublishedSceneCold();
 }
 
-Dictionary Terrain3DWorldController::getLastBuildStatsReferenceDebug( void ) const {
+Dictionary Terrain3DWorldController::getLastBuildStatsReferenceDebug(
+	void ) const {
 	Dictionary stats;
 	stats["visited_nodes"] = m_lastBuildStats.nVisitedNodes;
 	stats["mesh_candidates"] = m_lastBuildStats.nMeshCandidates;
@@ -471,11 +565,12 @@ Dictionary Terrain3DWorldController::getLastBuildStatsReferenceDebug( void ) con
 	stats["compatibility_instances"] = m_lastBuildStats.nCompatibilityInstances;
 	stats["native_instances"] = m_lastBuildStats.nNativeInstances;
 	stats["failures"] = m_lastBuildStats.nFailureCount;
-	stats["authoring_arena_bytes"] = ( int64_t )( m_nAuthoringArenaBytes );
+	stats["authoring_arena_bytes"] = ( int64_t ) ( m_nAuthoringArenaBytes );
 	return stats;
 }
 
-Dictionary Terrain3DWorldController::getBackendStatusReferenceDebug( void ) const {
+Dictionary Terrain3DWorldController::getBackendStatusReferenceDebug(
+	void ) const {
 	Dictionary status;
 	status["converter_attached"] = m_pConverter != NULL;
 	status["backend_attached"] = m_backend.pPublishSceneCold != NULL;
@@ -485,13 +580,14 @@ Dictionary Terrain3DWorldController::getBackendStatusReferenceDebug( void ) cons
 	status["publication_pending"] = m_bPublicationPending;
 	status["readiness_callback_attached"] = m_backend.pIsSceneReadyCold != NULL;
 	status["auto_rebuild_on_ready"] = m_bAutoRebuildOnReady;
-	status["authoring_arena_bytes"] = ( int64_t )( m_nAuthoringArenaBytes );
+	status["authoring_arena_bytes"] = ( int64_t ) ( m_nAuthoringArenaBytes );
 	status["mode"] = m_iMode;
 	status["enabled"] = m_bEnabled;
 	return status;
 }
 
-void Terrain3DWorldController::attachConverterCold( Terrain3DWorldGodotConverter *const pConverter ) {
+void Terrain3DWorldController::attachConverterCold(
+	Terrain3DWorldGodotConverter *const pConverter ) {
 	releasePublishedSceneCold();
 	if ( m_pConverter == &m_AutoConverter && pConverter != &m_AutoConverter ) {
 		releaseAuthoringImageCold();
@@ -499,7 +595,8 @@ void Terrain3DWorldController::attachConverterCold( Terrain3DWorldGodotConverter
 	m_pConverter = pConverter;
 }
 
-void Terrain3DWorldController::attachBackendCold( const t3dWorldAuthoringBackend_t &rBackend ) {
+void Terrain3DWorldController::attachBackendCold(
+	const t3dWorldAuthoringBackend_t &rBackend ) {
 	releasePublishedSceneCold();
 	m_backend = rBackend;
 }

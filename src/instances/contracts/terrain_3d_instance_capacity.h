@@ -9,11 +9,11 @@
 #include <EASTL/algorithm.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "instances/contracts/terrain_3d_instance_traversal.h"
 
-// t3dInstanceCellCapacityPlan_s centralized in Terrain3DTypes.h.
-
-
-EA_FORCE_INLINE static bool t3dAccumulateInstanceCellCount( const size_t nCellCount, size_t &rRequiredCells ) {
+EA_FORCE_INLINE static bool t3dAccumulateInstanceCellCount(
+	const size_t nCellCount,
+	size_t		&rRequiredCells ) {
 	if ( nCellCount > SIZE_MAX - rRequiredCells ) {
 		rRequiredCells = SIZE_MAX;
 		return false;
@@ -22,8 +22,27 @@ EA_FORCE_INLINE static bool t3dAccumulateInstanceCellCount( const size_t nCellCo
 	return true;
 }
 
+// Count only domain-eligible meshes; behavior and resource policy remain with
+// the physics/occlusion caller. Traversal never allocates.
+template< typename TEligible >
+EA_FORCE_INLINE size_t t3dCountResidentInstanceCells(
+	Terrain3DRegion *const *ppRegions,
+	const int				nRegionCount,
+	TEligible				eligible ) {
+	size_t required = 0u;
+	t3dForEachResidentInstanceMesh( ppRegions, nRegionCount, [&]( Terrain3DRegion &, const t3dInstanceMesh_t &rMesh ) {
+		if ( eligible( rMesh ) ) {
+			t3dAccumulateInstanceCellCount( rMesh.m_cells.size(), required );
+		}
+		return true;
+	} );
+	return required;
+}
+
 EA_FORCE_INLINE static t3dInstanceCellCapacityPlan_t t3dPlanInstanceCellCapacity(
-        const size_t nRequiredCells, const size_t nCurrentCells, const size_t nMinimumCapacity = 16u ) {
+	const size_t nRequiredCells,
+	const size_t nCurrentCells,
+	const size_t nMinimumCapacity = 16u ) {
 	t3dInstanceCellCapacityPlan_t plan;
 	plan.m_nRequired = nRequiredCells;
 	plan.m_nHeadroom = eastl::max( nMinimumCapacity, nRequiredCells / 8u );

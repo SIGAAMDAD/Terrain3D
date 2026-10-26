@@ -9,14 +9,14 @@ color_native_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_
 color_specular_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
 color_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
 color_specular_motion_radiance_array = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
-feedback_color_native = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING";
-feedback_color_specular = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
-feedback_color_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
-feedback_color_specular_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
-feedback_color_native_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY";
-feedback_color_specular_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
-feedback_color_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
-feedback_color_specular_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_native = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING";
+feedback_color_specular = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR";
+feedback_color_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION";
+feedback_color_specular_motion = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION";
+feedback_color_native_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
+feedback_color_specular_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY";
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
@@ -38,28 +38,44 @@ color_motion_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING
 color_motion_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 color_specular_motion_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
 color_specular_motion_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_native_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_native_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_specular_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_specular_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_specular_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_specular_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_native_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_native_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_specular_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_specular_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
-feedback_color_specular_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
-feedback_color_specular_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_native_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_native_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_native_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_native_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_VT_COARSE_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 depth_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
 depth_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 depth_normal_roughness_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
 depth_normal_roughness_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 depth_normal_roughness_voxel_gi_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
 depth_normal_roughness_voxel_gi_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+
+color_native_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_motion_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_motion_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_native_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_motion_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+color_specular_motion_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
+
+
+// Consumer-only VT alpha sampling trials; normal shader selection unchanged.
+alpha_gather_depth = "#define T3D_FORWARD_DEPTH\n#define T3D_VT_ALPHA_GATHER 1";
+alpha_edge_depth = "#define T3D_FORWARD_DEPTH\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
+alpha_gather_dnr = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_VT_ALPHA_GATHER 1";
+alpha_edge_dnr = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_VT_ALPHA_EDGE_REUSE 1";
 
 #[vertex]
 #version 450
@@ -184,13 +200,22 @@ void main() {
     draw_overlay_material_index = push_data.overlay_material_index;
     draw_flags = push_data.flags;
     draw_visibility_layers = push_data.visibility_layers;
-    if (push_data.reserved0 != 0u) {
+    // reserved0 selects the source of draw state: 0 = CPU reference,
+    // 1 = GPU grouped command metadata, 2 = GPU per-cell indirect fallback.
+    if (push_data.reserved0 == 1u) {
         uint draw_slot = visible_draw_slots[visible_address];
         InstanceDrawMeta metadata = draw_metadata[draw_slot];
         draw_material_index = metadata.material_index;
         draw_overlay_material_index = metadata.overlay_material_index;
         draw_flags = metadata.flags | visible_flags[visible_address];
         draw_visibility_layers = visible_layers[visible_address];
+    } else if (push_data.reserved0 == 2u) {
+        // Fallback commands keep their packet-specific material, pass and
+        // raster flags. Only fade is sourced from the GPU-visible instance.
+        // Otherwise the packet-center fade makes whole foliage cells vanish.
+        const uint fade_mask = 0x01ffff00u; // fade-active + 16-bit UNORM fade
+        uint instance_flags = visible_flags[visible_address];
+        draw_flags = (draw_flags & ~fade_mask) | (instance_flags & fade_mask);
     }
 #endif
     InstanceRecord record = records[record_index];
@@ -231,6 +256,12 @@ void main() {
 #version 450
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
+// Subgroup extension declarations follow RDShaderFile variant definitions.
+#if defined(T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING) && T3D_FORWARD_SUBGROUP_CLUSTER_LIGHTING
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_vote : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#endif
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
 #extension GL_EXT_samplerless_texture_functions : enable
 #endif
@@ -298,13 +329,24 @@ layout(set = 1, binding = 6, std430) readonly buffer VtTailMetadata {
 layout(set = 1, binding = 7) uniform sampler2D vt_albedo_tail;
 layout(set = 1, binding = 8) uniform sampler2D vt_normal_tail;
 layout(set = 1, binding = 9) uniform sampler2D vt_surface_tail;
+#if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
+layout(set = 1, binding = 11, std430) readonly buffer VtAncestorHints {
+    T3DVTAncestorHint vt_ancestor_hints[];
+};
+#endif
 layout(set = 1, binding = 10, std430) readonly buffer VtMipLayoutBuffer {
     T3DVTMipLayout vt_mip_layouts[];
 };
 #define T3D_VT_RESOLVE_ALLOCATION(index) vt_allocations[index]
 #define T3D_VT_RESOLVE_PAGE_ENTRY(index) vt_page_table[index]
 #define T3D_VT_RESOLVE_TAIL_ENTRY(index) vt_tails[index]
+#if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
+#define T3D_VT_RESOLVE_HINT(index) vt_ancestor_hints[index]
+#endif
 #include "vt/terrain_vt_resolve_core.glslinc"
+#ifdef T3D_VT_RESOLVE_HINT
+#undef T3D_VT_RESOLVE_HINT
+#endif
 #undef T3D_VT_RESOLVE_TAIL_ENTRY
 #undef T3D_VT_RESOLVE_PAGE_ENTRY
 #undef T3D_VT_RESOLVE_ALLOCATION
@@ -320,7 +362,27 @@ layout(set = 1, binding = 10, std430) readonly buffer VtMipLayoutBuffer {
 #define T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE() textureSize(vt_albedo_tail, 0)
 #define T3D_VT_CONSUMER_NORMAL_TAIL_SIZE() textureSize(vt_normal_tail, 0)
 #define T3D_VT_CONSUMER_SURFACE_TAIL_SIZE() textureSize(vt_surface_tail, 0)
+#define T3D_VT_CONSUMER_ALBEDO_BANK_DIMENSIONS() textureSize(vt_albedo_bank0, 0).xy
+#define T3D_VT_CONSUMER_SURFACE_BANK_DIMENSIONS() textureSize(vt_surface_bank0, 0).xy
+#define T3D_VT_CONSUMER_ALBEDO_BANK_LINEAR(dims, layer, uv, nearest) t3d_vt_consumer_linear_bank_sample(vt_albedo_bank0, (dims), (uv), (layer), (nearest))
+#define T3D_VT_CONSUMER_SURFACE_BANK_LINEAR(dims, layer, uv, nearest) t3d_vt_consumer_linear_bank_sample(vt_surface_bank0, (dims), (uv), (layer), (nearest))
+#define T3D_VT_CONSUMER_ALBEDO_TAIL_LINEAR(dims, uv, nearest) t3d_vt_consumer_linear_tail_sample(vt_albedo_tail, (dims), (uv), (nearest))
+#define T3D_VT_CONSUMER_SURFACE_TAIL_LINEAR(dims, uv, nearest) t3d_vt_consumer_linear_tail_sample(vt_surface_tail, (dims), (uv), (nearest))
+#define T3D_VT_CONSUMER_ALBEDO_BANK_ALPHA(dims, layer, uv, nearest) t3d_vt_consumer_alpha_bank_sample(vt_albedo_bank0, (dims), (uv), (layer), (nearest))
+#define T3D_VT_CONSUMER_SURFACE_BANK_ALPHA(dims, layer, uv, nearest) t3d_vt_consumer_alpha_bank_sample(vt_surface_bank0, (dims), (uv), (layer), (nearest))
+#define T3D_VT_CONSUMER_ALBEDO_TAIL_ALPHA(dims, uv, nearest) t3d_vt_consumer_alpha_tail_sample(vt_albedo_tail, (dims), (uv), (nearest))
+#define T3D_VT_CONSUMER_SURFACE_TAIL_ALPHA(dims, uv, nearest) t3d_vt_consumer_alpha_tail_sample(vt_surface_tail, (dims), (uv), (nearest))
 #include "vt/terrain_vt_consumer_sample_inc.glslinc"
+#undef T3D_VT_CONSUMER_ALBEDO_BANK_ALPHA
+#undef T3D_VT_CONSUMER_SURFACE_BANK_ALPHA
+#undef T3D_VT_CONSUMER_ALBEDO_TAIL_ALPHA
+#undef T3D_VT_CONSUMER_SURFACE_TAIL_ALPHA
+#undef T3D_VT_CONSUMER_ALBEDO_BANK_DIMENSIONS
+#undef T3D_VT_CONSUMER_SURFACE_BANK_DIMENSIONS
+#undef T3D_VT_CONSUMER_ALBEDO_BANK_LINEAR
+#undef T3D_VT_CONSUMER_SURFACE_BANK_LINEAR
+#undef T3D_VT_CONSUMER_ALBEDO_TAIL_LINEAR
+#undef T3D_VT_CONSUMER_SURFACE_TAIL_LINEAR
 #undef T3D_VT_CONSUMER_SURFACE_TAIL_SIZE
 #undef T3D_VT_CONSUMER_NORMAL_TAIL_SIZE
 #undef T3D_VT_CONSUMER_ALBEDO_TAIL_SIZE
@@ -482,6 +544,8 @@ vec3 tangent_to_world(vec3 tangent_normal, vec3 face_normal) {
 
 void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     T3DVTConsumerFootprint footprint,
+    T3DVTConsumerAddressPlan base_plan,
+    T3DVTConsumerAddress albedo_address,
     out T3DVTConsumerAddress vt_address,
     out float metallic,
     out float roughness,
@@ -490,7 +554,8 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
     vec4 surface_texel = vec4(1.0);
     if (has_surface) {
-        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
+        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v3(
+            material.vtAllocation, 2u, footprint, base_plan, albedo_address);
         surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
         t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
@@ -498,7 +563,8 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     }
     vt_address = t3d_vt_consumer_invalid_address();
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-        vt_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 1u, footprint);
+        vt_address = t3d_vt_consumer_resolve_material_sibling_v3(
+            material.vtAllocation, 1u, footprint, base_plan, albedo_address);
     }
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
@@ -550,8 +616,8 @@ void t3d_inst_stylized_local_light_response(vec3 albedo,
     vec3 N,
     vec3 V,
     float roughness,
-    float metallic,
-    float dielectric_specular,
+    float diffuse_metal_factor,
+    vec3 specular_color,
     vec3 L,
     vec3 radiance,
     float attenuation,
@@ -562,18 +628,20 @@ void t3d_inst_stylized_local_light_response(vec3 albedo,
     float lambert = max(ndotl, 0.0);
     if (lambert <= 0.0 || attenuation <= 0.0) return;
     vec3 incoming_light = radiance * attenuation / T3D_PI;
-    float diffuse_metal_factor = 1.0 - metallic * 0.88;
     diffuse_light += albedo * lambert * diffuse_metal_factor * incoming_light;
-    vec3 H = normalize(L + V);
-    float ndoth = max(dot(N, H), 0.0);
-    float x2 = ndoth * ndoth;
-    float x4 = x2 * x2;
-    float x8 = x4 * x4;
-    float x16 = x8 * x8;
-    float smoothness = 1.0 - roughness;
-    float local_specular = mix(x8, x16, smoothness) * smoothness * smoothness;
-    vec3 specular_color = mix(vec3(dielectric_specular), albedo, metallic);
-    specular_light += specular_color * local_specular * 0.12 * max(specular_amount, 0.0) * incoming_light;
+    // P44: local highlights vanish at zero specular or zero smoothness.
+    // Preserve diffuse without building a half-vector or lobe.
+    if (specular_amount > 0.0 && roughness != 1.0) {
+        vec3 H = normalize(L + V);
+        float ndoth = max(dot(N, H), 0.0);
+        float x2 = ndoth * ndoth;
+        float x4 = x2 * x2;
+        float x8 = x4 * x4;
+        float x16 = x8 * x8;
+        float smoothness = 1.0 - roughness;
+        float local_specular = mix(x8, x16, smoothness) * smoothness * smoothness;
+        specular_light += specular_color * local_specular * 0.12 * specular_amount * incoming_light;
+    }
 }
 
 void t3d_inst_stylized_direct_response(vec3 albedo,
@@ -589,40 +657,52 @@ void t3d_inst_stylized_direct_response(vec3 albedo,
     vec3 N = normalize(context.view_normal);
     vec3 V = normalize(context.view_direction);
     float diffuse_metal_factor = 1.0 - metallic * 0.88;
-
+    vec3 specular_color = mix(vec3(dielectric_specular), albedo, metallic);
     uint directional_count = min(t3d_forward_light_frame.scene_params.x, 8u);
-    for (uint i = 0u; i < directional_count; ++i) {
-        T3DNativeDirectionalLightData light = t3d_directional_lights.data[i];
-        if ((light.mask & surface_mask) == 0u) continue;
-        vec3 L = normalize(light.direction);
-        float ndotl = dot(N, L);
-        float lambert = max(ndotl, 0.0);
-        float shadow = t3d_directional_shadow(i, context.view_position, N);
-        vec3 incoming_light = light.color * light.energy * shadow / T3D_PI;
-        float wrapped = smoothstep(-frame_data.nomad_sun_shape.x, max(frame_data.nomad_sun_shape.y, 0.001), ndotl);
-        float diffuse_term = mix(lambert, wrapped, frame_data.nomad_sun_shape.z);
-        float contrast_scale = 1.0 + frame_data.nomad_sun_shape.w * 3.5;
-        diffuse_term = clamp((diffuse_term - 0.5) * contrast_scale + 0.5, 0.0, 1.0);
-        diffuse_term = max(diffuse_term, frame_data.nomad_sun_diffuse.z * (1.0 - lambert));
-        float face2 = diffuse_term * diffuse_term;
-        float face4 = face2 * face2;
-        diffuse_term = min(diffuse_term * (1.0 + face4 * frame_data.nomad_sun_diffuse.y), 2.0);
-        diffuse_light += albedo * diffuse_term * diffuse_metal_factor * frame_data.nomad_sun_diffuse.x * incoming_light;
-        if (ndotl > 0.0) {
-            vec3 H = normalize(L + V);
-            float ndoth = max(dot(N, H), 0.0);
-            float specular_lobe = t3d_inst_blinn_lobe(ndoth, roughness, frame_data.nomad_sun_specular.y, frame_data.nomad_sun_specular.z);
-            vec3 specular_color = mix(vec3(dielectric_specular), albedo, metallic);
-            specular_light += specular_color * specular_lobe * frame_data.nomad_sun_specular.x * max(light.specular, 0.0) * incoming_light;
-        }
+    float rim_shape = 0.0;
+    // Sun-independent fragments must not pay for directional rim shaping.
+    if (directional_count != 0u) {
         float nv = max(dot(N, V), 0.0);
         float rim = 1.0 - nv;
         float rim2 = rim * rim;
         float rim4 = rim2 * rim2;
         float rim8 = rim4 * rim4;
-        float rim_shape = mix(rim2, rim8, frame_data.nomad_sun_rim.y);
+        rim_shape = mix(rim2, rim8, frame_data.nomad_sun_rim.y);
+    }
+    float contrast_scale = 1.0 + frame_data.nomad_sun_shape.w * 3.5;
+    for (uint i = 0u; i < directional_count; ++i) {
+        T3DNativeDirectionalLightData light = t3d_directional_lights.data[i];
+        if ((light.mask & surface_mask) == 0u || light.energy == 0.0 || all(equal(light.color, vec3(0.0)))) continue;
+        vec3 L = normalize(light.direction);
+        float ndotl = dot(N, L);
+        float lambert = max(ndotl, 0.0);
+        float wrapped = smoothstep(-frame_data.nomad_sun_shape.x, max(frame_data.nomad_sun_shape.y, 0.001), ndotl);
+        float diffuse_term = mix(lambert, wrapped, frame_data.nomad_sun_shape.z);
+        diffuse_term = clamp((diffuse_term - 0.5) * contrast_scale + 0.5, 0.0, 1.0);
+        diffuse_term = max(diffuse_term, frame_data.nomad_sun_diffuse.z * (1.0 - lambert));
+        float face2 = diffuse_term * diffuse_term;
+        float face4 = face2 * face2;
+        diffuse_term = min(diffuse_term * (1.0 + face4 * frame_data.nomad_sun_diffuse.y), 2.0);
         float backlight = max(dot(-N, L), 0.0);
-        diffuse_light += albedo * rim_shape * backlight * frame_data.nomad_sun_rim.x * incoming_light;
+        bool diffuse_active = diffuse_term != 0.0 && frame_data.nomad_sun_diffuse.x != 0.0;
+        bool specular_active = ndotl > 0.0 && frame_data.nomad_sun_specular.x != 0.0 && light.specular > 0.0;
+        bool rim_active = rim_shape != 0.0 && backlight != 0.0 && frame_data.nomad_sun_rim.x != 0.0;
+        // P45: all three outputs are zero. No directional shadow is needed.
+        if (!diffuse_active && !specular_active && !rim_active) continue;
+        float shadow = t3d_directional_shadow(i, context.view_position, N);
+        vec3 incoming_light = light.color * light.energy * shadow / T3D_PI;
+        if (diffuse_active) {
+            diffuse_light += albedo * diffuse_term * diffuse_metal_factor * frame_data.nomad_sun_diffuse.x * incoming_light;
+        }
+        if (specular_active) {
+            vec3 H = normalize(L + V);
+            float ndoth = max(dot(N, H), 0.0);
+            float specular_lobe = t3d_inst_blinn_lobe(ndoth, roughness, frame_data.nomad_sun_specular.y, frame_data.nomad_sun_specular.z);
+            specular_light += specular_color * specular_lobe * frame_data.nomad_sun_specular.x * max(light.specular, 0.0) * incoming_light;
+        }
+        if (rim_active) {
+            diffuse_light += albedo * rim_shape * backlight * frame_data.nomad_sun_rim.x * incoming_light;
+        }
     }
 
     for (uint light_type = 0u; light_type < 3u; ++light_type) {
@@ -649,15 +729,12 @@ void t3d_inst_stylized_direct_response(vec3 albedo,
                     light_direction = to_light / distance_to_light;
                     attenuation = t3d_native_attenuation(distance_to_light, light.inv_radius, light.attenuation);
                 }
-                if (light_type == 0u) {
-                    shadow = t3d_omni_shadow(light, context.view_position, N);
-                } else if (light_type == 1u) {
+                if (light_type == 1u) {
                     float cone_angle = light.cone_angle;
                     float scos = max(dot(-light_direction, light.direction), cone_angle);
                     float spot_rim = max(1e-4, (1.0 - scos) / max(1.0 - cone_angle, 1e-4));
                     attenuation *= 1.0 - pow(spot_rim, light.cone_attenuation);
-                    shadow = t3d_spot_shadow(light, context.view_position, N, light_direction, distance_to_light);
-                } else {
+                } else if (light_type == 2u) {
                     if (dot(light.direction, context.view_position - light.position) <= 0.0) continue;
                     float width_length = length(light.area_width);
                     float height_length = length(light.area_height);
@@ -675,9 +752,18 @@ void t3d_inst_stylized_direct_response(vec3 albedo,
                     attenuation = t3d_native_attenuation(distance_to_light, light.inv_radius, light.attenuation);
                     float area = max(width_length * height_length, 0.0001);
                     attenuation *= clamp(area / max(area, distance_to_light * distance_to_light), 0.0, 1.0);
+                }
+                // The response discards these lights. Avoid PCF, matrix transforms
+                // and shadow-atlas fetches when they cannot contribute.
+                if (attenuation <= 0.0 || max(dot(N, light_direction), 0.0) <= 0.0) continue;
+                if (light_type == 0u) {
+                    shadow = t3d_omni_shadow(light, context.view_position, N);
+                } else if (light_type == 1u) {
+                    shadow = t3d_spot_shadow(light, context.view_position, N, light_direction, distance_to_light);
+                } else {
                     shadow = t3d_area_shadow(light, context.view_position, N);
                 }
-                t3d_inst_stylized_local_light_response(albedo, N, V, roughness, metallic, dielectric_specular,
+                t3d_inst_stylized_local_light_response(albedo, N, V, roughness, diffuse_metal_factor, specular_color,
                     light_direction, light.color, attenuation * shadow, light.specular_amount, diffuse_light, specular_light);
             }
         }
@@ -686,6 +772,13 @@ void t3d_inst_stylized_direct_response(vec3 albedo,
 #endif
 
 void main() {
+#if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_ONE_SUN)
+    // P01: render-space view gradients cannot be evaluated after alpha discard.
+    vec3 inst_world_ddx = dFdx(vertex_world_position);
+    vec3 inst_world_ddy = dFdy(vertex_world_position);
+    t3d_forward_decal_view_ddx = mat3(frame_data.view_matrix) * inst_world_ddx;
+    t3d_forward_decal_view_ddy = mat3(frame_data.view_matrix) * inst_world_ddy;
+#endif
     vec4 mesh_color = mesh_vertex_color;
     vec4 base_color = instance_color;
     vec4 overlay_color = vec4(0.0);
@@ -703,6 +796,17 @@ void main() {
     T3DRenderingMaterialGpu overlay;
     T3DVTConsumerFootprint base_footprint;
     T3DVTConsumerFootprint overlay_footprint;
+    T3DVTConsumerAddressPlan base_address_plan = t3d_vt_consumer_invalid_plan();
+    T3DVTConsumerAddressPlan overlay_address_plan = t3d_vt_consumer_invalid_plan();
+    T3DVTConsumerAddress base_albedo_address = t3d_vt_consumer_invalid_address();
+    T3DVTConsumerAddress overlay_albedo_address = t3d_vt_consumer_invalid_address();
+#if T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE
+#ifdef T3D_FORWARD_DEPTH
+    float base_albedo_texel = 1.0;
+#else
+    vec4 base_albedo_texel = vec4(1.0);
+#endif
+#endif
 
 #ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
     // Capture both materials' derivatives before fade/scissor divergence.
@@ -725,40 +829,109 @@ void main() {
 #ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
     // Resolve only opacity until the combined base/overlay pixel survives.
     if (draw_material_index != 0xffffu) {
-        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
-            mesh_color.rgb = srgb_to_linear(mesh_color.rgb);
-        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
+        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
+#ifdef T3D_FORWARD_DEPTH
+            // DNR and depth need alpha coverage, not decoded vertex RGB.
+            base_color.a *= mesh_color.a;
+#else
+            if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
+                mesh_color.rgb = srgb_to_linear(mesh_color.rgb);
             base_color *= mesh_color;
+#endif
+        }
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
         t3d_vt_instance_fragment_feedback_channel(material, base_footprint, 0u);
 #endif
-        T3DVTConsumerAddress albedo_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 0u, base_footprint);
-        base_color *= material.baseColor * t3d_vt_consumer_sample_albedo(albedo_address);
+        if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, base_footprint)
+            && t3d_vt_consumer_prepare_address_plan(material.vtAllocation, base_footprint, base_address_plan)) {
+            base_albedo_address = t3d_vt_consumer_resolve_plan(
+                base_address_plan, base_footprint, t3d_vt_consumer_invalid_address());
+        }
+#ifdef T3D_FORWARD_DEPTH
+#if T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE
+        base_albedo_texel = t3d_vt_consumer_sample_albedo_alpha(base_albedo_address);
+        base_color.a *= material.baseColor.a * base_albedo_texel;
+#else
+        base_color.a *= material.baseColor.a * t3d_vt_consumer_sample_albedo_alpha(base_albedo_address);
+#endif
+#else
+#if T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE
+        base_albedo_texel = t3d_vt_consumer_sample_albedo(base_albedo_address);
+        base_color *= material.baseColor * base_albedo_texel;
+#else
+        base_color *= material.baseColor * t3d_vt_consumer_sample_albedo(base_albedo_address);
+#endif
         if ((material.flags & T3D_VT_MATERIAL_ALBEDO_SATURATION) != 0u) {
             float saturation = float(material.reserved & 0xffffu) * (1.5 / 65535.0);
             float luma = dot(base_color.rgb, vec3(0.299, 0.587, 0.114));
             base_color.rgb = max(mix(vec3(luma), base_color.rgb, saturation), vec3(0.0));
         }
-        float alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
-        base_survives = (material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || base_color.a >= alpha_cutoff;
+#endif
+        // P48: no cutoff unpack for opaque materials. The same >= comparison
+        // remains in the scissored path, including at the threshold boundary.
+        base_survives = true;
+        if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u) {
+            float alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
+            base_survives = base_color.a >= alpha_cutoff;
+        }
     }
     vec4 final_color = base_survives ? base_color : vec4(0.0);
     if (draw_overlay_material_index != 0xffffu) {
         vec4 overlay_mesh_color = mesh_vertex_color;
-        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
-            overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
         overlay_color = instance_color;
-        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
+        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
+#ifdef T3D_FORWARD_DEPTH
+            overlay_color.a *= overlay_mesh_color.a;
+#else
+            if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
+                overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
             overlay_color *= overlay_mesh_color;
+#endif
+        }
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
         t3d_vt_instance_fragment_feedback_channel(overlay, overlay_footprint, 0u);
 #endif
-        T3DVTConsumerAddress overlay_albedo_address = t3d_vt_consumer_resolve_material_channel_v3(overlay.vtAllocation, 0u, overlay_footprint);
+        if (t3d_vt_consumer_material_page_set_valid(overlay.vtAllocation, overlay_footprint)
+            && t3d_vt_consumer_prepare_address_plan(overlay.vtAllocation, overlay_footprint, overlay_address_plan)) {
+            overlay_albedo_address = t3d_vt_consumer_resolve_plan(
+                overlay_address_plan, overlay_footprint, t3d_vt_consumer_invalid_address());
+        }
+#ifdef T3D_FORWARD_DEPTH
+#if T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE
+        float overlay_albedo_texel;
+        if (draw_material_index != 0xffffu
+            && t3d_vt_consumer_equal_sampling_address(base_albedo_address, overlay_albedo_address)) {
+            overlay_albedo_texel = base_albedo_texel;
+        } else {
+            overlay_albedo_texel = t3d_vt_consumer_sample_albedo_alpha(overlay_albedo_address);
+        }
+        overlay_color.a *= overlay.baseColor.a * overlay_albedo_texel;
+#else
+        overlay_color.a *= overlay.baseColor.a * t3d_vt_consumer_sample_albedo_alpha(overlay_albedo_address);
+#endif
+#else
+#if T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE
+        vec4 overlay_albedo_texel;
+        if (draw_material_index != 0xffffu
+            && t3d_vt_consumer_equal_sampling_address(base_albedo_address, overlay_albedo_address)) {
+            overlay_albedo_texel = base_albedo_texel;
+        } else {
+            overlay_albedo_texel = t3d_vt_consumer_sample_albedo(overlay_albedo_address);
+        }
+        overlay_color *= overlay.baseColor * overlay_albedo_texel;
+#else
         overlay_color *= overlay.baseColor * t3d_vt_consumer_sample_albedo(overlay_albedo_address);
-        float overlay_alpha_cutoff = t3d_inst_unpack_unorm8(overlay.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
-        overlay_survives = (overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || overlay_color.a >= overlay_alpha_cutoff;
+#endif
+#endif
+        overlay_survives = true;
+        if ((overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u) {
+            float overlay_alpha_cutoff = t3d_inst_unpack_unorm8(overlay.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
+            overlay_survives = overlay_color.a >= overlay_alpha_cutoff;
+        }
         if (overlay_survives) {
+#ifndef T3D_FORWARD_DEPTH
             final_color.rgb = mix(final_color.rgb, overlay_color.rgb, clamp(overlay_color.a, 0.0, 1.0));
+#endif
             final_color.a = max(final_color.a, overlay_color.a);
         }
     }
@@ -768,35 +941,48 @@ void main() {
     vec4 final_color = vec4(0.5, 0.5, 0.5, 1.0);
 #endif
 
+// P63: opaque/unshaded color uses only evaluated albedo and emission.
+// Keep every DNR source and the feedback-emitting shader's request order.
+    bool evaluate_surface = true;
+#if defined(T3D_UNSHADED_SURFACE_FAST_PATH) && T3D_UNSHADED_SURFACE_FAST_PATH && !defined(T3D_FORWARD_DEPTH) \
+    && !defined(T3D_VT_FRAGMENT_FEEDBACK) && !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT)
+    evaluate_surface = !(draw_material_index != 0xffffu && (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u)
+        && !(overlay_survives && (overlay.flags & T3D_VT_MATERIAL_UNSHADED) != 0u);
+#endif
 #if (!defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)) && !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
     if (draw_material_index != 0xffffu) {
-        T3DVTConsumerAddress vt_address;
-        float normal_scale;
-        // Preserve the base's contribution under a partially opaque overlay,
-        // including when the base opacity itself did not survive scissor.
-        t3d_inst_evaluate_surface(material, base_footprint, vt_address, metallic, roughness, ao, normal_scale);
-        if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-            normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(vt_address), normal_scale), normal);
-        }
+        if (evaluate_surface) {
+            T3DVTConsumerAddress vt_address;
+            float normal_scale;
+            // Preserve the base's contribution under a partially opaque overlay,
+            // including when the base opacity itself did not survive scissor.
+            t3d_inst_evaluate_surface(material, base_footprint, base_address_plan, base_albedo_address,
+                vt_address, metallic, roughness, ao, normal_scale);
+            if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+                normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(vt_address), normal_scale), normal);
+            }
+        } // P63: only shaded pixels sample surface and normal
         emission += t3d_inst_unpack_rgbe9995(material.packedEmission);
         unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
         stylized_sun = (material.flags & T3D_VT_MATERIAL_STYLIZED_SUN) != 0u;
         dielectric_specular = float((material.reserved >> 16u) & 0xffffu) / 65535.0;
     }
     if (overlay_survives) {
-        T3DVTConsumerAddress overlay_vt_address;
-        float overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale;
-        t3d_inst_evaluate_surface(overlay, overlay_footprint, overlay_vt_address,
-            overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale);
         float overlay_weight = clamp(overlay_color.a, 0.0, 1.0);
-        metallic = mix(metallic, overlay_metallic, overlay_weight);
-        roughness = mix(roughness, overlay_roughness, overlay_weight);
-        ao = mix(ao, overlay_ao, overlay_weight);
-        if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-            vec3 overlay_normal = tangent_to_world(
-                decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
-            normal = normalize(mix(normal, overlay_normal, overlay_weight));
-        }
+        if (evaluate_surface) {
+            T3DVTConsumerAddress overlay_vt_address;
+            float overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale;
+            t3d_inst_evaluate_surface(overlay, overlay_footprint, overlay_address_plan, overlay_albedo_address,
+                overlay_vt_address, overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale);
+            metallic = mix(metallic, overlay_metallic, overlay_weight);
+            roughness = mix(roughness, overlay_roughness, overlay_weight);
+            ao = mix(ao, overlay_ao, overlay_weight);
+            if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+                vec3 overlay_normal = tangent_to_world(
+                    decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
+                normal = normalize(mix(normal, overlay_normal, overlay_weight));
+            }
+        } // P63: overlay material's surface/normal paths
         emission += t3d_inst_unpack_rgbe9995(overlay.packedEmission) * overlay_weight;
         unshaded = unshaded || (overlay.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
     }

@@ -15,20 +15,20 @@
 using namespace godot;
 #endif
 
-
 // Native geometry workhorse for the editor-only HLOD authoring pipeline.
 // GDScript owns orchestration/transactional publishing; this class keeps the
 // expensive instance-store traversal, vertex compaction and error measurement
 // out of Variant/Dictionary-heavy script loops.
-class Terrain3DHLODBuilder : public RefCounted {
+class Terrain3DHLODBuilder : public RefCounted
+{
 	GDCLASS( Terrain3DHLODBuilder, RefCounted );
 	CLASS_NAME();
 
 public:
 	PackedInt32Array getInstancerMeshIds( Terrain3DRegion *pRegion ) const;
-	Dictionary analyzeInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
-	Dictionary buildInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
-	Dictionary simplifyMesh( const Ref<ArrayMesh> &rMesh, real_t fRatio ) const;
+	Dictionary		 analyzeInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
+	Dictionary		 buildInstancerSource( Terrain3D *pTerrain, Terrain3DRegion *pRegion, int nMeshId ) const;
+	Dictionary		 simplifyMesh( const Ref< ArrayMesh > &rMesh, real_t fRatio ) const;
 
 protected:
 	static void _bind_methods( void );

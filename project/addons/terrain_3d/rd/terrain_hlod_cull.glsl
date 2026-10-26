@@ -40,34 +40,27 @@ layout(push_constant, std430) uniform CullData {
 }
 cull_data;
 
+bool bounds_inside_plane(vec3 center, vec3 extent, vec4 plane) {
+    float projected_center = dot(plane.xyz, center);
+    float support = dot(abs(plane.xyz), extent);
+    // Conservative float32 tolerance: near-plane rounding must not reject
+    // boxes which the original eight-corner path would have admitted.
+    float tolerance = 1e-5 * (abs(projected_center) + abs(plane.w) + support + 1.0);
+    return projected_center + plane.w + support >= -tolerance;
+}
+
 bool bounds_visible(HlodCullDescriptor descriptor) {
-    vec3 c = descriptor.bounds_center.xyz;
-    vec3 e = descriptor.bounds_extent.xyz;
-    vec4 corners[8];
-    corners[0] = frame_data.view_projection * vec4(c.x - e.x, c.y - e.y, c.z - e.z, 1.0);
-    corners[1] = frame_data.view_projection * vec4(c.x + e.x, c.y - e.y, c.z - e.z, 1.0);
-    corners[2] = frame_data.view_projection * vec4(c.x - e.x, c.y + e.y, c.z - e.z, 1.0);
-    corners[3] = frame_data.view_projection * vec4(c.x + e.x, c.y + e.y, c.z - e.z, 1.0);
-    corners[4] = frame_data.view_projection * vec4(c.x - e.x, c.y - e.y, c.z + e.z, 1.0);
-    corners[5] = frame_data.view_projection * vec4(c.x + e.x, c.y - e.y, c.z + e.z, 1.0);
-    corners[6] = frame_data.view_projection * vec4(c.x - e.x, c.y + e.y, c.z + e.z, 1.0);
-    corners[7] = frame_data.view_projection * vec4(c.x + e.x, c.y + e.y, c.z + e.z, 1.0);
-    bool outside_left = true;
-    bool outside_right = true;
-    bool outside_bottom = true;
-    bool outside_top = true;
-    bool outside_near = true;
-    bool outside_far = true;
-    for (int i = 0; i < 8; ++i) {
-        vec4 p = corners[i];
-        outside_left = outside_left && p.x < -p.w;
-        outside_right = outside_right && p.x > p.w;
-        outside_bottom = outside_bottom && p.y < -p.w;
-        outside_top = outside_top && p.y > p.w;
-        outside_near = outside_near && p.z > p.w;
-        outside_far = outside_far && p.z < 0.0;
-    }
-    return !(outside_left || outside_right || outside_bottom || outside_top || outside_near || outside_far);
+    // Six support-point tests replace eight clip-space corner transforms.
+    // These are the same Vulkan half-spaces used in terrain_instance_cull.
+    vec3 center = descriptor.bounds_center.xyz;
+    vec3 extent = descriptor.bounds_extent.xyz;
+    mat4 rows = transpose(frame_data.view_projection);
+    return bounds_inside_plane(center, extent, rows[3] + rows[0])
+        && bounds_inside_plane(center, extent, rows[3] - rows[0])
+        && bounds_inside_plane(center, extent, rows[3] + rows[1])
+        && bounds_inside_plane(center, extent, rows[3] - rows[1])
+        && bounds_inside_plane(center, extent, rows[3] - rows[2])
+        && bounds_inside_plane(center, extent, rows[2]);
 }
 
 void main() {

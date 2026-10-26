@@ -7,10 +7,8 @@
 #include "rendering/rd/world/geometry/terrain_3d_world_geometry.h"
 #include "rendering/rd/world/runtime/terrain_3d_world_publication.h"
 
-// t3dWorldStaticBuildSource_t centralized in Terrain3DTypes.h.
-
-
-class Terrain3DWorldStaticBuilder {
+class Terrain3DWorldStaticBuilder
+{
 public:
 	static bool buildCold( const t3dWorldStaticBuildSource_t &rSource, Terrain3DWorldPublication &rTarget );
 };

@@ -9,15 +9,16 @@
 #include <godot_cpp/classes/render_data.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
-
-class Terrain3DRdCompositorEffect : public godot::CompositorEffect {
+class Terrain3DRdCompositorEffect : public godot::CompositorEffect
+{
 	GDCLASS( Terrain3DRdCompositorEffect, godot::CompositorEffect );
 
 private:
 	Terrain3DRenderCoordinatorAccess *m_pCoordinator = NULL;
 
 protected:
-	static void _bind_methods( void ) {
+	static void _bind_methods(
+		void ) {
 	}
 
 public:
@@ -33,7 +34,11 @@ public:
 	void acknowledgeStartupCancellationOnRenderThread( int64_t nStartupGeneration );
 	void serviceStartupWorldPublicationOnRenderThread( int64_t nStartupGeneration, int64_t nSnapshotGeneration );
 	void consumeFragmentFeedbackOnRenderThread( const godot::PackedByteArray &rBytes );
-	void consumePreviewReadbackOnRenderThread( const godot::PackedByteArray &rReadbackBytes, int32_t nSlot, int64_t nRequestGeneration );
+	void consumeDescriptorFenceOnRenderThread( const godot::PackedByteArray &rBytes,
+		int64_t nEpoch, int64_t nDeviceGeneration, int64_t nTicket );
+	void consumePreviewReadbackOnRenderThread( const godot::PackedByteArray &rReadbackBytes,
+											   int32_t						 nSlot,
+											   int64_t						 nRequestGeneration );
 	void _render_callback( int32_t nEffectCallbackType, godot::RenderData *pRenderData ) override;
 };
 

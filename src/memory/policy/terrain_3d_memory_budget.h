@@ -9,26 +9,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// t3dMemorySubsystem_e centralized in Terrain3DTypes.h.
-
-
-// t3dMemoryLimitReason_e centralized in Terrain3DTypes.h.
-
-
-// t3dMemorySubsystemInput_s centralized in Terrain3DTypes.h.
-
-
-// t3dMemoryBudgetInput_s centralized in Terrain3DTypes.h.
-
-
-// t3dMemorySubsystemAllocation_s centralized in Terrain3DTypes.h.
-
-
-// t3dMemoryBudgetResult_s centralized in Terrain3DTypes.h.
-
-
-class Terrain3DMemoryBudgetCoordinator {
-	EA_FORCE_INLINE static uint64_t addChecked( const uint64_t nA, const uint64_t nB, bool &rOverflow ) {
+class Terrain3DMemoryBudgetCoordinator
+{
+	EA_FORCE_INLINE static uint64_t addChecked(
+		const uint64_t nA,
+		const uint64_t nB,
+		bool		  &rOverflow ) {
 		if ( nA > UINT64_MAX - nB ) {
 			rOverflow = true;
 			return UINT64_MAX;
@@ -36,7 +22,9 @@ class Terrain3DMemoryBudgetCoordinator {
 		return nA + nB;
 	}
 
-	EA_FORCE_INLINE static uint64_t clampToCap( const uint64_t nBytes, const uint64_t nCap ) {
+	EA_FORCE_INLINE static uint64_t clampToCap(
+		const uint64_t nBytes,
+		const uint64_t nCap ) {
 		return nBytes > nCap ? nCap : nBytes;
 	}
 

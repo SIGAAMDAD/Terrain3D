@@ -5,6 +5,8 @@ extends EditorInspectorPlugin
 
 const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
 
+var plugin: EditorPlugin
+
 
 const LIGHTING_TERRAIN: int = 0
 const LIGHTING_FOLIAGE: int = 1
@@ -18,7 +20,7 @@ const BAKED_MATERIAL_ONLY: int = 3
 
 
 func _can_handle(object: Object) -> bool:
-	return is_instance_valid(_find_region_node_root(object as Node))
+	return object is Node3D and _find_region_node_root(object as Node) == object
 
 
 func _parse_begin(object: Object) -> void:
@@ -42,8 +44,8 @@ func _parse_begin(object: Object) -> void:
 
 
 func _make_boundary_row(region_node: Node3D) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
 	var label := _label("Region boundary",
 		"Single ownership stays with this root. Bounds Coverage keeps the owner region resident when the node extends into neighboring regions.")
 	row.add_child(label)
@@ -54,13 +56,14 @@ func _make_boundary_row(region_node: Node3D) -> Control:
 	var policy: int = int(region_node.get_meta(WorkbenchMetadata.NODE_META_BOUNDARY_POLICY, WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS))
 	_select_id(options, policy)
 	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_BOUNDARY_POLICY))
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(options)
 	return row
 
 
 func _make_lighting_class_row(region_node: Node3D) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
 	row.add_child(_label("Lighting class",
 		"Semantic world role used by the selective directional-shadow policy. It is independent of LightmapGI participation."))
 	var options := OptionButton.new()
@@ -72,13 +75,14 @@ func _make_lighting_class_row(region_node: Node3D) -> Control:
 	options.tooltip_text = "Semantic lighting/shadow class for this streamed object. The class selects the quality-policy shadow treatment independently of baked-lighting participation."
 	_select_id(options, int(region_node.get_meta(WorkbenchMetadata.NODE_META_LIGHTING_CLASS, LIGHTING_MEDIUM)))
 	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_LIGHTING_CLASS))
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(options)
 	return row
 
 
 func _make_baked_mode_row(region_node: Node3D) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
 	row.add_child(_label("Baked lighting",
 		"Controls GI participation for the streamed receiver. This does not determine its dynamic-shadow class."))
 	var options := OptionButton.new()
@@ -89,14 +93,15 @@ func _make_baked_mode_row(region_node: Node3D) -> Control:
 	options.tooltip_text = "Baked-lighting participation for this streamed object: disabled, lightmap, probe/dynamic, or material-only contribution."
 	_select_id(options, int(region_node.get_meta(WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE, BAKED_LIGHTMAP)))
 	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE))
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(options)
 	return row
 
 
 func _make_bool_row(text: String, meta_key: StringName, default_value: bool,
 		region_node: Node3D, tooltip: String) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
 	row.add_child(_label(text, tooltip))
 	var checkbox := CheckBox.new()
 	checkbox.button_pressed = bool(region_node.get_meta(meta_key, default_value))
@@ -107,8 +112,8 @@ func _make_bool_row(text: String, meta_key: StringName, default_value: bool,
 
 
 func _make_shadow_proxy_row(region_node: Node3D) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := VBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
 	row.add_child(_label("Shadow proxy",
 		"Optional low-detail PackedScene streamed with this object. Geometry in the proxy is forced to Shadows Only."))
 	var picker := EditorResourcePicker.new()
@@ -128,6 +133,7 @@ func _label(text: String, tooltip: String) -> Label:
 	label.text = text
 	label.tooltip_text = tooltip
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
 
 
@@ -143,16 +149,14 @@ func _on_int_meta_selected(index: int, node_ref: WeakRef, options: OptionButton,
 	var region_node := node_ref.get_ref() as Node3D
 	if not is_instance_valid(region_node):
 		return
-	region_node.set_meta(meta_key, options.get_item_id(index))
-	EditorInterface.mark_scene_as_unsaved()
+	_commit_meta(region_node, meta_key, options.get_item_id(index))
 
 
 func _on_bool_meta_toggled(enabled: bool, node_ref: WeakRef, meta_key: StringName) -> void:
 	var region_node := node_ref.get_ref() as Node3D
 	if not is_instance_valid(region_node):
 		return
-	region_node.set_meta(meta_key, enabled)
-	EditorInterface.mark_scene_as_unsaved()
+	_commit_meta(region_node, meta_key, enabled)
 
 
 func _on_shadow_proxy_changed(resource: Resource, node_ref: WeakRef) -> void:
@@ -160,8 +164,21 @@ func _on_shadow_proxy_changed(resource: Resource, node_ref: WeakRef) -> void:
 	if not is_instance_valid(region_node):
 		return
 	var path: String = resource.resource_path if is_instance_valid(resource) else ""
-	region_node.set_meta(WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, path)
-	EditorInterface.mark_scene_as_unsaved()
+	_commit_meta(region_node, WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, path)
+
+
+func _commit_meta(p_node: Node3D, p_key: StringName, p_value: Variant) -> void:
+	var old_value: Variant = p_node.get_meta(p_key, null)
+	if old_value == p_value:
+		return
+	if not is_instance_valid(plugin):
+		p_node.set_meta(p_key, p_value)
+		return
+	var undo: EditorUndoRedoManager = plugin.get_undo_redo()
+	undo.create_action("Set Streamed Node %s" % String(p_key))
+	undo.add_do_method(p_node, "set_meta", p_key, p_value)
+	undo.add_undo_method(p_node, "set_meta", p_key, old_value)
+	undo.commit_action()
 
 
 func _find_region_node_root(node: Node) -> Node3D:

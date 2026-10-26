@@ -1,5 +1,6 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 # UI for Terrain3D
+@tool
 extends Node
 
 
@@ -63,6 +64,7 @@ var active_tool: int = int(Terrain3DEditor.TOOL_MAX)
 var _selected_tool: int = int(Terrain3DEditor.TOOL_MAX)
 var active_operation: int = int(Terrain3DEditor.OP_MAX)
 var _selected_operation: int = int(Terrain3DEditor.OP_MAX)
+var _tool_settings_initialized: bool = false
 var _touchscreen_invert_active: bool = false
 
 # 3 Editor decals: 0 = cursor, 1 = slope point1, 2 = slope point2
@@ -128,6 +130,10 @@ func set_asset_dock(p_asset_dock: Terrain3DAssetDock) -> void:
 		tool_settings.asset_dock = p_asset_dock
 	if is_instance_valid(landform_controller):
 		landform_controller.asset_dock = p_asset_dock
+	# The initial Region selection may arrive before ToolSettings._ready or
+	# before the asset lists exist. Complete that deferred setup now.
+	if is_instance_valid(tool_settings) and tool_settings.settings.has(&"brush"):
+		_on_tool_changed(_selected_tool, _selected_operation)
 
 
 func _exit_tree() -> void:
@@ -171,7 +177,15 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 	if plugin.debug:
 		print("Terrain3DUI: set_visible(%s, %s)" % [ p_visible, p_menu_only ])
 
-	terrain_menu.set_visible(p_visible)
+	# Selection callbacks can occur during plugin startup or shutdown.
+	# The UI must not dereference controls before _enter_tree has built them.
+	if not is_instance_valid(terrain_menu) or not is_instance_valid(toolbar) or \
+			not is_instance_valid(tool_settings):
+		return
+
+	# Keep the tools entry accessible while inspecting terrain resources.
+	# Painting controls still follow the current terrain selection below.
+	terrain_menu.set_visible(p_visible or is_instance_valid(plugin.get_terrain()))
 	if p_visible and not p_menu_only:
 		var mode_menu: Terrain3DExecutionModeMenuBase = _ensure_execution_mode_menu()
 		if is_instance_valid(mode_menu):
@@ -214,10 +228,15 @@ func set_menu_visibility(p_list: Control, p_visible: bool) -> void:
 func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 	if plugin.debug:
 		print("Terrain3DUI: _on_tool_changed: ", p_tool, ", ", p_operation)
-	if _selected_tool == p_tool and _selected_operation == p_operation:
-		# Terrain/scene detachment resets native state while the UI intentionally
-		# retains its selection. Refresh brush data as well so the selected asset and
-		# terrain-specific settings cannot leak from the previously edited terrain.
+	if not is_instance_valid(tool_settings) or not tool_settings.settings.has(&"brush"):
+		# Controls are built in ToolSettings._ready, not in its constructor.
+		_selected_tool = p_tool
+		_selected_operation = p_operation
+		return
+	if _tool_settings_initialized and _selected_tool == p_tool and _selected_operation == p_operation:
+		# Reapply the selected native tool after terrain changes. The first tool
+		# event must still build the settings rows, even if an earlier event only
+		# recorded the selection before ToolSettings._ready completed.
 		_on_setting_changed()
 		return
 	# A native stroke owns one map/instance undo transaction. Changing tools while
@@ -397,6 +416,7 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 		to_show.push_back("gamma")
 		to_show.push_back("brush_spin_speed")
 	tool_settings.show_settings(to_show)
+	_tool_settings_initialized = true
 	_refresh_landform_mode_visibility()
 
 	if plugin.debug:
@@ -404,13 +424,37 @@ func _on_tool_changed(p_tool: int, p_operation: int) -> void:
 	_on_setting_changed()
 
 
+func _has_valid_brush(p_data: Dictionary[StringName, Variant]) -> bool:
+	var brush: Variant = p_data.get(&"brush")
+	if not brush is Array or brush.size() != 2:
+		return false
+	var image: Image = brush[0] as Image
+	var texture: Texture2D = brush[1] as Texture2D
+	return is_instance_valid(image) and not image.is_empty() and \
+			is_instance_valid(texture) and texture.get_width() > 0 and texture.get_height() > 0
+
+
 func _on_setting_changed() -> void:
 	if plugin.debug:
 		print("Terrain3DUI: _on_setting_changed")
-	if not asset_dock: # Skip function if not _ready()
+	if not is_instance_valid(tool_settings) or not tool_settings.settings.has(&"brush"):
+		return
+	if not is_instance_valid(asset_dock):
+		# Tool selection is independent of brush and asset initialization.
+		set_active_operation()
+		return
+	var next_brush_data: Dictionary[StringName, Variant] = tool_settings.get_settings()
+	# AssetDock emits selection updates while Terrain3D binds. Native editing
+	# must never receive a partial brush dictionary from that phase.
+	if not _has_valid_brush(next_brush_data):
+		# Preserve the last validated brush payload, but update the native
+		# selection so the toolbar does not remain stuck on the previous tool.
+		_touchscreen_invert_active = bool(next_brush_data.get("invert", false))
+		set_active_operation()
+		hide_decal()
 		return
 	var previous_touchscreen_invert_active: bool = _touchscreen_invert_active
-	brush_data = tool_settings.get_settings()
+	brush_data = next_brush_data
 	_refresh_landform_mode_visibility()
 	match _selected_tool:
 		Terrain3DEditor.TEXTURE, Terrain3DEditor.COLOR, Terrain3DEditor.ROUGHNESS:
@@ -683,6 +727,9 @@ func cancel_landform_stroke() -> void:
 
 func update_decal() -> void:
 	if not plugin.terrain or not plugin.viewport or brush_data.size() <= 3:
+		return
+	if not _has_valid_brush(brush_data):
+		hide_decal()
 		return
 
 	# If not a state that should show the decal, hide everything and return

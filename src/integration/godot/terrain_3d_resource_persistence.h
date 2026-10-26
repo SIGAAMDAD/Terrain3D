@@ -12,8 +12,12 @@
 
 using namespace godot;
 
-template <typename TResource, typename TPrepareCallback>
-Error t3dSaveExternalResource( TResource *const pResource, const String &rPath, bool &rPersistenceDirty, TPrepareCallback pPrepare ) {
+template< typename TResource, typename TPrepareCallback >
+Error t3dSaveExternalResource(
+	TResource *const pResource,
+	const String	&rPath,
+	bool			&rPersistenceDirty,
+	TPrepareCallback pPrepare ) {
 	static const char *const __class__ = "Terrain3DResourcePersistence";
 	if ( pResource == NULL || ( rPath.is_empty() && pResource->get_path().is_empty() ) ) {
 		return ERR_FILE_NOT_FOUND;
@@ -37,7 +41,12 @@ Error t3dSaveExternalResource( TResource *const pResource, const String &rPath, 
 	LOG( DEBUG, String( "Attempting to save external file: " ) + path );
 	const Error err = ResourceSaver::get_singleton()->save( pResource, path, ResourceSaver::FLAG_COMPRESS );
 	if ( err != OK ) {
-		LOG( ERROR, "Cannot save file: ", path, ". Error code: ", ERROR, ". Look up @GlobalScope Error enum in the Godot docs" );
+		LOG( ERROR,
+			 "Cannot save file: ",
+			 path,
+			 ". Error code: ",
+			 ERROR,
+			 ". Look up @GlobalScope Error enum in the Godot docs" );
 		return err;
 	}
 

@@ -51,6 +51,7 @@ func _restore_profiling_state() -> void:
 	_restore_profiling = false
 
 
+
 func _build_ui() -> void:
 	_panel = PanelContainer.new()
 	_panel.position = Vector2(12.0, 12.0)

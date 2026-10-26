@@ -6,9 +6,22 @@ extends "res://addons/terrain_3d/src/editor_plugin_base.gd"
 
 # Includes
 const Terrain3DUI = preload("res://addons/terrain_3d/src/ui.gd")
+const VtDemandExportPlugin = preload("res://addons/terrain_3d/src/vt_demand_export_plugin.gd")
+# Export-preflight parsing is deferred until the user explicitly requests it.
+# A broken export checker must not disable the painting sidebar at startup.
+const RUNTIME_EXPORT_PREFLIGHT_PATH: String = "res://addons/terrain_3d/src/runtime_export_preflight.gd"
 const InstanceTransformProxy = preload("res://addons/terrain_3d/src/instance_transform_proxy.gd")
 const ASSET_DOCK: PackedScene = preload("res://addons/terrain_3d/src/asset_dock.tscn")
 const ErosionInspectorPlugin = preload("res://addons/terrain_3d/menu/erosion_inspector_plugin.gd")
+const ErosionSimulator = preload("res://addons/terrain_3d/menu/erosion_simulator.gd")
+const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
+const RegionNodeInspectorPlugin = preload("res://addons/terrain_3d/tools/region_node_inspector_plugin.gd")
+const RegionWorkbenchTerrainInspectorPlugin = preload("res://addons/terrain_3d/tools/region_workbench_terrain_inspector_plugin.gd")
+# Optional Inspector documentation must not be a hard parser dependency of
+# the primary terrain toolbar. Resolve it after core controls are registered.
+const TERRAIN_PROPERTY_HELP_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_inspector_property_help.gd"
+const TERRAIN_RESOURCE_HELP_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_resource_help_inspector_plugin.gd"
+const TERRAIN_SETTINGS_WINDOW_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_settings_window.gd"
 const ShaderPerformancePanel = preload("res://addons/terrain_3d/src/shader_performance_panel.gd")
 const AutoShaderPanel = preload("res://addons/terrain_3d/src/autoshader_panel.gd")
 const StreamingConverter = preload("res://addons/terrain_3d/tools/streaming_converter.gd")
@@ -16,20 +29,24 @@ const RegionLightmapBaker = preload("res://addons/terrain_3d/tools/region_lightm
 const RegionLightmapPanel = preload("res://addons/terrain_3d/tools/region_lightmap_panel.gd")
 const HLODBaker = preload("res://addons/terrain_3d/tools/hlod_baker.gd")
 const HLODPanel = preload("res://addons/terrain_3d/tools/hlod_panel.gd")
+const FoliagePanel = preload("res://addons/terrain_3d/tools/foliage_panel.gd")
 const TOOL_MENU_OPEN: String = "Terrain3D: Open Tools Menu"
-const TOOL_MENU_EROSION: String = "Terrain3D: Show Erosion in Inspector"
-const TOOL_MENU_SHADER: String = "Terrain3D: Runtime Shader Quality"
-const TOOL_MENU_AUTOSHADER: String = "Terrain3D: Material Rules"
-const TOOL_MENU_CONVERT_STREAMING: String = "Terrain3D: Convert Selected Objects to Region Streaming"
-const TOOL_MENU_LIGHTMAP: String = "Terrain3D: Bake Region Lightmaps"
-const TOOL_MENU_HLOD: String = "Terrain3D: HLOD"
+const TOOL_MENU_EXPORT_PREFLIGHT: String = "Terrain3D: Validate Runtime Export"
 const EXPECTED_NATIVE_API_REVISION: int = 2026091003
 const EXPECTED_NATIVE_BUILD_ID: String = "mesh-derived-instance-physics-occlusion-p13-2-rd-capacity-align-2026-09-16"
+const EXPECTED_NATIVE_BUILD_FLAVOR: String = "editor"
 
 # Editor Plugin
 var ui: Terrain3DUI
 var asset_dock: Terrain3DAssetDock
 var erosion_inspector_plugin: ErosionInspectorPlugin
+var region_node_inspector_plugin: RegionNodeInspectorPlugin
+var region_workbench_inspector_plugin: EditorInspectorPlugin
+var property_help_inspector_plugin: EditorInspectorPlugin
+var resource_help_inspector_plugin: EditorInspectorPlugin
+var terrain_settings_window: Window
+var erosion_window: Window
+var erosion_panel: ErosionSimulator
 var shader_performance_panel: ShaderPerformancePanel
 var autoshader_panel: AutoShaderPanel
 var streaming_converter: StreamingConverter
@@ -37,6 +54,8 @@ var region_lightmap_baker: RegionLightmapBaker
 var region_lightmap_panel: RegionLightmapPanel
 var hlod_baker: HLODBaker
 var hlod_panel: HLODPanel
+var vt_demand_export_plugin: EditorExportPlugin
+var foliage_panel: FoliagePanel
 
 class ErosionSettingsCacheEntry extends RefCounted:
 	var terrain_ref: WeakRef
@@ -55,6 +74,7 @@ var _last_terrain: Terrain3D
 var _last_modifiers: int = 0
 var _use_meta: bool = false
 var _native_contract_error_reported: bool = false
+var _native_editor_initialized: bool = false
 var _instance_edit_mode: bool = false
 var _instance_edit_proxy: Node3D
 
@@ -69,8 +89,15 @@ func _init() -> void:
 func _enter_tree() -> void:
 	if debug:
 		print("Terrain3DEditorPlugin: _enter_tree")
+	# No UI, editor objects or export hooks may be constructed for a template DLL.
+	# This check runs before any authoring component is initialized.
+	if not _validate_native_editor_build():
+		return
 	editor = Terrain3DEditor.new()
+	_native_editor_initialized = true
 	setup_editor_settings()
+	vt_demand_export_plugin = VtDemandExportPlugin.new()
+	add_export_plugin(vt_demand_export_plugin)
 	ui = Terrain3DUI.new()
 	ui.plugin = self
 	add_child(ui)
@@ -80,11 +107,23 @@ func _enter_tree() -> void:
 	ui.set_asset_dock(asset_dock)
 	ui.toolbar.tool_changed.connect(asset_dock._on_tool_changed)
 
-	# Erosion is embedded in the Terrain3D node Inspector. Registering the inspector
-	# plugin here keeps the normal top toolbar independent from the erosion UI.
+	# The Inspector stays lightweight. Authoring jobs live in a persistent window.
 	erosion_inspector_plugin = ErosionInspectorPlugin.new()
 	erosion_inspector_plugin.plugin = self
 	add_inspector_plugin(erosion_inspector_plugin)
+	region_node_inspector_plugin = RegionNodeInspectorPlugin.new()
+	region_node_inspector_plugin.plugin = self
+	add_inspector_plugin(region_node_inspector_plugin)
+	region_workbench_inspector_plugin = RegionWorkbenchTerrainInspectorPlugin.new()
+	add_inspector_plugin(region_workbench_inspector_plugin)
+	# A syntax/import error in optional Inspector help must not prevent terrain
+	# painting tools from being constructed. The native Inspector still works.
+	property_help_inspector_plugin = _load_optional_inspector(TERRAIN_PROPERTY_HELP_PATH)
+	if is_instance_valid(property_help_inspector_plugin):
+		add_inspector_plugin(property_help_inspector_plugin)
+	resource_help_inspector_plugin = _load_optional_inspector(TERRAIN_RESOURCE_HELP_PATH)
+	if is_instance_valid(resource_help_inspector_plugin):
+		add_inspector_plugin(resource_help_inspector_plugin)
 
 	shader_performance_panel = ShaderPerformancePanel.new()
 	shader_performance_panel.plugin = self
@@ -110,29 +149,64 @@ func _enter_tree() -> void:
 	hlod_panel.baker = hlod_baker
 	add_child(hlod_panel)
 
+	foliage_panel = FoliagePanel.new()
+	foliage_panel.plugin = self
+	add_child(foliage_panel)
+
+	# Other authoring actions are available from Terrain3D > Tools.
 	add_tool_menu_item(TOOL_MENU_OPEN, _open_terrain_tools_menu)
-	add_tool_menu_item(TOOL_MENU_EROSION, open_erosion_simulator)
-	add_tool_menu_item(TOOL_MENU_SHADER, open_shader_performance)
-	add_tool_menu_item(TOOL_MENU_AUTOSHADER, open_autoshader_baker)
-	add_tool_menu_item(TOOL_MENU_CONVERT_STREAMING, convert_selected_to_region_streaming)
-	add_tool_menu_item(TOOL_MENU_LIGHTMAP, open_region_lightmap_baker)
-	add_tool_menu_item(TOOL_MENU_HLOD, open_hlod_panel)
+	add_tool_menu_item(TOOL_MENU_EXPORT_PREFLIGHT, _validate_runtime_export)
 	_connect_editor_signals()
+	# Enabling the plugin while Terrain3D is already selected does not always
+	# replay _edit(). Reconcile once after the editor has entered the tree.
+	_sync_tools_after_selection.call_deferred()
+
+
+func _load_optional_inspector(p_path: String) -> EditorInspectorPlugin:
+	var script: Script = load(p_path) as Script
+	if script == null or not script.can_instantiate():
+		push_warning("Terrain3D optional Inspector documentation disabled: %s" % p_path)
+		return null
+	var instance: EditorInspectorPlugin = script.new() as EditorInspectorPlugin
+	if not is_instance_valid(instance):
+		push_warning("Terrain3D optional Inspector documentation has invalid type: %s" % p_path)
+	return instance
 
 
 func _exit_tree() -> void:
 	if debug:
 		print("Terrain3DEditorPlugin: _exit_tree")
+	if not _native_editor_initialized:
+		return
+	_native_editor_initialized = false
 	_disconnect_editor_signals()
+	if vt_demand_export_plugin != null:
+		remove_export_plugin(vt_demand_export_plugin)
+		vt_demand_export_plugin = null
 	_detach_current_terrain()
 	_last_terrain = null
 	remove_tool_menu_item(TOOL_MENU_OPEN)
-	remove_tool_menu_item(TOOL_MENU_EROSION)
-	remove_tool_menu_item(TOOL_MENU_SHADER)
-	remove_tool_menu_item(TOOL_MENU_AUTOSHADER)
-	remove_tool_menu_item(TOOL_MENU_CONVERT_STREAMING)
-	remove_tool_menu_item(TOOL_MENU_LIGHTMAP)
-	remove_tool_menu_item(TOOL_MENU_HLOD)
+	remove_tool_menu_item(TOOL_MENU_EXPORT_PREFLIGHT)
+	# Release the long-lived erosion panel only when the addon is disabled.
+	if is_instance_valid(erosion_window):
+		erosion_window.queue_free()
+		erosion_window = null
+		erosion_panel = null
+	if is_instance_valid(terrain_settings_window):
+		terrain_settings_window.queue_free()
+		terrain_settings_window = null
+	if resource_help_inspector_plugin:
+		remove_inspector_plugin(resource_help_inspector_plugin)
+		resource_help_inspector_plugin = null
+	if property_help_inspector_plugin:
+		remove_inspector_plugin(property_help_inspector_plugin)
+		property_help_inspector_plugin = null
+	if region_workbench_inspector_plugin:
+		remove_inspector_plugin(region_workbench_inspector_plugin)
+		region_workbench_inspector_plugin = null
+	if region_node_inspector_plugin:
+		remove_inspector_plugin(region_node_inspector_plugin)
+		region_node_inspector_plugin = null
 	if erosion_inspector_plugin:
 		remove_inspector_plugin(erosion_inspector_plugin)
 		erosion_inspector_plugin = null
@@ -153,6 +227,9 @@ func _exit_tree() -> void:
 	if is_instance_valid(region_lightmap_baker):
 		region_lightmap_baker.queue_free()
 		region_lightmap_baker = null
+	if is_instance_valid(foliage_panel):
+		foliage_panel.queue_free()
+		foliage_panel = null
 	if is_instance_valid(hlod_panel):
 		hlod_panel.queue_free()
 		hlod_panel = null
@@ -177,6 +254,9 @@ func _connect_editor_signals() -> void:
 	# subscribe to editor-window focus changes.
 	if not scene_changed.is_connected(_on_scene_changed):
 		scene_changed.connect(_on_scene_changed)
+	var selection: EditorSelection = EditorInterface.get_selection()
+	if is_instance_valid(selection) and not selection.selection_changed.is_connected(_on_editor_selection_changed):
+		selection.selection_changed.connect(_on_editor_selection_changed)
 	# Retained for AssetDock focus handoff only. No focus-entered callback is
 	# connected here; Terrain3D has no work to perform merely because Godot regained focus.
 	godot_editor_window = EditorInterface.get_base_control().get_window()
@@ -190,15 +270,66 @@ func _disconnect_editor_signals() -> void:
 	# that are being removed below.
 	if scene_changed.is_connected(_on_scene_changed):
 		scene_changed.disconnect(_on_scene_changed)
+	var selection: EditorSelection = EditorInterface.get_selection()
+	if is_instance_valid(selection) and selection.selection_changed.is_connected(_on_editor_selection_changed):
+		selection.selection_changed.disconnect(_on_editor_selection_changed)
 	var inspector := EditorInterface.get_inspector()
 	if is_instance_valid(inspector) and inspector.mouse_entered.is_connected(_on_inspector_mouse_entered):
 		inspector.mouse_entered.disconnect(_on_inspector_mouse_entered)
 	godot_editor_window = null
 
 
+func _on_editor_selection_changed() -> void:
+	# Godot can invoke _make_visible and _edit in either order. Inspect the
+	# settled scene selection rather than the transient callback state.
+	_sync_tools_after_selection.call_deferred()
+
+
+func _sync_tools_after_selection() -> void:
+	if not _native_editor_initialized or not is_instance_valid(editor) or not is_instance_valid(ui) \
+			or not is_instance_valid(ui.toolbar):
+		return
+	var selection: EditorSelection = EditorInterface.get_selection()
+	if not is_instance_valid(selection):
+		return
+	for node: Node in selection.get_selected_nodes():
+		if not node is Terrain3D:
+			continue
+		var selected_terrain: Terrain3D = node as Terrain3D
+		if not is_instance_valid(selected_terrain) or not selected_terrain.is_inside_tree():
+			continue
+		var active_root: Node = EditorInterface.get_edited_scene_root()
+		if not is_instance_valid(active_root) or (selected_terrain != active_root and not active_root.is_ancestor_of(selected_terrain)):
+			continue
+		# An authored Terrain3D node can be selected before its data resource is
+		# ready. That must not hide the entire tool sidebar. The native binding
+		# itself keeps the stricter data/lifetime checks.
+		if is_terrain_valid(selected_terrain):
+			if terrain != selected_terrain:
+				_bind_terrain(selected_terrain)
+			elif not ui.toolbar.visible:
+				ui.set_visible(true)
+		else:
+			ui.set_visible(true)
+		return
+	if _is_instance_edit_proxy_selected() and is_terrain_valid():
+		if not ui.toolbar.visible:
+			ui.set_visible(true)
+		return
+	if is_instance_valid(nav_region) and is_terrain_valid(_last_terrain):
+		ui.set_visible(true, true)
+	else:
+		ui.set_visible(false)
+
+
 func get_erosion_settings(p_terrain: Terrain3D) -> Terrain3DErosionSettings:
 	if not is_instance_valid(p_terrain):
 		return Terrain3DErosionSettings.new()
+	# Weak terrain ownership must not keep old scene settings alive indefinitely.
+	for terrain_id: int in erosion_settings_cache.keys():
+		var cached: ErosionSettingsCacheEntry = erosion_settings_cache[terrain_id]
+		if not is_instance_valid(cached.terrain_ref.get_ref() if cached.terrain_ref else null):
+			erosion_settings_cache.erase(terrain_id)
 	var terrain_id := p_terrain.get_instance_id()
 	if erosion_settings_cache.has(terrain_id):
 		var entry: ErosionSettingsCacheEntry = erosion_settings_cache[terrain_id]
@@ -216,13 +347,70 @@ func set_erosion_settings(p_terrain: Terrain3D, p_settings: Terrain3DErosionSett
 	erosion_settings_cache[p_terrain.get_instance_id()] = ErosionSettingsCacheEntry.new(p_terrain, p_settings)
 
 
+func open_foliage_generator() -> void:
+	if is_instance_valid(foliage_panel):
+		foliage_panel.open()
+
+
 func open_erosion_simulator() -> void:
-	if not is_instance_valid(terrain):
-		push_error("Select a Terrain3D node before opening erosion tools")
+	var active_terrain: Terrain3D = get_terrain()
+	if not is_instance_valid(active_terrain):
+		push_warning("Select a Terrain3D node before opening erosion tools.")
 		return
-	# The erosion workflow is an EditorInspectorPlugin section on Terrain3D.
-	# Inspecting the node is the canonical way to reveal it in Godot 4.7.
-	EditorInterface.inspect_object(terrain)
+	if not is_instance_valid(erosion_window):
+		_create_erosion_window(active_terrain)
+	if not is_instance_valid(erosion_panel):
+		return
+	if not erosion_panel.bind_terrain(active_terrain):
+		# An active job remains bound to the source terrain until it completes.
+		push_warning("Finish or cancel the current erosion job before switching terrains.")
+	var preferred: Vector2i = Vector2i(int(EditorUI.scaled(1040.0)), int(EditorUI.scaled(760.0)))
+	var minimum: Vector2i = Vector2i(int(EditorUI.scaled(680.0)), int(EditorUI.scaled(460.0)))
+	if erosion_window.visible:
+		erosion_window.grab_focus()
+	else:
+		erosion_window.popup_centered(EditorUI.popup_size_for_screen(erosion_window, preferred, minimum))
+
+
+func _create_erosion_window(p_terrain: Terrain3D) -> void:
+	erosion_window = Window.new()
+	erosion_window.title = "Terrain3D — Erosion"
+	erosion_window.initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_MAIN_WINDOW_SCREEN
+	erosion_window.transient = true
+	erosion_window.exclusive = false
+	erosion_window.visible = false
+	erosion_window.close_requested.connect(erosion_window.hide)
+	erosion_window.min_size = Vector2i(int(EditorUI.scaled(680.0)), int(EditorUI.scaled(460.0)))
+
+	var margin: MarginContainer = MarginContainer.new()
+	for side: StringName in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
+		margin.add_theme_constant_override(side, int(EditorUI.scaled(10.0)))
+	erosion_window.add_child(margin)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var layout: VBoxContainer = VBoxContainer.new()
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	margin.add_child(layout)
+
+	var scroll: ScrollContainer = ScrollContainer.new()
+	EditorUI.configure_scroll_container(scroll)
+	layout.add_child(scroll)
+
+	var footer: HFlowContainer = HFlowContainer.new()
+	footer.alignment = FlowContainer.ALIGNMENT_END
+	footer.add_theme_constant_override("h_separation", int(EditorUI.scaled(8.0)))
+	footer.add_theme_constant_override("v_separation", int(EditorUI.scaled(4.0)))
+	layout.add_child(HSeparator.new())
+	layout.add_child(footer)
+
+	erosion_panel = ErosionSimulator.new()
+	erosion_panel.plugin = self
+	erosion_panel.terrain = p_terrain
+	erosion_panel.action_host = footer
+	erosion_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(erosion_panel)
+	add_child(erosion_window)
 
 
 func open_shader_performance() -> void:
@@ -239,6 +427,8 @@ func open_autoshader_baker() -> void:
 		return
 	if is_instance_valid(autoshader_panel):
 		autoshader_panel.set_terrain(terrain)
+	if is_instance_valid(foliage_panel):
+		foliage_panel.set_terrain(terrain)
 		autoshader_panel.open()
 
 
@@ -256,6 +446,32 @@ func convert_selected_to_hlod_visual(min_level: int = 1) -> void:
 		return
 	if is_instance_valid(streaming_converter):
 		streaming_converter.convert_selected_as_hlod_visual(min_level)
+
+
+func open_terrain_settings() -> void:
+	var selected_terrain: Terrain3D = get_terrain()
+	if not is_instance_valid(selected_terrain):
+		push_warning("Select a Terrain3D node before opening Terrain Settings")
+		return
+	if not is_instance_valid(terrain_settings_window):
+		# The optional window is loaded on demand, not during primary plugin startup.
+		var window_script: Script = load(TERRAIN_SETTINGS_WINDOW_PATH) as Script
+		if window_script == null or not window_script.can_instantiate():
+			push_error("Terrain3D Settings window script could not be loaded")
+			return
+		terrain_settings_window = window_script.new() as Window
+		if not is_instance_valid(terrain_settings_window):
+			push_error("Terrain3D Settings window could not be instantiated")
+			return
+		terrain_settings_window.set("plugin", self)
+		add_child(terrain_settings_window)
+	terrain_settings_window.call("open_tab", "Streaming & VT", selected_terrain)
+
+
+func open_runtime_dataset_cook_confirmation() -> void:
+	if not is_instance_valid(ui) or not is_instance_valid(ui.terrain_menu):
+		return
+	ui.terrain_menu.open_runtime_cook_confirmation()
 
 
 func open_region_lightmap_baker() -> void:
@@ -292,9 +508,13 @@ func notify_ui_setting_changed() -> void:
 func _open_terrain_tools_menu() -> void:
 	if not is_instance_valid(ui) or not is_instance_valid(ui.terrain_menu):
 		return
-	# Switch to the 3D editor before opening the spatial toolbar popup. This provides
-	# a reliable fallback when a crowded editor layout clips the toolbar button.
+	# Resource inspection detaches painting, but the last terrain remains a valid
+	# target for an explicit request to reopen its tools.
+	var active_terrain: Terrain3D = get_terrain()
+	if is_instance_valid(active_terrain):
+		_bind_terrain(active_terrain)
 	EditorInterface.set_main_screen_editor("3D")
+	ui.set_visible(is_instance_valid(terrain))
 	ui.terrain_menu.show()
 	ui.terrain_menu.open_menu.call_deferred()
 
@@ -355,14 +575,29 @@ func _edit(p_object: Object) -> void:
 			nav_region = null
 
 
+func _validate_native_editor_build() -> bool:
+	var flavor: String = Terrain3DUtil.get_native_build_flavor()
+	var revision: int = Terrain3DUtil.get_native_api_revision()
+	var build_id: String = Terrain3DUtil.get_native_build_id()
+	if flavor == EXPECTED_NATIVE_BUILD_FLAVOR and revision == EXPECTED_NATIVE_API_REVISION \
+			and build_id == EXPECTED_NATIVE_BUILD_ID and ClassDB.class_exists("Terrain3DEditor"):
+		_native_contract_error_reported = false
+		return true
+	if not _native_contract_error_reported:
+		push_error("Terrain3D editor native contract mismatch. Expected %s API %d (%s), loaded %s API %d (%s). Refusing to initialize authoring tools." % [EXPECTED_NATIVE_BUILD_FLAVOR, EXPECTED_NATIVE_API_REVISION, EXPECTED_NATIVE_BUILD_ID, flavor, revision, build_id])
+		_native_contract_error_reported = true
+	return false
+
+
 func _validate_native_contract(p_terrain: Terrain3D) -> bool:
 	if not is_instance_valid(p_terrain):
 		return false
 	var revision: int = p_terrain.get_native_api_revision()
 	var build_id: String = p_terrain.get_native_build_id()
-	if revision != EXPECTED_NATIVE_API_REVISION or build_id != EXPECTED_NATIVE_BUILD_ID:
+	var flavor: String = p_terrain.get_native_build_flavor()
+	if flavor != EXPECTED_NATIVE_BUILD_FLAVOR or revision != EXPECTED_NATIVE_API_REVISION or build_id != EXPECTED_NATIVE_BUILD_ID:
 		if not _native_contract_error_reported:
-			push_error("Terrain3D native/script revision mismatch. Expected API %d (%s), loaded API %d (%s). Refusing to bind the editor UI to mixed native/script revisions." % [EXPECTED_NATIVE_API_REVISION, EXPECTED_NATIVE_BUILD_ID, revision, build_id])
+			push_error("Terrain3D native/script contract mismatch. Expected %s API %d (%s), loaded %s API %d (%s). Refusing to bind the editor UI." % [EXPECTED_NATIVE_BUILD_FLAVOR, EXPECTED_NATIVE_API_REVISION, EXPECTED_NATIVE_BUILD_ID, flavor, revision, build_id])
 			_native_contract_error_reported = true
 		return false
 	_native_contract_error_reported = false
@@ -374,6 +609,11 @@ func _bind_terrain(p_terrain: Terrain3D) -> void:
 		_detach_current_terrain()
 		return
 	if p_terrain == terrain:
+		# Godot may hide the spatial controls while inspecting another object,
+		# then call _edit() again for the same Terrain3D. Restoring the existing
+		# binding must also restore its toolbar and tool settings.
+		if is_instance_valid(ui):
+			ui.set_visible(true)
 		return
 	_detach_current_terrain()
 	terrain = p_terrain
@@ -401,6 +641,10 @@ func _bind_terrain(p_terrain: Terrain3D) -> void:
 		asset_dock.update_assets()
 	if is_instance_valid(autoshader_panel):
 		autoshader_panel.set_terrain(terrain)
+	if is_instance_valid(foliage_panel):
+		foliage_panel.set_terrain(terrain)
+	if is_instance_valid(terrain_settings_window):
+		terrain_settings_window.call("set_terrain", terrain)
 
 
 func _make_visible(p_visible: bool) -> void:
@@ -413,7 +657,9 @@ func _make_visible(p_visible: bool) -> void:
 			editor.stop_operation()
 		ui.cancel_landform_stroke()
 		ui.clear_picking()
-	if p_visible and is_selected():
+	if p_visible and (is_selected() or is_terrain_valid()):
+		# _make_visible() can precede the editor selection update. The bound
+		# Terrain3D is still authoritative for a positive visibility request.
 		ui.set_visible(true)
 		if is_instance_valid(asset_dock):
 			asset_dock.update_dock()
@@ -443,7 +689,11 @@ func _detach_current_terrain() -> void:
 		editor.set_terrain(null)
 
 	var previous := terrain
+	if is_instance_valid(foliage_panel):
+		foliage_panel.set_terrain(null)
 	terrain = null
+	if is_instance_valid(terrain_settings_window):
+		terrain_settings_window.call("set_terrain", null)
 	if is_instance_valid(autoshader_panel):
 		autoshader_panel.set_terrain(null)
 	if not is_instance_valid(previous):
@@ -776,6 +1026,9 @@ func _on_scene_changed(scene_root: Node) -> void:
 
 	if is_instance_valid(asset_dock):
 		asset_dock.update_assets()
+	# Scene changes can retain a selection without emitting selection_changed.
+	# Reconcile the UI after the new scene root is active.
+	_sync_tools_after_selection.call_deferred()
 
 
 func get_terrain() -> Terrain3D:
@@ -991,3 +1244,16 @@ func add_do_method(p_method: Callable) -> void:
 
 func commit_action(p_execute: bool) -> void:
 	get_undo_redo().commit_action(p_execute)
+
+
+func _validate_runtime_export() -> void:
+	var preflight: Script = load(RUNTIME_EXPORT_PREFLIGHT_PATH) as Script
+	if preflight == null or not preflight.can_instantiate():
+		push_error("Terrain3D runtime export preflight script could not be loaded")
+		return
+	var failures: Array[String] = preflight.call("validate_project")
+	if failures.is_empty():
+		print("[Terrain3D][P05] Runtime export preflight passed")
+		return
+	for failure: String in failures:
+		push_error("[Terrain3D][P05] " + failure)

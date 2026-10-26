@@ -7,7 +7,8 @@
 
 // C++17 replacement for std::countr_zero used while configuring power-of-two
 // region geometry.
-EA_FORCE_INLINE int32_t t3dCountrZeroU32( uint32_t nValue ) noexcept {
+EA_FORCE_INLINE int32_t t3dCountrZeroU32(
+	uint32_t nValue ) noexcept {
 	if ( nValue == 0u ) {
 		return 32;
 	}

@@ -12,11 +12,12 @@
 
 // t3dWorldGeometryClusterBuilder_s centralized in Terrain3DTypes.h.
 
-
 // t3dWorldGeometryRequirements_s centralized in Terrain3DTypes.h.
 
-
-static bool t3d_world_geometry_u32_add( uint32_t pA, uint32_t pB, uint32_t &rValue ) {
+static bool t3d_world_geometry_u32_add(
+	uint32_t  pA,
+	uint32_t  pB,
+	uint32_t &rValue ) {
 	if ( pA > UINT32_MAX - pB ) {
 		return false;
 	}
@@ -25,7 +26,10 @@ static bool t3d_world_geometry_u32_add( uint32_t pA, uint32_t pB, uint32_t &rVal
 	return true;
 }
 
-static bool t3d_world_geometry_u64_add( uint64_t pA, uint64_t pB, uint64_t &rValue ) {
+static bool t3d_world_geometry_u64_add(
+	uint64_t  pA,
+	uint64_t  pB,
+	uint64_t &rValue ) {
 	if ( pA > UINT64_MAX - pB ) {
 		return false;
 	}
@@ -34,23 +38,29 @@ static bool t3d_world_geometry_u64_add( uint64_t pA, uint64_t pB, uint64_t &rVal
 	return true;
 }
 
-uint32_t t3d_world_geometry_float_bits( float pValue ) {
+uint32_t t3d_world_geometry_float_bits(
+	float pValue ) {
 	uint32_t nBits = 0u;
 	memcpy( &nBits, &pValue, sizeof( nBits ) );
 	return nBits;
 }
 
-static float t3d_world_geometry_bits_float( uint32_t pBits ) {
+static float t3d_world_geometry_bits_float(
+	uint32_t pBits ) {
 	float fValue = 0.0f;
 	memcpy( &fValue, &pBits, sizeof( fValue ) );
 	return fValue;
 }
 
-bool t3d_world_geometry_finite( float pValue ) {
+bool t3d_world_geometry_finite(
+	float pValue ) {
 	return isfinite( pValue ) != 0;
 }
 
-static float t3d_world_geometry_clamp( float pValue, float pMin, float pMax ) {
+static float t3d_world_geometry_clamp(
+	float pValue,
+	float pMin,
+	float pMax ) {
 	if ( pValue < pMin ) {
 		return pMin;
 	}
@@ -60,52 +70,73 @@ static float t3d_world_geometry_clamp( float pValue, float pMin, float pMax ) {
 	return pValue;
 }
 
-float t3d_world_geometry_length3( float pX, float pY, float pZ ) {
+float t3d_world_geometry_length3(
+	float pX,
+	float pY,
+	float pZ ) {
 	return sqrtf( pX * pX + pY * pY + pZ * pZ );
 }
 
-static uint32_t t3d_world_geometry_pack_half2( float pX, float pY ) {
+static uint32_t t3d_world_geometry_pack_half2(
+	float pX,
+	float pY ) {
 	const float fX = t3d_world_geometry_clamp( pX, -65504.0f, 65504.0f );
 	const float fY = t3d_world_geometry_clamp( pY, -65504.0f, 65504.0f );
-	return ( uint32_t )t3dHalfEncode( fX ) | ( ( uint32_t )t3dHalfEncode( fY ) << 16u );
+	return ( uint32_t ) t3dHalfEncode( fX ) | ( ( uint32_t ) t3dHalfEncode( fY ) << 16u );
 }
 
-static void t3d_world_geometry_unpack_vertex_uv( const t3dWorldVertex_t &rVertex, float &rU, float &rV ) {
-	rU = t3dHalfDecode( ( uint16_t )( rVertex.m_nPackedUv0 & 0xffffu ) );
-	rV = t3dHalfDecode( ( uint16_t )( rVertex.m_nPackedUv0 >> 16u ) );
+static void t3d_world_geometry_unpack_vertex_uv(
+	const t3dWorldVertex_t &rVertex,
+	float				   &rU,
+	float				   &rV ) {
+	rU = t3dHalfDecode( ( uint16_t ) ( rVertex.m_nPackedUv0 & 0xffffu ) );
+	rV = t3dHalfDecode( ( uint16_t ) ( rVertex.m_nPackedUv0 >> 16u ) );
 }
 
-uint32_t t3d_world_geometry_pack_local_triangle( uint32_t pLocal0, uint32_t pLocal1, uint32_t pLocal2 ) {
-	if ( pLocal0 >= T3D_WORLD_CLUSTER_MAX_VERTICES || pLocal1 >= T3D_WORLD_CLUSTER_MAX_VERTICES || pLocal2 >= T3D_WORLD_CLUSTER_MAX_VERTICES ) {
+uint32_t t3d_world_geometry_pack_local_triangle(
+	uint32_t pLocal0,
+	uint32_t pLocal1,
+	uint32_t pLocal2 ) {
+	if ( pLocal0 >= T3D_WORLD_CLUSTER_MAX_VERTICES || pLocal1 >= T3D_WORLD_CLUSTER_MAX_VERTICES ||
+		 pLocal2 >= T3D_WORLD_CLUSTER_MAX_VERTICES ) {
 		return UINT32_MAX;
 	}
 
 	return ( pLocal0 & 0x3fu ) | ( ( pLocal1 & 0x3fu ) << 6u ) | ( ( pLocal2 & 0x3fu ) << 12u );
 }
 
-void t3d_world_geometry_unpack_local_triangle( uint32_t pPacked, uint32_t &rLocal0, uint32_t &rLocal1, uint32_t &rLocal2 ) {
+void t3d_world_geometry_unpack_local_triangle(
+	uint32_t  pPacked,
+	uint32_t &rLocal0,
+	uint32_t &rLocal1,
+	uint32_t &rLocal2 ) {
 	rLocal0 = pPacked & 0x3fu;
 	rLocal1 = ( pPacked >> 6u ) & 0x3fu;
 	rLocal2 = ( pPacked >> 12u ) & 0x3fu;
 }
 
-float t3d_world_geometry_unpack_texel_density( uint32_t pPacked ) {
+float t3d_world_geometry_unpack_texel_density(
+	uint32_t pPacked ) {
 	return t3d_world_geometry_bits_float( pPacked );
 }
 
-float t3d_world_geometry_cluster_fill_ratio( const t3dWorldGeometryCookStats_t &pStats ) {
+float t3d_world_geometry_cluster_fill_ratio(
+	const t3dWorldGeometryCookStats_t &pStats ) {
 	if ( pStats.nClusterTriangleSlotCount == 0u ) {
 		return 0.0f;
 	}
 
-	return ( float )( ( double )pStats.nSourceTriangleCount / ( double )pStats.nClusterTriangleSlotCount );
+	return ( float ) ( ( double ) pStats.nSourceTriangleCount / ( double ) pStats.nClusterTriangleSlotCount );
 }
 
-static void t3d_world_geometry_builder_reset( t3dWorldGeometryClusterBuilder_t &rBuilder ) {
+static void t3d_world_geometry_builder_reset(
+	t3dWorldGeometryClusterBuilder_t &rBuilder ) {
 	memset( &rBuilder, 0, sizeof( rBuilder ) );
 }
 
-static uint32_t t3d_world_geometry_builder_find_vertex( const t3dWorldGeometryClusterBuilder_t &pBuilder, uint32_t pSourceVertex ) {
+static uint32_t t3d_world_geometry_builder_find_vertex(
+	const t3dWorldGeometryClusterBuilder_t &pBuilder,
+	uint32_t								pSourceVertex ) {
 	for ( uint32_t iVertex = 0u; iVertex < pBuilder.nVertexCount; ++iVertex ) {
 		if ( pBuilder.aSourceVertex[iVertex] == pSourceVertex ) {
 			return iVertex;
@@ -116,8 +147,11 @@ static uint32_t t3d_world_geometry_builder_find_vertex( const t3dWorldGeometryCl
 }
 
 static uint32_t t3d_world_geometry_builder_new_vertex_count(
-        const t3dWorldGeometryClusterBuilder_t &pBuilder, uint32_t pVertex0, uint32_t pVertex1, uint32_t pVertex2 ) {
-	uint32_t nNew = 0u;
+	const t3dWorldGeometryClusterBuilder_t &pBuilder,
+	uint32_t								pVertex0,
+	uint32_t								pVertex1,
+	uint32_t								pVertex2 ) {
+	uint32_t	   nNew = 0u;
 	const uint32_t aVertex[3] = { pVertex0, pVertex1, pVertex2 };
 
 	for ( uint32_t i = 0u; i < 3u; ++i ) {
@@ -127,7 +161,8 @@ static uint32_t t3d_world_geometry_builder_new_vertex_count(
 
 		bool bDuplicateNew = false;
 		for ( uint32_t j = 0u; j < i; ++j ) {
-			if ( aVertex[j] == aVertex[i] && t3d_world_geometry_builder_find_vertex( pBuilder, aVertex[j] ) == T3D_WORLD_INVALID_ID ) {
+			if ( aVertex[j] == aVertex[i] &&
+				 t3d_world_geometry_builder_find_vertex( pBuilder, aVertex[j] ) == T3D_WORLD_INVALID_ID ) {
 				bDuplicateNew = true;
 				break;
 			}
@@ -141,7 +176,9 @@ static uint32_t t3d_world_geometry_builder_new_vertex_count(
 	return nNew;
 }
 
-static uint32_t t3d_world_geometry_builder_add_vertex( t3dWorldGeometryClusterBuilder_t &rBuilder, uint32_t pSourceVertex ) {
+static uint32_t t3d_world_geometry_builder_add_vertex(
+	t3dWorldGeometryClusterBuilder_t &rBuilder,
+	uint32_t						  pSourceVertex ) {
 	uint32_t nLocal = t3d_world_geometry_builder_find_vertex( rBuilder, pSourceVertex );
 	if ( nLocal != T3D_WORLD_INVALID_ID ) {
 		return nLocal;
@@ -156,12 +193,13 @@ static uint32_t t3d_world_geometry_builder_add_vertex( t3dWorldGeometryClusterBu
 	return nLocal;
 }
 
-static bool t3d_world_geometry_builder_add_triangle( t3dWorldGeometryClusterBuilder_t &rBuilder,
-        uint32_t pVertex0,
-        uint32_t pVertex1,
-        uint32_t pVertex2,
-        uint32_t pMaterialId,
-        uint32_t pTier ) {
+static bool t3d_world_geometry_builder_add_triangle(
+	t3dWorldGeometryClusterBuilder_t &rBuilder,
+	uint32_t						  pVertex0,
+	uint32_t						  pVertex1,
+	uint32_t						  pVertex2,
+	uint32_t						  pMaterialId,
+	uint32_t						  pTier ) {
 	if ( rBuilder.nTriangleCount >= T3D_WORLD_CLUSTER_MAX_TRIANGLES ) {
 		return false;
 	}
@@ -189,11 +227,12 @@ static bool t3d_world_geometry_builder_add_triangle( t3dWorldGeometryClusterBuil
 	return true;
 }
 
-bool t3d_world_geometry_get_triangle_classification( const t3dWorldGeometrySourceMesh_t &pSource,
-        const t3dWorldGeometrySourceLod_t &pLod,
-        uint32_t pTriangle,
-        uint32_t &rMaterialId,
-        uint32_t &rTier ) {
+bool t3d_world_geometry_get_triangle_classification(
+	const t3dWorldGeometrySourceMesh_t &pSource,
+	const t3dWorldGeometrySourceLod_t  &pLod,
+	uint32_t							pTriangle,
+	uint32_t						   &rMaterialId,
+	uint32_t						   &rTier ) {
 	uint32_t nMaterialOffset = 0u;
 	if ( pLod.pTriangleMaterialOffsets != NULL ) {
 		nMaterialOffset = pLod.pTriangleMaterialOffsets[pTriangle];
@@ -205,13 +244,14 @@ bool t3d_world_geometry_get_triangle_classification( const t3dWorldGeometrySourc
 
 	rTier = pLod.nDefaultTier;
 	if ( pLod.pTriangleTiers != NULL ) {
-		rTier = ( uint32_t )pLod.pTriangleTiers[pTriangle];
+		rTier = ( uint32_t ) pLod.pTriangleTiers[pTriangle];
 	}
 
 	return rTier < T3D_WORLD_TIER_COUNT;
 }
 
-bool t3d_world_geometry_validate_source( const t3dWorldGeometrySourceMesh_t &pSource ) {
+bool t3d_world_geometry_validate_source(
+	const t3dWorldGeometrySourceMesh_t &pSource ) {
 	if ( pSource.pVertices == NULL || pSource.pLods == NULL ) {
 		return false;
 	}
@@ -284,7 +324,8 @@ bool t3d_world_geometry_validate_source( const t3dWorldGeometrySourceMesh_t &pSo
 }
 
 static bool t3d_world_geometry_accumulate_cluster_requirements(
-        const t3dWorldGeometryClusterBuilder_t &pBuilder, t3dWorldGeometryRequirements_t &rRequirements ) {
+	const t3dWorldGeometryClusterBuilder_t &pBuilder,
+	t3dWorldGeometryRequirements_t		   &rRequirements ) {
 	if ( pBuilder.nTriangleCount == 0u || pBuilder.nVertexCount == 0u ) {
 		return false;
 	}
@@ -294,15 +335,19 @@ static bool t3d_world_geometry_accumulate_cluster_requirements(
 	}
 
 	++rRequirements.nClusterCount;
-	if ( !t3d_world_geometry_u64_add(
-	             rRequirements.nClusterVertexReferenceCount, pBuilder.nVertexCount, rRequirements.nClusterVertexReferenceCount ) ) {
+	if ( !t3d_world_geometry_u64_add( rRequirements.nClusterVertexReferenceCount,
+									  pBuilder.nVertexCount,
+									  rRequirements.nClusterVertexReferenceCount ) ) {
 		return false;
 	}
-	if ( !t3d_world_geometry_u64_add( rRequirements.nTriangleSlotCount, T3D_WORLD_CLUSTER_MAX_TRIANGLES, rRequirements.nTriangleSlotCount ) ) {
+	if ( !t3d_world_geometry_u64_add( rRequirements.nTriangleSlotCount,
+									  T3D_WORLD_CLUSTER_MAX_TRIANGLES,
+									  rRequirements.nTriangleSlotCount ) ) {
 		return false;
 	}
 
-	if ( rRequirements.nMinimumClusterTriangleCount == 0u || pBuilder.nTriangleCount < rRequirements.nMinimumClusterTriangleCount ) {
+	if ( rRequirements.nMinimumClusterTriangleCount == 0u ||
+		 pBuilder.nTriangleCount < rRequirements.nMinimumClusterTriangleCount ) {
 		rRequirements.nMinimumClusterTriangleCount = pBuilder.nTriangleCount;
 	}
 	if ( pBuilder.nTriangleCount > rRequirements.nMaximumClusterTriangleCount ) {
@@ -313,12 +358,16 @@ static bool t3d_world_geometry_accumulate_cluster_requirements(
 }
 
 static bool t3d_world_geometry_preflight_lod(
-        const t3dWorldGeometrySourceMesh_t &pSource, const t3dWorldGeometrySourceLod_t &pLod, t3dWorldGeometryRequirements_t &rRequirements ) {
+	const t3dWorldGeometrySourceMesh_t &pSource,
+	const t3dWorldGeometrySourceLod_t  &pLod,
+	t3dWorldGeometryRequirements_t	   &rRequirements ) {
 	t3dWorldGeometryClusterBuilder_t Builder = {};
 	t3d_world_geometry_builder_reset( Builder );
 
 	const uint32_t nTriangleCount = pLod.nIndexCount / 3u;
-	if ( !t3d_world_geometry_u64_add( rRequirements.nSourceTriangleCount, nTriangleCount, rRequirements.nSourceTriangleCount ) ) {
+	if ( !t3d_world_geometry_u64_add( rRequirements.nSourceTriangleCount,
+									  nTriangleCount,
+									  rRequirements.nSourceTriangleCount ) ) {
 		return false;
 	}
 
@@ -327,14 +376,16 @@ static bool t3d_world_geometry_preflight_lod(
 		const uint32_t nVertex0 = pLod.pIndices[nIndex + 0u];
 		const uint32_t nVertex1 = pLod.pIndices[nIndex + 1u];
 		const uint32_t nVertex2 = pLod.pIndices[nIndex + 2u];
-		uint32_t nMaterialId = 0u;
-		uint32_t nTier = 0u;
+		uint32_t	   nMaterialId = 0u;
+		uint32_t	   nTier = 0u;
 		if ( !t3d_world_geometry_get_triangle_classification( pSource, pLod, iTriangle, nMaterialId, nTier ) ) {
 			return false;
 		}
 
-		const uint32_t nNewVertices = t3d_world_geometry_builder_new_vertex_count( Builder, nVertex0, nVertex1, nVertex2 );
-		const bool bClassChange = Builder.nTriangleCount != 0u && ( Builder.nMaterialId != nMaterialId || Builder.nTier != nTier );
+		const uint32_t nNewVertices =
+			t3d_world_geometry_builder_new_vertex_count( Builder, nVertex0, nVertex1, nVertex2 );
+		const bool bClassChange =
+			Builder.nTriangleCount != 0u && ( Builder.nMaterialId != nMaterialId || Builder.nTier != nTier );
 		const bool bTriangleFull = Builder.nTriangleCount == T3D_WORLD_CLUSTER_MAX_TRIANGLES;
 		const bool bVertexFull = Builder.nVertexCount + nNewVertices > T3D_WORLD_CLUSTER_MAX_VERTICES;
 
@@ -360,7 +411,9 @@ static bool t3d_world_geometry_preflight_lod(
 }
 
 static t3dWorldGeometryCookResult_t t3d_world_geometry_preflight_mesh(
-        const t3dWorldGeometryDatabase_t &pDatabase, const t3dWorldGeometrySourceMesh_t &pSource, t3dWorldGeometryRequirements_t &rRequirements ) {
+	const t3dWorldGeometryDatabase_t   &pDatabase,
+	const t3dWorldGeometrySourceMesh_t &pSource,
+	t3dWorldGeometryRequirements_t	   &rRequirements ) {
 	memset( &rRequirements, 0, sizeof( rRequirements ) );
 	if ( !t3d_world_geometry_validate_source( pSource ) ) {
 		return T3D_WORLD_GEOMETRY_COOK_INVALID_INPUT;
@@ -383,13 +436,17 @@ static t3dWorldGeometryCookResult_t t3d_world_geometry_preflight_mesh(
 	if ( nEnd > pDatabase.Buffers.nVertexCapacity ) {
 		return T3D_WORLD_GEOMETRY_COOK_CAPACITY_EXCEEDED;
 	}
-	if ( !t3d_world_geometry_u32_add( pDatabase.nClusterVertexIndexCount, ( uint32_t )rRequirements.nClusterVertexReferenceCount, nEnd ) ) {
+	if ( !t3d_world_geometry_u32_add( pDatabase.nClusterVertexIndexCount,
+									  ( uint32_t ) rRequirements.nClusterVertexReferenceCount,
+									  nEnd ) ) {
 		return T3D_WORLD_GEOMETRY_COOK_NUMERIC_OVERFLOW;
 	}
 	if ( nEnd > pDatabase.Buffers.nClusterVertexIndexCapacity ) {
 		return T3D_WORLD_GEOMETRY_COOK_CAPACITY_EXCEEDED;
 	}
-	if ( !t3d_world_geometry_u32_add( pDatabase.nTriangleCount, ( uint32_t )rRequirements.nTriangleSlotCount, nEnd ) ) {
+	if ( !t3d_world_geometry_u32_add( pDatabase.nTriangleCount,
+									  ( uint32_t ) rRequirements.nTriangleSlotCount,
+									  nEnd ) ) {
 		return T3D_WORLD_GEOMETRY_COOK_NUMERIC_OVERFLOW;
 	}
 	if ( nEnd > pDatabase.Buffers.nTriangleCapacity ) {
@@ -417,7 +474,9 @@ static t3dWorldGeometryCookResult_t t3d_world_geometry_preflight_mesh(
 	return T3D_WORLD_GEOMETRY_COOK_OK;
 }
 
-static float t3d_world_geometry_edge_density( const t3dWorldVertex_t &pA, const t3dWorldVertex_t &pB ) {
+static float t3d_world_geometry_edge_density(
+	const t3dWorldVertex_t &pA,
+	const t3dWorldVertex_t &pB ) {
 	const float fDx = pB.m_fPosition[0] - pA.m_fPosition[0];
 	const float fDy = pB.m_fPosition[1] - pA.m_fPosition[1];
 	const float fDz = pB.m_fPosition[2] - pA.m_fPosition[2];
@@ -435,13 +494,14 @@ static float t3d_world_geometry_edge_density( const t3dWorldVertex_t &pA, const 
 	return fUvLength / fWorldLength;
 }
 
-bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertexHeap,
-        uint32_t pVertexHeapCount,
-        const uint32_t *pClusterVertexIndices,
-        uint32_t pVertexCount,
-        const t3dWorldPackedClusterTriangle_t *pTriangles,
-        uint32_t pTriangleCount,
-        t3dWorldGeometryDerivedCluster_t &rDerived ) {
+bool t3d_world_geometry_compute_derived_cluster(
+	const t3dWorldVertex_t				  *pVertexHeap,
+	uint32_t							   pVertexHeapCount,
+	const uint32_t						  *pClusterVertexIndices,
+	uint32_t							   pVertexCount,
+	const t3dWorldPackedClusterTriangle_t *pTriangles,
+	uint32_t							   pTriangleCount,
+	t3dWorldGeometryDerivedCluster_t	  &rDerived ) {
 	if ( pVertexHeap == NULL || pClusterVertexIndices == NULL || pTriangles == NULL ) {
 		return false;
 	}
@@ -497,10 +557,10 @@ bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertex
 
 	for ( uint32_t iVertex = 0u; iVertex < pVertexCount; ++iVertex ) {
 		const t3dWorldVertex_t &Vertex = pVertexHeap[pClusterVertexIndices[iVertex]];
-		const float fDx = Vertex.m_fPosition[0] - rDerived.vCenter[0];
-		const float fDy = Vertex.m_fPosition[1] - rDerived.vCenter[1];
-		const float fDz = Vertex.m_fPosition[2] - rDerived.vCenter[2];
-		const float fDistance = t3d_world_geometry_length3( fDx, fDy, fDz );
+		const float				fDx = Vertex.m_fPosition[0] - rDerived.vCenter[0];
+		const float				fDy = Vertex.m_fPosition[1] - rDerived.vCenter[1];
+		const float				fDz = Vertex.m_fPosition[2] - rDerived.vCenter[2];
+		const float				fDistance = t3d_world_geometry_length3( fDx, fDy, fDz );
 		if ( fDistance > rDerived.fRadius ) {
 			rDerived.fRadius = fDistance;
 		}
@@ -509,8 +569,8 @@ bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertex
 	rDerived.nPackedUvMin = t3d_world_geometry_pack_half2( fUvMinU, fUvMinV );
 	rDerived.nPackedUvMax = t3d_world_geometry_pack_half2( fUvMaxU, fUvMaxV );
 
-	float vNormalSum[3] = { 0.0f, 0.0f, 0.0f };
-	float fMaxDensity = 0.0f;
+	float	 vNormalSum[3] = { 0.0f, 0.0f, 0.0f };
+	float	 fMaxDensity = 0.0f;
 	uint32_t nValidNormalCount = 0u;
 
 	for ( uint32_t iTriangle = 0u; iTriangle < pTriangleCount; ++iTriangle ) {
@@ -532,9 +592,9 @@ bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertex
 		const float fE20x = V2.m_fPosition[0] - V0.m_fPosition[0];
 		const float fE20y = V2.m_fPosition[1] - V0.m_fPosition[1];
 		const float fE20z = V2.m_fPosition[2] - V0.m_fPosition[2];
-		float fNx = fE10y * fE20z - fE10z * fE20y;
-		float fNy = fE10z * fE20x - fE10x * fE20z;
-		float fNz = fE10x * fE20y - fE10y * fE20x;
+		float		fNx = fE10y * fE20z - fE10z * fE20y;
+		float		fNy = fE10z * fE20x - fE10x * fE20z;
+		float		fNz = fE10x * fE20y - fE10y * fE20x;
 		const float fNormalLength = t3d_world_geometry_length3( fNx, fNy, fNz );
 		if ( fNormalLength > 1.0e-20f ) {
 			fNx /= fNormalLength;
@@ -580,16 +640,16 @@ bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertex
 			const t3dWorldVertex_t &V0 = pVertexHeap[pClusterVertexIndices[nLocal0]];
 			const t3dWorldVertex_t &V1 = pVertexHeap[pClusterVertexIndices[nLocal1]];
 			const t3dWorldVertex_t &V2 = pVertexHeap[pClusterVertexIndices[nLocal2]];
-			const float fE10x = V1.m_fPosition[0] - V0.m_fPosition[0];
-			const float fE10y = V1.m_fPosition[1] - V0.m_fPosition[1];
-			const float fE10z = V1.m_fPosition[2] - V0.m_fPosition[2];
-			const float fE20x = V2.m_fPosition[0] - V0.m_fPosition[0];
-			const float fE20y = V2.m_fPosition[1] - V0.m_fPosition[1];
-			const float fE20z = V2.m_fPosition[2] - V0.m_fPosition[2];
-			float fNx = fE10y * fE20z - fE10z * fE20y;
-			float fNy = fE10z * fE20x - fE10x * fE20z;
-			float fNz = fE10x * fE20y - fE10y * fE20x;
-			const float fNormalLength = t3d_world_geometry_length3( fNx, fNy, fNz );
+			const float				fE10x = V1.m_fPosition[0] - V0.m_fPosition[0];
+			const float				fE10y = V1.m_fPosition[1] - V0.m_fPosition[1];
+			const float				fE10z = V1.m_fPosition[2] - V0.m_fPosition[2];
+			const float				fE20x = V2.m_fPosition[0] - V0.m_fPosition[0];
+			const float				fE20y = V2.m_fPosition[1] - V0.m_fPosition[1];
+			const float				fE20z = V2.m_fPosition[2] - V0.m_fPosition[2];
+			float					fNx = fE10y * fE20z - fE10z * fE20y;
+			float					fNy = fE10z * fE20x - fE10x * fE20z;
+			float					fNz = fE10x * fE20y - fE10y * fE20x;
+			const float				fNormalLength = t3d_world_geometry_length3( fNx, fNy, fNz );
 			if ( fNormalLength <= 1.0e-20f ) {
 				continue;
 			}
@@ -611,14 +671,15 @@ bool t3d_world_geometry_compute_derived_cluster( const t3dWorldVertex_t *pVertex
 	return true;
 }
 
-static bool t3d_world_geometry_write_cluster( t3dWorldGeometryDatabase_t &rDatabase,
-        const t3dWorldGeometrySourceMesh_t &pSource,
-        const t3dWorldGeometryClusterBuilder_t &pBuilder,
-        uint32_t pVertexBase,
-        uint32_t pLodIndex,
-        uint32_t &rClusterCursor,
-        uint32_t &rVertexIndexCursor,
-        uint32_t &rTriangleCursor ) {
+static bool t3d_world_geometry_write_cluster(
+	t3dWorldGeometryDatabase_t			   &rDatabase,
+	const t3dWorldGeometrySourceMesh_t	   &pSource,
+	const t3dWorldGeometryClusterBuilder_t &pBuilder,
+	uint32_t								pVertexBase,
+	uint32_t								pLodIndex,
+	uint32_t							   &rClusterCursor,
+	uint32_t							   &rVertexIndexCursor,
+	uint32_t							   &rTriangleCursor ) {
 	if ( pBuilder.nVertexCount == 0u || pBuilder.nTriangleCount == 0u ) {
 		return false;
 	}
@@ -643,12 +704,12 @@ static bool t3d_world_geometry_write_cluster( t3dWorldGeometryDatabase_t &rDatab
 
 	t3dWorldGeometryDerivedCluster_t Derived = {};
 	if ( !t3d_world_geometry_compute_derived_cluster( rDatabase.Buffers.pVertexHeap,
-	             pVertexBase + pSource.nVertexCount,
-	             rDatabase.Buffers.pClusterVertexIndexHeap + rVertexIndexCursor,
-	             pBuilder.nVertexCount,
-	             rDatabase.Buffers.pTriangleHeap + rTriangleCursor,
-	             pBuilder.nTriangleCount,
-	             Derived ) ) {
+													  pVertexBase + pSource.nVertexCount,
+													  rDatabase.Buffers.pClusterVertexIndexHeap + rVertexIndexCursor,
+													  pBuilder.nVertexCount,
+													  rDatabase.Buffers.pTriangleHeap + rTriangleCursor,
+													  pBuilder.nTriangleCount,
+													  Derived ) ) {
 		return false;
 	}
 
@@ -664,10 +725,10 @@ static bool t3d_world_geometry_write_cluster( t3dWorldGeometryDatabase_t &rDatab
 	Cluster.fConeCutoff = Derived.fConeCutoff;
 	Cluster.nVertexIndexOffset = rVertexIndexCursor;
 	Cluster.nTriangleOffset = rTriangleCursor;
-	Cluster.nVertexCount = ( uint16_t )pBuilder.nVertexCount;
-	Cluster.nTriangleCount = ( uint16_t )pBuilder.nTriangleCount;
-	Cluster.nLod = ( uint16_t )pLodIndex;
-	Cluster.nTier = ( uint16_t )pBuilder.nTier;
+	Cluster.nVertexCount = ( uint16_t ) pBuilder.nVertexCount;
+	Cluster.nTriangleCount = ( uint16_t ) pBuilder.nTriangleCount;
+	Cluster.nLod = ( uint16_t ) pLodIndex;
+	Cluster.nTier = ( uint16_t ) pBuilder.nTier;
 	Cluster.nMaterialId = pBuilder.nMaterialId;
 	Cluster.nPackedUvMin = Derived.nPackedUvMin;
 	Cluster.nPackedUvMax = Derived.nPackedUvMax;
@@ -686,8 +747,10 @@ static bool t3d_world_geometry_write_cluster( t3dWorldGeometryDatabase_t &rDatab
 		World.m_fConeCutoff = Derived.fConeCutoff;
 		World.m_nVertexIndexOffset = rVertexIndexCursor;
 		World.m_nTriangleOffset = rTriangleCursor;
-		World.m_nPackedCounts = t3dWorldPackU16Pair( ( uint16_t )pBuilder.nVertexCount, ( uint16_t )pBuilder.nTriangleCount );
-		World.m_nPackedLodGeometryKind = t3dWorldPackU16Pair( ( uint16_t )pLodIndex, ( uint16_t )T3D_WORLD_GEOMETRY_STATIC_CLUSTER );
+		World.m_nPackedCounts =
+			t3dWorldPackU16Pair( ( uint16_t ) pBuilder.nVertexCount, ( uint16_t ) pBuilder.nTriangleCount );
+		World.m_nPackedLodGeometryKind =
+			t3dWorldPackU16Pair( ( uint16_t ) pLodIndex, ( uint16_t ) T3D_WORLD_GEOMETRY_STATIC_CLUSTER );
 		World.m_nMaterial = pBuilder.nMaterialId;
 		World.m_nFlags = pSource.nFlags;
 		World.m_nSourceId = rClusterCursor;
@@ -705,16 +768,17 @@ static bool t3d_world_geometry_write_cluster( t3dWorldGeometryDatabase_t &rDatab
 	return true;
 }
 
-static bool t3d_world_geometry_write_lod( t3dWorldGeometryDatabase_t &rDatabase,
-        const t3dWorldGeometrySourceMesh_t &pSource,
-        const t3dWorldGeometrySourceLod_t &pLod,
-        uint32_t pLodIndex,
-        uint32_t pVertexBase,
-        uint32_t &rLodCursor,
-        uint32_t &rClusterCursor,
-        uint32_t &rVertexIndexCursor,
-        uint32_t &rTriangleCursor ) {
-	const uint32_t nLodClusterOffset = rClusterCursor;
+static bool t3d_world_geometry_write_lod(
+	t3dWorldGeometryDatabase_t		   &rDatabase,
+	const t3dWorldGeometrySourceMesh_t &pSource,
+	const t3dWorldGeometrySourceLod_t  &pLod,
+	uint32_t							pLodIndex,
+	uint32_t							pVertexBase,
+	uint32_t						   &rLodCursor,
+	uint32_t						   &rClusterCursor,
+	uint32_t						   &rVertexIndexCursor,
+	uint32_t						   &rTriangleCursor ) {
+	const uint32_t					 nLodClusterOffset = rClusterCursor;
 	t3dWorldGeometryClusterBuilder_t Builder = {};
 	t3d_world_geometry_builder_reset( Builder );
 	const uint32_t nTriangleCount = pLod.nIndexCount / 3u;
@@ -724,20 +788,28 @@ static bool t3d_world_geometry_write_lod( t3dWorldGeometryDatabase_t &rDatabase,
 		const uint32_t nVertex0 = pLod.pIndices[nIndex + 0u];
 		const uint32_t nVertex1 = pLod.pIndices[nIndex + 1u];
 		const uint32_t nVertex2 = pLod.pIndices[nIndex + 2u];
-		uint32_t nMaterialId = 0u;
-		uint32_t nTier = 0u;
+		uint32_t	   nMaterialId = 0u;
+		uint32_t	   nTier = 0u;
 		if ( !t3d_world_geometry_get_triangle_classification( pSource, pLod, iTriangle, nMaterialId, nTier ) ) {
 			return false;
 		}
 
-		const uint32_t nNewVertices = t3d_world_geometry_builder_new_vertex_count( Builder, nVertex0, nVertex1, nVertex2 );
-		const bool bClassChange = Builder.nTriangleCount != 0u && ( Builder.nMaterialId != nMaterialId || Builder.nTier != nTier );
+		const uint32_t nNewVertices =
+			t3d_world_geometry_builder_new_vertex_count( Builder, nVertex0, nVertex1, nVertex2 );
+		const bool bClassChange =
+			Builder.nTriangleCount != 0u && ( Builder.nMaterialId != nMaterialId || Builder.nTier != nTier );
 		const bool bTriangleFull = Builder.nTriangleCount == T3D_WORLD_CLUSTER_MAX_TRIANGLES;
 		const bool bVertexFull = Builder.nVertexCount + nNewVertices > T3D_WORLD_CLUSTER_MAX_VERTICES;
 
 		if ( bClassChange || bTriangleFull || bVertexFull ) {
-			if ( !t3d_world_geometry_write_cluster(
-			             rDatabase, pSource, Builder, pVertexBase, pLodIndex, rClusterCursor, rVertexIndexCursor, rTriangleCursor ) ) {
+			if ( !t3d_world_geometry_write_cluster( rDatabase,
+													pSource,
+													Builder,
+													pVertexBase,
+													pLodIndex,
+													rClusterCursor,
+													rVertexIndexCursor,
+													rTriangleCursor ) ) {
 				return false;
 			}
 			t3d_world_geometry_builder_reset( Builder );
@@ -749,8 +821,14 @@ static bool t3d_world_geometry_write_lod( t3dWorldGeometryDatabase_t &rDatabase,
 	}
 
 	if ( Builder.nTriangleCount != 0u ) {
-		if ( !t3d_world_geometry_write_cluster(
-		             rDatabase, pSource, Builder, pVertexBase, pLodIndex, rClusterCursor, rVertexIndexCursor, rTriangleCursor ) ) {
+		if ( !t3d_world_geometry_write_cluster( rDatabase,
+												pSource,
+												Builder,
+												pVertexBase,
+												pLodIndex,
+												rClusterCursor,
+												rVertexIndexCursor,
+												rTriangleCursor ) ) {
 			return false;
 		}
 	}
@@ -767,7 +845,8 @@ static bool t3d_world_geometry_write_lod( t3dWorldGeometryDatabase_t &rDatabase,
 	return true;
 }
 
-bool t3d_world_geometry_database_buffers_valid( const t3dWorldGeometryDatabaseBuffers_t &pBuffers ) {
+bool t3d_world_geometry_database_buffers_valid(
+	const t3dWorldGeometryDatabaseBuffers_t &pBuffers ) {
 	if ( pBuffers.pVertexHeap == NULL || pBuffers.nVertexCapacity == 0u ) {
 		return false;
 	}
@@ -789,24 +868,28 @@ bool t3d_world_geometry_database_buffers_valid( const t3dWorldGeometryDatabaseBu
 	return true;
 }
 
-void t3d_world_geometry_database_initialize_cold( t3dWorldGeometryDatabase_t &rDatabase, const t3dWorldGeometryDatabaseBuffers_t &pBuffers ) {
+void t3d_world_geometry_database_initialize_cold(
+	t3dWorldGeometryDatabase_t				&rDatabase,
+	const t3dWorldGeometryDatabaseBuffers_t &pBuffers ) {
 	memset( &rDatabase, 0, sizeof( rDatabase ) );
 	rDatabase.Buffers = pBuffers;
 	rDatabase.nContentSignature = t3d_world_geometry_compute_signature_reference_debug( rDatabase );
 }
 
-t3dWorldGeometryCookResult_t t3d_world_geometry_append_mesh_cold( t3dWorldGeometryDatabase_t &rDatabase,
-        const t3dWorldGeometrySourceMesh_t &pSource,
-        t3dWorldGeometryCookedMeshSpan_t &rSpan,
-        t3dWorldGeometryCookStats_t &rStats ) {
+t3dWorldGeometryCookResult_t t3d_world_geometry_append_mesh_cold(
+	t3dWorldGeometryDatabase_t		   &rDatabase,
+	const t3dWorldGeometrySourceMesh_t &pSource,
+	t3dWorldGeometryCookedMeshSpan_t   &rSpan,
+	t3dWorldGeometryCookStats_t		   &rStats ) {
 	memset( &rSpan, 0, sizeof( rSpan ) );
 	memset( &rStats, 0, sizeof( rStats ) );
 	if ( !t3d_world_geometry_database_buffers_valid( rDatabase.Buffers ) ) {
 		return T3D_WORLD_GEOMETRY_COOK_INVALID_INPUT;
 	}
 
-	t3dWorldGeometryRequirements_t Requirements = {};
-	const t3dWorldGeometryCookResult_t nPreflight = t3d_world_geometry_preflight_mesh( rDatabase, pSource, Requirements );
+	t3dWorldGeometryRequirements_t	   Requirements = {};
+	const t3dWorldGeometryCookResult_t nPreflight =
+		t3d_world_geometry_preflight_mesh( rDatabase, pSource, Requirements );
 	if ( nPreflight != T3D_WORLD_GEOMETRY_COOK_OK ) {
 		return nPreflight;
 	}
@@ -815,24 +898,25 @@ t3dWorldGeometryCookResult_t t3d_world_geometry_append_mesh_cold( t3dWorldGeomet
 	const uint32_t nMeshId = rDatabase.nMeshCount;
 	const uint32_t nLodOffset = rDatabase.nLodCount;
 	const uint32_t nClusterOffset = rDatabase.nClusterCount;
-	uint32_t nVertexIndexCursor = rDatabase.nClusterVertexIndexCount;
-	uint32_t nTriangleCursor = rDatabase.nTriangleCount;
-	uint32_t nLodCursor = rDatabase.nLodCount;
-	uint32_t nClusterCursor = rDatabase.nClusterCount;
+	uint32_t	   nVertexIndexCursor = rDatabase.nClusterVertexIndexCount;
+	uint32_t	   nTriangleCursor = rDatabase.nTriangleCount;
+	uint32_t	   nLodCursor = rDatabase.nLodCount;
+	uint32_t	   nClusterCursor = rDatabase.nClusterCount;
 
-	memmove(
-	        rDatabase.Buffers.pVertexHeap + nVertexBase, pSource.pVertices, ( size_t )pSource.nVertexCount * sizeof( t3dWorldVertex_t ) );
+	memmove( rDatabase.Buffers.pVertexHeap + nVertexBase,
+			 pSource.pVertices,
+			 ( size_t ) pSource.nVertexCount * sizeof( t3dWorldVertex_t ) );
 
 	for ( uint32_t iLod = 0u; iLod < pSource.nLodCount; ++iLod ) {
 		if ( !t3d_world_geometry_write_lod( rDatabase,
-		             pSource,
-		             pSource.pLods[iLod],
-		             iLod,
-		             nVertexBase,
-		             nLodCursor,
-		             nClusterCursor,
-		             nVertexIndexCursor,
-		             nTriangleCursor ) ) {
+											pSource,
+											pSource.pLods[iLod],
+											iLod,
+											nVertexBase,
+											nLodCursor,
+											nClusterCursor,
+											nVertexIndexCursor,
+											nTriangleCursor ) ) {
 			return T3D_WORLD_GEOMETRY_COOK_INTERNAL_ERROR;
 		}
 	}

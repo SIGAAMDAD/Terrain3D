@@ -1,19 +1,25 @@
 #include "rendering/rd/world/core/terrain_3d_world_system_limits.h"
 
-
-static bool t3d_world_nonzero_u32( uint32_t pValue ) {
+static bool t3d_world_nonzero_u32(
+	uint32_t pValue ) {
 	return pValue != 0u;
 }
 
-static uint32_t t3d_world_max_u32( const uint32_t nA, const uint32_t nB ) {
+static uint32_t t3d_world_max_u32(
+	const uint32_t nA,
+	const uint32_t nB ) {
 	return nA > nB ? nA : nB;
 }
 
-static uint64_t t3d_world_max_u64( const uint64_t nA, const uint64_t nB ) {
+static uint64_t t3d_world_max_u64(
+	const uint64_t nA,
+	const uint64_t nB ) {
 	return nA > nB ? nA : nB;
 }
 
-static uint32_t t3d_world_min_u32( const uint32_t nA, const uint32_t nB ) {
+static uint32_t t3d_world_min_u32(
+	const uint32_t nA,
+	const uint32_t nB ) {
 	return nA < nB ? nA : nB;
 }
 
@@ -48,7 +54,8 @@ t3dWorldLimits_t t3d_world_make_prototype_limits() {
 	return limits;
 }
 
-t3dWorldLimits_t t3d_world_make_runtime_limits( const t3dWorldResourceLimits_t &rWorldLimits ) {
+t3dWorldLimits_t t3d_world_make_runtime_limits(
+	const t3dWorldResourceLimits_t &rWorldLimits ) {
 	t3dWorldLimits_t limits = {};
 	limits.nMaxCells = t3d_world_max_u32( 1u, rWorldLimits.m_nMaxVisibleItems / 64u );
 	limits.nMaxInstances = t3d_world_max_u32( 1u, rWorldLimits.m_nMaxTransforms );
@@ -71,7 +78,7 @@ t3dWorldLimits_t t3d_world_make_runtime_limits( const t3dWorldResourceLimits_t &
 	limits.nMaxReadbackBytesPerFrame = 64u * 1024u;
 	limits.nGeometryVertexHeapBytes = t3d_world_max_u64( 4ull * 1024ull, rWorldLimits.m_nGeometryHeapBytes );
 	limits.nGeometryClusterVertexIndexHeapBytes =
-	        t3d_world_max_u64( 4ull * 1024ull, ( uint64_t )rWorldLimits.m_nMaxClusterVertexIndices * sizeof( uint32_t ) );
+		t3d_world_max_u64( 4ull * 1024ull, ( uint64_t ) rWorldLimits.m_nMaxClusterVertexIndices * sizeof( uint32_t ) );
 	limits.nGeometryTriangleHeapBytes = t3d_world_max_u64( 4ull * 1024ull, rWorldLimits.m_nTriangleHeapBytes );
 	limits.nSnapshotBytesPerFrame = t3d_world_max_u64( 64ull * 1024ull, rWorldLimits.m_nPublicationScratchBytes );
 	limits.nFrameScratchBytesPerFrame = t3d_world_max_u64( 64ull * 1024ull, rWorldLimits.m_nVisibilityBytes );
@@ -80,7 +87,9 @@ t3dWorldLimits_t t3d_world_make_runtime_limits( const t3dWorldResourceLimits_t &
 	return limits;
 }
 
-t3dWorldLimits_t t3d_world_make_preview_limits( const uint32_t nMaterialCapacity, const uint32_t nVirtualPageCapacity ) {
+t3dWorldLimits_t t3d_world_make_preview_limits(
+	const uint32_t nMaterialCapacity,
+	const uint32_t nVirtualPageCapacity ) {
 	t3dWorldLimits_t limits = {};
 	limits.nMaxCells = 1u;
 	limits.nMaxInstances = 1u;
@@ -111,9 +120,10 @@ t3dWorldLimits_t t3d_world_make_preview_limits( const uint32_t nMaterialCapacity
 	return limits;
 }
 
-uint64_t t3d_world_limits_signature( const t3dWorldLimits_t &pLimits ) {
-	const uint8_t *pBytes = ( const uint8_t * )&pLimits;
-	uint64_t nHash = 1469598103934665603ull;
+uint64_t t3d_world_limits_signature(
+	const t3dWorldLimits_t &pLimits ) {
+	const uint8_t *pBytes = ( const uint8_t * ) &pLimits;
+	uint64_t	   nHash = 1469598103934665603ull;
 	for ( uint32_t iByte = 0u; iByte < sizeof( t3dWorldLimits_t ); ++iByte ) {
 		nHash ^= pBytes[iByte];
 		nHash *= 1099511628211ull;
@@ -121,7 +131,8 @@ uint64_t t3d_world_limits_signature( const t3dWorldLimits_t &pLimits ) {
 	return nHash;
 }
 
-bool t3d_world_validate_limits( const t3dWorldLimits_t &pLimits ) {
+bool t3d_world_validate_limits(
+	const t3dWorldLimits_t &pLimits ) {
 	if ( !t3d_world_nonzero_u32( pLimits.nMaxCells ) ) {
 		return false;
 	}

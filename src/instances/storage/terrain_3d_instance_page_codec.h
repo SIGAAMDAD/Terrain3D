@@ -14,27 +14,29 @@
 using namespace godot;
 #endif
 
-class Terrain3DInstancePageCodec {
+class Terrain3DInstancePageCodec
+{
 	CLASS_NAME_STATIC( "Terrain3DInstancePageCodec" );
 
 public:
 	static bool encode( const Terrain3DInstanceStore &rStore,
-	        PackedByteArray &rPage,
-	        uint32_t *pMeshCounts,
-	        uint32_t &nInstanceCount,
-	        uint16_t &nMeshCount );
-	static bool decode( const PackedByteArray &rPage,
-	        Terrain3DInstanceStore &rStore,
-	        uint32_t *pMeshCounts,
-	        uint32_t &nInstanceCount,
-	        uint16_t &nMeshCount );
-	static bool decode( const PackedByteArray &rPage,
-	        size_t nPageBytes,
-	        Terrain3DInstanceStore &rStore,
-	        uint32_t *pMeshCounts,
-	        uint32_t &nInstanceCount,
-	        uint16_t &nMeshCount );
-	static bool inspect( const PackedByteArray &rPage, uint32_t *pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount );
+						PackedByteArray				 &rPage,
+						uint32_t					 *pMeshCounts,
+						uint32_t					 &nInstanceCount,
+						uint16_t					 &nMeshCount );
+	static bool decode( const PackedByteArray  &rPage,
+						Terrain3DInstanceStore &rStore,
+						uint32_t			   *pMeshCounts,
+						uint32_t			   &nInstanceCount,
+						uint16_t			   &nMeshCount );
+	static bool decode( const PackedByteArray  &rPage,
+						size_t					nPageBytes,
+						Terrain3DInstanceStore &rStore,
+						uint32_t			   *pMeshCounts,
+						uint32_t			   &nInstanceCount,
+						uint16_t			   &nMeshCount );
+	static bool
+	inspect( const PackedByteArray &rPage, uint32_t *pMeshCounts, uint32_t &nInstanceCount, uint16_t &nMeshCount );
 #if defined( TERRAIN3D_INSTANCE_PAGE_CODEC_TEST_ACCESS )
 	static void testSetDecodeFailureCountdown( int nCountdown );
 	static void testClearDecodeFailure( void );

@@ -2,29 +2,34 @@
 
 #include "core/utility/terrain_3d_generation.h"
 #include "authoring/world/core/terrain_3d_world_authoring.h"
+#include "assets/import/terrain_3d_world_import_profile.h"
+#include "authoring/vt/build/terrain_3d_vt_cooker.h"
 
 #include <string.h>
 
-static uint32_t t3d_world_authoring_hash_source_id( uint64_t pSourceId ) {
+static uint32_t t3d_world_authoring_hash_source_id(
+	uint64_t pSourceId ) {
 	uint64_t nValue = pSourceId;
 	nValue ^= nValue >> 33u;
 	nValue *= 0xff51afd7ed558ccduLL;
 	nValue ^= nValue >> 33u;
 	nValue *= 0xc4ceb9fe1a85ec53uLL;
 	nValue ^= nValue >> 33u;
-	return ( uint32_t )nValue;
+	return ( uint32_t ) nValue;
 }
 
-static bool t3d_world_authoring_kind_enabled( const t3dWorldConversionPolicy_t &pPolicy, t3dWorldCandidateKind_t pKind ) {
+static bool t3d_world_authoring_kind_enabled(
+	const t3dWorldConversionPolicy_t &pPolicy,
+	t3dWorldCandidateKind_t			  pKind ) {
 	switch ( pKind ) {
-		case T3D_WORLD_CANDIDATE_WORLD_INSTANCE:
-			return true;
-		case T3D_WORLD_CANDIDATE_MESH_INSTANCE:
-			return pPolicy.bConvertMeshInstances;
-		case T3D_WORLD_CANDIDATE_MULTIMESH_INSTANCE:
-			return pPolicy.bConvertMultiMeshInstances;
-		default:
-			return false;
+	case T3D_WORLD_CANDIDATE_WORLD_INSTANCE:
+		return true;
+	case T3D_WORLD_CANDIDATE_MESH_INSTANCE:
+		return pPolicy.bConvertMeshInstances;
+	case T3D_WORLD_CANDIDATE_MULTIMESH_INSTANCE:
+		return pPolicy.bConvertMultiMeshInstances;
+	default:
+		return false;
 	}
 }
 
@@ -43,7 +48,8 @@ t3dWorldConversionPolicy_t t3d_world_authoring_default_policy() {
 }
 
 t3dWorldClassification_t t3d_world_authoring_classify_reference_debug(
-        const t3dWorldConversionPolicy_t &pPolicy, const t3dWorldCandidateDesc_t &pCandidate ) {
+	const t3dWorldConversionPolicy_t &pPolicy,
+	const t3dWorldCandidateDesc_t	 &pCandidate ) {
 	t3dWorldClassification_t Result;
 	Result.eOwnership = T3D_WORLD_OWNERSHIP_NATIVE_GODOT;
 	Result.eReason = T3D_WORLD_CONVERSION_OK;
@@ -80,8 +86,8 @@ t3dWorldClassification_t t3d_world_authoring_classify_reference_debug(
 		Result.eReason = T3D_WORLD_CONVERSION_NOT_EXPLICIT;
 		return Result;
 	}
-	if ( pPolicy.eMode == T3D_WORLD_MODE_ELIGIBLE_SCENE && pCandidate.eKind != T3D_WORLD_CANDIDATE_WORLD_INSTANCE
-	        && !pCandidate.bExplicitInclude ) {
+	if ( pPolicy.eMode == T3D_WORLD_MODE_ELIGIBLE_SCENE && pCandidate.eKind != T3D_WORLD_CANDIDATE_WORLD_INSTANCE &&
+		 !pCandidate.bExplicitInclude ) {
 		Result.eReason = T3D_WORLD_CONVERSION_NOT_EXPLICIT;
 		return Result;
 	}
@@ -101,7 +107,9 @@ t3dWorldClassification_t t3d_world_authoring_classify_reference_debug(
 }
 
 bool t3d_world_ownership_registry_initialize_cold(
-        t3dWorldOwnershipRegistry_t &rRegistry, t3dWorldOwnershipEntry_t *pEntries, uint32_t pCapacity ) {
+	t3dWorldOwnershipRegistry_t &rRegistry,
+	t3dWorldOwnershipEntry_t	*pEntries,
+	uint32_t					 pCapacity ) {
 	if ( pEntries == NULL || pCapacity < 8u || ( pCapacity & ( pCapacity - 1u ) ) != 0u ) {
 		return false;
 	}
@@ -121,7 +129,8 @@ bool t3d_world_ownership_registry_initialize_cold(
 	return true;
 }
 
-void t3d_world_ownership_registry_clear_cold( t3dWorldOwnershipRegistry_t &rRegistry ) {
+void t3d_world_ownership_registry_clear_cold(
+	t3dWorldOwnershipRegistry_t &rRegistry ) {
 	if ( rRegistry.pEntries == NULL || rRegistry.nCapacity == 0u ) {
 		return;
 	}
@@ -139,13 +148,14 @@ void t3d_world_ownership_registry_clear_cold( t3dWorldOwnershipRegistry_t &rRegi
 }
 
 bool t3d_world_ownership_registry_publish_cold(
-        t3dWorldOwnershipRegistry_t &rRegistry, const t3dWorldOwnershipEntry_t &pEntry ) {
+	t3dWorldOwnershipRegistry_t	   &rRegistry,
+	const t3dWorldOwnershipEntry_t &pEntry ) {
 	if ( rRegistry.pEntries == NULL || rRegistry.nCapacity == 0u || pEntry.nSourceId == 0u ) {
 		return false;
 	}
 
 	const uint32_t nMask = rRegistry.nCapacity - 1u;
-	uint32_t nSlot = t3d_world_authoring_hash_source_id( pEntry.nSourceId ) & nMask;
+	uint32_t	   nSlot = t3d_world_authoring_hash_source_id( pEntry.nSourceId ) & nMask;
 	for ( uint32_t i = 0u; i < rRegistry.nCapacity; ++i ) {
 		t3dWorldOwnershipEntry_t &Entry = rRegistry.pEntries[nSlot];
 		if ( Entry.nSourceId == 0u || Entry.nSourceId == pEntry.nSourceId ) {
@@ -162,13 +172,14 @@ bool t3d_world_ownership_registry_publish_cold(
 }
 
 const t3dWorldOwnershipEntry_t *t3d_world_ownership_registry_find_reference_debug(
-        const t3dWorldOwnershipRegistry_t &pRegistry, uint64_t pSourceId ) {
+	const t3dWorldOwnershipRegistry_t &pRegistry,
+	uint64_t						   pSourceId ) {
 	if ( pRegistry.pEntries == NULL || pRegistry.nCapacity == 0u || pSourceId == 0u ) {
 		return NULL;
 	}
 
 	const uint32_t nMask = pRegistry.nCapacity - 1u;
-	uint32_t nSlot = t3d_world_authoring_hash_source_id( pSourceId ) & nMask;
+	uint32_t	   nSlot = t3d_world_authoring_hash_source_id( pSourceId ) & nMask;
 	for ( uint32_t i = 0u; i < pRegistry.nCapacity; ++i ) {
 		const t3dWorldOwnershipEntry_t &Entry = pRegistry.pEntries[nSlot];
 		if ( Entry.nSourceId == pSourceId ) {
@@ -180,4 +191,14 @@ const t3dWorldOwnershipEntry_t *t3d_world_ownership_registry_find_reference_debu
 		nSlot = ( nSlot + 1u ) & nMask;
 	}
 	return NULL;
+}
+
+void Terrain3DWorldImportProfile::resolveVtCookerSettings(
+	t3dVTCookerSettings_t &rSettings ) const {
+	t3d_vt_cooker_default_settings( rSettings );
+	rSettings.m_nClusterTargetPages = ( uint32_t ) m_iVtClusterTargetPages;
+	rSettings.m_nClusterTargetBytes = ( uint32_t ) m_iVtClusterTargetBytes;
+	rSettings.m_nOuterCompression = ( uint32_t ) m_iVtOuterCompression;
+	rSettings.m_nMipQuality = ( uint32_t ) m_iVtMipQuality;
+	rSettings.m_nCompressionQuality = ( uint32_t ) m_iVtCompressionQuality;
 }

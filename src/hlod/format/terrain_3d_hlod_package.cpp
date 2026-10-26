@@ -1,3 +1,5 @@
+#include "hlod/format/terrain_3d_hlod_manifest.h"
+#include "hlod/format/terrain_3d_hlod_runtime_codec.h"
 #include "integration/godot/terrain_3d_binding.h"
 #include "hlod/format/terrain_3d_hlod_package.h"
 
@@ -5,30 +7,79 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-#define HLOD_SET_VALUE( method, field, type, normalize )                                                                                   \
-	void Terrain3DHLODPackage::method( type value ) {                                                                                      \
-		type normalized = ( normalize );                                                                                                   \
-		if ( field == normalized ) {                                                                                                       \
-			return;                                                                                                                        \
-		}                                                                                                                                  \
-		field = normalized;                                                                                                                \
-		emit_changed();                                                                                                                    \
+#define HLOD_SET_VALUE( method, field, type, normalize )                                                               \
+	void Terrain3DHLODPackage::method( type value ) {                                                                  \
+		type normalized = ( normalize );                                                                               \
+		if ( field == normalized ) {                                                                                   \
+			return;                                                                                                    \
+		}                                                                                                              \
+		field = normalized;                                                                                            \
+		emit_changed();                                                                                                \
 	}
 
-HLOD_SET_VALUE( setLevel, m_nLevel, int, CLAMP( value, 1, 6 ) )
-HLOD_SET_VALUE( setClusterLocation, m_clusterLocation, const Vector2i &, value )
-HLOD_SET_VALUE( setRegionMin, m_regionMin, const Vector2i &, value )
-HLOD_SET_VALUE( setRegionMax, m_regionMax, const Vector2i &, value )
-HLOD_SET_VALUE( setLocalBounds, m_localBounds, const AABB &, value )
-HLOD_SET_VALUE( setGeometricError, m_fGeometricError, real_t, MAX( value, 0.001f ) )
-HLOD_SET_VALUE( setSourceSignature, m_nSourceSignature, int64_t, value )
-HLOD_SET_VALUE( setBuildSignature, m_nBuildSignature, int64_t, value )
-HLOD_SET_VALUE( setSourceTriangles, m_nSourceTriangles, int64_t, MAX<int64_t>( value, 0 ) )
-HLOD_SET_VALUE( setProxyTriangles, m_nProxyTriangles, int64_t, MAX<int64_t>( value, 0 ) )
-HLOD_SET_VALUE( setEstimatedGpuBytes, m_nEstimatedGpuBytes, int64_t, MAX<int64_t>( value, 0 ) )
-HLOD_SET_VALUE( setBuiltUnix, m_nBuiltUnix, int64_t, MAX<int64_t>( value, 0 ) )
+HLOD_SET_VALUE(
+	setLevel,
+	m_nLevel,
+	int,
+	CLAMP( value, 1, 6 ) )
+HLOD_SET_VALUE(
+	setClusterLocation,
+	m_clusterLocation,
+	const Vector2i &,
+	value )
+HLOD_SET_VALUE(
+	setRegionMin,
+	m_regionMin,
+	const Vector2i &,
+	value )
+HLOD_SET_VALUE(
+	setRegionMax,
+	m_regionMax,
+	const Vector2i &,
+	value )
+HLOD_SET_VALUE(
+	setLocalBounds,
+	m_localBounds,
+	const AABB &,
+	value )
+HLOD_SET_VALUE(
+	setGeometricError,
+	m_fGeometricError,
+	real_t,
+	MAX( value, 0.001f ) )
+HLOD_SET_VALUE(
+	setSourceSignature,
+	m_nSourceSignature,
+	int64_t,
+	value )
+HLOD_SET_VALUE(
+	setBuildSignature,
+	m_nBuildSignature,
+	int64_t,
+	value )
+HLOD_SET_VALUE(
+	setSourceTriangles,
+	m_nSourceTriangles,
+	int64_t,
+	MAX< int64_t >( value, 0 ) )
+HLOD_SET_VALUE(
+	setProxyTriangles,
+	m_nProxyTriangles,
+	int64_t,
+	MAX< int64_t >( value, 0 ) )
+HLOD_SET_VALUE(
+	setEstimatedGpuBytes,
+	m_nEstimatedGpuBytes,
+	int64_t,
+	MAX< int64_t >( value, 0 ) )
+HLOD_SET_VALUE(
+	setBuiltUnix,
+	m_nBuiltUnix,
+	int64_t,
+	MAX< int64_t >( value, 0 ) )
 
-void Terrain3DHLODPackage::setMesh( const Ref<ArrayMesh> &rMesh ) {
+void Terrain3DHLODPackage::setMesh(
+	const Ref< ArrayMesh > &rMesh ) {
 	if ( m_mesh == rMesh ) {
 		return;
 	}
@@ -36,19 +87,22 @@ void Terrain3DHLODPackage::setMesh( const Ref<ArrayMesh> &rMesh ) {
 	emit_changed();
 }
 
-String Terrain3DHLODPackage::getVtMaterialOwnerIdentityCold( void ) const {
+String Terrain3DHLODPackage::getVtMaterialOwnerIdentityCold(
+	void ) const {
 	const String package_path = get_path();
 	if ( !package_path.is_empty() ) {
 		return String( "hlod-package:" ) + package_path;
 	}
-	return String( "hlod-level:" ) + String::num_int64( m_nLevel ) + String( ":cluster:" ) + String::num_int64( m_clusterLocation.x )
-	        + String( "," ) + String::num_int64( m_clusterLocation.y ) + String( ":source:" ) + String::num_int64( m_nSourceSignature );
+	return String( "hlod-level:" ) + String::num_int64( m_nLevel ) + String( ":cluster:" ) +
+		   String::num_int64( m_clusterLocation.x ) + String( "," ) + String::num_int64( m_clusterLocation.y ) +
+		   String( ":source:" ) + String::num_int64( m_nSourceSignature );
 }
 
-bool Terrain3DHLODPackage::ensureRenderingMaterialStableKeysCold( void ) {
+bool Terrain3DHLODPackage::ensureRenderingMaterialStableKeysCold(
+	void ) {
 	const String owner = getVtMaterialOwnerIdentityCold();
 	for ( int64_t iMaterial = 0; iMaterial < m_renderingMaterials.size(); ++iMaterial ) {
-		const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[iMaterial];
+		const Ref< Terrain3DRenderingMaterial > material = m_renderingMaterials[iMaterial];
 		if ( material.is_null() ) {
 			continue;
 		}
@@ -60,7 +114,8 @@ bool Terrain3DHLODPackage::ensureRenderingMaterialStableKeysCold( void ) {
 	return true;
 }
 
-void Terrain3DHLODPackage::setRenderingMaterials( const TypedArray<Terrain3DRenderingMaterial> &rMaterials ) {
+void Terrain3DHLODPackage::setRenderingMaterials(
+	const TypedArray< Terrain3DRenderingMaterial > &rMaterials ) {
 	if ( m_renderingMaterials == rMaterials ) {
 		return;
 	}
@@ -69,23 +124,26 @@ void Terrain3DHLODPackage::setRenderingMaterials( const TypedArray<Terrain3DRend
 	emit_changed();
 }
 
-bool Terrain3DHLODPackage::captureRenderingMaterialsCold( void ) {
+bool Terrain3DHLODPackage::captureRenderingMaterialsCold(
+	void ) {
 	if ( m_mesh.is_null() ) {
 		return false;
 	}
-	TypedArray<Terrain3DRenderingMaterial> materials;
+	TypedArray< Terrain3DRenderingMaterial > materials;
 	materials.resize( m_mesh->get_surface_count() );
 	for ( int surface = 0; surface < m_mesh->get_surface_count(); ++surface ) {
-		Ref<Terrain3DRenderingMaterial> renderingMaterial;
+		Ref< Terrain3DRenderingMaterial > renderingMaterial;
 		renderingMaterial.instantiate();
-		const Ref<Material> sourceMaterial = m_mesh->surface_get_material( surface );
+		const Ref< Material > sourceMaterial = m_mesh->surface_get_material( surface );
 		if ( sourceMaterial.is_valid() && !renderingMaterial->importBaseMaterialCold( sourceMaterial ) ) {
 			return false;
 		}
-		if ( sourceMaterial.is_valid() && !sourceMaterial->get_path().is_empty() && !sourceMaterial->get_path().contains( "::" ) ) {
-			renderingMaterial->setVtStableKey( t3d_vt_material_stable_key_from_resource_path( sourceMaterial->get_path() ) );
-		} else if ( !renderingMaterial->ensureVtStableKeyCold(
-		                    getVtMaterialOwnerIdentityCold(), String( "surface:" ) + String::num_int64( surface ) ) ) {
+		if ( sourceMaterial.is_valid() && !sourceMaterial->get_path().is_empty() &&
+			 !sourceMaterial->get_path().contains( "::" ) ) {
+			renderingMaterial->setVtStableKey(
+				t3d_vt_material_stable_key_from_resource_path( sourceMaterial->get_path() ) );
+		} else if ( !renderingMaterial->ensureVtStableKeyCold( getVtMaterialOwnerIdentityCold(),
+															   String( "surface:" ) + String::num_int64( surface ) ) ) {
 			return false;
 		}
 		materials[surface] = renderingMaterial;
@@ -94,12 +152,13 @@ bool Terrain3DHLODPackage::captureRenderingMaterialsCold( void ) {
 	return true;
 }
 
-bool Terrain3DHLODPackage::hasCanonicalRenderingMaterials( void ) const {
+bool Terrain3DHLODPackage::hasCanonicalRenderingMaterials(
+	void ) const {
 	if ( m_mesh.is_null() || m_renderingMaterials.size() != m_mesh->get_surface_count() ) {
 		return false;
 	}
 	for ( int surface = 0; surface < m_renderingMaterials.size(); ++surface ) {
-		const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[surface];
+		const Ref< Terrain3DRenderingMaterial > material = m_renderingMaterials[surface];
 		if ( material.is_null() || !material->isOneSubmitCompatible() ) {
 			return false;
 		}
@@ -107,45 +166,225 @@ bool Terrain3DHLODPackage::hasCanonicalRenderingMaterials( void ) const {
 	return true;
 }
 
-const Terrain3DRenderingMaterial *Terrain3DHLODPackage::getRenderingMaterialPtr( const uint32_t nSurface ) const {
-	if ( nSurface >= ( uint32_t )( m_renderingMaterials.size() ) ) {
+const Terrain3DRenderingMaterial *Terrain3DHLODPackage::getRenderingMaterialPtr(
+	const uint32_t nSurface ) const {
+	if ( nSurface >= ( uint32_t ) ( m_renderingMaterials.size() ) ) {
 		return NULL;
 	}
-	const Ref<Terrain3DRenderingMaterial> material = m_renderingMaterials[( int64_t )( nSurface )];
+	const Ref< Terrain3DRenderingMaterial > material = m_renderingMaterials[( int64_t ) ( nSurface )];
 	return material.ptr();
 }
 
-void Terrain3DHLODPackage::_bind_methods( void ) {
+void Terrain3DHLODPackage::_bind_methods(
+	void ) {
+	ClassDB::bind_method( D_METHOD( "capture_rendering_materials" ),
+						  &Terrain3DHLODPackage::captureRenderingMaterialsCold );
+	ClassDB::bind_method( D_METHOD( "has_canonical_rendering_materials" ),
+						  &Terrain3DHLODPackage::hasCanonicalRenderingMaterials );
 
-	ClassDB::bind_method( D_METHOD( "capture_rendering_materials" ), &Terrain3DHLODPackage::captureRenderingMaterialsCold );
-	ClassDB::bind_method( D_METHOD( "has_canonical_rendering_materials" ), &Terrain3DHLODPackage::hasCanonicalRenderingMaterials );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setLevel,
+					   getLevel,
+					   "level",
+					   PropertyInfo( Variant::INT, "level", PROPERTY_HINT_RANGE, "1,6,1" ),
+					   "set_level",
+					   "get_level" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setClusterLocation,
+					   getClusterLocation,
+					   "location",
+					   PropertyInfo( Variant::VECTOR2I, "cluster_location" ),
+					   "set_cluster_location",
+					   "get_cluster_location" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setRegionMin,
+					   getRegionMin,
+					   "location",
+					   PropertyInfo( Variant::VECTOR2I, "region_min" ),
+					   "set_region_min",
+					   "get_region_min" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setRegionMax,
+					   getRegionMax,
+					   "location",
+					   PropertyInfo( Variant::VECTOR2I, "region_max" ),
+					   "set_region_max",
+					   "get_region_max" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setLocalBounds,
+					   getLocalBounds,
+					   "bounds",
+					   PropertyInfo( Variant::AABB, "local_bounds" ),
+					   "set_local_bounds",
+					   "get_local_bounds" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setMesh,
+					   getMesh,
+					   "mesh",
+					   PropertyInfo( Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ),
+					   "set_mesh",
+					   "get_mesh" );
+	T3D_BIND_PROPERTY(
+		Terrain3DHLODPackage,
+		setRenderingMaterials,
+		getRenderingMaterials,
+		"materials",
+		PropertyInfo( Variant::ARRAY, "rendering_materials", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DRenderingMaterial" ),
+		"set_rendering_materials",
+		"get_rendering_materials" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setGeometricError,
+					   getGeometricError,
+					   "error",
+					   PropertyInfo( Variant::FLOAT, "geometric_error" ),
+					   "set_geometric_error",
+					   "get_geometric_error" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setSourceSignature,
+					   getSourceSignature,
+					   "signature",
+					   PropertyInfo( Variant::INT, "source_signature" ),
+					   "set_source_signature",
+					   "get_source_signature" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setBuildSignature,
+					   getBuildSignature,
+					   "signature",
+					   PropertyInfo( Variant::INT, "build_signature" ),
+					   "set_build_signature",
+					   "get_build_signature" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setSourceTriangles,
+					   getSourceTriangles,
+					   "count",
+					   PropertyInfo( Variant::INT, "source_triangles" ),
+					   "set_source_triangles",
+					   "get_source_triangles" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setProxyTriangles,
+					   getProxyTriangles,
+					   "count",
+					   PropertyInfo( Variant::INT, "proxy_triangles" ),
+					   "set_proxy_triangles",
+					   "get_proxy_triangles" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setEstimatedGpuBytes,
+					   getEstimatedGpuBytes,
+					   "bytes",
+					   PropertyInfo( Variant::INT, "estimated_gpu_bytes" ),
+					   "set_estimated_gpu_bytes",
+					   "get_estimated_gpu_bytes" );
+	T3D_BIND_PROPERTY( Terrain3DHLODPackage,
+					   setBuiltUnix,
+					   getBuiltUnix,
+					   "unix_time",
+					   PropertyInfo( Variant::INT, "built_unix" ),
+					   "set_built_unix",
+					   "get_built_unix" );
+}
 
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setLevel, getLevel, "level",
-	                   PropertyInfo( Variant::INT, "level", PROPERTY_HINT_RANGE, "1,6,1" ), "set_level", "get_level" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setClusterLocation, getClusterLocation, "location",
-	                   PropertyInfo( Variant::VECTOR2I, "cluster_location" ), "set_cluster_location", "get_cluster_location" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setRegionMin, getRegionMin, "location",
-	                   PropertyInfo( Variant::VECTOR2I, "region_min" ), "set_region_min", "get_region_min" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setRegionMax, getRegionMax, "location",
-	                   PropertyInfo( Variant::VECTOR2I, "region_max" ), "set_region_max", "get_region_max" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setLocalBounds, getLocalBounds, "bounds",
-	                   PropertyInfo( Variant::AABB, "local_bounds" ), "set_local_bounds", "get_local_bounds" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setMesh, getMesh, "mesh",
-	                   PropertyInfo( Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "ArrayMesh" ), "set_mesh", "get_mesh" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setRenderingMaterials, getRenderingMaterials, "materials",
-	                   PropertyInfo( Variant::ARRAY, "rendering_materials", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DRenderingMaterial" ), "set_rendering_materials", "get_rendering_materials" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setGeometricError, getGeometricError, "error",
-	                   PropertyInfo( Variant::FLOAT, "geometric_error" ), "set_geometric_error", "get_geometric_error" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setSourceSignature, getSourceSignature, "signature",
-	                   PropertyInfo( Variant::INT, "source_signature" ), "set_source_signature", "get_source_signature" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setBuildSignature, getBuildSignature, "signature",
-	                   PropertyInfo( Variant::INT, "build_signature" ), "set_build_signature", "get_build_signature" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setSourceTriangles, getSourceTriangles, "count",
-	                   PropertyInfo( Variant::INT, "source_triangles" ), "set_source_triangles", "get_source_triangles" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setProxyTriangles, getProxyTriangles, "count",
-	                   PropertyInfo( Variant::INT, "proxy_triangles" ), "set_proxy_triangles", "get_proxy_triangles" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setEstimatedGpuBytes, getEstimatedGpuBytes, "bytes",
-	                   PropertyInfo( Variant::INT, "estimated_gpu_bytes" ), "set_estimated_gpu_bytes", "get_estimated_gpu_bytes" );
-	T3D_BIND_PROPERTY( Terrain3DHLODPackage, setBuiltUnix, getBuiltUnix, "unix_time",
-	                   PropertyInfo( Variant::INT, "built_unix" ), "set_built_unix", "get_built_unix" );
+// -------- Consolidated from hlod/format/terrain_3d_hlod_manifest.cpp --------
+bool Terrain3DHLODManifest::compileRuntimeBlob(
+	void ) {
+	PackedByteArray compiled = Terrain3DHLODRuntimeCodec::encode( m_entries,
+																  m_instancerMinLevels,
+																  m_nodeRegionIndices,
+																  m_nodeSpawnIds,
+																  m_nodeMinLevels );
+	if ( compiled.is_empty() ) {
+		return false;
+	}
+	m_runtimeBlob = compiled;
+	emit_changed();
+	return true;
+}
+
+bool Terrain3DHLODManifest::validateRuntimeBlob(
+	void ) const {
+	if ( m_runtimeBlob.is_empty() ) {
+		return false;
+	}
+	t3dHLODRuntimeData_t decoded;
+	if ( !Terrain3DHLODRuntimeCodec::decode( m_runtimeBlob, decoded ) ) {
+		return false;
+	}
+	return decoded.m_entries.size() == ( size_t ) m_entries.size();
+}
+
+void Terrain3DHLODManifest::_bind_methods(
+	void ) {
+	ClassDB::bind_method( D_METHOD( "compile_runtime_blob" ), &Terrain3DHLODManifest::compileRuntimeBlob );
+	ClassDB::bind_method( D_METHOD( "validate_runtime_blob" ), &Terrain3DHLODManifest::validateRuntimeBlob );
+	ClassDB::bind_method( D_METHOD( "get_entry_count" ), &Terrain3DHLODManifest::getEntryCount );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setFormat,
+					   getFormat,
+					   "value",
+					   PropertyInfo( Variant::INT, "format" ),
+					   "set_format",
+					   "get_format" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setMaxLevel,
+					   getMaxLevel,
+					   "value",
+					   PropertyInfo( Variant::INT, "max_level" ),
+					   "set_max_level",
+					   "get_max_level" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setBuildSignature,
+					   getBuildSignature,
+					   "value",
+					   PropertyInfo( Variant::INT, "build_signature" ),
+					   "set_build_signature",
+					   "get_build_signature" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setBuiltUnix,
+					   getBuiltUnix,
+					   "value",
+					   PropertyInfo( Variant::INT, "built_unix" ),
+					   "set_built_unix",
+					   "get_built_unix" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setEntries,
+					   getEntries,
+					   "value",
+					   PropertyInfo( Variant::ARRAY, "entries" ),
+					   "set_entries",
+					   "get_entries" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setInstancerMinLevels,
+					   getInstancerMinLevels,
+					   "value",
+					   PropertyInfo( Variant::PACKED_BYTE_ARRAY, "instancer_min_levels" ),
+					   "set_instancer_min_levels",
+					   "get_instancer_min_levels" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setNodeRegionIndices,
+					   getNodeRegionIndices,
+					   "value",
+					   PropertyInfo( Variant::PACKED_INT32_ARRAY, "node_region_indices" ),
+					   "set_node_region_indices",
+					   "get_node_region_indices" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setNodeSpawnIds,
+					   getNodeSpawnIds,
+					   "value",
+					   PropertyInfo( Variant::PACKED_INT64_ARRAY, "node_spawn_ids" ),
+					   "set_node_spawn_ids",
+					   "get_node_spawn_ids" );
+	T3D_BIND_PROPERTY( Terrain3DHLODManifest,
+					   setNodeMinLevels,
+					   getNodeMinLevels,
+					   "value",
+					   PropertyInfo( Variant::PACKED_BYTE_ARRAY, "node_min_levels" ),
+					   "set_node_min_levels",
+					   "get_node_min_levels" );
+	T3D_BIND_PROPERTY(
+		Terrain3DHLODManifest,
+		setRuntimeBlob,
+		getRuntimeBlob,
+		"value",
+		PropertyInfo( Variant::PACKED_BYTE_ARRAY, "runtime_blob", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE ),
+		"set_runtime_blob",
+		"get_runtime_blob" );
 }

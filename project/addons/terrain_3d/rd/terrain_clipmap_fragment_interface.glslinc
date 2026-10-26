@@ -1,3 +1,4 @@
+// P04 channel-directory shadow ABI is dormant; include it from a stage root on activation.
 // Terrain clipmap fragment pipeline interface.
 // Stage roots include this explicitly so reusable material evaluation cannot silently add descriptors or stage I/O.
 
@@ -47,12 +48,7 @@
 #endif
 
 #ifndef T3D_WORLD_RASTER_MESH
-// WG-C SH04 production policy: the shared set-3 feedback ABI remains dormant
-// until its frame/reset publication owner is wired. The adapter is still
-// compiled by the authoritative feedback fixture lane so activation cannot
-// regress silently. Pure depth remains feedback-free by contract.
-#define T3D_TERRAIN_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 1
-#define T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(logical_material_id) (materials[int(logical_material_id)].micro_vt_allocation)
+#define T3D_VT_TERRAIN_FEEDBACK_ALLOCATION(logical_material_id) (materials[T3D_CLIPMAP_MATERIAL_BASE + int(logical_material_id)].micro_vt_allocation)
 
 #if defined(T3D_VT_FRAGMENT_FEEDBACK) && (!defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS))
 #ifndef T3D_VT_TERRAIN_FEEDBACK_ALLOCATION
@@ -65,6 +61,20 @@
 #endif
 #endif // !T3D_WORLD_RASTER_MESH
 
+// BR17: the screen-space variant reconstructs geometry varyings from an
+// independently owned, reverse-Z visibility target. The raster variant is
+// unchanged and the two interfaces cannot be active together.
+#if defined(T3D_SCREEN_SPACE_SHADE_PASS) && T3D_SCREEN_SPACE_SHADE_PASS
+vec3 world_position;
+vec3 world_normal;
+uint patch_tier;
+int terrain_region_layer;
+vec2 terrain_world_texel;
+vec3 t3d_screen_space_world_ddx;
+vec3 t3d_screen_space_world_ddy;
+vec2 t3d_screen_space_texel_ddx;
+vec2 t3d_screen_space_texel_ddy;
+#else
 layout(location = 0) in vec3 world_position;
 layout(location = 1) in vec3 world_normal;
 #ifndef T3D_WORLD_RASTER_MESH
@@ -75,6 +85,14 @@ layout(location = 4) in vec2 terrain_world_texel;
 #ifdef T3D_FORWARD_MOTION
 layout(location = 5) in vec4 current_screen_position;
 layout(location = 6) in vec4 previous_screen_position;
+#endif
+#endif // !T3D_SCREEN_SPACE_SHADE_PASS
+#if defined(T3D_SCREEN_SPACE_COVERAGE_PASS) && T3D_SCREEN_SPACE_COVERAGE_PASS
+layout(location = 0) out vec4 t3d_screen_space_position_region;
+layout(location = 1) out vec4 t3d_screen_space_normal_tier;
+layout(location = 2) out vec4 t3d_screen_space_texel_dx;
+layout(location = 3) out vec4 t3d_screen_space_texel_dy_world_dx;
+layout(location = 4) out vec4 t3d_screen_space_world_dxz_dy;
 #endif
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS
@@ -93,36 +111,11 @@ layout(location = 2) out vec2 out_motion;
 #endif
 #endif
 
-layout(set = 0, binding = 0, std140) uniform FrameData {
-    mat4 view_projection[2];
-    mat4 view_matrix;
-    mat4 previous_view_projection[2];
-    vec4 motion_jitter;
-    vec4 motion_params;
-    vec4 light_direction_ambient;
-    vec4 light_color;
-    vec4 terrain_params;
-    vec4 mesh_params;
-    vec4 target_params;
-    vec4 camera_params[2];
-    vec4 fog_params;
-    vec4 fog_depth_params;
-    vec4 displacement_params;
-    vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
-}
-frame_data;
 
 uint t3d_view_index() {
     return min(uint(gl_ViewIndex), 1u);
 }
 #ifndef T3D_WORLD_RASTER_MESH
-struct TerrainRegionRecord {
-    uint packed_physical_flags;
-    uint megavt_allocation;
-    uint megavt_generation;
-    uint megavt_flags;
-    vec4 megavt_world_to_uv;
-};
 layout(set = 0, binding = 1, std430) readonly buffer RegionMapData {
     TerrainRegionRecord region_map[];
 };
@@ -143,20 +136,7 @@ layout(set = 0, binding = 20) uniform sampler2DArray far_albedo_maps;
 layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
 layout(set = 0, binding = 22) uniform sampler2D macro_noise_texture;
 
-struct EditorDecal {
-    vec4 transform; // world position.xy, size, rotation
-    vec4 color;
-    uvec4 state; // visible, part flags, padding
-};
-struct EditorOverlayConfig {
-    EditorDecal decals[3];
-    vec4 heightmap_contour; // black height, white height, interval, thickness
-    vec4 contour_color;
-    vec4 instancer_grid; // cell size, padding
-};
-layout(set = 0, binding = 23, std430) readonly buffer EditorOverlayBuffer {
-    EditorOverlayConfig editor_overlay;
-};
+
 layout(set = 0, binding = 24) uniform sampler2D editor_brush_texture;
 layout(set = 0, binding = 25) uniform sampler2DArray terrain_shadow_masks;
 #endif // !T3D_WORLD_RASTER_MESH
@@ -200,109 +180,64 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT_TAIL
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_MIP_LAYOUT_BINDING, std430) readonly buffer TerrainVTMipLayoutBuffer {
     T3DVTMipLayout terrain_vt_mip_layouts[];
 };
+#if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
+#ifndef T3D_TERRAIN_VT_HINT_BINDING
+#define T3D_TERRAIN_VT_HINT_BINDING 43
+#endif
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDING, std430) readonly buffer TerrainVTAncestorHints {
+    T3DVTAncestorHint terrain_vt_ancestor_hints[];
+};
+#endif
+
+// Independently versioned composed-result descriptor extension, cold-specialized.
+// Legacy variants declare no additional bindings or descriptor requirements.
+#ifdef T3D_CS_ACTIVE
+#ifndef T3D_CS_DESCRIPTOR_SET
+#define T3D_CS_DESCRIPTOR_SET T3D_TERRAIN_VT_DESCRIPTOR_SET
+#endif
+#ifndef T3D_CS_PAGE_TABLE_BINDING
+#define T3D_CS_PAGE_TABLE_BINDING 39
+#define T3D_CS_ALBEDO_BINDING 40
+#define T3D_CS_NORMAL_BINDING 41
+#define T3D_CS_SURFACE_BINDING 42
+#endif
+struct T3DComposedGpuEntry {
+    ivec2 world_page;
+    uint mip;
+    uint physical_slot;
+    uint generation;
+    uint device_generation;
+    uint revision_lo;
+    uint revision_hi;
+    uint state;
+    uint channels;
+    uint reserved0;
+    uint reserved1;
+};
+layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_PAGE_TABLE_BINDING, std430) readonly buffer T3DComposedPageLookup {
+    T3DComposedGpuEntry terrain_cs_pages[];
+};
+layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_ALBEDO_BINDING) uniform sampler2DArray terrain_cs_albedo;
+layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_NORMAL_BINDING) uniform sampler2DArray terrain_cs_normal;
+layout(set = T3D_CS_DESCRIPTOR_SET, binding = T3D_CS_SURFACE_BINDING) uniform sampler2DArray terrain_cs_surface;
+#endif
 
 // The stage root includes the resolver body after this fragment has declared
 // its VT resources. Keeping only the prototype here avoids a nested filesystem
 // include, which Godot 4.7.2 does not expand.
 bool t3d_vt_resolve_page_core(
     uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount, out T3DVTResolveResult result);
+bool t3d_vt_resolve_page_core_loaded(uint allocationId, uint requestedPage, uint requestedMip,
+    uint allocationCount, uint pageCount, T3DVTAllocation allocation, out T3DVTResolveResult result);
 
 #ifndef T3D_WORLD_RASTER_MESH
-struct MaterialLayer {
-    vec4 color;
-    vec4 pbr0;
-    vec4 pbr1;
-    vec2 displacement;
-    uint physical_layer;
-    uint flags;
-    uint micro_vt_allocation;
-    uint micro_vt_generation;
-    uint micro_vt_flags;
-    uint micro_vt_reserved;
-};
 layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
     MaterialLayer materials[];
 };
 layout(set = 0, binding = 11) uniform sampler2DArray displacement_maps;
 
-struct TierMaterialConfig {
-    uint sampling_mode;
-    uint normal_mode;
-    uint color_mode;
-    uint surface_response;
-    uint texture_surface_mode;
-    uint lighting_model;
-    uint detiling_mode;
-    uint filtering;
-    float authored_color_contribution;
-    float wetness_contribution;
-    float material_lod_bias;
-    float quality_lod_offset;
-};
-struct MaterialConfig {
-    uint feature_flags;
-    uint debug_flags;
-    uint output_flags;
-    uint background_mode;
-    uint projection_mode;
-    uint tessellation_material_mode;
-    uint world_noise_mode;
-    uint texture_layer_counts;
-    float displacement_sharpness;
-    float blend_sharpness;
-    float distant_normal_scale;
-    float ground_level;
-    float region_blend;
-    float bias_distance;
-    float mipmap_bias;
-    float depth_blur;
-    float auto_slope;
-    float auto_height_reduction;
-    uint auto_base_texture;
-    uint auto_overlay_texture;
-    uint dual_scale_texture;
-    uint far_albedo_layer_count;
-    float dual_scale_reduction;
-    float tri_scale_reduction;
-    float dual_scale_far;
-    float dual_scale_near;
-    float noise1_scale;
-    float noise2_scale;
-    float noise1_rotation_x;
-    float noise1_rotation_y;
-    float macro_variation1_r;
-    float macro_variation1_g;
-    float macro_variation1_b;
-    float macro_variation_slope;
-    float macro_variation2_r;
-    float macro_variation2_g;
-    float macro_variation2_b;
-    float macro_variation_padding;
-    float noise1_offset_x;
-    float noise1_offset_y;
-    float world_noise_cache_period;
-    float world_noise_lod_distance;
-    float world_noise_scale;
-    float world_noise_height;
-    uint world_noise_max_octaves;
-    uint world_noise_min_octaves;
-    uint world_noise_cache_enabled;
-    uint world_noise_fragment_normals;
-    float world_noise_offset_x;
-    float world_noise_offset_y;
-    float world_noise_offset_z;
-    float world_noise_cache_max_lod;
-    float silhouette_r;
-    float silhouette_g;
-    float silhouette_b;
-    float silhouette_a;
-    float contour_step;
-    float editor_overlay_opacity;
-    float reserved_2;
-    float reserved_3;
-    TierMaterialConfig tier[3];
-};
 layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer {
-    MaterialConfig material_config;
+    MaterialConfig material_configs[];
 };
+#define material_config material_configs[t3d_hot_records[T3D_HOT_INDEX].terrain_bases.x]
 #endif // !T3D_WORLD_RASTER_MESH

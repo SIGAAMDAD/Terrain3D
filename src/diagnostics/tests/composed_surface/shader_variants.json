@@ -1,0 +1,5417 @@
+{
+  "stage": "CS00",
+  "type": "source inventory",
+  "gpu_measured": false,
+  "variants": [
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color",
+      "defines": [],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "compat_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "editor_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_native",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_native_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_native_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_near.glsl",
+      "variant": "feedback_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color",
+      "defines": [],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "compat_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "editor_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_native",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_native_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_native_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_middle.glsl",
+      "variant": "feedback_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color",
+      "defines": [],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_native_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": true,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "compat_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 1",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": true
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "editor_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 2",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 1",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": true,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_native",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_native_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_native_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_motion_one_sun",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_native_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_clipmap_far.glsl",
+      "variant": "feedback_color_specular_motion_one_sun_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_ONE_SUN",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": true,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_shadow",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_SHADOW",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "terrain_strip_shadow",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_SHADOW",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array_diag_constant",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array_diag_opacity",
+      "defines": [
+        "#define T3D_VT_FRAGMENT_FEEDBACK",
+        "#define T3D_VT_COARSE_FEEDBACK",
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": true,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_shadow_diag_constant",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_SHADOW",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_CONSTANT"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "mesh_shadow_diag_opacity",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_WORLD_SHADOW",
+        "#define T3D_WORLD_RASTER_MESH",
+        "#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "#define T3D_INSTANCE_GPU_DIAG_OPACITY"
+      ],
+      "depth": true,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_native",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_specular",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_specular_motion",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_native_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_specular_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_color_specular_motion_radiance_array",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_NATIVE_LIGHTING",
+        "#define T3D_FORWARD_SPECULAR",
+        "#define T3D_FORWARD_MOTION",
+        "#define T3D_FORWARD_RADIANCE_ARRAY",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": false,
+      "dnr": false,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_depth_normal_roughness",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    },
+    {
+      "shader": "terrain_world_raster.glsl",
+      "variant": "cs_terrain_strip_depth_normal_roughness_voxel_gi",
+      "defines": [
+        "#define T3D_TERRAIN_SHADER_PATH 0",
+        "#define T3D_TERRAIN_MATERIAL_BACKEND 0",
+        "#define T3D_FORWARD_DEPTH",
+        "#define T3D_FORWARD_NORMAL_ROUGHNESS",
+        "#define T3D_FORWARD_VOXEL_GI",
+        "#define T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "#define T3D_CS_ACTIVE"
+      ],
+      "depth": true,
+      "dnr": true,
+      "feedback": false,
+      "one_sun": false,
+      "editor": false,
+      "compat": false
+    }
+  ]
+}

@@ -721,7 +721,9 @@ func _apply_snapshot(p_terrain: Terrain3D, snapshot: Dictionary[Vector2i, Image]
 			continue
 		var image: Image = snapshot[region_location]
 		region.set_control_map(image.duplicate() if is_instance_valid(image) else null)
-		p_terrain.data.commit_map_edit(int(Terrain3DRegion.TYPE_CONTROL), region_location)
+		# Material-only rebakes preserve hole/height state. Resnapping instances here
+		# can issue editor Jolt raycasts outside a physics notification.
+		p_terrain.data.commit_map_edit(int(Terrain3DRegion.TYPE_CONTROL), region_location, Rect2i(), false)
 	_suppress_dirty_tracking = false
 
 

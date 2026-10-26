@@ -6,18 +6,23 @@
 #include <math.h>
 #include <string.h>
 
-static Vector4 t3dRdTransformPoint( const Projection &rProjection, const float x, const float y, const float z ) {
+static Vector4 t3dRdTransformPoint(
+	const Projection &rProjection,
+	const float		  x,
+	const float		  y,
+	const float		  z ) {
 	const Vector4 c0 = rProjection[0];
 	const Vector4 c1 = rProjection[1];
 	const Vector4 c2 = rProjection[2];
 	const Vector4 c3 = rProjection[3];
 	return Vector4( c0.x * x + c1.x * y + c2.x * z + c3.x,
-	        c0.y * x + c1.y * y + c2.y * z + c3.y,
-	        c0.z * x + c1.z * y + c2.z * z + c3.z,
-	        c0.w * x + c1.w * y + c2.w * z + c3.w );
+					c0.y * x + c1.y * y + c2.y * z + c3.y,
+					c0.z * x + c1.z * y + c2.z * z + c3.z,
+					c0.w * x + c1.w * y + c2.w * z + c3.w );
 }
 
-uint32_t Terrain3DRdCpuCuller::getDrawGroup( const t3dRdPatch_t &rPatch ) {
+uint32_t Terrain3DRdCpuCuller::getDrawGroup(
+	const t3dRdPatch_t &rPatch ) {
 	if ( rPatch.m_nLod == 0u ) {
 		return T3D_RD_DRAW_GROUP_LOD0_NEAR;
 	}
@@ -30,24 +35,29 @@ uint32_t Terrain3DRdCpuCuller::getDrawGroup( const t3dRdPatch_t &rPatch ) {
 	return T3D_RD_DRAW_GROUP_OUTER_FAR;
 }
 
-bool Terrain3DRdCpuCuller::isPatchValid( const t3dRdPatch_t &rPatch ) {
-	return isfinite( rPatch.m_fOriginX ) && isfinite( rPatch.m_fOriginZ ) && isfinite( rPatch.m_fScale ) && rPatch.m_fScale > 0.0f
-	        && rPatch.m_nLod < T3D_MAX_CLIPMAP_LEVELS && rPatch.m_nTier <= 2u && rPatch.m_nStitchX <= 2u && rPatch.m_nStitchZ <= 2u
-	        && isfinite( rPatch.m_fBoundsMinY ) && isfinite( rPatch.m_fBoundsMaxY ) && isfinite( rPatch.m_fBoundsHalfExtent )
-	        && rPatch.m_fBoundsMinY <= rPatch.m_fBoundsMaxY && rPatch.m_fBoundsHalfExtent > 0.0f && isfinite( rPatch.m_fPreviousOriginX )
-	        && isfinite( rPatch.m_fPreviousOriginZ ) && isfinite( rPatch.m_fPreviousScale ) && rPatch.m_fPreviousScale > 0.0f;
+bool Terrain3DRdCpuCuller::isPatchValid(
+	const t3dRdPatch_t &rPatch ) {
+	return isfinite( rPatch.m_fOriginX ) && isfinite( rPatch.m_fOriginZ ) && isfinite( rPatch.m_fScale ) &&
+		   rPatch.m_fScale > 0.0f && rPatch.m_nLod < T3D_MAX_CLIPMAP_LEVELS && rPatch.m_nTier <= 2u &&
+		   rPatch.m_nStitchX <= 2u && rPatch.m_nStitchZ <= 2u && isfinite( rPatch.m_fBoundsMinY ) &&
+		   isfinite( rPatch.m_fBoundsMaxY ) && isfinite( rPatch.m_fBoundsHalfExtent ) &&
+		   rPatch.m_fBoundsMinY <= rPatch.m_fBoundsMaxY && rPatch.m_fBoundsHalfExtent > 0.0f &&
+		   isfinite( rPatch.m_fPreviousOriginX ) && isfinite( rPatch.m_fPreviousOriginZ ) &&
+		   isfinite( rPatch.m_fPreviousScale ) && rPatch.m_fPreviousScale > 0.0f;
 }
 
-bool Terrain3DRdCpuCuller::isPatchVisible( const t3dRdPatch_t &rPatch, const Projection &rViewProjection ) {
+bool Terrain3DRdCpuCuller::isPatchVisible(
+	const t3dRdPatch_t &rPatch,
+	const Projection   &rViewProjection ) {
 	if ( !isPatchValid( rPatch ) ) {
 		return false;
 	}
-	const float x0 = rPatch.m_fOriginX - rPatch.m_fBoundsHalfExtent;
-	const float x1 = rPatch.m_fOriginX + rPatch.m_fBoundsHalfExtent;
-	const float z0 = rPatch.m_fOriginZ - rPatch.m_fBoundsHalfExtent;
-	const float z1 = rPatch.m_fOriginZ + rPatch.m_fBoundsHalfExtent;
-	const float y0 = rPatch.m_fBoundsMinY;
-	const float y1 = rPatch.m_fBoundsMaxY;
+	const float	  x0 = rPatch.m_fOriginX - rPatch.m_fBoundsHalfExtent;
+	const float	  x1 = rPatch.m_fOriginX + rPatch.m_fBoundsHalfExtent;
+	const float	  z0 = rPatch.m_fOriginZ - rPatch.m_fBoundsHalfExtent;
+	const float	  z1 = rPatch.m_fOriginZ + rPatch.m_fBoundsHalfExtent;
+	const float	  y0 = rPatch.m_fBoundsMinY;
+	const float	  y1 = rPatch.m_fBoundsMaxY;
 	const Vector4 corners[8] = {
 		t3dRdTransformPoint( rViewProjection, x0, y0, z0 ),
 		t3dRdTransformPoint( rViewProjection, x1, y0, z0 ),
@@ -77,21 +87,26 @@ bool Terrain3DRdCpuCuller::isPatchVisible( const t3dRdPatch_t &rPatch, const Pro
 }
 
 bool Terrain3DRdCpuCuller::isCommandRangeValid(
-        const uint32_t nGroup, const uint32_t nBufferBytes, const uint32_t nStride, const uint32_t nDrawCount ) {
-	if ( nGroup >= T3D_RD_DRAW_GROUP_COUNT || nDrawCount == 0u || nStride < T3D_TERRAIN_3D_RD_CULLING_COMMAND_BYTES
-	        || ( nStride & 3u ) != 0u ) {
+	const uint32_t nGroup,
+	const uint32_t nBufferBytes,
+	const uint32_t nStride,
+	const uint32_t nDrawCount ) {
+	if ( nGroup >= T3D_RD_DRAW_GROUP_COUNT || nDrawCount == 0u || nStride < T3D_TERRAIN_3D_RD_CULLING_COMMAND_BYTES ||
+		 ( nStride & 3u ) != 0u ) {
 		return false;
 	}
-	const size_t offset = ( size_t )( nGroup )*nStride;
-	const size_t last_offset = offset + ( size_t )( nDrawCount - 1u ) * nStride;
-	return last_offset >= offset && last_offset <= nBufferBytes && T3D_TERRAIN_3D_RD_CULLING_COMMAND_BYTES <= nBufferBytes - last_offset;
+	const size_t offset = ( size_t ) ( nGroup ) *nStride;
+	const size_t last_offset = offset + ( size_t ) ( nDrawCount - 1u ) * nStride;
+	return last_offset >= offset && last_offset <= nBufferBytes &&
+		   T3D_TERRAIN_3D_RD_CULLING_COMMAND_BYTES <= nBufferBytes - last_offset;
 }
 
-bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
-        const Projection &rViewProjection,
-        const uint32_t nLod0PartCount,
-        const uint32_t nOuterPartCount,
-        t3dRdCpuCullResult_t &rResult ) {
+bool Terrain3DRdCpuCuller::build(
+	const t3dRdFrameSnapshot_t &rSnapshot,
+	const Projection		   &rViewProjection,
+	const uint32_t				nLod0PartCount,
+	const uint32_t				nOuterPartCount,
+	t3dRdCpuCullResult_t	   &rResult ) {
 	t3dRdCpuCullResultReset( &rResult );
 	if ( rSnapshot.m_nPatchCount > T3D_MAX_CLIPMAP_LEVELS || nLod0PartCount == 0u || nOuterPartCount == 0u ) {
 		return false;
@@ -110,7 +125,7 @@ bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
 		if ( !isPatchVisible( patch, rViewProjection ) ) {
 			continue;
 		}
-		const uint32_t group = getDrawGroup( patch );
+		const uint32_t				   group = getDrawGroup( patch );
 		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
 		if ( command.m_nInstanceCount >= T3D_MAX_CLIPMAP_LEVELS ) {
 			return false;
@@ -119,18 +134,20 @@ bool Terrain3DRdCpuCuller::build( const t3dRdFrameSnapshot_t &rSnapshot,
 		rResult.m_szVisibleIndices[group * T3D_MAX_CLIPMAP_LEVELS + slot] = patch_index;
 		++rResult.m_nVisibleCount;
 	}
-	return rResult.m_nInvalidPatchCount == 0u && validate( rSnapshot, rViewProjection, nLod0PartCount, nOuterPartCount, rResult );
+	return rResult.m_nInvalidPatchCount == 0u &&
+		   validate( rSnapshot, rViewProjection, nLod0PartCount, nOuterPartCount, rResult );
 }
 
-bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot,
-        const Projection *const pViewProjections,
-        const uint32_t nViewCount,
-        const uint32_t nLod0PartCount,
-        const uint32_t nOuterPartCount,
-        t3dRdCpuCullResult_t &rResult ) {
+bool Terrain3DRdCpuCuller::buildMultiview(
+	const t3dRdFrameSnapshot_t &rSnapshot,
+	const Projection *const		pViewProjections,
+	const uint32_t				nViewCount,
+	const uint32_t				nLod0PartCount,
+	const uint32_t				nOuterPartCount,
+	t3dRdCpuCullResult_t	   &rResult ) {
 	t3dRdCpuCullResultReset( &rResult );
-	if ( !pViewProjections || nViewCount == 0u || nViewCount > T3D_RD_FORWARD_MAX_VIEWS || rSnapshot.m_nPatchCount > T3D_MAX_CLIPMAP_LEVELS
-	        || nLod0PartCount == 0u || nOuterPartCount == 0u ) {
+	if ( !pViewProjections || nViewCount == 0u || nViewCount > T3D_RD_FORWARD_MAX_VIEWS ||
+		 rSnapshot.m_nPatchCount > T3D_MAX_CLIPMAP_LEVELS || nLod0PartCount == 0u || nOuterPartCount == 0u ) {
 		return false;
 	}
 	for ( uint32_t group = 0u; group < T3D_RD_DRAW_GROUP_COUNT; ++group ) {
@@ -151,7 +168,7 @@ bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot
 		if ( !visible ) {
 			continue;
 		}
-		const uint32_t group = getDrawGroup( patch );
+		const uint32_t				   group = getDrawGroup( patch );
 		t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
 		if ( command.m_nInstanceCount >= T3D_MAX_CLIPMAP_LEVELS ) {
 			return false;
@@ -162,16 +179,17 @@ bool Terrain3DRdCpuCuller::buildMultiview( const t3dRdFrameSnapshot_t &rSnapshot
 	return rResult.m_nInvalidPatchCount == 0u;
 }
 
-bool Terrain3DRdCpuCuller::validate( const t3dRdFrameSnapshot_t &rSnapshot,
-        const Projection &rViewProjection,
-        const uint32_t nLod0PartCount,
-        const uint32_t nOuterPartCount,
-        const t3dRdCpuCullResult_t &rResult ) {
+bool Terrain3DRdCpuCuller::validate(
+	const t3dRdFrameSnapshot_t &rSnapshot,
+	const Projection		   &rViewProjection,
+	const uint32_t				nLod0PartCount,
+	const uint32_t				nOuterPartCount,
+	const t3dRdCpuCullResult_t &rResult ) {
 	if ( rSnapshot.m_nPatchCount > T3D_MAX_CLIPMAP_LEVELS || rResult.m_nInvalidPatchCount != 0u ) {
 		return false;
 	}
 	uint32_t visible_count = 0u;
-	bool seen[T3D_MAX_CLIPMAP_LEVELS];
+	bool	 seen[T3D_MAX_CLIPMAP_LEVELS];
 	memset( seen, 0, sizeof( seen ) );
 
 	for ( uint32_t group = 0u; group < T3D_RD_DRAW_GROUP_COUNT; ++group ) {
@@ -180,8 +198,9 @@ bool Terrain3DRdCpuCuller::validate( const t3dRdFrameSnapshot_t &rSnapshot,
 		}
 		const t3dRdIndexedIndirectCommand_t &command = rResult.m_szCommands[group];
 		const uint32_t expected_parts = group == T3D_RD_DRAW_GROUP_LOD0_NEAR ? nLod0PartCount : nOuterPartCount;
-		if ( command.m_nIndexCount != expected_parts || command.m_nInstanceCount > T3D_MAX_CLIPMAP_LEVELS || command.m_nFirstIndex != 0u
-		        || command.m_nVertexOffset != 0 || command.m_nFirstInstance != group * T3D_MAX_CLIPMAP_LEVELS ) {
+		if ( command.m_nIndexCount != expected_parts || command.m_nInstanceCount > T3D_MAX_CLIPMAP_LEVELS ||
+			 command.m_nFirstIndex != 0u || command.m_nVertexOffset != 0 ||
+			 command.m_nFirstInstance != group * T3D_MAX_CLIPMAP_LEVELS ) {
 			return false;
 		}
 		for ( uint32_t slot = 0u; slot < command.m_nInstanceCount; ++slot ) {

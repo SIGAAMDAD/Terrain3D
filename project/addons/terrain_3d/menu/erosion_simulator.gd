@@ -12,7 +12,6 @@ const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 const SettingMetadata = preload("res://addons/terrain_3d/src/setting_metadata.gd")
 const ESTIMATED_BYTES_PER_CELL: float = 176.0
 const CUSTOM_PRESET_INDEX: int = 1000
-const ES_EROSION_PANEL_FOLDED: String = "terrain3d/erosion/panel_folded"
 const QUALITY_NAMES: PackedStringArray = ["Draft", "Preview", "Balanced", "High", "Full Resolution"]
 const QUALITY_SCALES: PackedInt32Array = [16, 8, 4, 2, 1]
 const QUALITY_STEPS: PackedInt32Array = [32, 64, 128, 256, 512]
@@ -77,8 +76,8 @@ class ColorizedOutput extends RefCounted:
 
 var plugin: Terrain3DEditorPluginBase
 var terrain: Terrain3D
+var action_host: Control
 
-var _section: FoldableContainer
 var _content_root: VBoxContainer
 var _terrain_label: Label
 var _tabs: TabContainer
@@ -152,7 +151,40 @@ func _exit_tree() -> void:
 
 
 func is_editor_ready() -> bool:
-	return is_instance_valid(_section)
+	return is_instance_valid(_tabs)
+
+
+func bind_terrain(p_terrain: Terrain3D) -> bool:
+	if not is_instance_valid(p_terrain):
+		return false
+	if terrain == p_terrain:
+		_refresh_editor_context()
+		return true
+	if _is_running():
+		return false
+	_join_thread()
+	# Switching terrain never rebuilds the editor widget or its controls.
+	terrain = p_terrain
+	_settings = plugin.get_erosion_settings(p_terrain) if is_instance_valid(plugin) else Terrain3DErosionSettings.new()
+	if is_instance_valid(_settings_picker):
+		_settings_picker.edited_resource = _settings
+	if is_instance_valid(_advanced_inspector):
+		_advanced_inspector.edit(_settings)
+	if is_instance_valid(_profile_editor):
+		_profile_editor.terrain = p_terrain
+		_profile_editor.refresh()
+	if is_instance_valid(_preview_window):
+		_preview_window.clear_job()
+	_job = null
+	_active_run_settings = null
+	_last_raw_output_image = null
+	_last_preview_image = null
+	_clear_result_preview()
+	_stage_label.text = "Ready"
+	_summary_label.text = _idle_summary()
+	_tabs.current_tab = 0
+	_sync_quick_controls_from_settings()
+	return true
 
 
 func _get_terrain() -> Terrain3D:
@@ -165,22 +197,12 @@ func _store_settings() -> void:
 
 
 func _build_inspector_panel() -> void:
-	_section = FoldableContainer.new()
-	_section.title = "Terrain Erosion"
-	_section.tooltip_text = "Simulate erosion for this Terrain3D node without leaving the Inspector."
-	_section.folded = bool(plugin.get_setting(ES_EROSION_PANEL_FOLDED, false)) if is_instance_valid(plugin) else false
-	_section.folding_changed.connect(_on_section_folding_changed)
-	_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_section.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	add_child(_section)
-
+	# The panel is owned by a persistent editor window, never by Inspector parsing.
 	var margin: MarginContainer = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_top", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_bottom", 8)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_section.add_child(margin)
+	for side: StringName in [&"margin_left", &"margin_right", &"margin_top", &"margin_bottom"]:
+		margin.add_theme_constant_override(side, int(EditorUI.scaled(6.0)))
+	add_child(margin)
 
 	_content_root = VBoxContainer.new()
 	_content_root.add_theme_constant_override("separation", 8)
@@ -209,10 +231,13 @@ func _build_inspector_panel() -> void:
 	action_row.alignment = FlowContainer.ALIGNMENT_END
 	action_row.add_theme_constant_override("h_separation", 8)
 	action_row.add_theme_constant_override("v_separation", 4)
-	_content_root.add_child(action_row)
+	if is_instance_valid(action_host):
+		action_host.add_child(action_row)
+	else:
+		_content_root.add_child(action_row)
 
 	_run_preview_button = Button.new()
-	_run_preview_button.text = "Draft Preview"
+	_run_preview_button.text = "Preview"
 	_run_preview_button.tooltip_text = "Runs a temporary coarse simulation. Preview results cannot be applied."
 	_run_preview_button.pressed.connect(_start_preview_simulation)
 	action_row.add_child(_run_preview_button)
@@ -229,18 +254,13 @@ func _build_inspector_panel() -> void:
 	action_row.add_child(_cancel_button)
 
 	_apply_button = Button.new()
-	_apply_button.text = "Apply..."
+	_apply_button.text = "Apply to Terrain..."
 	_apply_button.tooltip_text = "Applies the completed result as one Terrain3D undo operation."
 	_apply_button.pressed.connect(_request_apply_simulation)
 	action_row.add_child(_apply_button)
 
 	_build_file_dialogs()
 	_apply_accessible_control_sizes(_content_root)
-
-
-func _on_section_folding_changed(p_is_folded: bool) -> void:
-	if is_instance_valid(plugin):
-		plugin.set_setting(ES_EROSION_PANEL_FOLDED, p_is_folded)
 
 
 func _apply_accessible_control_sizes(p_root: Node) -> void:
@@ -285,7 +305,7 @@ func _build_resource_toolbar(p_root: VBoxContainer) -> void:
 
 	_settings_picker = EditorResourcePicker.new()
 	_settings_picker.base_type = "Terrain3DErosionSettings"
-	_settings_picker.tooltip_text = "Terrain3DErosionSettings resource edited and used by this erosion workflow. Every advanced property in the embedded Inspector carries the generated operational setting documentation."
+	_settings_picker.tooltip_text = "Simulation settings resource. Advanced properties and curves are available under Configure > Advanced Parameters."
 	_settings_picker.edited_resource = _settings
 	EditorUI.configure_field_control(_settings_picker, 260.0)
 	_settings_picker.resource_changed.connect(_on_settings_changed)
@@ -324,7 +344,7 @@ func _build_resource_toolbar(p_root: VBoxContainer) -> void:
 
 func _build_setup_tab() -> void:
 	var setup: VBoxContainer = VBoxContainer.new()
-	setup.name = "Simulation"
+	setup.name = "Configure"
 	setup.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	setup.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	setup.add_theme_constant_override("separation", 10)
@@ -332,11 +352,7 @@ func _build_setup_tab() -> void:
 
 	var intro: Label = Label.new()
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	intro.text = (
-		"Choose a production preset, adjust the common controls, then run a draft preview. "
-		+ "Advanced parameters, masks, material transitions, and timeline curves remain available "
-		+ "through the settings resource."
-	)
+	intro.text = "Choose a preset and quality, enable the desired processes, then preview before applying."
 	setup.add_child(intro)
 
 	var preset_panel: PanelParts = _make_panel("Starting Point")
@@ -408,33 +424,31 @@ func _build_setup_tab() -> void:
 	seed_row.add_child(randomize_button)
 	common_grid.add_child(seed_row)
 
-	var process_panel: PanelParts = _make_panel("Processes and Outputs")
+	var process_panel: PanelParts = _make_panel("Processes")
 	setup.add_child(process_panel.panel)
-	var process_grid: GridContainer = GridContainer.new()
-	process_grid.columns = 2
-	process_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	process_grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	process_grid.add_theme_constant_override("h_separation", int(EditorUI.scaled(16.0)))
-	process_grid.add_theme_constant_override("v_separation", int(EditorUI.scaled(6.0)))
-	process_panel.body.add_child(process_grid)
-	_add_process_toggle(process_grid, "hydraulic_enabled", "Water Flow")
-	_add_process_toggle(process_grid, "weathering_enabled", "Weathering")
-	_add_process_toggle(process_grid, "oxidation_enabled", "Oxidation")
-	_add_process_toggle(process_grid, "wind_enabled", "Wind")
-	_add_process_toggle(process_grid, "wave_enabled", "Waves")
-	_add_process_toggle(process_grid, "traffic_enabled", "Foot Traffic")
-	_add_process_toggle(process_grid, "material_output_enabled", "Material Transitions")
-	_add_process_toggle(process_grid, "sediment_sorting_enabled", "Sorted Sediment")
-	_add_process_toggle(process_grid, "alluvial_fan_enabled", "Alluvial Fans")
-	_add_process_toggle(process_grid, "debris_flow_enabled", "Debris Flows")
-	_add_process_toggle(process_grid, "dune_enabled", "Dune Avalanching")
-	_add_process_toggle(process_grid, "desert_pavement_enabled", "Desert Pavement")
-	_add_process_toggle(process_grid, "salt_weathering_enabled", "Salt Weathering")
-	_add_process_toggle(process_grid, "wet_dry_enabled", "Wet-Dry Cycling")
-	_add_process_toggle(process_grid, "exposure_age_enabled", "Exposure / Varnish")
-	_add_process_toggle(process_grid, "snowmelt_enabled", "Snowmelt")
-	_add_process_toggle(process_grid, "stratigraphy_enabled", "Layered Substrate")
-	_add_process_toggle(process_grid, "oxidation_color_enabled", "Oxidation Tint")
+	var water_grid: GridContainer = _make_process_group(process_panel.body, "Water and Sediment", false)
+	_add_process_toggle(water_grid, "hydraulic_enabled", "Water Flow")
+	_add_process_toggle(water_grid, "sediment_sorting_enabled", "Sorted Sediment")
+	_add_process_toggle(water_grid, "alluvial_fan_enabled", "Alluvial Fans")
+	_add_process_toggle(water_grid, "debris_flow_enabled", "Debris Flows")
+	_add_process_toggle(water_grid, "wave_enabled", "Waves")
+	_add_process_toggle(water_grid, "snowmelt_enabled", "Snowmelt")
+
+	var climate_grid: GridContainer = _make_process_group(process_panel.body, "Climate and Weathering", true)
+	_add_process_toggle(climate_grid, "weathering_enabled", "Weathering")
+	_add_process_toggle(climate_grid, "oxidation_enabled", "Oxidation")
+	_add_process_toggle(climate_grid, "wind_enabled", "Wind")
+	_add_process_toggle(climate_grid, "dune_enabled", "Dune Avalanching")
+	_add_process_toggle(climate_grid, "salt_weathering_enabled", "Salt Weathering")
+	_add_process_toggle(climate_grid, "wet_dry_enabled", "Wet-Dry Cycling")
+	_add_process_toggle(climate_grid, "exposure_age_enabled", "Exposure / Varnish")
+
+	var surface_grid: GridContainer = _make_process_group(process_panel.body, "Surface and Materials", true)
+	_add_process_toggle(surface_grid, "material_output_enabled", "Material Transitions")
+	_add_process_toggle(surface_grid, "traffic_enabled", "Foot Traffic")
+	_add_process_toggle(surface_grid, "desert_pavement_enabled", "Desert Pavement")
+	_add_process_toggle(surface_grid, "stratigraphy_enabled", "Layered Substrate")
+	_add_process_toggle(surface_grid, "oxidation_color_enabled", "Oxidation Tint")
 
 	var profile_button: Button = Button.new()
 	profile_button.text = "Open Material Profiles"
@@ -442,12 +456,14 @@ func _build_setup_tab() -> void:
 	profile_button.pressed.connect(_open_texture_profiles)
 	process_panel.body.add_child(profile_button)
 
-	var scope_panel: PanelParts = _make_panel("Scope Shortcuts")
-	setup.add_child(scope_panel.panel)
+	var scope_fold: FoldableContainer = FoldableContainer.new()
+	scope_fold.title = "Spatial Masks and Scope"
+	scope_fold.folded = true
+	setup.add_child(scope_fold)
 	var scope_row: HFlowContainer = HFlowContainer.new()
 	scope_row.add_theme_constant_override("h_separation", 8)
 	scope_row.add_theme_constant_override("v_separation", 4)
-	scope_panel.body.add_child(scope_row)
+	scope_fold.add_child(scope_row)
 	var use_mask_bounds_button: Button = Button.new()
 	use_mask_bounds_button.text = "Fit Simulation Mask to Terrain"
 	use_mask_bounds_button.tooltip_text = "Sets the simulation mask world rectangle to the active terrain bounds."
@@ -483,7 +499,7 @@ func _build_setup_tab() -> void:
 	setup.add_child(_workload_label)
 
 	_advanced_foldable = FoldableContainer.new()
-	_advanced_foldable.title = "Advanced Erosion Settings and Curves"
+	_advanced_foldable.title = "Advanced Parameters and Curves"
 	_advanced_foldable.folded = true
 	_advanced_foldable.tooltip_text = "Edit the complete Terrain3DErosionSettings resource inline."
 	setup.add_child(_advanced_foldable)
@@ -504,7 +520,7 @@ func _build_setup_tab() -> void:
 
 func _build_results_tab() -> void:
 	var results: VBoxContainer = VBoxContainer.new()
-	results.name = "Results"
+	results.name = "Run and Results"
 	results.add_theme_constant_override("separation", 8)
 	_tabs.add_child(results)
 
@@ -713,6 +729,20 @@ func _build_file_dialogs() -> void:
 
 func _make_panel(p_title: String) -> PanelParts:
 	return PanelParts.new(p_title)
+
+
+func _make_process_group(p_parent: VBoxContainer, p_title: String, p_folded: bool) -> GridContainer:
+	var section: FoldableContainer = FoldableContainer.new()
+	section.title = p_title
+	section.folded = p_folded
+	p_parent.add_child(section)
+	var grid: GridContainer = GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", int(EditorUI.scaled(12.0)))
+	grid.add_theme_constant_override("v_separation", int(EditorUI.scaled(4.0)))
+	section.add_child(grid)
+	return grid
 
 
 func _make_field_label(p_text: String) -> Label:
@@ -1512,7 +1542,7 @@ func _update_controls() -> void:
 		var active_terrain: Terrain3D = _get_terrain()
 		if is_instance_valid(active_terrain) and is_instance_valid(active_terrain.data):
 			_terrain_label.text = (
-				"%s — %d regions — Inspector workflow"
+				"%s — %d regions"
 				% [active_terrain.name, active_terrain.data.get_region_count()]
 			)
 		elif is_instance_valid(active_terrain):
