@@ -10,6 +10,7 @@
 #include "eastl_config.h"
 #include "hlod/format/terrain_3d_hlod_manifest.h"
 #include "hlod/format/terrain_3d_hlod_package.h"
+#include "hlod/format/terrain_3d_hlod_instance_codec.h"
 #include "hlod/format/terrain_3d_hlod_runtime_codec.h"
 #include "instances/contracts/terrain_3d_instance_mutation.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
@@ -24,6 +25,31 @@
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
+
+typedef struct t3dHlodMaterialContext_s
+{
+    const Terrain3DHLODPackage *m_pPackage = NULL;
+    uint32_t m_nSurfaceOffset = 0u;
+} t3dHlodMaterialContext_t;
+
+typedef struct t3dHlodPrototypeRuntime_s
+{
+    Ref< ArrayMesh > m_mesh;
+    t3dHlodMaterialContext_t m_materialContext;
+    uint32_t m_nFirstInstance = 0u;
+    uint32_t m_nInstanceCount = 0u;
+} t3dHlodPrototypeRuntime_t;
+
+// Precomputed spatial culling cell within an instanced HLOD group.
+// Instance ordering is finalized on the cold package load, not in the frame loop.
+typedef struct t3dHlodSpatialCell_s
+{
+    uint32_t m_nPrototype = 0u;
+    uint32_t m_nFirstInstance = 0u;
+    uint32_t m_nInstanceCount = 0u;
+    int16_t m_nBucketX = 0;
+    int16_t m_nBucketZ = 0;
+} t3dHlodSpatialCell_t;
 
 typedef struct t3dEntry_s : public t3dHLODEntryDescriptor_t
 {
@@ -40,6 +66,10 @@ typedef struct t3dEntry_s : public t3dHLODEntryDescriptor_t
 	int								 m_iLoadingListPosition = -1;
 	int								 m_iRetiringListPosition = -1;
 	Ref< Terrain3DHLODPackage >		 m_ackage;
+    t3dHlodMaterialContext_t m_singleMaterialContext;
+    eastl::vector< t3dHLODGroupInstance_t > m_groupInstances;
+    eastl::vector< t3dHlodPrototypeRuntime_t > m_groupPrototypes;
+    eastl::vector< t3dHlodSpatialCell_t > m_groupCells;
 	Terrain3DSharedMemoryReservation m_memory;
 } t3dEntry_t;
 
@@ -57,11 +87,16 @@ class Terrain3DHLODStreamer : public Object
 	eastl::vector< int, Terrain3DEastlAllocator >			  m_retiringEntries;
 	eastl::vector< int, Terrain3DEastlAllocator >			  m_loadCandidates;
 	eastl::vector< uint8_t, Terrain3DEastlAllocator >		  m_instancerMinLevels;
+	eastl::vector< uint8_t, Terrain3DEastlAllocator > m_instancerSubcellMasks;
 	eastl::vector< t3dNodePolicy_t, Terrain3DEastlAllocator > m_nodePolicies;
 	uint32_t												  m_nodePolicyOffsets[T3D_REGION_SLOTS + 1]{};
+    // Cold-built 64m owner groups. -1 denotes an empty quadrant.
+    int32_t m_szSubcellEntries[T3D_REGION_SLOTS][4]{};
 	uint8_t													  m_szRegionRepresentationLevel[T3D_REGION_SLOTS] = {};
 	uint8_t							  m_szRegionResidentRepresentationLevel[T3D_REGION_SLOTS] = {};
 	uint8_t							  m_szRegionRetiringRepresentationLevel[T3D_REGION_SLOTS] = {};
+	uint8_t m_szRegionReadySubcells[T3D_REGION_SLOTS] = {};
+	uint8_t m_szRegionResidentSubcells[T3D_REGION_SLOTS] = {};
 	eastl::bitset< T3D_REGION_SLOTS > m_managedRegions;
 	eastl::bitset< T3D_REGION_SLOTS > m_detailRequiredRegions;
 	bool							  m_bEnabled = true;
@@ -99,12 +134,12 @@ class Terrain3DHLODStreamer : public Object
 
 	static int			 regionIndex( const Vector2i &rRegion );
 	static Vector2i		 regionFromIndex( int index );
-	int					 findEntry( int level, const Vector2i &rCluster ) const;
 	void				 clearRuntime( bool bNotify, bool bReleaseStorage = false );
 	bool				 compileManifest( const Ref< Terrain3DHLODManifest > &rManifest );
 	bool				 compilePackedManifest( const Ref< Terrain3DHLODManifest > &rManifest );
 	bool				 compileLegacyNodePolicies( const Ref< Terrain3DHLODManifest > &rManifest );
 	bool				 buildHierarchy( void );
+    bool buildSubcellLookupCold( void );
 	bool				 packageAcceptable( const t3dEntry_t &rEntry, const Vector3 &rLocalTarget ) const;
 	EA_FORCE_INLINE bool isDesired(
 		const t3dEntry_t &rEntry ) const {
@@ -129,9 +164,9 @@ class Terrain3DHLODStreamer : public Object
 	bool			requestOrActivate( int index );
 	void			deactivate( int index, bool bWait = false );
 	void			publishRepresentationMap( void );
-	void			notifyRepresentationChanges( const uint8_t *pOldLevels );
+	void			notifyRepresentationChanges( const uint8_t *pOldLevels, const uint8_t *pOldSubcells = NULL );
 	void			markRdPublicationDirty( void );
-	static uint64_t rdMeshSourceKey( int nEntryIndex );
+	static uint64_t rdMeshSourceKey( int nEntryIndex, uint32_t nPrototype = 0u );
 
 public:
 	bool bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
@@ -214,7 +249,8 @@ public:
 	uint8_t								  getInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const;
 	t3dHLODInstancerRepresentationState_t getInstancerRepresentationState( const Vector2i &rRegion,
 																		   const int	   nMeshId ) const;
-	uint8_t								  getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
+	uint8_t getNodeMinimumLevel( const Vector2i &rRegion, int64_t nSpawnId ) const;
+    bool isNodeSubcellSuppressed( const Vector2i &rRegion, int64_t nSpawnId, int nMinimumLevel ) const;
 	uint8_t								  getRegionRepresentationLevel( const Vector2i &rRegion ) const;
 	EA_FORCE_INLINE int64_t				  getResidentEstimatedBytes(
 					  void ) const {
@@ -234,10 +270,40 @@ public:
 	}
 	bool fillRdMeshSources( eastl::vector< t3dRdExternalMeshSource_t, Terrain3DEastlAllocator > &rSources );
 	bool buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_t &rSnapshot ) const;
-	EA_FORCE_INLINE size_t getRdPublicationCapacity(
-		void ) const {
-		return m_entries.size();
-	}
+    EA_FORCE_INLINE size_t getRdPublicationInstanceCapacity( void ) const {
+        size_t capacity = m_entries.size();
+        for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+            const t3dEntry_t &entry = m_entries[i];
+            if ( entry.m_bActive && entry.m_groupInstances.size() > 1u ) {
+                capacity += entry.m_groupInstances.size() - 1u;
+            }
+        }
+        return capacity;
+    }
+    EA_FORCE_INLINE size_t getRdPublicationCellCapacity( void ) const {
+        size_t capacity = m_entries.size();
+        for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+            const t3dEntry_t &entry = m_entries[i];
+            if ( !entry.m_bActive ) { continue; }
+            const size_t count = entry.m_groupCells.empty() ? 1u : entry.m_groupCells.size();
+            if ( count > 1u ) { capacity += count - 1u; }
+        }
+        return capacity;
+    }
+    EA_FORCE_INLINE size_t getRdPublicationSourceCapacity( void ) const {
+        size_t capacity = m_entries.size();
+        for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+            const t3dEntry_t &entry = m_entries[i];
+            if ( entry.m_bActive && entry.m_groupPrototypes.size() > 1u ) {
+                capacity += entry.m_groupPrototypes.size() - 1u;
+            }
+        }
+        return capacity;
+    }
+    EA_FORCE_INLINE size_t getRdPublicationCapacity( void ) const {
+        return getRdPublicationInstanceCapacity();
+    }
+
 	Dictionary getStats( void ) const;
 	Array	   getDebugEntries( void ) const;
 

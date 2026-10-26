@@ -1493,6 +1493,12 @@ bool Terrain3D::isHlodRegionSuppressed(
 	const int		nMinimumLevel ) const {
 	return m_pHlodStreamer && m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel );
 }
+bool Terrain3D::isHlodNodeVisualSuppressed(
+    const Vector2i &rRegion, const int64_t nSpawnId, const int nMinimumLevel ) const {
+    return m_pHlodStreamer && nMinimumLevel > 0 &&
+           ( m_pHlodStreamer->isRegionSuppressed( rRegion, nMinimumLevel ) ||
+             m_pHlodStreamer->isNodeSubcellSuppressed( rRegion, nSpawnId, nMinimumLevel ) );
+}
 bool Terrain3D::isHlodRegionDetailRequired(
 	const Vector2i &rRegion ) const {
 	return !m_pHlodStreamer || m_pHlodStreamer->isRegionDetailRequired( rRegion );

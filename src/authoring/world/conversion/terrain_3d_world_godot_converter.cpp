@@ -2,6 +2,7 @@
 
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "authoring/world/conversion/terrain_3d_world_godot_converter.h"
+#include "authoring/meshes/terrain_3d_meshopt_cook.h"
 #include "instances/runtime/terrain_3d_mesh.h"
 #include "data/formats/terrain_3d_half_buffer.h"
 
@@ -354,7 +355,13 @@ bool Terrain3DWorldGodotConverter::flattenMeshCold(
 			rReason = T3D_WORLD_CONVERSION_UNSUPPORTED_PRIMITIVE;
 			return false;
 		}
-		Array			   Arrays = Mesh->surface_get_arrays( s );
+		Array Arrays = Mesh->surface_get_arrays( s );
+		// Editor-only cache/fetch ordering. Refuse unsupported vertex streams
+		// rather than dropping tangent, UV, color or skinning information.
+		Array optimized_arrays;
+		if ( t3dMeshoptCook::optimizeArrays( Arrays, optimized_arrays ) ) {
+			Arrays = optimized_arrays;
+		}
 		aSurfaceArrays[s] = Arrays;
 		PackedVector3Array Positions = Arrays[Mesh::ARRAY_VERTEX];
 		PackedInt32Array   Indices = Arrays[Mesh::ARRAY_INDEX];

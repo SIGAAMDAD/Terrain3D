@@ -14,6 +14,7 @@
 #include "data/model/terrain_3d_data.h"
 #include "data/model/terrain_3d_region.h"
 #include "diagnostics/core/terrain_3d_diagnostics.h"
+#include "hlod/format/terrain_3d_hlod_layer_settings.h"
 #include "hlod/format/terrain_3d_hlod_manifest.h"
 #include "hlod/format/terrain_3d_hlod_package.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
@@ -57,6 +58,7 @@ void t3dRegisterRuntimeTypes(
 	ClassDB::register_class< Terrain3DCollision >();
 	ClassDB::register_class< Terrain3DInstancer >();
 	ClassDB::register_class< Terrain3DLightmapStreamer >();
+	ClassDB::register_class< Terrain3DHLODLayerSettings >();
 	ClassDB::register_class< Terrain3DHLODPackage >();
 	ClassDB::register_class< Terrain3DHLODManifest >();
 	ClassDB::register_class< Terrain3DHLODStreamer >();

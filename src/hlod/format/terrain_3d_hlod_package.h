@@ -3,12 +3,15 @@
 #define TERRAIN3D_HLOD_PACKAGE_H
 
 #include "Terrain3DConstants.h"
+#include "hlod/format/terrain_3d_hlod_layer_settings.h"
+#include "hlod/format/terrain_3d_hlod_instance_codec.h"
 #include "assets/resources/terrain_3d_rendering_material.h"
 #include "core/config/terrain_3d_compiler.h"
 
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/variant/aabb.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
@@ -36,6 +39,13 @@ class Terrain3DHLODPackage : public Resource
 	int64_t									 m_nProxyTriangles = 0;
 	int64_t									 m_nEstimatedGpuBytes = 0;
 	int64_t									 m_nBuiltUnix = 0;
+	int m_nFormatVersion = 1;
+	int m_nPayloadType = T3D_HLOD_COOKED_MESH;
+	int m_nLayerType = T3D_HLOD_LAYER_LEGACY_SIMPLIFIED;
+	int m_nRecipeVersion = 0;
+	int64_t m_nRecipeHash = 0;
+	PackedByteArray m_instanceGroupPayload;
+	TypedArray< ArrayMesh > m_prototypeMeshes;
 
 	String getVtMaterialOwnerIdentityCold( void ) const;
 
@@ -114,6 +124,26 @@ public:
 		void ) const {
 		return m_nBuiltUnix;
 	}
+
+    void setFormatVersion( int nVersion );
+    int getFormatVersion( void ) const { return m_nFormatVersion; }
+    void setPayloadType( int nType );
+    int getPayloadType( void ) const { return m_nPayloadType; }
+    void setLayerType( int nType );
+    int getLayerType( void ) const { return m_nLayerType; }
+    void setRecipeVersion( int nVersion );
+    int getRecipeVersion( void ) const { return m_nRecipeVersion; }
+    void setRecipeHash( int64_t nHash );
+    int64_t getRecipeHash( void ) const { return m_nRecipeHash; }
+    void setInstanceGroupPayload( const PackedByteArray &rPayload );
+    PackedByteArray getInstanceGroupPayload( void ) const { return m_instanceGroupPayload; }
+    bool isRuntimeCookedMesh( void ) const;
+    void setPrototypeMeshes( const TypedArray< ArrayMesh > &rMeshes );
+    TypedArray< ArrayMesh > getPrototypeMeshes( void ) const { return m_prototypeMeshes; }
+    Ref< ArrayMesh > getPrototypeMesh( uint32_t nPrototype ) const;
+    uint32_t getPrototypeMaterialOffset( uint32_t nPrototype ) const;
+    bool isRuntimeInstanceGroup( void ) const;
+    bool validateRuntimeInstanceGroupDecodedCold( const t3dHLODGroupData_t &rGroup ) const;
 
 protected:
 	static void _bind_methods( void );

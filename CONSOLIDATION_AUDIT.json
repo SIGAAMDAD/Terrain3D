@@ -1,0 +1,49 @@
+{
+  "approach": "three-way content merge versus W1-W7 ancestor; SuperTerrain+binding fix is target, HLOD V5 is incoming",
+  "merge_date": "2026-10-26",
+  "overlapping_three_way_paths": [
+    "src/Terrain3DTypes.h",
+    "src/assets/resources/terrain_3d_mesh_asset.cpp",
+    "src/rendering/rd/core/terrain_3d_render_publication_builder.cpp"
+  ],
+  "preserved_incoming_v5_nonoverlap_bytes": 90,
+  "preserved_target_nonoverlap_bytes": 1239,
+  "semantic_checks": {
+    "Asset binding retained": true,
+    "HLOD V5 capacity split": true,
+    "HLOD subcell mask present": true,
+    "Lighting property fix retained": true,
+    "Meshopt cook integrated": true,
+    "Region duplication binding retained": true,
+    "SConstruct editor meshoptimizer": true,
+    "SuperTerrain region publication committed": true,
+    "Texture binding retained": true,
+    "V5 editor baker": true,
+    "V5 ownership packet": true,
+    "source region ABI retained": true
+  },
+  "source_roots": {
+    "Binding collision overlay": "Terrain3D_Godot_4_7_Resource_Binding_Collision_Fix_Changed_Files.zip",
+    "Common HLOD W1-W7 ancestor": "Terrain3D_GlobalMesh_HLOD_W1-W7_Integrated_Full_Source.zip",
+    "HLOD V5 full source": "Terrain3D_HLOD_V5_Integrated_Full_Source_2026-10-26.zip",
+    "SuperTerrain W7 full source": "Terrain3D_SuperTerrain_ST06_GlobalMesh_HLOD_W7_Integrated_Full_Source.zip"
+  },
+  "source_sha256": {
+    "Binding collision overlay": "417b82f8ad63078d7c69865ca81a60efc88246a8143765aa73d6ad424564a8d6",
+    "Common HLOD W1-W7 ancestor": "850206375d04c92356ed4ff72234d05b0b9928bef60de646aa01f2ed9b7314ac",
+    "HLOD V5 full source": "7cc6928ec830acc83281cd905b429a23031dae2664f2e2db03ac44dd6ea6fc50",
+    "SuperTerrain W7 full source": "315c7d7f969f98d7eee2f0bfac642741531255e2063b5d1ee0c3547e7ef1fa98"
+  },
+  "supertterrain_changed_relative_to_common_ancestor": 141,
+  "text_merge_conflicts": 0,
+  "v5_changed_relative_to_common_ancestor": 93,
+  "validation": {
+    "HLOD_and_ST06_structural_py": 12,
+    "HLOD_standalone_test_sources_compiled": 4,
+    "godot_MSVC_DLL_build": "not performed",
+    "live_renderer_GPU_validation": "not performed",
+    "native_compile_failures": 0,
+    "native_editor_runtime_clang_syntax": 43,
+    "shader_retirement_validators": 2
+  }
+}

@@ -15,9 +15,19 @@ var _topology_dirty: bool = false
 var _summary: Label
 var _runtime_status: Label
 var _cluster_list: ItemList
+var _plan_list: ItemList
+var _plan_tabs: TabContainer
 var _preview: CheckBox
 var _show_bounds: CheckBox
 var _force_level: OptionButton
+var _layer_type: OptionButton
+var _loading_distance: SpinBox
+var _target_error: SpinBox
+var _spatial_partition: CheckBox
+var _region_leaves: CheckBox
+var _subregion_leaves: CheckBox
+var _partition_triangles: SpinBox
+var _partition_sections: SpinBox
 var _conversion_min_level: SpinBox
 var _poll_timer: Timer
 var _debug_mesh: MeshInstance3D
@@ -26,8 +36,8 @@ var _debug_mesh: MeshInstance3D
 func _ready() -> void:
 	title = "Terrain3D HLOD"
 	initial_position = Window.WINDOW_INITIAL_POSITION_CENTER_MAIN_WINDOW_SCREEN
-	min_size = Vector2i(760, 560)
-	size = Vector2i(860, 650)
+	min_size = Vector2i(850, 590)
+	size = Vector2i(960, 700)
 	transient = true
 	exclusive = false
 	close_requested.connect(hide)
@@ -80,6 +90,87 @@ func _build_ui() -> void:
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content.add_child(help)
 
+	var layer_row := HBoxContainer.new()
+	layer_row.add_theme_constant_override("separation", 8)
+	content.add_child(layer_row)
+	var layer_label := Label.new()
+	layer_label.text = "Bake recipe"
+	layer_row.add_child(layer_label)
+	_layer_type = OptionButton.new()
+	_layer_type.add_item("Instancing (grouped mesh prototypes)", 1)
+	_layer_type.add_item("Merged (topology preserved)", 2)
+	_layer_type.add_item("Simplified (meshoptimizer)", 3)
+	_layer_type.add_item("Auto (offline cost policy)", 4)
+	_layer_type.select(_layer_type.get_item_index(baker.layer_settings.layer_type))
+	_layer_type.item_selected.connect(_on_recipe_changed)
+	layer_row.add_child(_layer_type)
+
+	var quality_row := HBoxContainer.new()
+	quality_row.add_theme_constant_override("separation", 8)
+	content.add_child(quality_row)
+	var distance_label := Label.new()
+	distance_label.text = "Transition distance (m)"
+	quality_row.add_child(distance_label)
+	_loading_distance = SpinBox.new()
+	_loading_distance.min_value = 128.0
+	_loading_distance.max_value = 65536.0
+	_loading_distance.step = 64.0
+	_loading_distance.value = baker.layer_settings.loading_distance
+	_loading_distance.value_changed.connect(_on_loading_distance_changed)
+	quality_row.add_child(_loading_distance)
+	var error_label := Label.new()
+	error_label.text = "Screen error (px)"
+	quality_row.add_child(error_label)
+	_target_error = SpinBox.new()
+	_target_error.min_value = 0.1
+	_target_error.max_value = 64.0
+	_target_error.step = 0.1
+	_target_error.value = baker.layer_settings.target_error_pixels
+	_target_error.value_changed.connect(_on_target_error_changed)
+	quality_row.add_child(_target_error)
+
+	var partition_row := HBoxContainer.new()
+	partition_row.add_theme_constant_override("separation", 8)
+	content.add_child(partition_row)
+	_spatial_partition = CheckBox.new()
+	_spatial_partition.text = "Adaptive spatial subpartition"
+	_spatial_partition.tooltip_text = "Stop building oversized coarse HLOD parents; retain independently streamed child quadrants."
+	_spatial_partition.button_pressed = baker.layer_settings.spatial_partitioning
+	_spatial_partition.toggled.connect(_on_partition_changed)
+	partition_row.add_child(_spatial_partition)
+	_region_leaves = CheckBox.new()
+	_region_leaves.text = "128m HLOD leaves"
+	_region_leaves.tooltip_text = "Bake independent 128m region proxies below the conventional 256m HLOD1 tier."
+	_region_leaves.button_pressed = baker.layer_settings.region_leaves or baker.layer_settings.subregion_leaves
+	_region_leaves.disabled = baker.layer_settings.subregion_leaves
+	_region_leaves.toggled.connect(_on_region_leaves_changed)
+	partition_row.add_child(_region_leaves)
+	_subregion_leaves = CheckBox.new()
+	_subregion_leaves.text = "64m streamable subcells"
+	_subregion_leaves.tooltip_text = "Bake independent 64m HLOD packages beneath the 128m region tier."
+	_subregion_leaves.button_pressed = baker.layer_settings.subregion_leaves
+	_subregion_leaves.toggled.connect(_on_subregion_leaves_changed)
+	partition_row.add_child(_subregion_leaves)
+	var triangle_label := Label.new()
+	triangle_label.text = "Max parent triangles"
+	partition_row.add_child(triangle_label)
+	_partition_triangles = SpinBox.new()
+	_partition_triangles.min_value = 1000
+	_partition_triangles.max_value = 20000000
+	_partition_triangles.step = 1000
+	_partition_triangles.value = baker.layer_settings.partition_triangle_limit
+	_partition_triangles.value_changed.connect(_on_partition_triangle_changed)
+	partition_row.add_child(_partition_triangles)
+	var section_label := Label.new()
+	section_label.text = "Max sections"
+	partition_row.add_child(section_label)
+	_partition_sections = SpinBox.new()
+	_partition_sections.min_value = 1
+	_partition_sections.max_value = 4096
+	_partition_sections.value = baker.layer_settings.partition_section_limit
+	_partition_sections.value_changed.connect(_on_partition_section_changed)
+	partition_row.add_child(_partition_sections)
+
 	var conversion_row := HBoxContainer.new()
 	conversion_row.add_theme_constant_override("separation", 8)
 	content.add_child(conversion_row)
@@ -108,6 +199,12 @@ func _build_ui() -> void:
 	analyze_button.pressed.connect(_analyze)
 	authoring_row.add_child(analyze_button)
 
+	var plan_button := Button.new()
+	plan_button.text = "Plan Dirty"
+	plan_button.tooltip_text = "Preview child-first HLOD dependencies, package rebuilds and reuse decisions without writing files."
+	plan_button.pressed.connect(_plan_dirty)
+	authoring_row.add_child(plan_button)
+
 	var validate_button := Button.new()
 	validate_button.text = "Validate HLOD"
 	validate_button.tooltip_text = "Validate the published manifest and every referenced content-addressed HLOD package without rebuilding anything."
@@ -132,7 +229,7 @@ func _build_ui() -> void:
 
 	_summary = Label.new()
 	_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_summary.custom_minimum_size = Vector2(0, 78)
+	_summary.custom_minimum_size = Vector2(0, 100)
 	content.add_child(_summary)
 
 	content.add_child(HSeparator.new())
@@ -158,7 +255,7 @@ func _build_ui() -> void:
 
 	_force_level = OptionButton.new()
 	_force_level.add_item("Auto", -1)
-	for level: int in range(1, 7):
+	for level: int in range(0, 7):
 		_force_level.add_item("HLOD %d" % level, level)
 	_force_level.item_selected.connect(_on_force_level_selected)
 	preview_row.add_child(_force_level)
@@ -173,10 +270,18 @@ func _build_ui() -> void:
 	cluster_heading.add_theme_font_size_override("font_size", 15)
 	content.add_child(cluster_heading)
 
+	_plan_tabs = TabContainer.new()
+	_plan_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(_plan_tabs)
 	_cluster_list = ItemList.new()
+	_cluster_list.name = "Runtime"
 	_cluster_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_cluster_list.allow_reselect = true
-	content.add_child(_cluster_list)
+	_plan_tabs.add_child(_cluster_list)
+	_plan_list = ItemList.new()
+	_plan_list.name = "Build Plan"
+	_plan_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_plan_tabs.add_child(_plan_list)
 
 
 func _convert_selected_hlod_visual() -> void:
@@ -210,6 +315,54 @@ func _analyze() -> void:
 	_append_messages(result)
 
 
+func _plan_dirty() -> void:
+	_sync_active_terrain()
+	if not _ready_for_authoring():
+		return
+	var result: Dictionary = baker.plan_bake(terrain, true)
+	if not bool(result.get("ok", false)):
+		_summary.text = "HLOD plan rejected: %s" % String(result.get("error", "unknown error"))
+		_append_messages(result)
+		return
+	var per_build: PackedInt32Array = result.get("per_level_build", PackedInt32Array())
+	var per_reuse: PackedInt32Array = result.get("per_level_reuse", PackedInt32Array())
+	var level_lines: PackedStringArray = PackedStringArray()
+	if int(result.get("subcell_build", 0)) + int(result.get("subcell_reuse", 0)) > 0:
+		level_lines.append("S64: %d build / %d reuse" % [int(result.get("subcell_build", 0)), int(result.get("subcell_reuse", 0))])
+	for level: int in range(0, per_build.size()):
+		if per_build[level] + per_reuse[level] > 0:
+			level_lines.append("L%d: %d build / %d reuse" % [level, per_build[level], per_reuse[level]])
+	var reasons: Dictionary = result.get("reasons", {})
+	var reason_lines: PackedStringArray = PackedStringArray()
+	for reason: String in ["new_cluster", "source_changed", "recipe_changed", "package_missing", "package_invalid"]:
+		if int(reasons.get(reason, 0)) > 0:
+			reason_lines.append("%s=%d" % [reason, int(reasons[reason])])
+	_summary.text = "HLOD build plan (no files written): %d jobs, %d rebuild, %d reuse, %d split (%d recovered).\n%s" % [
+		int(result.get("clusters", 0)), int(result.get("built", 0)), int(result.get("reused", 0)),
+		int(result.get("split", 0)),
+		int(result.get("resumed", 0)), " | ".join(level_lines)]
+	if not reason_lines.is_empty():
+		_summary.text += "\nRebuild reasons: " + ", ".join(reason_lines)
+	_plan_list.clear()
+	var jobs: Array[Dictionary] = result.get("jobs", [])
+	for job: Dictionary in jobs:
+		var dependencies: PackedStringArray = job.get("dependencies", PackedStringArray())
+		var name: String = String(job.get("id", ""))
+		var action: String = String(job.get("action", ""))
+		var reason: String = String(job.get("reason", ""))
+		var policy: int = int(job.get("resolved_layer", 0))
+		var policy_names: PackedStringArray = PackedStringArray(["Legacy", "Instancing", "Merged", "Simplified"])
+		var policy_name: String = policy_names[clampi(policy, 0, 3)]
+		var label: String = "%s  %s  %s  [%s, %d triangles, %d sections, ~%d batches]" % [
+			name, action, reason, policy_name, int(job.get("estimate_triangles", 0)),
+			int(job.get("estimate_sections", 0)), int(job.get("estimate_batches", 0))]
+		if not dependencies.is_empty():
+			label += "  [children: %s]" % ", ".join(dependencies)
+		_plan_list.add_item(label)
+	_plan_tabs.current_tab = 1
+	_append_messages(result)
+
+
 func _validate_generated() -> void:
 	_sync_active_terrain()
 	if not _ready_for_authoring():
@@ -224,6 +377,52 @@ func _validate_generated() -> void:
 	var messages: PackedStringArray = result.get("messages", PackedStringArray())
 	if not messages.is_empty():
 		_summary.text += "\n" + " | ".join(messages)
+
+
+func _on_recipe_changed(index: int) -> void:
+	if not is_instance_valid(baker):
+		return
+	baker.layer_settings.layer_type = _layer_type.get_item_id(index)
+	_plan_list.clear()
+	_summary.text = "HLOD recipe changed. Analyze, then use Bake Dirty to recook only affected packages."
+
+
+func _on_loading_distance_changed(value: float) -> void:
+	if is_instance_valid(baker):
+		baker.layer_settings.loading_distance = value
+		_plan_list.clear()
+
+
+func _on_target_error_changed(value: float) -> void:
+	if is_instance_valid(baker):
+		baker.layer_settings.target_error_pixels = value
+		_plan_list.clear()
+
+
+func _on_partition_changed(enabled: bool) -> void:
+	baker.layer_settings.spatial_partitioning = enabled
+	_plan_list.clear()
+
+
+func _on_region_leaves_changed(enabled: bool) -> void:
+	baker.layer_settings.region_leaves = enabled
+
+
+func _on_subregion_leaves_changed(enabled: bool) -> void:
+	baker.layer_settings.subregion_leaves = enabled
+	_region_leaves.disabled = enabled
+	_region_leaves.button_pressed = enabled or baker.layer_settings.region_leaves
+	_plan_list.clear()
+
+
+func _on_partition_triangle_changed(value: float) -> void:
+	baker.layer_settings.partition_triangle_limit = int(value)
+	_plan_list.clear()
+
+
+func _on_partition_section_changed(value: float) -> void:
+	baker.layer_settings.partition_section_limit = int(value)
+	_plan_list.clear()
 
 
 func _bake_dirty() -> void:
@@ -246,10 +445,29 @@ func _bake(dirty_only: bool) -> void:
 		_append_messages(result)
 		return
 	_summary.text = "HLOD unchanged: no packages or manifest republished." if bool(result.get("unchanged", false)) else \
-		"HLOD bake complete: %d sources, %d clusters, %d built, %d reused.\nManifest: %s" % [
+		"HLOD bake complete: %d sources, %d resident clusters, %d built, %d reused, %d spatial splits (%d recovered).\nManifest: %s" % [
 		int(result.get("sources", 0)), int(result.get("clusters", 0)), int(result.get("built", 0)),
-		int(result.get("reused", 0)), String(result.get("manifest_path", ""))]
+		int(result.get("reused", 0)), int(result.get("split", 0)), int(result.get("resumed", 0)),
+		String(result.get("manifest_path", ""))]
+	_summary.text += "\nCooked geometry: %d -> %d triangles; ~%d batches; estimated GPU %.1f MiB." % [
+		int(result.get("source_triangles", 0)), int(result.get("proxy_triangles", 0)),
+		int(result.get("estimated_batches", 0)), float(int(result.get("estimated_gpu_bytes", 0))) / (1024.0 * 1024.0)]
+	_summary.text += "\nDisk packages %.2f MiB; max world error %.4fm; bake %.1fms." % [
+		float(int(result.get("package_disk_bytes", 0))) / (1024.0 * 1024.0),
+		float(result.get("max_geometric_error", 0.0)), float(result.get("bake_elapsed_ms", 0.0))]
+	var layer_names: PackedStringArray = PackedStringArray(["Legacy", "Instancing", "Merged", "Simplified"])
+	var by_layer: Dictionary = result.get("per_layer", {})
+	for layer_id: int in [1, 2, 3]:
+		if not by_layer.has(layer_id):
+			continue
+		var layer: Dictionary = by_layer[layer_id]
+		_summary.text += "\n%s: %d packages, %d -> %d triangles, ~%d batches, %.2f MiB GPU." % [
+			layer_names[layer_id], int(layer.get("packages", 0)), int(layer.get("source_triangles", 0)),
+			int(layer.get("proxy_triangles", 0)), int(layer.get("estimated_batches", 0)),
+			float(int(layer.get("estimated_gpu_bytes", 0))) / (1024.0 * 1024.0)]
 	_append_messages(result)
+	_plan_list.clear()
+	_plan_tabs.current_tab = 0
 	_dirty_regions.clear()
 	_topology_dirty = false
 	_refresh_runtime()
@@ -290,6 +508,11 @@ func _refresh_runtime() -> void:
 		int(stats.get("entries", 0)), int(stats.get("active", 0)), int(stats.get("desired", 0)),
 		int(stats.get("retiring", 0)), int(stats.get("failed", 0)), int(stats.get("managed_regions", 0)),
 		int(stats.get("detail_required_regions", 0)), mib, int(stats.get("memory_budget_mb", 0))]
+	_runtime_status.text += "\nHLOD sources: %d prototypes  •  %d grouped instances  •  %d groups  •  %d awaiting GPU publication" % [
+		int(stats.get("active_hlod_prototypes", 0)),
+		int(stats.get("active_hlod_instances", 0)), int(stats.get("active_instance_groups", 0)),
+		int(stats.get("awaiting_gpu_publication", 0))]
+	_runtime_status.text += "\nWORLD culling cells: %d (64m HLOD instance groups)" % int(stats.get("active_spatial_cells", 0))
 	if not _dirty_regions.is_empty() or _topology_dirty:
 		var locations: Array[Vector2i] = []
 		locations.assign(_dirty_regions.keys())
@@ -345,6 +568,10 @@ func _sync_controls_from_terrain() -> void:
 	if not is_instance_valid(terrain):
 		return
 	_preview.set_pressed_no_signal(terrain.is_editor_hlod_preview_enabled())
+	if is_instance_valid(baker):
+		_layer_type.select(_layer_type.get_item_index(baker.layer_settings.layer_type))
+		_loading_distance.set_value_no_signal(baker.layer_settings.loading_distance)
+		_target_error.set_value_no_signal(baker.layer_settings.target_error_pixels)
 	var forced: int = terrain.hlod_forced_debug_level
 	for index: int in range(_force_level.item_count):
 		if _force_level.get_item_id(index) == forced:
@@ -362,6 +589,8 @@ func _sync_active_terrain() -> void:
 	_dirty_regions.clear()
 	_topology_dirty = false
 	_connected_data = data
+	if is_instance_valid(_plan_list):
+		_plan_list.clear()
 	if is_instance_valid(_connected_data):
 		_connected_data.maps_edit_committed.connect(_on_map_edit_committed)
 		_connected_data.region_map_changed.connect(_on_region_map_changed)
@@ -383,9 +612,11 @@ func _on_map_edit_committed(map_type: int, changed_regions: Array[Vector2i], are
 		return
 	for location: Vector2i in AuthoringDependencies.regions_for_committed_edit(terrain, changed_regions, area):
 		_dirty_regions[location] = true
+	_plan_list.clear()
 
 
 func _on_region_map_changed() -> void:
+	_plan_list.clear()
 	_topology_dirty = true
 	AuthoringDependencies.reconcile_regions(terrain, _dirty_regions)
 

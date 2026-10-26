@@ -20,6 +20,10 @@
 #include "core/config/terrain_3d_compiler.h"
 #include "core/utility/terrain_3d_util.h"
 #include "hlod/build/terrain_3d_hlod_builder.h"
+#include "hlod/format/terrain_3d_hlod_layer_settings.h"
+#include "hlod/format/terrain_3d_hlod_package.h"
+#include "hlod/format/terrain_3d_hlod_instance_codec.h"
+
 #include "rendering/rd/instances/terrain_3d_rd_culling.h"
 #include "rendering/rd/instances/terrain_3d_rd_mesh_cache.h"
 #include "rendering/rd/resources/terrain_3d_rd_texture_manager.h"
@@ -1439,6 +1443,119 @@ bool t3dTestRdInstanceAbi(
 	return state.m_nFailed == 0u;
 }
 
+static void t3dRunHlodRecipeContractTests( t3dRdUnitTestState_t &rState )
+{
+    Ref< Terrain3DHLODLayerSettings > recipe;
+    recipe.instantiate();
+    const int64_t legacyHash = recipe->getRecipeHash();
+    rState.expect( recipe->getLayerType() == T3D_HLOD_LAYER_SIMPLIFIED,
+        "New HLOD recipes default to meshoptimizer simplification" );
+    recipe->setLayerType( T3D_HLOD_LAYER_LEGACY_SIMPLIFIED );
+    rState.expect( recipe->getLayerType() == T3D_HLOD_LAYER_SIMPLIFIED &&
+        recipe->getRecipeHash() == legacyHash,
+        "Serialized legacy authoring selection migrates to current meshoptimizer policy" );
+    recipe->setLayerType( T3D_HLOD_LAYER_MERGED );
+    const int64_t mergedHash = recipe->getRecipeHash();
+    recipe->setTargetErrorPixels( 4.0f );
+    const int64_t newErrorHash = recipe->getRecipeHash();
+    recipe->setTargetErrorPixels( 2.0f );
+    rState.expect( legacyHash > 0 && mergedHash > 0 && legacyHash != mergedHash &&
+        mergedHash != newErrorHash && mergedHash == recipe->getRecipeHash(),
+        "HLOD recipe hash changes on policy/error updates and is deterministic" );
+
+    recipe->setLayerType( T3D_HLOD_LAYER_AUTO );
+    const int64_t autoHash = recipe->getRecipeHash();
+    recipe->setLayerType( T3D_HLOD_LAYER_AUTO );
+    rState.expect( recipe->getLayerType() == T3D_HLOD_LAYER_AUTO &&
+        autoHash > 0 && autoHash != mergedHash &&
+        recipe->getRecipeHash() == autoHash,
+        "HLOD AUTO editor recipe roundtrips and hashes deterministically" );
+    recipe->setLayerType( 500 );
+    rState.expect( recipe->getLayerType() == T3D_HLOD_LAYER_AUTO,
+        "HLOD recipe clamps unrecognized future layer IDs to AUTO" );
+    recipe->setLayerType( T3D_HLOD_LAYER_MERGED );
+
+    // Versioned single-prototype binary group must roundtrip deterministically
+    // and reject incomplete or corrupted publication payloads.
+    t3dHLODGroupData_t group;
+    t3dHLODGroupPrototype_t prototype;
+    prototype.m_nGeometryKey = 123u;
+    prototype.m_nMaterialKey = 456u;
+    prototype.m_nVertexBytes = 36u;
+    prototype.m_nIndexBytes = 12u;
+    prototype.m_fBounds[3] = 1.0f;
+    group.m_prototypes.push_back( prototype );
+    for ( uint32_t i = 0u; i < 2u; ++i ) {
+        t3dHLODGroupInstance_t instance;
+        instance.m_nPrototype = 0u;
+        instance.m_nSourceId = i;
+        instance.m_fAffine[0] = 1.0f;
+        instance.m_fAffine[5] = 1.0f;
+        instance.m_fAffine[10] = 1.0f;
+        instance.m_fAffine[3] = (float) i * 4.0f;
+        group.m_instances.push_back( instance );
+    }
+    const PackedByteArray packed = Terrain3DHLODInstanceCodec::encode( group );
+    t3dHLODGroupData_t decoded;
+    const bool validGroup = Terrain3DHLODInstanceCodec::decode( packed, decoded );
+    rState.expect( validGroup && decoded.m_prototypes.size() == 1u &&
+        decoded.m_instances.size() == 2u && decoded.m_instances[1].m_fAffine[3] == 4.0f &&
+        Terrain3DHLODInstanceCodec::encode( decoded ) == packed,
+        "HLOD single-prototype payload roundtrips with deterministic affine transforms" );
+    PackedByteArray corrupted = packed;
+    if ( corrupted.size() > 20 ) { corrupted.set( 20, corrupted[20] ^ 1 ); }
+    rState.expect( !Terrain3DHLODInstanceCodec::decode( corrupted, decoded ),
+        "HLOD group checksum rejects corrupted geometry metadata" );
+
+    // A mixed group retains prototype identity and source ordering. This is
+    // the on-disk payload accepted by package format v4 and the WORLD adapter.
+    t3dHLODGroupData_t mixed;
+    t3dHLODGroupPrototype_t protoA = prototype;
+    t3dHLODGroupPrototype_t protoB = prototype;
+    protoB.m_nGeometryKey = 654u;
+    protoB.m_nMaterialKey = 987u;
+    mixed.m_prototypes.push_back( protoA );
+    mixed.m_prototypes.push_back( protoB );
+    for ( uint32_t i = 0u; i < 5u; ++i ) {
+        t3dHLODGroupInstance_t record;
+        record.m_nPrototype = i % 2u;
+        record.m_nSourceId = i;
+        record.m_fAffine[0] = 1.0f;
+        record.m_fAffine[5] = 1.0f;
+        record.m_fAffine[10] = 1.0f;
+        record.m_fAffine[3] = (float) ( i * 16u );
+        mixed.m_instances.push_back( record );
+    }
+    const PackedByteArray mixedBlob = Terrain3DHLODInstanceCodec::encode( mixed );
+    t3dHLODGroupData_t mixedDecoded;
+    const bool decodedMixed = Terrain3DHLODInstanceCodec::decode( mixedBlob, mixedDecoded );
+    rState.expect( decodedMixed && mixedDecoded.m_prototypes.size() == 2u &&
+        mixedDecoded.m_instances.size() == 5u && mixedDecoded.m_instances[3].m_nPrototype == 1u &&
+        Terrain3DHLODInstanceCodec::encode( mixedDecoded ) == mixedBlob,
+        "HLOD v4 mixed prototype groups roundtrip deterministically with full indices" );
+    mixed.m_instances[2].m_nPrototype = 4u;
+    rState.expect( Terrain3DHLODInstanceCodec::encode( mixed ).is_empty(),
+        "HLOD group rejects out-of-range prototype indexes before package publication" );
+    rState.expect( ( t3dRdHlodMeshSourceKey( 4u ) | ( 1ull << 32u ) ) !=
+        t3dRdHlodMeshSourceKey( 4u ) &&
+        ( t3dRdHlodMeshSourceKey( 4u ) | ( 1ull << 32u ) ) !=
+        ( t3dRdHlodMeshSourceKey( 5u ) | ( 1ull << 32u ) ),
+        "HLOD prototype source keys remain distinct between mesh and group identities" );
+
+    Ref< Terrain3DHLODPackage > package;
+    package.instantiate();
+    rState.expect( package->getFormatVersion() == 1 && package->getPayloadType() == T3D_HLOD_COOKED_MESH &&
+        package->getLayerType() == T3D_HLOD_LAYER_LEGACY_SIMPLIFIED,
+        "W1-W7 package metadata remains an implicit legacy cooked-mesh variant" );
+    package->setFormatVersion( 3 );
+    rState.expect( package->getFormatVersion() == 3 && !package->isRuntimeCookedMesh(),
+        "Future package versions do not alias to the known runtime codec" );
+    package->setFormatVersion( 2 );
+    package->setPayloadType( T3D_HLOD_INSTANCE_GROUP );
+    rState.expect( !package->isRuntimeCookedMesh(),
+        "Unimplemented instance-group packages cannot enter legacy WORLD publication" );
+}
+
 static bool t3dRunHlodArrayMeshSurfaceTests(
 	t3dRdUnitTestState_t &rState ) {
 	Ref< ArrayMesh > mesh;
@@ -1544,6 +1661,7 @@ bool t3dRunRdCpuTests(
 	t3dRunRdMaterialAbiTests( state );
 	t3dRunRdInstanceAbiTests( state );
 	t3dRunHlodArrayMeshSurfaceTests( state );
+	t3dRunHlodRecipeContractTests( state );
 	state.expect( t3dRunMegaVTCacheTests(), "MegaVT region cache startup regression suite" );
 	state.expect( t3dRunVTWarmRepublishTests(), "VT warm republish regression suite" );
 	UtilityFunctions::print( "=== Terrain3D RD CPU tests: ",

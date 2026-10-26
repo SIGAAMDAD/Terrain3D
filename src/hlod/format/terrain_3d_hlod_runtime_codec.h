@@ -66,6 +66,7 @@ typedef struct t3dHLODRuntimeData_s
 	eastl::vector< t3dHLODEntryDescriptor_t, Terrain3DEastlAllocator >		   m_entries;
 	eastl::vector< int, Terrain3DEastlAllocator >							   m_roots;
 	eastl::vector< uint8_t, Terrain3DEastlAllocator >						   m_instancerMinLevels;
+	eastl::vector< uint8_t, Terrain3DEastlAllocator > m_instancerSubcellMasks;
 	eastl::vector< t3dHLODRuntimeNodePolicyRecord_t, Terrain3DEastlAllocator > m_nodePolicies;
 	uint32_t m_szNodePolicyOffsets[T3D_REGION_SLOTS + 1]{};
 } t3dHLODRuntimeData_t;
@@ -80,7 +81,9 @@ public:
 								   const PackedByteArray  &rInstancerMinLevels,
 								   const PackedInt32Array &rNodeRegionIndices,
 								   const PackedInt64Array &rNodeSpawnIds,
-								   const PackedByteArray  &rNodeMinLevels );
+								   const PackedByteArray  &rNodeMinLevels,
+                                   const PackedByteArray  &rInstancerSubcellMasks,
+                                   const PackedByteArray  &rNodeSubcellMasks );
 	static bool			   decode( const PackedByteArray &rBlob, t3dHLODRuntimeData_t &rData );
 };
 

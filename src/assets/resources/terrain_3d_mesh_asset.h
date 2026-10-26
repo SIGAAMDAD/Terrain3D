@@ -75,6 +75,17 @@ private:
 	int										 m_iLastShadowLod = T3D_MESH_MAX_LOD_COUNT - 1;
 	int										 m_nShadowImpostor = 0;
 	float									 m_fLodRanges[T3D_MESH_MAX_LOD_COUNT]{};
+    // Serialized opt-in import recipe; generated levels are cold-cooked at import.
+    bool m_bMeshoptLodsEnabled = false;
+    int m_nMeshoptTargetLods = 4;
+    float m_fMeshoptReductionRatio = 0.5f;
+    float m_fMeshoptMaxWorldError = 0.5f;
+    // Derived editor diagnostics. Never read on the runtime frame path.
+    int m_nAuthoredLodCount = 0;
+    float m_fMeshoptLodError[T3D_MESH_MAX_LOD_COUNT]{};
+    uint32_t m_nMeshoptLodTriangles[T3D_MESH_MAX_LOD_COUNT]{};
+    bool generateMissingLodsPending( void );
+
 	real_t									 m_fFadeMargin = 0.f;
 
 	// Working data
@@ -159,6 +170,17 @@ public:
 		void ) const {
 		return m_nInstanceCount;
 	}
+
+    void setMeshoptLodsEnabled( bool bEnabled );
+    bool getMeshoptLodsEnabled( void ) const { return m_bMeshoptLodsEnabled; }
+    void setMeshoptTargetLods( int nCount );
+    int getMeshoptTargetLods( void ) const { return m_nMeshoptTargetLods; }
+    void setMeshoptReductionRatio( float fRatio );
+    float getMeshoptReductionRatio( void ) const { return m_fMeshoptReductionRatio; }
+    void setMeshoptMaxWorldError( float fError );
+    float getMeshoptMaxWorldError( void ) const { return m_fMeshoptMaxWorldError; }
+    bool bakeMissingLods( void );
+    Array getMeshoptLodStats( void ) const;
 
 	void			setSceneFile( const Ref< PackedScene > &rSceneFile );
 	EA_FORCE_INLINE Ref< PackedScene > getSceneFile(

@@ -4,6 +4,9 @@
 #include "core/utility/terrain_3d_generation.h"
 #include "Terrain3DTypes.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
+#include "hlod/format/terrain_3d_hlod_cell_index.h"
+#include "hlod/runtime/terrain_3d_hlod_spatial_bucket.h"
+#include "hlod/runtime/terrain_3d_hlod_subcell_ownership.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_record.h"
 
 #include "data/model/terrain_3d_data.h"
@@ -32,8 +35,10 @@ static bool t3dIndexedNodePolicyLess(
 static const Terrain3DRenderingMaterial *t3dResolveHlodRenderingMaterial(
 	const void *const pContext,
 	const uint32_t	  nSurface ) {
-	const Terrain3DHLODPackage *const pPackage = ( const Terrain3DHLODPackage *const ) ( pContext );
-	return pPackage ? pPackage->getRenderingMaterialPtr( nSurface ) : NULL;
+    const t3dHlodMaterialContext_t *const pMaterial =
+        (const t3dHlodMaterialContext_t *) pContext;
+    return pMaterial && pMaterial->m_pPackage ?
+        pMaterial->m_pPackage->getRenderingMaterialPtr( pMaterial->m_nSurfaceOffset + nSurface ) : NULL;
 }
 
 int Terrain3DHLODStreamer::regionIndex(
@@ -52,8 +57,10 @@ void Terrain3DHLODStreamer::markRdPublicationDirty(
 }
 
 uint64_t Terrain3DHLODStreamer::rdMeshSourceKey(
-	const int nEntryIndex ) {
-	return t3dRdHlodMeshSourceKey( ( uint32_t ) ( nEntryIndex ) );
+    const int nEntryIndex, const uint32_t nPrototype ) {
+    // Retain the original source key for prototype zero and reserve upper
+    // source-index bits for all additional prototypes in the same HLOD entry.
+    return t3dRdHlodMeshSourceKey( (uint32_t) nEntryIndex ) | ( (uint64_t) nPrototype << 32u );
 }
 
 static AABB t3dTransformHlodBounds(
@@ -93,6 +100,7 @@ bool Terrain3DHLODStreamer::bindRuntimeAllocator(
 	m_retiringEntries.set_allocator( allocator );
 	m_loadCandidates.set_allocator( allocator );
 	m_instancerMinLevels.set_allocator( allocator );
+	m_instancerSubcellMasks.set_allocator( allocator );
 	m_nodePolicies.set_allocator( allocator );
 	return true;
 }
@@ -115,7 +123,9 @@ void Terrain3DHLODStreamer::destroy(
 void Terrain3DHLODStreamer::suspend(
 	void ) {
 	uint8_t old[T3D_REGION_SLOTS];
+    uint8_t oldSubcells[T3D_REGION_SLOTS];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
+    memcpy( oldSubcells, m_szRegionReadySubcells, sizeof( oldSubcells ) );
 	while ( !m_activeEntries.empty() ) {
 		deactivate( m_activeEntries.back() );
 	}
@@ -128,16 +138,20 @@ void Terrain3DHLODStreamer::suspend(
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	memset( m_szRegionResidentRepresentationLevel, 0, sizeof( m_szRegionResidentRepresentationLevel ) );
 	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
+    memset( m_szRegionReadySubcells, 0, sizeof( m_szRegionReadySubcells ) );
+    memset( m_szRegionResidentSubcells, 0, sizeof( m_szRegionResidentSubcells ) );
 	m_detailRequiredRegions = m_managedRegions;
 	if ( m_pTerrain ) {
-		notifyRepresentationChanges( old );
+		notifyRepresentationChanges( old, oldSubcells );
 	}
 }
 void Terrain3DHLODStreamer::clearRuntime(
 	const bool bNotify,
 	const bool bReleaseStorage ) {
 	uint8_t old[T3D_REGION_SLOTS];
+    uint8_t oldSubcells[T3D_REGION_SLOTS];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
+    memcpy( oldSubcells, m_szRegionReadySubcells, sizeof( oldSubcells ) );
 	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) {
 		deactivate( i, true );
 	}
@@ -149,6 +163,7 @@ void Terrain3DHLODStreamer::clearRuntime(
 		t3dVectorRelease( m_retiringEntries );
 		t3dVectorRelease( m_loadCandidates );
 		t3dVectorRelease( m_instancerMinLevels );
+		t3dVectorRelease( m_instancerSubcellMasks );
 		t3dVectorRelease( m_nodePolicies );
 	} else {
 		m_entries.clear();
@@ -158,6 +173,7 @@ void Terrain3DHLODStreamer::clearRuntime(
 		m_retiringEntries.clear();
 		m_loadCandidates.clear();
 		m_instancerMinLevels.clear();
+		m_instancerSubcellMasks.clear();
 		m_nodePolicies.clear();
 	}
 	eastl::fill_n( m_nodePolicyOffsets, T3D_REGION_SLOTS + 1u, 0u );
@@ -166,6 +182,11 @@ void Terrain3DHLODStreamer::clearRuntime(
 	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
+    memset( m_szRegionReadySubcells, 0, sizeof( m_szRegionReadySubcells ) );
+    memset( m_szRegionResidentSubcells, 0, sizeof( m_szRegionResidentSubcells ) );
+    for ( int region = 0; region < T3D_REGION_SLOTS; ++region ) {
+        for ( int slot = 0; slot < 4; ++slot ) { m_szSubcellEntries[region][slot] = -1; }
+    }
 	m_nResidentEstimatedBytes = 0;
 	m_nReservedBytes = 0u;
 	m_nLoadCandidateCursor = 0u;
@@ -174,24 +195,38 @@ void Terrain3DHLODStreamer::clearRuntime(
 	m_bHasSelectionContext = false;
 	m_bSelectionDirty = true;
 	if ( bNotify && m_pTerrain ) {
-		notifyRepresentationChanges( old );
+		notifyRepresentationChanges( old, oldSubcells );
 	}
 }
 
-int Terrain3DHLODStreamer::findEntry(
-	const int		level,
-	const Vector2i &rCluster ) const {
-	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) {
-		if ( m_entries[( size_t ) i].m_nLevel == level && m_entries[( size_t ) i].getCluster() == rCluster ) {
-			return i;
-		}
-	}
-	return -1;
+bool Terrain3DHLODStreamer::buildSubcellLookupCold( void )
+{
+    for ( int region = 0; region < T3D_REGION_SLOTS; ++region ) {
+        for ( int slot = 0; slot < 4; ++slot ) { m_szSubcellEntries[region][slot] = -1; }
+    }
+    for ( int i = 0; i < ( int ) m_entries.size(); ++i ) {
+        const t3dEntry_t &entry = m_entries[( size_t ) i];
+        if ( entry.m_nLevel != -1 ) { continue; }
+        const int region = regionIndex( entry.getRegionMin() );
+        if ( region < 0 ) { return false; }
+        const Vector2i coord = entry.getCluster();
+        const int slot = ( coord.y & 1 ) * 2 + ( coord.x & 1 );
+        if ( m_szSubcellEntries[region][slot] >= 0 ) { return false; }
+        m_szSubcellEntries[region][slot] = i;
+    }
+    return true;
 }
+
 bool Terrain3DHLODStreamer::buildHierarchy(
 	void ) {
 	m_roots.clear();
 	if ( !t3dContainerReserveCold( m_roots, m_entries.size() ) ) {
+		return false;
+	}
+	// Build parent relationships in O(n log n) instead of rescanning every
+	// packed entry for every child. The temporary index is released after load.
+	eastl::vector< t3dHlodCellIndex_t, Terrain3DEastlAllocator > lookup( m_entries.get_allocator() );
+	if ( !t3dBuildHlodCellIndex( m_entries, lookup ) ) {
 		return false;
 	}
 	for ( size_t iEntry = 0u; iEntry < ( size_t ) ( ( m_entries ).size() ); iEntry++ ) {
@@ -206,7 +241,7 @@ bool Terrain3DHLODStreamer::buildHierarchy(
 		t3dEntry_t	  &entry = m_entries[( size_t ) i];
 		const Vector2i parentCluster( t3dDivideFloor( entry.getCluster().x, 2 ),
 									  t3dDivideFloor( entry.getCluster().y, 2 ) );
-		const int	   parent = findEntry( entry.m_nLevel + 1, parentCluster );
+		const int	   parent = t3dFindHlodCellIndex( lookup, entry.m_nLevel + 1, parentCluster.x, parentCluster.y );
 		entry.m_nParent = parent;
 		if ( parent < 0 ) {
 			if ( !t3dVectorPushBackWithinCapacity( m_roots, i ) ) {
@@ -229,6 +264,7 @@ bool Terrain3DHLODStreamer::compileLegacyNodePolicies(
 	const PackedInt32Array nodeRegions = rManifest->getNodeRegionIndices();
 	const PackedInt64Array nodeIds = rManifest->getNodeSpawnIds();
 	const PackedByteArray  nodeLevels = rManifest->getNodeMinLevels();
+	const PackedByteArray nodeMasks = rManifest->getNodeSubcellMasks();
 	const int			   nodeCount = MIN( nodeRegions.size(), MIN( nodeIds.size(), nodeLevels.size() ) );
 	eastl::vector< t3dIndexedNodePolicy_t, Terrain3DEastlAllocator > policies;
 	policies.reserve( ( size_t ) nodeCount );
@@ -237,7 +273,8 @@ bool Terrain3DHLODStreamer::compileLegacyNodePolicies(
 		if ( region < 0 || region >= T3D_REGION_SLOTS || nodeLevels[i] == 0 ) {
 			continue;
 		}
-		policies.push_back( { region, { nodeIds[i], nodeLevels[i] } } );
+		policies.push_back( { region, { nodeIds[i], nodeLevels[i],
+             ( uint8_t ) ( i < nodeMasks.size() ? nodeMasks[i] : 0u ) } } );
 	}
 	eastl::sort( policies.begin(), policies.end(), t3dIndexedNodePolicyLess );
 	if ( !t3dContainerReserveCold( m_nodePolicies, policies.size() ) ) {
@@ -287,6 +324,7 @@ bool Terrain3DHLODStreamer::compilePackedManifest(
 	}
 	m_roots = eastl::move( runtime.m_roots );
 	m_instancerMinLevels = eastl::move( runtime.m_instancerMinLevels );
+	m_instancerSubcellMasks = eastl::move( runtime.m_instancerSubcellMasks );
 	if ( !t3dContainerReserveCold( m_nodePolicies, runtime.m_nodePolicies.size() ) ) {
 		return false;
 	}
@@ -297,7 +335,8 @@ bool Terrain3DHLODStreamer::compilePackedManifest(
 		}
 	}
 	eastl::copy_n( runtime.m_szNodePolicyOffsets, T3D_REGION_SLOTS + 1, m_nodePolicyOffsets );
-	m_manifest = rManifest;
+	if ( !buildSubcellLookupCold() ) { return false; }
+    m_manifest = rManifest;
 	return true;
 }
 
@@ -313,9 +352,15 @@ bool Terrain3DHLODStreamer::compileManifest(
 	m_entries.clear();
 	m_roots.clear();
 	m_instancerMinLevels.clear();
+	m_instancerSubcellMasks.clear();
 	m_nodePolicies.clear();
 	m_managedRegions.reset();
 	m_detailRequiredRegions.reset();
+    memset( m_szRegionReadySubcells, 0, sizeof( m_szRegionReadySubcells ) );
+    memset( m_szRegionResidentSubcells, 0, sizeof( m_szRegionResidentSubcells ) );
+    for ( int region = 0; region < T3D_REGION_SLOTS; ++region ) {
+        for ( int slot = 0; slot < 4; ++slot ) { m_szSubcellEntries[region][slot] = -1; }
+    }
 	eastl::fill_n( m_nodePolicyOffsets, T3D_REGION_SLOTS + 1u, 0u );
 	if ( !m_pTerrain->isEditorAuthoringMode() ) {
 		return false;
@@ -343,6 +388,7 @@ bool Terrain3DHLODStreamer::compileManifest(
 		}
 	}
 	const PackedByteArray meshPolicy = rManifest->getInstancerMinLevels();
+	const PackedByteArray subcellPolicy = rManifest->getInstancerSubcellMasks();
 	const int			  expected = T3D_REGION_SLOTS * T3D_MAX_MESH_ASSETS;
 	if ( !t3dVectorResizeCold( m_instancerMinLevels, ( size_t ) expected ) ) {
 		return false;
@@ -350,7 +396,11 @@ bool Terrain3DHLODStreamer::compileManifest(
 	for ( int i = 0; i < expected; ++i ) {
 		m_instancerMinLevels[( size_t ) i] = i < meshPolicy.size() ? meshPolicy[i] : 0;
 	}
-	if ( !compileLegacyNodePolicies( rManifest ) || !buildHierarchy() || !prepareTransitionStorageCold() ) {
+    if ( subcellPolicy.size() != 0 && subcellPolicy.size() != expected ) { return false; }
+    if ( !t3dVectorResizeCold( m_instancerSubcellMasks, ( size_t ) subcellPolicy.size() ) ) { return false; }
+    for ( int i = 0; i < subcellPolicy.size(); ++i ) { m_instancerSubcellMasks[( size_t ) i] = subcellPolicy[i]; }
+	if ( !compileLegacyNodePolicies( rManifest ) || !buildHierarchy() ||
+         !buildSubcellLookupCold() || !prepareTransitionStorageCold() ) {
 		return false;
 	}
 	m_manifest = rManifest;
@@ -624,7 +674,7 @@ bool Terrain3DHLODStreamer::replacementReady(
 			// a finer replacement. Only an equal/coarser active level is guaranteed
 			// to contain every source represented by this entry. Otherwise detailed
 			// publishers must acknowledge restoration before the proxy disappears.
-			if ( m_szRegionRepresentationLevel[region_index] >= ( uint8_t ) ( rEntry.m_nLevel ) ) {
+			if ( m_szRegionRepresentationLevel[region_index] >= ( uint8_t ) MAX( 1, rEntry.m_nLevel ) ) {
 				continue;
 			}
 			if ( !m_pTerrain->isHlodDetailReady( region, region ) ) {
@@ -732,10 +782,95 @@ bool Terrain3DHLODStreamer::requestOrActivate(
 		++m_nFailuresLastTick;
 		return false;
 	}
+    // Runtime instance-group decoding, validation and prototype partitioning
+    // happen only when the asynchronous package has completed loading.
+    entry.m_groupInstances.clear();
+    entry.m_groupPrototypes.clear();
+    entry.m_groupCells.clear();
+    if ( entry.m_ackage->getPayloadType() == T3D_HLOD_INSTANCE_GROUP ) {
+        t3dHLODGroupData_t decoded;
+        if ( !Terrain3DHLODInstanceCodec::decode( entry.m_ackage->getInstanceGroupPayload(), decoded ) ||
+             !entry.m_ackage->validateRuntimeInstanceGroupDecodedCold( decoded ) ) {
+            entry.m_ackage.unref();
+            entry.m_bLoadFailed = true;
+            ++m_nFailuresLastTick;
+            return false;
+        }
+        const bool spatialCells = entry.m_ackage->getRecipeVersion() >= 2;
+        eastl::sort( decoded.m_instances.begin(), decoded.m_instances.end(),
+            [spatialCells]( const t3dHLODGroupInstance_t &a, const t3dHLODGroupInstance_t &b ) {
+                if ( !spatialCells ) {
+                    return a.m_nPrototype < b.m_nPrototype ||
+                        ( a.m_nPrototype == b.m_nPrototype && a.m_nSourceId < b.m_nSourceId );
+                }
+                if ( a.m_nPrototype != b.m_nPrototype ) { return a.m_nPrototype < b.m_nPrototype; }
+                const int16_t ax = t3dHlodSpatialBucket( a.m_fAffine[3] );
+                const int16_t bx = t3dHlodSpatialBucket( b.m_fAffine[3] );
+                if ( ax != bx ) { return ax < bx; }
+                const int16_t az = t3dHlodSpatialBucket( a.m_fAffine[11] );
+                const int16_t bz = t3dHlodSpatialBucket( b.m_fAffine[11] );
+                return az == bz ? a.m_nSourceId < b.m_nSourceId : az < bz;
+            } );
+        entry.m_groupPrototypes.resize( decoded.m_prototypes.size() );
+        for ( uint32_t p = 0u; p < (uint32_t) decoded.m_prototypes.size(); ++p ) {
+            t3dHlodPrototypeRuntime_t &runtime = entry.m_groupPrototypes[p];
+            runtime.m_mesh = entry.m_ackage->getPrototypeMesh( p );
+            runtime.m_materialContext.m_pPackage = entry.m_ackage.ptr();
+            runtime.m_materialContext.m_nSurfaceOffset = entry.m_ackage->getPrototypeMaterialOffset( p );
+            if ( runtime.m_mesh.is_null() || runtime.m_materialContext.m_nSurfaceOffset == UINT32_MAX ) {
+                entry.m_groupPrototypes.clear();
+                entry.m_ackage.unref();
+                entry.m_bLoadFailed = true;
+                ++m_nFailuresLastTick;
+                return false;
+            }
+        }
+        for ( uint32_t i = 0u; i < (uint32_t) decoded.m_instances.size(); ++i ) {
+            const uint32_t p = decoded.m_instances[i].m_nPrototype;
+            t3dHlodPrototypeRuntime_t &runtime = entry.m_groupPrototypes[p];
+            if ( runtime.m_nInstanceCount++ == 0u ) { runtime.m_nFirstInstance = i; }
+        }
+        for ( size_t p = 0u; p < entry.m_groupPrototypes.size(); ++p ) {
+            if ( entry.m_groupPrototypes[p].m_nInstanceCount == 0u ) {
+                entry.m_groupPrototypes.clear();
+                entry.m_ackage.unref();
+                entry.m_bLoadFailed = true;
+                ++m_nFailuresLastTick;
+                return false;
+            }
+        }
+        // Contiguous (prototype, spatial bucket) ranges become independent WORLD
+        // culling cells. Geometry source handles remain deduplicated per prototype.
+        for ( uint32_t first = 0u; first < (uint32_t) decoded.m_instances.size(); ) {
+            const t3dHLODGroupInstance_t &head = decoded.m_instances[first];
+            const int16_t bucketX = t3dHlodSpatialBucket( head.m_fAffine[3] );
+            const int16_t bucketZ = t3dHlodSpatialBucket( head.m_fAffine[11] );
+            uint32_t last = first + 1u;
+            while ( last < (uint32_t) decoded.m_instances.size() ) {
+                const t3dHLODGroupInstance_t &next = decoded.m_instances[last];
+                if ( next.m_nPrototype != head.m_nPrototype ||
+                     ( spatialCells && ( t3dHlodSpatialBucket( next.m_fAffine[3] ) != bucketX ||
+                                           t3dHlodSpatialBucket( next.m_fAffine[11] ) != bucketZ ) ) ) { break; }
+                ++last;
+            }
+            entry.m_groupCells.push_back( { head.m_nPrototype, first, last - first, bucketX, bucketZ } );
+            first = last;
+        }
+        entry.m_groupInstances.swap( decoded.m_instances );
+    } else if ( !entry.m_ackage->isRuntimeCookedMesh() ) {
+        entry.m_ackage.unref();
+        entry.m_bLoadFailed = true;
+        ++m_nFailuresLastTick;
+        return false;
+    }
+
 	const int64_t bytes = MAX< int64_t >( entry.m_nEstimatedGpuBytes, entry.m_ackage->getEstimatedGpuBytes() );
 	const int64_t budget = ( int64_t ) m_nMemoryBudgetMb * 1024LL * 1024LL;
 	if ( bytes > budget ) {
 		entry.m_ackage.unref();
+        entry.m_groupInstances.clear();
+        entry.m_groupPrototypes.clear();
+        entry.m_groupCells.clear();
 		++m_nCapacityDeferredLastTick;
 		return false;
 	}
@@ -743,6 +878,9 @@ bool Terrain3DHLODStreamer::requestOrActivate(
 		// Promotion must fit alongside its live fallback. Defer instead of
 		// borrowing an unreserved transition package from the total budget.
 		entry.m_ackage.unref();
+        entry.m_groupInstances.clear();
+        entry.m_groupPrototypes.clear();
+        entry.m_groupCells.clear();
 		++m_nCapacityDeferredLastTick;
 		return false;
 	}
@@ -815,6 +953,9 @@ void Terrain3DHLODStreamer::deactivate(
 	removeLoadingEntry( index );
 	removeRetiringEntry( index );
 	entry.m_ackage.unref();
+    entry.m_groupInstances.clear();
+    entry.m_groupPrototypes.clear();
+    entry.m_groupCells.clear();
 	m_nReservedBytes -= MIN( m_nReservedBytes, entry.m_memory.bytes() );
 	entry.m_memory.reset();
 	entry.m_bRequestStarted = false;
@@ -828,41 +969,61 @@ void Terrain3DHLODStreamer::deactivate(
 void Terrain3DHLODStreamer::publishRepresentationMap(
 	void ) {
 	uint8_t old[T3D_REGION_SLOTS];
+    uint8_t oldSubcells[T3D_REGION_SLOTS];
 	memcpy( old, m_szRegionRepresentationLevel, sizeof( old ) );
+    memcpy( oldSubcells, m_szRegionReadySubcells, sizeof( oldSubcells ) );
 	memset( m_szRegionRepresentationLevel, 0, sizeof( m_szRegionRepresentationLevel ) );
 	memset( m_szRegionResidentRepresentationLevel, 0, sizeof( m_szRegionResidentRepresentationLevel ) );
 	memset( m_szRegionRetiringRepresentationLevel, 0, sizeof( m_szRegionRetiringRepresentationLevel ) );
+    memset( m_szRegionReadySubcells, 0, sizeof( m_szRegionReadySubcells ) );
+    memset( m_szRegionResidentSubcells, 0, sizeof( m_szRegionResidentSubcells ) );
 	m_detailRequiredRegions = m_managedRegions;
 	for ( size_t iActive = 0u; iActive < m_activeEntries.size(); ++iActive ) {
 		const t3dEntry_t &entry = m_entries[( size_t ) m_activeEntries[iActive]];
+        if ( entry.m_nLevel == -1 ) {
+            const int subRegion = regionIndex( entry.getRegionMin() );
+            if ( subRegion >= 0 ) {
+                const Vector2i cluster = entry.getCluster();
+                const uint8_t bit = ( uint8_t ) ( 1u << ( ( cluster.y & 1 ) * 2 + ( cluster.x & 1 ) ) );
+                m_szRegionResidentSubcells[subRegion] |= bit;
+                if ( entry.m_bGpuReady && !entry.m_bRetiring && isDesired( entry ) ) {
+                    m_szRegionReadySubcells[subRegion] |= bit;
+                }
+            }
+            // Level -1 represents one quadrant, never the entire region.
+            // Coarse suppression would incorrectly hide cross-quadrant sources
+            // owned by level 0 or a larger HLOD package.
+            continue;
+        }
 		for ( int z = entry.getRegionMin().y; z <= entry.getRegionMax().y; ++z ) {
 			for ( int x = entry.getRegionMin().x; x <= entry.getRegionMax().x; ++x ) {
 				const int region = regionIndex( Vector2i( x, z ) );
 				if ( region >= 0 ) {
 					m_szRegionResidentRepresentationLevel[region] =
-						MAX< uint8_t >( m_szRegionResidentRepresentationLevel[region], ( uint8_t ) entry.m_nLevel );
+						MAX< uint8_t >( m_szRegionResidentRepresentationLevel[region], ( uint8_t ) MAX( 1, entry.m_nLevel ) );
 					if ( !entry.m_bGpuReady || entry.m_bRetiring || !isDesired( entry ) ) {
 						m_szRegionRetiringRepresentationLevel[region] =
-							MAX< uint8_t >( m_szRegionRetiringRepresentationLevel[region], ( uint8_t ) entry.m_nLevel );
+							MAX< uint8_t >( m_szRegionRetiringRepresentationLevel[region], ( uint8_t ) MAX( 1, entry.m_nLevel ) );
 					} else {
 						m_szRegionRepresentationLevel[region] =
-							MAX< uint8_t >( m_szRegionRepresentationLevel[region], ( uint8_t ) entry.m_nLevel );
+							MAX< uint8_t >( m_szRegionRepresentationLevel[region], ( uint8_t ) MAX( 1, entry.m_nLevel ) );
 						m_detailRequiredRegions.reset( ( size_t ) region );
 					}
 				}
 			}
 		}
 	}
-	notifyRepresentationChanges( old );
+	notifyRepresentationChanges( old, oldSubcells );
 }
 void Terrain3DHLODStreamer::notifyRepresentationChanges(
-	const uint8_t *pOldLevels ) {
+	const uint8_t *pOldLevels, const uint8_t *pOldSubcells ) {
 	if ( !m_pTerrain ) {
 		return;
 	}
 	bool changed = false;
 	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
-		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ) {
+		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ||
+             ( pOldSubcells && pOldSubcells[i] != m_szRegionReadySubcells[i] ) ) {
 			changed = true;
 			break;
 		}
@@ -871,7 +1032,8 @@ void Terrain3DHLODStreamer::notifyRepresentationChanges(
 		m_nRepresentationGeneration = 1u;
 	}
 	for ( int i = 0; i < T3D_REGION_SLOTS; ++i ) {
-		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ) {
+		if ( pOldLevels[i] != m_szRegionRepresentationLevel[i] ||
+             ( pOldSubcells && pOldSubcells[i] != m_szRegionReadySubcells[i] ) ) {
 			m_pTerrain->onHlodRegionRepresentationChanged( regionFromIndex( i ) );
 		}
 	}
@@ -1025,32 +1187,41 @@ uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel(
 	return 0;
 }
 bool Terrain3DHLODStreamer::fillRdMeshSources(
-	eastl::vector< t3dRdExternalMeshSource_t, Terrain3DEastlAllocator > &rSources ) {
-	rSources.clear();
-	if ( rSources.capacity() < m_entries.size() ) {
-		++m_nCapacityMissCount;
-		return false;
-	}
-	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) {
-		const t3dEntry_t &entry = m_entries[( size_t ) ( i )];
-		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
-			continue;
-		}
-		if ( !entry.m_ackage->hasCanonicalRenderingMaterials() ||
-			 !entry.m_ackage->ensureRenderingMaterialStableKeysCold() ) {
-			return false;
-		}
-		t3dRdExternalMeshSource_t source;
-		source.m_nSourceKey = rdMeshSourceKey( i );
-		source.m_mesh = entry.m_ackage->getMesh();
-		source.m_pMaterialContext = entry.m_ackage.ptr();
-		source.m_pResolveRenderingMaterial = &t3dResolveHlodRenderingMaterial;
-		source.m_nFlags = T3D_RD_EXTERNAL_MESH_REQUIRE_RENDERING_MATERIAL;
-		if ( !t3dVectorPushBackWithinCapacity( rSources, source ) ) {
-			return false;
-		}
-	}
-	return true;
+    eastl::vector< t3dRdExternalMeshSource_t, Terrain3DEastlAllocator > &rSources ) {
+    rSources.clear();
+    if ( rSources.capacity() < getRdPublicationSourceCapacity() ) {
+        ++m_nCapacityMissCount;
+        return false;
+    }
+    for ( int i = 0; i < (int) m_entries.size(); ++i ) {
+        t3dEntry_t &entry = m_entries[(size_t) i];
+        if ( !entry.m_bActive ||
+             entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
+            continue;
+        }
+        if ( !entry.m_ackage->hasCanonicalRenderingMaterials() ||
+             !entry.m_ackage->ensureRenderingMaterialStableKeysCold() ) { return false; }
+        const size_t count = entry.m_groupPrototypes.empty() ? 1u : entry.m_groupPrototypes.size();
+        for ( uint32_t p = 0u; p < (uint32_t) count; ++p ) {
+            t3dRdExternalMeshSource_t source;
+            source.m_nSourceKey = rdMeshSourceKey( i, p );
+            if ( entry.m_groupPrototypes.empty() ) {
+                source.m_mesh = entry.m_ackage->getMesh();
+                // Stable fallback context for traditional proxy meshes.
+                entry.m_singleMaterialContext.m_pPackage = entry.m_ackage.ptr();
+                entry.m_singleMaterialContext.m_nSurfaceOffset = 0u;
+                source.m_pMaterialContext = &entry.m_singleMaterialContext;
+            } else {
+                t3dHlodPrototypeRuntime_t &prototype = entry.m_groupPrototypes[p];
+                source.m_mesh = prototype.m_mesh;
+                source.m_pMaterialContext = &prototype.m_materialContext;
+            }
+            source.m_pResolveRenderingMaterial = &t3dResolveHlodRenderingMaterial;
+            source.m_nFlags = T3D_RD_EXTERNAL_MESH_REQUIRE_RENDERING_MATERIAL;
+            if ( !t3dVectorPushBackWithinCapacity( rSources, source ) ) { return false; }
+        }
+    }
+    return true;
 }
 
 bool Terrain3DHLODStreamer::buildRdInstanceSnapshot(
@@ -1065,53 +1236,82 @@ bool Terrain3DHLODStreamer::buildRdInstanceSnapshot(
 	if ( !m_pTerrain ) {
 		return true;
 	}
-	if ( rSnapshot.m_instances.capacity() < m_entries.size() || rSnapshot.m_cells.capacity() < m_entries.size() ) {
-		++m_nCapacityMissCount;
-		return false;
-	}
-
-	const real_t	  regionWorld = ( real_t ) ( T3D_REGION_WORLD_SIZE_METERS );
-	const Transform3D terrainTransform = m_pTerrain->sceneNode().get_global_transform();
-	for ( int i = 0; i < ( int ) ( m_entries.size() ); ++i ) {
-		const t3dEntry_t &entry = m_entries[( size_t ) ( i )];
-		if ( !entry.m_bActive || entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
-			continue;
-		}
-
-		Transform3D local;
-		local.origin = Vector3( entry.getRegionMin().x * regionWorld, 0.0f, entry.getRegionMin().y * regionWorld );
-		const Transform3D transform = terrainTransform * local;
-		const uint32_t	  firstInstance = ( uint32_t ) ( rSnapshot.m_instances.size() );
-		if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform ) ) ) {
-			return false;
-		}
-
-		t3dRdInstanceCell_t cell;
-		cell.m_nMeshSourceKey = rdMeshSourceKey( i );
-		cell.m_nRegionX = entry.getRegionMin().x;
-		cell.m_nRegionZ = entry.getRegionMin().y;
-		cell.m_nCellX = ( int16_t ) ( CLAMP( entry.getCluster().x, ( int ) ( INT16_MIN ), ( int ) ( INT16_MAX ) ) );
-		cell.m_nCellZ = ( int16_t ) ( CLAMP( entry.getCluster().y, ( int ) ( INT16_MIN ), ( int ) ( INT16_MAX ) ) );
-		cell.m_nMeshAssetId = UINT16_MAX;
-		cell.m_nLod = ( int16_t ) ( entry.m_nLevel );
-		cell.m_nFirstInstance = firstInstance;
-		cell.m_nInstanceCount = 1u;
-		cell.m_nRevision = ( uint32_t ) ( ( uint64_t ) ( entry.m_nBuildSignature ) & 0xFFFFFFFFull );
-		cell.m_nSettingsRevision = ( uint32_t ) ( m_nRdPublicationGeneration & 0xFFFFFFFFull );
-		cell.m_nVisibilityLayers = 1u;
-		cell.m_nFlags = T3D_RD_INSTANCE_HLOD;
-		if ( entry.m_nLevel <= m_nMaxShadowLevel ) {
-			cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS;
-		}
-		cell.m_fLodBegin = 0.0f;
-		cell.m_fLodEnd = 0.0f;
-		cell.m_fFadeMargin = 0.0f;
-		const AABB package_bounds = entry.m_ackage.is_valid() ? entry.m_ackage->getLocalBounds() : entry.m_localBounds;
-		cell.m_bounds = t3dTransformHlodBounds( transform, package_bounds );
-		if ( !rSnapshot.m_cells.pushBack( cell ) ) {
-			return false;
-		}
-	}
+    if ( rSnapshot.m_instances.capacity() < getRdPublicationInstanceCapacity() ||
+         rSnapshot.m_cells.capacity() < getRdPublicationCellCapacity() ) {
+        ++m_nCapacityMissCount;
+        return false;
+    }
+    const real_t regionWorld = (real_t) T3D_REGION_WORLD_SIZE_METERS;
+    const Transform3D terrainTransform = m_pTerrain->sceneNode().get_global_transform();
+    for ( int i = 0; i < (int) m_entries.size(); ++i ) {
+        const t3dEntry_t &entry = m_entries[(size_t) i];
+        if ( !entry.m_bActive ||
+             entry.m_ackage.is_null() || entry.m_ackage->getMesh().is_null() ) {
+            continue;
+        }
+        Transform3D local;
+        local.origin = Vector3( entry.getRegionMin().x * regionWorld, 0.0f,
+            entry.getRegionMin().y * regionWorld );
+        const Transform3D rootTransform = terrainTransform * local;
+        const uint32_t prototypeCount = entry.m_groupPrototypes.empty() ? 1u :
+            (uint32_t) entry.m_groupPrototypes.size();
+        const size_t groupCellCount = entry.m_groupCells.empty() ? 1u : entry.m_groupCells.size();
+        for ( size_t gCell = 0u; gCell < groupCellCount; ++gCell ) {
+            const t3dHlodSpatialCell_t *const spatial = entry.m_groupCells.empty() ?
+                NULL : &entry.m_groupCells[gCell];
+            const uint32_t p = spatial ? spatial->m_nPrototype : 0u;
+            if ( p >= prototypeCount ) { return false; }
+            const t3dHlodPrototypeRuntime_t *const prototype = entry.m_groupPrototypes.empty() ?
+                NULL : &entry.m_groupPrototypes[p];
+            const uint32_t firstInstance = (uint32_t) rSnapshot.m_instances.size();
+            const uint32_t instanceCount = spatial ? spatial->m_nInstanceCount : 1u;
+            AABB bounds;
+            bool boundsSet = false;
+            if ( prototype ) {
+                const AABB prototypeBounds = prototype->m_mesh->get_aabb();
+                for ( uint32_t g = 0u; g < instanceCount; ++g ) {
+                    const t3dHLODGroupInstance_t &instance = entry.m_groupInstances[spatial->m_nFirstInstance + g];
+                    const float *const a = instance.m_fAffine;
+                    const Basis basis( Vector3( a[0], a[4], a[8] ),
+                        Vector3( a[1], a[5], a[9] ), Vector3( a[2], a[6], a[10] ) );
+                    const Transform3D child( basis, Vector3( a[3], a[7], a[11] ) );
+                    const Transform3D worldTransform = rootTransform * child;
+                    if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( worldTransform ) ) ) { return false; }
+                    const AABB childBounds = t3dTransformHlodBounds( worldTransform, prototypeBounds );
+                    bounds = boundsSet ? bounds.merge( childBounds ) : childBounds;
+                    boundsSet = true;
+                }
+            } else {
+                if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( rootTransform ) ) ) { return false; }
+                bounds = t3dTransformHlodBounds( rootTransform, entry.m_ackage->getLocalBounds() );
+            }
+            t3dRdInstanceCell_t cell;
+            cell.m_nMeshSourceKey = rdMeshSourceKey( i, p );
+            cell.m_nRegionX = entry.getRegionMin().x;
+            cell.m_nRegionZ = entry.getRegionMin().y;
+            const bool useSpatialCell = spatial && entry.m_ackage->getRecipeVersion() >= 2;
+            cell.m_nCellX = useSpatialCell ? (int16_t) CLAMP( entry.getRegionMin().x * 2 + spatial->m_nBucketX,
+                (int) INT16_MIN, (int) INT16_MAX ) :
+                (int16_t) CLAMP( entry.getCluster().x, (int) INT16_MIN, (int) INT16_MAX );
+            cell.m_nCellZ = useSpatialCell ? (int16_t) CLAMP( entry.getRegionMin().y * 2 + spatial->m_nBucketZ,
+                (int) INT16_MIN, (int) INT16_MAX ) :
+                (int16_t) CLAMP( entry.getCluster().y, (int) INT16_MIN, (int) INT16_MAX );
+            cell.m_nMeshAssetId = UINT16_MAX;
+            cell.m_nLod = (int16_t) MAX( entry.m_nLevel, 0 );
+            cell.m_nFirstInstance = firstInstance;
+            cell.m_nInstanceCount = instanceCount;
+            cell.m_nRevision = (uint32_t) ( (uint64_t) entry.m_nBuildSignature & 0xFFFFFFFFull );
+            cell.m_nSettingsRevision = (uint32_t) ( m_nRdPublicationGeneration & 0xFFFFFFFFull );
+            cell.m_nVisibilityLayers = 1u;
+            cell.m_nFlags = T3D_RD_INSTANCE_HLOD;
+            if ( entry.m_nLevel <= m_nMaxShadowLevel ) { cell.m_nFlags |= T3D_RD_INSTANCE_CAST_SHADOWS; }
+            cell.m_fLodBegin = 0.0f;
+            cell.m_fLodEnd = 0.0f;
+            cell.m_fFadeMargin = 0.0f;
+            cell.m_bounds = bounds;
+            if ( !rSnapshot.m_cells.pushBack( cell ) ) { return false; }
+        }
+    }
 	return true;
 }
 
@@ -1126,17 +1326,36 @@ Dictionary Terrain3DHLODStreamer::getStats(
 	void ) const {
 	Dictionary d;
 	int		   active = 0, desired = 0, failed = 0, retiring = 0, gpuReady = 0, pendingGpu = 0;
+    int activeGroups = 0, publishedInstances = 0;
 	for ( size_t iEntry = 0u; iEntry < ( size_t ) ( ( m_entries ).size() ); iEntry++ ) {
 		const t3dEntry_t &e = ( m_entries )[iEntry];
 		active += e.m_bActive;
+        activeGroups += e.m_bActive && !e.m_groupInstances.empty();
+        publishedInstances += e.m_bActive ? (int) MAX< size_t >( e.m_groupInstances.size(), 1u ) : 0;
 		gpuReady += e.m_bGpuReady;
 		pendingGpu += e.m_bActive && !e.m_bGpuReady;
 		desired += isDesired( e );
 		failed += e.m_bLoadFailed;
 		retiring += e.m_bRetiring;
 	}
-	d["entries"] = ( int ) m_entries.size();
+	int activeSpatialCells = 0;
+    for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+        if ( m_entries[i].m_bActive ) {
+            activeSpatialCells += (int) (m_entries[i].m_groupCells.empty() ? 1u : m_entries[i].m_groupCells.size());
+        }
+    }
+    d["active_spatial_cells"] = activeSpatialCells;
+    d["entries"] = ( int ) m_entries.size();
 	d["active"] = active;
+    int activePrototypes = 0;
+    for ( size_t i = 0u; i < m_entries.size(); ++i ) {
+        if ( m_entries[i].m_bActive ) {
+            activePrototypes += (int) MAX< size_t >( m_entries[i].m_groupPrototypes.size(), 1u );
+        }
+    }
+    d["active_hlod_prototypes"] = activePrototypes;
+    d["active_instance_groups"] = activeGroups;
+    d["active_hlod_instances"] = publishedInstances;
 	d["gpu_ready"] = gpuReady;
 	d["awaiting_gpu_publication"] = pendingGpu;
 	d["gpu_prepared_generation"] = m_pTerrain ? ( int64_t ) m_pTerrain->getPreparedHlodSourceGenerationCold() : 0;
@@ -1311,7 +1530,29 @@ t3dHLODInstancerRepresentationState_t Terrain3DHLODStreamer::getInstancerReprese
 	state.m_nActiveLevel = m_szRegionRepresentationLevel[region];
 	state.m_nResidentLevel = m_szRegionResidentRepresentationLevel[region];
 	state.m_nRetiringLevel = m_szRegionRetiringRepresentationLevel[region];
+    state.m_nReadySubcellMask = m_szRegionReadySubcells[region];
+    state.m_nResidentSubcellMask = m_szRegionResidentSubcells[region];
+    state.m_nSubcellCoverageMask = offset < m_instancerSubcellMasks.size() ?
+        m_instancerSubcellMasks[offset] : 0u;
 	return state;
+}
+
+bool Terrain3DHLODStreamer::isNodeSubcellSuppressed(
+    const Vector2i &rRegion, const int64_t nSpawnId, const int nMinimumLevel ) const
+{
+    if ( nMinimumLevel != 1 ) { return false; }
+    const int region = regionIndex( rRegion );
+    if ( region < 0 ) { return false; }
+    const uint32_t begin = m_nodePolicyOffsets[( size_t ) region];
+    const uint32_t end = m_nodePolicyOffsets[( size_t ) region + 1u];
+    for ( uint32_t i = begin; i < end && i < m_nodePolicies.size(); ++i ) {
+        const t3dNodePolicy_t &policy = m_nodePolicies[i];
+        if ( policy.m_nSpawnId == nSpawnId ) {
+            return policy.m_nMinLevel == 1u &&
+                ( policy.m_nSubcellMask & m_szRegionReadySubcells[region] ) != 0u;
+        }
+    }
+    return false;
 }
 
 uint8_t Terrain3DHLODStreamer::getRegionRepresentationLevel(

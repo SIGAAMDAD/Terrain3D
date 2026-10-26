@@ -524,7 +524,7 @@ static const int g_t3dConstStorage_s_szRenderControlKernel[5] = { 1, 2, 3, 2, 1 
 #define T3D_RUNTIME_WORLD_ADJ_W					  ( 1u << 6u )
 #define T3D_RUNTIME_WORLD_ADJ_NW				  ( 1u << 7u )
 #define T3D_HLOD_RUNTIME_MAGIC					  ( 0x32444c48u ) // HLD2
-#define T3D_HLOD_RUNTIME_VERSION				  ( 2u )
+#define T3D_HLOD_RUNTIME_VERSION				  ( 5u )
 #define T3D_INSTANCE_CACHE_MAX_PAGES			  ( 64 )
 #define T3D_INSTANCE_CACHE_MIB					  ( 1024u * 1024u )
 #define T3D_ACTIVE_PHYSICAL_PAGE_COUNT			  ( 32 )

@@ -1234,7 +1234,7 @@ bool Terrain3DNodeStreamer::isHlodVisualSuppressed(
 		return false;
 	}
 	const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( rOwnerLocation, rSpawn.m_nId );
-	return baked_min > 0 && m_pTerrain->isHlodRegionSuppressed( rOwnerLocation, baked_min );
+	return baked_min > 0 && m_pTerrain->isHlodNodeVisualSuppressed( rOwnerLocation, rSpawn.m_nId, baked_min );
 }
 
 bool Terrain3DNodeStreamer::streamedSpawnCoverageIntersects(
@@ -1304,7 +1304,7 @@ void Terrain3DNodeStreamer::buildDesiredSet(
 			if ( ( spawn.m_nFlags & NODE_FLAG_HLOD_VISUAL ) != 0 ) {
 				const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( owner_location, spawn.m_nId );
 				if ( baked_min > 0 ) {
-					if ( !m_pTerrain->isHlodRegionSuppressed( owner_location, baked_min ) ) {
+					if ( !m_pTerrain->isHlodNodeVisualSuppressed( owner_location, spawn.m_nId, baked_min ) ) {
 						region_desired = true;
 						break;
 					}
@@ -1770,7 +1770,7 @@ bool Terrain3DNodeStreamer::areHlodVisualRegionsReady(
 					continue;
 				}
 				const uint8_t baked_min = m_pTerrain->getHlodNodeMinimumLevel( region, spawn.m_nId );
-				if ( baked_min == 0 || m_pTerrain->isHlodRegionSuppressed( region, baked_min ) ) {
+				if ( baked_min == 0 || m_pTerrain->isHlodNodeVisualSuppressed( region, spawn.m_nId, baked_min ) ) {
 					continue;
 				}
 				if ( !runtimeHasSpawn( runtime, spawn.m_nId ) ) {

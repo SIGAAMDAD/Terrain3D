@@ -209,22 +209,24 @@ bool Terrain3DRenderPublicationBuilder::hasInstancePublicationCapacity(
 		t3dRdGetInstanceHlodStreamer( rServices.m_pTerrain ? rServices.m_pTerrain : NULL );
 	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
 	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
-	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
-	const size_t combined_instances = regular_instances + hlod_entries;
-	const size_t combined_cells = regular_cells + hlod_entries;
+	const size_t hlod_instances = hlod_streamer ? hlod_streamer->getRdPublicationInstanceCapacity() : 0u;
+    const size_t hlod_cells = hlod_streamer ? hlod_streamer->getRdPublicationCellCapacity() : 0u;
+    const size_t hlod_sources = hlod_streamer ? hlod_streamer->getRdPublicationSourceCapacity() : 0u;
+	const size_t combined_instances = regular_instances + hlod_instances;
+	const size_t combined_cells = regular_cells + hlod_cells;
 	if ( m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ||
 		 m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells ||
 		 m_cachedRegularInstanceScene.m_dirtyRanges.capacity() < regular_cells ||
 		 m_cachedRegularInstanceScene.m_dirtyCells.capacity() < regular_cells ||
-		 m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries ||
-		 m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries ||
-		 m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_entries ||
-		 m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_entries ||
+		 m_cachedHlodInstanceScene.m_instances.capacity() < hlod_instances ||
+		 m_cachedHlodInstanceScene.m_cells.capacity() < hlod_cells ||
+		 m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_cells ||
+		 m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_cells ||
 		 m_cachedInstanceScene.m_instances.capacity() < combined_instances ||
 		 m_cachedInstanceScene.m_cells.capacity() < combined_cells ||
 		 m_cachedInstanceScene.m_dirtyRanges.capacity() < combined_cells ||
 		 m_cachedInstanceScene.m_dirtyCells.capacity() < combined_cells ||
-		 m_cachedHlodMeshSources.capacity() < hlod_entries ) {
+		 m_cachedHlodMeshSources.capacity() < hlod_sources ) {
 		return false;
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
@@ -311,23 +313,25 @@ bool Terrain3DRenderPublicationBuilder::ensureInstancePublicationStorage(
 		t3dRdGetInstanceHlodStreamer( rServices.m_pTerrain ? rServices.m_pTerrain : NULL );
 	const size_t regular_instances = instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u;
 	const size_t regular_cells = instancer ? instancer->getRdSnapshotCellCapacity() : 0u;
-	const size_t hlod_entries = hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u;
-	const size_t combined_instances = regular_instances + hlod_entries;
-	const size_t combined_cells = regular_cells + hlod_entries;
+	const size_t hlod_instances = hlod_streamer ? hlod_streamer->getRdPublicationInstanceCapacity() : 0u;
+    const size_t hlod_cells = hlod_streamer ? hlod_streamer->getRdPublicationCellCapacity() : 0u;
+    const size_t hlod_sources = hlod_streamer ? hlod_streamer->getRdPublicationSourceCapacity() : 0u;
+	const size_t combined_instances = regular_instances + hlod_instances;
+	const size_t combined_cells = regular_cells + hlod_cells;
 
 	const bool needs_rebuild = m_cachedRegularInstanceScene.m_instances.capacity() < regular_instances ||
 							   m_cachedRegularInstanceScene.m_cells.capacity() < regular_cells ||
 							   m_cachedRegularInstanceScene.m_dirtyRanges.capacity() < regular_cells ||
 							   m_cachedRegularInstanceScene.m_dirtyCells.capacity() < regular_cells ||
-							   m_cachedHlodInstanceScene.m_instances.capacity() < hlod_entries ||
-							   m_cachedHlodInstanceScene.m_cells.capacity() < hlod_entries ||
-							   m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_entries ||
-							   m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_entries ||
+							   m_cachedHlodInstanceScene.m_instances.capacity() < hlod_instances ||
+							   m_cachedHlodInstanceScene.m_cells.capacity() < hlod_cells ||
+							   m_cachedHlodInstanceScene.m_dirtyRanges.capacity() < hlod_cells ||
+							   m_cachedHlodInstanceScene.m_dirtyCells.capacity() < hlod_cells ||
 							   m_cachedInstanceScene.m_instances.capacity() < combined_instances ||
 							   m_cachedInstanceScene.m_cells.capacity() < combined_cells ||
 							   m_cachedInstanceScene.m_dirtyRanges.capacity() < combined_cells ||
 							   m_cachedInstanceScene.m_dirtyCells.capacity() < combined_cells ||
-							   m_cachedHlodMeshSources.capacity() < hlod_entries;
+							   m_cachedHlodMeshSources.capacity() < hlod_sources;
 	bool bank_needs_rebuild = false;
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceSceneBanks ); iBank++ ) {
 		const t3dRdInstanceSceneSnapshot_t &snapshot = ( m_instanceSceneBanks )[iBank].m_snapshot;
@@ -341,12 +345,12 @@ bool Terrain3DRenderPublicationBuilder::ensureInstancePublicationStorage(
 	}
 
 	if ( !m_cachedRegularInstanceScene.reserveCold( regular_instances, regular_cells ) ||
-		 !m_cachedHlodInstanceScene.reserveCold( hlod_entries, hlod_entries ) ||
+		 !m_cachedHlodInstanceScene.reserveCold( hlod_instances, hlod_cells ) ||
 		 !m_cachedInstanceScene.reserveCold( combined_instances, combined_cells ) ) {
 		return false;
 	}
-	if ( m_cachedHlodMeshSources.capacity() < hlod_entries ) {
-		if ( !t3dContainerReserveCold( m_cachedHlodMeshSources, hlod_entries ) ) {
+	if ( m_cachedHlodMeshSources.capacity() < hlod_sources ) {
+		if ( !t3dContainerReserveCold( m_cachedHlodMeshSources, hlod_sources ) ) {
 			return false;
 		}
 	}
@@ -1801,7 +1805,7 @@ void Terrain3DRenderPublicationBuilder::publish(
 		Terrain3DHLODStreamer *const hlod_streamer =
 			t3dRdGetInstanceHlodStreamer( rServices.m_pTerrain ? rServices.m_pTerrain : NULL );
 		const size_t required = ( instancer ? instancer->getRdSnapshotInstanceCapacity() : 0u ) +
-								( hlod_streamer ? hlod_streamer->getRdPublicationCapacity() : 0u );
+								( hlod_streamer ? hlod_streamer->getRdPublicationInstanceCapacity() : 0u );
 		recordCapacityMiss( "RD instance publication", required, m_cachedInstanceScene.m_instances.capacity(), false );
 		return;
 	}

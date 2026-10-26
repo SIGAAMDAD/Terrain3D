@@ -963,12 +963,14 @@ typedef struct t3dHLODRuntimeNodeTemp_s
 	uint16_t m_nRegion;
 	int64_t	 m_nSpawn;
 	uint8_t	 m_nLevel;
+	uint8_t m_nSubcellMask = 0u;
 } t3dHLODRuntimeNodeTemp_t;
 
 typedef struct t3dHLODRuntimeNodePolicyRecord_s
 {
 	int64_t m_nSpawnId = 0;
 	uint8_t m_nMinLevel = 0;
+	uint8_t m_nSubcellMask = 0u;
 } t3dHLODRuntimeNodePolicyRecord_t;
 
 // Shared with the HLOD codec: identical persisted policy record.
@@ -980,6 +982,9 @@ typedef struct t3dHLODInstancerRepresentationState_s
 	uint8_t m_nActiveLevel = 0;
 	uint8_t m_nResidentLevel = 0;
 	uint8_t m_nRetiringLevel = 0;
+	uint8_t m_nSubcellCoverageMask = 0u;
+	uint8_t m_nReadySubcellMask = 0u;
+	uint8_t m_nResidentSubcellMask = 0u;
 } t3dHLODInstancerRepresentationState_t;
 
 typedef struct t3dInstanceCellCapacityPlan_s

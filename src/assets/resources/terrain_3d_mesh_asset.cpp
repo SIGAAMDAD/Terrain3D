@@ -1,9 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "integration/godot/terrain_3d_binding.h"
-#include "integration/godot/terrain_3d_binding.h"
 #include "core/utility/terrain_3d_generation.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
+#if defined( T3D_EDITOR_NATIVE )
+#include "authoring/meshes/terrain_3d_meshopt_cook.h"
+#endif
 
 #include "rendering/rd/vt/core/terrain_3d_vt_material_identity.h"
 
@@ -538,6 +540,15 @@ void Terrain3DMeshAsset::clear(
 	m_iLastShadowLod = T3D_MESH_MAX_LOD_COUNT - 1;
 	m_nShadowImpostor = 0;
 	clearLodRanges();
+    m_bMeshoptLodsEnabled = false;
+    m_nMeshoptTargetLods = 4;
+    m_fMeshoptReductionRatio = 0.5f;
+    m_fMeshoptMaxWorldError = 0.5f;
+    m_nAuthoredLodCount = 0;
+    for ( int i = 0; i < T3D_MESH_MAX_LOD_COUNT; ++i ) {
+        m_fMeshoptLodError[i] = -1.0f;
+        m_nMeshoptLodTriangles[i] = 0u;
+    }
 	m_fFadeMargin = 0.f;
 	m_thumbnail.unref();
 }
@@ -615,6 +626,146 @@ void Terrain3DMeshAsset::setInstanceCount(
 	LOG( INFO, "ID ", m_nId, ", ", m_name, ": Setting instance_count: ", m_nInstanceCount );
 	LOG( DEBUG, "Emitting instance_count_changed" );
 	emit_signal( "instance_count_changed" );
+}
+
+void Terrain3DMeshAsset::setMeshoptLodsEnabled( bool bEnabled ) {
+    m_bMeshoptLodsEnabled = bEnabled;
+}
+
+void Terrain3DMeshAsset::setMeshoptTargetLods( int nCount ) {
+    m_nMeshoptTargetLods = CLAMP( nCount, 1, T3D_MESH_MAX_LOD_COUNT );
+}
+
+void Terrain3DMeshAsset::setMeshoptReductionRatio( float fRatio ) {
+    m_fMeshoptReductionRatio = CLAMP( fRatio, 0.1f, 0.9f );
+}
+
+void Terrain3DMeshAsset::setMeshoptMaxWorldError( float fError ) {
+    m_fMeshoptMaxWorldError = CLAMP( fError, 0.0f, 1000.0f );
+}
+
+bool Terrain3DMeshAsset::generateMissingLodsPending( void ) {
+#if defined( T3D_EDITOR_NATIVE )
+    if ( !m_bMeshoptLodsEnabled || m_generatedType != TYPE_NONE ||
+        !t3dMeshoptCook::available() || m_pendingMeshes.is_empty() ) {
+        return false;
+    }
+    const int target = MIN( m_nMeshoptTargetLods, getCategoryMaximumLodCount() );
+    m_nAuthoredLodCount = m_pendingMeshes.size();
+    if ( target <= m_nAuthoredLodCount ) {
+        return false;
+    }
+    for ( int lod = 0; lod < m_nAuthoredLodCount; ++lod ) {
+        Ref< ArrayMesh > mesh = m_pendingMeshes[lod];
+        if ( mesh.is_null() || mesh->get_blend_shape_count() > 0 ) {
+            return false;
+        }
+        if ( t3dMeshoptCook::hasEmbeddedLods( mesh ) ) {
+            return false; // Preserve Godot's embedded per-surface LODs.
+        }
+    }
+    // Stage the complete chain before publishing. An unsupported surface or
+    // quality-limit failure leaves every imported authored mesh intact.
+    TypedArray< Mesh > staged( m_pendingMeshes.duplicate() );
+    float errors[T3D_MESH_MAX_LOD_COUNT]{};
+    uint32_t triangles[T3D_MESH_MAX_LOD_COUNT]{};
+    float accumulated = 0.0f;
+    for ( int lod = m_nAuthoredLodCount; lod < target; ++lod ) {
+        Ref< ArrayMesh > source = staged[lod - 1];
+        Ref< ArrayMesh > cooked;
+        float error = 0.0f;
+        uint32_t source_tris = 0u;
+        uint32_t cooked_tris = 0u;
+        if ( !t3dMeshoptCook::generateLodMesh( source, m_fMeshoptReductionRatio,
+            m_fMeshoptMaxWorldError, cooked, error, source_tris, cooked_tris ) ) {
+            break; // Publish the successfully reduced prefix, never a broken LOD.
+        }
+        accumulated += error;
+        errors[lod] = accumulated;
+        triangles[lod] = cooked_tris;
+        staged.push_back( cooked );
+    }
+    if ( staged.size() == m_nAuthoredLodCount ) {
+        return false;
+    }
+    m_pendingMeshes = staged;
+    for ( int lod = m_nAuthoredLodCount; lod < staged.size(); ++lod ) {
+        m_fMeshoptLodError[lod] = errors[lod];
+        m_nMeshoptLodTriangles[lod] = triangles[lod];
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool Terrain3DMeshAsset::bakeMissingLods( void ) {
+#if defined( T3D_EDITOR_NATIVE )
+    if ( m_packedScene.is_null() || m_generatedType != TYPE_NONE ||
+        m_nAuthoredLodCount <= 0 ) {
+        return false;
+    }
+    const TypedArray< Mesh > original = getMeshes();
+    if ( original.size() < m_nAuthoredLodCount ) { return false; }
+    TypedArray< Mesh > authored;
+    for ( int i = 0; i < m_nAuthoredLodCount; ++i ) {
+        authored.push_back( original[i] );
+    }
+    const TypedArray< Mesh > oldPending = m_pendingMeshes;
+    const TypedArray< Terrain3DRenderingMaterial > oldMaterials = m_pendingSurfaceRenderingMaterials;
+    const bool oldEnabled = m_bMeshoptLodsEnabled;
+    float oldErrors[T3D_MESH_MAX_LOD_COUNT]{};
+    uint32_t oldTriangles[T3D_MESH_MAX_LOD_COUNT]{};
+    for ( int i = 0; i < T3D_MESH_MAX_LOD_COUNT; ++i ) {
+        oldErrors[i] = m_fMeshoptLodError[i];
+        oldTriangles[i] = m_nMeshoptLodTriangles[i];
+        m_fMeshoptLodError[i] = -1.0f;
+        m_nMeshoptLodTriangles[i] = 0u;
+    }
+    m_bMeshoptLodsEnabled = true;
+    m_pendingMeshes = authored;
+    if ( !generateMissingLodsPending() || !capturePendingSurfaceRenderingMaterialsCold() ) {
+        m_pendingMeshes = oldPending;
+        m_pendingSurfaceRenderingMaterials = oldMaterials;
+        m_bMeshoptLodsEnabled = oldEnabled;
+        for ( int i = 0; i < T3D_MESH_MAX_LOD_COUNT; ++i ) {
+            m_fMeshoptLodError[i] = oldErrors[i];
+            m_nMeshoptLodTriangles[i] = oldTriangles[i];
+        }
+        return false;
+    }
+    m_iLastLod = m_pendingMeshes.size() - 1;
+    commitMeshes();
+    notify_property_list_changed();
+    emit_signal( "instancer_setting_changed", m_nId );
+    return true;
+#else
+    return false;
+#endif
+}
+
+Array Terrain3DMeshAsset::getMeshoptLodStats( void ) const {
+    Array stats;
+    const TypedArray< Mesh > meshes = getMeshes();
+    for ( int lod = 0; lod < meshes.size(); ++lod ) {
+        const Ref< Mesh > mesh = meshes[lod];
+        if ( mesh.is_null() ) { continue; }
+        uint64_t nTriangles = 0u;
+        for ( int surface = 0; surface < mesh->get_surface_count(); ++surface ) {
+            const Array arrays = mesh->surface_get_arrays( surface );
+            const PackedInt32Array indices = arrays[Mesh::ARRAY_INDEX];
+            const PackedVector3Array positions = arrays[Mesh::ARRAY_VERTEX];
+            nTriangles += (uint64_t) ( indices.is_empty() ? positions.size() : indices.size() ) / 3u;
+        }
+        Dictionary info;
+        info["lod"] = lod;
+        info["authored"] = lod < m_nAuthoredLodCount;
+        info["triangles"] = (int64_t) nTriangles;
+        info["geometric_error"] = m_fMeshoptLodError[lod];
+        info["range"] = m_fLodRanges[lod];
+        stats.push_back( info );
+    }
+    return stats;
 }
 
 void Terrain3DMeshAsset::setSceneFile(
@@ -795,6 +946,12 @@ void Terrain3DMeshAsset::setSceneFile(
 		}
 		pNode->queue_free();
 	}
+    m_nAuthoredLodCount = m_pendingMeshes.size();
+    for ( int i = 0; i < T3D_MESH_MAX_LOD_COUNT; ++i ) {
+        m_fMeshoptLodError[i] = -1.0f;
+        m_nMeshoptLodTriangles[i] = 0u;
+    }
+    generateMissingLodsPending();
 	if ( m_pendingMeshes.size() > 0 && !capturePendingSurfaceRenderingMaterialsCold() ) {
 		LOG( ERROR, "Unable to build canonical Terrain3DRenderingMaterial table for imported mesh surfaces" );
 		m_pendingMeshes.clear();
@@ -833,6 +990,38 @@ void Terrain3DMeshAsset::commitMeshes(
 	m_meshes.clear();
 	m_meshes = m_pendingMeshes;
 	m_pendingMeshes = TypedArray< Mesh >();
+#if defined( T3D_EDITOR_NATIVE )
+	// Optimize the imported authored LODs without creating/replacing any
+	// missing levels or altering material identity. Keep the original Mesh
+	// on unsupported vertex formats or failed optimization.
+	if ( t3dMeshoptCook::available() ) {
+		for ( int lod = 0; lod < m_meshes.size(); ++lod ) {
+			Ref< ArrayMesh > source = m_meshes[lod];
+            if ( source.is_null() || source->get_blend_shape_count() != 0 ) { continue; }
+            if ( t3dMeshoptCook::hasEmbeddedLods( source ) ) { continue; }
+			Ref< ArrayMesh > cooked; cooked.instantiate();
+			bool changed = false;
+			for ( int s = 0; s < source->get_surface_count(); ++s ) {
+				Array arrays = source->surface_get_arrays( s );
+				Array optimized;
+				if ( source->surface_get_primitive_type( s ) == Mesh::PRIMITIVE_TRIANGLES &&
+					t3dMeshoptCook::optimizeArrays( arrays, optimized ) ) {
+					arrays = optimized;
+					changed = true;
+				}
+				cooked->add_surface_from_arrays( source->surface_get_primitive_type( s ), arrays,
+					TypedArray< Array >(), Dictionary(), source->surface_get_format( s ) );
+				cooked->surface_set_material( s, source->surface_get_material( s ) );
+				cooked->surface_set_name( s, source->surface_get_name( s ) );
+			}
+			if ( changed ) {
+				cooked->set_custom_aabb( source->get_custom_aabb() );
+				cooked->set_shadow_mesh( source->get_shadow_mesh() );
+				m_meshes[lod] = cooked;
+			}
+		}
+	}
+#endif
 	disconnectRenderingMaterialSignals();
 	m_surfaceRenderingMaterials = m_pendingSurfaceRenderingMaterials;
 	m_pendingSurfaceRenderingMaterials = TypedArray< Terrain3DRenderingMaterial >();
@@ -1700,6 +1889,23 @@ void Terrain3DMeshAsset::_bind_methods(
 					   PropertyInfo( Variant::BOOL, "enabled", PROPERTY_HINT_NONE ),
 					   "set_enabled",
 					   "is_enabled" );
+
+    ClassDB::bind_method( D_METHOD( "bake_missing_lods" ), &Terrain3DMeshAsset::bakeMissingLods );
+    ClassDB::bind_method( D_METHOD( "get_meshopt_lod_stats" ), &Terrain3DMeshAsset::getMeshoptLodStats );
+
+    ADD_GROUP( "Offline Mesh LOD Cooking", "meshopt_" );
+    T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMeshoptLodsEnabled, getMeshoptLodsEnabled, "enable",
+        PropertyInfo( Variant::BOOL, "meshopt_lods_enabled" ),
+        "set_meshopt_lods_enabled", "get_meshopt_lods_enabled" );
+    T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMeshoptTargetLods, getMeshoptTargetLods, "count",
+        PropertyInfo( Variant::INT, "meshopt_target_lods", PROPERTY_HINT_RANGE, "1,10,1" ),
+        "set_meshopt_target_lods", "get_meshopt_target_lods" );
+    T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMeshoptReductionRatio, getMeshoptReductionRatio, "ratio",
+        PropertyInfo( Variant::FLOAT, "meshopt_reduction_ratio", PROPERTY_HINT_RANGE, "0.1,0.9,0.05" ),
+        "set_meshopt_reduction_ratio", "get_meshopt_reduction_ratio" );
+    T3D_BIND_PROPERTY( Terrain3DMeshAsset, setMeshoptMaxWorldError, getMeshoptMaxWorldError, "error",
+        PropertyInfo( Variant::FLOAT, "meshopt_max_world_error", PROPERTY_HINT_RANGE, "0,1000,0.01" ),
+        "set_meshopt_max_world_error", "get_meshopt_max_world_error" );
 
 	ADD_GROUP( "Source / Placement", "" );
 	T3D_BIND_PROPERTY( Terrain3DMeshAsset,

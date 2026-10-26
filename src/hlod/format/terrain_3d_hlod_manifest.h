@@ -27,9 +27,11 @@ class Terrain3DHLODManifest : public Resource
 	int64_t			 m_nBuiltUnix = 0;
 	Array			 m_entries;
 	PackedByteArray	 m_instancerMinLevels;
+	PackedByteArray  m_instancerSubcellMasks;
 	PackedInt32Array m_nodeRegionIndices;
 	PackedInt64Array m_nodeSpawnIds;
 	PackedByteArray	 m_nodeMinLevels;
+	PackedByteArray  m_nodeSubcellMasks;
 	PackedByteArray	 m_runtimeBlob;
 
 public:
@@ -108,6 +110,18 @@ public:
 		void ) const {
 		return m_instancerMinLevels;
 	}
+	EA_FORCE_INLINE void setInstancerSubcellMasks( const PackedByteArray &rValue ) {
+		m_instancerSubcellMasks = rValue;
+		m_runtimeBlob.clear();
+		emit_changed();
+	}
+	EA_FORCE_INLINE PackedByteArray getInstancerSubcellMasks( void ) const { return m_instancerSubcellMasks; }
+	EA_FORCE_INLINE void setNodeSubcellMasks( const PackedByteArray &rValue ) {
+		m_nodeSubcellMasks = rValue;
+		m_runtimeBlob.clear();
+		emit_changed();
+	}
+	EA_FORCE_INLINE PackedByteArray getNodeSubcellMasks( void ) const { return m_nodeSubcellMasks; }
 	EA_FORCE_INLINE void setNodeRegionIndices(
 		const PackedInt32Array &rValue ) {
 		m_nodeRegionIndices = rValue;

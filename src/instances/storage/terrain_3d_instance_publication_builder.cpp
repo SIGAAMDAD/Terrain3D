@@ -8,6 +8,7 @@
 #include "assets/resources/terrain_3d_mesh_asset.h"
 #include "data/model/terrain_3d_region.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
+#include "hlod/runtime/terrain_3d_hlod_subcell_ownership.h"
 #include "instances/storage/terrain_3d_instance_store.h"
 #include "instances/physics/terrain_3d_instance_occlusion.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
@@ -247,9 +248,24 @@ static bool t3dInstancePublicationAcceptCell(
 			}
 			rHlodSourceCounted = true;
 		}
-		const bool active_replacement = rHlodState.m_nActiveLevel >= rHlodState.m_nMinimumLevel;
-		const bool resident_replacement = rHlodState.m_nResidentLevel >= rHlodState.m_nMinimumLevel;
-		const bool retiring_replacement = rHlodState.m_nRetiringLevel >= rHlodState.m_nMinimumLevel;
+        bool subcell_ready = false;
+        bool subcell_resident = false;
+        if ( rHlodState.m_nMinimumLevel == 1u && rHlodState.m_nSubcellCoverageMask != 0u &&
+             bConservativeBoundsValid &&
+             t3dInstancePublicationEnsureCellBounds( rSourceCell, rConservativeSourceAabb, diagnostics ) ) {
+            const AABB &bounds = rSourceCell.m_cachedAabb;
+            const Vector3 end = bounds.get_end();
+            const uint8_t slot = t3dHlodSubcellOwnerForBounds(
+                (float)bounds.position.x, (float)bounds.position.z, (float)end.x, (float)end.z );
+            subcell_ready = t3dHlodSubcellOwnedAndReady(
+                rHlodState.m_nSubcellCoverageMask, rHlodState.m_nReadySubcellMask, slot );
+            subcell_resident = t3dHlodSubcellOwnedAndReady(
+                rHlodState.m_nSubcellCoverageMask, rHlodState.m_nResidentSubcellMask, slot );
+        }
+        const bool active_replacement = rHlodState.m_nActiveLevel >= rHlodState.m_nMinimumLevel || subcell_ready;
+        const bool resident_replacement = rHlodState.m_nResidentLevel >= rHlodState.m_nMinimumLevel || subcell_resident;
+        const bool retiring_replacement = rHlodState.m_nRetiringLevel >= rHlodState.m_nMinimumLevel ||
+             ( subcell_resident && !subcell_ready );
 		if ( active_replacement && resident_replacement ) {
 			++rCategory.m_nHlodDetailSuppressedCells;
 			return false;

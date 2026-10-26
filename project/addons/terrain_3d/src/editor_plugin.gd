@@ -21,6 +21,7 @@ const RegionWorkbenchTerrainInspectorPlugin = preload("res://addons/terrain_3d/t
 # the primary terrain toolbar. Resolve it after core controls are registered.
 const TERRAIN_PROPERTY_HELP_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_inspector_property_help.gd"
 const TERRAIN_RESOURCE_HELP_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_resource_help_inspector_plugin.gd"
+const TERRAIN_MESH_LOD_INSPECTOR_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_mesh_lod_inspector_plugin.gd"
 const TERRAIN_SETTINGS_WINDOW_PATH: String = "res://addons/terrain_3d/src/inspector/terrain_settings_window.gd"
 const ShaderPerformancePanel = preload("res://addons/terrain_3d/src/shader_performance_panel.gd")
 const AutoShaderPanel = preload("res://addons/terrain_3d/src/autoshader_panel.gd")
@@ -44,6 +45,7 @@ var region_node_inspector_plugin: RegionNodeInspectorPlugin
 var region_workbench_inspector_plugin: EditorInspectorPlugin
 var property_help_inspector_plugin: EditorInspectorPlugin
 var resource_help_inspector_plugin: EditorInspectorPlugin
+var mesh_lod_inspector_plugin: EditorInspectorPlugin
 var terrain_settings_window: Window
 var erosion_window: Window
 var erosion_panel: ErosionSimulator
@@ -136,6 +138,10 @@ func _enter_tree() -> void:
 	if is_instance_valid(resource_help_inspector_plugin):
 		add_inspector_plugin(resource_help_inspector_plugin)
 
+	mesh_lod_inspector_plugin = _load_optional_inspector(TERRAIN_MESH_LOD_INSPECTOR_PATH)
+	if is_instance_valid(mesh_lod_inspector_plugin):
+		add_inspector_plugin(mesh_lod_inspector_plugin)
+
 	shader_performance_panel = ShaderPerformancePanel.new()
 	shader_performance_panel.plugin = self
 	add_child(shader_performance_panel)
@@ -206,6 +212,9 @@ func _exit_tree() -> void:
 	if is_instance_valid(terrain_settings_window):
 		terrain_settings_window.queue_free()
 		terrain_settings_window = null
+	if mesh_lod_inspector_plugin:
+		remove_inspector_plugin(mesh_lod_inspector_plugin)
+		mesh_lod_inspector_plugin = null
 	if resource_help_inspector_plugin:
 		remove_inspector_plugin(resource_help_inspector_plugin)
 		resource_help_inspector_plugin = null

@@ -168,6 +168,7 @@ public:
 	virtual bool									 isGpuRegionCookOnSave( void ) const = 0;
 	virtual bool isHlodDetailReady( const Vector2i &rRegionMin, const Vector2i &rRegionMax ) const = 0;
 	virtual bool isHlodRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const = 0;
+    virtual bool isHlodNodeVisualSuppressed( const Vector2i &rRegion, int64_t nSpawnId, int nMinimumLevel ) const = 0;
 	virtual bool isInitialized( void ) const = 0;
 	virtual bool isInstanceRegionCacheEffective( void ) const = 0;
 	virtual bool isOceanEnabled( void ) const = 0;

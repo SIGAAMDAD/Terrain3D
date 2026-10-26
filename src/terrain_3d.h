@@ -1682,6 +1682,7 @@ public:
 	Dictionary			getInstancePhysicsStats( void ) const;
 	Array				getHlodDebugEntries( void ) const;
 	bool				isHlodRegionSuppressed( const Vector2i &rRegion, int nMinimumLevel = 1 ) const;
+    bool isHlodNodeVisualSuppressed( const Vector2i &rRegion, int64_t nSpawnId, int nMinimumLevel ) const;
 	bool				isHlodRegionDetailRequired( const Vector2i &rRegion ) const;
 	bool				isHlodRegionManaged( const Vector2i &rRegion ) const;
 	uint8_t				getHlodInstancerMinimumLevel( const Vector2i &rRegion, int nMeshId ) const;
