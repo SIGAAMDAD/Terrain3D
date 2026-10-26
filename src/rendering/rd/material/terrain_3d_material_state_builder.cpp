@@ -809,6 +809,9 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 		snapshot.m_materialConfig = m_cachedMaterialConfig;
 		snapshot.m_nMaterialLayerCount = m_nCachedMaterialLayerCount;
 	}
+	// Frame slots are reset before every publication. The cached-material path
+	// must restore the backend classification just like the rebuilt path.
+	snapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 	snapshot.m_nMaterialGeneration = m_nMaterialGeneration;
 	buildEditorOverlayState( rSources, snapshot, rd_material.ptr() );
 	return true;

@@ -323,6 +323,10 @@ public:
 		void ) const {
 		return m_bInstanceMeshBankCapacityPending;
 	}
+	bool isWorldPublicationCapacityPending(
+		void ) const {
+		return m_bWorldPublicationCapacityPending && !hasWorldPublicationCapacity( m_worldPublicationRequired );
+	}
 	bool isColdCapacityServiceActive(
 		void ) const {
 		return m_bColdCapacityServiceActive;

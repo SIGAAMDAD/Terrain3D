@@ -1857,7 +1857,9 @@ void Terrain3DRenderPublicationBuilder::publish(
 		return;
 	}
 	if ( snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) {
-		rServices.m_host.reportPublicationError( "Retired terrain material backend rejected before publication" );
+		rServices.m_host.reportPublicationError(
+			String( "Retired terrain material backend rejected before publication: backend=" ) +
+			String::num_uint64( snapshot.m_nTerrainMaterialBackend ) );
 		return;
 	}
 	publishLightingState( rServices, snapshot );

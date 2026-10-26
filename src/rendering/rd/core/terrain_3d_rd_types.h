@@ -401,7 +401,7 @@ typedef struct t3dRdFrameSnapshot_s
 	uint32_t m_nMeshSize = 48u;
 	uint32_t m_nMaterialLayerCount = 1u;
 	// CPU-only WG-A publication classification; GPU material ABI is unchanged.
-	uint32_t m_nTerrainMaterialBackend = 1u;
+	uint32_t m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 	uint32_t m_nCameraCullMask = UINT32_MAX;
 	uint32_t m_nRenderLayers = UINT32_MAX;
 	// OWNER-PUBLISHED RENDER POLICY. Render execution must not recover these

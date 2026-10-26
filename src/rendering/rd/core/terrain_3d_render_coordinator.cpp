@@ -1608,13 +1608,26 @@ bool Terrain3DRenderCoordinator::prepareStartupActivationCold(
 			m_bStartupColdFailed = true;
 			++m_nStartupFinalSyncFailureCount;
 			m_nStartupFinalSyncElapsedUsecLast = t3dRdStartupTicksUsec() - m_nStartupFinalSyncBeginUsec;
+			String publicationError;
+			{
+				Terrain3DScopedLock lock( m_diagnosticsMutex );
+				publicationError = m_initializationError;
+			}
 			LOG( ERROR,
 				 "[Terrain3D][Startup][Activation][FAIL][SnapshotPublish] before=",
 				 nSnapshotBefore,
 				 " after=",
 				 nSnapshotAfter,
 				 " renderer_failed=",
-				 snapshotStatus.m_eStage == T3D_RENDER_LIFECYCLE_FAILED );
+				 snapshotStatus.m_eStage == T3D_RENDER_LIFECYCLE_FAILED,
+				 " publication_error=",
+				 publicationError,
+				 " world_capacity_pending=",
+				 m_publicationBuilder.isWorldPublicationCapacityPending(),
+				 " instance_capacity_pending=",
+				 m_publicationBuilder.isInstancePublicationCapacityPending(),
+				 " mesh_capacity_pending=",
+				 m_publicationBuilder.isInstanceMeshBankCapacityPending() );
 			logStartupActivationFailureState( "snapshot_publish", nStartupGeneration );
 			Terrain3DScopedLock lock( m_diagnosticsMutex );
 			m_initializationError = "Final startup activation barrier could not publish a valid terrain/ocean snapshot";
@@ -1868,10 +1881,12 @@ bool Terrain3DRenderCoordinator::prepareStartupCold(
 	// were unavailable before publishSnapshot(). If so, satisfy that owner request
 	// immediately and retry before initialization is exposed to READY/physics.
 	if ( m_publicationBuilder.isInstancePublicationCapacityPending() ||
-		 m_publicationBuilder.isInstanceMeshBankCapacityPending() ) {
+		 m_publicationBuilder.isInstanceMeshBankCapacityPending() ||
+		 m_publicationBuilder.isWorldPublicationCapacityPending() ) {
 		serviceColdCapacity();
 		if ( m_publicationBuilder.isInstancePublicationCapacityPending() ||
-			 m_publicationBuilder.isInstanceMeshBankCapacityPending() ) {
+			 m_publicationBuilder.isInstanceMeshBankCapacityPending() ||
+			 m_publicationBuilder.isWorldPublicationCapacityPending() ) {
 			nPublicationPrepareUsec += t3dRdStartupTicksUsec() - nPublicationSegmentStartedUsec;
 			m_nStartupPublicationPrepareUsecLast = nPublicationPrepareUsec;
 			Terrain3DScopedLock lock( m_diagnosticsMutex );
@@ -2537,8 +2552,9 @@ void Terrain3DRenderCoordinator::update(
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL &&
 		 Engine::get_singleton()->is_editor_hint() &&
 		 ( m_publicationBuilder.isInstancePublicationCapacityPending() ||
-		   m_publicationBuilder.isInstanceMeshBankCapacityPending() ) ) {
-		// Asset batches discover immutable mesh-bank requirements during publish.
+		   m_publicationBuilder.isInstanceMeshBankCapacityPending() ||
+		   m_publicationBuilder.isWorldPublicationCapacityPending() ) ) {
+		// Asset batches discover mesh-bank and WORLD publication requirements during publish.
 		// Grow and republish immediately in authoring instead of leaving a frame
 		// with the old bank and servicing it on the next scheduler tick.
 		m_publicationBuilder.serviceColdCapacity( publicationServices() );
