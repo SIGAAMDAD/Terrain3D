@@ -3,10 +3,10 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-HEADER = ROOT / "src/rendering/rd/terrain_3d_render_coordinator.h"
-CPP = ROOT / "src/rendering/rd/terrain_3d_render_coordinator.cpp"
-CLIPMAP = ROOT / "src/rendering/rd/terrain_3d_rd_clipmap_renderer.cpp"
-INSTANCES = ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.cpp"
+HEADER = ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.h"
+CPP = ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp"
+CLIPMAP = ROOT / "src/rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.cpp"
+INSTANCES = ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp"
 
 header = HEADER.read_text(encoding="utf-8")
 cpp = CPP.read_text(encoding="utf-8")

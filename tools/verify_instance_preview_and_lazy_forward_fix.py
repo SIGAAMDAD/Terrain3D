@@ -2,9 +2,9 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-renderer_h = (root / "src/rendering/rd/terrain_3d_rd_instance_renderer.h").read_text()
-renderer = (root / "src/rendering/rd/terrain_3d_rd_instance_renderer.cpp").read_text()
-coordinator = (root / "src/rendering/rd/terrain_3d_render_coordinator.cpp").read_text()
+renderer_h = (root / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.h").read_text()
+renderer = (root / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp").read_text()
+coordinator = (root / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp").read_text()
 
 checks = [
     ("preview has dedicated base-raster initializer", "bool initializePreview( const Ref<RDShaderSPIRV> &rShader );" in renderer_h),

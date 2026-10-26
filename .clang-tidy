@@ -1,0 +1,103 @@
+# Doom 3-derived C++17 naming/hygiene rules, NEO spec revision 3.1.
+# Target: clang-tidy 19+ using an accurate compile_commands.json.
+#
+# REPOSITORY PREFIX SETUP (required when changing repos):
+# This file is preconfigured for The Nomad: nmd / NMD_. For Terrain3D:
+#   EnumPrefix, StructPrefix, TypedefPrefix: change nmd -> t3d
+#   EnumConstantPrefix: change NMD_ -> T3D_
+# This prefix is NOT auto-detected. Existing third-party/public ABI identifiers
+# must not be bulk-renamed merely because they trigger a diagnostic.
+#
+# LIMITATIONS:
+# * clang-tidy cannot demand 'typedef enum Tag_e : uintX_t { ... } Tag_t;'
+#   or prove tag/alias stem correspondence, fixed-width type, or placement.
+# * Naming checks do not prohibit named const/constexpr values: macro-only
+#   constants need a separate source review/custom AST check.
+# * Class vs struct member prefix precedence and static class fields should
+#   be validated on an actual compile DB before enabling automatic fixes.
+# * Forward-declaration necessity, repo layout, and long struct methods
+#   require architectural/source review, not regex-based auto-fixes.
+
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-deadcode.*,
+  bugprone-assert-side-effect,
+  bugprone-assignment-in-if-condition,
+  bugprone-infinite-loop,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-semicolon,
+  bugprone-use-after-move,
+  readability-identifier-naming,
+  readability-misleading-indentation,
+  readability-redundant-declaration
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+ExcludeHeaderFilterRegex: '(^|[/\\])(thirdparty|third_party|vendor|external|generated|build)([/\\]|$)'
+FormatStyle: file
+
+CheckOptions:
+  # Readable Doom 3 scope prefix: not type Hungarian notation.
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.LocalVariableIgnoredRegexp
+    value: '^[ijk]$'
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+
+  # MemberCase applies to struct record fields. ClassMember is more specific.
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ClassMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ClassMemberPrefix
+    value: 'm_'
+
+  - key: readability-identifier-naming.StaticVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.StaticVariablePrefix
+    value: 's_'
+  - key: readability-identifier-naming.GlobalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.GlobalVariablePrefix
+    value: 'g_'
+  - key: readability-identifier-naming.GlobalPointerCase
+    value: camelBack
+  - key: readability-identifier-naming.GlobalPointerPrefix
+    value: 'g_'
+
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.MethodIgnoredRegexp
+    value: '^Event_[A-Z][A-Za-z0-9_]*$'
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+
+  # Tag names + _e / _s and typedef aliases + _t.
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumPrefix
+    value: nmd
+  - key: readability-identifier-naming.EnumSuffix
+    value: '_e'
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructPrefix
+    value: nmd
+  - key: readability-identifier-naming.StructSuffix
+    value: '_s'
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefPrefix
+    value: nmd
+  - key: readability-identifier-naming.TypedefSuffix
+    value: '_t'
+  - key: readability-identifier-naming.EnumConstantCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.EnumConstantPrefix
+    value: 'NMD_'
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+
+  # No naming rules for external types, event registration objects, engine
+  # ABI signatures or qualified 'const' parameters; preserve their contract.

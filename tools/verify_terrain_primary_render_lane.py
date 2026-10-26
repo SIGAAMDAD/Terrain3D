@@ -3,8 +3,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP = (ROOT / "src/rendering/rd/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
-HDR = (ROOT / "src/rendering/rd/terrain_3d_render_coordinator.h").read_text(encoding="utf-8")
+CPP = (ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
+HDR = (ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.h").read_text(encoding="utf-8")
 
 def fail(msg):
     print("FAIL:", msg, file=sys.stderr)

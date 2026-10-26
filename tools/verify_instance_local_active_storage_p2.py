@@ -4,11 +4,11 @@ import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-header = (ROOT / 'src/memory/terrain_3d_active_storage.h').read_text(encoding='utf-8')
-cpp = (ROOT / 'src/memory/terrain_3d_active_storage.cpp').read_text(encoding='utf-8')
-sampling_h = (ROOT / 'src/data/terrain_3d_sampling_storage.h').read_text(encoding='utf-8')
-sampling_cpp = (ROOT / 'src/data/terrain_3d_sampling_storage.cpp').read_text(encoding='utf-8')
-data_cpp = (ROOT / 'src/data/terrain_3d_data.cpp').read_text(encoding='utf-8')
+header = (ROOT / 'src/memory/storage/terrain_3d_active_storage.h').read_text(encoding='utf-8')
+cpp = (ROOT / 'src/memory/storage/terrain_3d_active_storage.cpp').read_text(encoding='utf-8')
+sampling_h = (ROOT / 'src/data/sampling/terrain_3d_sampling_storage.h').read_text(encoding='utf-8')
+sampling_cpp = (ROOT / 'src/data/sampling/terrain_3d_sampling_storage.cpp').read_text(encoding='utf-8')
+data_cpp = (ROOT / 'src/data/model/terrain_3d_data.cpp').read_text(encoding='utf-8')
 constants = (ROOT / 'src/Terrain3DConstants.h').read_text(encoding='utf-8')
 plugin = (ROOT / 'project/addons/terrain_3d/src/editor_plugin.gd').read_text(encoding='utf-8')
 
@@ -55,8 +55,9 @@ for stale in ['process-static active terrain storage', 'Only one Terrain3DData o
     if stale in data_cpp:
         errors.append('stale singleton diagnostic: ' + stale)
 
-build_id = 'instancer-authoritative-visible-index-fix-2026-09-09'
-if build_id not in constants or build_id not in plugin:
+native_build = re.search(r's_pszNativeBuildId \( "([^"]+)" \)', constants)
+plugin_build = re.search(r'EXPECTED_NATIVE_BUILD_ID: String = "([^"]+)"', plugin)
+if not native_build or not plugin_build or native_build.group(1) != plugin_build.group(1):
     errors.append('native/editor build id mismatch for P2')
 
 if errors:

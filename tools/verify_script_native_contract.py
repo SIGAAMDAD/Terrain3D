@@ -27,7 +27,7 @@ def main() -> int:
 
     native_revision = require_match(
         constants,
-        r"#define\s+s_nNativeApiRevision\s*\(\s*([0-9]+)LL\s*\)",
+        r"#define\s+T3D_NATIVE_API_REVISION\s*\(\s*([0-9]+)LL\s*\)",
         "native API revision",
     )
     native_build = require_match(

@@ -20,7 +20,7 @@ def block(rel, start, end):
         return data[a:]
     return data[a:b]
 
-resource_plan = text('src/rendering/rd/render_world/terrain_3d_render_world_resource_plan.h')
+resource_plan = text('src/rendering/rd/vt/planning/terrain_3d_vt_resource_plan.h')
 for needle in (
     'T3D_RW_INDIRECT_VIS_INSTANCE_OFFSET = 48u',
     'T3D_RW_INDIRECT_VIS_CLUSTER_OFFSET = 60u',
@@ -32,7 +32,7 @@ for needle in (
     if needle not in resource_plan:
         failures.append(f'P09 indirect-buffer ABI missing: {needle}')
 
-resource_plan_cpp = text('src/rendering/rd/render_world/terrain_3d_render_world_resource_plan.cpp')
+resource_plan_cpp = text('src/rendering/rd/vt/planning/terrain_3d_vt_resource_plan.cpp')
 if 'rPlan.nBufferBytes[T3D_RW_GPU_BUFFER_INDIRECT_ARGS] = T3D_RW_INDIRECT_BUFFER_BYTES;' not in resource_plan_cpp:
     failures.append('P09 indirect buffer size is not driven by the shared ABI')
 
@@ -64,9 +64,9 @@ for word_offset in ('write_dispatch(12u', 'write_dispatch(15u', 'write_dispatch(
         failures.append(f'P09 args shader missing indirect triplet {word_offset}')
 
 vt_gpu = block(
-    'src/rendering/rd/render_world/terrain_3d_render_world_vt_gpu.cpp',
-    'bool Terrain3DRenderWorldVTGpu::dispatch_prediction_hot',
-    'bool Terrain3DRenderWorldVTGpu::schedule_request_readback_hot',
+    'src/rendering/rd/vt/gpu/terrain_3d_vt_gpu.cpp',
+    'bool Terrain3DVTGpu::dispatch_prediction_hot',
+    'bool Terrain3DVTGpu::schedule_request_readback_hot',
 )
 if vt_gpu.count('compute_list_dispatch_indirect') < 1:
     failures.append('P09 VT prediction tiers are not dispatched indirectly')

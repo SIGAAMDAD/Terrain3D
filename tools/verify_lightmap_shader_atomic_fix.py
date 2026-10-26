@@ -4,7 +4,7 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 shader = (root / "project/addons/terrain_3d/shaders/includes/none_functions.gdshaderinc").read_text(encoding="utf-8")
-sync = (root / "src/core/terrain_3d_sync.h").read_text(encoding="utf-8")
+sync = (root / "src/core/utility/terrain_3d_sync.h").read_text(encoding="utf-8")
 lightmap = (root / "project/addons/terrain_3d/tools/region_lightmap_baker.gd").read_text(encoding="utf-8")
 
 errors = []

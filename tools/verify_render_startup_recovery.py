@@ -3,9 +3,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 terrain = (ROOT / 'src/terrain_3d.cpp').read_text()
-coord_h = (ROOT / 'src/rendering/rd/terrain_3d_render_coordinator.h').read_text()
-coord = (ROOT / 'src/rendering/rd/terrain_3d_render_coordinator.cpp').read_text()
-renderer = (ROOT / 'src/rendering/rd/terrain_3d_rd_clipmap_renderer.cpp').read_text()
+coord_h = (ROOT / 'src/rendering/rd/core/terrain_3d_render_coordinator.h').read_text()
+coord = (ROOT / 'src/rendering/rd/core/terrain_3d_render_coordinator.cpp').read_text()
+renderer = (ROOT / 'src/rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.cpp').read_text()
 
 errors = []
 

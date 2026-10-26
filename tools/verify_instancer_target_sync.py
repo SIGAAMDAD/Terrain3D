@@ -4,10 +4,10 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 terrain = (root / 'src/terrain_3d.cpp').read_text(encoding='utf-8')
-integration = (root / 'src/rendering/terrain_3d_render_integration.cpp').read_text(encoding='utf-8')
-instancer = (root / 'src/instances/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
-header = (root / 'src/instances/terrain_3d_instancer.h').read_text(encoding='utf-8')
-policy = (root / 'src/streaming/terrain_3d_streaming_policy.h').read_text(encoding='utf-8')
+integration = (root / 'src/rendering/integration/terrain_3d_render_integration.cpp').read_text(encoding='utf-8')
+instancer = (root / 'src/instances/runtime/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
+header = (root / 'src/instances/runtime/terrain_3d_instancer.h').read_text(encoding='utf-8')
+policy = (root / 'src/streaming/policy/terrain_3d_streaming_policy.h').read_text(encoding='utf-8')
 
 errors = []
 

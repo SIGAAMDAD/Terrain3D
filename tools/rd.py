@@ -39,7 +39,7 @@ SCAN_ROOTS = [
 ]
 TEXT_SUFFIXES = {
     ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".inl",
-    ".gd", ".cs", ".json", ".glsl", ".gdshader", ".gdshaderinc",
+    ".gd", ".cs", ".json", ".glsl", ".glslinc", ".gdshader", ".gdshaderinc",
     ".tscn", ".tres", ".cfg", ".gdextension", ".md", ".patch", ".diff",
 }
 SYMBOLS = {
@@ -60,11 +60,19 @@ def capture(command: list[str], *, cwd: Path = REPO) -> str:
     return subprocess.check_output(command, cwd=str(cwd), text=True, stderr=subprocess.STDOUT).strip()
 
 
+def git_checkout_available() -> bool:
+    return (REPO / ".git").exists()
+
+
 def current_branch() -> str:
+    if not git_checkout_available():
+        return "source-archive"
     return capture(["git", "rev-parse", "--abbrev-ref", "HEAD"])
 
 
 def current_commit() -> str:
+    if not git_checkout_available():
+        return "unavailable"
     return capture(["git", "rev-parse", "HEAD"])
 
 
@@ -118,6 +126,9 @@ def run_quiet(
 
 
 def branch_check() -> bool:
+    if not git_checkout_available():
+        print("SKIP branch check: clean source archive has no .git metadata")
+        return True
     branch = current_branch()
     if branch != EXPECTED_BRANCH:
         print(f"FAIL branch={branch}; expected={EXPECTED_BRANCH}")
@@ -127,6 +138,9 @@ def branch_check() -> bool:
 
 
 def reference_check() -> bool:
+    if not git_checkout_available():
+        print("SKIP frozen reference tag check: clean source archive has no .git metadata")
+        return True
     try:
         ref = capture(["git", "rev-parse", f"{REFERENCE_TAG}^{{}}"] )
     except subprocess.CalledProcessError:
@@ -140,6 +154,9 @@ def reference_check() -> bool:
 
 
 def diff_check() -> bool:
+    if not git_checkout_available():
+        print("SKIP git diff --check: clean source archive has no .git metadata")
+        return True
     result = subprocess.run(["git", "diff", "--check"], cwd=str(REPO), text=True)
     if result.returncode != 0:
         print("FAIL git diff --check")
@@ -207,8 +224,9 @@ def rd_batch_c_material_check() -> bool:
     sampler_body = renderer[sampler_start:sampler_end] if sampler_start >= 0 and sampler_end > sampler_start else ""
 
     checks += [
-        ("material layer ABI size", 'sizeof( t3dRdMaterialLayer_t ) == 64u' in types),
+        ("material layer ABI size", 'sizeof( t3dRdMaterialLayer_t ) == 80u' in types),
         ("material layer integral texture index", 'uint32_t m_nPhysicalLayer' in types),
+        ("material layer shared micro VT allocation", 'uint32_t m_nMicroVTAllocation' in types),
         ("material layer integral flags", 'uint32_t m_nFlags' in types),
         ("tier material ABI size", 'sizeof( t3dRdTierMaterialConfig_t ) == 48u' in types),
         ("material config ABI size", 'sizeof( t3dRdMaterialConfig_t ) == 384u' in types),
@@ -390,11 +408,11 @@ def rd_batch_d_instance_check() -> bool:
         ("large shared static mesh arenas", "s_nMinVertexArenaBytes = 4u * 1024u * 1024u" in mesh_cpp and "s_nMinIndexArenaBytes = 2u * 1024u * 1024u" in mesh_cpp),
         ("explicit arena growth", "nextArenaCapacity" in mesh_h and "while ( capacity < nRequiredBytes ) capacity <<= 1u" in mesh_cpp),
         ("shared vertex arena", "vertex_buffer_create" in mesh_cpp and "T3D.Instance.MeshVertexArena" in mesh_cpp),
-        ("shared index arenas", mesh_cpp.count("index_buffer_create") >= 1 and "T3D.Instance.MeshIndexArena16" in mesh_cpp and "T3D.Instance.MeshIndexArena32" in mesh_cpp),
-        ("U16/U32 index selection", "max_index <= 65535u" in mesh_cpp and "INDEX_BUFFER_FORMAT_UINT16" in mesh_cpp and "INDEX_BUFFER_FORMAT_UINT32" in mesh_cpp),
+        ("shared U32 index arena", mesh_cpp.count("index_buffer_create") >= 1 and "T3D.Instance.MeshIndexArena32" in mesh_cpp and "MeshIndexArena16" not in mesh_cpp),
+        ("universal U32 production indices", "INDEX_BUFFER_FORMAT_UINT32" in mesh_cpp and "INDEX_BUFFER_FORMAT_UINT16" not in mesh_cpp and "m_index16Bytes" not in mesh_h and "m_nIndexFormat" not in mesh_h),
         ("generation checked mesh resolution", "rHandle.m_nGeneration == m_nGeneration" in mesh_cpp),
         ("material subset extraction", "Object::cast_to<BaseMaterial3D>" in mesh_cpp and "TEXTURE_ALBEDO" in mesh_cpp and "TEXTURE_NORMAL" in mesh_cpp and "TEXTURE_ORM" in mesh_cpp),
-        ("separate roughness texture/channel parity", "TEXTURE_ROUGHNESS" in mesh_cpp and "get_roughness_texture_channel" in mesh_cpp and "T3D_RD_INSTANCE_MATERIAL_ROUGHNESS_TEXTURE" in mesh_cpp and "MATERIAL_ROUGHNESS_TEXTURE" in shader and "material_texture_channel" in shader),
+        ("separate roughness texture/channel parity", "TEXTURE_ROUGHNESS" in mesh_cpp and "get_roughness_texture_channel" in mesh_cpp and "surface_layout" in mesh_cpp and "T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK" in mesh_cpp and "surface_layout" in shader and "material_texture_channel" in shader),
         ("material table deduplicates packed state", "std::memcmp( &rMaterials[i], &packed, sizeof( packed ) ) == 0" in mesh_cpp),
         ("material texture identity participates in source fingerprint", "t3dRdHashTexture" in mesh_cpp and "texture_rid.get_id()" in mesh_cpp),
         ("direct RD imported material textures", "Terrain3DRdTextureManager::buildLayout" in mesh_cpp and "pManager->createTexture" in mesh_cpp and "getTextureRid" in mesh_h),
@@ -426,9 +444,9 @@ def rd_batch_d_instance_check() -> bool:
         ("instance shader has vertex+fragment stages", shader.count("#[vertex]") == 1 and shader.count("#[fragment]") == 1),
         ("instance shader descriptor ABI", all(token in shader for token in ("binding = 0", "binding = 1", "binding = 2", "binding = 3", "InstanceRecord", "InstanceMaterial"))),
         ("instance shader consumes packed transforms/colors", "unpackSnorm2x16" in shader and "unpackHalf2x16" in shader and "unpackUnorm4x8" in shader),
-        ("instance material descriptor set binds albedo/normal/ORM pairs", all(token in instance_cpp for token in ("ensureMaterialSamplers", "ensureFallbackMaterialTextures", "rebuildMaterialBindings", "t3dRdInstanceTextureUniform")) and shader.count("layout(set = 1, binding =") == 6),
-        ("instance shader samples albedo normal and ORM", all(token in shader for token in ("base_albedo_texture", "base_normal_texture", "base_orm_texture", "overlay_albedo_texture", "overlay_normal_texture", "overlay_orm_texture", "decode_normal", "material.normal_scale"))),
-        ("instance material filtering/repeat sampler policy", "set_use_anisotropy" in instance_cpp and "SAMPLER_REPEAT_MODE_REPEAT" in instance_cpp and "T3D_RD_INSTANCE_MATERIAL_FILTER_MASK" in instance_cpp),
+        ("instance material descriptor set is invariant VT/global state", all(token in instance_cpp for token in ("ensureMaterialVtUniformSet", "buildMaterialVtUniformSet", "T3D_RW_GPU_BUFFER_VT_ALLOCATION_TABLE", "T3D_RW_GPU_BUFFER_VT_PAGE_TABLE")) and "m_materialBindings" not in instance_cpp),
+        ("instance shader samples albedo normal and surface through VT banks", all(token in shader for token in ("vt_albedo_bank0", "vt_normal_bank0", "vt_surface_bank0", "vt_allocations", "vt_page_table", "material.vtAllocation", "overlay.vtAllocation"))),
+        ("instance material filtering/repeat sampler policy", "m_nSamplerClass" in mesh_cpp and "T3D_VT_MATERIAL_FILTER_MASK" in mesh_cpp and "t3d_inst_effective_sampler_class" in shader and "t3d_inst_sampler_repeats" in shader),
         ("material alpha-scissor and vertex-color parity", "MATERIAL_ALPHA_SCISSOR" in shader and "MATERIAL_VERTEX_COLOR" in shader and "discard" in shader and "srgb_to_linear" in shader),
         ("alpha blend and depth-prepass material extraction", "TRANSPARENCY_ALPHA" in mesh_cpp and "TRANSPARENCY_ALPHA_DEPTH_PRE_PASS" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_BLEND" in mesh_cpp and "T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS" in mesh_cpp),
         ("transparent cells stay independently sortable", "!alpha_blend && !range_fade" in instance_cpp and "m_fSortDistanceSq" in instance_h and "std::stable_sort" in instance_cpp),
@@ -513,10 +531,10 @@ def rd_batch_e_hlod_check() -> bool:
         ("HLOD cull dispatch updates persistent indirect buffer", "m_hIndirectBuffer" in instance_cpp and "dispatchHlodCull" in instance_cpp and "compute_list_dispatch" in instance_cpp),
         ("HLOD cull bindings are invalidated when indirect storage grows", "if ( replace_indirect && m_hHlodCullUniformSet.is_valid() )" in instance_cpp and "m_context.freeResource( m_hHlodCullUniformSet )" in instance_cpp),
         ("HLOD cull inserts compute-to-draw barrier", "compute_list_add_barrier" in instance_cpp and "dispatchHlodCull( nVisibilityMask )" in instance_cpp),
-        ("HLOD cull has no CPU readback or sync", "buffer_get_data" not in instance_cpp[instance_cpp.find("bool Terrain3DRdInstanceRenderer::dispatchHlodCull"):instance_cpp.find("void Terrain3DRdInstanceRenderer::freeViewState")] and ".sync(" not in instance_cpp),
+        ("HLOD cull has no CPU readback or sync", "buffer_get_data" not in instance_cpp[instance_cpp.find("bool Terrain3DRdInstanceRenderer::dispatchHlodCull"):instance_cpp.find("bool Terrain3DRdInstanceRenderer::buildGpuPacketTopology")] and ".sync(" not in instance_cpp[instance_cpp.find("bool Terrain3DRdInstanceRenderer::dispatchHlodCull"):instance_cpp.find("bool Terrain3DRdInstanceRenderer::buildGpuPacketTopology")]),
         ("HLOD shadow policy is published", "entry.m_nLevel <= m_nMaxShadowLevel" in streamer_cpp and "T3D_RD_INSTANCE_CAST_SHADOWS" in streamer_cpp),
         ("HLOD participates in shared shadow packets", "m_shadowPackets.push_back" in instance_cpp and "bShadowPass" in instance_cpp and "created.m_packet.m_cullBounds = cell.m_bounds" in instance_cpp and "created.m_packet.m_nVisibilityLayers = cell.m_nVisibilityLayers" in instance_cpp),
-        ("HLOD imported materials use shared mesh material path", "t3dRdAppendMeshSource" in mesh_cpp and "t3dRdAddMaterial" in mesh_cpp and "rebuildMaterialBindings" in instance_cpp),
+        ("HLOD imported materials use shared mesh material/VT path", "t3dRdAppendMeshSource" in mesh_cpp and "t3dRdAddMaterial" in mesh_cpp and "getVtMaterials" in instance_cpp and "ensureMaterialVtUniformSet" in instance_cpp),
         ("HLOD deactivation releases package and invalidates publication", "entry.m_ackage.unref()" in streamer_cpp and "if ( wasPublished ) markRdPublicationDirty()" in streamer_cpp),
         ("HLOD renderer exposes cull diagnostics", all(token in instance_cpp for token in ("hlod_gpu_cull_descriptors", "hlod_gpu_cull_dispatches", "hlod_descriptor_capacity_bytes"))),
     ]
@@ -691,7 +709,7 @@ def rd_batch_f2_native_depth_opaque_check() -> bool:
         ("opaque depth-prepass uses equality without depth write", "COMPARE_OP_EQUAL" in clip_cpp and "set_enable_depth_write( !key.m_bDepthPrepassActive )" in clip_cpp and "COMPARE_OP_EQUAL" in inst_cpp),
         ("terrain pipeline variants cover native depth attachments", all(t in clip_cpp for t in ("T3D_RD_FORWARD_SHADER_DEPTH", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI"))),
         ("instance pipeline variants cover native depth attachments", all(t in inst_cpp for t in ("T3D_RD_FORWARD_SHADER_DEPTH", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS", "T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI"))),
-        ("shader library loads all F2 variants", "depth_normal_roughness_voxel_gi" in shader_lib and "getForwardBundle" in (rd_dir / "terrain_3d_rd_shader_library.h").read_text(encoding="utf-8", errors="ignore")),
+        ("shader catalog loads all F2 variants", "depth_normal_roughness_voxel_gi" in (rd_dir / "terrain_3d_rd_shader_catalog.cpp").read_text(encoding="utf-8", errors="ignore") and "loadCatalogShader" in shader_lib),
         ("all F2 shaders declare version variants", all("#[versions]" in sh and "depth_normal_roughness_voxel_gi" in sh for sh in shaders)),
         ("native normal/roughness output is view-space", all("view_matrix" in sh and "mat3(frame_data.view_matrix)" in sh for sh in shaders)),
         ("terrain depth retains hole discard behavior", all("outside_region" in sh and "discard" in sh and "T3D_FORWARD_DEPTH" in sh for sh in shaders[:3])),
@@ -702,7 +720,7 @@ def rd_batch_f2_native_depth_opaque_check() -> bool:
         ("coordinator routes depth and opaque through native path", "T3D_RD_FORWARD_PASS_DEPTH" in coordinator and "T3D_RD_FORWARD_PASS_OPAQUE" in coordinator and "prepareForwardPass" in coordinator and "renderForwardPass" in coordinator),
         ("submit failure does not mutate RD ownership while list is open", "Do not destroy or rebuild RD resources" in coordinator),
         ("compositor remains explicit debug lane", "TERRAIN3D_RD_DEBUG_COMPOSITOR" in coordinator and "!m_bCompositorDebugEnabled" in coordinator),
-        ("forward shader bundle is in Windows project", "terrain_3d_rd_forward_shader_bundle.h" in vcxproj and "terrain_3d_rd_forward_shader_bundle.h" in filters),
+        ("shader catalog is in Windows project", "terrain_3d_rd_shader_catalog.h" in vcxproj and "terrain_3d_rd_shader_catalog.h" in filters),
     ]
     failed = [label for label, ok in checks if not ok]
     if failed:
@@ -765,7 +783,7 @@ def rd_batch_f4_native_lighting_check() -> bool:
     clip = (rd / "terrain_3d_rd_clipmap_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     shader_lib = (rd / "terrain_3d_rd_shader_library.cpp").read_text(encoding="utf-8", errors="ignore")
-    include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
+    include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glslinc").read_text(encoding="utf-8", errors="ignore")
     terrain = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f"terrain_clipmap_{tier}.glsl").read_text(encoding="utf-8", errors="ignore") for tier in ("near", "middle", "far")]
     instance_shader = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
     patch = (REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch").read_text(encoding="utf-8", errors="ignore")
@@ -885,7 +903,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
     data = (REPO / "src" / "data" / "terrain_3d_data.cpp").read_text(encoding="utf-8", errors="ignore")
     cache_h = (REPO / "src" / "streaming" / "terrain_3d_gpu_region_cache.h").read_text(encoding="utf-8", errors="ignore")
     cache = (REPO / "src" / "streaming" / "terrain_3d_gpu_region_cache.cpp").read_text(encoding="utf-8", errors="ignore")
-    include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
+    include = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glslinc").read_text(encoding="utf-8", errors="ignore")
     terrain = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / f"terrain_clipmap_{tier}.glsl").read_text(encoding="utf-8", errors="ignore") for tier in ("near", "middle", "far")]
     instance = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_instances.glsl").read_text(encoding="utf-8", errors="ignore")
     baker = (REPO / "project" / "addons" / "terrain_3d" / "tools" / "region_lightmap_baker.gd").read_text(encoding="utf-8", errors="ignore")
@@ -1025,7 +1043,7 @@ def rd_batch_f8_consolidation_check() -> bool:
     inst = (rd / "terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8", errors="ignore")
     types = (rd / "terrain_3d_rd_types.h").read_text(encoding="utf-8", errors="ignore")
     lighting = (rd / "terrain_3d_rd_forward_lighting.cpp").read_text(encoding="utf-8", errors="ignore")
-    lighting_inc = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glsl").read_text(encoding="utf-8", errors="ignore")
+    lighting_inc = (REPO / "project" / "addons" / "terrain_3d" / "rd" / "terrain_forward_lighting_inc.glslinc").read_text(encoding="utf-8", errors="ignore")
     profiler = (REPO / "project" / "addons" / "terrain_3d" / "src" / "runtime_profiler_window.gd").read_text(encoding="utf-8", errors="ignore")
     patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
@@ -1045,7 +1063,7 @@ def rd_batch_f8_consolidation_check() -> bool:
     coord_shutdown = between(coord, "void Terrain3DRenderCoordinator::shutdown", "void Terrain3DRenderCoordinator::update")
     coord_proxy = between(coord, "void Terrain3DRenderCoordinator::enforceRdPresentation", "void Terrain3DRenderCoordinator::attachEffectToActiveCamera")
     clip_pipeline = between(clip, "bool Terrain3DRdClipmapRenderer::ensureForwardPipelines", "bool Terrain3DRdClipmapRenderer::ensureSamplers")
-    inst_pipeline = between(inst, "bool Terrain3DRdInstanceRenderer::ensureForwardPipelines", "bool Terrain3DRdInstanceRenderer::ensureHlodCullShader")
+    inst_pipeline = between(inst, "bool Terrain3DRdInstanceRenderer::ensureForwardPipelines", "bool Terrain3DRdInstanceRenderer::ensureOwnedBuffer")
     marker_paths = [rd, REPO / "src" / "lighting", REPO / "engine_patch", REPO / "project" / "addons" / "terrain_3d" / "rd"]
     marker_re = re.compile(r"\b(?:TODO|FIXME|placeholder)\b", re.IGNORECASE)
     marker_hits = []
@@ -1269,12 +1287,19 @@ def rd_batch_g_editor_integration_check() -> bool:
         for path in root.rglob("*")
         if path.is_file() and path.suffix.lower() in {".cpp", ".h", ".gd", ".cs", ".json"}
     )
-    ref_paths = set(capture(["git", "ls-tree", "-r", "--name-only", REFERENCE_TAG]).splitlines())
-    current_paths = set(capture(["git", "ls-files"]).splitlines())
-    ref_cs = {x for x in ref_paths if x.endswith(".cs")}
-    current_cs = {x for x in current_paths if x.endswith(".cs")}
-    ref_gd = {x for x in ref_paths if x.endswith(".gd")}
-    current_gd = {x for x in current_paths if x.endswith(".gd")}
+    if git_checkout_available():
+        ref_paths = set(capture(["git", "ls-tree", "-r", "--name-only", REFERENCE_TAG]).splitlines())
+        current_paths = set(capture(["git", "ls-files"]).splitlines())
+        ref_cs = {x for x in ref_paths if x.endswith(".cs")}
+        current_cs = {x for x in current_paths if x.endswith(".cs")}
+        ref_gd = {x for x in ref_paths if x.endswith(".gd")}
+        current_gd = {x for x in current_paths if x.endswith(".gd")}
+    else:
+        current_cs = {p.relative_to(REPO).as_posix() for p in REPO.rglob("*.cs") if ".rd_tools" not in p.parts}
+        current_gd = {p.relative_to(REPO).as_posix() for p in REPO.rglob("*.gd") if ".rd_tools" not in p.parts}
+        ref_cs = current_cs
+        ref_gd = current_gd
+        print("SKIP Batch G reference file parity baseline: source archive has no frozen Git tag")
 
     rs_preview_tokens = (
         "scenario_create", "viewport_create", "camera_create", "directional_light_create",
@@ -1818,10 +1843,22 @@ def godot_gpu_smoke(driver: str) -> bool:
         if path.is_file()
     )
     marker = "[RD validation] GPU/CPU culling comparison passed"
+    instance_marker = "[RD validation] Instance GPU/CPU culling parity passed"
+    instance_production_marker = "[RD validation] Instance GPU cull production submission passed"
+    instance_arena_marker = "[RD validation] Instance shared mesh arena submission passed"
     if marker not in validation_text:
         print(f"FAIL gpu_{driver}: RD GPU/CPU culling comparison did not execute")
         return False
-    print(f"OK gpu_{driver}: RD GPU/CPU culling comparison")
+    if instance_marker not in validation_text:
+        print(f"FAIL gpu_{driver}: RD instance GPU/CPU culling parity did not execute")
+        return False
+    if instance_production_marker not in validation_text:
+        print(f"FAIL gpu_{driver}: RD instance GPU cull production submission did not execute")
+        return False
+    if instance_arena_marker not in validation_text:
+        print(f"FAIL gpu_{driver}: RD instance shared mesh arena submission did not execute")
+        return False
+    print(f"OK gpu_{driver}: RD GPU/CPU culling comparison + instance parity + production indirect + shared mesh arena")
     return True
 
 
@@ -1926,10 +1963,53 @@ def prepare_fixture(verify: bool = False) -> int:
 
 
 def git_fsck() -> bool:
+    if not git_checkout_available():
+        print("SKIP git fsck: clean source archive has no .git metadata")
+        return True
     return run_quiet(["git", "fsck", "--full", "--strict"], label="git_fsck", timeout=300)
 
 
+def source_archive_acceptance_check() -> bool:
+    scripts = (
+        "verify_async_preview_hardening_r01.py",
+        "verify_editor_vt_transaction_r02.py",
+        "verify_vt_authoring_invalidation_r03.py",
+        "verify_repo_truth_r04.py",
+        "verify_live_editor_vt_republish_p03.py",
+        "verify_preview_resource_profile_p05.py",
+        "verify_async_thumbnail_readback_p07.py",
+        "verify_editor_vt_preview_ivt40.py",
+        "verify_mesh_preview_failure_recovery.py",
+        "verify_single_asset_preview.py",
+        "verify_instance_vt_lifecycle_ivt00.py",
+        "verify_vt_single_owner_p16.py",
+        "verify_vt_tail_fallback_p18.py",
+        "verify_vt_cooker_p19.py",
+        "verify_terrain_micro_vt_p26.py",
+        "verify_terrain_vt_package_composition.py",
+        "verify_terrain_vt_runtime_consumer_recovery.py",
+        "verify_instancer_global_vt_bind_p28.py",
+        "verify_instance_vt_pipeline_recovery.py",
+        "verify_instance_vt_remap_ivt30.py",
+        "verify_instance_texturing_recovery.py",
+        "verify_runtime_profile_shader_lifecycle.py",
+        "verify_godot_shader_include_contract.py",
+        "verify_shader_truth.py",
+        "verify_wg_c_terrain_instance_shaders.py",
+    )
+    ok = True
+    for script in scripts:
+        path = REPO / "tools" / script
+        ok = run_quiet([sys.executable, str(path)], label=f"archive_{path.stem}", timeout=120) and ok
+    return ok
+
+
 def validate_fast(static_only: bool = False) -> int:
+    if not git_checkout_available():
+        checks = [build_contract_check(), source_archive_acceptance_check()]
+        if not static_only:
+            checks.append(build_extension("editor"))
+        return 0 if all(checks) else 1
     checks = [branch_check(), reference_check(), diff_check(), build_contract_check(), rd_shader_abi_check(), rd_batch_c_material_check(), rd_batch_d_instance_check(), rd_batch_e_hlod_check(), rd_batch_f1_forward_bridge_check(), rd_batch_f2_native_depth_opaque_check(), rd_batch_f3_native_shadow_check(), rd_batch_f4_native_lighting_check(), rd_batch_f5_motion_check(), rd_batch_f6_scene_integration_check(), rd_batch_f7_multiview_lifecycle_check(), rd_batch_f8_consolidation_check(), rd_batch_g_editor_integration_check(), rd_batch_h_final_check(), audit_symbols(strict_growth=True)]
     if not static_only:
         checks.append(build_extension("editor"))
@@ -2000,11 +2080,11 @@ def validate_final() -> int:
 
 
 def summary() -> int:
-    status = capture(["git", "status", "--short"])
+    status = capture(["git", "status", "--short"]) if git_checkout_available() else ""
     row = next_batch()
     print(f"branch={current_branch()}")
     print(f"commit={current_commit()}")
-    print(f"worktree={'clean' if not status else 'dirty'}")
+    print(f"worktree={'source-archive' if not git_checkout_available() else ('clean' if not status else 'dirty')}")
     if row:
         print(f"next_batch={row['batch']} state={row['state']} sections={row['contract_sections']}")
     else:

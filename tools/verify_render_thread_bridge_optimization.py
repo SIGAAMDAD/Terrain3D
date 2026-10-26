@@ -2,8 +2,8 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-h = (root / 'src/rendering/rd/terrain_3d_rd_forward_plus_bridge.h').read_text()
-cpp = (root / 'src/rendering/rd/terrain_3d_rd_forward_plus_bridge.cpp').read_text()
+h = (root / 'src/rendering/rd/forward/terrain_3d_rd_forward_plus_bridge.h').read_text()
+cpp = (root / 'src/rendering/rd/forward/terrain_3d_rd_forward_plus_bridge.cpp').read_text()
 
 checks = [
     ('coordinator slots are cold plain pointers', 'Terrain3DRenderCoordinator *m_szCoordinators[s_nMaxCoordinators]{};' in h),

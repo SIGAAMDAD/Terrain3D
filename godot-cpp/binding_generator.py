@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
+import importlib.util
 import json
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from make_interface_header import generate_gdextension_interface_header
@@ -11,7 +13,7 @@ from make_interface_header import generate_gdextension_interface_header
 def generate_mod_version(argcount, const=False, returns=False):
     s = """
 #define MODBIND$VER($RETTYPE m_name$ARG) \\
-virtual $RETVAL _##m_name($FUNCARGS) $CONST override; \\
+virtual $RETVAL _##m_name($FUNCARGS) $CONST override;
 """
     sproto = str(argcount)
     if returns:
@@ -284,16 +286,45 @@ def print_file_list(api_filepath, output_dir, headers=False, sources=False):
 
 
 def generate_bindings(
-    api_filepath, interface_filepath, use_template_get_node, bits="64", precision="single", output_dir="."
+    api_filepath,
+    interface_filepath,
+    use_template_get_node,
+    bits="64",
+    precision="single",
+    output_dir=".",
+    hooks_path=None,
 ):
     api = {}
     with open(api_filepath, encoding="utf-8") as api_file:
         api = json.load(api_file)
-    _generate_bindings(api, api_filepath, interface_filepath, use_template_get_node, bits, precision, output_dir)
+    custom_hooks = None
+    if hooks_path:
+        # load the file dynamically
+        try:
+            spec = importlib.util.spec_from_file_location("custom_binding_generator_hooks", hooks_path)
+            loaded_module = importlib.util.module_from_spec(spec)
+            sys.modules["custom_binding_generator_hooks"] = loaded_module
+            spec.loader.exec_module(loaded_module)
+            # assume the class is named 'CustomBindingGeneratorHooks'
+            custom_hooks = loaded_module.CustomBindingGeneratorHooks()
+        except Exception:
+            raise Exception(
+                "Failed to load custom binding generator hooks. Make sure your path points to a python file which defines a class named 'BindingGeneratorHooks'"
+            )
+    _generate_bindings(
+        api, api_filepath, interface_filepath, use_template_get_node, bits, precision, output_dir, custom_hooks
+    )
 
 
 def _generate_bindings(
-    api, api_filepath, interface_filepath, use_template_get_node, bits="64", precision="single", output_dir="."
+    api,
+    api_filepath,
+    interface_filepath,
+    use_template_get_node,
+    bits="64",
+    precision="single",
+    output_dir=".",
+    hooks=None,
 ):
     if "precision" in api["header"] and precision != api["header"]["precision"]:
         raise Exception(
@@ -318,12 +349,12 @@ def _generate_bindings(
 
     generate_gdextension_interface_loader(interface_filepath, target_dir)
 
-    generate_global_constants(api, target_dir)
+    generate_global_constants(api, target_dir, hooks)
     generate_version_header(api, target_dir)
     generate_global_constant_binds(api, target_dir)
-    generate_builtin_bindings(api, target_dir, real_t + "_" + bits)
-    generate_engine_classes_bindings(api, target_dir, use_template_get_node)
-    generate_utility_functions(api, target_dir)
+    generate_builtin_bindings(api, target_dir, real_t + "_" + bits, hooks)
+    generate_engine_classes_bindings(api, target_dir, use_template_get_node, hooks)
+    generate_utility_functions(api, target_dir, hooks)
 
 
 def generate_gdextension_interface_loader(interface_filepath, output_dir):
@@ -336,7 +367,7 @@ def generate_gdextension_interface_loader(interface_filepath, output_dir):
     header_filename = include_gen_folder / "gdextension_interface_loader.hpp"
     source_filename = source_gen_folder / "gdextension_interface_loader.cpp"
 
-    with open(interface_filepath, "rt") as file:
+    with open(interface_filepath, "rt", encoding="utf-8") as file:
         data = json.load(file)
 
     functions_by_version = {}
@@ -459,6 +490,9 @@ def generate_gdextension_interface_loader_source(data):
 
         for func in data[version]:
             name = func["name"]
+            if name == "print_error":
+                # We manually load "print_error" early, so don't load it again here.
+                continue
             fn = gdextension_interface_type_name(name)
 
             if "deprecated" in func:
@@ -499,7 +533,7 @@ native_structures = []
 singletons = []
 
 
-def generate_builtin_bindings(api, output_dir, build_config):
+def generate_builtin_bindings(api, output_dir, build_config, hooks=None):
     global builtin_classes
 
     core_gen_folder = Path(output_dir) / "include" / "godot_cpp" / "core"
@@ -603,10 +637,10 @@ def generate_builtin_bindings(api, output_dir, build_config):
         fully_used_classes.sort()
 
         with header_filename.open("w+", encoding="utf-8") as header_file:
-            header_file.write(generate_builtin_class_header(builtin_api, size, used_classes, fully_used_classes))
+            header_file.write(generate_builtin_class_header(builtin_api, size, used_classes, fully_used_classes, hooks))
 
         with source_filename.open("w+", encoding="utf-8") as source_file:
-            source_file.write(generate_builtin_class_source(builtin_api, size, used_classes, fully_used_classes))
+            source_file.write(generate_builtin_class_source(builtin_api, size, used_classes, fully_used_classes, hooks))
 
     # Create a header with all builtin types for convenience.
     builtin_header_filename = include_gen_folder / "builtin_types.hpp"
@@ -654,9 +688,8 @@ def generate_builtin_bindings(api, output_dir, build_config):
 
     # Create a header to implement all builtin class vararg methods and be included in "variant.hpp".
     builtin_vararg_methods_header = include_gen_folder / "builtin_vararg_methods.hpp"
-    builtin_vararg_methods_header.open("w+").write(
-        generate_builtin_class_vararg_method_implements_header(api["builtin_classes"])
-    )
+    with builtin_vararg_methods_header.open("w+", encoding="utf-8") as vararg_methods_file:
+        vararg_methods_file.write(generate_builtin_class_vararg_method_implements_header(api["builtin_classes"]))
 
 
 def generate_builtin_class_vararg_method_implements_header(builtin_classes):
@@ -682,7 +715,7 @@ def generate_builtin_class_vararg_method_implements_header(builtin_classes):
     return "\n".join(result)
 
 
-def generate_builtin_class_header(builtin_api, size, used_classes, fully_used_classes):
+def generate_builtin_class_header(builtin_api, size, used_classes, fully_used_classes, hooks=None):
     result = []
 
     class_name = builtin_api["name"]
@@ -694,6 +727,7 @@ def generate_builtin_class_header(builtin_api, size, used_classes, fully_used_cl
 
     result.append("")
     result.append("#include <godot_cpp/core/defs.hpp>")
+    result.append("#include <godot_cpp/core/math_defs.hpp>")
     result.append("")
 
     # Special cases.
@@ -765,7 +799,10 @@ def generate_builtin_class_header(builtin_api, size, used_classes, fully_used_cl
 
     result.append(f"class {class_name} {{")
     result.append(f"\tstatic constexpr size_t {snake_class_name}_SIZE = {size};")
-    result.append(f"\tuint8_t opaque[{snake_class_name}_SIZE] = {{}};")
+    # We don't get alignment information from the JSON so we have to guess.
+    # This logic should be correct for all built-in types as they exist right now.
+    alignment = 8 if size >= 8 else 4
+    result.append(f"\talignas({alignment}) uint8_t opaque[{snake_class_name}_SIZE] = {{}};")
 
     result.append("")
     result.append("\tfriend class Variant;")
@@ -1169,10 +1206,13 @@ def generate_builtin_class_header(builtin_api, size, used_classes, fully_used_cl
 
     result.append("")
 
+    if hooks:
+        result = hooks.alter_builtin_class_header(builtin_api, result)
+
     return "\n".join(result)
 
 
-def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_classes):
+def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_classes, hooks=None):
     result = []
 
     class_name = builtin_api["name"]
@@ -1471,12 +1511,7 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
 
     # Move assignment.
     result.append(f"{class_name} &{class_name}::operator=({class_name} &&p_other) {{")
-    if needs_copy_instead_of_move(class_name) and copy_constructor_index >= 0:
-        result.append(
-            f"\t::godot::internal::_call_builtin_constructor(_method_bindings.constructor_{copy_constructor_index}, &opaque, &p_other);"
-        )
-    else:
-        result.append("\tstd::swap(opaque, p_other.opaque);")
+    result.append("\tstd::swap(opaque, p_other.opaque);")
     result.append("\treturn *this;")
     result.append("}")
 
@@ -1484,10 +1519,13 @@ def generate_builtin_class_source(builtin_api, size, used_classes, fully_used_cl
     result.append("} //namespace godot")
     result.append("")
 
+    if hooks:
+        result = hooks.alter_builtin_class_source(builtin_api, result)
+
     return "\n".join(result)
 
 
-def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
+def generate_engine_classes_bindings(api, output_dir, use_template_get_node, hooks=None):
     global engine_classes
     global singletons
     global native_structures
@@ -1673,16 +1711,18 @@ def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
         used_classes = list(used_classes)
         used_classes.sort()
         fully_used_classes = list(fully_used_classes)
+        if class_api["name"] == "RefCounted":
+            fully_used_classes.remove("Ref")  # Special case; Ref should include RefCounted but not vice versa.
         fully_used_classes.sort()
 
         with header_filename.open("w+", encoding="utf-8") as header_file:
             header_file.write(
-                generate_engine_class_header(class_api, used_classes, fully_used_classes, use_template_get_node)
+                generate_engine_class_header(class_api, used_classes, fully_used_classes, use_template_get_node, hooks)
             )
 
         with source_filename.open("w+", encoding="utf-8") as source_file:
             source_file.write(
-                generate_engine_class_source(class_api, used_classes, fully_used_classes, use_template_get_node)
+                generate_engine_class_source(class_api, used_classes, fully_used_classes, use_template_get_node, hooks)
             )
 
     for native_struct in api["native_structures"]:
@@ -1741,7 +1781,7 @@ def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
             header_file.write("\n".join(result))
 
 
-def generate_engine_class_header(class_api, used_classes, fully_used_classes, use_template_get_node):
+def generate_engine_class_header(class_api, used_classes, fully_used_classes, use_template_get_node, hooks):
     global singletons
     result = []
 
@@ -1785,7 +1825,10 @@ def generate_engine_class_header(class_api, used_classes, fully_used_classes, us
         result.append("#include <godot_cpp/core/binder_common.hpp>")
         result.append("")
 
-    result.append("namespace godot {")
+    if class_name == "Mutex":
+        result.append("namespace godot::CoreBind {")
+    else:
+        result.append("namespace godot {")
     result.append("")
 
     for type_name in used_classes:
@@ -1828,7 +1871,13 @@ def generate_engine_class_header(class_api, used_classes, fully_used_classes, us
         for value in class_api["constants"]:
             if "type" not in value:
                 value["type"] = "int"
-            result.append(f"\tstatic const {value['type']} {value['name']} = {value['value']};")
+            const_value = value["value"]
+            if value["type"] == "int" and const_value == -2147483648:
+                # -2147483648 is a valid value for int, but MSVC doesn't read the whole thing as a literal,
+                # instead it sees 2147483648 (which is too big for an an int) and then applies the unary minus.
+                # This is a workaround for that.
+                const_value = "-2147483647 - 1"
+            result.append(f"\tstatic const {value['type']} {value['name']} = {const_value};")
         result.append("")
 
     if is_singleton:
@@ -1938,6 +1987,9 @@ def generate_engine_class_header(class_api, used_classes, fully_used_classes, us
         result.append(
             "\tGroupID add_native_group_task(void (*p_func)(void *, uint32_t), void *p_userdata, int p_elements, int p_tasks = -1, bool p_high_priority = false, const String &p_description = String());"
         )
+
+    if class_name == "SceneTree":
+        result.append("\tstatic SceneTree *get_singleton();")
 
     if class_name == "Object":
         result.append("\ttemplate <typename T>")
@@ -2054,10 +2106,13 @@ def generate_engine_class_header(class_api, used_classes, fully_used_classes, us
 
     result.append("")
 
+    if hooks:
+        result = hooks.alter_engine_class_header(class_api, result)
+
     return "\n".join(result)
 
 
-def generate_engine_class_source(class_api, used_classes, fully_used_classes, use_template_get_node):
+def generate_engine_class_source(class_api, used_classes, fully_used_classes, use_template_get_node, hooks=None):
     global singletons
     result = []
 
@@ -2086,7 +2141,10 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
 
         result.append("")
 
-    result.append("namespace godot {")
+    if class_name == "Mutex":
+        result.append("namespace godot::CoreBind {")
+    else:
+        result.append("namespace godot {")
     result.append("")
 
     if is_singleton:
@@ -2232,10 +2290,13 @@ def generate_engine_class_source(class_api, used_classes, fully_used_classes, us
     result.append("} // namespace godot")
     result.append("")
 
+    if hooks:
+        result = hooks.alter_engine_class_source(class_api, result)
+
     return "\n".join(result)
 
 
-def generate_global_constants(api, output_dir):
+def generate_global_constants(api, output_dir, hooks=None):
     include_gen_folder = Path(output_dir) / "include" / "godot_cpp" / "classes"
     source_gen_folder = Path(output_dir) / "src" / "classes"
 
@@ -2256,17 +2317,25 @@ def generate_global_constants(api, output_dir):
     header.append("namespace godot {")
     header.append("")
 
-    if len(api["global_constants"]) > 0:
-        for constant in api["global_constants"]:
-            constant_name = escape_identifier(constant["name"])
-            # C and C++ standard headers expose several integer-limit names as
-            # macros. Godot 4.7.2 exports those names as global constants, so
-            # temporarily hide a collision while declaring the namespaced value
-            # and restore it immediately for standard headers included later.
-            header.append(f'#pragma push_macro("{constant_name}")')
-            header.append(f"#undef {constant_name}")
-            header.append(f"const int64_t {constant_name} = {constant['value']};")
-            header.append(f'#pragma pop_macro("{constant_name}")')
+    # Remove integer limit global constants that overlap with those defined in cstdint
+    limit_constants = {
+        "UINT8_MAX",
+        "UINT16_MAX",
+        "UINT32_MAX",
+        "INT8_MIN",
+        "INT8_MAX",
+        "INT16_MIN",
+        "INT16_MAX",
+        "INT32_MIN",
+        "INT32_MAX",
+        "INT64_MIN",
+        "INT64_MAX",
+    }
+    global_constants = [c for c in api["global_constants"] if c["name"] not in limit_constants]
+
+    if len(global_constants) > 0:
+        for constant in global_constants:
+            header.append(f"const int64_t {escape_identifier(constant['name'])} = {constant['value']};")
 
         header.append("")
 
@@ -2287,6 +2356,9 @@ def generate_global_constants(api, output_dir):
     header.append("} // namespace godot")
 
     header.append("")
+
+    if hooks:
+        header = hooks.alter_global_constants(api, header)
 
     with header_filename.open("w+", encoding="utf-8") as header_file:
         header_file.write("\n".join(header))
@@ -2354,7 +2426,7 @@ def generate_global_constant_binds(api, output_dir):
         header_file.write("\n".join(header))
 
 
-def generate_utility_functions(api, output_dir):
+def generate_utility_functions(api, output_dir, hooks=None):
     include_gen_folder = Path(output_dir) / "include" / "godot_cpp" / "variant"
     source_gen_folder = Path(output_dir) / "src" / "variant"
 
@@ -2407,6 +2479,9 @@ def generate_utility_functions(api, output_dir):
     header.append("")
     header.append("} // namespace godot")
     header.append("")
+
+    if hooks:
+        header = hooks.alter_utility_functions_header(api, header)
 
     with header_filename.open("w+", encoding="utf-8") as header_file:
         header_file.write("\n".join(header))
@@ -2487,6 +2562,10 @@ def generate_utility_functions(api, output_dir):
         source.append("")
 
     source.append("} // namespace godot")
+    source.append("")
+
+    if hooks:
+        header = hooks.alter_utility_functions_source(api, source)
 
     with source_filename.open("w+", encoding="utf-8") as source_file:
         source_file.write("\n".join(source))
@@ -2892,6 +2971,8 @@ def is_included(type_name, current_type):
 
 def correct_default_value(value, type_name):
     value_map = {
+        "inf": "Math::INF",
+        "nan": "Math::NaN",
         "null": "nullptr",
         '""': "String()",
         '&""': "StringName()",

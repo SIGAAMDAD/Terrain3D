@@ -26,7 +26,7 @@ def source_files() -> list[Path]:
         if not source_root.exists():
             continue
         for path in source_root.rglob("*"):
-            if path.is_file() and path.suffix.lower() in SUFFIXES:
+            if path.is_file() and path.suffix.lower() in SUFFIXES and "gen" not in path.relative_to(source_root).parts:
                 files.append(path)
     return sorted(files)
 

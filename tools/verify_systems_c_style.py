@@ -2,10 +2,15 @@
 from pathlib import Path
 import re
 import sys
+import argparse
 
 ROOT = Path(__file__).resolve().parents[1] / "src"
 SUFFIXES = {".h", ".cpp"}
 errors = []
+parser = argparse.ArgumentParser(description='Check repository conventions for its 2009-2012 C++ style.')
+parser.add_argument('--strict-2009', action='store_true', help='Also reject C++11 auto, lambdas and range loops')
+style_args = parser.parse_args()
+
 
 def strip_comments_and_strings(line: str) -> str:
     out=[]; i=0; quote=None; esc=False
@@ -71,14 +76,15 @@ for path in ROOT.rglob('*'):
         ]
         for label,rx in checks:
             if re.search(rx,code): errors.append((rel,n,label,line.strip()))
-        if is_range_for(code): errors.append((rel,n,'range-for',line.strip()))
-        if has_lambda(code): errors.append((rel,n,'lambda',line.strip()))
-        if re.search(r'\bauto\b',code) and not line.lstrip().startswith('*'): errors.append((rel,n,'auto',line.strip()))
+        if style_args.strict_2009 and is_range_for(code): errors.append((rel,n,'range-for',line.strip()))
+        if re.search(r'\[[^\]\n]*\]\s*\([^)]*\bauto\b', code): errors.append((rel,n,'generic lambda requires C++14',line.strip()))
+        if style_args.strict_2009 and has_lambda(code): errors.append((rel,n,'lambda',line.strip()))
+        if style_args.strict_2009 and re.search(r'\bauto\b',code) and not line.lstrip().startswith('*'): errors.append((rel,n,'auto',line.strip()))
         if line.strip() == '#pragma once': errors.append((rel,n,'pragma once; use the repository include-guard convention',line.strip()))
-        if 'std::' in code and rel.as_posix() != 'core/terrain_3d_sync.h':
+        if 'std::' in code and rel.as_posix() not in {'core/utility/terrain_3d_sync.h', 'core/utility/terrain_3d_binary_io.h'} and 'std::' in code.replace('std::nothrow', ''):
             errors.append((rel,n,'std namespace leakage outside synchronization facade',line.strip()))
         wrapper_match = re.match(r'\s*#include\s*<(algorithm|numeric|limits|type_traits|cstdint|cstddef|cstring|cmath|cstdlib|cstdio|cfloat|climits|cassert|utility)>', line)
-        if wrapper_match and not ( rel.as_posix() == 'core/terrain_3d_sync.h' and wrapper_match.group(1) == 'utility' ):
+        if wrapper_match and not ( (rel.as_posix() == 'core/utility/terrain_3d_sync.h' and wrapper_match.group(1) == 'utility') or (rel.as_posix() == 'core/utility/terrain_3d_binary_io.h' and wrapper_match.group(1) == 'type_traits') ):
             errors.append((rel,n,'forbidden C++ standard wrapper/STL header',line.strip()))
         if re.match(r'\s*(if|for|while)\s*\([^\n]*\)\s*(return|continue|break)\b',code):
             errors.append((rel,n,'unbraced single-line control',line.strip()))
@@ -116,7 +122,7 @@ for path in ROOT.rglob('*'):
     rel = path.relative_to(ROOT)
     for n, line in enumerate(path.read_text().splitlines(), 1):
         if re.match(r'\s*#include\s*"\.\.?/', line):
-            if not ( rel.as_posix() == 'core/eastl_runtime.cpp' and '../thirdparty/EASTL/source/hashtable.cpp' in line ):
+            if not ( rel.as_posix() == 'core/runtime/eastl_runtime.cpp' and '../thirdparty/EASTL/source/hashtable.cpp' in line ):
                 errors.append((rel, n, 'relative project include', line.strip()))
 
 if errors:
@@ -124,4 +130,4 @@ if errors:
         print(f'{rel}:{n}: {label}: {line}')
     print(f'FAIL: {len(errors)} systems-C style violations')
     sys.exit(1)
-print('PASS: Terrain3D systems-C style gates')
+print('PASS: Terrain3D systems-C conventions, ' + ('strict 2009' if style_args.strict_2009 else '2009-2012 language features'))

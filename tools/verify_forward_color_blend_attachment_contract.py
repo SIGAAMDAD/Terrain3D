@@ -1,8 +1,8 @@
 from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
-instance = (root / 'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp').read_text()
-ocean = (root / 'src/rendering/rd/terrain_3d_rd_ocean_renderer.cpp').read_text()
+instance = (root / 'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp').read_text()
+ocean = (root / 'src/rendering/rd/ocean/terrain_3d_rd_ocean_renderer.cpp').read_text()
 constants = (root / 'src/Terrain3DConstants.h').read_text()
 plugin = (root / 'project/addons/terrain_3d/src/editor_plugin.gd').read_text()
 
@@ -16,7 +16,12 @@ checks = [
     ('native/editor build IDs agree',
      any(build in constants and build in plugin for build in (
          'forward-color-blend-attachment-contract-fix-2026-09-09',
-         'instancer-authoritative-visible-index-fix-2026-09-09',
+         'instancer-category-policy-p3-2026-09-09',
+         'instancer-terrain-follow-p4-2026-09-09',
+         'instancer-publication-p5-2026-09-09',
+         'instancer-hlod-handoff-p6-2026-09-09',
+         'instancer-occlusion-p7-2026-09-09',
+         'mesh-derived-instance-physics-occlusion-p13-2-2026-09-10',
      ))),
 ]
 

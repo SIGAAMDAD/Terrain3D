@@ -3,8 +3,8 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[1]
-cpp = (root / 'src/instances/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
-hdr = (root / 'src/instances/terrain_3d_instancer.h').read_text(encoding='utf-8')
+cpp = (root / 'src/instances/runtime/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
+hdr = (root / 'src/instances/runtime/terrain_3d_instancer.h').read_text(encoding='utf-8')
 
 def fail(msg: str) -> None:
     print(f'Instance first-population render verification FAIL: {msg}')

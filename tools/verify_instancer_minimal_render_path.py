@@ -8,10 +8,10 @@ if '#define T3D_INSTANCER_RD_PORT 1' in switch_probe and '#define T3D_INSTANCER_
     print('PASS: historical bring-up gate superseded by integrated instancer RD port')
     sys.exit(0)
 switch = (root / 'src/instances/terrain_3d_instancer_bringup.h').read_text(encoding='utf-8')
-instancer = (root / 'src/instances/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
-streaming = (root / 'src/streaming/terrain_3d_streaming_integration.cpp').read_text(encoding='utf-8')
-coordinator = (root / 'src/rendering/rd/terrain_3d_render_coordinator.cpp').read_text(encoding='utf-8')
-renderer = (root / 'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp').read_text(encoding='utf-8')
+instancer = (root / 'src/instances/runtime/terrain_3d_instancer.cpp').read_text(encoding='utf-8')
+streaming = (root / 'src/streaming/integration/terrain_3d_streaming_integration.cpp').read_text(encoding='utf-8')
+coordinator = (root / 'src/rendering/rd/core/terrain_3d_render_coordinator.cpp').read_text(encoding='utf-8')
+renderer = (root / 'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp').read_text(encoding='utf-8')
 
 
 def fail(message: str) -> None:

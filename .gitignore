@@ -39,7 +39,10 @@ export_presets.cfg
 .DS_Store
 
 # Editors
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/extensions.json
 .vs/
 
 # Visual Studio per-user settings
@@ -49,3 +52,6 @@ export_presets.cfg
 .rd_tools/
 
 .rd_logs/
+
+# Native unit-test reports and captured engine logs
+/tests/unit/results/

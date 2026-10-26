@@ -15,11 +15,11 @@ def fail(msg):
 
 constants = read('src/Terrain3DConstants.h')
 header = read('src/terrain_3d.h')
-stream = read('src/streaming/terrain_3d_streaming_integration.cpp')
-cache = read('src/streaming/terrain_3d_gpu_region_cache.cpp')
-renderer = read('src/rendering/rd/terrain_3d_rd_clipmap_renderer.cpp')
-bindings = read('src/core/terrain_3d_bindings.cpp')
-manifest = read('src/streaming/terrain_3d_performance_profile_manifest.inc')
+stream = read('src/streaming/integration/terrain_3d_streaming_integration.cpp')
+cache = read('src/streaming/cache/terrain_3d_gpu_region_cache.cpp')
+renderer = read('src/rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.cpp')
+bindings = read('src/integration/godot/terrain_3d_bindings.cpp')
+manifest = read('src/streaming/policy/terrain_3d_performance_profile_manifest.inc')
 plugin = read('project/addons/terrain_3d/src/editor_plugin.gd')
 metadata = json.loads(read('project/addons/terrain_3d/setting_metadata.json'))['properties']
 csharp = read('project/addons/terrain_3d/csharp/Terrain3D.cs')

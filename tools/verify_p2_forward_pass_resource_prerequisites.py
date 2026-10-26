@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-BRIDGE_CPP = ROOT / "src/rendering/rd/terrain_3d_rd_forward_plus_bridge.cpp"
+BRIDGE_CPP = ROOT / "src/rendering/rd/forward/terrain_3d_rd_forward_plus_bridge.cpp"
 
 text = BRIDGE_CPP.read_text(encoding="utf-8")
 failures = []

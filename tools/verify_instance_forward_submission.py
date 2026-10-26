@@ -3,16 +3,16 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-renderer = (ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8")
-header = (ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8")
-coordinator = (ROOT / "src/rendering/rd/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
-util = (ROOT / "src/core/terrain_3d_util.cpp").read_text(encoding="utf-8")
+renderer = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8")
+header = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8")
+coordinator = (ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
+util = (ROOT / "src/core/utility/terrain_3d_util.cpp").read_text(encoding="utf-8")
 
 checks = {
     "forward set0 is shader-variant specific": "uniform_set_create( uniforms, m_hszForwardShaders[variant], 0u )" in renderer,
-    "forward material set1 is shader-variant specific": "uniform_set_create( uniforms, m_hszForwardShaders[variant], 1u )" in renderer,
+    "forward material set1 is shader-variant specific": "uniform_set_create( uniforms, rShader, 1u )" in renderer and "buildMaterialVtUniformSet( m_hszForwardShaders[variant]" in renderer,
     "forward draw binds variant set0": "m_hszForwardShadowUniformSets[variant] : m_hszForwardUniformSets[variant]" in renderer,
-    "forward draw binds variant material set": "getForwardMaterialBinding( packet.m_nMaterial, packet.m_nOverlayMaterial, variant )" in renderer,
+    "forward draw binds invariant VT material set": "const RID material_vt_set = m_hszForwardMaterialVtUniformSets[variant];" in renderer and "draw_list_bind_uniform_set( draw_list, material_vt_set, 1u )" in renderer,
     "transparent pass is accepted": "rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT" in renderer,
     "transparent pipeline matches Forward+ three-slot blend contract": "blend_count = 3u;" in renderer
         and "const bool blend_color = transparent_pass && i == 0u;" in renderer

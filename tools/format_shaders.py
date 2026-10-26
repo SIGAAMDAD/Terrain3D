@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Format Terrain3D RD GLSL sources and embedded fallback shader strings."""
+"""Format the single canonical file-backed Terrain3D RD GLSL source tree."""
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import subprocess
 import sys
@@ -13,16 +12,13 @@ from format_cpp import ClangdClient
 
 ROOT = Path(__file__).resolve().parents[1]
 SHADER_ROOT = ROOT / "project" / "addons" / "terrain_3d" / "rd"
-EMBEDDED_HEADERS = (
-    ROOT / "src" / "rendering" / "rd" / "render_world" / "terrain_3d_render_world_forward_lighting_shader_inc.h",
-    ROOT / "src" / "rendering" / "rd" / "render_world" / "terrain_3d_render_world_raster_shaders.h",
-    ROOT / "src" / "rendering" / "rd" / "render_world" / "terrain_3d_render_world_vt_shaders.h",
-)
-RAW_STRING_RE = re.compile(r'R"(?P<delimiter>[A-Za-z0-9_]*)\((?P<body>.*?)\)(?P=delimiter)"', re.DOTALL)
 
 
 def shader_files() -> list[Path]:
-    return sorted(path for path in SHADER_ROOT.glob("*.glsl") if path.is_file())
+    return sorted(
+        [path for path in SHADER_ROOT.rglob("*.glsl") if path.is_file()]
+        + [path for path in SHADER_ROOT.rglob("*.glslinc") if path.is_file()]
+    )
 
 
 def protect_version_manifest(text: str) -> tuple[str, dict[str, str]]:
@@ -63,56 +59,18 @@ def format_with_clang_format(executable: str, text: str, assume_filename: Path) 
     return result.stdout.decode("utf-8")
 
 
-def format_text(
-    text: str,
-    virtual_path: Path,
-    clang_format: str | None,
-    clangd_client: ClangdClient | None,
-) -> str:
+def format_text(text: str, virtual_path: Path, clang_format: str | None, clangd_client: ClangdClient | None) -> str:
     if clang_format:
         return format_with_clang_format(clang_format, text, virtual_path)
     assert clangd_client is not None
     return clangd_client.formatted_text(virtual_path.resolve(), text)
 
 
-def format_shader_source(
-    path: Path,
-    clang_format: str | None,
-    clangd_client: ClangdClient | None,
-) -> str:
+def format_shader_source(path: Path, clang_format: str | None, clangd_client: ClangdClient | None) -> str:
     original = path.read_text(encoding="utf-8")
     masked, protected = protect_version_manifest(original)
     formatted = format_text(masked, path, clang_format, clangd_client)
     return restore_version_manifest(formatted, protected)
-
-
-def format_embedded_header(
-    path: Path,
-    clang_format: str | None,
-    clangd_client: ClangdClient | None,
-) -> str:
-    original = path.read_text(encoding="utf-8")
-    raw_index = 0
-
-    def replace(match: re.Match[str]) -> str:
-        nonlocal raw_index
-        raw_index += 1
-        delimiter = match.group("delimiter")
-        body = match.group("body")
-        leading_newline = body.startswith("\n")
-        trailing_newline = body.endswith("\n")
-        core = body[1:] if leading_newline else body
-        if trailing_newline and core.endswith("\n"):
-            core = core[:-1]
-        if core:
-            virtual_path = SHADER_ROOT / f"__embedded_shader_{raw_index:02d}.glsl"
-            formatted = format_text(core + "\n", virtual_path, clang_format, clangd_client).rstrip("\n")
-        else:
-            formatted = core
-        rebuilt = ("\n" if leading_newline else "") + formatted + ("\n" if trailing_newline else "")
-        return f'R"{delimiter}({rebuilt}){delimiter}"'
-
-    return RAW_STRING_RE.sub(replace, original)
 
 
 def main() -> int:
@@ -140,15 +98,6 @@ def main() -> int:
                     path.write_text(formatted, encoding="utf-8", newline="\n")
             if index % 10 == 0 or index == len(files):
                 print(f"Formatted shaders {index}/{len(files)}", file=sys.stderr)
-
-        for path in EMBEDDED_HEADERS:
-            original = path.read_text(encoding="utf-8")
-            formatted = format_embedded_header(path, clang_format, client)
-            if formatted != original:
-                if args.check:
-                    failed.append(path)
-                else:
-                    path.write_text(formatted, encoding="utf-8", newline="\n")
     finally:
         if client:
             client.close()

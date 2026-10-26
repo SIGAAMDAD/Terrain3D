@@ -355,31 +355,7 @@ env.Append(CPPPATH=[
     "thirdparty/EASTL/include",
     "thirdparty/EABase/include/Common",
 ])
-# Editor-only meshoptimizer vendor integration. No runtime dependency or hot-path
-# references. The vendor script checks release provenance and installs LICENSE.
-MESHOPT_SRC = Path("thirdparty/meshoptimizer/src")
-MESHOPT_LICENSE = Path("thirdparty/meshoptimizer/LICENSE.md")
-# Link only the features used by the editor cook. Vendored optional codecs,
-# meshlets and GPU-oriented cluster sources are not part of this patch.
-MESHOPT_REQUIRED = (
-    "allocator.cpp", "indexgenerator.cpp", "vcacheoptimizer.cpp",
-    "vfetchoptimizer.cpp", "simplifier.cpp",
-)
-MESHOPT_UNITS = [MESHOPT_SRC / n for n in MESHOPT_REQUIRED]
-MESHOPT_READY = (all((MESHOPT_SRC / n).is_file() for n in MESHOPT_REQUIRED + ("meshoptimizer.h",))
-    and MESHOPT_LICENSE.is_file()
-    and (MESHOPT_SRC.parent / "TERRAIN3D_VENDOR_VERSION").is_file())
-if native_target == "editor":
-    if MESHOPT_READY:
-        env.AppendUnique(CPPDEFINES=[("T3D_MESHOPT_AVAILABLE", 1)])
-        env.AppendUnique(CPPPATH=[MESHOPT_SRC.as_posix()])
-        print("HLOD editor mesh cooking: meshoptimizer v1.3 vendor enabled")
-    else:
-        env.AppendUnique(CPPDEFINES=[("T3D_MESHOPT_AVAILABLE", 0)])
-        print("HLOD editor mesh cooking: meshoptimizer vendor missing (use tools/vendor_meshoptimizer.py)")
 native_cpp_paths = _native_translation_units(native_target == "editor")
-if native_target == "editor" and MESHOPT_READY:
-    native_cpp_paths += MESHOPT_UNITS
 if native_target != "editor" and any(_editor_only(path) for path in native_cpp_paths):
     raise RuntimeError("Authoring sources leaked into Terrain3D runtime build")
 sources = [env.File(path.as_posix()) for path in native_cpp_paths]
@@ -446,7 +422,7 @@ for source in sources:
     source_path = Path(str(source))
     # register_types.cpp receives a special test define in test builds; it must
     # never consume a PCH compiled without that define.
-    use_pch = pch_mode == "stable" and pch_eligible(source_path) and "thirdparty" not in source_path.parts
+    use_pch = pch_mode == "stable" and pch_eligible(source_path)
     if include_tests and source_path.name == "register_types.cpp":
         use_pch = False
     object_env = pch_env if use_pch else env

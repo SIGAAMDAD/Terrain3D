@@ -50,6 +50,13 @@ void *Memory::alloc_static(size_t p_bytes, bool p_pad_align) {
 #endif
 }
 
+void *Memory::alloc_static_zeroed(size_t p_bytes, bool p_pad_align) {
+	// TODO Could benefit from binding the upstream alloc_static_zeroed
+	void *mem = alloc_static(p_bytes, p_pad_align);
+	memset(mem, 0, p_bytes);
+	return mem;
+}
+
 void *Memory::realloc_static(void *p_memory, size_t p_bytes, bool p_pad_align) {
 	if (p_memory == nullptr) {
 		return alloc_static(p_bytes, p_pad_align);
@@ -95,31 +102,10 @@ _GlobalNil _GlobalNilClass::_nil;
 
 } // namespace godot
 
-// p_dummy argument is added to avoid conflicts with the engine functions when both engine and GDExtension are built as a static library on iOS.
-void *operator new(size_t p_size, const char *p_dummy, const char *p_description) {
-	return godot::Memory::alloc_static(p_size);
+void *operator new(size_t p_size, ::godot::DefaultAllocator p_allocator) {
+	return ::godot::Memory::alloc_static(p_size);
 }
 
-void *operator new(size_t p_size, const char *p_dummy, void *(*p_allocfunc)(size_t p_size)) {
+void *operator new(size_t p_size, ::godot::DefaultAllocator p_allocator, void *(*p_allocfunc)(size_t p_size)) {
 	return p_allocfunc(p_size);
 }
-
-using namespace godot;
-
-#ifdef _MSC_VER
-void operator delete(void *p_mem, const char *p_dummy, const char *p_description) {
-	ERR_PRINT("Call to placement delete should not happen.");
-	CRASH_NOW();
-}
-
-void operator delete(void *p_mem, const char *p_dummy, void *(*p_allocfunc)(size_t p_size)) {
-	ERR_PRINT("Call to placement delete should not happen.");
-	CRASH_NOW();
-}
-
-void operator delete(void *p_mem, const char *p_dummy, void *p_pointer, size_t check, const char *p_description) {
-	ERR_PRINT("Call to placement delete should not happen.");
-	CRASH_NOW();
-}
-
-#endif

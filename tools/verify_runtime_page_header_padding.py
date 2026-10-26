@@ -4,7 +4,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 constants = (ROOT / 'src/Terrain3DConstants.h').read_text(encoding='utf-8')
-store = (ROOT / 'src/streaming/terrain_3d_runtime_page_store.cpp').read_text(encoding='utf-8')
+store = (ROOT / 'src/streaming/runtime/terrain_3d_runtime_page_store.cpp').read_text(encoding='utf-8')
 
 def macro(name: str) -> int:
     m = re.search(rf'#define\s+{re.escape(name)}\s+\(\s*(\d+)u\s*\)', constants)

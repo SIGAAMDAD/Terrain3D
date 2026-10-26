@@ -15,13 +15,13 @@ def require(condition, message):
         failures.append(message)
 
 
-data = text('src/data/terrain_3d_data.cpp')
-cache_h = text('src/streaming/terrain_3d_middle_height_region_cache.h')
-cache_cpp = text('src/streaming/terrain_3d_middle_height_region_cache.cpp')
-sampler_h = text('src/data/terrain_3d_sampler.h')
-sampler_cpp = text('src/data/terrain_3d_sampler.cpp')
-builder = text('src/physics/terrain_3d_collision_surface_builder.cpp')
-store = text('src/streaming/terrain_3d_runtime_page_store.cpp')
+data = text('src/data/model/terrain_3d_data.cpp')
+cache_h = text('src/streaming/cache/terrain_3d_middle_height_region_cache.h')
+cache_cpp = text('src/streaming/cache/terrain_3d_middle_height_region_cache.cpp')
+sampler_h = text('src/data/sampling/terrain_3d_sampler.h')
+sampler_cpp = text('src/data/sampling/terrain_3d_sampler.cpp')
+builder = text('src/physics/build/terrain_3d_collision_surface_builder.cpp')
+store = text('src/streaming/runtime/terrain_3d_runtime_page_store.cpp')
 
 require('makeHeightImageForDivisor' in cache_h,
         'middle-height cache must expose an explicit divisor cook path')
@@ -31,7 +31,7 @@ require('const t3dRuntimePageConfig_t runtime_page_config = getRuntimePageConfig
         'runtime page cook must freeze one numeric/config contract per page')
 require('makeHeightImageForDivisor( location, runtime_page_config.m_nMiddleHeightDivisor )' in data,
         'runtime page cook must generate Middle height using the runtime-page divisor, not the editor live-cache divisor')
-require('m_runtimePageStore.writePage( pRegion, runtime_page_config, payload, pError )' in data,
+require('m_runtimeArtifacts.writePage( pRegion, runtime_page_config, payload, pError )' in data,
         'runtime page writer must validate against the same frozen config used to generate Middle height')
 require('makeHeightImage( location, true )' not in data,
         'runtime page cook must not route Middle height through the authoring cache resolution')

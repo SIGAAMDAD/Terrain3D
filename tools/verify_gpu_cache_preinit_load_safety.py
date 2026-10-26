@@ -2,8 +2,8 @@
 from pathlib import Path
 import re
 root = Path(__file__).resolve().parents[1]
-gpu = (root / 'src/streaming/terrain_3d_gpu_region_cache.cpp').read_text()
-stream = (root / 'src/streaming/terrain_3d_streaming_integration.cpp').read_text()
+gpu = (root / 'src/streaming/cache/terrain_3d_gpu_region_cache.cpp').read_text()
+stream = (root / 'src/streaming/integration/terrain_3d_streaming_integration.cpp').read_text()
 errors=[]
 
 m=re.search(r'int Terrain3DGpuRegionCache::calculateGpuRegionPhysicalLayers\([^\)]*\) const \{(.*?)\n\}', gpu, re.S)

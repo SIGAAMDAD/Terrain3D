@@ -4,19 +4,19 @@ import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-coord = (root / "src/rendering/rd/terrain_3d_render_coordinator.cpp").read_text()
-coord_h = (root / "src/rendering/rd/terrain_3d_render_coordinator.h").read_text()
+coord = (root / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp").read_text()
+coord_h = (root / "src/rendering/rd/core/terrain_3d_render_coordinator.h").read_text()
 contract = (root / "src/rendering/rd/render_world/terrain_3d_render_world_contract.h").read_text()
 runtime = (root / "src/rendering/rd/render_world/terrain_3d_render_world_runtime.cpp").read_text()
 runtime_rd_dir = root / "project/addons/terrain_3d/rd"
-common = (runtime_rd_dir / "render_world_common_inc.glsl").read_text()
+common = (runtime_rd_dir / "render_world_common_inc.glslinc").read_text()
 raster = (runtime_rd_dir / "render_world_raster.glsl").read_text()
 vt_reset = (runtime_rd_dir / "render_world_vt_reset.glsl").read_text()
 vt_predict = (runtime_rd_dir / "render_world_vt_predict.glsl").read_text()
 vt_compact = (runtime_rd_dir / "render_world_vt_compact.glsl").read_text()
-vt_gpu = (root / "src/rendering/rd/render_world/terrain_3d_render_world_vt_gpu.cpp").read_text()
-shader_library = (root / "src/rendering/rd/terrain_3d_rd_shader_library.cpp").read_text()
-assets_cpp = (root / "src/assets/terrain_3d_assets.cpp").read_text()
+vt_gpu = (root / "src/rendering/rd/vt/gpu/terrain_3d_vt_gpu.cpp").read_text()
+shader_library = (root / "src/rendering/rd/shaders/terrain_3d_rd_shader_library.cpp").read_text()
+assets_cpp = (root / "src/assets/catalog/terrain_3d_assets.cpp").read_text()
 
 errors = []
 

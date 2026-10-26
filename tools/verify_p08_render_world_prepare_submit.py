@@ -91,7 +91,7 @@ for key in (
     'render_world_compute_reuses',
     'render_world_raster_submits',
 ):
-    require('src/rendering/rd/terrain_3d_render_coordinator.cpp', key, f'P08 diagnostic {key}')
+    require('src/rendering/rd/core/terrain_3d_render_coordinator.cpp', key, f'P08 diagnostic {key}')
 
 if failures:
     print('P08 render-world prepare/submit verification FAIL')

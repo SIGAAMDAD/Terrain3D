@@ -17,7 +17,21 @@ except Exception:
     # We apply platform specific toolchains via our custom tools.
     env = Environment(tools=["default"], PLATFORM="")
 
+try:
+    Import("api_version")
+    env["api_version"] = api_version
+except Exception:
+    pass
+
 env.PrependENVPath("PATH", os.getenv("PATH"))
+
+try:
+    Import("binding_hooks")
+except Exception:
+    # binding_hooks was not exported by the user's env
+    binding_hooks = None
+
+env["binding_hooks"] = binding_hooks
 
 # Custom options and profile flags.
 customs = ["custom.py"]

@@ -4,8 +4,8 @@ import re
 import sys
 
 root = Path(__file__).resolve().parents[1]
-header = (root / 'src/data/terrain_3d_data.h').read_text(encoding='utf-8')
-source = (root / 'src/data/terrain_3d_data.cpp').read_text(encoding='utf-8')
+header = (root / 'src/data/model/terrain_3d_data.h').read_text(encoding='utf-8')
+source = (root / 'src/data/model/terrain_3d_data.cpp').read_text(encoding='utf-8')
 
 checks = [
     ('rehydrate declaration', r'\bError\s+rehydrateActiveStorage\s*\(\s*void\s*\)\s*;'),

@@ -1,34 +1,42 @@
 #!/usr/bin/env python3
+"""Check the shared Instance indirect arena's allocation and offset paths."""
+
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP = ROOT / 'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp'
-text = CPP.read_text(encoding='utf-8')
+CPP = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8")
+GLSL = (ROOT / "project/addons/terrain_3d/rd/terrain_instance_cull.glsl").read_text(encoding="utf-8")
+SERVICE = (ROOT / "src/rendering/rd/infrastructure/terrain_3d_rd_resource_service.h").read_text(encoding="utf-8")
 
-needle = '''} else if ( type == Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER ) {'''
-pos = text.find(needle)
-if pos < 0:
-    print('FAIL: instance renderer indirect-buffer allocation branch missing')
-    sys.exit(1)
-block = text[pos:text.find('\n\t} else {', pos)]
-if 'STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT' not in block:
-    print('FAIL: instance indirect buffers are created as plain storage buffers')
-    sys.exit(1)
-if 'storage_buffer_create' not in block:
-    print('FAIL: instance indirect-buffer allocation no longer uses RenderingDevice storage buffer creation')
+required_cpp = (
+    'replaceBuffer( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nIndirectArenaCapacityBytes,',
+    '"T3D.Instance.IndirectArena", Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER,',
+    'RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT',
+    'm_commandTable.m_hShadowIndirectBuffer = m_commandTable.m_hIndirectBuffer;',
+    'm_commandTable.m_nMainIndirectOffsetBytes = 0u;',
+    'm_commandTable.m_nShadowIndirectOffsetBytes = ( uint32_t )aligned;',
+    'push.m_nMainCommandBase = m_commandTable.m_nMainIndirectOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );',
+    'push.m_nShadowCommandBase = m_commandTable.m_nShadowIndirectOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );',
+    'updatePacked( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nMainIndirectOffsetBytes, indirect_bytes',
+    'updatePacked( m_commandTable.m_hShadowIndirectBuffer, m_commandTable.m_nShadowIndirectOffsetBytes, indirect_bytes',
+    'updatePacked( m_commandTable.m_hShadowIndirectBuffer, m_commandTable.m_nShadowIndirectOffsetBytes, shadow_indirect_bytes',
+    'bShadowPass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes, indirect_bytes',
+    'shadow_pass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes,',
+    '( shadow_pass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes ) + i * sizeof( t3dRdIndexedIndirectCommand_t )',
+    'm_context.freeResource( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nIndirectArenaCapacityBytes );',
+)
+required_shader = (
+    'main_commands[cull_data.main_command_base + command_index]',
+    'shadow_commands[cull_data.shadow_command_base + command_index]',
+    'shadow_commands[cull_data.shadow_command_base + descriptor.command_index]',
+)
+missing = [token for token in required_cpp if token not in CPP]
+missing += [token for token in required_shader if token not in GLSL]
+if 'storage_buffer_create( nBytes, PackedByteArray(), usage )' not in SERVICE:
+    missing.append('indirect-capable storage creation in the resource service')
+if missing:
+    print('FAIL: missing Instance indirect arena contract: ' + ', '.join(missing))
     sys.exit(1)
 
-# Both main and shadow command buffers must continue to flow through the typed branch.
-required = [
-    'ensureBuffer( m_hIndirectBuffer,',
-    'Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER',
-    'ensureBuffer( m_hShadowIndirectBuffer,',
-    'draw_list_draw_indirect',
-]
-for item in required:
-    if item not in text:
-        print(f'FAIL: missing expected instance indirect path token: {item}')
-        sys.exit(1)
-
-print('PASS: instance main/shadow indirect buffers carry RenderingDevice indirect usage')
+print('PASS: Instance main/shadow commands share an indirect-capable arena with separate offsets')

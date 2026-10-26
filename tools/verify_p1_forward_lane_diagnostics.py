@@ -3,10 +3,10 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-COORD_H = ROOT / "src/rendering/rd/terrain_3d_render_coordinator.h"
-COORD_CPP = ROOT / "src/rendering/rd/terrain_3d_render_coordinator.cpp"
-BRIDGE_CPP = ROOT / "src/rendering/rd/terrain_3d_rd_forward_plus_bridge.cpp"
-INSTANCE_H = ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.h"
+COORD_H = ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.h"
+COORD_CPP = ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp"
+BRIDGE_CPP = ROOT / "src/rendering/rd/forward/terrain_3d_rd_forward_plus_bridge.cpp"
+INSTANCE_H = ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
 
 coord_h = COORD_H.read_text(encoding="utf-8")
 coord_cpp = COORD_CPP.read_text(encoding="utf-8")
@@ -67,7 +67,8 @@ require("submitted_draws_before = m_instanceRenderer.getForwardSubmittedDrawCoun
         "SUBMIT snapshots instance draw count before rendering")
 require("submitted_draws_after = m_instanceRenderer.getForwardSubmittedDrawCount" in submit_block,
         "SUBMIT snapshots instance draw count after rendering")
-require("m_nForwardInstanceSubmitDraws = submitted_draws_after >= submitted_draws_before" in submit_block,
+require("m_nForwardInstanceSubmitDraws =" in submit_block
+        and "submitted_draws_after >= submitted_draws_before ? submitted_draws_after - submitted_draws_before : 0u;" in submit_block,
         "SUBMIT stores actual instance draw delta")
 require("m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_INSTANCES" in submit_block,
         "successful instance SUBMIT is represented independently")

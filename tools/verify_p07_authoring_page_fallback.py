@@ -21,7 +21,7 @@ def block(rel, start, end):
     return data[a:b]
 
 upload = block(
-    'src/streaming/terrain_3d_gpu_region_cache.cpp',
+    'src/streaming/cache/terrain_3d_gpu_region_cache.cpp',
     'bool Terrain3DGpuRegionCache::uploadGpuRegionLayer',
     'bool Terrain3DGpuRegionCache::isRuntimePageWanted',
 )
@@ -54,8 +54,8 @@ for occurrence in [i for i in range(len(upload)) if upload.startswith(retry, i)]
 # Runtime source discovery is cached by every signature that participates in
 # source validation. A signature change must invalidate a previous absent-page
 # decision and any matching capacity-failure latch.
-header = text('src/streaming/terrain_3d_runtime_page_store.h')
-store = text('src/streaming/terrain_3d_runtime_page_store.cpp')
+header = text('src/streaming/runtime/terrain_3d_runtime_page_store.h')
+store = text('src/streaming/runtime/terrain_3d_runtime_page_store.cpp')
 for symbol in (
     'm_nSourceMaterialSignature',
     'm_nSourceCollisionSignature',

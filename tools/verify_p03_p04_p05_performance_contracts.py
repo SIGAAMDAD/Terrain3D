@@ -63,25 +63,25 @@ for root in shader_roots:
                 failures.append(f'{p.relative_to(ROOT)}: legacy runtime shader geometry token {token}')
 
 p03_files = [
-    'src/instances/terrain_3d_instance_layout.h',
-    'src/instances/terrain_3d_instancer.cpp',
-    'src/instances/terrain_3d_instancer.h',
-    'src/physics/terrain_3d_collision.cpp',
-    'src/physics/terrain_3d_collision_surface_builder.cpp',
-    'src/physics/terrain_3d_collision_surface_builder.h',
-    'src/data/terrain_3d_runtime_bake_codec.cpp',
-    'src/data/terrain_3d_runtime_bake_codec.h',
-    'src/streaming/terrain_3d_cpu_cache_policy.h',
-    'src/streaming/terrain_3d_gpu_cache_policy.h',
-    'src/streaming/terrain_3d_cpu_region_cache.cpp',
+    'src/instances/contracts/terrain_3d_instance_layout.h',
+    'src/instances/runtime/terrain_3d_instancer.cpp',
+    'src/instances/runtime/terrain_3d_instancer.h',
+    'src/physics/runtime/terrain_3d_collision.cpp',
+    'src/physics/build/terrain_3d_collision_surface_builder.cpp',
+    'src/physics/build/terrain_3d_collision_surface_builder.h',
+    'src/data/runtime/terrain_3d_runtime_bake_codec.cpp',
+    'src/data/runtime/terrain_3d_runtime_bake_codec.h',
+    'src/streaming/policy/terrain_3d_cpu_cache_policy.h',
+    'src/streaming/policy/terrain_3d_gpu_cache_policy.h',
+    'src/streaming/cache/terrain_3d_cpu_region_cache.cpp',
 ]
 for rel in p03_files:
     text = read(rel)
     for pattern in (r'\bnRegionSize\b', r'\bnSourceWidth\b', r'getRegionSize\(\)', r'getVertexSpacing\(\)'):
         if re.search(pattern, text):
             failures.append(f'{rel}: forbidden runtime geometry pattern {pattern}')
-require('src/core/terrain_3d_util.h', 't3dRegionCoordinateFromGrid')
-require('src/core/terrain_3d_util.h', 't3dRegionLocalFromGrid')
+require('src/core/utility/terrain_3d_util.h', 't3dRegionCoordinateFromGrid')
+require('src/core/utility/terrain_3d_util.h', 't3dRegionLocalFromGrid')
 require('src/Terrain3DConstants.h', '#define s_nRegionShift ( 7 )')
 require('src/Terrain3DConstants.h', '#define s_nMaxCollisionAxisSamples ( s_nMaxRegionBlendSamples + 1 )')
 for needle in (
@@ -90,43 +90,43 @@ for needle in (
     's_nRuntimeMinMaxBlobBytes = 174836u',
     'side != expected_side',
 ):
-    require('src/data/terrain_3d_runtime_bake_codec.cpp', needle)
+    require('src/data/runtime/terrain_3d_runtime_bake_codec.cpp', needle)
 for stale in ('For a 2048 region', 'source_side == 0u', 'level_count > 32u'):
-    forbid('src/data/terrain_3d_runtime_bake_codec.cpp', (stale,))
+    forbid('src/data/runtime/terrain_3d_runtime_bake_codec.cpp', (stale,))
 
 # P04: explicit allocation domain and central-zone ownership.
-require('src/core/terrain_3d_allocation_domain.h', 'TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED')
-for rel in ('src/core/terrain_3d_fixed_buffer.h', 'src/core/terrain_3d_slab_array.h'):
+require('src/Terrain3DTypes.h', 'TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED')
+for rel in ('src/core/containers/terrain_3d_fixed_buffer.h', 'src/core/containers/terrain_3d_slab_array.h'):
     require(rel, 'requireRuntimeZone')
     require(rel, 'bindAllocatorZone')
     require(rel, 'TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED')
-require('src/memory/terrain_3d_memory.h', 'TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME')
-require('src/memory/terrain_3d_memory.h', 'TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER')
-forbid('src/memory/terrain_3d_memory.h', ('m_szRawDeniedEvents', 'm_szRawDeniedBytes', 't3dRuntimeRawAllocationAllowed', 't3dRecordRuntimeRawAllocationDenied'), 'P04 allocator phase permission must remain telemetry-only')
-forbid('src/memory/terrain_3d_memory_policy.cpp', ('raw_denied_events_by_phase', 'raw_denied_bytes_by_phase'), 'P04 denied-allocation telemetry must not be resurrected')
+require('src/memory/core/terrain_3d_memory.h', 'TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME')
+require('src/memory/core/terrain_3d_memory.h', 'TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER')
+forbid('src/memory/core/terrain_3d_memory.h', ('m_szRawDeniedEvents', 'm_szRawDeniedBytes', 't3dRuntimeRawAllocationAllowed', 't3dRecordRuntimeRawAllocationDenied'), 'P04 allocator phase permission must remain telemetry-only')
+forbid('src/memory/policy/terrain_3d_memory_policy.cpp', ('raw_denied_events_by_phase', 'raw_denied_bytes_by_phase'), 'P04 denied-allocation telemetry must not be resurrected')
 
 for rel in (
-    'src/memory/terrain_3d_resident_pool.cpp',
-    'src/streaming/terrain_3d_node_streamer.cpp',
+    'src/memory/storage/terrain_3d_resident_pool.cpp',
+    'src/streaming/runtime/terrain_3d_node_streamer.cpp',
     'src/rendering/rd/render_world/terrain_3d_render_world_runtime.cpp',
 ):
     forbid(rel, ('t3dMemoryAllocate(', 't3dMemoryRelease('), f'{rel}: runtime owner still uses raw Terrain3D allocation')
-require('src/memory/terrain_3d_resident_pool.cpp', 'm_pRuntimeAllocatorZone')
-require('src/streaming/terrain_3d_node_streamer.cpp', 'm_pRuntimeAllocatorZone')
+require('src/memory/storage/terrain_3d_resident_pool.cpp', 'm_pRuntimeAllocatorZone')
+require('src/streaming/runtime/terrain_3d_node_streamer.cpp', 'm_pRuntimeAllocatorZone')
 require('src/rendering/rd/render_world/terrain_3d_render_world_runtime.cpp', 'm_pRuntimeAllocatorZone')
-require('src/instances/terrain_3d_instance_store.h', 'TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED')
-require('src/instances/terrain_3d_instance_store.cpp', 'runtimeAllocatorReady')
-require('src/streaming/terrain_3d_runtime_page_store.cpp', 'TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED')
-require('src/streaming/terrain_3d_runtime_page_store.h', 'setPreparedByteBudget')
+require('src/instances/storage/terrain_3d_instance_store.h', 'TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED')
+require('src/instances/storage/terrain_3d_instance_store.cpp', 'runtimeAllocatorReady')
+require('src/streaming/runtime/terrain_3d_runtime_page_store.cpp', 'TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED')
+require('src/streaming/runtime/terrain_3d_runtime_page_store.h', 'setPreparedByteBudget')
 for needle in ('m_nPreparedByteBudget', 'm_nPreparedReservedBytes', 'm_nPayloadBytesPerSlot', 'm_nWorkerScratchReservedBytes'):
-    require('src/streaming/terrain_3d_runtime_page_store.h', needle)
-require('src/memory/terrain_3d_memory_policy.cpp', 'setRuntimePagePreparedByteBudget')
-require('src/core/terrain_3d_slab_array.h', 'canBindAllocatorZone')
-require('src/instances/terrain_3d_instance_store.cpp', 'm_transformSlab.canBindAllocatorZone( pZone )')
-forbid('src/memory/terrain_3d_memory.h', ('Terrain3D raw allocation attempted from HOT_FRAME/HOT_RENDER',), 'allocator must not reject HOT_FRAME/HOT_RENDER allocations')
+    require('src/streaming/runtime/terrain_3d_runtime_page_store.h', needle)
+require('src/memory/policy/terrain_3d_memory_policy.cpp', 'setRuntimePagePreparedByteBudget')
+require('src/core/containers/terrain_3d_slab_array.h', 'canBindAllocatorZone')
+require('src/instances/storage/terrain_3d_instance_store.cpp', 'm_transformSlab.canBindAllocatorZone( pZone )')
+forbid('src/memory/core/terrain_3d_memory.h', ('Terrain3D raw allocation attempted from HOT_FRAME/HOT_RENDER',), 'allocator must not reject HOT_FRAME/HOT_RENDER allocations')
 
 # P05: worker-side cooked material preparation and owner-side bounded consume.
-assets = read('src/assets/terrain_3d_assets.cpp')
+assets = read('src/assets/catalog/terrain_3d_assets.cpp')
 worker = function_body(assets, 'void Terrain3DAssets::runtimeMaterialWorkerMain')
 owner = function_body(assets, 'void Terrain3DAssets::updateRuntimeMaterialResidencyInternal')
 for needle in ('FileAccess::open', 'seek(', 'get_buffer(', 'Image::create_from_data'):
@@ -145,7 +145,7 @@ for needle in (
     'm_runtimeMaterialRequestRing',
     'm_runtimeMaterialCompletionRing',
 ):
-    if needle not in assets and needle not in read('src/assets/terrain_3d_assets.h'):
+    if needle not in assets and needle not in read('src/assets/catalog/terrain_3d_assets.h'):
         failures.append(f'assets async material contract missing {needle}')
 if worker.count('FileAccess::open') != 1:
     failures.append('assets worker: persistent cooked reader must open exactly once per worker lifetime')

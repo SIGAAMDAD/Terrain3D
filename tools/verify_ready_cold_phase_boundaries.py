@@ -37,20 +37,20 @@ phase = init.find("TERRAIN3D_ALLOCATION_PHASE_INITIALIZATION")
 if cold < 0 or phase < 0 or cold > phase:
     fail("initializeInternal must open a cold phase scope before the initialization phase scope")
 
-setter = function_body("src/core/terrain_3d_resources.cpp", "void Terrain3D::setDataDirectory( const String dir )")
+setter = function_body("src/integration/godot/terrain_3d_resources.cpp", "void Terrain3D::setDataDirectory( const String dir )")
 if "Terrain3DColdPhaseScope" not in setter:
     fail("setDataDirectory is missing its cold repository-transition phase")
 if setter.find("Terrain3DColdPhaseScope") > setter.find("m_pData->loadDirectory( dir )"):
     fail("setDataDirectory opens its cold phase scope after repository loading")
 
-loader = function_body("src/data/terrain_3d_data.cpp", "Error Terrain3DData::loadDirectory( const String &rDir )")
+loader = function_body("src/data/model/terrain_3d_data.cpp", "Error Terrain3DData::loadDirectory( const String &rDir )")
 if "Terrain3DColdPhaseScope" not in loader:
     fail("Terrain3DData::loadDirectory is missing its direct-call cold phase")
 if loader.find("Terrain3DColdPhaseScope") > loader.find("t3dStagedRepository_t staged"):
     fail("loadDirectory constructs staged repository storage before opening the cold boundary")
 
 rebuild = function_body(
-    "src/streaming/terrain_3d_runtime_page_store.cpp",
+    "src/streaming/runtime/terrain_3d_runtime_page_store.cpp",
     "bool Terrain3DRuntimePageStore::rebuildRuntimeSources( const t3dRuntimePageServiceState_t &rState )",
 )
 fast = rebuild.find("if ( same_config && m_nWorkerThreadCount == m_nEffectivePrepareThreads )")

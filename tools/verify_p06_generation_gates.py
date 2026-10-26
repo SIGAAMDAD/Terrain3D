@@ -31,22 +31,22 @@ def block(rel, start, end):
     return data[a:b]
 
 # P06: source-owned generations and coordinator generation gates.
-require('src/assets/terrain_3d_assets.h', 'getTexturePublicationGeneration', 'P06 texture publication generation')
-require('src/assets/terrain_3d_assets.h', 'getTextureLayerMappingGeneration', 'P06 layer-map generation')
-require('src/assets/terrain_3d_assets.h', 'getTextureLayerPhysicalIndexInternal', 'P06 semantic layer-map accessor')
-forbid('src/assets/terrain_3d_assets.h', 'getTextureLayerMapDataInternal', 'P06 raw layer-map accessor regression')
-require('src/assets/terrain_3d_assets.h', 'getMeshSourceGeneration', 'P06 mesh source generation')
-require('src/rendering/terrain_3d_material.h', 'getRdPublicationGeneration', 'P06 material generation')
-require('src/lighting/terrain_3d_region_lighting.h', 'getGlobalPublicationGeneration', 'P06 regional lighting generation')
+require('src/assets/catalog/terrain_3d_assets.h', 'getTexturePublicationGeneration', 'P06 texture publication generation')
+require('src/assets/catalog/terrain_3d_assets.h', 'getTextureLayerMappingGeneration', 'P06 layer-map generation')
+require('src/assets/catalog/terrain_3d_assets.h', 'getTextureLayerPhysicalIndexInternal', 'P06 semantic layer-map accessor')
+forbid('src/assets/catalog/terrain_3d_assets.h', 'getTextureLayerMapDataInternal', 'P06 raw layer-map accessor regression')
+require('src/assets/catalog/terrain_3d_assets.h', 'getMeshSourceGeneration', 'P06 mesh source generation')
+require('src/rendering/material/terrain_3d_material.h', 'getRdPublicationGeneration', 'P06 material generation')
+require('src/lighting/runtime/terrain_3d_region_lighting.h', 'getGlobalPublicationGeneration', 'P06 regional lighting generation')
 require('src/terrain_3d.h', 'getOceanPublicationGeneration', 'P06 ocean generation')
-coordinator_publish = block('src/rendering/rd/terrain_3d_render_coordinator.cpp',
+coordinator_publish = block('src/rendering/rd/core/terrain_3d_render_coordinator.cpp',
                             'void Terrain3DRenderCoordinator::publishSnapshot',
                             'void Terrain3DRenderCoordinator::resetSnapshotPublication')
 if 'computeSourceFingerprint' in coordinator_publish:
     failures.append('P06 mesh fingerprint remains in normal publishSnapshot hot path')
 if 'getTextureLayerMap()' in coordinator_publish:
     failures.append('P06 coordinator still requests an allocating PackedInt32Array layer map')
-material_builder = block('src/rendering/rd/terrain_3d_render_coordinator.cpp',
+material_builder = block('src/rendering/rd/core/terrain_3d_render_coordinator.cpp',
                          'void Terrain3DRenderCoordinator::buildMaterialState',
                          'uint32_t Terrain3DRenderCoordinator::selectWritablePublicationBank')
 if 'getTextureLayerPhysicalIndexInternal' not in material_builder:
@@ -67,19 +67,19 @@ for symbol in ('areControlMapsImplicit', 'areColorMapsImplicit',
     if symbol not in coordinator_publish:
         failures.append(f'P06 material source gate misses runtime dependency: {symbol}')
 
-tier_change = block('src/rendering/terrain_3d_material.cpp',
+tier_change = block('src/rendering/material/terrain_3d_material.cpp',
                     'void Terrain3DMaterial::tierQualityChanged',
                     'void Terrain3DMaterial::refreshGpuRegionChannelPolicy')
 if 'm_nRdPublicationGeneration' not in tier_change:
     failures.append('P06 dynamic tier values do not invalidate cached RD material state')
 
-mesh_update = block('src/assets/terrain_3d_assets.cpp',
+mesh_update = block('src/assets/catalog/terrain_3d_assets.cpp',
                     'void Terrain3DAssets::updateMeshInternal',
                     'void Terrain3DAssets::updateMesh(')
 if mesh_update.find('advanceMeshSourceGeneration();') < 0 or mesh_update.find('advanceMeshSourceGeneration();') > mesh_update.find('if ( bPersistentChange )'):
     failures.append('P06 preview/nonpersistent mesh changes do not advance mesh source generation')
 
-pending_mesh_commit = block('src/assets/terrain_3d_assets.cpp',
+pending_mesh_commit = block('src/assets/catalog/terrain_3d_assets.cpp',
                             'void Terrain3DAssets::loadPendingMeshes',
                             'Error Terrain3DAssets::save')
 if 'commitMeshes();' not in pending_mesh_commit:
@@ -89,7 +89,7 @@ if 'advanceMeshSourceGeneration();' not in pending_mesh_commit:
 if 'updateMmis( ( int )( iMesh ), s_v2iMax, false )' not in pending_mesh_commit:
     failures.append('P06 deferred mesh commits do not rebuild instance render-cell LOD/settings state')
 
-lighting_replace = block('src/data/terrain_3d_region.cpp',
+lighting_replace = block('src/data/model/terrain_3d_region.cpp',
                          'void Terrain3DRegion::setLighting',
                          'void Terrain3DRegion::setLocation')
 if 'markGlobalPublicationDirtyInternal' not in lighting_replace:

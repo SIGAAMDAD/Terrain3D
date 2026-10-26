@@ -29,7 +29,7 @@ def block(rel, start, end):
     return data[a:b]
 
 # Exact 128m finite mip-chain accounting.
-policy = text('src/streaming/terrain_3d_gpu_cache_policy.h')
+policy = text('src/streaming/policy/terrain_3d_gpu_cache_policy.h')
 if 'for ( ;; )' not in policy or 'bytes += texels * 4u' not in policy:
     failures.append('P07 RGBA8 mip accounting is not an exact finite mip-chain sum')
 if 't3dGpuCacheShadowBytes' not in policy or 'bytes += texels;' not in policy:
@@ -50,7 +50,7 @@ total = full * 2 + full * 2 + full * 4 + color + color + shadow
 if (color, shadow, total) != (87380, 21845, 327677):
     failures.append(f'P07 reference byte arithmetic wrong: color={color} shadow={shadow} total={total}')
 
-cache = text('src/streaming/terrain_3d_gpu_region_cache.cpp')
+cache = text('src/streaming/cache/terrain_3d_gpu_region_cache.cpp')
 for needle in (
     'm_nGpuRegionMiddleCompositeBytesLastTick',
     'm_nGpuRegionTerrainShadowBytesLastTick',
@@ -64,7 +64,7 @@ if 'const uint64_t elapsed = now - m_nGpuRegionUploadTokenRefillUsec;' not in ca
     failures.append('P07 upload admission is not elapsed-time token based')
 
 full_upload = block(
-    'src/streaming/terrain_3d_gpu_region_cache.cpp',
+    'src/streaming/cache/terrain_3d_gpu_region_cache.cpp',
     'bool Terrain3DGpuRegionCache::uploadGpuRegionLayer',
     'bool Terrain3DGpuRegionCache::serviceRuntimePages',
 )
@@ -80,8 +80,8 @@ if 'The live retry remains bounded by P07' not in full_upload:
 
 # Preserve the repaired P06 exact resident-layer grant rather than regressing to
 # the older cumulative P07/P08 archive's base-only capacity arithmetic.
-require('src/streaming/terrain_3d_gpu_cache_policy.h', 't3dGpuCacheEstimateResidentLayerBytes', 'P06 exact physical layer grant')
-require('src/streaming/terrain_3d_gpu_region_cache.cpp', 'calculateGpuRegionPhysicalLayers( capacity )', 'P06 physical layer capacity')
+require('src/streaming/policy/terrain_3d_gpu_cache_policy.h', 't3dGpuCacheEstimateResidentLayerBytes', 'P06 exact physical layer grant')
+require('src/streaming/cache/terrain_3d_gpu_region_cache.cpp', 'calculateGpuRegionPhysicalLayers( capacity )', 'P06 physical layer capacity')
 
 # P08 is intentionally layered above P07; this verifier checks only P07 upload/residency invariants.
 

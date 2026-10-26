@@ -10,8 +10,8 @@ def require(rel, needle, message):
     if needle not in text(rel):
         raise SystemExit(f'FAIL: {message}')
 
-cache = text('src/streaming/terrain_3d_gpu_region_cache.cpp')
-stream = text('src/streaming/terrain_3d_streaming_integration.cpp')
+cache = text('src/streaming/cache/terrain_3d_gpu_region_cache.cpp')
+stream = text('src/streaming/integration/terrain_3d_streaming_integration.cpp')
 terrain = text('src/terrain_3d.cpp')
 
 minimum_start = cache.index('size_t Terrain3DGpuRegionCache::getMinimumBytes')

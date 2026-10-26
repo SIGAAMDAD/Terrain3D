@@ -45,9 +45,9 @@
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 
 #include <godot_cpp/templates/a_hash_map.hpp>
-#include <list>
+#include <godot_cpp/templates/hash_set.hpp>
+#include <godot_cpp/templates/list.hpp>
 #include <mutex>
-#include <set>
 
 namespace godot {
 
@@ -55,7 +55,7 @@ namespace godot {
 
 struct MethodDefinition {
 	StringName name;
-	std::list<StringName> args;
+	List<StringName> args;
 	MethodDefinition() {}
 	MethodDefinition(StringName p_name) :
 			name(p_name) {}
@@ -73,7 +73,7 @@ MethodDefinition D_METHOD(StringName p_name, StringName p_arg1, Args... args) {
 class ClassDB {
 	static GDExtensionInitializationLevel current_level;
 
-	friend class godot::GDExtensionBinding;
+	friend class ::godot::GDExtensionBinding;
 
 public:
 	struct ClassInfo {
@@ -86,10 +86,10 @@ public:
 		StringName parent_name;
 		GDExtensionInitializationLevel level = GDEXTENSION_INITIALIZATION_SCENE;
 		AHashMap<StringName, MethodBind *> method_map;
-		std::set<StringName> signal_names;
+		HashSet<StringName> signal_names;
 		AHashMap<StringName, VirtualMethod> virtual_methods;
-		std::set<StringName> property_names;
-		std::set<StringName> constant_names;
+		HashSet<StringName> property_names;
+		HashSet<StringName> constant_names;
 		// Pointer to the parent custom class, if any. Will be null if the parent class is a Godot class.
 		ClassInfo *parent_ptr = nullptr;
 	};
@@ -119,7 +119,7 @@ private:
 		if constexpr (!std::is_abstract_v<T>) {
 			Wrapped::_set_construct_info<T>();
 #if GODOT_VERSION_MINOR >= 4
-			T *new_object = new ("", "") T;
+			T *new_object = new (::godot::DefaultAllocator{}) T;
 			if (p_notify_postinitialize) {
 				new_object->_postinitialize();
 			}
@@ -136,10 +136,7 @@ private:
 	static GDExtensionClassInstancePtr _recreate_instance_func(void *data, GDExtensionObjectPtr obj) {
 		if constexpr (!std::is_abstract_v<T>) {
 #ifdef HOT_RELOAD_ENABLED
-#ifdef _GODOT_CPP_AVOID_THREAD_LOCAL
-			std::lock_guard<std::recursive_mutex> lk(Wrapped::_constructing_mutex);
-#endif
-			Wrapped::_constructing_recreate_owner = obj;
+			Wrapped::_get_construct_info().recreate_owner = obj;
 			T *new_instance = (T *)memalloc(sizeof(T));
 			memnew_placement(new_instance, T);
 			return new_instance;
@@ -226,12 +223,12 @@ public:
 #define BIND_BITFIELD_FLAG(m_constant) \
 	::godot::ClassDB::bind_integer_constant(get_class_static(), ::godot::_gde_constant_get_bitfield_name(m_constant, #m_constant), #m_constant, m_constant, true);
 
-#define BIND_VIRTUAL_METHOD(m_class, m_method, m_hash)                                                                                        \
-	{                                                                                                                                         \
+#define BIND_VIRTUAL_METHOD(m_class, m_method, m_hash) \
+	{ \
 		auto _call##m_method = [](GDExtensionObjectPtr p_instance, const GDExtensionConstTypePtr *p_args, GDExtensionTypePtr p_ret) -> void { \
-			call_with_ptr_args(reinterpret_cast<m_class *>(p_instance), &m_class::m_method, p_args, p_ret);                                   \
-		};                                                                                                                                    \
-		::godot::ClassDB::bind_virtual_method(m_class::get_class_static(), #m_method, _call##m_method, m_hash);                               \
+			call_with_ptr_args(reinterpret_cast<m_class *>(p_instance), &m_class::m_method, p_args, p_ret); \
+		}; \
+		::godot::ClassDB::bind_virtual_method(m_class::get_class_static(), #m_method, _call##m_method, m_hash); \
 	}
 
 template <typename T, bool is_abstract>
@@ -255,7 +252,9 @@ void ClassDB::_register_class(bool p_virtual, bool p_exposed, bool p_runtime) {
 	class_register_order.push_back(cl.name);
 
 	// Register this class with Godot
-#if GODOT_VERSION_MINOR >= 5
+#if GODOT_VERSION_MINOR >= 7
+	GDExtensionClassCreationInfo6 class_info = {
+#elif GODOT_VERSION_MINOR >= 5
 	GDExtensionClassCreationInfo5 class_info = {
 #elif GODOT_VERSION_MINOR >= 4
 	GDExtensionClassCreationInfo4 class_info = {
@@ -292,7 +291,9 @@ void ClassDB::_register_class(bool p_virtual, bool p_exposed, bool p_runtime) {
 		(void *)&T::get_class_static(), // void *class_userdata;
 	};
 
-#if GODOT_VERSION_MINOR >= 5
+#if GODOT_VERSION_MINOR >= 7
+	::godot::gdextension_interface::classdb_register_extension_class6(::godot::gdextension_interface::library, cl.name._native_ptr(), cl.parent_name._native_ptr(), &class_info);
+#elif GODOT_VERSION_MINOR >= 5
 	::godot::gdextension_interface::classdb_register_extension_class5(::godot::gdextension_interface::library, cl.name._native_ptr(), cl.parent_name._native_ptr(), &class_info);
 #elif GODOT_VERSION_MINOR >= 4
 	::godot::gdextension_interface::classdb_register_extension_class4(::godot::gdextension_interface::library, cl.name._native_ptr(), cl.parent_name._native_ptr(), &class_info);

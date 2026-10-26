@@ -48,7 +48,7 @@ for forbidden in (
 # E: allocator carries explicit owner zone and default/bootstrap is explicit.
 eastl = read('src/eastl_config.h')
 require('Terrain3DMemoryZone *m_pZone' in eastl, 'Terrain3DEastlAllocator does not carry explicit zone pointer')
-require('zoneAllocator( Terrain3DMemoryZone *const pZone' in eastl, 'zoneAllocator helper missing')
+require(re.search(r'zoneAllocator\s*\(\s*Terrain3DMemoryZone\s*\*const\s+pZone', eastl) is not None, 'zoneAllocator helper missing')
 require('bootstrapAllocator( void )' in eastl, 'bootstrapAllocator helper missing')
 require('return Terrain3DEastlAllocator();' in eastl, 'bootstrap allocator is not explicit default construction')
 require('return m_pZone == NULL;' in eastl, 'bootstrap ownership test missing')
@@ -56,7 +56,7 @@ require('header.m_pZone = pZone;' in eastl, 'allocation header does not retain o
 
 # E: retained runtime owners bind to the current Terrain3D zone.
 terrain = read('src/terrain_3d.cpp')
-render_integration = read('src/rendering/terrain_3d_render_integration.cpp')
+render_integration = read('src/rendering/integration/terrain_3d_render_integration.cpp')
 require('m_pInstancer->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() )' in terrain,
         'Instancer is not explicitly bound to Terrain3D runtime zone')
 require('m_pHlodStreamer->bindRuntimeAllocator( &m_runtimeMemoryZone, getRuntimeAllocatorOverflowPolicyInternal() )' in terrain,
@@ -65,12 +65,12 @@ require('m_pRenderCoordinator->bindRuntimeAllocator( getRuntimeMemoryZoneInterna
         'RenderCoordinator is not explicitly bound to Terrain3D runtime zone')
 
 # E: Resource-owned state remains bootstrap because it may outlive a Terrain3D node.
-region = read('src/data/terrain_3d_region.cpp')
+region = read('src/data/model/terrain_3d_region.cpp')
 require('Terrain3DRegion::Terrain3DRegion( void ) : m_streamedNodeRuntime( Terrain3DEastlAllocator::bootstrapAllocator() )' in region,
         'Terrain3DRegion streamed-node Resource storage is not explicitly bootstrap-owned')
 
 # D1: hot instance cache selection never materializes backing.
-instance_cache = read('src/streaming/terrain_3d_instance_region_cache.cpp')
+instance_cache = read('src/streaming/cache/terrain_3d_instance_region_cache.cpp')
 ensure_body = function_body(instance_cache, 'bool Terrain3DInstanceRegionCache::ensureResident(')
 materialize_body = function_body(instance_cache, 'bool Terrain3DInstanceRegionCache::materializeRegionCold(')
 service_body = function_body(instance_cache, 'void Terrain3DInstanceRegionCache::serviceColdMaterialization(')
@@ -85,7 +85,7 @@ require('m_bMaterializationServiceActive = true' in service_body and 'm_bMateria
         'instance cold service does not bracket owner service state')
 
 # D2/D3: request only marks pending; service owns rebuild.
-node = read('src/streaming/terrain_3d_node_streamer.cpp')
+node = read('src/streaming/runtime/terrain_3d_node_streamer.cpp')
 node_req = function_body(node, 'void Terrain3DNodeStreamer::requestActivationStorageRebuild( void )')
 node_service = function_body(node, 'void Terrain3DNodeStreamer::serviceColdRebuild( void )')
 require('m_bActivationStorageRebuildPending = true' in node_req, 'NodeStreamer rebuild request does not set pending state')
@@ -94,7 +94,7 @@ require('rebuildActivationStorageCold' not in node_req and 'serviceColdRebuild' 
 require('rebuildActivationStorageCold' in node_service and 'm_bColdRebuildServiceActive = true' in node_service,
         'NodeStreamer cold service does not own activation-storage rebuild')
 
-collision = read('src/physics/terrain_3d_collision.cpp')
+collision = read('src/physics/runtime/terrain_3d_collision.cpp')
 collision_req = function_body(collision, 'void Terrain3DCollision::requestColdRebuild( void )')
 collision_service = function_body(collision, 'void Terrain3DCollision::serviceColdRebuild( void )')
 require('m_bColdRebuildPending = true' in collision_req, 'Collision rebuild request does not set pending state')
@@ -104,7 +104,7 @@ require('build();' in collision_service and 'm_bColdRebuildServiceActive = true'
         'Collision cold service does not own rebuild')
 
 # D4: hot coordinator publication defers capacity misses; only cold service grows banks.
-coord = read('src/rendering/rd/terrain_3d_render_coordinator.cpp')
+coord = read('src/rendering/rd/core/terrain_3d_render_coordinator.cpp')
 publish = function_body(coord, 'void Terrain3DRenderCoordinator::publishSnapshot( void )')
 cold_capacity = function_body(coord, 'void Terrain3DRenderCoordinator::serviceColdCapacity( void )')
 require('ensureInstancePublicationStorage' not in publish and 'ensureInstanceMeshBankStorage' not in publish,
@@ -125,14 +125,14 @@ for key in ('cold_rebuild_count', 'cold_rebuild_failures', 'capacity_misses'):
 for key in ('cold_rebuild_count', 'cold_rebuild_failures'):
     require(key in collision, f'Collision diagnostic missing: {key}')
 
-instancer = read('src/instances/terrain_3d_instancer.cpp')
+instancer = read('src/instances/runtime/terrain_3d_instancer.cpp')
 for key in ('owner_capacity_misses', 'owner_growth_denied', 'owner_cold_rebuilds'):
     require(key in instancer, f'Instancer diagnostic missing: {key}')
-hlod = read('src/hlod/terrain_3d_hlod_streamer.cpp')
+hlod = read('src/hlod/runtime/terrain_3d_hlod_streamer.cpp')
 for key in ('owner_capacity_misses', 'owner_cold_rebuilds'):
     require(key in hlod, f'HLOD diagnostic missing: {key}')
 
-rd_instance = read('src/rendering/rd/terrain_3d_rd_instance_renderer.cpp')
+rd_instance = read('src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp')
 for key in ('owner_buffer_capacity_misses', 'owner_buffer_rebuilds', 'owner_buffer_rebuild_failures',
             'owner_cpu_capacity_rebuilds', 'owner_cpu_capacity_rebuild_failures',
             'mesh_owner_arena_capacity_misses', 'mesh_owner_arena_growth_requests', 'mesh_owner_arena_rebuilds'):

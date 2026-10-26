@@ -3,10 +3,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 terrain = (ROOT / 'src/terrain_3d.cpp').read_text()
-cache = (ROOT / 'src/streaming/terrain_3d_instance_region_cache.cpp').read_text()
-region = (ROOT / 'src/data/terrain_3d_region.h').read_text()
-instancer = (ROOT / 'src/instances/terrain_3d_instancer.cpp').read_text()
-data = (ROOT / 'src/data/terrain_3d_data.cpp').read_text()
+cache = (ROOT / 'src/streaming/cache/terrain_3d_instance_region_cache.cpp').read_text()
+region = (ROOT / 'src/data/model/terrain_3d_region.h').read_text()
+instancer = (ROOT / 'src/instances/runtime/terrain_3d_instancer.cpp').read_text()
+data = (ROOT / 'src/data/model/terrain_3d_data.cpp').read_text()
 
 errors = []
 
@@ -17,19 +17,25 @@ def require(cond, msg):
 physics_start = terrain.find('void Terrain3D::physicsProcess')
 physics_end = terrain.find('\nvoid Terrain3D::', physics_start + 1)
 physics = terrain[physics_start: physics_end if physics_end >= 0 else len(terrain)]
+cold_start = terrain.find('void Terrain3D::serviceColdRuntimeOwners')
+cold_end = terrain.find('\nvoid Terrain3D::', cold_start + 1)
+cold_owners = terrain[cold_start: cold_end if cold_end >= 0 else len(terrain)]
 hot = physics.find('TERRAIN3D_ALLOCATION_PHASE_HOT_FRAME')
 require(hot >= 0, 'HOT_FRAME phase missing from physicsProcess')
+require('serviceColdRuntimeOwners( clipmap_target_position );' in physics,
+        'physicsProcess does not invoke extracted cold-owner service')
+require(physics.find('serviceColdRuntimeOwners( clipmap_target_position );') < hot,
+        'cold-owner service occurs after HOT_FRAME')
 for needle in (
-    'serviceColdInstanceResidency( clipmap_target_position, false )',
+    'serviceColdInstanceResidency( rTargetPosition, false )',
     'm_pNodeStreamer->serviceColdRebuild();',
     'm_pCollision->serviceColdRebuild();',
     'm_pInstancer->serviceColdCapacity();',
     'm_pRenderCoordinator->serviceColdCapacity();',
 ):
-    pos = physics.find(needle)
-    require(pos >= 0, f'missing cold service: {needle}')
-    require(pos < hot, f'cold service occurs after HOT_FRAME: {needle}')
-require(physics.find('updateRegionStreamingPolicy( clipmap_target_position, fDelta, false )') < hot,
+    require(needle in cold_owners, f'missing cold service: {needle}')
+require(physics.find('updateRegionStreamingPolicy( clipmap_target_position, fDelta, false )') <
+        physics.find('serviceColdRuntimeOwners( clipmap_target_position );'),
         'streaming policy must be resolved before cold instance materialization')
 
 update_start = cache.find('void Terrain3DInstanceRegionCache::update(')
@@ -49,7 +55,7 @@ data_cold_start = data.find('void Terrain3DData::serviceColdInstanceResidencyInt
 data_cold_end = data.find('\nvoid Terrain3DData::', data_cold_start + 1)
 data_cold = data[data_cold_start:data_cold_end if data_cold_end >= 0 else len(data)]
 require(data_cold.count('serviceGpuRuntimePagePrepare') == 2, 'cold data residency service must poll runtime pages before and after materialization')
-require('m_instanceRegionCache.serviceColdMaterialization' in data_cold, 'cold data residency service does not invoke cache materialization')
+require('m_residency.instanceRegionCache().serviceColdMaterialization' in data_cold, 'cold data residency service does not invoke cache materialization')
 require('getResidentInstanceStoreInternal' in region, 'resident-only const instance accessor missing')
 require('getResidentInstanceStoreInternalMut' in region, 'resident-only mutable instance accessor missing')
 

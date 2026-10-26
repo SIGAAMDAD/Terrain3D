@@ -58,9 +58,9 @@ for forbidden in (
 # G2: allocator layers may record telemetry but may not use phase state as policy.
 allocator_layers = {
     'src/eastl_config.h': read('src/eastl_config.h'),
-    'src/memory/terrain_3d_memory_zone.cpp': read('src/memory/terrain_3d_memory_zone.cpp'),
-    'src/memory/terrain_3d_linear_arena.h': read('src/memory/terrain_3d_linear_arena.h'),
-    'src/memory/terrain_3d_zone_allocator.h': read('src/memory/terrain_3d_zone_allocator.h'),
+    'src/memory/arena/terrain_3d_memory_zone.cpp': read('src/memory/arena/terrain_3d_memory_zone.cpp'),
+    'src/memory/arena/terrain_3d_linear_arena.h': read('src/memory/arena/terrain_3d_linear_arena.h'),
+    'src/memory/arena/terrain_3d_zone_allocator.h': read('src/memory/arena/terrain_3d_zone_allocator.h'),
 }
 for rel, text in allocator_layers.items():
     for forbidden in (
@@ -73,13 +73,13 @@ for rel, text in allocator_layers.items():
     ):
         require(forbidden not in text, f'allocator layer {rel} depends on runtime phase policy: {forbidden}')
 
-memory = read('src/memory/terrain_3d_memory.h')
+memory = read('src/memory/core/terrain_3d_memory.h')
 require('Phase labels never grant or deny allocation.' in memory, 'memory phase contract does not state telemetry-only phase semantics')
 require('t3dRecordRuntimeEastlAllocation' in memory and 't3dRecordRuntimeZoneAllocation' in memory and 't3dRecordRuntimeRawAllocation' in memory,
         'allocation phase telemetry is incomplete')
 
 # G3: linear arena cursor allocation must never change physical backing.
-linear = allocator_layers['src/memory/terrain_3d_linear_arena.h']
+linear = allocator_layers['src/memory/arena/terrain_3d_linear_arena.h']
 linear_allocate = function_body(linear, 'void *allocate( const size_t nBytes, const size_t nAlignment )')
 require(bool(linear_allocate), 'could not locate Terrain3DLinearArena::allocate')
 for forbidden in ('configure(', 'ensureCapacity(', 't3dMemoryAllocate(', 't3dMemoryRelease(', 'releaseBacking(', 'm_bCapacitySealed'):
@@ -87,17 +87,17 @@ for forbidden in ('configure(', 'ensureCapacity(', 't3dMemoryAllocate(', 't3dMem
 
 # G4: named steady-state owners must stay within established capacity.
 hot_checks = [
-    ('src/streaming/terrain_3d_instance_region_cache.cpp', 'void Terrain3DInstanceRegionCache::update(',
+    ('src/streaming/cache/terrain_3d_instance_region_cache.cpp', 'void Terrain3DInstanceRegionCache::update(',
      ('ensureInstanceStoreResident', 'materializeRegionCold', 'takeInstance(', 't3dContainerReserveCold', '.reserve(')),
-    ('src/streaming/terrain_3d_node_streamer.cpp', 'void Terrain3DNodeStreamer::updateResidency(',
+    ('src/streaming/runtime/terrain_3d_node_streamer.cpp', 'void Terrain3DNodeStreamer::updateResidency(',
      ('rebuildActivationStorageCold', 'serviceColdRebuild(', 't3dContainerReserveCold', '.reserve(')),
-    ('src/physics/terrain_3d_collision.cpp', 'void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild )',
+    ('src/physics/runtime/terrain_3d_collision.cpp', 'void Terrain3DCollision::update( const Vector2i &rRegionLoc, const bool bRebuild )',
      ('build();', 'serviceColdRebuild(', 't3dContainerReserveCold', '.reserve(', '.resize(')),
-    ('src/rendering/rd/terrain_3d_render_coordinator.cpp', 'void Terrain3DRenderCoordinator::publishSnapshot( void )',
+    ('src/rendering/rd/core/terrain_3d_render_coordinator.cpp', 'void Terrain3DRenderCoordinator::publishSnapshot( void )',
      ('ensureInstancePublicationStorage', 'ensureInstanceMeshBankStorage', 't3dContainerReserveCold', '.reserve(', '.resize(')),
-    ('src/instances/terrain_3d_instancer.cpp', 'void Terrain3DInstancer::processUpdates( void )',
+    ('src/instances/runtime/terrain_3d_instancer.cpp', 'void Terrain3DInstancer::processUpdates( void )',
      ('rebuildRuntimeStorageCapacities', 'serviceColdCapacity(', 't3dContainerReserveCold', '.reserve(')),
-    ('src/instances/terrain_3d_instancer.cpp', 'void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition )',
+    ('src/instances/runtime/terrain_3d_instancer.cpp', 'void Terrain3DInstancer::updateStreaming( const Vector3 &rTargetPosition )',
      ('rebuildRuntimeStorageCapacities', 'serviceColdCapacity(', 't3dContainerReserveCold', '.reserve(')),
 ]
 for rel, signature, forbidden_tokens in hot_checks:
@@ -114,39 +114,41 @@ for p in production_files:
         zone_calls.append(p.relative_to(ROOT).as_posix())
 allowed_zone_files = {
     'src/eastl_config.h',
-    'src/core/terrain_3d_fixed_buffer.h',
-    'src/core/terrain_3d_slab_array.h',
-    'src/instances/terrain_3d_instancer.cpp',
-    'src/instances/terrain_3d_instance_store.cpp',
-    'src/hlod/terrain_3d_hlod_streamer.cpp',
-    'src/rendering/rd/terrain_3d_rd_mesh_cache.cpp',
-    'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp',
-    'src/rendering/rd/terrain_3d_render_coordinator.cpp',
+    'src/core/containers/terrain_3d_fixed_buffer.h',
+    'src/core/containers/terrain_3d_slab_array.h',
+    'src/instances/runtime/terrain_3d_instancer.cpp',
+    'src/instances/storage/terrain_3d_instance_store.cpp',
+    'src/instances/physics/terrain_3d_instance_occlusion.cpp',
+    'src/instances/physics/terrain_3d_instance_physics.cpp',
+    'src/hlod/runtime/terrain_3d_hlod_streamer.cpp',
+    'src/rendering/rd/instances/terrain_3d_rd_mesh_cache.cpp',
+    'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp',
+    'src/rendering/rd/core/terrain_3d_render_coordinator.cpp',
 }
 for rel in zone_calls:
     require(rel in allowed_zone_files, f'zoneAllocator appears in unreviewed lifetime owner: {rel}')
-region = read('src/data/terrain_3d_region.cpp')
-manifest = read('src/data/terrain_3d_runtime_world_manifest.cpp')
+region = read('src/data/model/terrain_3d_region.cpp')
+manifest = read('src/data/runtime/terrain_3d_runtime_world_manifest.cpp')
 require('m_streamedNodeRuntime( Terrain3DEastlAllocator::bootstrapAllocator() )' in region,
         'Terrain3DRegion Resource-owned runtime metadata is not explicitly bootstrap-owned')
 require('Terrain3DEastlAllocator::bootstrapAllocator()' in manifest,
         'runtime-world manifest persistent/resource-like storage lost explicit bootstrap ownership')
 
 # G6: critical owners expose owner-specific capacity diagnostics rather than allocator denial.
-instancer_h = read('src/instances/terrain_3d_instancer.h')
-instancer_cpp = read('src/instances/terrain_3d_instancer.cpp')
-coord_h = read('src/rendering/rd/terrain_3d_render_coordinator.h')
-coord_cpp = read('src/rendering/rd/terrain_3d_render_coordinator.cpp')
+instancer_h = read('src/instances/runtime/terrain_3d_instancer.h')
+instancer_cpp = read('src/instances/runtime/terrain_3d_instancer.cpp')
+coord_h = read('src/rendering/rd/core/terrain_3d_render_coordinator.h')
+coord_cpp = read('src/rendering/rd/core/terrain_3d_render_coordinator.cpp')
 require('m_nOwnerGrowthDeniedCount' in instancer_h and 'owner_growth_denied' in instancer_cpp,
         'Instancer owner-growth diagnostic is not explicitly owner-scoped')
 require('m_nOwnerGrowthDeniedCount' in coord_h and 'owner_growth_denied' in coord_cpp,
         'RenderCoordinator owner-growth diagnostic is not explicitly owner-scoped')
 for rel in (
-    'src/streaming/terrain_3d_instance_region_cache.cpp',
-    'src/streaming/terrain_3d_node_streamer.cpp',
-    'src/physics/terrain_3d_collision.cpp',
-    'src/hlod/terrain_3d_hlod_streamer.cpp',
-    'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp',
+    'src/streaming/cache/terrain_3d_instance_region_cache.cpp',
+    'src/streaming/runtime/terrain_3d_node_streamer.cpp',
+    'src/physics/runtime/terrain_3d_collision.cpp',
+    'src/hlod/runtime/terrain_3d_hlod_streamer.cpp',
+    'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp',
 ):
     text = read(rel)
     require('capacity_miss' in text or 'capacity_misses' in text or 'materialization_misses' in text or 'rebuild_failures' in text,

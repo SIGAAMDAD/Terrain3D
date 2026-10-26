@@ -9,8 +9,8 @@ failures = []
 def read(rel):
     return (ROOT / rel).read_text(encoding='utf-8')
 
-data = read('src/data/terrain_3d_data.cpp')
-policy = read('src/memory/terrain_3d_memory_policy.cpp')
+data = read('src/data/model/terrain_3d_data.cpp')
+policy = read('src/memory/policy/terrain_3d_memory_policy.cpp')
 constants = read('src/Terrain3DConstants.h')
 terrain_h = read('src/terrain_3d.h')
 

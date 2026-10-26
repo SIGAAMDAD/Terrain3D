@@ -1,6 +1,6 @@
 from pathlib import Path
 
-source = Path('src/rendering/rd/terrain_3d_rd_mesh_cache.cpp').read_text()
+source = Path('src/rendering/rd/instances/terrain_3d_rd_mesh_cache.cpp').read_text()
 constants = Path('src/Terrain3DConstants.h').read_text()
 
 required = [
@@ -17,7 +17,17 @@ required = [
 for token in required[:-1]:
     if token not in source:
         raise SystemExit(f'MISSING: {token}')
-if not any(build in constants for build in (required[-1], 'memory-budget-zone-containment-p1-2026-09-09', 'forward-color-blend-attachment-contract-fix-2026-09-09', 'instancer-authoritative-visible-index-fix-2026-09-09')):
+if not any(build in constants for build in (
+    required[-1],
+    'memory-budget-zone-containment-p1-2026-09-09',
+    'forward-color-blend-attachment-contract-fix-2026-09-09',
+    'instancer-category-policy-p3-2026-09-09',
+    'instancer-terrain-follow-p4-2026-09-09',
+    'instancer-publication-p5-2026-09-09',
+    'instancer-hlod-handoff-p6-2026-09-09',
+    'instancer-occlusion-p7-2026-09-09',
+    'mesh-derived-instance-physics-occlusion-p13-2-2026-09-10',
+)):
     raise SystemExit('MISSING: P0 or descendant native build lineage')
 
 for forbidden in (

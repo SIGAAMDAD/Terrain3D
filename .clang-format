@@ -1,50 +1,64 @@
-BasedOnStyle: LLVM
+---
 Language: Cpp
-Standard: c++17
+BasedOnStyle: LLVM
+UseTab: Always
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ColumnLimit: 120
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: true
+  BeforeWhile: true
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+IndentAccessModifiers: false
 AccessModifierOffset: -4
-AlignAfterOpenBracket: DontAlign
+NamespaceIndentation: None
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: true
+SpacesInSquareBrackets: false
+SpacesInAngles: Never
+SpaceBeforeAssignmentOperators: true
+PointerAlignment: Right
+ReferenceAlignment: Right
+DerivePointerAlignment: false
 AlignConsecutiveAssignments: None
 AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
 AlignOperands: DontAlign
-AllowAllArgumentsOnNextLine: true
-AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortBlocksOnASingleLine: Never
-AllowShortCaseLabelsOnASingleLine: false
-AllowShortEnumsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: None
-AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine: None
-AllowShortLoopsOnASingleLine: false
-AlwaysBreakTemplateDeclarations: Yes
+AlignTrailingComments: false
+AlignEscapedNewlines: Left
 BinPackArguments: false
 BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
 BreakBeforeBinaryOperators: NonAssignment
-BreakBeforeBraces: Attach
-BreakConstructorInitializers: AfterColon
-BreakInheritanceList: AfterColon
-ColumnLimit: 140
-ConstructorInitializerIndentWidth: 8
-ContinuationIndentWidth: 8
-Cpp11BracedListStyle: false
-DerivePointerAlignment: false
-IncludeBlocks: Preserve
-IndentCaseLabels: true
-IndentPPDirectives: None
-IndentWidth: 4
-InsertBraces: true
-KeepEmptyLinesAtTheStartOfBlocks: false
-MaxEmptyLinesToKeep: 2
-PackConstructorInitializers: NextLine
-PointerAlignment: Right
-ReferenceAlignment: Pointer
-QualifierAlignment: Leave
-ReflowComments: false
 SortIncludes: Never
-SpaceAfterCStyleCast: false
-SpaceBeforeParens: ControlStatements
-SpacesInAngles: Never
-SpacesInCStyleCastParentheses: true
-SpacesInContainerLiterals: false
-SpacesInParentheses: true
-TabWidth: 4
-UseTab: ForIndentation
+IncludeBlocks: Preserve
+ReflowComments: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+Cpp11BracedListStyle: false
+Standard: c++17

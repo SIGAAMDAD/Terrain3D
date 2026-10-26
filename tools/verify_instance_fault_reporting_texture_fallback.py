@@ -3,12 +3,12 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[1]
-renderer = (root / 'src/rendering/rd/terrain_3d_rd_instance_renderer.cpp').read_text(encoding='utf-8')
-renderer_h = (root / 'src/rendering/rd/terrain_3d_rd_instance_renderer.h').read_text(encoding='utf-8')
-mesh = (root / 'src/rendering/rd/terrain_3d_rd_mesh_cache.cpp').read_text(encoding='utf-8')
-texture = (root / 'src/rendering/rd/terrain_3d_rd_texture_manager.cpp').read_text(encoding='utf-8')
-texture_h = (root / 'src/rendering/rd/terrain_3d_rd_texture_manager.h').read_text(encoding='utf-8')
-coordinator = (root / 'src/rendering/rd/terrain_3d_render_coordinator.cpp').read_text(encoding='utf-8')
+renderer = (root / 'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp').read_text(encoding='utf-8')
+renderer_h = (root / 'src/rendering/rd/instances/terrain_3d_rd_instance_renderer.h').read_text(encoding='utf-8')
+mesh = (root / 'src/rendering/rd/instances/terrain_3d_rd_mesh_cache.cpp').read_text(encoding='utf-8')
+texture = (root / 'src/rendering/rd/resources/terrain_3d_rd_texture_manager.cpp').read_text(encoding='utf-8')
+texture_h = (root / 'src/rendering/rd/resources/terrain_3d_rd_texture_manager.h').read_text(encoding='utf-8')
+coordinator = (root / 'src/rendering/rd/core/terrain_3d_render_coordinator.cpp').read_text(encoding='utf-8')
 constants = (root / 'src/Terrain3DConstants.h').read_text(encoding='utf-8')
 plugin = (root / 'project/addons/terrain_3d/src/editor_plugin.gd').read_text(encoding='utf-8')
 
@@ -44,7 +44,12 @@ expected_builds = (
     'instancer-rd-arraymesh-surface-binding-p0-2026-09-09',
     'memory-budget-zone-containment-p1-2026-09-09',
     'forward-color-blend-attachment-contract-fix-2026-09-09',
-    'instancer-authoritative-visible-index-fix-2026-09-09',
+    'instancer-category-policy-p3-2026-09-09',
+    'instancer-terrain-follow-p4-2026-09-09',
+    'instancer-publication-p5-2026-09-09',
+    'instancer-hlod-handoff-p6-2026-09-09',
+         'instancer-occlusion-p7-2026-09-09',
+         'mesh-derived-instance-physics-occlusion-p13-2-2026-09-10',
 )
 if not any(build in constants and build in plugin for build in expected_builds):
     fail('native/script build ID contract does not identify this patch lineage')

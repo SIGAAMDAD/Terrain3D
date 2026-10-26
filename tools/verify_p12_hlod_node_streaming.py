@@ -25,7 +25,7 @@ def block(rel, start, end):
 
 
 # P12A: HLOD selection and retirement must be generation/list driven.
-hlod_h = text('src/hlod/terrain_3d_hlod_streamer.h')
+hlod_h = text('src/hlod/runtime/terrain_3d_hlod_streamer.h')
 for needle in (
     'm_nDesiredGeneration',
     'm_activeEntries',
@@ -38,7 +38,7 @@ for needle in (
         failures.append(f'P12 HLOD transition state missing {needle}')
 
 hlod_update = block(
-    'src/hlod/terrain_3d_hlod_streamer.cpp',
+    'src/hlod/runtime/terrain_3d_hlod_streamer.cpp',
     'void Terrain3DHLODStreamer::updateResidency',
     'uint8_t Terrain3DHLODStreamer::getNodeMinimumLevel',
 )
@@ -51,9 +51,9 @@ if 'm_bDesired' in hlod_h or 'entry.m_bDesired' in hlod_update:
     failures.append('P12 legacy per-entry desired clear flag remains in HLOD hot selection')
 
 # P12B: movable-node ownership migration is no longer mandatory every physics tick.
-node_h = text('src/streaming/terrain_3d_node_streamer.h')
+node_h = text('src/streaming/runtime/terrain_3d_node_streamer.h')
 node_update = block(
-    'src/streaming/terrain_3d_node_streamer.cpp',
+    'src/streaming/runtime/terrain_3d_node_streamer.cpp',
     'void Terrain3DNodeStreamer::updateResidency',
     'Dictionary Terrain3DNodeStreamer::getStats',
 )
@@ -63,7 +63,7 @@ for needle in ('m_nMovableMigrationCadence = 4u', 'm_nMovableMigrationTick', 'm_
 for needle in ('bMigrationDue', 'm_nMovableMigrationCadence'):
     if needle not in node_update:
         failures.append(f'P12 node migration throttling missing {needle}')
-if 'migration_scan_skipped_last_tick' not in text('src/streaming/terrain_3d_node_streamer.cpp'):
+if 'migration_scan_skipped_last_tick' not in text('src/streaming/runtime/terrain_3d_node_streamer.cpp'):
     failures.append('P12 node migration skip telemetry is missing')
 
 if failures:

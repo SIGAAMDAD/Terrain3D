@@ -45,7 +45,7 @@ namespace godot {
 class ObjectID;
 
 class Variant {
-	uint8_t opaque[GODOT_CPP_VARIANT_SIZE]{ 0 };
+	alignas(8) uint8_t opaque[GODOT_CPP_VARIANT_SIZE]{ 0 };
 
 	friend class GDExtensionBinding;
 	friend class MethodBind;
@@ -191,14 +191,14 @@ public:
 	Variant(const Vector4i &v);
 	Variant(const Plane &v);
 	Variant(const Quaternion &v);
-	Variant(const godot::AABB &v);
+	Variant(const ::godot::AABB &v);
 	Variant(const Basis &v);
 	Variant(const Transform3D &v);
 	Variant(const Projection &v);
 	Variant(const Color &v);
 	Variant(const StringName &v);
 	Variant(const NodePath &v);
-	Variant(const godot::RID &v);
+	Variant(const ::godot::RID &v);
 	Variant(const ObjectID &v);
 	Variant(const Object *v);
 	Variant(const Callable &v);
@@ -240,14 +240,14 @@ public:
 	operator Vector4i() const;
 	operator Plane() const;
 	operator Quaternion() const;
-	operator godot::AABB() const;
+	operator ::godot::AABB() const;
 	operator Basis() const;
 	operator Transform3D() const;
 	operator Projection() const;
 	operator Color() const;
 	operator StringName() const;
 	operator NodePath() const;
-	operator godot::RID() const;
+	operator ::godot::RID() const;
 	operator ObjectID() const;
 	operator Object *() const;
 	operator Callable() const;
@@ -299,7 +299,7 @@ public:
 		}
 		Variant result;
 		GDExtensionCallError error;
-		callp_static(type, method, argptrs.data(), argptrs.size(), sizeof...(args), result, error);
+		callp_static(type, method, argptrs.data(), argptrs.size(), result, error);
 		return result;
 	}
 
@@ -332,6 +332,9 @@ public:
 	Variant duplicate(bool deep = false) const;
 
 	static String get_type_name(Variant::Type type);
+#if GODOT_VERSION_MINOR >= 7
+	static Variant::Type get_type_by_name(const String &p_name);
+#endif
 	static bool can_convert(Variant::Type from, Variant::Type to);
 	static bool can_convert_strict(Variant::Type from, Variant::Type to);
 

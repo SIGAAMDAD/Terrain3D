@@ -4,8 +4,8 @@ import sys
 
 root = Path(__file__).resolve().parents[1]
 baker = (root / "project/addons/terrain_3d/tools/region_lightmap_baker.gd").read_text(encoding="utf-8")
-data = (root / "src/data/terrain_3d_data.cpp").read_text(encoding="utf-8")
-gpu = (root / "src/streaming/terrain_3d_gpu_region_cache.cpp").read_text(encoding="utf-8")
+data = (root / "src/data/model/terrain_3d_data.cpp").read_text(encoding="utf-8")
+gpu = (root / "src/streaming/cache/terrain_3d_gpu_region_cache.cpp").read_text(encoding="utf-8")
 
 errors = []
 

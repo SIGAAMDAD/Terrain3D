@@ -3,18 +3,18 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-coordinator = (ROOT / "src/rendering/rd/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
-coordinator_h = (ROOT / "src/rendering/rd/terrain_3d_render_coordinator.h").read_text(encoding="utf-8")
-renderer = (ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8")
-renderer_h = (ROOT / "src/rendering/rd/terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8")
-mesh_h = (ROOT / "src/rendering/rd/terrain_3d_rd_mesh_cache.h").read_text(encoding="utf-8")
+coordinator = (ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.cpp").read_text(encoding="utf-8")
+coordinator_h = (ROOT / "src/rendering/rd/core/terrain_3d_render_coordinator.h").read_text(encoding="utf-8")
+renderer = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.cpp").read_text(encoding="utf-8")
+renderer_h = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_instance_renderer.h").read_text(encoding="utf-8")
+mesh_h = (ROOT / "src/rendering/rd/instances/terrain_3d_rd_mesh_cache.h").read_text(encoding="utf-8")
 
 checks = {
     "terrain initialization no longer early-returns before companion recovery":
         "if ( m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {\n\t\treturn true;\n\t}" not in coordinator,
     "instance renderer retries independently":
-        "const bool instance_retry_allowed = !instance_ready" in coordinator
-        and "m_nLastInstanceInitializationRenderFrame != nRenderFrame" in coordinator,
+        "const bool instance_retry_allowed" in coordinator
+        and "!instance_ready && ( nRenderFrame == UINT64_MAX || m_nLastInstanceInitializationRenderFrame != nRenderFrame )" in coordinator,
     "failed partial instance initialization is cleaned before retry":
         "const String instance_error = m_instanceRenderer.getLastError();" in coordinator
         and "m_instanceRenderer.shutdown();" in coordinator,
@@ -28,9 +28,9 @@ checks = {
         "float fade = 1.0f;" in renderer
         and "draw_flags &= ~T3D_RD_INSTANCE_FADE_MASK;" in renderer
         and "fade_unorm << T3D_RD_INSTANCE_FADE_SHIFT" in renderer,
-    "production indirect addressing coexists with isolated direct-surface bring-up":
+    "production indirect addressing coexists with isolated CPU reference geometry":
         "rd->draw_list_draw_indirect( draw_list" in renderer
-        and "getDirectSurfaceVertexArray" in renderer
+        and ( "getSurfaceVertexArray" in renderer or "getDirectSurfaceVertexArray" in renderer )
         and "rd->draw_list_draw( draw_list, true, packet.m_nVisibleCount, 0u )" in renderer,
     "opaque depth equality requires successful instance depth submit":
         "m_nInstanceLastSuccessfulDepthScenePass != rContext.m_nScenePass" in coordinator

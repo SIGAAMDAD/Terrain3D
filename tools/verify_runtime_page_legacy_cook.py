@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[1]
-data = (root / 'src/data/terrain_3d_data.cpp').read_text(encoding='utf-8')
+data = (root / 'src/data/model/terrain_3d_data.cpp').read_text(encoding='utf-8')
 menu = (root / 'project/addons/terrain_3d/menu/terrain_menu.gd').read_text(encoding='utf-8')
 failures = []
 
@@ -19,7 +19,7 @@ else:
     cook = data[cook_begin:bind_begin if bind_begin > cook_begin else len(data)]
 
 for needle in [
-    'm_runtimePageStore.probePage( page_path, probe )',
+    'm_runtimeArtifacts.probePage( page_path, probe )',
     'probe.m_state == RUNTIME_PAGE_PROBE_LEGACY',
     'probe.m_state == RUNTIME_PAGE_PROBE_FUTURE',
     'result["legacy"] = legacy',
@@ -35,9 +35,9 @@ if legacy_pos < 0 or sig_pos < 0 or legacy_pos > sig_pos:
     failures.append('inspection still attempts current-format signature parsing before legacy classification')
 
 for needle in [
-    'm_runtimePageStore.probePage( page_path, page_probe )',
+    'm_runtimeArtifacts.probePage( page_path, page_probe )',
     'page_probe.m_state == RUNTIME_PAGE_PROBE_FUTURE',
-    'm_runtimePageStore.validatePageForRegion( pRegion, runtime_page_config )',
+    'm_runtimeArtifacts.validatePageForRegion( pRegion, runtime_page_config )',
     'const bool bLegacyArtifact = page_probe.m_state == RUNTIME_PAGE_PROBE_LEGACY',
     'legacy_recooked += bLegacyArtifact ? 1 : 0',
     'incompatible_recooked += bIncompatibleArtifact ? 1 : 0',

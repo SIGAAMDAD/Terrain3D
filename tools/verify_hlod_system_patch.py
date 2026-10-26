@@ -9,15 +9,15 @@ def read(rel):
 baker = read('project/addons/terrain_3d/tools/hlod_baker.gd')
 panel = read('project/addons/terrain_3d/tools/hlod_panel.gd')
 plugin = read('project/addons/terrain_3d/src/editor_plugin.gd')
-builder = read('src/hlod/terrain_3d_hlod_builder.cpp')
-builder_h = read('src/hlod/terrain_3d_hlod_builder.h')
-manifest = read('src/hlod/terrain_3d_hlod_manifest.cpp')
-manifest_h = read('src/hlod/terrain_3d_hlod_manifest.h')
+builder = read('src/hlod/build/terrain_3d_hlod_builder.cpp')
+builder_h = read('src/hlod/build/terrain_3d_hlod_builder.h')
+manifest = read('src/hlod/format/terrain_3d_hlod_manifest.cpp')
+manifest_h = read('src/hlod/format/terrain_3d_hlod_manifest.h')
 
 checks = {
     'plugin initializes HLOD panel hidden': 'hlod_panel.visible = false' in plugin,
     'HLOD panel hides itself in _ready': 'close_requested.connect(hide)\n\thide()' in panel,
-    'builder version bumped for new bake contract': 'const BUILDER_VERSION: int = 6' in baker,
+    'builder version bumped for new bake contract': 'const BUILDER_VERSION: int = 7' in baker,
     'instancer analysis API declared': 'analyzeInstancerSource' in builder_h,
     'instancer analysis API bound': 'analyze_instancer_source' in builder,
     'analysis path is deferred': '_native_builder.analyze_instancer_source' in baker and 'source.deferred_instancer = true' in baker,
