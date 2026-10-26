@@ -73,6 +73,12 @@ struct InstanceRecord {
 layout(set = 0, binding = 10, std430) readonly buffer InstanceRecords {
     InstanceRecord records[];
 };
+layout(set = 0, binding = 11, std430) buffer MainVisibleFlagBuffer {
+    uint main_visible_flags[];
+};
+layout(set = 0, binding = 12, std430) buffer ShadowVisibleFlagBuffer {
+    uint shadow_visible_flags[];
+};
 
 layout(push_constant, std430) uniform CullData {
     uint descriptor_base;
@@ -97,6 +103,32 @@ const uint T3D_RD_INSTANCE_LOD_PRESELECTED = 1u << 28u;
 shared uint shared_visible;
 shared uint shared_write_base;
 shared uint shared_count;
+shared uint shared_flags;
+
+uint descriptor_draw_flags(InstanceCullDescriptor descriptor) {
+    uint flags = descriptor.flags;
+    float margin = descriptor.bounds_center.w;
+    if (cull_data.shadow_pass == 0u && margin > 0.0) {
+        // Camera center is packed into previously unused W lanes. Eye 0 may be
+        // offset in multiview, while the CPU packet fade uses the center camera.
+        vec3 camera_center = vec3(frame_data.camera_position[0].w, frame_data.camera_position[1].w, frame_data.motion_params.w);
+        vec3 delta = descriptor.bounds_center.xyz - camera_center;
+        float distance_sq = dot(delta, delta);
+        float begin_end = descriptor.lod_begin + margin;
+        float end_begin = max(0.0, descriptor.lod_end - margin);
+        bool near_begin = descriptor.lod_begin > 0.001 && distance_sq < begin_end * begin_end;
+        bool near_end = descriptor.lod_end > 0.001 && distance_sq > end_begin * end_begin;
+        float fade = 1.0;
+        if (near_begin || near_end) {
+            float distance = sqrt(distance_sq);
+            if (near_begin) fade = min(fade, (distance - descriptor.lod_begin) / margin);
+            if (near_end) fade = min(fade, (descriptor.lod_end - distance) / margin);
+        }
+        uint fade_unorm = uint(floor(clamp(fade, 0.0, 1.0) * 65535.0 + 0.5));
+        flags = (flags & ~0x00ffff00u) | (1u << 24u) | (fade_unorm << 8u);
+    }
+    return flags;
+}
 
 bool aabb_inside_plane(vec3 c, vec3 e, vec4 plane) {
     return dot(plane.xyz, c) + plane.w + dot(abs(plane.xyz), e) >= 0.0;
@@ -188,6 +220,7 @@ void main() {
         return;
     if (local_index == 0u) {
         shared_visible = descriptor_visible(descriptor) ? 1u : 0u;
+        shared_flags = shared_visible != 0u ? descriptor_draw_flags(descriptor) : 0u;
     }
     barrier();
     if (shared_visible == 0u)
@@ -219,10 +252,12 @@ void main() {
                 shadow_visible[destination] = descriptor.first_instance + i;
                 shadow_visible_draw_slots[destination] = descriptor.draw_slot;
                 shadow_visible_layers[destination] = descriptor.visibility_layers;
+                shadow_visible_flags[destination] = shared_flags;
             } else {
                 main_visible[destination] = descriptor.first_instance + i;
                 main_visible_draw_slots[destination] = descriptor.draw_slot;
                 main_visible_layers[destination] = descriptor.visibility_layers;
+                main_visible_flags[destination] = shared_flags;
             }
         }
         barrier();

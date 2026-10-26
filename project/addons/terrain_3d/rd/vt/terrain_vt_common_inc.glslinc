@@ -183,6 +183,13 @@ vec4 t3d_vt_decode_srgb_albedo(vec4 value) {
 #define T3D_VT_MATERIAL_ALBEDO_SATURATION (1u << 13u)
 #define T3D_VT_MATERIAL_STYLIZED_SUN (1u << 14u)
 #define T3D_VT_MATERIAL_V3_LAYOUT (1u << 15u)
+#define T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE (1u << 16u)
+#define T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN (1u << 17u)
+
+bool t3d_vt_material_has_surface_texture(uint flags) {
+    return (flags & T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE) != 0u
+        || (flags & T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN) == 0u;
+}
 #define T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION 3u
 
 struct T3DVTAllocation {

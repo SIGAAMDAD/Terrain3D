@@ -430,6 +430,13 @@ static_assert( offsetof( t3dVTRequest_t, m_nWantedMip ) == 4u, "VT request packe
 
 static_assert( sizeof( t3dRenderingMaterialVTBindings_t ) == 8u, "VT material binding ABI changed" );
 static_assert( sizeof( t3dRenderingMaterialGpu_t ) == 64u, "VT material GPU ABI changed" );
+static_assert( T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE == ( 1u << 16u ), "VT surface flag ABI changed" );
+static_assert( T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN == ( 1u << 17u ), "VT surface provenance ABI changed" );
+
+inline bool t3d_vt_material_has_surface_texture( const uint32_t flags ) {
+	return ( flags & T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE ) != 0u
+	        || ( flags & T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN ) == 0u;
+}
 static_assert( offsetof( t3dRenderingMaterialGpu_t, m_nVtAllocation ) == 0u, "VT material allocation ABI changed" );
 static_assert( offsetof( t3dRenderingMaterialGpu_t, m_vBaseColor ) == 16u, "VT material base-color ABI changed" );
 static_assert( offsetof( t3dRenderingMaterialGpu_t, m_vUvScaleBias ) == 32u, "VT material UV ABI changed" );

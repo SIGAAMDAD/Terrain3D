@@ -1371,6 +1371,9 @@ typedef enum t3dRenderingMaterialFlags_e : uint32_t {
 	T3D_VT_MATERIAL_STYLIZED_SUN = 1u << 14u,
 	// VT-P06: material allocation is the base of a sparse V3 runtime channel triplet.
 	T3D_VT_MATERIAL_V3_LAYOUT = 1u << 15u,
+	T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE = 1u << 16u,
+	// Old cooked records lack provenance and must retain surface sampling.
+	T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN = 1u << 17u,
 } t3dRenderingMaterialFlags_t;
 
 // From src/rendering/rd/vt/runtime/terrain_3d_vt_fixed_profile.h

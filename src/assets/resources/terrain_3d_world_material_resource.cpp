@@ -285,6 +285,10 @@ bool Terrain3DWorldMaterial::compileVtRecordCold(
 	rRecord.m_nVtAllocation = rVt.m_nVtAllocation;
 	rRecord.m_nOverlayVtAllocation = rVt.m_nOverlayVtAllocation;
 	rRecord.m_nFlags = getMaterialFlags();
+	rRecord.m_nFlags |= T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN;
+	if ( m_surfaceTexture.is_valid() ) {
+		rRecord.m_nFlags |= T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE;
+	}
 	if ( m_normalTexture.is_valid() ) {
 		rRecord.m_nFlags |= T3D_VT_MATERIAL_NORMAL_MAPPING;
 	}

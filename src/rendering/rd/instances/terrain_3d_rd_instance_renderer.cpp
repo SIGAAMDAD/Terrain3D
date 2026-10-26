@@ -4,6 +4,7 @@
 #include "Terrain3DTypes.h"
 
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 #include "Terrain3DConstants.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_record.h"
@@ -51,10 +52,48 @@ static_assert( sizeof( t3dRdHlodCullPush_t ) == 16u, "HLOD cull push ABI changed
 
 static_assert( sizeof( t3dRdInstanceCullPush_t ) == 48u, "Instance cull push ABI changed" );
 
-static bool t3dRdInstanceOneSubmitCompatible( const t3dRdInstanceDrawPacket_t &rPacket ) {
+static bool t3dRdInstanceSharedSurfaceCommandCompatible( const t3dRdInstanceDrawPacket_t &rPacket ) {
+	// Sharing one command across cells has stricter rules than batching distinct
+	// indirect commands. Cell-specific fades keep their own sealed command spans.
 	const uint32_t incompatible_flags = T3D_RD_INSTANCE_ALPHA_BLEND | T3D_RD_INSTANCE_FADE_ACTIVE | T3D_RD_INSTANCE_DOUBLE_SIDED
 	        | T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED | T3D_RD_INSTANCE_CULL_FRONT;
 	return ( rPacket.m_nFlags & incompatible_flags ) == 0u;
+}
+
+static uint32_t t3dRdInstanceGroupedPipeline( const t3dRdInstanceDrawPacket_t &packet, const bool shadow ) {
+	if ( ( packet.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u || packet.m_nVisibleCount == 0u ) { return 3u; }
+	if ( ( packet.m_nFlags & ( T3D_RD_INSTANCE_DOUBLE_SIDED | ( shadow ? T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED : 0u ) ) ) != 0u ) { return 2u; }
+	return ( packet.m_nFlags & T3D_RD_INSTANCE_CULL_FRONT ) != 0u ? 1u : 0u;
+}
+
+static bool t3dRdInstanceGroupCommandsCold(
+	eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> &packets,
+	eastl::vector<t3dRdInstanceCullDescriptor_t, Terrain3DEastlAllocator> &descriptors,
+	eastl::vector<uint32_t, Terrain3DEastlAllocator> &remap,
+	uint32_t *counts, const bool shadow ) {
+	if ( remap.size() < packets.size() ) { return false; }
+	// Temporarily use the redundant first-instance field as the original index.
+	// Restore it from the packet's sealed visible base before uploading commands.
+	for ( uint32_t i = 0u; i < packets.size(); ++i ) { packets[i].m_command.m_nFirstInstance = i; }
+	uint32_t cursor = 0u;
+	for ( uint32_t pipeline = 0u; pipeline < 3u; ++pipeline ) {
+		const uint32_t begin = cursor;
+		for ( uint32_t i = cursor; i < packets.size(); ++i ) {
+			if ( t3dRdInstanceGroupedPipeline( packets[i], shadow ) == pipeline ) {
+				eastl::swap( packets[cursor++], packets[i] );
+			}
+		}
+		counts[pipeline] = cursor - begin;
+	}
+	for ( uint32_t i = 0u; i < packets.size(); ++i ) {
+		remap[packets[i].m_command.m_nFirstInstance] = i;
+		packets[i].m_command.m_nFirstInstance = packets[i].m_nFirstVisible;
+	}
+	for ( auto &descriptor : descriptors ) {
+		if ( descriptor.m_nCommandIndex >= packets.size() ) { return false; }
+		descriptor.m_nCommandIndex = remap[descriptor.m_nCommandIndex];
+	}
+	return true;
 }
 
 static bool t3dRdInstanceMeshIdentityMatchesCell( const t3dRdInstanceCell_t &rCell, const t3dRdMeshSourceLod_t *const pLod ) {
@@ -125,6 +164,8 @@ EA_FORCE_INLINE static void t3dRdFillInstanceCullDescriptorCellState(
 	rDescriptor.m_szBoundsCenter[0] = ( float )center.x;
 	rDescriptor.m_szBoundsCenter[1] = ( float )center.y;
 	rDescriptor.m_szBoundsCenter[2] = ( float )center.z;
+	// Unused W publishes the cell fade margin without changing descriptor stride.
+	rDescriptor.m_szBoundsCenter[3] = bShadowPass ? 0.0f : rCell.m_fFadeMargin;
 	rDescriptor.m_szBoundsExtent[0] = ( float )extent.x;
 	rDescriptor.m_szBoundsExtent[1] = ( float )extent.y;
 	rDescriptor.m_szBoundsExtent[2] = ( float )extent.z;
@@ -276,6 +317,7 @@ bool Terrain3DRdInstanceRenderer::bindRuntimeAllocator( Terrain3DMemoryZone *con
 	m_visibility.m_cullParityActualIndices.set_allocator( allocator );
 	m_visibility.m_cullParityCommandCounts.set_allocator( allocator );
 	m_visibility.m_cullParityCommandWriteOffsets.set_allocator( allocator );
+	m_commandTable.m_groupedCommandRemap.set_allocator( allocator );
 	m_commandTable.m_drawPackets.set_allocator( allocator );
 	m_commandTable.m_depthPackets.set_allocator( allocator );
 	m_commandTable.m_shadowPackets.set_allocator( allocator );
@@ -951,7 +993,8 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers(
 	const uint32_t draw_metadata_bytes = ( uint32_t )( draw_metadata_bytes64 );
 	const bool replace_previous_instance = m_uploadState.m_hPreviousInstanceBuffer.needsCapacity( nInstanceBytes );
 	const bool replace_visible_draw_slot = m_visibility.m_hVisibleDrawSlotBuffer.needsCapacity( nVisibleBytes );
-	const bool replace_visible_layer = m_visibility.m_hVisibleLayerBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_visible_layer = m_visibility.m_hVisibleLayerBuffer.needsCapacity( nVisibleBytes )
+	        || m_visibility.m_hVisibleFlagBuffer.needsCapacity( nVisibleBytes );
 	const bool replace_draw_metadata = m_commandTable.m_hDrawMetadataBuffer.needsCapacity( draw_metadata_bytes );
 	const bool replace_material = m_uploadState.m_hMaterialBuffer.needsCapacity( nMaterialBytes );
 	const bool replace_indirect = !m_commandTable.m_hIndirectBuffer.isValid()
@@ -1010,6 +1053,9 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers(
 	        && ensureOwnedBuffer( m_visibility.m_hVisibleLayerBuffer,
 	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleLayers",
 	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hVisibleFlagBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleFlags",
+	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
 	        && ensureOwnedBuffer( m_commandTable.m_hDrawMetadataBuffer,
 	                draw_metadata_bytes, "T3D.Instance.DrawMetadata",
 	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
@@ -1026,7 +1072,8 @@ bool Terrain3DRdInstanceRenderer::ensureShadowBuffers( const uint32_t nVisibleBy
 		freeForwardUniformSets();
 	}
 	const bool replace_visible_draw_slot = m_visibility.m_hShadowVisibleDrawSlotBuffer.needsCapacity( nVisibleBytes );
-	const bool replace_visible_layer = m_visibility.m_hShadowVisibleLayerBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_visible_layer = m_visibility.m_hShadowVisibleLayerBuffer.needsCapacity( nVisibleBytes )
+	        || m_visibility.m_hShadowVisibleFlagBuffer.needsCapacity( nVisibleBytes );
 	const bool replace_indirect = !m_commandTable.m_hIndirectBuffer.isValid()
 	        || m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes < nIndirectBytes;
 	if ( replace_visible_draw_slot || replace_visible_layer ) {
@@ -1045,6 +1092,9 @@ bool Terrain3DRdInstanceRenderer::ensureShadowBuffers( const uint32_t nVisibleBy
 	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
 	        && ensureOwnedBuffer( m_visibility.m_hShadowVisibleLayerBuffer,
 	                MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleLayers",
+	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hShadowVisibleFlagBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleFlags",
 	                T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER, T3D_RD_CONTEXT_MEMORY_INSTANCE )
 	        && m_commandTable.m_hIndirectBuffer.isValid()
 	        && m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes >= nIndirectBytes;
@@ -1065,6 +1115,7 @@ bool Terrain3DRdInstanceRenderer::ensureUniformSet( void ) {
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 5, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleDrawSlotBuffer ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 6, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleLayerBuffer ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( 7, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleFlagBuffer ) );
 	m_descriptorState.m_hUniformSet = m_instanceSet0Descriptors.getOrCreate(
 	        m_hShader.rid(), "T3D.Instance.UniformSet", uniforms, m_hShader.rid(), 0u );
 	if ( !m_descriptorState.m_hUniformSet.is_valid() ) {
@@ -1114,6 +1165,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardUniformSet( const t3dRdForwardSha
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 6,
 	        RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 	        bShadow ? m_visibility.m_hShadowVisibleLayerBuffer : m_visibility.m_hVisibleLayerBuffer ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( 7, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+	        bShadow ? m_visibility.m_hShadowVisibleFlagBuffer : m_visibility.m_hVisibleFlagBuffer ) );
 	const String name = String( bShadow ? "T3D.Forward.Instance.ShadowUniformSet." : "T3D.Forward.Instance.UniformSet." )
 	        + String::num_int64( variant );
 	uniform_set = m_forwardDescriptors.getOrCreate( { m_hszForwardShaders[variant].rid(), bShadow }, name,
@@ -1367,6 +1420,9 @@ bool Terrain3DRdInstanceRenderer::hasRequiredSceneMotionCpuStorage( const t3dRdI
 }
 
 bool Terrain3DRdInstanceRenderer::hasRequiredScenePacketCpuStorage( const t3dRdInstanceSceneSnapshot_t &scene ) const {
+	if ( m_commandTable.m_groupedCommandRemap.size() < m_commandTable.m_nPacketCapacity ) {
+		return false;
+	}
 	return m_commandTable.m_alphaSortScratch.size() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_drawPackets.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_depthPackets.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_shadowPackets.capacity() >= m_commandTable.m_nPacketCapacity && m_visibility.m_instanceCullDescriptors.capacity() >= m_commandTable.m_nPacketCapacity && m_visibility.m_shadowInstanceCullDescriptors.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_packetBuildSlots.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_packetBuildEntries.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_alphaPackets.capacity() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_transparentPacketOrder.size() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_gpuPacketBoundValid.size() >= m_commandTable.m_nPacketCapacity && m_commandTable.m_packetIndex.capacity() >= m_commandTable.m_nPacketCapacity;
 }
 
@@ -1436,6 +1492,10 @@ bool Terrain3DRdInstanceRenderer::ensureSceneCpuStorage( const t3dRdInstanceScen
 	if ( fixed_storage_ok && m_visibility.m_bCullingComparisonEnabled
 	        && m_visibility.m_cullParityCommandWriteOffsets.size() < m_commandTable.m_nPacketCapacity ) {
 		fixed_storage_ok = t3dVectorResizeCold( m_visibility.m_cullParityCommandWriteOffsets, m_commandTable.m_nPacketCapacity );
+	}
+	// Command grouping is production publication work, independent of optional parity diagnostics.
+	if ( fixed_storage_ok && m_commandTable.m_groupedCommandRemap.size() < m_commandTable.m_nPacketCapacity ) {
+		fixed_storage_ok = t3dVectorResizeCold( m_commandTable.m_groupedCommandRemap, m_commandTable.m_nPacketCapacity );
 	}
 	if ( fixed_storage_ok && m_commandTable.m_alphaSortScratch.size() < m_commandTable.m_nPacketCapacity ) {
 		fixed_storage_ok = t3dVectorResizeCold( m_commandTable.m_alphaSortScratch, m_commandTable.m_nPacketCapacity );
@@ -1988,6 +2048,8 @@ static float t3dRdInstancePredictionPixels( const AABB &rBounds, const t3dRdForw
 
 void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot( const t3dRdForwardPassContext_t &rContext,
         const t3dRdInstanceSceneSnapshot_t &rScene, const uint32_t nVisibilityMask ) {
+	const uint32_t diagnostic_mode = Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode();
+	if ( diagnostic_mode == 1u ) { return; }
 	const uint32_t nFrameId = ( uint32_t )rContext.m_nRenderFrame;
 	if ( m_pVirtualTexture == NULL || nFrameId == m_nLastVtResidencyRequestFrame || m_commandTable.m_drawPackets.empty() ) {
 		return;
@@ -2132,7 +2194,9 @@ void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot( const t3
 			}
 		}
 		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION && attempts_left > 0u; ++channel ) {
+			if ( diagnostic_mode == 2u && channel != 0u ) { continue; }
 			if ( channel == 1u && ( material.m_nFlags & T3D_VT_MATERIAL_NORMAL_MAPPING ) == 0u ) { continue; }
+			if ( channel == 2u && !t3d_vt_material_has_surface_texture( material.m_nFlags ) ) { continue; }
 			if ( material.m_nVtAllocation >= residency.nAllocationCount || channel >= residency.nAllocationCount - material.m_nVtAllocation ) { break; }
 			const uint32_t allocation_id = material.m_nVtAllocation + channel;
 			if ( allocation_id >= residency.nAllocationCount ) { break; }
@@ -2447,7 +2511,7 @@ bool Terrain3DRdInstanceRenderer::buildVisibleOutputForPass( const bool bSkipFru
 		uint32_t command_index = 0u;
 		for ( size_t iSlot = 0u; iSlot < m_commandTable.m_packetBuildSlots.size(); ++iSlot ) {
 			t3dRdPacketBuildSlot_t &slot = m_commandTable.m_packetBuildSlots[iSlot];
-			if ( t3dRdInstanceOneSubmitCompatible( slot.m_packet ) ) {
+			if ( t3dRdInstanceSharedSurfaceCommandCompatible( slot.m_packet ) ) {
 				slot.m_nCommandIndex = command_index++;
 			}
 		}
@@ -2458,7 +2522,7 @@ bool Terrain3DRdInstanceRenderer::buildVisibleOutputForPass( const bool bSkipFru
 		}
 		for ( size_t iSlot = 0u; iSlot < m_commandTable.m_packetBuildSlots.size(); ++iSlot ) {
 			t3dRdPacketBuildSlot_t &slot = m_commandTable.m_packetBuildSlots[iSlot];
-			if ( !t3dRdInstanceOneSubmitCompatible( slot.m_packet ) ) {
+			if ( !t3dRdInstanceSharedSurfaceCommandCompatible( slot.m_packet ) ) {
 				slot.m_nCommandIndex = command_index++;
 			}
 		}
@@ -2734,7 +2798,7 @@ bool Terrain3DRdInstanceRenderer::buildFixedVisibleLayout( const t3dRdInstanceSc
 			if ( cell.m_fFadeMargin > 0.0f ) {
 				compatibility.m_nFlags |= T3D_RD_INSTANCE_FADE_ACTIVE;
 			}
-			if ( ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u && t3dRdInstanceOneSubmitCompatible( compatibility ) ) {
+			if ( ( cell.m_nFlags & T3D_RD_INSTANCE_SHADOWS_ONLY ) == 0u && t3dRdInstanceSharedSurfaceCommandCompatible( compatibility ) ) {
 				uint32_t &capacity = m_commandTable.m_fixedDrawVisibleCapacities[handle.m_nSlot];
 				if ( UINT32_MAX - capacity < cell.m_nInstanceCount ) {
 					setError( "RD P32 main fixed visible span overflow" );
@@ -2747,7 +2811,7 @@ bool Terrain3DRdInstanceRenderer::buildFixedVisibleLayout( const t3dRdInstanceSc
 			const bool alpha_blend = ( compatibility.m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u;
 			const bool shadow_eligible = ( cell.m_nFlags & T3D_RD_INSTANCE_CAST_SHADOWS ) != 0u
 			        && ( !alpha_blend || ( compatibility.m_nFlags & T3D_RD_INSTANCE_ALPHA_DEPTH_PREPASS ) != 0u );
-			if ( shadow_eligible && t3dRdInstanceOneSubmitCompatible( compatibility ) ) {
+			if ( shadow_eligible && t3dRdInstanceSharedSurfaceCommandCompatible( compatibility ) ) {
 				uint32_t &capacity = m_commandTable.m_shadowFixedDrawVisibleCapacities[handle.m_nSlot];
 				if ( UINT32_MAX - capacity < cell.m_nInstanceCount ) {
 					setError( "RD P32 shadow fixed visible span overflow" );
@@ -2899,7 +2963,7 @@ bool Terrain3DRdInstanceRenderer::buildGpuCommandTableForPass( const t3dRdInstan
 
 			t3dRdInstanceDrawPacket_t compatibility;
 			compatibility.m_nFlags = draw_flags;
-			const bool compatible = t3dRdInstanceOneSubmitCompatible( compatibility );
+			const bool compatible = t3dRdInstanceSharedSurfaceCommandCompatible( compatibility );
 			uint32_t command_index = handle.m_nSlot;
 			uint32_t first_visible = fixed_bases[handle.m_nSlot];
 			if ( !compatible ) {
@@ -2964,9 +3028,19 @@ bool Terrain3DRdInstanceRenderer::buildGpuCommandTableForPass( const t3dRdInstan
 		setError( "RD P32 final visible cursor exceeded publication-time capacity" );
 		return false;
 	}
+	uint32_t *const grouped_counts = t_bShadowPass ? m_commandTable.m_szShadowGroupedCommands : m_commandTable.m_szMainGroupedCommands;
+	// Both passes reuse dedicated command scratch established during cold scene publication.
+	if ( !t3dRdInstanceGroupCommandsCold( packets, descriptors, m_commandTable.m_groupedCommandRemap,
+	        grouped_counts, t_bShadowPass ) ) {
+		setError( "RD instance grouped command remap exceeded sealed capacity" );
+		return false;
+	}
+	const uint32_t grouped_count = grouped_counts[0] + grouped_counts[1] + grouped_counts[2];
 	if constexpr ( t_bShadowPass ) {
+		m_commandTable.m_nShadowCompatibleCommandCount = grouped_count;
 		m_visibility.m_nShadowVisibleIndexCount = ( uint32_t )( visible_cursor );
 	} else {
+		m_commandTable.m_nMainCompatibleCommandCount = grouped_count;
 		m_visibility.m_nVisibleIndexCount = ( uint32_t )( visible_cursor );
 	}
 	return true;
@@ -3224,6 +3298,8 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	        Terrain3DRdBindingBuilder::single( 9, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hShadowVisibleLayerBuffer ) );
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_uploadState.m_hInstanceBuffer ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( 11, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleFlagBuffer ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::single( 12, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hShadowVisibleFlagBuffer ) );
 	m_visibility.m_hInstanceCullUniformSet = m_instanceCullDescriptors.getOrCreate( m_visibility.m_hInstanceCullShader.rid(),
 	        "T3D.Instance.CullUniformSet", uniforms, m_visibility.m_hInstanceCullShader.rid(), 0u );
 	if ( !m_visibility.m_hInstanceCullUniformSet.is_valid() ) {
@@ -3919,7 +3995,9 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_visibility.m_hVisibleDrawSlotBuffer.releaseTracked( m_context );
 	m_visibility.m_hShadowVisibleDrawSlotBuffer.releaseTracked( m_context );
 	m_visibility.m_hVisibleLayerBuffer.releaseTracked( m_context );
+	m_visibility.m_hVisibleFlagBuffer.releaseTracked( m_context );
 	m_visibility.m_hShadowVisibleLayerBuffer.releaseTracked( m_context );
+	m_visibility.m_hShadowVisibleFlagBuffer.releaseTracked( m_context );
 	m_commandTable.m_hDrawMetadataBuffer.releaseTracked( m_context );
 	m_uploadState.m_hMaterialBuffer.releaseTracked( m_context );
 	m_commandTable.m_hIndirectBuffer.releaseTracked( m_context );
@@ -3946,6 +4024,11 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_commandTable.m_nCpuSurfacePacketsBuilt = 0u;
 	m_commandTable.m_nOneSubmitOpaque = m_commandTable.m_nOneSubmitDepth = m_commandTable.m_nOneSubmitMotion =
 	        m_commandTable.m_nOneSubmitShadow = m_commandTable.m_nOneSubmitFallbackDraws = 0u;
+	memset( m_commandTable.m_szMainGroupedCommands, 0, sizeof( m_commandTable.m_szMainGroupedCommands ) );
+	memset( m_commandTable.m_szShadowGroupedCommands, 0, sizeof( m_commandTable.m_szShadowGroupedCommands ) );
+	memset( m_commandTable.m_szSubmittedCommands, 0, sizeof( m_commandTable.m_szSubmittedCommands ) );
+	memset( m_commandTable.m_szGroupedCommands, 0, sizeof( m_commandTable.m_szGroupedCommands ) );
+	memset( m_commandTable.m_szFallbackCommands, 0, sizeof( m_commandTable.m_szFallbackCommands ) );
 	m_geometryArena.m_nSceneCapacityMeshGeneration = 0u;
 	m_visibility.m_nVisibleIndexCount = 0u;
 	m_visibility.m_nShadowVisibleIndexCount = 0u;
@@ -3978,6 +4061,7 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	t3dVectorRelease( m_visibility.m_cullParityActualIndices );
 	t3dVectorRelease( m_visibility.m_cullParityCommandCounts );
 	t3dVectorRelease( m_visibility.m_cullParityCommandWriteOffsets );
+	t3dVectorRelease( m_commandTable.m_groupedCommandRemap );
 	t3dVectorRelease( m_commandTable.m_drawPackets );
 	t3dVectorRelease( m_commandTable.m_depthPackets );
 	t3dVectorRelease( m_commandTable.m_shadowPackets );
@@ -4430,6 +4514,11 @@ bool Terrain3DRdInstanceRenderer::updateForwardFrameBuffer( const t3dRdForwardPa
 	frame.m_szMotionParams[0] = history_valid ? 1.0f : 0.0f;
 	frame.m_szMotionParams[1] = m_bMotionDebug ? 1.0f : 0.0f;
 	frame.m_szMotionParams[2] = ( float )( rContext.m_nViewCount );
+	// Fade uses the center camera in every pass, including multiview. These W
+	// lanes were unused and preserve the frame UBO layout and eye positions.
+	frame.m_szCamera[0][3] = ( float )rContext.m_cameraTransform.origin.x;
+	frame.m_szCamera[1][3] = ( float )rContext.m_cameraTransform.origin.y;
+	frame.m_szMotionParams[3] = ( float )rContext.m_cameraTransform.origin.z;
 	copyStylizedSunGlobals( frame.m_szNomadSunShape, frame.m_szNomadSunDiffuse, frame.m_szNomadSunSpecular, frame.m_szNomadSunRim );
 	memcpy( frame.m_szInstanceTextureMipBias, m_szTextureMipBias, sizeof( frame.m_szInstanceTextureMipBias ) );
 	memcpy( m_uploadState.m_frameBytes.ptrw(), &frame, sizeof( frame ) );
@@ -4731,14 +4820,24 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 	const bool gpu_visibility = m_bForwardPreparedGpuVisibility;
 	const uint32_t compatible_command_count =
 	        shadow_pass ? m_commandTable.m_nShadowCompatibleCommandCount : m_commandTable.m_nMainCompatibleCommandCount;
-	if ( gpu_visibility && !transparent_pass && compatible_command_count > 0u ) {
+	const uint32_t *const grouped_counts = shadow_pass ? m_commandTable.m_szShadowGroupedCommands : m_commandTable.m_szMainGroupedCommands;
+	uint32_t grouped_command_base = 0u;
+	for ( uint32_t pipeline = 0u; gpu_visibility && !transparent_pass && pipeline < 3u; ++pipeline ) {
+		const uint32_t count = grouped_counts[pipeline];
+		const uint32_t command_base = grouped_command_base;
+		grouped_command_base += count;
+		if ( count == 0u ) { continue; }
+		if ( grouped_command_base > compatible_command_count || grouped_command_base > packets.size() ) {
+			setError( "RD grouped instance command range exceeds sealed topology" );
+			return false;
+		}
 		const RID index_array = m_geometryArena.m_meshCache.getIndexArray();
 		if ( !index_array.is_valid() ) {
 			setError( "RD P32 compatible one-submit lane is missing the shared U32 index arena" );
 			return false;
 		}
-		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[0] );
-		bound_pipeline = 0u;
+		rd->draw_list_bind_render_pipeline( draw_list, entry->m_hszPipelines[pipeline] );
+		bound_pipeline = pipeline;
 		rd->draw_list_bind_index_array( draw_list, index_array );
 		const uint32_t nActiveAllocationCount = m_pVirtualTexture != NULL ? m_pVirtualTexture->getActiveAllocationCount() : 0u;
 		const uint32_t nActivePageCount = m_pVirtualTexture != NULL ? m_pVirtualTexture->getActiveVirtualPageCount() : 0u;
@@ -4748,10 +4847,13 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		rd->draw_list_draw_indirect( draw_list,
 		        true,
 		        shadow_pass ? m_commandTable.m_hIndirectBuffer : m_commandTable.m_hIndirectBuffer,
-		        shadow_pass ? m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes : m_commandTable.m_mainIndirectSlice.m_nOffsetBytes,
-		        compatible_command_count,
+		        ( shadow_pass ? m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes : m_commandTable.m_mainIndirectSlice.m_nOffsetBytes )
+		                + command_base * sizeof( t3dRdIndexedIndirectCommand_t ),
+		        count,
 		        sizeof( t3dRdIndexedIndirectCommand_t ) );
-		m_context.recordRenderIndirectCommandsSubmitted( T3D_RD_CONTEXT_OWNER_INSTANCES, compatible_command_count );
+		m_context.recordRenderIndirectCommandsSubmitted( T3D_RD_CONTEXT_OWNER_INSTANCES, count );
+		m_commandTable.m_szSubmittedCommands[rContext.m_passKind] += count;
+		m_commandTable.m_szGroupedCommands[rContext.m_passKind] += count;
 		++m_commandTable.m_nGpuProductionIndirectSubmissions;
 		++m_commandTable.m_nDraws;
 		switch ( rContext.m_passKind ) {
@@ -4826,7 +4928,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 			rd->draw_list_bind_vertex_array( draw_list, vertex_array );
 		}
 		uint32_t pipeline_index = 0u;
-		if ( ( packet.m_nFlags & ( T3D_RD_INSTANCE_DOUBLE_SIDED | T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED ) ) != 0u ) {
+		if ( ( packet.m_nFlags & ( T3D_RD_INSTANCE_DOUBLE_SIDED | ( shadow_pass ? T3D_RD_INSTANCE_SHADOW_DOUBLE_SIDED : 0u ) ) ) != 0u ) {
 			pipeline_index = 2u;
 		} else if ( ( packet.m_nFlags & T3D_RD_INSTANCE_CULL_FRONT ) != 0u ) {
 			pipeline_index = 1u;
@@ -4880,6 +4982,8 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 			        1u,
 			        sizeof( t3dRdIndexedIndirectCommand_t ) );
 			m_context.recordRenderIndirectCommandsSubmitted( T3D_RD_CONTEXT_OWNER_INSTANCES, 1u );
+			++m_commandTable.m_szSubmittedCommands[rContext.m_passKind];
+			++m_commandTable.m_szFallbackCommands[rContext.m_passKind];
 			++m_commandTable.m_nGpuProductionIndirectSubmissions;
 			if ( !transparent_pass ) {
 				++m_commandTable.m_nOneSubmitFallbackDraws;
@@ -4972,6 +5076,7 @@ size_t Terrain3DRdInstanceRenderer::getRetainedCpuBytes( void ) const {
 	bytes += m_visibility.m_cullParityActualIndices.capacity() * sizeof( uint32_t );
 	bytes += m_visibility.m_cullParityCommandCounts.capacity() * sizeof( uint32_t );
 	bytes += m_visibility.m_cullParityCommandWriteOffsets.capacity() * sizeof( uint32_t );
+	bytes += m_commandTable.m_groupedCommandRemap.capacity() * sizeof( uint32_t );
 	bytes += m_uploadState.m_frameBytes.size() + m_uploadState.m_instanceBytes.size() + m_uploadState.m_previousInstanceBytes.size()
 	        + m_uploadState.m_dirtyInstanceBytes.size();
 	bytes += m_uploadState.m_visibleBytes.size() + m_uploadState.m_shadowVisibleBytes.size() + m_uploadState.m_visibleDrawSlotBytes.size()
@@ -4990,6 +5095,28 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 		alpha_packet_count += ( m_commandTable.m_drawPackets[iPacket].m_nFlags & T3D_RD_INSTANCE_ALPHA_BLEND ) != 0u ? 1u : 0u;
 	}
 	result["instance_frames"] = ( int64_t )( m_uploadState.m_nFrames );
+	result["instance_render_lane"] = "preview_instances";
+	result["instance_gpu_pass_time_available"] = false;
+	result["instance_visible_count_classification"] = "CPU sealed capacity; accepted GPU count unavailable without diagnostic readback";
+	Dictionary passes;
+	const char *const pass_names[5] = { "depth", "opaque", "shadow", "motion", "transparent" };
+	const t3dRdForwardPassKind_t pass_kinds[5] = { T3D_RD_FORWARD_PASS_DEPTH, T3D_RD_FORWARD_PASS_OPAQUE,
+	    T3D_RD_FORWARD_PASS_SHADOW, T3D_RD_FORWARD_PASS_MOTION, T3D_RD_FORWARD_PASS_TRANSPARENT };
+	const uint64_t draw_calls[5] = { m_commandTable.m_nDepthSubmittedDraws, m_commandTable.m_nOpaqueSubmittedDraws,
+	    m_commandTable.m_nShadowSubmittedDraws, m_commandTable.m_nMotionSubmittedDraws, m_commandTable.m_nTransparentSubmittedDraws };
+	for ( uint32_t i = 0u; i < 5u; ++i ) {
+		const uint32_t pass = ( uint32_t )pass_kinds[i];
+		Dictionary row;
+		row["lane"] = "preview_instances";
+		row["classification"] = "Cumulative CPU submission counters; compare frame deltas";
+		row["submitted_indirect_commands"] = ( int64_t )m_commandTable.m_szSubmittedCommands[pass];
+		row["grouped_commands"] = ( int64_t )m_commandTable.m_szGroupedCommands[pass];
+		row["individual_fallback_commands"] = ( int64_t )m_commandTable.m_szFallbackCommands[pass];
+		row["draw_calls"] = ( int64_t )draw_calls[i];
+		row["gpu_time_usec"] = -1;
+		passes[pass_names[i]] = row;
+	}
+	result["instance_pass_submissions"] = passes;
 	result["virtual_texture_attached"] = m_pVirtualTexture != NULL;
 	result["virtual_texture_initialized"] = m_pVirtualTexture != NULL && m_pVirtualTexture->is_initialized();
 	result["instance_vt_stable_key_misses"] = ( int64_t )( m_nVtStableKeyMissCount );

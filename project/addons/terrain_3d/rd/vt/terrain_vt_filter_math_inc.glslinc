@@ -107,10 +107,17 @@ T3DVTContinuousLod t3d_vt_filter_continuous_lod(vec2 ddx_uv,
     uint clamped_base = min(base_mip, last_mip);
     float max_offset = float(last_mip - clamped_base);
 
-    T3DVTFilterFootprintAxes axes = t3d_vt_filter_footprint_axes(ddx_uv, ddy_uv, virtual_texels);
-    float rho = anisotropic
-        ? max(axes.minor, axes.major / float(T3D_VT_MAX_ANISOTROPY))
-        : axes.major;
+    float rho;
+    if (anisotropic) {
+        T3DVTFilterFootprintAxes axes = t3d_vt_filter_footprint_axes(ddx_uv, ddy_uv, virtual_texels);
+        rho = max(axes.minor, axes.major / float(T3D_VT_MAX_ANISOTROPY));
+    } else {
+        vec2 dx = ddx_uv * virtual_texels;
+        vec2 dy = ddy_uv * virtual_texels;
+        float A = dot(dx, dx), B = dot(dx, dy), C = dot(dy, dy);
+        float discriminant = sqrt(max((A - C) * (A - C) + 4.0 * B * B, 0.0));
+        rho = sqrt(max(0.5 * (A + C + discriminant), 0.0));
+    }
     float lod_offset = clamp(log2(max(rho, 1.0e-8)) + lod_bias, 0.0, max_offset);
     float floored_lod = floor(lod_offset);
 

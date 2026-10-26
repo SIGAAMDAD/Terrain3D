@@ -20,6 +20,46 @@ feedback_color_specular_motion_radiance_array = "#define T3D_VT_FRAGMENT_FEEDBAC
 depth = "#define T3D_FORWARD_DEPTH";
 depth_normal_roughness = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS";
 depth_normal_roughness_voxel_gi = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI";
+color_diag_constant = "#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_diag_opacity = "#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_native_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_native_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_specular_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_specular_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_motion_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_motion_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_specular_motion_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_specular_motion_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_native_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_native_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_specular_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_specular_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_motion_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_motion_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+color_specular_motion_radiance_array_diag_constant = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+color_specular_motion_radiance_array_diag_opacity = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_native_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_native_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_native_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_native_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_color_specular_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_color_specular_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+depth_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+depth_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+depth_normal_roughness_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+depth_normal_roughness_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+depth_normal_roughness_voxel_gi_diag_constant = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+depth_normal_roughness_voxel_gi_diag_opacity = "#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 
 #[vertex]
 #version 450
@@ -89,6 +129,9 @@ layout(set = 0, binding = 5, std430) readonly buffer VisibleDrawSlots {
 layout(set = 0, binding = 6, std430) readonly buffer VisibleLayers {
     uint visible_layers[];
 };
+layout(set = 0, binding = 7, std430) readonly buffer VisibleFlags {
+    uint visible_flags[];
+};
 #endif
 
 layout(push_constant, std430) uniform InstancePush {
@@ -146,7 +189,7 @@ void main() {
         InstanceDrawMeta metadata = draw_metadata[draw_slot];
         draw_material_index = metadata.material_index;
         draw_overlay_material_index = metadata.overlay_material_index;
-        draw_flags = metadata.flags;
+        draw_flags = metadata.flags | visible_flags[visible_address];
         draw_visibility_layers = visible_layers[visible_address];
     }
 #endif
@@ -444,14 +487,20 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     out float roughness,
     out float ao,
     out float normal_scale) {
-    T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
-    vec4 surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+    bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
+    vec4 surface_texel = vec4(1.0);
+    if (has_surface) {
+        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
+        surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+        t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
+#endif
+    }
     vt_address = t3d_vt_consumer_invalid_address();
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
         vt_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 1u, footprint);
     }
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-    t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
         t3d_vt_instance_fragment_feedback_channel(material, footprint, 1u);
     }
@@ -461,7 +510,11 @@ void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
     float ao_strength = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);
     normal_scale = unpackHalf2x16(material.packedScalars1).x;
     uint surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
-    if (surface_layout == 0u) {
+    if (!has_surface) {
+        ao = 1.0;
+        roughness = clamp(roughness, 0.02, 1.0);
+        metallic = clamp(metallic, 0.0, 1.0);
+    } else if (surface_layout == 0u) {
         ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface_texel.r, ao_strength) : 1.0;
         if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u) {
             roughness = clamp(surface_texel.g, 0.04, 1.0);
@@ -651,6 +704,7 @@ void main() {
     T3DVTConsumerFootprint base_footprint;
     T3DVTConsumerFootprint overlay_footprint;
 
+#ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
     // Capture both materials' derivatives before fade/scissor divergence.
     if (draw_material_index != 0xffffu) {
         material = materials[draw_material_index];
@@ -660,6 +714,7 @@ void main() {
         overlay = materials[draw_overlay_material_index];
         overlay_footprint = t3d_inst_material_footprint(overlay);
     }
+#endif
     if ((draw_flags & INSTANCE_FADE_ACTIVE) != 0u) {
         float visibility_fade = float((draw_flags >> INSTANCE_FADE_SHIFT) & 0xffffu) / 65535.0;
         vec2 pixel = floor(gl_FragCoord.xy);
@@ -667,6 +722,7 @@ void main() {
         if (dither > visibility_fade) discard;
     }
 
+#ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
     // Resolve only opacity until the combined base/overlay pixel survives.
     if (draw_material_index != 0xffffu) {
         if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
@@ -708,8 +764,11 @@ void main() {
     }
     if (!base_survives && !overlay_survives) discard;
     if ((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5) discard;
+#else
+    vec4 final_color = vec4(0.5, 0.5, 0.5, 1.0);
+#endif
 
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+#if (!defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)) && !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
     if (draw_material_index != 0xffffu) {
         T3DVTConsumerAddress vt_address;
         float normal_scale;
@@ -753,6 +812,10 @@ void main() {
 #else
     vec3 lit;
     vec3 specular_light = vec3(0.0);
+#if defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) || defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
+    unshaded = true;
+    lit = vec3(0.5);
+#else
     if (unshaded) {
         lit = final_color.rgb + emission;
     } else {
@@ -798,6 +861,7 @@ void main() {
         lit = final_color.rgb * (ambient + (1.0 - metallic * 0.65) * ndotl * (1.0 - mix(0.10, 0.30, roughness))) + emission;
 #endif
     }
+#endif
     out_color = vec4(lit, final_color.a);
 #ifdef T3D_FORWARD_SPECULAR
     out_specular = unshaded ? vec4(0.0) : vec4(specular_light, metallic);

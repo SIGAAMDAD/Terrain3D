@@ -9,6 +9,7 @@
 #include <godot_cpp/classes/rd_shader_file.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 
@@ -29,6 +30,9 @@ typedef struct t3dRdShaderSharedState_s {
 	t3dAtomicU32_t m_nPhysicalUsers{ 0u };
 	t3dAtomicU64_t m_nPhysicalDeviceGeneration{ 0u };
 	bool m_bPhysicalMetadataPrepared = false;
+	String m_instanceDiagnosticSuffix;
+	String m_instanceDiagnosticMode = "production";
+	uint32_t m_nInstanceDiagnosticMode = 0u;
 } t3dRdShaderSharedState_t;
 
 // Keep the Windows loader path free of Godot Ref/RID/mutex constructors.
@@ -47,6 +51,21 @@ static t3dRdShaderSharedState_t &t3dRdShaderSharedState( void ) {
 bool Terrain3DRdShaderLibrary::initializeSharedState( void ) {
 	if ( s_pRdShaderSharedState ) { return true; }
 	s_pRdShaderSharedState = new ( std::nothrow ) t3dRdShaderSharedState_t();
+	if ( s_pRdShaderSharedState ) {
+#ifdef DEBUG_ENABLED
+		// Cold selection is process-wide because the physical shader cache is shared.
+		const String mode = OS::get_singleton()->get_environment( "TERRAIN3D_INSTANCE_GPU_DIAGNOSTIC" ).to_lower();
+		if ( mode == "constant" || mode == "opacity" ) {
+			s_pRdShaderSharedState->m_instanceDiagnosticMode = mode;
+			s_pRdShaderSharedState->m_instanceDiagnosticSuffix = "_diag_" + mode;
+			s_pRdShaderSharedState->m_nInstanceDiagnosticMode = mode == "constant" ? 1u : 2u;
+		} else if ( mode == "scalar_lit" ) {
+			// Production now includes the authored-surface/scalar-only policy (P01).
+			s_pRdShaderSharedState->m_instanceDiagnosticMode = mode;
+			s_pRdShaderSharedState->m_nInstanceDiagnosticMode = 3u;
+		}
+#endif
+	}
 	return s_pRdShaderSharedState != NULL;
 }
 
@@ -57,6 +76,11 @@ void Terrain3DRdShaderLibrary::shutdownSharedState( void ) {
 	}
 	delete s_pRdShaderSharedState;
 	s_pRdShaderSharedState = NULL;
+}
+
+uint32_t Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode( void ) {
+	const auto *state = t3dRdShaderSharedStateGet();
+	return state ? state->m_nInstanceDiagnosticMode : 0u;
 }
 
 bool Terrain3DRdShaderLibrary::physicalCacheReady( void ) {
@@ -185,6 +209,14 @@ Ref<RDShaderFile> Terrain3DRdShaderLibrary::findSourceFile( const String &rPath 
 }
 
 Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, const StringName &rVersion ) {
+	StringName selected_version = rVersion;
+	const auto &diagnostic_state = t3dRdShaderSharedState();
+	if ( !diagnostic_state.m_instanceDiagnosticSuffix.is_empty()
+	        && ( rPath.ends_with( "/terrain_instances.glsl" )
+	                || ( rPath.ends_with( "/terrain_world_raster.glsl" ) && String( rVersion ).contains( "mesh_" ) ) )
+	        && rVersion != StringName( "bringup" ) ) {
+		selected_version = StringName( String( rVersion ) + diagnostic_state.m_instanceDiagnosticSuffix );
+	}
 	m_nShaderLoadAttemptCount++;
 	const uint64_t nStartedMsec = t3dRdShaderTicksMsec();
 	UtilityFunctions::print( "[Terrain3D][ShaderLoad] RESOLVE [", m_nShaderLoadAttemptCount, "/", m_nShaderLoadExpectedCount,
@@ -195,11 +227,11 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, co
 		logShaderFailure( rPath, rVersion, nStartedMsec );
 		return Ref<RDShaderSPIRV>();
 	}
-	if ( !rVersion.is_empty() ) {
+	if ( !selected_version.is_empty() ) {
 		const TypedArray<StringName> versions = shader_file->get_version_list();
 		bool found = false;
 		for ( int64_t i = 0; i < versions.size(); ++i ) {
-			if ( StringName( versions[i] ) == rVersion ) {
+			if ( StringName( versions[i] ) == selected_version ) {
 				found = true;
 				break;
 			}
@@ -210,7 +242,7 @@ Ref<RDShaderSPIRV> Terrain3DRdShaderLibrary::loadShader( const String &rPath, co
 			return Ref<RDShaderSPIRV>();
 		}
 	}
-	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv( rVersion );
+	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv( selected_version );
 	if ( spirv.is_null() ) {
 		m_lastError = "RD shader has no SPIR-V: " + rPath + ( rVersion.is_empty() ? String() : String( " version=" ) + String( rVersion ) );
 		logShaderFailure( rPath, rVersion, nStartedMsec );
@@ -656,6 +688,9 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics( void ) const {
 	t3dRdShaderSharedState_t &state = t3dRdShaderSharedState();
 	Dictionary result;
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
+	result["instance_gpu_diagnostic_mode"] = state.m_instanceDiagnosticMode;
+	result["instance_gpu_diagnostic_requires_restart"] = true;
+	result["instance_gpu_diagnostic_gpu_time_available"] = false;
 	result["startup_generation"] = ( int64_t )( m_nStartupGeneration );
 	const t3dStartupStage_t eStartupStage = startup.m_eStage;
 	result["startup_stage"] = ( int64_t )( eStartupStage );

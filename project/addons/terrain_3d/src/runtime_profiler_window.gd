@@ -17,7 +17,8 @@ const HistoryGraph = preload("res://addons/terrain_3d/src/runtime_profiler_histo
 const ResidencyGrid = preload("res://addons/terrain_3d/src/runtime_profiler_residency_grid.gd")
 const RuntimeOverlay = preload("res://addons/terrain_3d/src/runtime_profiler_overlay.gd")
 
-const HISTORY_SAMPLES: int = 600
+const DEFAULT_HISTORY_SAMPLES: int = 6000
+const MAX_HISTORY_SAMPLES: int = 60000
 const DEFAULT_REFRESH_HZ: float = 4.0
 
 var terrain: Terrain3D
@@ -69,6 +70,8 @@ var _refresh_accumulator: float = 0.0
 var _refresh_interval_sec: float = 1.0 / DEFAULT_REFRESH_HZ
 var _last_snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
 var _history: Array[Terrain3DRuntimeValueMap] = []
+var _history_capacity: int = DEFAULT_HISTORY_SAMPLES
+var _history_capacity_control: SpinBox
 var _grid_snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.new()
 var _restore_profiling_on_close: bool = false
 var _updating_controls: bool = false
@@ -149,6 +152,11 @@ func _build_toolbar(p_root: VBoxContainer) -> void:
 	reset_button.tooltip_text = "Reset Terrain3D diagnostic counters/history used by this profiler view."
 	reset_button.pressed.connect(_reset_counters)
 	toolbar.add_child(reset_button)
+	var clear_history_button: Button = Button.new()
+	clear_history_button.text = "Clear history"
+	clear_history_button.tooltip_text = "Clear the timeline and start a fresh capture while preserving cumulative diagnostic counters."
+	clear_history_button.pressed.connect(_clear_history)
+	toolbar.add_child(clear_history_button)
 	var export_button: Button = Button.new()
 	export_button.text = "Export..."
 	export_button.tooltip_text = "Export the current Terrain3D diagnostic/history snapshot without changing terrain configuration."
@@ -459,6 +467,18 @@ func _build_timeline_tab() -> void:
 	var root: VBoxContainer = VBoxContainer.new()
 	root.name = "Timeline"
 	_tabs.add_child(root)
+	var history_controls: HBoxContainer = HBoxContainer.new()
+	root.add_child(history_controls)
+	history_controls.add_child(_make_label("History limit"))
+	_history_capacity_control = SpinBox.new()
+	_history_capacity_control.min_value = 600.0
+	_history_capacity_control.max_value = float(MAX_HISTORY_SAMPLES)
+	_history_capacity_control.step = 600.0
+	_history_capacity_control.value = float(_history_capacity)
+	_history_capacity_control.suffix = " samples"
+	_history_capacity_control.tooltip_text = "Samples retained while this profiler is collecting. Increasing the limit keeps a longer capture; it cannot recover samples already discarded."
+	_history_capacity_control.value_changed.connect(_on_history_capacity_changed)
+	history_controls.add_child(_history_capacity_control)
 	var controls: HBoxContainer = HBoxContainer.new()
 	root.add_child(controls)
 	_auto_freeze = CheckButton.new()
@@ -788,19 +808,12 @@ func refresh_now() -> void:
 	var current_frame: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("frame")
 	var current_sequence: int = current_frame.int_value("sequence")
 	if _history_fetch_sequence > current_sequence:
-		_history.clear()
-		_history_items.clear()
-		_history_tree.clear()
-		_history_detail.clear()
-		_last_history_sequence = -1
-		_history_fetch_sequence = -1
-		_selected_history_index = -1
-	var new_samples: Array[Terrain3DRuntimeValueMap] = Terrain3DRuntimeValueMap.maps_from_value(terrain.get_runtime_profile_history_since(_history_fetch_sequence, HISTORY_SAMPLES))
+		_clear_history_state()
+	var new_samples: Array[Terrain3DRuntimeValueMap] = Terrain3DRuntimeValueMap.maps_from_value(terrain.get_runtime_profile_history_since(_history_fetch_sequence, _history_capacity))
 	for sample: Terrain3DRuntimeValueMap in new_samples:
 		_history.push_back(sample)
 		_history_fetch_sequence = sample.int_value("sequence", _history_fetch_sequence)
-	while _history.size() > HISTORY_SAMPLES:
-		_history.pop_front()
+	_trim_history()
 	if is_instance_valid(terrain.data):
 		_grid_snapshot = Terrain3DRuntimeValueMap.from_value(terrain.data.get_runtime_residency_grid(6))
 	else:
@@ -828,7 +841,7 @@ func refresh_now() -> void:
 	})
 	var frame: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("frame")
 	var sequence: int = frame.int_value("sequence")
-	_status.text = "Frame %d — Terrain3D %.3f ms — history %d/%d" % [sequence, frame.float_value("physics_total_usec") / 1000.0, _history.size(), HISTORY_SAMPLES]
+	_status.text = "Frame %d — Terrain3D %.3f ms — history %d/%d" % [sequence, frame.float_value("physics_total_usec") / 1000.0, _history.size(), _history_capacity]
 	var adaptive_status: Terrain3DRuntimeValueMap = terrain_snapshot.map_value("adaptive_budgets")
 	if adaptive_status.bool_value("enabled"):
 		_status.text += " — adaptive %s %.3f/%.3f ms" % [adaptive_status.string_value("reason", "steady"),
@@ -849,7 +862,8 @@ func refresh_now() -> void:
 	_update_spatial(terrain_snapshot)
 	_update_settings(terrain_snapshot)
 	_update_raw_tree(_last_snapshot)
-	_evaluate_auto_freeze(frame)
+	if not _history.is_empty():
+		_evaluate_auto_freeze(frame)
 
 
 func _initialize_metric_rows() -> void:
@@ -1101,16 +1115,16 @@ func _update_timeline(p_sequence: int) -> void:
 		if item == null:
 			item = _history_tree.create_item(root)
 			_history_items[sequence] = item
+			item.set_text(0, str(sequence))
+			item.set_text(1, _format_usec(sample.float_value("physics_total_usec")))
+			item.set_text(2, _format_usec(sample.float_value("data_residency_usec")))
+			item.set_text(3, _format_usec(sample.float_value("clipmap_usec")))
+			item.set_text(4, _format_usec(sample.float_value("instancer_usec")))
+			var event_names: PackedStringArray = sample.string_array("events")
+			var stall_names: PackedStringArray = sample.string_array("stall_reasons")
+			item.set_text(5, ", ".join(event_names))
+			item.set_text(6, ", ".join(stall_names))
 		item.set_metadata(0, index)
-		item.set_text(0, str(sequence))
-		item.set_text(1, _format_usec(sample.float_value("physics_total_usec")))
-		item.set_text(2, _format_usec(sample.float_value("data_residency_usec")))
-		item.set_text(3, _format_usec(sample.float_value("clipmap_usec")))
-		item.set_text(4, _format_usec(sample.float_value("instancer_usec")))
-		var event_names: PackedStringArray = sample.string_array("events")
-		var stall_names: PackedStringArray = sample.string_array("stall_reasons")
-		item.set_text(5, ", ".join(event_names))
-		item.set_text(6, ", ".join(stall_names))
 	for sequence: int in _history_items:
 		if not seen.has(sequence):
 			var item: TreeItem = _history_items[sequence]
@@ -1369,8 +1383,6 @@ func _evaluate_auto_freeze(p_frame: Terrain3DRuntimeValueMap) -> void:
 			triggered = true
 		if _freeze_on_failure.button_pressed and frame_events.has("node_load_failure"):
 			triggered = true
-		if _freeze_on_shader.button_pressed and frame_events.has("shader_update"):
-			triggered = true
 		if triggered:
 			_freeze_trigger_sequence = sequence
 			_freeze_target_sequence = sequence + int(_post_trigger_samples.value)
@@ -1470,8 +1482,57 @@ func _reset_counters() -> void:
 	refresh_now()
 
 
-func _reset_ui_state() -> void:
+func _on_history_capacity_changed(p_value: float) -> void:
+	_history_capacity = clampi(int(p_value), 600, MAX_HISTORY_SAMPLES)
+	_trim_history()
+	_last_history_sequence = -1
+	_update_timeline(_history_fetch_sequence)
+	if is_instance_valid(terrain):
+		refresh_now()
+
+
+func _trim_history() -> void:
+	var removed: int = maxi(0, _history.size() - _history_capacity)
+	if removed == 0:
+		return
+	# Remove an expired batch in one copy instead of shifting a large array per sample.
+	_history = _history.slice(removed)
+	_selected_history_index = maxi(-1, _selected_history_index - removed)
+	_history_graph.selected_index = _selected_history_index
+	if _selected_history_index < 0:
+		_history_detail.clear()
+
+
+func _clear_history() -> void:
+	var after_sequence: int = -1
+	if is_instance_valid(terrain):
+		var snapshot: Terrain3DRuntimeValueMap = Terrain3DRuntimeValueMap.from_value(terrain.get_runtime_diagnostics(false))
+		after_sequence = snapshot.map_value("frame").int_value("sequence")
+	_clear_history_state(after_sequence)
+	_pause.button_pressed = false
+	_refresh_accumulator = 0.0
+	refresh_now()
+
+
+func _clear_history_state(p_after_sequence: int = -1) -> void:
+	_history.clear()
 	_history_items.clear()
+	_last_history_sequence = -1
+	_history_fetch_sequence = p_after_sequence
+	_selected_history_index = -1
+	_freeze_trigger_sequence = -1
+	_freeze_target_sequence = -1
+	if is_instance_valid(_history_graph):
+		_history_graph.selected_index = -1
+		_history_graph.set_samples(_history)
+	if is_instance_valid(_history_tree):
+		_history_tree.clear()
+	if is_instance_valid(_history_detail):
+		_history_detail.clear()
+
+
+func _reset_ui_state() -> void:
+	_clear_history_state()
 	_raw_items.clear()
 	_problem_items.clear()
 	_pressure_items.clear()
@@ -1479,15 +1540,6 @@ func _reset_ui_state() -> void:
 	_adaptive_items.clear()
 	_priority_items.clear()
 	_subsystem_items.clear()
-	_last_history_sequence = -1
-	_history_fetch_sequence = -1
-	_selected_history_index = -1
-	_freeze_trigger_sequence = -1
-	_freeze_target_sequence = -1
-	if is_instance_valid(_history_tree):
-		_history_tree.clear()
-	if is_instance_valid(_history_detail):
-		_history_detail.clear()
 	if is_instance_valid(_raw_tree):
 		_raw_tree.clear()
 	if is_instance_valid(_problems_tree):

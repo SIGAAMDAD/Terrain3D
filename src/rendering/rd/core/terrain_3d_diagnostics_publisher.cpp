@@ -183,6 +183,24 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const t3dDiagnosticInp
 	world_renderer[ "draw_calls_opaque" ] = (int64_t)world_raster.getSubmitCount( T3D_RD_FORWARD_PASS_OPAQUE );
 	world_renderer[ "draw_calls_motion" ] = (int64_t)world_raster.getSubmitCount( T3D_RD_FORWARD_PASS_MOTION );
 	world_renderer[ "draw_calls_shadow" ] = (int64_t)world_raster.getSubmitCount( T3D_RD_FORWARD_PASS_SHADOW );
+	Dictionary world_passes;
+	const char *const world_pass_names[4] = { "depth", "opaque", "motion", "shadow" };
+	const t3dRdForwardPassKind_t world_pass_kinds[4] = { T3D_RD_FORWARD_PASS_DEPTH, T3D_RD_FORWARD_PASS_OPAQUE,
+	    T3D_RD_FORWARD_PASS_MOTION, T3D_RD_FORWARD_PASS_SHADOW };
+	for ( uint32_t i = 0u; i < 4u; ++i ) {
+		const uint64_t submits = world_raster.getSubmitCount( world_pass_kinds[i] );
+		Dictionary row;
+		row["lane"] = "unified_world";
+		row["classification"] = "Cumulative CPU submission counters; compare frame deltas";
+		row["mesh_submitted_indirect_commands"] = (int64_t)submits;
+		row["submitted_indirect_commands"] = (int64_t)( submits * ( T3D_WORLD_TERRAIN_STRIP_BUCKET_COUNT + 1u ) );
+		row["grouped_commands"] = row["submitted_indirect_commands"];
+		row["individual_fallback_commands"] = 0;
+		row["draw_calls"] = (int64_t)( submits * 2u );
+		row["gpu_time_usec"] = -1;
+		world_passes[world_pass_names[i]] = row;
+	}
+	world_renderer[ "pass_submissions" ] = world_passes;
 	result[ "world_renderer" ] = world_renderer;
 	result[ "forward_pass_callbacks" ] = (int64_t)( m_forwardPassPreparerView.m_nForwardPassCallbacks );
 	result[ "depth_pass_callbacks" ] = (int64_t)( m_forwardPassPreparerView.m_nDepthPassCallbacks );

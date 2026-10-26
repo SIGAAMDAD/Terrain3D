@@ -63,6 +63,8 @@ public:
 	static bool initializeSharedState( void );
 	static void shutdownSharedState( void );
 	static bool physicalCacheReady( void );
+	// 0 production, 1 opaque constant, 2 opacity only, 3 scalar-lit production.
+	static uint32_t getInstanceGpuDiagnosticMode( void );
 	bool servicePhysicalPrewarm( Terrain3DRdContext &context, uint32_t budget );
 	void releasePhysical( Terrain3DRdContext &context );
 	bool isPhysicalReady( void ) const;

@@ -56,6 +56,8 @@ private:
 		Terrain3DRdGpuBuffer m_hShadowVisibleDrawSlotBuffer;
 		Terrain3DRdGpuBuffer m_hVisibleLayerBuffer;
 		Terrain3DRdGpuBuffer m_hShadowVisibleLayerBuffer;
+		Terrain3DRdGpuBuffer m_hVisibleFlagBuffer;
+		Terrain3DRdGpuBuffer m_hShadowVisibleFlagBuffer;
 		uint32_t m_nVisibleIndexCapacity = 0u;
 		uint32_t m_nVisibleIndexCount = 0u;
 		uint32_t m_nShadowVisibleIndexCount = 0u;
@@ -115,6 +117,9 @@ private:
 		uint32_t m_nPacketCapacity = 0u;
 		uint32_t m_nMainCompatibleCommandCount = 0u;
 		uint32_t m_nShadowCompatibleCommandCount = 0u;
+		uint32_t m_szMainGroupedCommands[3] = {};
+		uint32_t m_szShadowGroupedCommands[3] = {};
+		eastl::vector<uint32_t, Terrain3DEastlAllocator> m_groupedCommandRemap;
 		eastl::vector<uint32_t, Terrain3DEastlAllocator> m_fixedDrawVisibleBases;
 		eastl::vector<uint32_t, Terrain3DEastlAllocator> m_fixedDrawVisibleCapacities;
 		eastl::vector<uint32_t, Terrain3DEastlAllocator> m_shadowFixedDrawVisibleBases;
@@ -140,6 +145,9 @@ private:
 		uint64_t m_nOneSubmitMotion = 0u;
 		uint64_t m_nOneSubmitShadow = 0u;
 		uint64_t m_nOneSubmitFallbackDraws = 0u;
+		uint64_t m_szSubmittedCommands[T3D_RD_FORWARD_PASS_MAX] = {};
+		uint64_t m_szGroupedCommands[T3D_RD_FORWARD_PASS_MAX] = {};
+		uint64_t m_szFallbackCommands[T3D_RD_FORWARD_PASS_MAX] = {};
 		uint64_t m_nCpuSurfacePacketsBuilt = 0u;
 		uint64_t m_nPacketBuildInputCells = 0u;
 		uint64_t m_nResolvedMeshCells = 0u;

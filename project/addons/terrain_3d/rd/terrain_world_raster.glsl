@@ -34,6 +34,46 @@ terrain_strip_depth = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MA
 terrain_strip_depth_normal_roughness = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_TERRAIN_STRIP";
 terrain_strip_depth_normal_roughness_voxel_gi = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_WORLD_RASTER_TERRAIN_STRIP";
 terrain_strip_shadow = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_SHADOW\n#define T3D_WORLD_RASTER_TERRAIN_STRIP";
+mesh_color_native_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_native_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_specular_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_specular_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_motion_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_motion_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_specular_motion_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_specular_motion_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_native_radiance_array_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_native_radiance_array_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_specular_radiance_array_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_specular_radiance_array_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_motion_radiance_array_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_motion_radiance_array_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_color_specular_motion_radiance_array_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_color_specular_motion_radiance_array_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_native_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_native_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_specular_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_specular_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_specular_motion_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_specular_motion_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_native_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_native_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_specular_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_specular_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+feedback_mesh_color_specular_motion_radiance_array_diag_constant = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+feedback_mesh_color_specular_motion_radiance_array_diag_opacity = "#define T3D_VT_FRAGMENT_FEEDBACK\n#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_depth_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_depth_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_depth_normal_roughness_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_depth_normal_roughness_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_depth_normal_roughness_voxel_gi_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_depth_normal_roughness_voxel_gi_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_FORWARD_NORMAL_ROUGHNESS\n#define T3D_FORWARD_VOXEL_GI\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
+mesh_shadow_diag_constant = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_SHADOW\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_CONSTANT";
+mesh_shadow_diag_opacity = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_DEPTH\n#define T3D_WORLD_SHADOW\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_INSTANCE_GPU_DIAG_OPACITY";
 
 #[vertex]
 #version 450
@@ -347,6 +387,7 @@ void t3d_world_mesh_fragment_evaluate() {
     if ((material.flags & T3D_VT_MATERIAL_CAST_SHADOWS) == 0u)
         discard;
 #endif
+#ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
     vec2 uv = world_mesh_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
     bool repeat_uv = material.samplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || material.samplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT;
     uint filter_mode = t3d_vt_instance_filter_mode(
@@ -377,25 +418,40 @@ void t3d_world_mesh_fragment_evaluate() {
     uint surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
     if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u && base.a < alpha_threshold)
         discard;
+#else
+    vec4 base = vec4(0.5, 0.5, 0.5, 1.0);
+    float metallic = 0.0, roughness = 1.0;
+#endif
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     return;
 #else
+    float ao = 1.0;
+    vec3 final_normal = normalize(world_normal);
+#if !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
     // Reuse derivatives captured before alpha rejection. Unused normal channels
     // and transparent card pixels never contend on the feedback hash.
     if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) {
-        t3d_vt_fragment_request_material_page_set(material.vtAllocation + 2u, uv, footprint.ddx_uv, footprint.ddy_uv,
-            footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+        if (t3d_vt_material_has_surface_texture(material.flags)) {
+            t3d_vt_fragment_request_material_page_set(material.vtAllocation + 2u, uv, footprint.ddx_uv, footprint.ddy_uv,
+                footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+        }
         if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
             t3d_vt_fragment_request_material_page_set(material.vtAllocation + 1u, uv, footprint.ddx_uv, footprint.ddy_uv,
                 footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
         }
     }
 #endif
-    T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
-    vec4 surface = t3d_vt_consumer_sample_orm_v3(surface_address);
-    float ao = 1.0;
-    if (surface_layout == 0u) {
+    bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
+    vec4 surface = vec4(1.0);
+    if (has_surface) {
+        T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
+        surface = t3d_vt_consumer_sample_orm_v3(surface_address);
+    }
+    if (!has_surface) {
+        roughness = clamp(roughness, 0.02, 1.0);
+        metallic = clamp(metallic, 0.0, 1.0);
+    } else if (surface_layout == 0u) {
         ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface.r, ao_strength) : 1.0;
         if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u) {
             roughness = clamp(surface.g, 0.04, 1.0);
@@ -416,7 +472,6 @@ void t3d_world_mesh_fragment_evaluate() {
         float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
         base.rgb = max(mix(vec3(luma), base.rgb, saturation), vec3(0.0));
     }
-    vec3 final_normal = normalize(world_normal);
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
         vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
         vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
@@ -425,6 +480,7 @@ void t3d_world_mesh_fragment_evaluate() {
         encoded *= max(normal_scale, 0.0);
         final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
     }
+#endif
 #ifdef T3D_FORWARD_DEPTH
     out_normal_roughness = vec4(normalize(mat3(frame_data.view_matrix) * final_normal) * 0.5 + 0.5, roughness * (127.0 / 255.0));
 #ifdef T3D_FORWARD_VOXEL_GI
@@ -436,6 +492,10 @@ void t3d_world_mesh_fragment_evaluate() {
     bool unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
     vec3 specular = vec3(0.0);
     vec3 lit;
+#if defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) || defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
+    unshaded = true;
+    lit = vec3(0.5);
+#else
     if (unshaded) {
         lit = base.rgb + emission;
     } else {
@@ -470,6 +530,7 @@ void t3d_world_mesh_fragment_evaluate() {
         lit += specular;
 #endif
     }
+#endif
     out_color = vec4(lit, base.a);
 #ifdef T3D_FORWARD_SPECULAR
     out_specular = unshaded ? vec4(0.0) : vec4(specular, metallic);

@@ -9,6 +9,7 @@
 #include "rendering/rd/core/terrain_3d_rd_context.h"
 #include "rendering/rd/world/core/terrain_3d_world_render_authority.h"
 #include "rendering/rd/vt/streaming/terrain_3d_vt_streaming.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 
 #include <math.h>
 #include <string.h>
@@ -38,6 +39,8 @@ static void t3dStageWorldMaterialFootprintsHot( Terrain3DVirtualTexture &rVT,
         const Terrain3DWorldPublication &rWorld, const Terrain3DWorldResources &rResources,
         const t3dRdFrameSnapshot_t &rSnapshot, const t3dRdForwardPassContext_t &rContext, size_t &rCursor, uint32_t &rSweep ) {
 	const t3dVTResidencyState_t &residency = rVT.get_residency();
+	const uint32_t diagnostic_mode = Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode();
+	if ( diagnostic_mode == 1u ) { return; }
 	if ( rWorld.m_visibilityCandidates.empty() || !residency.bInitialized || !residency.Buffers.pAllocations ) { return; }
 	uint64_t seenKeys[256];
 	uint16_t seenMips[256];
@@ -112,7 +115,9 @@ static void t3dStageWorldMaterialFootprintsHot( Terrain3DVirtualTexture &rVT,
 		const float fFilterScale = bAnisotropic ? ( float )T3D_VT_MAX_ANISOTROPY : 1.0f;
 		const bool bMipmapped = nFilter >= T3D_VT_FILTER_NEAREST_MIPMAP;
 		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION; ++channel ) {
+			if ( diagnostic_mode == 2u && channel != 0u ) { continue; }
 			if ( channel == 1u && ( pMaterial->m_nFlags & T3D_VT_MATERIAL_NORMAL_MAPPING ) == 0u ) { continue; }
+			if ( channel == 2u && !t3d_vt_material_has_surface_texture( pMaterial->m_nFlags ) ) { continue; }
 			if ( pMaterial->m_nVtAllocation >= residency.nAllocationCount || channel >= residency.nAllocationCount - pMaterial->m_nVtAllocation ) { break; }
 			const uint32_t nAllocation = pMaterial->m_nVtAllocation + channel;
 			const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[nAllocation];
