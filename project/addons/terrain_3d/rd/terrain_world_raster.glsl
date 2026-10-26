@@ -93,6 +93,7 @@ layout(location = 9) flat out uint world_mesh_material;
 layout(location = 10) out vec4 world_mesh_tangent;
 layout(location = 11) out vec4 world_mesh_color;
 layout(location = 12) flat out uint world_mesh_category;
+layout(location = 13) flat out uint world_mesh_visibility_layers;
 #endif
 
 #ifndef T3D_WORLD_RASTER_TERRAIN_STRIP
@@ -120,8 +121,15 @@ vec3 t3d_world_transform_direction(T3DWorldTransform t, vec3 v) {
 }
 #endif
 #ifndef T3D_WORLD_RASTER_TERRAIN_STRIP
+void t3d_world_zero_vertex();
 void t3d_world_mesh_vertex(T3DWorldVisibleItem item, uint tri, uint corner) {
     T3DWorldCluster cluster = world_clusters[item.clusterOrTerrainId];
+    // Fixed draw envelopes include degenerate padding. Reject it before pulling
+    // vertex payloads or evaluating transforms, including in depth/motion passes.
+    if (tri >= (cluster.packedCounts >> 16u)) {
+        t3d_world_zero_vertex();
+        return;
+    }
     T3DWorldInstance instance = world_instances[item.instanceOrPatchId];
     uint packed_tri = world_triangles[cluster.triangleOffset + tri];
     uint local_index = (packed_tri >> (corner * 6u)) & 63u;
@@ -141,10 +149,13 @@ void t3d_world_mesh_vertex(T3DWorldVisibleItem item, uint tri, uint corner) {
     }
     world_mesh_category = instance.visibilityFlagsKindSource.z == T3D_WORLD_GEOMETRY_STATIC_CLUSTER
         ? 2u : min((instance.visibilityFlagsKindSource.y >> 26u) & 3u, 2u);
+    world_mesh_visibility_layers = instance.visibilityFlagsKindSource.x;
     T3DWorldTransform current_transform = world_transforms[instance.spanTransform.z];
+#ifdef T3D_FORWARD_MOTION
     T3DWorldTransform previous_transform = world_previous_transforms[instance.spanTransform.w];
-    vec3 world = t3d_world_transform_position(current_transform, p);
     vec3 previous_world = t3d_world_transform_position(previous_transform, p);
+#endif
+    vec3 world = t3d_world_transform_position(current_transform, p);
     world_position = world;
     world_normal = t3d_world_transform_normal(current_transform, n);
     vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world, 1.0);
@@ -200,6 +211,7 @@ void t3d_world_zero_vertex() {
     world_mesh_tangent = vec4(1.0, 0.0, 0.0, 1.0);
     world_mesh_color = vec4(1.0);
     world_mesh_category = 0u;
+    world_mesh_visibility_layers = 0u;
 #endif
     gl_Position = vec4(0.0);
 #ifdef T3D_FORWARD_MOTION
@@ -314,6 +326,7 @@ layout(location = 9) flat in uint world_mesh_material;
 layout(location = 10) in vec4 world_mesh_tangent;
 layout(location = 11) in vec4 world_mesh_color;
 layout(location = 12) flat in uint world_mesh_category;
+layout(location = 13) flat in uint world_mesh_visibility_layers;
 
 float t3d_world_unpack_unorm8(uint packed, uint shift) {
     return float((packed >> shift) & 0xffu) * (1.0 / 255.0);
@@ -343,13 +356,14 @@ void t3d_world_mesh_fragment_evaluate() {
         uv, dFdx(uv), dFdy(uv), frame_data.instance_texture_mip_bias[world_mesh_category],
         repeat_uv, filter_mode, uint(frame_data.terrain_params.x), uint(frame_data.terrain_params.y));
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-    for (uint channel = 0u; channel < 3u; ++channel) {
-        t3d_vt_fragment_request_material_page_set(material.vtAllocation + channel, uv, dFdx(uv), dFdy(uv),
-            frame_data.instance_texture_mip_bias[world_mesh_category], T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+    // Opacity must stay requestable even when a fallback texel rejects the pixel.
+    if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) {
+        t3d_vt_fragment_request_material_page_set(material.vtAllocation, uv, footprint.ddx_uv, footprint.ddy_uv,
+            footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
     }
 #endif
-    T3DVTConsumerPageSet3 page_set = t3d_vt_consumer_resolve_page_set3_v3(material.vtAllocation, footprint);
-    vec4 base = material.baseColor * t3d_vt_consumer_sample_albedo(page_set.channel0);
+    T3DVTConsumerAddress albedo_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 0u, footprint);
+    vec4 base = material.baseColor * t3d_vt_consumer_sample_albedo(albedo_address);
     vec4 mesh_color = world_mesh_color;
     if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
         mesh_color.rgb = pow(max(mesh_color.rgb, vec3(0.0)), vec3(2.2));
@@ -366,7 +380,20 @@ void t3d_world_mesh_fragment_evaluate() {
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     return;
 #else
-    vec4 surface = t3d_vt_consumer_sample_orm_v3(page_set.channel2);
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+    // Reuse derivatives captured before alpha rejection. Unused normal channels
+    // and transparent card pixels never contend on the feedback hash.
+    if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) {
+        t3d_vt_fragment_request_material_page_set(material.vtAllocation + 2u, uv, footprint.ddx_uv, footprint.ddy_uv,
+            footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+        if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+            t3d_vt_fragment_request_material_page_set(material.vtAllocation + 1u, uv, footprint.ddx_uv, footprint.ddy_uv,
+                footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+        }
+    }
+#endif
+    T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
+    vec4 surface = t3d_vt_consumer_sample_orm_v3(surface_address);
     float ao = 1.0;
     if (surface_layout == 0u) {
         ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface.r, ao_strength) : 1.0;
@@ -393,7 +420,8 @@ void t3d_world_mesh_fragment_evaluate() {
     if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
         vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
         vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
-        vec2 encoded = t3d_vt_consumer_sample_normal_v3(page_set.channel1).rg * 2.0 - 1.0;
+        T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 1u, footprint);
+        vec2 encoded = t3d_vt_consumer_sample_normal_v3(normal_address).rg * 2.0 - 1.0;
         encoded *= max(normal_scale, 0.0);
         final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
     }
@@ -403,7 +431,7 @@ void t3d_world_mesh_fragment_evaluate() {
     out_voxel_gi = uvec2(0xffu, 0xffu);
 #endif
 #else
-    uint surface_mask = 0xffffffffu;
+    uint surface_mask = world_mesh_visibility_layers;
     vec3 emission = t3d_world_unpack_rgbe9995(material.packedEmission);
     bool unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
     vec3 specular = vec3(0.0);

@@ -191,9 +191,7 @@ void main() {
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH)
 #extension GL_EXT_samplerless_texture_functions : enable
 #endif
-// WG-C SH05 production policy: instance fragment feedback remains explicitly
-// disabled until the shared set-3 frame/reset publication owner is available.
-// The dormant adapters below are still compiled by the SH-B/WG-C fixture lane.
+// Color variants opt into the shared set-3 feedback owner when it is available.
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
 #define T3D_INSTANCE_FRAGMENT_FEEDBACK_PRODUCTION_DISABLED 0
 #else
@@ -398,38 +396,21 @@ vec3 t3d_inst_unpack_rgbe9995(uint packed) {
     return vec3(mantissa) * exp2(float(exponent) - 24.0);
 }
 
+T3DVTConsumerFootprint t3d_inst_material_footprint(T3DRenderingMaterialGpu material) {
+    vec2 uv = vertex_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
+    return t3d_vt_consumer_prepare_footprint(uv, dFdx(uv), dFdy(uv),
+        frame_data.instance_texture_mip_bias[min((draw_flags >> 26u) & 3u, 2u)],
+        t3d_inst_sampler_repeats(t3d_inst_effective_sampler_class(material)),
+        t3d_inst_filter_mode(material), push_data.reserved1, push_data.reserved2);
+}
+
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-#define T3D_VT_INSTANCE_FEEDBACK_ALLOCATION(material_index) (materials[(material_index)].vtAllocation)
-#define T3D_VT_INSTANCE_FEEDBACK_REPEAT_UV(material_index)                                                                                 \
-    t3d_inst_sampler_repeats(t3d_inst_effective_sampler_class(materials[(material_index)]))
-
-void t3d_vt_instance_fragment_feedback(uint material_index, uint material_flags, vec2 uv) {
-    if (material_index == 0xffffu) {
-        return;
-    }
-
-    uint allocation_id = T3D_VT_INSTANCE_FEEDBACK_ALLOCATION(material_index);
-    if (allocation_id == T3D_VT_INVALID_ALLOCATION || allocation_id >= push_data.reserved1) {
-        return;
-    }
-    bool repeat_uv = T3D_VT_INSTANCE_FEEDBACK_REPEAT_UV(material_index);
-    uint filter_mode = t3d_inst_filter_mode(materials[material_index]);
-    float mip_bias = frame_data.instance_texture_mip_bias[min((draw_flags >> 26u) & 3u, 2u)];
-#if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-    // Pure depth/shadow stays feedback-free for opaque materials. Alpha-scissor
-    // only requests the page containing opacity-bearing Albedo.A.
-    if ((material_flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u) {
-        return;
-    }
-    t3d_vt_fragment_request_albedo_alpha_if_missing(
-        allocation_id, uv, dFdx(uv), dFdy(uv), mip_bias, T3D_VT_FRAGMENT_PRIORITY_ALPHA_SCISSOR, repeat_uv, filter_mode);
-#else
-    // V3 channels own distinct virtual pages; request the same siblings as sampling.
-    for (uint channel = 0u; channel < 3u; ++channel) {
-        t3d_vt_fragment_request_material_page_set(
-            allocation_id + channel, uv, dFdx(uv), dFdy(uv), mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
-    }
-#endif
+void t3d_vt_instance_fragment_feedback_channel(T3DRenderingMaterialGpu material,
+    T3DVTConsumerFootprint footprint, uint channel) {
+    if (!t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) return;
+    t3d_vt_fragment_request_material_page_set(material.vtAllocation + channel,
+        footprint.wrapped_uv, footprint.ddx_uv, footprint.ddy_uv, footprint.mip_bias,
+        T3D_VT_FRAGMENT_PRIORITY_COLOR, footprint.repeat_uv != 0u, footprint.filter_mode);
 }
 #endif
 
@@ -457,34 +438,29 @@ vec3 tangent_to_world(vec3 tangent_normal, vec3 face_normal) {
 }
 
 void t3d_inst_evaluate_surface(T3DRenderingMaterialGpu material,
-    vec2 material_uv,
+    T3DVTConsumerFootprint footprint,
     out T3DVTConsumerAddress vt_address,
-    out vec4 albedo_texel,
-    out vec4 surface_texel,
     out float metallic,
     out float roughness,
     out float ao,
-    out float normal_scale,
-    out float alpha_cutoff,
-    out uint surface_layout) {
-    uint sampler_class = t3d_inst_effective_sampler_class(material);
-    bool repeat_uv = t3d_inst_sampler_repeats(sampler_class);
-    uint filter_mode = t3d_inst_filter_mode(material);
-    T3DVTConsumerFootprint footprint = t3d_vt_consumer_prepare_footprint(
-        material_uv, dFdx(material_uv), dFdy(material_uv), frame_data.instance_texture_mip_bias[min((draw_flags >> 26u) & 3u, 2u)],
-        repeat_uv, filter_mode, push_data.reserved1, push_data.reserved2);
-    T3DVTConsumerPageSet3 page_set = t3d_vt_consumer_resolve_page_set3_v3(material.vtAllocation, footprint);
-    T3DVTConsumerAddress albedo_address = page_set.channel0;
-    vt_address = page_set.channel1;
-    T3DVTConsumerAddress surface_address = page_set.channel2;
-    albedo_texel = t3d_vt_consumer_sample_albedo(albedo_address);
-    surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+    out float normal_scale) {
+    T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 2u, footprint);
+    vec4 surface_texel = t3d_vt_consumer_sample_orm_v3(surface_address);
+    vt_address = t3d_vt_consumer_invalid_address();
+    if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+        vt_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 1u, footprint);
+    }
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+    t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
+    if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+        t3d_vt_instance_fragment_feedback_channel(material, footprint, 1u);
+    }
+#endif
     metallic = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_METALLIC_SHIFT);
     roughness = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ROUGHNESS_SHIFT);
     float ao_strength = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);
-    alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
     normal_scale = unpackHalf2x16(material.packedScalars1).x;
-    surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
+    uint surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
     if (surface_layout == 0u) {
         ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface_texel.r, ao_strength) : 1.0;
         if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u) {
@@ -659,6 +635,7 @@ void t3d_inst_stylized_direct_response(vec3 albedo,
 void main() {
     vec4 mesh_color = mesh_vertex_color;
     vec4 base_color = instance_color;
+    vec4 overlay_color = vec4(0.0);
     vec3 normal = face_oriented_normal(vertex_normal);
     float metallic = 0.0;
     float roughness = 1.0;
@@ -668,123 +645,103 @@ void main() {
     bool stylized_sun = false;
     float dielectric_specular = 0.04;
     bool base_survives = true;
+    bool overlay_survives = false;
+    T3DRenderingMaterialGpu material;
+    T3DRenderingMaterialGpu overlay;
+    T3DVTConsumerFootprint base_footprint;
+    T3DVTConsumerFootprint overlay_footprint;
 
+    // Capture both materials' derivatives before fade/scissor divergence.
     if (draw_material_index != 0xffffu) {
-        T3DRenderingMaterialGpu material = materials[draw_material_index];
+        material = materials[draw_material_index];
+        base_footprint = t3d_inst_material_footprint(material);
+    }
+    if (draw_overlay_material_index != 0xffffu) {
+        overlay = materials[draw_overlay_material_index];
+        overlay_footprint = t3d_inst_material_footprint(overlay);
+    }
+    if ((draw_flags & INSTANCE_FADE_ACTIVE) != 0u) {
+        float visibility_fade = float((draw_flags >> INSTANCE_FADE_SHIFT) & 0xffffu) / 65535.0;
+        vec2 pixel = floor(gl_FragCoord.xy);
+        float dither = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
+        if (dither > visibility_fade) discard;
+    }
+
+    // Resolve only opacity until the combined base/overlay pixel survives.
+    if (draw_material_index != 0xffffu) {
         if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
             mesh_color.rgb = srgb_to_linear(mesh_color.rgb);
         if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
             base_color *= mesh_color;
-        vec2 material_uv = vertex_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-        t3d_vt_instance_fragment_feedback(draw_material_index, material.flags, material_uv);
+        t3d_vt_instance_fragment_feedback_channel(material, base_footprint, 0u);
 #endif
-        T3DVTConsumerAddress vt_address;
-        vec4 albedo_texel;
-        vec4 surface_texel;
-        float normal_scale;
-        float alpha_cutoff;
-        uint surface_layout;
-        t3d_inst_evaluate_surface(material,
-            material_uv,
-            vt_address,
-            albedo_texel,
-            surface_texel,
-            metallic,
-            roughness,
-            ao,
-            normal_scale,
-            alpha_cutoff,
-            surface_layout);
-        base_color *= material.baseColor * albedo_texel;
+        T3DVTConsumerAddress albedo_address = t3d_vt_consumer_resolve_material_channel_v3(material.vtAllocation, 0u, base_footprint);
+        base_color *= material.baseColor * t3d_vt_consumer_sample_albedo(albedo_address);
         if ((material.flags & T3D_VT_MATERIAL_ALBEDO_SATURATION) != 0u) {
             float saturation = float(material.reserved & 0xffffu) * (1.5 / 65535.0);
             float luma = dot(base_color.rgb, vec3(0.299, 0.587, 0.114));
             base_color.rgb = max(mix(vec3(luma), base_color.rgb, saturation), vec3(0.0));
         }
+        float alpha_cutoff = t3d_inst_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
+        base_survives = (material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || base_color.a >= alpha_cutoff;
+    }
+    vec4 final_color = base_survives ? base_color : vec4(0.0);
+    if (draw_overlay_material_index != 0xffffu) {
+        vec4 overlay_mesh_color = mesh_vertex_color;
+        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
+            overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
+        overlay_color = instance_color;
+        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
+            overlay_color *= overlay_mesh_color;
+#ifdef T3D_VT_FRAGMENT_FEEDBACK
+        t3d_vt_instance_fragment_feedback_channel(overlay, overlay_footprint, 0u);
+#endif
+        T3DVTConsumerAddress overlay_albedo_address = t3d_vt_consumer_resolve_material_channel_v3(overlay.vtAllocation, 0u, overlay_footprint);
+        overlay_color *= overlay.baseColor * t3d_vt_consumer_sample_albedo(overlay_albedo_address);
+        float overlay_alpha_cutoff = t3d_inst_unpack_unorm8(overlay.packedScalars0, T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT);
+        overlay_survives = (overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || overlay_color.a >= overlay_alpha_cutoff;
+        if (overlay_survives) {
+            final_color.rgb = mix(final_color.rgb, overlay_color.rgb, clamp(overlay_color.a, 0.0, 1.0));
+            final_color.a = max(final_color.a, overlay_color.a);
+        }
+    }
+    if (!base_survives && !overlay_survives) discard;
+    if ((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5) discard;
+
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
+    if (draw_material_index != 0xffffu) {
+        T3DVTConsumerAddress vt_address;
+        float normal_scale;
+        // Preserve the base's contribution under a partially opaque overlay,
+        // including when the base opacity itself did not survive scissor.
+        t3d_inst_evaluate_surface(material, base_footprint, vt_address, metallic, roughness, ao, normal_scale);
         if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
             normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(vt_address), normal_scale), normal);
         }
         emission += t3d_inst_unpack_rgbe9995(material.packedEmission);
-#endif
-        if ((material.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) != 0u && base_color.a < alpha_cutoff)
-            base_survives = false;
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
         unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
         stylized_sun = (material.flags & T3D_VT_MATERIAL_STYLIZED_SUN) != 0u;
         dielectric_specular = float((material.reserved >> 16u) & 0xffffu) / 65535.0;
-#endif
     }
-
-    vec4 final_color = base_survives ? base_color : vec4(0.0);
-    bool overlay_survives = false;
-    if (draw_overlay_material_index != 0xffffu) {
-        T3DRenderingMaterialGpu overlay = materials[draw_overlay_material_index];
-        vec4 overlay_mesh_color = mesh_vertex_color;
-        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
-            overlay_mesh_color.rgb = srgb_to_linear(overlay_mesh_color.rgb);
-        vec4 overlay_color = instance_color;
-        if ((overlay.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
-            overlay_color *= overlay_mesh_color;
-        vec2 overlay_uv = vertex_uv * overlay.uvScaleBias.xy + overlay.uvScaleBias.zw;
-#ifdef T3D_VT_FRAGMENT_FEEDBACK
-        t3d_vt_instance_fragment_feedback(draw_overlay_material_index, overlay.flags, overlay_uv);
-#endif
+    if (overlay_survives) {
         T3DVTConsumerAddress overlay_vt_address;
-        vec4 overlay_albedo;
-        vec4 overlay_surface;
-        float overlay_metallic;
-        float overlay_roughness;
-        float overlay_ao;
-        float overlay_normal_scale;
-        float overlay_alpha_cutoff;
-        uint overlay_surface_layout;
-        t3d_inst_evaluate_surface(overlay,
-            overlay_uv,
-            overlay_vt_address,
-            overlay_albedo,
-            overlay_surface,
-            overlay_metallic,
-            overlay_roughness,
-            overlay_ao,
-            overlay_normal_scale,
-            overlay_alpha_cutoff,
-            overlay_surface_layout);
-        overlay_color *= overlay.baseColor * overlay_albedo;
-        overlay_survives = (overlay.flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u || overlay_color.a >= overlay_alpha_cutoff;
-        if (overlay_survives) {
-            float overlay_weight = clamp(overlay_color.a, 0.0, 1.0);
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-            metallic = mix(metallic, overlay_metallic, overlay_weight);
-            roughness = mix(roughness, overlay_roughness, overlay_weight);
-            ao = mix(ao, overlay_ao, overlay_weight);
-            if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-                vec3 overlay_normal =
-                    tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
-                normal = normalize(mix(normal, overlay_normal, overlay_weight));
-            }
-            emission += t3d_inst_unpack_rgbe9995(overlay.packedEmission) * overlay_weight;
-#endif
-            final_color.rgb = mix(final_color.rgb, overlay_color.rgb, overlay_weight);
-            final_color.a = max(final_color.a, overlay_color.a);
-#if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-            unshaded = unshaded || (overlay.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
-#endif
+        float overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale;
+        t3d_inst_evaluate_surface(overlay, overlay_footprint, overlay_vt_address,
+            overlay_metallic, overlay_roughness, overlay_ao, overlay_normal_scale);
+        float overlay_weight = clamp(overlay_color.a, 0.0, 1.0);
+        metallic = mix(metallic, overlay_metallic, overlay_weight);
+        roughness = mix(roughness, overlay_roughness, overlay_weight);
+        ao = mix(ao, overlay_ao, overlay_weight);
+        if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
+            vec3 overlay_normal = tangent_to_world(
+                decode_normal_sample(t3d_vt_consumer_sample_normal_v3(overlay_vt_address), overlay_normal_scale), normal);
+            normal = normalize(mix(normal, overlay_normal, overlay_weight));
         }
+        emission += t3d_inst_unpack_rgbe9995(overlay.packedEmission) * overlay_weight;
+        unshaded = unshaded || (overlay.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
     }
-
-    if (!base_survives && !overlay_survives)
-        discard;
-    if ((draw_flags & INSTANCE_DEPTH_PREPASS_PASS) != 0u && final_color.a < 0.5)
-        discard;
-    if ((draw_flags & INSTANCE_FADE_ACTIVE) != 0u) {
-        float visibility_fade = float((draw_flags >> INSTANCE_FADE_SHIFT) & 0xffffu) / 65535.0;
-        vec2 pixel = floor(gl_FragCoord.xy);
-        float dither = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
-        if (dither > visibility_fade)
-            discard;
-    }
+#endif
 
 #ifdef T3D_FORWARD_DEPTH
 #ifdef T3D_FORWARD_NORMAL_ROUGHNESS

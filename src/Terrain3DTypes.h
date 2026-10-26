@@ -3674,6 +3674,8 @@ typedef struct alignas( 16 ) t3dRdInstanceCullDescriptor_s {
 	uint32_t m_nFlags = 0u;
 	float m_fLodBegin = 0.0f;
 	float m_fLodEnd = 0.0f;
+	alignas( 16 ) float m_szLocalBoundsCenter[4] = {};
+	alignas( 16 ) float m_szLocalBoundsExtent[4] = {};
 } t3dRdInstanceCullDescriptor_t;
 
 // From src/rendering/rd/core/terrain_3d_rd_types.h

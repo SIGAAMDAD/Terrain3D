@@ -2132,6 +2132,8 @@ void Terrain3DRdInstanceRenderer::requestPublishedMaterialResidencyHot( const t3
 			}
 		}
 		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION && attempts_left > 0u; ++channel ) {
+			if ( channel == 1u && ( material.m_nFlags & T3D_VT_MATERIAL_NORMAL_MAPPING ) == 0u ) { continue; }
+			if ( material.m_nVtAllocation >= residency.nAllocationCount || channel >= residency.nAllocationCount - material.m_nVtAllocation ) { break; }
 			const uint32_t allocation_id = material.m_nVtAllocation + channel;
 			if ( allocation_id >= residency.nAllocationCount ) { break; }
 			const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[allocation_id];
@@ -2940,6 +2942,12 @@ bool Terrain3DRdInstanceRenderer::buildGpuCommandTableForPass( const t3dRdInstan
 			descriptor.m_nFirstInstance = cell.m_nFirstInstance;
 			descriptor.m_nInstanceCount = cell.m_nInstanceCount;
 			descriptor.m_nFirstVisible = first_visible;
+			const Vector3 local_center = pSurface->m_bounds.get_center();
+			const Vector3 local_extent = pSurface->m_bounds.size * 0.5f;
+			for ( uint32_t axis = 0u; axis < 3u; ++axis ) {
+				descriptor.m_szLocalBoundsCenter[axis] = ( float )local_center[axis];
+				descriptor.m_szLocalBoundsExtent[axis] = ( float )local_extent[axis];
+			}
 			t3dRdInstanceDescriptorSpan_t &span = spans[iCell];
 			if ( span.m_nCount == 0u ) {
 				span.m_nFirst = ( uint32_t )( descriptors.size() );
@@ -3214,6 +3222,8 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	        Terrain3DRdBindingBuilder::single( 8, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleLayerBuffer ) );
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 9, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hShadowVisibleLayerBuffer ) );
+	uniforms.push_back(
+	        Terrain3DRdBindingBuilder::single( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_uploadState.m_hInstanceBuffer ) );
 	m_visibility.m_hInstanceCullUniformSet = m_instanceCullDescriptors.getOrCreate( m_visibility.m_hInstanceCullShader.rid(),
 	        "T3D.Instance.CullUniformSet", uniforms, m_visibility.m_hInstanceCullShader.rid(), 0u );
 	if ( !m_visibility.m_hInstanceCullUniformSet.is_valid() ) {
@@ -3478,11 +3488,29 @@ bool Terrain3DRdInstanceRenderer::compareGpuCpuInstanceCulling( const t3dRdInsta
 				++m_visibility.m_nCullParityTopologyMismatches;
 				return false;
 			}
+			const Vector3 local_center( descriptor.m_szLocalBoundsCenter[0], descriptor.m_szLocalBoundsCenter[1], descriptor.m_szLocalBoundsCenter[2] );
+			const Vector3 local_extent( descriptor.m_szLocalBoundsExtent[0], descriptor.m_szLocalBoundsExtent[1], descriptor.m_szLocalBoundsExtent[2] );
+			const AABB local_bounds( local_center - local_extent, local_extent * 2.0f );
+			uint32_t accepted = 0u;
 			for ( uint32_t instance = 0u; instance < descriptor.m_nInstanceCount; ++instance ) {
-				m_visibility.m_cullParityExpectedIndices[write + instance] = descriptor.m_nFirstInstance + instance;
+				const uint32_t record_index = descriptor.m_nFirstInstance + instance;
+				if ( record_index >= rScene.m_instances.size() ) {
+					return false;
+				}
+				const AABB bounds = t3dRdInstancePredictionTransform( rScene.m_instances[record_index] ).xform( local_bounds );
+				const Vector3 extent = bounds.size * 0.5f;
+				const Vector3 conservative_extent = extent + Vector3( 0.001f, 0.001f, 0.001f ) + extent * 0.0001f;
+				const AABB conservative_bounds( bounds.get_center() - conservative_extent, conservative_extent * 2.0f );
+				bool instance_visible = false;
+				for ( uint32_t view = 0u; view < nViewCount && !instance_visible; ++view ) {
+					instance_visible = t3dRdInstanceAabbVisible( conservative_bounds, frustums[view] );
+				}
+				if ( instance_visible ) {
+					m_visibility.m_cullParityExpectedIndices[write + accepted++] = record_index;
+				}
 			}
-			m_visibility.m_cullParityCommandWriteOffsets[command_index] = ( uint32_t )write_end;
-			m_visibility.m_cullParityCommandCounts[command_index] += descriptor.m_nInstanceCount;
+			m_visibility.m_cullParityCommandWriteOffsets[command_index] = write + accepted;
+			m_visibility.m_cullParityCommandCounts[command_index] += accepted;
 		}
 	}
 

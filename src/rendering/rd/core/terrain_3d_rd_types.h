@@ -382,7 +382,9 @@ static_assert( offsetof( t3dRdHlodCullDescriptor_t, m_nVisibilityLayers ) == 32u
 
 // t3dRdInstanceCullDescriptor_s centralized in Terrain3DTypes.h.
 
-static_assert( sizeof( t3dRdInstanceCullDescriptor_t ) == 80u, "RD instance cull descriptor ABI changed" );
+static_assert( sizeof( t3dRdInstanceCullDescriptor_t ) == 112u, "RD instance cull descriptor ABI changed" );
+static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_szLocalBoundsCenter ) == 80u, "RD instance local bounds ABI changed" );
+static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_szLocalBoundsExtent ) == 96u, "RD instance local extent ABI changed" );
 static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nDrawSlot ) == 32u, "RD instance cull draw-slot ABI changed" );
 static_assert( offsetof( t3dRdInstanceCullDescriptor_t, m_nCommandIndex ) == 36u, "RD instance cull command ABI changed" );
 

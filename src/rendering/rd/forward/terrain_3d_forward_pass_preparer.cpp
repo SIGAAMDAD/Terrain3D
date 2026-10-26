@@ -112,6 +112,7 @@ static void t3dStageWorldMaterialFootprintsHot( Terrain3DVirtualTexture &rVT,
 		const float fFilterScale = bAnisotropic ? ( float )T3D_VT_MAX_ANISOTROPY : 1.0f;
 		const bool bMipmapped = nFilter >= T3D_VT_FILTER_NEAREST_MIPMAP;
 		for ( uint32_t channel = 0u; channel < T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION; ++channel ) {
+			if ( channel == 1u && ( pMaterial->m_nFlags & T3D_VT_MATERIAL_NORMAL_MAPPING ) == 0u ) { continue; }
 			if ( pMaterial->m_nVtAllocation >= residency.nAllocationCount || channel >= residency.nAllocationCount - pMaterial->m_nVtAllocation ) { break; }
 			const uint32_t nAllocation = pMaterial->m_nVtAllocation + channel;
 			const t3dVTAllocation_t &allocation = residency.Buffers.pAllocations[nAllocation];

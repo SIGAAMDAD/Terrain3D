@@ -25,6 +25,8 @@ struct InstanceCullDescriptor {
     uint flags;
     float lod_begin;
     float lod_end;
+    vec4 local_bounds_center;
+    vec4 local_bounds_extent;
 };
 layout(set = 0, binding = 1, std430) readonly buffer DescriptorBuffer {
     InstanceCullDescriptor descriptors[];
@@ -60,6 +62,17 @@ layout(set = 0, binding = 8, std430) buffer MainVisibleLayerBuffer {
 layout(set = 0, binding = 9, std430) buffer ShadowVisibleLayerBuffer {
     uint shadow_visible_layers[];
 };
+struct InstanceRecord {
+    vec3 position;
+    uint quaternion01;
+    uint quaternion23;
+    uint scale01;
+    uint scale2_flags;
+    uint color_rgba8;
+};
+layout(set = 0, binding = 10, std430) readonly buffer InstanceRecords {
+    InstanceRecord records[];
+};
 
 layout(push_constant, std430) uniform CullData {
     uint descriptor_base;
@@ -83,34 +96,22 @@ const uint T3D_RD_INSTANCE_LOD_PRESELECTED = 1u << 28u;
 
 shared uint shared_visible;
 shared uint shared_write_base;
+shared uint shared_count;
+
+bool aabb_inside_plane(vec3 c, vec3 e, vec4 plane) {
+    return dot(plane.xyz, c) + plane.w + dot(abs(plane.xyz), e) >= 0.0;
+}
 
 bool aabb_visible_view(vec3 c, vec3 e, uint view_index) {
-    vec4 corners[8];
-    mat4 vp = frame_data.view_projection[min(view_index, 1u)];
-    corners[0] = vp * vec4(c.x - e.x, c.y - e.y, c.z - e.z, 1.0);
-    corners[1] = vp * vec4(c.x + e.x, c.y - e.y, c.z - e.z, 1.0);
-    corners[2] = vp * vec4(c.x - e.x, c.y + e.y, c.z - e.z, 1.0);
-    corners[3] = vp * vec4(c.x + e.x, c.y + e.y, c.z - e.z, 1.0);
-    corners[4] = vp * vec4(c.x - e.x, c.y - e.y, c.z + e.z, 1.0);
-    corners[5] = vp * vec4(c.x + e.x, c.y - e.y, c.z + e.z, 1.0);
-    corners[6] = vp * vec4(c.x - e.x, c.y + e.y, c.z + e.z, 1.0);
-    corners[7] = vp * vec4(c.x + e.x, c.y + e.y, c.z + e.z, 1.0);
-    bool outside_left = true;
-    bool outside_right = true;
-    bool outside_bottom = true;
-    bool outside_top = true;
-    bool outside_near = true;
-    bool outside_far = true;
-    for (int i = 0; i < 8; ++i) {
-        vec4 p = corners[i];
-        outside_left = outside_left && p.x < -p.w;
-        outside_right = outside_right && p.x > p.w;
-        outside_bottom = outside_bottom && p.y < -p.w;
-        outside_top = outside_top && p.y > p.w;
-        outside_near = outside_near && p.z > p.w;
-        outside_far = outside_far && p.z < 0.0;
-    }
-    return !(outside_left || outside_right || outside_bottom || outside_top || outside_near || outside_far);
+    // Test the AABB support point against Vulkan clip planes rather than
+    // transforming eight corners for every admitted instance.
+    mat4 rows = transpose(frame_data.view_projection[min(view_index, 1u)]);
+    return aabb_inside_plane(c, e, rows[3] + rows[0])
+        && aabb_inside_plane(c, e, rows[3] - rows[0])
+        && aabb_inside_plane(c, e, rows[3] + rows[1])
+        && aabb_inside_plane(c, e, rows[3] - rows[1])
+        && aabb_inside_plane(c, e, rows[3] - rows[2])
+        && aabb_inside_plane(c, e, rows[2]);
 }
 
 bool bounds_visible_view(InstanceCullDescriptor descriptor, uint view_index) {
@@ -145,6 +146,27 @@ bool descriptor_visible(InstanceCullDescriptor descriptor) {
     return true;
 }
 
+vec3 rotate_quaternion(vec4 q, vec3 v) {
+    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+}
+
+bool instance_visible(InstanceCullDescriptor descriptor, uint record_index) {
+    InstanceRecord record = records[record_index];
+    vec4 q = vec4(unpackSnorm2x16(record.quaternion01), unpackSnorm2x16(record.quaternion23));
+    q = dot(q, q) > 0.000001 ? normalize(q) : vec4(0.0, 0.0, 0.0, 1.0);
+    vec3 scale = vec3(unpackHalf2x16(record.scale01), unpackHalf2x16(record.scale2_flags & 0xffffu).x);
+    vec3 center = record.position + rotate_quaternion(q, descriptor.local_bounds_center.xyz * scale);
+    vec3 extent = abs(rotate_quaternion(q, vec3(scale.x, 0.0, 0.0))) * descriptor.local_bounds_extent.x
+        + abs(rotate_quaternion(q, vec3(0.0, scale.y, 0.0))) * descriptor.local_bounds_extent.y
+        + abs(rotate_quaternion(q, vec3(0.0, 0.0, scale.z))) * descriptor.local_bounds_extent.z;
+    // Keep quantized transforms conservatively inside the CPU/GPU boundary.
+    extent += vec3(0.001) + extent * 0.0001;
+    for (uint view = 0u; view < clamp(cull_data.view_count, 1u, 2u); ++view) {
+        if (aabb_visible_view(center, extent, view)) return true;
+    }
+    return false;
+}
+
 void main() {
     if (cull_data.mode == 0u) {
         uint command_index = gl_GlobalInvocationID.x;
@@ -166,27 +188,43 @@ void main() {
         return;
     if (local_index == 0u) {
         shared_visible = descriptor_visible(descriptor) ? 1u : 0u;
-        shared_write_base = 0u;
-        if (shared_visible != 0u) {
-            shared_write_base = cull_data.shadow_pass != 0u
-                ? atomicAdd(shadow_commands[cull_data.shadow_command_base + descriptor.command_index].instance_count, descriptor.instance_count)
-                : atomicAdd(main_commands[cull_data.main_command_base + descriptor.command_index].instance_count, descriptor.instance_count);
-        }
     }
     barrier();
     if (shared_visible == 0u)
         return;
 
-    uint destination_base = descriptor.first_visible + shared_write_base;
-    for (uint i = local_index; i < descriptor.instance_count; i += 64u) {
-        if (cull_data.shadow_pass != 0u) {
-            shadow_visible[destination_base + i] = descriptor.first_instance + i;
-            shadow_visible_draw_slots[destination_base + i] = descriptor.draw_slot;
-            shadow_visible_layers[destination_base + i] = descriptor.visibility_layers;
-        } else {
-            main_visible[destination_base + i] = descriptor.first_instance + i;
-            main_visible_draw_slots[destination_base + i] = descriptor.draw_slot;
-            main_visible_layers[destination_base + i] = descriptor.visibility_layers;
+    // Compact each 64-instance chunk in shared memory. Reserve globally once per
+    // chunk rather than once per surviving instance, including for grouped draws.
+    for (uint chunk = 0u; chunk < descriptor.instance_count; chunk += 64u) {
+        if (local_index == 0u) shared_count = 0u;
+        barrier();
+        uint i = chunk + local_index;
+        bool visible = false;
+        if (i < descriptor.instance_count) visible = instance_visible(descriptor, descriptor.first_instance + i);
+        uint local_write = 0u;
+        if (visible) local_write = atomicAdd(shared_count, 1u);
+        barrier();
+        if (local_index == 0u) {
+            shared_write_base = 0u;
+            if (shared_count > 0u) {
+                shared_write_base = cull_data.shadow_pass != 0u
+                    ? atomicAdd(shadow_commands[cull_data.shadow_command_base + descriptor.command_index].instance_count, shared_count)
+                    : atomicAdd(main_commands[cull_data.main_command_base + descriptor.command_index].instance_count, shared_count);
+            }
         }
+        barrier();
+        if (visible) {
+            uint destination = descriptor.first_visible + shared_write_base + local_write;
+            if (cull_data.shadow_pass != 0u) {
+                shadow_visible[destination] = descriptor.first_instance + i;
+                shadow_visible_draw_slots[destination] = descriptor.draw_slot;
+                shadow_visible_layers[destination] = descriptor.visibility_layers;
+            } else {
+                main_visible[destination] = descriptor.first_instance + i;
+                main_visible_draw_slots[destination] = descriptor.draw_slot;
+                main_visible_layers[destination] = descriptor.visibility_layers;
+            }
+        }
+        barrier();
     }
 }

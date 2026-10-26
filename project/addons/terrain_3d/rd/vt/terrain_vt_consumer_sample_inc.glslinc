@@ -358,6 +358,22 @@ T3DVTConsumerAddress t3d_vt_consumer_resolve_sibling(uint allocation_id,
     return t3d_vt_consumer_resolve_plan(plan, footprint, reuse);
 }
 
+// Lazy channel resolution lets opacity reject a fragment before any other V3
+// channel walks the page table. Guard the base before adding sibling offsets.
+bool t3d_vt_consumer_material_page_set_valid(uint base_allocation, T3DVTConsumerFootprint footprint) {
+    return base_allocation != T3D_VT_INVALID_ALLOCATION && base_allocation < footprint.allocation_count
+        && footprint.allocation_count - base_allocation >= T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION;
+}
+
+T3DVTConsumerAddress t3d_vt_consumer_resolve_material_channel_v3(
+    uint base_allocation, uint channel, T3DVTConsumerFootprint footprint) {
+    if (channel >= T3D_VT_V3_RUNTIME_CHANNELS_PER_ALLOCATION
+        || !t3d_vt_consumer_material_page_set_valid(base_allocation, footprint)) {
+        return t3d_vt_consumer_invalid_address();
+    }
+    return t3d_vt_consumer_resolve_address(base_allocation + channel, footprint);
+}
+
 T3DVTConsumerPageSet3 t3d_vt_consumer_resolve_page_set3_v3(uint base_allocation, T3DVTConsumerFootprint footprint) {
     T3DVTConsumerPageSet3 page_set;
     if (base_allocation == T3D_VT_INVALID_ALLOCATION || base_allocation >= footprint.allocation_count
