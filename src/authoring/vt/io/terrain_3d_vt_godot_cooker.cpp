@@ -8,6 +8,7 @@
 #include "authoring/vt/build/terrain_3d_vt_reference_encoder.h"
 #include "authoring/vt/build/terrain_3d_composed_surface_v1_godot_decode.h"
 #include "authoring/vt/build/terrain_3d_composed_surface_cooker.h"
+#include "data/runtime/terrain_3d_composed_surface_sidecar.h"
 #include "rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.h"
 #include "rendering/rd/vt/io/terrain_3d_far_avt_region_file.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
@@ -2307,41 +2308,145 @@ bool t3d_vt_godot_import_far_region_directory_v1(
     return true;
 }
 
+// UCMP-03: decode one complete authored composed mip from the validated .t3sc
+// sidecar into its V1 logical format. The BC decoder is the existing CS15
+// decoder. No independent GPU residency or second page table is created.
+static bool t3d_cs_ucmp_decode_mip_cold(
+    const t3dComposedSurfaceSidecarView_t &rView,
+    const uint8_t *const pSidecar, const uint64_t nSidecarBytes,
+    const uint64_t nRegionKey, const uint32_t nMip, const uint32_t nTiles,
+    const uint32_t nFormat, const uint32_t nChannel, const uint32_t nComponents,
+    uint8_t *const pOutput, const uint32_t nOutputExtent )
+{
+    if ( !pOutput || !nTiles || nTiles > 4u || !nOutputExtent ) return false;
+    const uint32_t nativeExtent = nTiles * T3D_CS_PAGE_INTERIOR;
+    PackedByteArray native, decoded;
+    if ( native.resize( int64_t( nativeExtent ) * nativeExtent * nComponents ) != OK ||
+         decoded.resize( T3D_CS_RGBA_SCRATCH_BYTES ) != OK ) return false;
+    uint8_t *const pNative = native.ptrw();
+    for ( uint32_t pageY = 0u; pageY < nTiles; ++pageY ) {
+        for ( uint32_t pageX = 0u; pageX < nTiles; ++pageX ) {
+            uint32_t index = UINT32_MAX;
+            t3dComposedSurfacePageRecord_t page{};
+            if ( !t3d_cs_find_page_location( rView, nRegionKey, nMip,
+                    pageX, pageY, index ) ||
+                 !t3d_cs_sidecar_record( rView, index, page ) ||
+                 page.m_nChannelMask != T3D_CS_CHANNEL_MASK_ALL ) return false;
+            const t3dComposedSurfaceChannelRecord_t &blob = page.m_channels[nChannel];
+            if ( !t3d_cs_range_within( blob.m_nFileOffset, blob.m_nByteCount, nSidecarBytes ) ||
+                 !t3d_cs_validate_channel_payload( blob,
+                     pSidecar + blob.m_nFileOffset, blob.m_nByteCount ) ||
+                 !t3d_cs12_decode_godot_image( NULL, nFormat,
+                     pSidecar + blob.m_nFileOffset, blob.m_nByteCount,
+                     decoded.ptrw(), T3D_CS_RGBA_SCRATCH_BYTES ) ) return false;
+            const uint8_t *const rgba = decoded.ptr();
+            for ( uint32_t y = 0u; y < T3D_CS_PAGE_INTERIOR; ++y ) {
+                for ( uint32_t x = 0u; x < T3D_CS_PAGE_INTERIOR; ++x ) {
+                    const uint32_t nx = pageX * T3D_CS_PAGE_INTERIOR + x;
+                    const uint32_t ny = pageY * T3D_CS_PAGE_INTERIOR + y;
+                    const uint32_t rx = x + T3D_CS_PAGE_GUTTER;
+                    const uint32_t ry = y + T3D_CS_PAGE_GUTTER;
+                    memcpy( pNative + ( ny * nativeExtent + nx ) * nComponents,
+                            rgba + ( ry * T3D_CS_PHYSICAL_TILE + rx ) * 4u,
+                            nComponents );
+                }
+            }
+        }
+    }
+    for ( uint32_t y = 0u; y < nOutputExtent; ++y ) {
+        const uint32_t sy = uint32_t( uint64_t( y ) * nativeExtent / nOutputExtent );
+        for ( uint32_t x = 0u; x < nOutputExtent; ++x ) {
+            const uint32_t sx = uint32_t( uint64_t( x ) * nativeExtent / nOutputExtent );
+            memcpy( pOutput + ( y * nOutputExtent + x ) * nComponents,
+                    pNative + ( sy * nativeExtent + sx ) * nComponents, nComponents );
+        }
+    }
+    return true;
+}
+
+static bool t3d_cs_ucmp_prepare_channel_cold(
+    const t3dComposedSurfaceSidecarView_t &rView,
+    const uint8_t *const pSidecar, const uint64_t nSidecarBytes,
+    const uint64_t nRegionKey, const uint32_t nTiles,
+    const uint32_t nChannel, const t3dVTLogicalChannel_t eLogical,
+    const t3dVTPhysicalFormatFamily_t eFormat, const uint32_t nComponents,
+    const uint32_t nOutputExtent, PackedByteArray &rPrepared,
+    t3dVTMipChainLayout_t &rLayout )
+{
+    rPrepared.clear();
+    if ( !t3d_vt_page_builder_layout_mips( nOutputExtent, nOutputExtent,
+                                          nComponents, rLayout ) ||
+         rLayout.m_nTotalBytes > INT32_MAX ||
+         rPrepared.resize( ( int64_t ) rLayout.m_nTotalBytes ) != OK ) return false;
+    const uint32_t sourceExtent = nTiles * T3D_CS_PAGE_INTERIOR;
+    uint32_t sourceMipMax = 0u;
+    for ( uint32_t n = nTiles; n > 1u; n >>= 1u ) ++sourceMipMax;
+    // Map the authored mip hierarchy to the V1 channel-specific quality view.
+    // NORMAL/PBR have half the maximum ALBEDO resolution. Beyond the last
+    // authored mip, use the existing V1 channel-specific filtering for tails.
+    uint32_t lastWritten = UINT32_MAX;
+    for ( uint32_t level = 0u; level < rLayout.m_nMipCount; ++level ) {
+        const uint32_t extent = rLayout.m_Levels[level].m_nWidth;
+        uint32_t sampledMip = 0u;
+        uint32_t checkExtent = sourceExtent;
+        while ( checkExtent > extent && sampledMip < sourceMipMax ) {
+            checkExtent >>= 1u;
+            ++sampledMip;
+        }
+        if ( checkExtent > extent ) break;
+        const uint32_t tiles = MAX( 1u, nTiles >> sampledMip );
+        if ( !t3d_cs_ucmp_decode_mip_cold( rView, pSidecar, nSidecarBytes,
+                nRegionKey, sampledMip, tiles, ( uint32_t ) eFormat,
+                nChannel, nComponents,
+                rPrepared.ptrw() + rLayout.m_Levels[level].m_nOffset, extent ) ) return false;
+        lastWritten = level;
+    }
+    if ( lastWritten == UINT32_MAX ) return false;
+    if ( lastWritten + 1u == rLayout.m_nMipCount ) return true;
+    // The V1 mip builder already handles gamma-aware color and normalized
+    // normals. Build the remaining tail from the last authored composed mip.
+    const t3dVTMipLevelLayout_t &last = rLayout.m_Levels[lastWritten];
+    t3dVTMipChainLayout_t tailLayout{};
+    if ( !t3d_vt_page_builder_layout_mips( last.m_nWidth, last.m_nHeight,
+                                          nComponents, tailLayout ) ||
+         tailLayout.m_nTotalBytes > INT32_MAX ) return false;
+    PackedByteArray tail;
+    if ( tail.resize( ( int64_t ) tailLayout.m_nTotalBytes ) != OK ) return false;
+    memcpy( tail.ptrw(), rPrepared.ptr() + last.m_nOffset, last.m_nBytes );
+    if ( !t3d_vt_page_builder_build_logical_channel_mips_u8( eLogical,
+             false, 0u, tail.ptrw(), tailLayout.m_nTotalBytes,
+             tailLayout, 1u ) ) return false;
+    for ( uint32_t i = 1u; lastWritten + i < rLayout.m_nMipCount; ++i ) {
+        const t3dVTMipLevelLayout_t &target = rLayout.m_Levels[lastWritten + i];
+        const t3dVTMipLevelLayout_t &source = tailLayout.m_Levels[i];
+        if ( target.m_nBytes != source.m_nBytes ) return false;
+        memcpy( rPrepared.ptrw() + target.m_nOffset,
+                tail.ptr() + source.m_nOffset, target.m_nBytes );
+    }
+    return true;
+}
+
 bool t3d_vt_godot_import_composed_sidecar_v1(
     const uint8_t *const pSidecar, const uint64_t nSidecarBytes,
     const uint64_t nExpectedSourceFingerprint, const uint32_t nPackageGeneration,
     PackedByteArray &rFragment, String *const pError )
 {
     rFragment.clear();
-    const auto fail = [&]( const char *const pReason ) -> bool {
-        if ( pError ) {
-            *pError = String( pReason );
-        }
+    const auto fail = [&]( const char *const pszReason ) -> bool {
+        if ( pError ) *pError = String( pszReason );
         return false;
     };
     if ( !pSidecar || nSidecarBytes > SIZE_MAX ||
          nSidecarBytes < sizeof( t3dComposedSurfaceFileHeader_t ) ||
-         !nExpectedSourceFingerprint || !nPackageGeneration ) {
+         !nExpectedSourceFingerprint || !nPackageGeneration )
         return fail( "Invalid composed V1 sidecar import inputs" );
-    }
     t3dComposedSurfaceSidecarView_t view{};
     if ( !t3d_cs_open_sidecar_cold( pSidecar, ( size_t ) nSidecarBytes,
-                                     nExpectedSourceFingerprint, view ) ||
-         !view.m_header.m_nPageCount ) {
-        return fail( "Stale or invalid composed sidecar source fingerprint" );
-    }
-    // The source is a cold, parity-approved sidecar, not the diagnostic
-    // .candidate output. All fragments use the ordinary V1 cooker, allocator,
-    // tail and physical-bank publication paths; no composed-only GPU owner.
-    eastl::vector< PackedByteArray, Terrain3DEastlAllocator > fragments;
-    if ( !t3dContainerReserveCold( fragments, MIN( view.m_header.m_nPageCount,
-                                      T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) ) ) {
-        return fail( "Composed V1 fragment reservation failed" );
-    }
-    PackedByteArray decoded;
-    if ( decoded.resize( T3D_CS_RGBA_SCRATCH_BYTES ) != OK ) {
-        return fail( "Composed V1 decode scratch allocation failed" );
-    }
+                                    nExpectedSourceFingerprint, view ) ||
+         !view.m_header.m_nPageCount ||
+         !t3d_cs_validate_sidecar_bytes( pSidecar, ( size_t ) nSidecarBytes, true ) )
+        return fail( "Stale, corrupt or invalid composed sidecar" );
+
     const t3dVTLogicalChannel_t logical[3] = {
         T3D_VT_LOGICAL_CHANNEL_ALBEDO,
         T3D_VT_LOGICAL_CHANNEL_NORMAL,
@@ -2353,58 +2458,40 @@ bool t3d_vt_godot_import_composed_sidecar_v1(
         T3D_VT_PHYSICAL_FORMAT_BC7_UNORM
     };
     const uint32_t components[3] = { 4u, 2u, 4u };
-    uint64_t previousRegion = UINT64_MAX;
-    for ( uint32_t i = 0u; i < view.m_header.m_nPageCount; ++i ) {
+    eastl::vector< PackedByteArray, Terrain3DEastlAllocator > fragments;
+    if ( !t3dContainerReserveCold( fragments,
+           MIN( view.m_header.m_nPageCount, T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) ) )
+        return fail( "Composed V1 fragment reservation failed" );
+
+    uint64_t previousRegion = 0u;
+    for ( uint32_t index = 0u; index < view.m_header.m_nPageCount; ) {
         t3dComposedSurfacePageRecord_t first{};
-        if ( !t3d_cs_sidecar_record( view, i, first ) ) {
-            return fail( "Invalid composed V1 sidecar record" );
+        if ( !t3d_cs_sidecar_record( view, index, first ) ||
+             first.m_nRegionKey <= previousRegion ||
+             first.m_nRegionKey > T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY )
+            return fail( "Composed region order or stable-key range invalid" );
+        t3dComposedSurfacePageRecord_t records[T3D_CS_MAX_REGION_MIP_PAGES]{};
+        uint32_t count = 0u;
+        while ( index < view.m_header.m_nPageCount ) {
+            t3dComposedSurfacePageRecord_t page{};
+            if ( !t3d_cs_sidecar_record( view, index, page ) )
+                return fail( "Unreadable composed page record" );
+            if ( page.m_nRegionKey != first.m_nRegionKey ) break;
+            if ( count == T3D_CS_MAX_REGION_MIP_PAGES )
+                return fail( "Composed region exceeds bounded mip hierarchy" );
+            records[count++] = page;
+            ++index;
         }
-        if ( first.m_nRegionKey == previousRegion ) {
-            continue;
-        }
+        uint32_t tiles = 0u;
+        uint64_t signature = 0u;
+        if ( !t3d_cs_import_region_mips_complete( records, count, tiles, signature ) )
+            return fail( "Incomplete or unordered composed mip hierarchy" );
         previousRegion = first.m_nRegionKey;
-        // Composed sidecars use 1-based region keys; MegaVT and the V1 stable
-        // allocation-key namespace use zero-based 32x32 region indices.
-        if ( first.m_nRegionKey == 0u ||
-             first.m_nRegionKey > T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) {
-            return fail( "Composed region key outside the MegaVT allocation table" );
-        }
-        uint32_t maxX = 0u;
-        uint32_t maxY = 0u;
-        uint32_t mip0Count = 0u;
-        uint64_t regionSignature = 14695981039346656037ull;
-        for ( uint32_t j = i; j < view.m_header.m_nPageCount; ++j ) {
-            t3dComposedSurfacePageRecord_t record{};
-            if ( !t3d_cs_sidecar_record( view, j, record ) ) {
-                return fail( "Invalid composed page layout record" );
-            }
-            if ( record.m_nRegionKey != first.m_nRegionKey ) {
-                break;
-            }
-            if ( record.m_nMip != 0u ) {
-                continue;
-            }
-            if ( record.m_nPageX >= 4u || record.m_nPageY >= 4u ) {
-                return fail( "Composed V1 page footprint exceeds 4x4 tiles" );
-            }
-            maxX = MAX( maxX, record.m_nPageX );
-            maxY = MAX( maxY, record.m_nPageY );
-            ++mip0Count;
-            regionSignature ^= record.m_nContentFingerprint + 0x9e3779b97f4a7c15ull +
-                               ( regionSignature << 6u ) + ( regionSignature >> 2u );
-            regionSignature ^= uint64_t( record.m_nGeneration ) +
-                               ( regionSignature << 6u ) + ( regionSignature >> 2u );
-        }
-        const uint32_t tiles = maxX + 1u;
-        if ( tiles != maxY + 1u || ( tiles != 1u && tiles != 2u && tiles != 4u ) ||
-             mip0Count != tiles * tiles ) {
-            return fail( "Incomplete or irregular composed V1 region footprint" );
-        }
         const uint32_t nativeExtent = tiles * T3D_CS_PAGE_INTERIOR;
         const uint32_t albedoExtent = MAX( nativeExtent, 256u );
-        const uint32_t secondaryExtent = MAX( albedoExtent / 2u, 128u );
-        const uint32_t outputExtent[3] = { albedoExtent, secondaryExtent, secondaryExtent };
-        const uint32_t generation = ( uint32_t ) ( regionSignature ^ ( regionSignature >> 32u ) );
+        const uint32_t outputExtent[3] = {
+            albedoExtent, MAX( albedoExtent / 2u, 128u ), MAX( albedoExtent / 2u, 128u )
+        };
         t3dVTCookSparseSourceV1_t source{};
         source.m_nStableKey = t3d_vt_composed_region_stable_key(
             ( uint32_t ) ( first.m_nRegionKey - 1u ) );
@@ -2413,87 +2500,41 @@ bool t3d_vt_godot_import_composed_sidecar_v1(
         source.m_nWrapMode = T3D_VT_COOK_WRAP_CLAMP;
         source.m_nAllocationFlags = T3D_VT_ALLOCATION_MEGATEXTURE |
             T3D_VT_ALLOCATION_CLAMP | T3D_VT_ALLOCATION_SHIPPING_IMMUTABLE;
-        source.m_nGenerationSeed = generation ? generation : 1u;
-        PackedByteArray image[3];
+        source.m_nGenerationSeed = ( uint32_t ) ( signature ^ ( signature >> 32u ) );
+        if ( !source.m_nGenerationSeed ) source.m_nGenerationSeed = 1u;
+        PackedByteArray prepared[3];
         for ( uint32_t channel = 0u; channel < 3u; ++channel ) {
-            PackedByteArray native;
-            if ( native.resize( ( int64_t ) nativeExtent * nativeExtent * components[channel] ) != OK ||
-                 image[channel].resize( ( int64_t ) outputExtent[channel] *
-                                        outputExtent[channel] * components[channel] ) != OK ) {
-                return fail( "Composed V1 bounded authoring image allocation failed" );
-            }
-            uint8_t *const pNative = native.ptrw();
-            for ( uint32_t tileY = 0u; tileY < tiles; ++tileY ) {
-                for ( uint32_t tileX = 0u; tileX < tiles; ++tileX ) {
-                    uint32_t pageIndex = UINT32_MAX;
-                    t3dComposedSurfacePageRecord_t page{};
-                    if ( !t3d_cs_find_page_location( view, first.m_nRegionKey, 0u,
-                                                       tileX, tileY, pageIndex ) ||
-                         !t3d_cs_sidecar_record( view, pageIndex, page ) ||
-                         page.m_nChannelMask != T3D_CS_CHANNEL_MASK_ALL ||
-                         !page.m_nGeneration || !page.m_nCompositionRevision ||
-                         !page.m_nContentFingerprint ) {
-                        return fail( "Composed V1 region missing a complete base tile" );
-                    }
-                    const t3dComposedSurfaceChannelRecord_t &record = page.m_channels[channel];
-                    if ( !t3d_cs_range_within( record.m_nFileOffset,
-                                               record.m_nByteCount, nSidecarBytes ) ||
-                         !t3d_cs_validate_channel_payload( record,
-                              pSidecar + record.m_nFileOffset, record.m_nByteCount ) ||
-                         !t3d_cs12_decode_godot_image( NULL, ( uint32_t ) format[channel],
-                              pSidecar + record.m_nFileOffset, record.m_nByteCount,
-                              decoded.ptrw(), T3D_CS_RGBA_SCRATCH_BYTES ) ) {
-                        return fail( "Composed V1 payload CRC or BC decode failed" );
-                    }
-                    const uint8_t *const pRgba = decoded.ptr();
-                    for ( uint32_t y = 0u; y < T3D_CS_PAGE_INTERIOR; ++y ) {
-                        for ( uint32_t x = 0u; x < T3D_CS_PAGE_INTERIOR; ++x ) {
-                            const uint32_t nativeX = tileX * T3D_CS_PAGE_INTERIOR + x;
-                            const uint32_t nativeY = tileY * T3D_CS_PAGE_INTERIOR + y;
-                            const uint32_t rawX = x + T3D_CS_PAGE_GUTTER;
-                            const uint32_t rawY = y + T3D_CS_PAGE_GUTTER;
-                            memcpy( pNative + ( nativeY * nativeExtent + nativeX ) * components[channel],
-                                pRgba + ( rawY * T3D_CS_PHYSICAL_TILE + rawX ) * 4u,
-                                components[channel] );
-                        }
-                    }
-                }
-            }
-            uint8_t *const pTarget = image[channel].ptrw();
-            const uint32_t output = outputExtent[channel];
-            for ( uint32_t y = 0u; y < output; ++y ) {
-                const uint32_t srcY = ( uint64_t( y ) * nativeExtent ) / output;
-                for ( uint32_t x = 0u; x < output; ++x ) {
-                    const uint32_t srcX = ( uint64_t( x ) * nativeExtent ) / output;
-                    memcpy( pTarget + ( y * output + x ) * components[channel],
-                        pNative + ( srcY * nativeExtent + srcX ) * components[channel],
-                        components[channel] );
-                }
-            }
-            t3dVTCookImageView_t &imageView = source.m_Channels[( uint32_t ) logical[channel] ];
-            imageView.m_pPixels = pTarget;
-            imageView.m_nWidth = output;
-            imageView.m_nHeight = output;
-            imageView.m_nComponents = components[channel];
-            imageView.m_nRowBytes = output * components[channel];
+            t3dVTMipChainLayout_t layout{};
+            if ( !t3d_cs_ucmp_prepare_channel_cold( view, pSidecar, nSidecarBytes,
+                    first.m_nRegionKey, tiles, channel, logical[channel],
+                    format[channel], components[channel], outputExtent[channel],
+                    prepared[channel], layout ) )
+                return fail( "Composed mip decode or V1 channel preparation failed" );
+            t3dVTCookPreparedChannelV1_t &p = source.m_PreparedChannels[( uint32_t ) logical[channel] ];
+            p.m_pMipBytes = prepared[channel].ptr();
+            p.m_Layout = layout;
+            p.m_nTargetExtent = outputExtent[channel];
+            t3dVTCookImageView_t &image = source.m_Channels[( uint32_t ) logical[channel] ];
+            image.m_pPixels = prepared[channel].ptr();
+            image.m_nWidth = outputExtent[channel];
+            image.m_nHeight = outputExtent[channel];
+            image.m_nComponents = components[channel];
+            image.m_nRowBytes = outputExtent[channel] * components[channel];
             source.m_nSourceFingerprint[( uint32_t ) logical[channel] ] =
-                regionSignature ^ ( uint64_t( channel + 1u ) << 56u );
+                signature ^ ( uint64_t( channel + 1u ) << 56u );
         }
         PackedByteArray fragment;
-        if ( !t3d_vt_godot_cook_source_fragment_v1( source, fragment ) || fragment.is_empty() ) {
-            return fail( "Composed region could not be encoded by the V1 cooker" );
-        }
+        if ( !t3d_vt_godot_cook_source_fragment_v1( source, fragment ) || fragment.is_empty() )
+            return fail( "Composed V1 prepared channel cook failed" );
         fragments.push_back( fragment );
     }
     if ( fragments.empty() ||
-         !t3d_vt_godot_merge_packages_v1( fragments.data(), ( uint32_t ) fragments.size(),
-                                           nPackageGeneration, rFragment ) ||
+         !t3d_vt_godot_merge_packages_v1( fragments.data(),
+            ( uint32_t ) fragments.size(), nPackageGeneration, rFragment ) ||
          rFragment.is_empty() ) {
         rFragment.clear();
         return fail( "Composed V1 package merge failed" );
     }
-    if ( pError ) {
-        *pError = String();
-    }
+    if ( pError ) *pError = String();
     return true;
 }

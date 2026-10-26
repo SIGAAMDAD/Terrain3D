@@ -21,13 +21,35 @@ inline void t3d_cs_editor_dirty_bounds( const Terrain3DTerrainMegaVT &megaVT,
                                         const t3dComposedSurfaceEditBounds_t &bounds,
                                         uint64_t nFingerprint )
 {
-    // Event-only scan; 1024 fixed logical slots, never a per-frame poll.
-    // The journal expands by both the control halo and the composed page gutter.
+    // Project the bounded control+gutter halo onto resident region slots.
+    // This runs on an edit event and visits only overlapping regions rather
+    // than scanning the full 32x32 world directory on each brush dab.
+    if ( !nFingerprint || !megaVT.getTexelsPerMeter() ||
+         !isfinite( bounds.m_fMinX ) || !isfinite( bounds.m_fMinZ ) ||
+         !isfinite( bounds.m_fMaxX ) || !isfinite( bounds.m_fMaxZ ) ||
+         bounds.m_fMaxX <= bounds.m_fMinX || bounds.m_fMaxZ <= bounds.m_fMinZ ) return;
+    const float halo = ( T3D_CS_EDITOR_CONTROL_HALO_TEXELS +
+                         T3D_CS_EDITOR_GUTTER_TEXELS ) / float( megaVT.getTexelsPerMeter() );
+    const float side = T3D_CS_EDITOR_REGION_SIZE;
+    const int32_t half = int32_t( T3D_REGION_MAP_HALF );
+    const float worldMin = -float( half ) * side;
+    const float worldMax = float( half ) * side;
+    if ( bounds.m_fMaxX + halo <= worldMin || bounds.m_fMaxZ + halo <= worldMin ||
+         bounds.m_fMinX - halo >= worldMax || bounds.m_fMinZ - halo >= worldMax ) return;
+    const int32_t x0 = int32_t( floorf( fmaxf( worldMin, bounds.m_fMinX - halo ) / side ) );
+    const int32_t z0 = int32_t( floorf( fmaxf( worldMin, bounds.m_fMinZ - halo ) / side ) );
+    const int32_t x1 = int32_t( floorf( ( fminf( worldMax, bounds.m_fMaxX + halo ) - 0.0001f ) / side ) );
+    const int32_t z1 = int32_t( floorf( ( fminf( worldMax, bounds.m_fMaxZ + halo ) - 0.0001f ) / side ) );
     const uint64_t topology = megaVT.getTopologyGeneration() ? megaVT.getTopologyGeneration() : 1u;
-    for ( uint32_t i = 0u; i < T3D_CS_EDITOR_REGION_COUNT; ++i ) {
-        t3dComposedSurfaceEditRegion_t region{};
-        if ( t3d_cs_editor_region( megaVT, i, region ) )
-            journal.dirtyRegionCold( region, bounds, megaVT.getTexelsPerMeter(), nFingerprint, topology );
+    for ( int32_t z = z0; z <= z1; ++z ) {
+        for ( int32_t x = x0; x <= x1; ++x ) {
+            uint32_t index = 0u;
+            if ( !Terrain3DTerrainMegaVT::locationToRegionIndex( x, z, index ) ) continue;
+            t3dComposedSurfaceEditRegion_t region{};
+            if ( t3d_cs_editor_region( megaVT, index, region ) )
+                journal.dirtyRegionCold( region, bounds, megaVT.getTexelsPerMeter(),
+                                         nFingerprint, topology );
+        }
     }
 }
 

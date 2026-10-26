@@ -8,6 +8,9 @@
 #include <fstream>
 #include <iterator>
 #include <vector>
+#if !defined( _WIN32 )
+#include <sys/stat.h>
+#endif
 
 // The pack validator is replaced ONLY in this fixture because the native V1
 // reader depends on the rest of Terrain3D. This does not test real pack-open.
@@ -258,6 +261,14 @@ int main()
     std::ifstream file( path, std::ios::binary );
     const std::vector< uint8_t > disk( (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>() );
     assert( disk == output );
+#if !defined( _WIN32 )
+    // Identical publication must NOT replace the file inode: no disk writes.
+    struct stat previous_stat{}, current_stat{};
+    assert( stat( path, &previous_stat ) == 0 );
+    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( stat( path, &current_stat ) == 0 );
+    assert( current_stat.st_ino == previous_stat.st_ino );
+#endif
     std::remove( path );
     // Editor reference-only incremental identity: a brush changes local
     // page revision, NOT the immutable package/material/filter fingerprint.

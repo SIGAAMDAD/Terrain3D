@@ -21,8 +21,14 @@ bool t3d_cs_static_v1_eligible( const t3dComposedStaticV1Source_t &s )
          ( s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_NEAREST &&
            s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_BILINEAR &&
            s.m_nSamplingMode != T3D_CS_STATIC_V1_SAMPLE_TOP_TWO ) ||
-         s.m_bAutoShader || s.m_bDualScale || s.m_bSideProjection ||
-         s.m_bDetiling || s.m_bAdaptiveSampling || s.m_bImplicitControls ||
+         ( s.m_bAutoShader && ( !s.m_pReadTerrainSurface ||
+             s.m_nAutoBaseTexture >= s.m_nLayerCount ||
+             s.m_nAutoOverlayTexture >= s.m_nLayerCount ||
+             !t3d_cs_finite( s.m_fAutoSlope ) ||
+             !t3d_cs_finite( s.m_fAutoHeightReduction ) ) ) ||
+         ( s.m_bDetiling && ( s.m_nDetilingMode == 2u || s.m_nDetilingMode > 5u ) ) ||
+         s.m_bDualScale || s.m_bSideProjection ||
+         s.m_bAdaptiveSampling || s.m_bImplicitControls ||
          s.m_bViewDependentMipBias ||
          !t3d_cs_finite( s.m_fStaticMipBias ) || !t3d_cs_finite( s.m_fBlendSharpness ) ||
          s.m_fBlendSharpness < 0.0f || s.m_fBlendSharpness > 1.0f ) return false;
@@ -67,6 +73,52 @@ static void t3d_cs_normalize( float *v )
     }
 }
 
+// Mirrors hash21/apply_detiling in terrain_clipmap_fragment_inc.glslinc.
+// World-local material transforms are deterministic even for negative cells.
+static float t3d_cs_fract( const float x ) { return x - floorf( x ); }
+static float t3d_cs_hash21( const float x, const float y )
+{
+    float a = t3d_cs_fract( x * 0.1031f );
+    float b = t3d_cs_fract( y * 0.1031f );
+    float c = t3d_cs_fract( x * 0.1031f );
+    const float k = a * ( b + 33.33f ) + b * ( c + 33.33f ) + c * ( a + 33.33f );
+    a += k; b += k; c += k;
+    return t3d_cs_fract( ( a + b ) * c );
+}
+
+// GLSL mat2(c, -s, s, c) rotates the UV and tangent frame by -angle.
+static void t3d_cs_detile( const t3dComposedStaticV1Source_t &s,
+                            const t3dComposedStaticV1Layer_t &layer, uint32_t id,
+                            const float *world, float *uv, float *dx, float *dy,
+                            float &rRotation )
+{
+    rRotation = 0.0f;
+    if ( !s.m_bDetiling || s.m_nDetilingMode == 2u ) return;
+    const float k = fmaxf( layer.m_fPbr0[0], 0.000001f ) * 0.25f;
+    const float hash = t3d_cs_hash21( floorf( world[0] * k ) + float( id ),
+                                      floorf( world[1] * k ) + 19.0f );
+    const float shift = layer.m_fPbr1[3];
+    if ( s.m_nDetilingMode == 3u ) {
+        uv[0] += ( hash - 0.5f ) * shift;
+        uv[1] += ( hash - 0.5f ) * shift;
+        return;
+    }
+    const uint32_t sectors = s.m_nDetilingMode == 4u ? 4u :
+                            ( s.m_nDetilingMode == 5u ? 16u : 8u );
+    rRotation = floorf( hash * float( sectors ) ) *
+                ( 6.2831853071795864769f / float( sectors ) ) * layer.m_fPbr1[2];
+    const float cs = cosf( rRotation ), sn = sinf( rRotation );
+    const float ox = uv[0], odx = dx[0], ody = dy[0];
+    uv[0] = cs * ox + sn * uv[1];
+    uv[1] = -sn * ox + cs * uv[1];
+    dx[0] = cs * odx + sn * dx[1];
+    dx[1] = -sn * odx + cs * dx[1];
+    dy[0] = cs * ody + sn * dy[1];
+    dy[1] = -sn * ody + cs * dy[1];
+    uv[0] += ( t3d_cs_fract( hash * 7.13f ) - 0.5f ) * shift;
+    uv[1] += ( t3d_cs_fract( hash * 13.71f ) - 0.5f ) * shift;
+}
+
 static bool t3d_cs_material( const t3dComposedStaticV1Source_t &s, const uint32_t id,
                              const float *world, const float *grad_x, const float *grad_y,
                              float scale, uint32_t rotation, t3dCsMaterial_t &dst )
@@ -82,6 +134,8 @@ static bool t3d_cs_material( const t3dComposedStaticV1Source_t &s, const uint32_
                     ( sn * grad_x[0] + cs * grad_x[1] ) * k };
     float dy[2] = { ( cs * grad_y[0] - sn * grad_y[1] ) * k,
                     ( sn * grad_y[0] + cs * grad_y[1] ) * k };
+    float detile_rotation = 0.0f;
+    t3d_cs_detile( s, layer, id, world, uv, dx, dy, detile_rotation );
     t3dComposedStaticV1Sample_t sample{};
     if ( !s.m_pSampleSource( s.m_pUser, layer.m_nAllocation, uv, dx, dy,
                             s.m_fStaticMipBias, s.m_nVtFiltering, sample ) ) return false;
@@ -95,9 +149,12 @@ static bool t3d_cs_material( const t3dComposedStaticV1Source_t &s, const uint32_
     float len2 = nx * nx + nz * nz;
     if ( len2 > 1.0f ) { float inv = 1.0f / sqrtf( len2 ); nx *= inv; nz *= inv; len2 = 1.0f; }
     // Same canonical V1 XZ normal transform as sample_material_canonical_v1.
-    dst.normal[0] = ( cs * nx - sn * nz ) * layer.m_fPbr0[1];
+    // Tangent normal follows detile_rotation * authored_control_rotation.
+    const float normal_angle = angle - detile_rotation;
+    const float nc = cosf( normal_angle ), ns = sinf( normal_angle );
+    dst.normal[0] = ( nc * nx - ns * nz ) * layer.m_fPbr0[1];
     dst.normal[1] = sqrtf( fmaxf( 1.0f - len2, 0.0f ) );
-    dst.normal[2] = ( sn * nx + cs * nz ) * layer.m_fPbr0[1];
+    dst.normal[2] = ( ns * nx + nc * nz ) * layer.m_fPbr0[1];
     t3d_cs_normalize( dst.normal );
     dst.height = sample.m_fHeight;
     dst.ao = 1.0f + ( sample.m_fPbr[3] - 1.0f ) * t3d_cs_limit( layer.m_fPbr1[0], 0.0f, 1.0f );
@@ -132,6 +189,34 @@ static bool t3d_cs_control_pair( const t3dComposedStaticV1Source_t &s, const uin
     return true;
 }
 
+// GLSL auto_control: the authored auto bit is resolved per output pixel,
+// using the same sampled terrain height/normal for all four control corners.
+static bool t3d_cs_resolve_auto( const t3dComposedStaticV1Source_t &s,
+                                 uint32_t *pControls, uint32_t count,
+                                 uint32_t px, uint32_t py )
+{
+    if ( !s.m_bAutoShader ) return true;
+    bool needed = false;
+    for ( uint32_t i = 0u; i < count; ++i ) needed |= ( pControls[i] & 1u ) != 0u;
+    if ( !needed ) return true;
+    float height = 0.0f, normal_y = 1.0f;
+    if ( !s.m_pReadTerrainSurface( s.m_pUser, px, py, height, normal_y ) ||
+         !t3d_cs_finite( height ) || !t3d_cs_finite( normal_y ) ||
+         normal_y < -1.0f || normal_y > 1.0f ) return false;
+    const float blend = t3d_cs_limit( fmaf( s.m_fAutoSlope * 2.0f, normal_y - 1.0f, 1.0f ) -
+                                      s.m_fAutoHeightReduction * 0.01f * height, 0.0f, 1.0f );
+    const uint32_t base = s.m_nAutoBaseTexture;
+    const uint32_t overlay = s.m_nAutoOverlayTexture;
+    const bool swap = base > overlay;
+    const uint32_t weight = uint32_t( floorf( ( swap ? 1.0f - blend : blend ) * 255.0f + 0.5f ) );
+    const uint32_t replacement = ( ( swap ? overlay : base ) << 27u ) |
+                                 ( ( swap ? base : overlay ) << 22u ) |
+                                 ( ( weight & 255u ) << 14u );
+    for ( uint32_t i = 0u; i < count; ++i )
+        if ( ( pControls[i] & 1u ) != 0u ) pControls[i] = replacement;
+    return true;
+}
+
 static bool t3d_cs_pixel( const t3dComposedStaticV1Source_t &s, const t3dComposedStaticV1Footprint_t &foot,
                           const uint32_t x, const uint32_t y, t3dCsMaterial_t &rResult )
 {
@@ -149,11 +234,13 @@ static bool t3d_cs_pixel( const t3dComposedStaticV1Source_t &s, const t3dCompose
     uint32_t controls[4]{};
     if ( !s.m_pReadControl( s.m_pUser, cell_x, cell_y, controls[0] ) ) return false;
     if ( s.m_nSamplingMode == T3D_CS_STATIC_V1_SAMPLE_NEAREST ) {
+        if ( !t3d_cs_resolve_auto( s, controls, 1u, x, y ) ) return false;
         return t3d_cs_control_pair( s, controls[0], world, foot.m_fWorldStepX, foot.m_fWorldStepY, rResult );
     }
     if ( !s.m_pReadControl( s.m_pUser, cell_x + 1, cell_y, controls[1] ) ||
          !s.m_pReadControl( s.m_pUser, cell_x, cell_y + 1, controls[2] ) ||
-         !s.m_pReadControl( s.m_pUser, cell_x + 1, cell_y + 1, controls[3] ) ) return false;
+         !s.m_pReadControl( s.m_pUser, cell_x + 1, cell_y + 1, controls[3] ) ||
+         !t3d_cs_resolve_auto( s, controls, 4u, x, y ) ) return false;
     if ( controls[0] == controls[1] && controls[0] == controls[2] && controls[0] == controls[3] ) {
         return t3d_cs_control_pair( s, controls[0], world, foot.m_fWorldStepX, foot.m_fWorldStepY, rResult );
     }

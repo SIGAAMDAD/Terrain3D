@@ -3,7 +3,7 @@
 
 static_assert( T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE ==
     T3D_RD_SHADER_ENVIRONMENT_HEIGHT + 1u, "Existing shader IDs shifted" );
-static_assert( T3D_RD_SHADER_COUNT == T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE +
+static_assert( T3D_RD_SHADER_UCMP_ALIAS == T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE +
     3u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT, "Compact-feedback shader count is incomplete" );
 static_assert( t3dRdCanonicalTerrainRoute( 0u, 2u, 7u, true, false, true ).m_id ==
     t3dRdTerrainCompactFeedbackId( 2u, 7u ), "Far compact feedback routing failed" );

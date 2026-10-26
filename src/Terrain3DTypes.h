@@ -3770,7 +3770,7 @@ typedef struct alignas(
 	float					  m_fEditorOverlayOpacity = 0.55f;
 	float					  m_fReserved2 = 0.0f;
 	float					  m_fReserved3 = 0.0f;
-	t3dRdTierMaterialConfig_t m_szTier[3]{};
+	t3dRdTierMaterialConfig_t m_szTier[1]{};
 } t3dRdMaterialConfig_t;
 
 typedef struct alignas(

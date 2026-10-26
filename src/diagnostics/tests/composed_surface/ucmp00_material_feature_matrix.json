@@ -1,0 +1,126 @@
+{
+  "baseline": "AVT08 Baseline2 Typed Commit (source snapshot)",
+  "stage": "UCMP-00 through UCMP-03; no rendering cutover",
+  "semantics": {
+    "static_candidate": "Representable by restricted camera-independent sidecar evaluator; still reference-only pending renderer parity",
+    "dependency_conditional": "Candidate can bake only with an explicit snapshot/dependency; no shipping parity approval without matching runtime evidence",
+    "runtime": "Requires live dynamic/view data or separate coverage owner",
+    "unsupported": "Unsupported by current composed representation or missing parity proof; retain canonical raster"
+  },
+  "features": [
+    {
+      "name": "control base and overlay material IDs",
+      "classification": "static_candidate",
+      "owner": "Terrain3DData control / composed static V1"
+    },
+    {
+      "name": "control blend, rotation and scale",
+      "classification": "static_candidate",
+      "owner": "composed static V1"
+    },
+    {
+      "name": "nearest, bilinear and top-two control sampling",
+      "classification": "static_candidate",
+      "owner": "composed static V1"
+    },
+    {
+      "name": "authored material color, normal and PBR",
+      "classification": "static_candidate",
+      "owner": "Terrain3DAssets / composed static V1"
+    },
+    {
+      "name": "static material blend sharpness",
+      "classification": "static_candidate",
+      "owner": "Terrain3DMaterial / cold fingerprint"
+    },
+    {
+      "name": "composed material mips and BC page gutters",
+      "classification": "static_candidate",
+      "owner": "composed cooker / V1 pack"
+    },
+    {
+      "name": "height/slope autoshader",
+      "classification": "static_candidate",
+      "owner": "Terrain3DData immutable height/normal page samples + static V1 auto-control evaluator",
+      "note": "Exact mathematical candidate, parity not approved"
+    },
+    {
+      "name": "implicit controls and outside-region selection",
+      "classification": "dependency_conditional",
+      "owner": "canonical raster; Terrain3DData"
+    },
+    {
+      "name": "deterministic material detiling",
+      "classification": "static_candidate",
+      "owner": "authored per-layer detile params + static V1 canonical deterministic hash",
+      "note": "Shader hash21 and canonical detile rotation/offset; source-cooked parity only"
+    },
+    {
+      "name": "stochastic or derivative-dependent runtime sampling",
+      "classification": "unsupported",
+      "owner": "canonical raster until a semantically proven static recipe exists"
+    },
+    {
+      "name": "dual-scale surface sampling",
+      "classification": "runtime",
+      "owner": "canonical raster",
+      "note": "Camera-distance transition cannot be represented in one static BC1/BC5/BC7 surface triple; Wave 2 runtime surface policy required"
+    },
+    {
+      "name": "side/triplanar projection",
+      "classification": "unsupported",
+      "owner": "canonical raster",
+      "note": "Retained until parity for world-normal/side-axis and projection derivatives is proven"
+    },
+    {
+      "name": "adaptive derivative-based filtering",
+      "classification": "unsupported",
+      "owner": "canonical raster"
+    },
+    {
+      "name": "heightfield displacement and vertex normals",
+      "classification": "runtime",
+      "owner": "clipmap geometry / Terrain3DData"
+    },
+    {
+      "name": "holes, coverage and collision shape",
+      "classification": "runtime",
+      "owner": "Terrain3DData controls / geometry"
+    },
+    {
+      "name": "wetness and moving weather",
+      "classification": "runtime",
+      "owner": "canonical raster/effects"
+    },
+    {
+      "name": "sun, BRDF, shadows and GI",
+      "classification": "runtime",
+      "owner": "Forward+ / raster lighting"
+    },
+    {
+      "name": "FAR height and regional coverage",
+      "classification": "runtime",
+      "owner": "existing FAR source and Terrain3DData"
+    },
+    {
+      "name": "WORLD / HLOD material raster",
+      "classification": "unsupported",
+      "owner": "existing WORLD shader material path"
+    },
+    {
+      "name": "DNR and material feedback passes",
+      "classification": "runtime",
+      "owner": "existing renderer pass ABI"
+    },
+    {
+      "name": "editor material debug, overlays and tool brushes",
+      "classification": "runtime",
+      "owner": "editor shader / authoring"
+    }
+  ],
+  "measured_gpu_residency_bytes": null,
+  "measured_gpu_pipeline_count": null,
+  "measured_shader_compile_count": null,
+  "glsl_reflection_validated": false,
+  "parity_capture_accepted": false
+}

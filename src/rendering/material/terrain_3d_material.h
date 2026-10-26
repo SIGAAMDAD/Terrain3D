@@ -267,6 +267,31 @@ public:
 		void ) const {
 		return m_authoringState.m_worldBackground;
 	}
+	// UCMP-06: editor-only names for the established shared source-quality record.
+	// Existing near/middle/far properties retain serialization for older resources.
+	void setCookedTextureFiltering( t3dTextureFiltering_t filtering );
+	t3dTextureFiltering_t getCookedTextureFiltering( void ) const;
+	void setCookedMaterialSamplingQuality( t3dMaterialSamplingQuality_t quality );
+	t3dMaterialSamplingQuality_t getCookedMaterialSamplingQuality( void ) const;
+	void setCookedTerrainNormalQuality( t3dTerrainNormalQuality_t quality );
+	t3dTerrainNormalQuality_t getCookedTerrainNormalQuality( void ) const;
+	void setCookedTerrainColorQuality( t3dTerrainColorQuality_t quality );
+	t3dTerrainColorQuality_t getCookedTerrainColorQuality( void ) const;
+	void setCookedSurfaceResponseQuality( t3dSurfaceResponseQuality_t quality );
+	t3dSurfaceResponseQuality_t getCookedSurfaceResponseQuality( void ) const;
+	void setCookedTextureSurfaceMode( t3dTextureSurfaceMode_t mode );
+	t3dTextureSurfaceMode_t getCookedTextureSurfaceMode( void ) const;
+	void setCookedLightingModel( t3dTierLightingModel_t model );
+	t3dTierLightingModel_t getCookedLightingModel( void ) const;
+	void setCookedDetilingQuality( t3dTierDetilingQuality_t quality );
+	t3dTierDetilingQuality_t getCookedDetilingQuality( void ) const;
+	void setCookedAuthoredColorContribution( real_t contribution );
+	real_t getCookedAuthoredColorContribution( void ) const;
+	void setCookedWetnessContribution( real_t contribution );
+	real_t getCookedWetnessContribution( void ) const;
+	void setCookedMaterialLodBias( real_t bias );
+	real_t getCookedMaterialLodBias( void ) const;
+
 	// Shared 11-row quality-tier schema.
 	void								  setNearTextureFiltering( t3dTextureFiltering_t filtering );
 	EA_FORCE_INLINE t3dTextureFiltering_t getNearTextureFiltering(
@@ -789,6 +814,7 @@ public:
 
 protected:
 	void _get_property_list( List< PropertyInfo > *pList ) const;
+	void _validate_property( PropertyInfo &rProperty ) const;
 	bool _property_can_revert( const StringName &rName ) const;
 	bool _property_get_revert( const StringName &rName, Variant &rProperty ) const;
 	bool _set( const StringName &rName, const Variant &rProperty );

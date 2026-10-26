@@ -37,8 +37,8 @@ assert '#define T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ( 0 )' in constants
 
 # Godot replaces #VERSION_DEFINES from the named RDShaderFile version. A
 # subgroup flag that is tested *before* this point silently stays disabled.
-fragment_roots = ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                  'terrain_clipmap_far.glsl', 'terrain_instances.glsl',
+fragment_roots = ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                  'terrain_clipmap.glsl', 'terrain_instances.glsl',
                   'terrain_world_raster.glsl')
 for name in fragment_roots:
     stage = split_sections((RD / name).read_text())['fragment']
@@ -56,8 +56,8 @@ def expand(name, variant, extra=()):
     checks += 1
     return output
 
-for terrain in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                'terrain_clipmap_far.glsl'):
+for terrain in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                'terrain_clipmap.glsl'):
     selected = variants(split_sections((RD / terrain).read_text()))
     assert 'color_native_vt_hints' in selected
     assert 'feedback_color_native_vt_hints' in selected
@@ -71,7 +71,7 @@ for terrain in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
 # The compact list variant must instantiate its optional set-4 ABI only when
 # the corresponding semantic variant is selected, including explicit zero.
 for shader, plain_name, compact_name in (
-    ('terrain_clipmap_near.glsl', 'color_native', 'color_native_compact'),
+    ('terrain_clipmap.glsl', 'color_native', 'color_native_compact'),
     ('terrain_instances.glsl', 'color_native', 'color_native_compact'),
     ('terrain_world_raster.glsl', 'mesh_color_native', 'mesh_color_native_compact'),
 ):
@@ -82,7 +82,7 @@ for shader, plain_name, compact_name in (
     assert 'T3DBr21CompactHeaders' in compact, shader
 
 # No shader version or forward-lighting helper retains the retired subgroup experiment.
-for shader in ('terrain_clipmap_near.glsl', 'terrain_instances.glsl', 'terrain_world_raster.glsl'):
+for shader in ('terrain_clipmap.glsl', 'terrain_instances.glsl', 'terrain_world_raster.glsl'):
     baseline = expand(shader, 'color_native' if shader != 'terrain_world_raster.glsl' else 'mesh_color_native')
     assert 'subgroupAllEqual' not in baseline, shader
 assert 'subgroupAllEqual' not in (RD / 'terrain_forward_lighting_inc.glslinc').read_text()

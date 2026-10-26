@@ -10,10 +10,10 @@ import tempfile
 from compile_fragment_wave import emit_fragment, shader_root
 
 FRAGMENTS = (
-    ('terrain_clipmap_near.glsl', 'color_native'),
-    ('terrain_clipmap_near.glsl', 'feedback_color_native'),
-    ('terrain_clipmap_middle.glsl', 'color_native'),
-    ('terrain_clipmap_far.glsl', 'color_native'),
+    ('terrain_clipmap.glsl', 'color_native'),
+    ('terrain_clipmap.glsl', 'feedback_color_native'),
+    ('terrain_clipmap.glsl', 'color_native'),
+    ('terrain_clipmap.glsl', 'color_native'),
     ('terrain_instances.glsl', 'color_native'),
     ('terrain_instances.glsl', 'feedback_color_native'),
     ('terrain_world_raster.glsl', 'mesh_color_native'),

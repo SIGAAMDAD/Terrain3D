@@ -4,7 +4,7 @@
   "gpu_measured": false,
   "variants": [
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color",
       "defines": [],
       "depth": false,
@@ -15,7 +15,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -30,7 +30,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -45,7 +45,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -60,7 +60,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -76,7 +76,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -92,7 +92,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -108,7 +108,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -124,7 +124,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -140,7 +140,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -156,7 +156,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -173,7 +173,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -190,7 +190,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -207,7 +207,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -223,7 +223,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -239,7 +239,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -255,7 +255,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -272,7 +272,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -289,7 +289,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -306,7 +306,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -323,7 +323,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -340,7 +340,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -357,7 +357,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -375,7 +375,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -393,7 +393,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -411,7 +411,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -427,7 +427,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -443,7 +443,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -459,7 +459,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -476,7 +476,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -493,7 +493,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -510,7 +510,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -527,7 +527,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -544,7 +544,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -561,7 +561,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -579,7 +579,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -597,7 +597,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -615,7 +615,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -632,7 +632,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -649,7 +649,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -666,7 +666,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -684,7 +684,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -702,7 +702,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -720,7 +720,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -738,7 +738,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -756,7 +756,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -774,7 +774,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -793,7 +793,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -812,7 +812,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -831,7 +831,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -846,7 +846,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -861,7 +861,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -876,7 +876,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -892,7 +892,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -908,7 +908,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -924,7 +924,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -941,7 +941,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -958,7 +958,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -975,7 +975,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -992,7 +992,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1010,7 +1010,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1028,7 +1028,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1047,7 +1047,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1065,7 +1065,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1084,7 +1084,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1103,7 +1103,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1123,7 +1123,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1141,7 +1141,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1160,7 +1160,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1179,7 +1179,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1199,7 +1199,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1218,7 +1218,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1238,7 +1238,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1258,7 +1258,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_near.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -1279,7 +1279,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color",
       "defines": [],
       "depth": false,
@@ -1290,7 +1290,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1305,7 +1305,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1320,7 +1320,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1335,7 +1335,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1351,7 +1351,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1367,7 +1367,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1383,7 +1383,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1399,7 +1399,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1415,7 +1415,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1431,7 +1431,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1448,7 +1448,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1465,7 +1465,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1482,7 +1482,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1498,7 +1498,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1514,7 +1514,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1530,7 +1530,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1547,7 +1547,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1564,7 +1564,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1581,7 +1581,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1598,7 +1598,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1615,7 +1615,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1632,7 +1632,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1650,7 +1650,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1668,7 +1668,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1686,7 +1686,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1702,7 +1702,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1718,7 +1718,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1734,7 +1734,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1751,7 +1751,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1768,7 +1768,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1785,7 +1785,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1802,7 +1802,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1819,7 +1819,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1836,7 +1836,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1854,7 +1854,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1872,7 +1872,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1890,7 +1890,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1907,7 +1907,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1924,7 +1924,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1941,7 +1941,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -1959,7 +1959,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -1977,7 +1977,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -1995,7 +1995,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2013,7 +2013,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2031,7 +2031,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2049,7 +2049,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2068,7 +2068,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2087,7 +2087,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2106,7 +2106,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2121,7 +2121,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2136,7 +2136,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2151,7 +2151,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2167,7 +2167,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2183,7 +2183,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2199,7 +2199,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2216,7 +2216,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2233,7 +2233,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2250,7 +2250,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2267,7 +2267,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2285,7 +2285,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2303,7 +2303,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2322,7 +2322,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2340,7 +2340,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2359,7 +2359,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2378,7 +2378,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2398,7 +2398,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2416,7 +2416,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2435,7 +2435,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2454,7 +2454,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2474,7 +2474,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2493,7 +2493,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2513,7 +2513,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2533,7 +2533,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_middle.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -2554,7 +2554,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color",
       "defines": [],
       "depth": false,
@@ -2565,7 +2565,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2580,7 +2580,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2595,7 +2595,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2610,7 +2610,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2626,7 +2626,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2642,7 +2642,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2658,7 +2658,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2674,7 +2674,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2690,7 +2690,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2706,7 +2706,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2723,7 +2723,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2740,7 +2740,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2757,7 +2757,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2773,7 +2773,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2789,7 +2789,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2805,7 +2805,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2822,7 +2822,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2839,7 +2839,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2856,7 +2856,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2873,7 +2873,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2890,7 +2890,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2907,7 +2907,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2925,7 +2925,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2943,7 +2943,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -2961,7 +2961,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -2977,7 +2977,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -2993,7 +2993,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3009,7 +3009,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3026,7 +3026,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3043,7 +3043,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3060,7 +3060,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3077,7 +3077,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3094,7 +3094,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3111,7 +3111,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3129,7 +3129,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3147,7 +3147,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3165,7 +3165,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3182,7 +3182,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3199,7 +3199,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3216,7 +3216,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3234,7 +3234,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3252,7 +3252,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3270,7 +3270,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3288,7 +3288,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3306,7 +3306,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3324,7 +3324,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3343,7 +3343,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3362,7 +3362,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3381,7 +3381,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3396,7 +3396,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3411,7 +3411,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3426,7 +3426,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3442,7 +3442,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3458,7 +3458,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3474,7 +3474,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 0",
@@ -3491,7 +3491,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "compat_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 1",
@@ -3508,7 +3508,7 @@
       "compat": true
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "editor_depth_normal_roughness_voxel_gi",
       "defines": [
         "#define T3D_TERRAIN_SHADER_PATH 2",
@@ -3525,7 +3525,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3542,7 +3542,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3560,7 +3560,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3578,7 +3578,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3597,7 +3597,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3615,7 +3615,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3634,7 +3634,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3653,7 +3653,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3673,7 +3673,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3691,7 +3691,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3710,7 +3710,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3729,7 +3729,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3749,7 +3749,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_native_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3768,7 +3768,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3788,7 +3788,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",
@@ -3808,7 +3808,7 @@
       "compat": false
     },
     {
-      "shader": "terrain_clipmap_far.glsl",
+      "shader": "terrain_clipmap.glsl",
       "variant": "feedback_color_specular_motion_one_sun_radiance_array",
       "defines": [
         "#define T3D_VT_FRAGMENT_FEEDBACK",

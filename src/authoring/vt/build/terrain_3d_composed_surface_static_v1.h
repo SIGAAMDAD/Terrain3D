@@ -17,7 +17,7 @@ struct t3dComposedStaticV1Layer_t
     uint32_t m_nAllocation;
     float m_fColor[3];
     float m_fPbr0[4]; // x=source UV scale, y=normal strength, z=roughness offset, w=metallic
-    float m_fPbr1[2]; // x=AO weight, y=AO influence
+    float m_fPbr1[4]; // x=AO weight, y=AO influence, z=detile rotation, w=detile shift
 };
 
 // First interior texel has coordinates (origin + 0.5 * step).
@@ -46,6 +46,10 @@ struct t3dComposedStaticV1Sample_t
 typedef bool ( *t3dCsStaticV1PageFn )( void *pUser, const t3dComposedSurfaceCookPage_t &page,
                                         t3dComposedStaticV1Footprint_t &rFootprint );
 typedef bool ( *t3dCsStaticV1ControlFn )( void *pUser, int32_t nX, int32_t nY, uint32_t &rControl );
+// The editor takes immutable height/normal snapshots at the composed page's
+// output sample positions. A callback is required only for explicit auto cells.
+typedef bool ( *t3dCsStaticV1SurfaceFn )( void *pUser, uint32_t nX, uint32_t nY,
+                                             float &rHeight, float &rNormalY );
 typedef bool ( *t3dCsStaticV1SourceFn )( void *pUser, uint32_t nAllocation,
                                          const float *pUv, const float *pGradX, const float *pGradY,
                                          float fLodBias, uint32_t nFiltering,
@@ -56,6 +60,7 @@ struct t3dComposedStaticV1Source_t
     void *m_pUser;
     t3dCsStaticV1PageFn m_pResolvePage;
     t3dCsStaticV1ControlFn m_pReadControl;
+    t3dCsStaticV1SurfaceFn m_pReadTerrainSurface = nullptr;
     t3dCsStaticV1SourceFn m_pSampleSource;
     const t3dComposedStaticV1Layer_t *m_pLayers;
     uint32_t m_nLayerCount;
@@ -63,8 +68,16 @@ struct t3dComposedStaticV1Source_t
     uint32_t m_nVtFiltering;
     float m_fStaticMipBias;
     float m_fBlendSharpness;
-    // Reject modes whose shading depends on view, runtime state, derivative,
-    // triplanar projection, auto controls or stochastic detiling.
+    // Canonical shader detiling uses 2=off, 1=8-way, 3=translation,
+    // 4=4-way and 5=16-way. No runtime camera distance enters this recipe.
+    uint32_t m_nDetilingMode = 2u;
+    float m_fAutoSlope = 1.0f;
+    float m_fAutoHeightReduction = 0.1f;
+    uint32_t m_nAutoBaseTexture = 0u;
+    uint32_t m_nAutoOverlayTexture = 1u;
+    // Auto controls and deterministic detiling can be composed from an
+    // immutable authoring snapshot. Camera-distance dual scale, triplanar
+    // projection and adaptive sampling still require another representation.
     bool m_bAutoShader;
     bool m_bDualScale;
     bool m_bSideProjection;

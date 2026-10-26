@@ -22,6 +22,10 @@ static bool decode(void *,uint32_t fmt,const uint8_t*data,uint32_t size,uint8_t*
 }
 static bool page(void *user,const t3dComposedSurfaceCookPage_t&,t3dComposedStaticV1Footprint_t&){return *static_cast<uint32_t*>(user)==42u;}
 static bool control(void *user,int32_t,int32_t,uint32_t &v){v=7u;return *static_cast<uint32_t*>(user)==42u;}
+static bool surface(void *user,uint32_t x,uint32_t y,float &height,float &normal_y){
+  if(*static_cast<uint32_t*>(user)!=42u || x!=7u || y!=9u)return false;
+  height=12.5f;normal_y=0.75f;return true;
+}
 int main(){
   t3dVTPackAllocationRecordV1_t alloc{};alloc.m_nConsumer=0;
   t3dVTPackAllocationKeyRecordV1_t key{};
@@ -110,7 +114,7 @@ int main(){
   // Check adapter preserves the original author's page/control user pointer.
   uint32_t marker=42u;
   t3dComposedStaticV1Source_t source{};source.m_pUser=&marker;
-  source.m_pResolvePage=page;source.m_pReadControl=control;source.m_nVtFiltering=0u;
+  source.m_pResolvePage=page;source.m_pReadControl=control;source.m_pReadTerrainSurface=surface;source.m_nVtFiltering=0u;
   t3dCs12ProducerBridge_t bridge{};
   assert(!t3d_cs12_bind_static_source(sampler,bridge,source));
   source.m_nVtFiltering=3u;
@@ -119,6 +123,10 @@ int main(){
   uint32_t ctrl=0u;
   assert(source.m_pResolvePage(source.m_pUser,p,f));
   assert(source.m_pReadControl(source.m_pUser,0,0,ctrl)&&ctrl==7u);
+  float height=0.0f, normal_y=1.0f;
+  assert(source.m_pReadTerrainSurface(source.m_pUser,7u,9u,height,normal_y));
+  assert(height==12.5f && normal_y==0.75f);
+  assert(!source.m_pReadTerrainSurface(source.m_pUser,0u,0u,height,normal_y));
   assert(source.m_pSampleSource(source.m_pUser,0u,uv,ddx,ddy,0.0f,3u,out));
   assert(decodes>=prev);
   std::puts("CS12 pack sampling/CRC/tail/cache/bridge PASS");

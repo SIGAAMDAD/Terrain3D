@@ -148,7 +148,9 @@ bool t3d_feature_megavt_enabled() {
 }
 
 bool t3d_near_tier_active() {
-#ifdef T3D_RUNTIME_TIER
+#ifdef T3D_UCMP_COOKED
+    return true;
+#elif defined(T3D_RUNTIME_TIER)
     return patch_tier == 0u;
 #else
     return T3D_TIER == 0;
@@ -1434,13 +1436,15 @@ float apply_authored_roughness(float roughness, float alpha, TierMaterialConfig 
     return clamp(roughness - authored_wetness_offset(alpha, tier_config), 0.0, 1.0);
 }
 vec4 sample_middle_composite(vec2 world_texel) {
-#ifdef T3D_RUNTIME_TIER
-    TierMaterialConfig tier_config = material_config.tier[min(patch_tier, 2u)];
+#ifdef T3D_UCMP_COOKED
+    return vec4(0.0);
+#elif defined(T3D_RUNTIME_TIER)
+    TierMaterialConfig tier_config = material_config.tier[0];
     if (patch_tier != 1u || !t3d_middle_use_composite(tier_config) || terrain_region_layer < 0) {
         return vec4(0.0);
     }
 #elif T3D_TIER == 1
-    TierMaterialConfig tier_config = material_config.tier[1];
+    TierMaterialConfig tier_config = material_config.tier[0];
     if (!t3d_middle_use_composite(tier_config) || terrain_region_layer < 0) {
         return vec4(0.0);
     }
@@ -1711,11 +1715,13 @@ bool t3d_cs_static_v1_runtime_eligible(TierMaterialConfig tier_config) {
 #else
     float near_bias_scale = exp2(material_config.mipmap_bias);
 #endif
-    return explicit_controls && tier_config.detiling_mode == 2u &&
-           tier_config.surface_response != 0u && material_config.projection_mode == 0u &&
-           !t3d_feature_dual_scale_enabled() && !t3d_feature_auto_shader_enabled() &&
-           (material_config.feature_flags & T3D_FEATURE_CONTROL_IMPLICIT) == 0u &&
-           abs(far_bias_scale - near_bias_scale) < 0.00001;
+    // The generation-validated composed allocation represents the accepted
+    // authored static result, including auto controls and deterministic detiling.
+    // View-dependent dual scale and side projection stay in the detailed path.
+    return explicit_controls && tier_config.surface_response != 0u &&
+           material_config.projection_mode == 0u &&
+           !t3d_feature_dual_scale_enabled() &&
+           (material_config.feature_flags & T3D_FEATURE_CONTROL_IMPLICIT) == 0u;
 #else
     return false;
 #endif
@@ -2292,7 +2298,7 @@ SampledMaterial sample_resolved_control_pair(uint control, vec2 world_xz, vec3 t
 }
 
 bool use_bilinear_controls(TierMaterialConfig tier_config) {
-#ifdef T3D_RUNTIME_TIER
+#if defined(T3D_RUNTIME_TIER) && !defined(T3D_UCMP_COOKED)
     if (patch_tier == 1u && t3d_middle_use_composite(tier_config)) {
         return false;
     }
@@ -3659,13 +3665,25 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
     vec2 composed_grad_x, vec2 composed_grad_y,
 #endif
     out vec4 color_map) {
-#ifdef T3D_RUNTIME_TIER
+#ifdef T3D_UCMP_COOKED
+    uint tier = 0u;
+#elif defined(T3D_RUNTIME_TIER)
     uint tier = patch_tier;
 #else
     uint tier = uint(T3D_TIER);
 #endif
 #ifdef T3D_CS_ACTIVE
-    if (tier == 1u && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)) {
+    if (
+#ifdef T3D_UCMP_COOKED
+        true &&
+#else
+        tier == 1u &&
+#endif
+        !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)
+#if T3D_TERRAIN_SHADER_PATH == 2
+        && !t3d_editor_brush_invalidates_composed(world_texel)
+#endif
+        ) {
         T3DComposedSample composed;
         if (t3d_cs_sample(world_texel, composed_grad_x, composed_grad_y, composed)) {
             SampledMaterial result = material_zero();
@@ -3682,6 +3700,9 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
     }
 #endif
     bool composite_mode = tier == 1u && t3d_middle_use_composite(tier_config);
+#ifdef T3D_UCMP_COOKED
+    composite_mode = false;
+#endif
 #ifdef T3D_CS_ACTIVE
     composite_mode = false; // Miss => full detailed evaluation, not legacy RGB-only cache.
 #endif
@@ -3827,12 +3848,17 @@ SampledMaterial sample_color_material_shared(vec2 world_texel, vec3 terrain_norm
 #define T3D_SILHOUETTE_FAST_ACTIVE 1
 vec4 t3d_silhouette_color_map(vec2 world_texel, TierMaterialConfig tier_config,
     bool outside_region, vec4 far_surface, uint far_bits, bool need_authored_color) {
-#ifdef T3D_RUNTIME_TIER
+#ifdef T3D_UCMP_COOKED
+    uint tier = 0u;
+#elif defined(T3D_RUNTIME_TIER)
     uint tier = patch_tier;
 #else
     uint tier = uint(T3D_TIER);
 #endif
     bool composite_mode = tier == 1u && t3d_middle_use_composite(tier_config);
+#ifdef T3D_UCMP_COOKED
+    composite_mode = false;
+#endif
 #ifdef T3D_CS_ACTIVE
     composite_mode = false; // Composed-cache misses follow the detailed path.
 #endif
@@ -3865,10 +3891,12 @@ void t3d_screen_space_shade_fragment() {
 void main() {
 #endif
 #endif
-#ifdef T3D_RUNTIME_TIER
-    TierMaterialConfig tier_config = material_config.tier[min(patch_tier, 2u)];
+#ifdef T3D_UCMP_COOKED
+    TierMaterialConfig tier_config = material_config.tier[0];
+#elif defined(T3D_RUNTIME_TIER)
+    TierMaterialConfig tier_config = material_config.tier[0];
 #else
-    TierMaterialConfig tier_config = material_config.tier[T3D_TIER];
+    TierMaterialConfig tier_config = material_config.tier[0];
 #endif
     vec2 world_texel = terrain_world_texel;
     float instancer_grid_footprint = 0.0;
@@ -3918,7 +3946,9 @@ void main() {
     // extra texelFetch on every covered pixel in the depth and color passes.
     bool need_far_surface = outside_region;
 #ifdef T3D_RUNTIME_TIER
+#ifndef T3D_UCMP_COOKED
     need_far_surface = need_far_surface || patch_tier == 2u;
+#endif
 #elif T3D_TIER == 2
     need_far_surface = true;
 #endif
@@ -3948,7 +3978,7 @@ void main() {
 #endif
 
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-#if T3D_TIER == 1 || defined(T3D_RUNTIME_TIER)
+#if !defined(T3D_UCMP_COOKED) && (T3D_TIER == 1 || defined(T3D_RUNTIME_TIER))
     if (
 #ifdef T3D_RUNTIME_TIER
         patch_tier == 1u &&
@@ -3989,10 +4019,15 @@ void main() {
     NormalRoughnessMaterial nr_material = normal_roughness_zero();
     bool composed_hit = false;
 #ifdef T3D_CS_ACTIVE
-#ifdef T3D_RUNTIME_TIER
+#ifdef T3D_UCMP_COOKED
+    bool composed_eligible = true;
+#elif defined(T3D_RUNTIME_TIER)
     bool composed_eligible = patch_tier == 1u;
 #else
     bool composed_eligible = T3D_TIER == 1;
+#endif
+#if T3D_TERRAIN_SHADER_PATH == 2
+    composed_eligible = composed_eligible && !t3d_editor_brush_invalidates_composed(world_texel);
 #endif
     if (composed_eligible && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)) {
         vec3 composed_normal;
@@ -4009,7 +4044,12 @@ void main() {
     }
 #endif
     if (!composed_hit) {
-#ifdef T3D_RUNTIME_TIER
+#ifdef T3D_UCMP_COOKED
+        nr_material = sample_detailed_material_normal_roughness(
+            world_texel, nearest_control, terrain_normal, tier_config, require_normal, require_roughness);
+        if (require_roughness && tier_config.wetness_contribution > 0.0)
+            wetness_alpha = sample_color_map(world_texel, tier_config).a;
+#elif defined(T3D_RUNTIME_TIER)
     if (patch_tier == 2u) {
         if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_surface_solid(far_bits)) {
             int material_id = far_surface_material(far_bits);

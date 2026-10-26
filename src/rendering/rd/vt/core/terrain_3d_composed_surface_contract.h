@@ -10,6 +10,13 @@
 #define T3D_CS_FILE_MAGIC             0x43533354u // "T3SC" in little-endian bytes
 #define T3D_CS_FILE_VERSION           1u
 #define T3D_CS_COMPOSITION_ABI        1u
+// Changes to input math/filter semantics invalidate cold source identities,
+// without changing the existing T3SC or V1 shipping file layouts.
+#define T3D_CS_SOURCE_RECIPE_REVISION 3u
+#define T3D_CS_MAX_REGION_MIP_PAGES  21u // 4x4 + 2x2 + 1
+// Hole/alpha coverage remains sourced from authoritative Terrain3DData
+// control maps; the three-channel T3SC V1 file has no coverage channel.
+#define T3D_CS_COVERAGE_FROM_CONTROLS 1u
 #define T3D_CS_PAGE_INTERIOR          128u
 #define T3D_CS_PAGE_GUTTER            4u
 #define T3D_CS_PHYSICAL_TILE          136u
@@ -143,6 +150,51 @@ inline bool t3d_cs_validate_mapping( const t3dComposedSurfacePageMapping_t &mapp
            mapping.m_nResidentChannels == T3D_CS_CHANNEL_MASK_ALL &&
            mapping.m_nGeneration != 0u && mapping.m_nDeviceGeneration == nDeviceGeneration &&
            mapping.m_nCompositionRevision == nCompositionRevision;
+}
+
+// UCMP-03: validate an entire region's cooked LOD hierarchy before importing
+// any page into the existing V1 physical allocation. Sorted (mip,y,x), exact
+// square footprints, and complete parent levels are required. Cold-only.
+inline bool t3d_cs_import_region_mips_complete(
+    const t3dComposedSurfacePageRecord_t *pRecords, uint32_t nCount,
+    uint32_t &rMip0Tiles, uint64_t &rContentSignature )
+{
+    rMip0Tiles = 0u;
+    rContentSignature = 0u;
+    if ( !pRecords || !nCount || nCount > T3D_CS_MAX_REGION_MIP_PAGES ) return false;
+    const uint64_t region = pRecords[0].m_nRegionKey;
+    if ( !region || pRecords[0].m_nMip != 0u || pRecords[0].m_nPageX != 0u ||
+         pRecords[0].m_nPageY != 0u ) return false;
+    // Region footprints supported by the existing TerrainMegaVT are 1x1,
+    // 2x2, or 4x4 pages at mip zero. Reject partial pyramids outright.
+    const uint32_t tiles = nCount == 1u ? 1u : nCount == 5u ? 2u :
+                           nCount == 21u ? 4u : 0u;
+    if ( !tiles ) return false;
+    uint32_t expected = 0u;
+    for ( uint32_t n = tiles; n != 0u; n >>= 1u ) expected += n * n;
+    if ( nCount != expected ) return false;
+    uint64_t signature = 14695981039346656037ull;
+    uint32_t index = 0u;
+    for ( uint32_t mip = 0u, n = tiles; n != 0u; ++mip, n >>= 1u ) {
+        for ( uint32_t y = 0u; y < n; ++y ) {
+            for ( uint32_t x = 0u; x < n; ++x ) {
+                const t3dComposedSurfacePageRecord_t &r = pRecords[index++];
+                if ( r.m_nRegionKey != region || r.m_nMip != mip ||
+                     r.m_nPageX != x || r.m_nPageY != y ||
+                     !r.m_nContentFingerprint || !r.m_nCompositionRevision ||
+                     !r.m_nGeneration || r.m_nChannelMask != T3D_CS_CHANNEL_MASK_ALL ) return false;
+                const uint64_t elements[3] = { r.m_nContentFingerprint,
+                                                r.m_nCompositionRevision, r.m_nGeneration };
+                for ( uint32_t i = 0u; i < 3u; ++i ) {
+                    signature ^= elements[i] + 0x9e3779b97f4a7c15ull +
+                                 ( signature << 6u ) + ( signature >> 2u );
+                }
+            }
+        }
+    }
+    rMip0Tiles = tiles;
+    rContentSignature = signature ? signature : 1u;
+    return true;
 }
 
 // Header and on-disk record validation, including channel payload bounds and

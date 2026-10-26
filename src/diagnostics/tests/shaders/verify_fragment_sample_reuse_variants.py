@@ -15,9 +15,9 @@ ROOT=Path(__file__).resolve().parents[4]
 CASES={
     'terrain_instances.glsl':('depth','depth_normal_roughness','color_native','feedback_color_native'),
     'terrain_world_raster.glsl':('mesh_depth','mesh_depth_normal_roughness','mesh_color_native','feedback_mesh_color_native'),
-    'terrain_clipmap_near.glsl':('color_native','editor_color_native','feedback_color_native'),
-    'terrain_clipmap_middle.glsl':('color_native','editor_color_native'),
-    'terrain_clipmap_far.glsl':('color_native','editor_color_native'),
+    'terrain_clipmap.glsl':('color_native','editor_color_native','feedback_color_native'),
+    'terrain_clipmap.glsl':('color_native','editor_color_native'),
+    'terrain_clipmap.glsl':('color_native','editor_color_native'),
 }
 # Each switch is independent. Also test combined alpha and source reuse and
 # combined authored-color shortcuts to detect macro-order interactions.
@@ -28,14 +28,14 @@ OPT={
         ('T3D_VT_ALPHA_GATHER','T3D_VT_INSTANCE_ALBEDO_SAMPLE_REUSE')),
     'terrain_world_raster.glsl': (
         ('T3D_VT_ALPHA_GATHER',),('T3D_VT_ALPHA_EDGE_REUSE',)),
-    'terrain_clipmap_near.glsl': (
+    'terrain_clipmap.glsl': (
         ('T3D_AUTHORED_BILINEAR_CORNER_REUSE',),
         ('T3D_MEGAVT_EARLY_COLOR_OVERRIDE',),
         ('T3D_AUTHORED_BILINEAR_CORNER_REUSE','T3D_MEGAVT_EARLY_COLOR_OVERRIDE')),
-    'terrain_clipmap_middle.glsl': (
+    'terrain_clipmap.glsl': (
         ('T3D_AUTHORED_BILINEAR_CORNER_REUSE',),
         ('T3D_MEGAVT_EARLY_COLOR_OVERRIDE',)),
-    'terrain_clipmap_far.glsl': (
+    'terrain_clipmap.glsl': (
         ('T3D_AUTHORED_BILINEAR_CORNER_REUSE',),
         ('T3D_MEGAVT_EARLY_COLOR_OVERRIDE',)),
 }

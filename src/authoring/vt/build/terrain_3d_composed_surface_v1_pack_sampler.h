@@ -67,6 +67,7 @@ struct t3dCs12ProducerBridge_t
     void *m_pOriginalUser;
     t3dCsStaticV1PageFn m_pOriginalPage;
     t3dCsStaticV1ControlFn m_pOriginalControl;
+    t3dCsStaticV1SurfaceFn m_pOriginalSurface;
 };
 
 // Preserves the producer's page/control callback contexts while installing

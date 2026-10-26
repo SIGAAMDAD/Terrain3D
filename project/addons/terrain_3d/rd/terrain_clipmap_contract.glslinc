@@ -120,7 +120,7 @@ struct MaterialConfig {
     float editor_overlay_opacity;
     float reserved_2;
     float reserved_3;
-    TierMaterialConfig tier[3];
+    TierMaterialConfig tier[1];
 };
 
 struct PatchData {

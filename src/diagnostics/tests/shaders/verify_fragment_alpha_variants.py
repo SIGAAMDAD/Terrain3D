@@ -20,8 +20,8 @@ FEATURES = (
     ('T3D_COLOR_TWO_KEY_SPECIALIZATION', 'T3D_DNR_SOURCE_REUSE',
      'T3D_CONTROL_TRANSFORM_REUSE', 'T3D_VT_ALBEDO_FAMILY_BRANCH_HOIST'),
 )
-FAMILIES = {'terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-            'terrain_clipmap_far.glsl', 'terrain_instances.glsl', 'terrain_world_raster.glsl'}
+FAMILIES = {'terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+            'terrain_clipmap.glsl', 'terrain_instances.glsl', 'terrain_world_raster.glsl'}
 RELEVANT = ('color_native', 'editor_color_native', 'feedback_color_native',
             'depth', 'depth_normal_roughness', 'terrain_strip_color_native',
             'terrain_strip_depth_normal_roughness', 'world_mesh_color_native',

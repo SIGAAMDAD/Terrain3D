@@ -80,6 +80,14 @@ static bool t3d_cs12_bridge_control( void *user, int32_t x, int32_t y, uint32_t 
     return bridge.m_pOriginalControl(bridge.m_pOriginalUser, x, y, control);
 }
 
+static bool t3d_cs12_bridge_surface( void *user, uint32_t x, uint32_t y,
+                                      float &height, float &normal_y )
+{
+    auto &bridge = *static_cast< t3dCs12ProducerBridge_t * >( user );
+    return bridge.m_pOriginalSurface && bridge.m_pOriginalSurface( bridge.m_pOriginalUser,
+                                                                    x, y, height, normal_y );
+}
+
 static bool t3d_cs12_bridge_sample( void *user, uint32_t allocation,
                                     const float *uv, const float *dx, const float *dy,
                                     float bias, uint32_t filter, t3dComposedStaticV1Sample_t &sample )
@@ -100,9 +108,12 @@ bool t3d_cs12_bind_static_source( t3dCs12PackSampler_t &sampler,
     bridge.m_pOriginalUser = source.m_pUser;
     bridge.m_pOriginalPage = source.m_pResolvePage;
     bridge.m_pOriginalControl = source.m_pReadControl;
+    bridge.m_pOriginalSurface = source.m_pReadTerrainSurface;
     source.m_pUser = &bridge;
     source.m_pResolvePage = t3d_cs12_bridge_page;
     source.m_pReadControl = t3d_cs12_bridge_control;
+    if ( source.m_pReadTerrainSurface )
+        source.m_pReadTerrainSurface = t3d_cs12_bridge_surface;
     source.m_pSampleSource = t3d_cs12_bridge_sample;
     return true;
 }

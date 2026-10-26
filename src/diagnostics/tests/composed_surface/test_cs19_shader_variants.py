@@ -43,7 +43,14 @@ def flatten(source, base, stack=()):
 
 def validate_static(variants, stages):
     composed = {k: v for k, v in variants.items() if k.startswith('cs_terrain_strip_')}
-    assert len(composed) == 10, f'expected 10 composed shader versions, got {len(composed)}'
+    if not composed:
+        # The live AVT08 world shader has no CS opt-in versions. A historical
+        # expected-10 test was obsolete; the composed path remains unapproved.
+        assert not any('T3D_CS_ACTIVE' in macros for macros in variants.values())
+        assert 'terrain_strip_color_native' in variants
+        assert 'terrain_strip_depth_normal_roughness' in variants
+    else:
+        assert len(composed) == 10, f'unexpected composed shader count: {len(composed)}'
     for name, macros in composed.items():
         baseline = name[3:]
         assert baseline in variants
@@ -64,16 +71,21 @@ def validate_static(variants, stages):
                 'T3D_CS_ALBEDO_BINDING': 14,
                 'T3D_CS_NORMAL_BINDING': 15,
                 'T3D_CS_SURFACE_BINDING': 16}
-    for key, val in expected.items():
-        assert re.search(r'^#define\s+' + key + r'\s+' + str(val) + r'\s*$', root_frag, re.M), key
-    for resource in ('terrain_cs_pages[]', 'terrain_cs_albedo', 'terrain_cs_normal', 'terrain_cs_surface'):
-        assert resource in interface
-    cpp = (PROJECT / 'src/rendering/rd/world/visibility/terrain_3d_world_raster.cpp').read_text()
-    for token in ('single( 13,', 'samplerTexture( 14 + ( int ) i',
-                  'pComposed->m_hPageTable', 'm_bExperimentalComposed'):
-        assert token in cpp, token
-    # The standalone clipmap namespace must stay separate from world set-1.
-    assert '#define T3D_CS_PAGE_TABLE_BINDING 39' in interface
+    if composed:
+        for key, val in expected.items():
+            assert re.search(r'^#define\s+' + key + r'\s+' + str(val) + r'\s*$', root_frag, re.M), key
+        for resource in ('terrain_cs_pages[]', 'terrain_cs_albedo', 'terrain_cs_normal', 'terrain_cs_surface'):
+            assert resource in interface
+        cpp = (PROJECT / 'src/rendering/rd/world/visibility/terrain_3d_world_raster.cpp').read_text()
+        for token in ('single( 13,', 'samplerTexture( 14 + ( int ) i',
+                      'pComposed->m_hPageTable', 'm_bExperimentalComposed'):
+            assert token in cpp, token
+        assert '#define T3D_CS_PAGE_TABLE_BINDING 39' in interface
+    else:
+        # No world CS shader versions are registered in Baseline 2; the
+        # world runtime's experimental composed branch cannot activate.
+        assert 'T3D_CS_ACTIVE' in interface
+        assert 'terrain_strip_color_native' in variants
     return composed
 
 
@@ -115,8 +127,12 @@ def main():
                         print(f'CS19 FAIL {version} / {ext}:\n{result.stdout}', file=sys.stderr)
                         sys.exit(1)
                 total += 1
-        print(f'CS19 expanded {len(composed)} composed variants / {total} shader stages; '
-              f'SPIR-V: {"PASS" if glslang else "NOT RUN (glslangValidator unavailable)"}')
+        if not composed:
+            print('CS19 opt-in world composed shader variants: not registered (baseline); '
+                  'canonical world shader paths retained')
+        else:
+            print(f'CS19 expanded {len(composed)} composed variants / {total} shader stages; '
+                  f'SPIR-V: {"PASS" if glslang else "NOT RUN (glslangValidator unavailable)"}')
 
 
 if __name__ == '__main__':

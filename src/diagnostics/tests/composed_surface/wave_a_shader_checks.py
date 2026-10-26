@@ -19,8 +19,8 @@ def read(name):
 
 def manifest():
     variants = []
-    for filename in ['terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                     'terrain_clipmap_far.glsl', 'terrain_world_raster.glsl']:
+    for filename in ['terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                     'terrain_clipmap.glsl', 'terrain_world_raster.glsl']:
         text = read(filename)
         match = re.search(r'(?ms)^#\[versions\]\s*\n(.*?)(?=^#\[(?:vertex|fragment|compute)\])', text)
         if match:
@@ -47,8 +47,8 @@ def verify():
     pure = read('terrain_composed_material_math.glslinc')
     fixture = read('terrain_composed_surface_fixture.glsl')
     assert '#include "terrain_composed_material_math.glslinc"' not in raster
-    for name in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                 'terrain_clipmap_far.glsl', 'terrain_world_raster.glsl'):
+    for name in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                 'terrain_clipmap.glsl', 'terrain_world_raster.glsl'):
         stage = read(name).split('#[fragment]', 1)[1]
         assert stage.count('#include "terrain_composed_material_math.glslinc"') == 1
         assert stage.count('#include "terrain_composed_surface_sampling.glslinc"') == 1

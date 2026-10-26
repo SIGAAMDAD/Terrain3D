@@ -38,3 +38,22 @@ bool t3d_editor_brush_lookup(ivec2 texel, uint map_type, out uint packed) {
     return true;
 }
 #endif
+
+// A cooked material page represents a snapshot of the authored height/control
+// neighborhood. Until the edit is committed and re-cooked, the editor must
+// evaluate edited source pixels instead of the stale cooked material.
+#if defined(T3D_EDITOR_BRUSH_FRAGMENT_STAGE) && T3D_TERRAIN_SHADER_PATH == 2
+bool t3d_editor_brush_invalidates_composed(vec2 world_texel) {
+    ivec2 base = ivec2(floor(world_texel));
+    uint packed;
+    for (int dy = 0; dy <= 1; ++dy) {
+        for (int dx = 0; dx <= 1; ++dx) {
+            ivec2 texel = base + ivec2(dx, dy);
+            if (t3d_editor_brush_lookup(texel, 0u, packed) ||
+                t3d_editor_brush_lookup(texel, 1u, packed) ||
+                t3d_editor_brush_lookup(texel, 2u, packed)) return true;
+        }
+    }
+    return false;
+}
+#endif

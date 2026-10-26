@@ -84,6 +84,7 @@ private:
 	{
 		bool				   m_bOneSunLighting = false;
 		bool m_bFeedbackEnabled = false;
+        bool m_bUnifiedCooked = false;
         bool m_bCompactLighting = false;
 		t3dTerrainShaderPath_t m_shaderPath = T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
 		uint8_t				   m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
@@ -104,7 +105,8 @@ private:
 			return ( const t3dRdForwardPipelineBaseKey_t & ) ( *this ) ==
 					   ( const t3dRdForwardPipelineBaseKey_t & ) ( rOther ) &&
 				   m_bOneSunLighting == rOther.m_bOneSunLighting && m_bFeedbackEnabled == rOther.m_bFeedbackEnabled &&
-                   m_bCompactLighting == rOther.m_bCompactLighting && m_shaderPath == rOther.m_shaderPath &&
+                   m_bCompactLighting == rOther.m_bCompactLighting &&
+                   m_bUnifiedCooked == rOther.m_bUnifiedCooked && m_shaderPath == rOther.m_shaderPath &&
 				   m_nShippingFeatureClass == rOther.m_nShippingFeatureClass &&
 				   m_nszLightingModelClass[0] == rOther.m_nszLightingModelClass[0] &&
 				   m_nszLightingModelClass[1] == rOther.m_nszLightingModelClass[1] &&
@@ -153,6 +155,14 @@ private:
 	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
 	uint16_t			  m_szStripPartCounts[MESH_TYPE_COUNT]{};
 	Terrain3DRdShader	  m_hszShaders[3];
+    Terrain3DRdShader m_hUnifiedRasterShader;
+    Terrain3DRdShader m_hszUnifiedForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+    Terrain3DRdShader m_hszUnifiedCompactShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    Terrain3DRdShader m_hszUnifiedOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    Terrain3DRdShader m_hszUnifiedFeedbackShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    Terrain3DRdShader m_hszUnifiedFeedbackOneSunShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    Terrain3DRdShader m_hszUnifiedFeedbackCompactShaders[T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+    bool m_bUnifiedCookedMaterialActive = false;
     // One combined resident-ancestor + prepared-mip-bias shader per terrain tier.
     // The non-hint evaluator always retains the bounded VT fallback.
     Terrain3DRdShader m_hszCanonicalHintColorShaders[3];
@@ -247,10 +257,12 @@ private:
 		RID		 m_hBoundEditorBrushTexture;
 		uint64_t m_nBoundSharedVTResourceGeneration = 0u;
 		uint32_t m_nszBoundTierFiltering[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
+        bool m_bUnifiedCooked = false;
 
 		bool operator==(
 			const t3dRdClipmapDescriptorKey_s &rOther ) const {
-			return m_hBoundAncestorHints == rOther.m_hBoundAncestorHints &&
+			return m_bUnifiedCooked == rOther.m_bUnifiedCooked &&
+                m_hBoundAncestorHints == rOther.m_hBoundAncestorHints &&
                    m_hszBoundHintShaders[0] == rOther.m_hszBoundHintShaders[0] &&
                    m_hszBoundHintShaders[1] == rOther.m_hszBoundHintShaders[1] &&
                    m_hszBoundHintShaders[2] == rOther.m_hszBoundHintShaders[2] &&

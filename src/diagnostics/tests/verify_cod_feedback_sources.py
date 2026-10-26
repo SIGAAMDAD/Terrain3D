@@ -11,8 +11,8 @@ import re
 
 def verify(rd):
     versions = {}
-    for name in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                 'terrain_clipmap_far.glsl', 'terrain_instances.glsl',
+    for name in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                 'terrain_clipmap.glsl', 'terrain_instances.glsl',
                  'terrain_world_raster.glsl'):
         txt = (rd / name).read_text(encoding='utf-8')
         versions[name] = dict(re.findall(r'^([\w]+) = "([^"\n]*)";', txt, re.MULTILINE))
@@ -25,7 +25,7 @@ def verify(rd):
         'color_native_one_sun_radiance_array', 'color_specular_one_sun_radiance_array',
         'color_motion_one_sun_radiance_array', 'color_specular_motion_one_sun_radiance_array'
     ]
-    for name in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl', 'terrain_clipmap_far.glsl'):
+    for name in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl', 'terrain_clipmap.glsl'):
         for base in expected:
             variant = 'feedback_' + base
             assert variant in versions[name], (name,variant)

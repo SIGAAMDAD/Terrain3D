@@ -540,7 +540,7 @@ void t3d_terrain_vertex_evaluate(ivec2 t3d_grid, uint t3d_part_code, PatchData p
 #ifndef T3D_RUNTIME_TIER
     normal_tier = uint(T3D_TIER);
 #endif
-    bool fragment_normal = material_config.tier[min(normal_tier, 2u)].normal_mode == 2u
+    bool fragment_normal = material_config.tier[0].normal_mode == 2u
         || (normal_tier == 0u && (material_config.feature_flags & T3D_FEATURE_FLAT_TERRAIN_NORMALS_VERTEX) != 0u);
     world_normal = vec3(0.0, 1.0, 0.0);
     if (!fragment_normal && !try_sample_derived_normal(terrain_texel, terrain_layer, world_normal)) {

@@ -582,9 +582,7 @@ static bool t3dRunRdMaterialAbiTests(
 				   "RD editor overlay ABI pins decal, debug-height, contour, and grid offsets" );
 	t3dRdFrameSnapshot_t snapshot;
 	rState.expect( snapshot.m_nMaterialLayerCount == 1u &&
-					   snapshot.m_materialConfig.m_szTier[0].m_nSamplingMode == 3u &&
-					   snapshot.m_materialConfig.m_szTier[1].m_nSamplingMode == 3u &&
-					   snapshot.m_materialConfig.m_szTier[2].m_nSamplingMode == 3u,
+					   snapshot.m_materialConfig.m_szTier[0].m_nSamplingMode == 3u,
 				   "RD snapshot owns one deterministic material-config publication table" );
 	return rState.m_nFailed == 0u;
 }
@@ -1099,11 +1097,11 @@ bool t3dRunCentralizationTests(
 			rasterVariantsDeferred = rasterVariantsDeferred && !required;
 		}
 	}
-	state.expect( startupShaders == 17u && startupDomainsValid,
-				  "Startup creates only 17 global-device infrastructure shaders" );
+	state.expect( startupShaders == 14u && startupDomainsValid,
+				  "Startup creates 14 global-device infrastructure and unified shaders" );
 	state.expect( rasterVariantsDeferred,
 				  "Terrain, one-sun, instance and world pass variants are deferred until PREPARE" );
-	state.expect( t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_NEAR_ALIAS ) &&
+	state.expect( t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_UCMP_ALIAS ) &&
 					  t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) &&
 					  t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_WORLD_RASTER_MESH_SHADOW ) &&
 					  t3dRdShaderNeedsStartupPhysical( T3D_RD_SHADER_DISPLACEMENT_COMPUTE ),

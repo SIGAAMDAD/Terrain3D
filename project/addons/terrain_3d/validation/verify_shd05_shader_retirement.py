@@ -38,16 +38,10 @@ def run():
         'vt_ancestor_hints_prepared_bias_native')
     retired_alpha = ('alpha_gather_depth', 'alpha_edge_depth', 'alpha_gather_dnr', 'alpha_edge_dnr')
     retained_shader_cases = {
-        'terrain_clipmap_near.glsl': ('color_native', 'feedback_color_native',
+        'terrain_clipmap.glsl': ('color_native', 'feedback_color_native',
             'color_native_compact', 'feedback_color_native_compact', 'color_native_vt_hints',
             'feedback_color_native_vt_hints', 'depth', 'depth_normal_roughness',
             'color_specular_motion', 'feedback_color_specular_motion'),
-        'terrain_clipmap_middle.glsl': ('color_native', 'feedback_color_native',
-            'color_native_compact', 'feedback_color_native_compact', 'color_native_vt_hints',
-            'feedback_color_native_vt_hints', 'depth', 'depth_normal_roughness'),
-        'terrain_clipmap_far.glsl': ('color_native', 'feedback_color_native',
-            'color_native_compact', 'feedback_color_native_compact', 'color_native_vt_hints',
-            'feedback_color_native_vt_hints', 'depth', 'depth_normal_roughness'),
         'terrain_instances.glsl': ('color_native', 'color_native_compact', 'feedback_color_native',
             'depth', 'depth_normal_roughness', 'bringup'),
         'terrain_world_raster.glsl': ('mesh_color_native', 'mesh_shadow', 'mesh_depth',

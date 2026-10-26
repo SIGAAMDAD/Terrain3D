@@ -113,10 +113,10 @@ def main():
                                                    for field in sorted(OPCODES.values())}
                 checks[key] = result
                 count += 1
-        opt_variants = [('terrain_clipmap_near.glsl', 'color_native'),
-                        ('terrain_clipmap_near.glsl', 'editor_color_native'),
-                        ('terrain_clipmap_near.glsl', 'depth_normal_roughness'),
-                        ('terrain_clipmap_far.glsl', 'color_native'),
+        opt_variants = [('terrain_clipmap.glsl', 'color_native'),
+                        ('terrain_clipmap.glsl', 'editor_color_native'),
+                        ('terrain_clipmap.glsl', 'depth_normal_roughness'),
+                        ('terrain_clipmap.glsl', 'color_native'),
                         ('terrain_instances.glsl', 'color_native'),
                         ('terrain_world_raster.glsl', 'mesh_color_native')]
         for shader, version in opt_variants:

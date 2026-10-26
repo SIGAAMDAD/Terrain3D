@@ -18,8 +18,8 @@ clipmap_host = (root / 'src/rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.
 
 assert '#ifdef T3D_CS_ACTIVE' in interface and '#ifdef T3D_CS_ACTIVE' in sampling
 assert '#include "terrain_composed_surface_sampling.glslinc"' not in fragment
-for shader_root in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-                    'terrain_clipmap_far.glsl', 'terrain_world_raster.glsl'):
+for shader_root in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+                    'terrain_clipmap.glsl', 'terrain_world_raster.glsl'):
     stage = (rd / shader_root).read_text().split('#[fragment]', 1)[1]
     assert '#include "terrain_composed_surface_sampling.glslinc"' in stage
 assert 'if (!composed_hit)' in fragment
@@ -51,8 +51,8 @@ assert re.search(r'BindingBuilder::single\( 38\s*,', clipmap_host)
 for i, key in enumerate(['PAGE_TABLE', 'ALBEDO', 'NORMAL', 'SURFACE']):
     assert f'#define T3D_CS_{key}_BINDING {39 + i}' in interface
     assert f'#define T3D_CS_{key}_BINDING {13 + i}' in world
-for name in ['terrain_clipmap_middle.glsl', 'terrain_clipmap_near.glsl',
-             'terrain_clipmap_far.glsl', 'terrain_world_raster.glsl']:
+for name in ['terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+             'terrain_clipmap.glsl', 'terrain_world_raster.glsl']:
     text = (rd / name).read_text()
     variants = text.split('#[vertex]')[0]
     for variant in variants.splitlines():

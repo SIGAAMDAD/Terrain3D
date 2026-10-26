@@ -12,6 +12,7 @@
 #include "instances/runtime/terrain_3d_instancer.h"
 #include "rendering/material/terrain_3d_material.h"
 #include "rendering/material/terrain_3d_shader_specializer.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
@@ -438,7 +439,8 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags(
 	if ( pData && pData->getDerivedMapsRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_DERIVED_MAPS;
 	}
-	if ( pData && pData->getMiddleCompositeMapsRid().is_valid() ) {
+	if ( !Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold() &&
+         pData && pData->getMiddleCompositeMapsRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MIDDLE_COMPOSITE;
 	}
 	if ( pData && pData->getMiddleHeightMapsRid().is_valid() && pData->getMiddleHeightRegionMapRid().is_valid() ) {
@@ -633,32 +635,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialTierConfig(
 						 ( float ) ( pMaterial->getNearWetnessContribution() ),
 						 ( float ) ( pMaterial->getNearMaterialLodBias() ),
 						 0.0f );
-	t3dRdFillTierConfig( config.m_szTier[1],
-						 pMaterial->getMiddleMaterialSamplingQuality(),
-						 pMaterial->getMiddleTerrainNormalQuality(),
-						 pMaterial->getMiddleTerrainColorQuality(),
-						 pMaterial->getMiddleSurfaceResponseQuality(),
-						 pMaterial->getMiddleTextureSurfaceMode(),
-						 pMaterial->getMiddleLightingModel(),
-						 pMaterial->getMiddleDetilingQuality(),
-						 pMaterial->getMiddleTextureFiltering(),
-						 ( float ) ( pMaterial->getMiddleAuthoredColorContribution() ),
-						 ( float ) ( pMaterial->getMiddleWetnessContribution() ),
-						 ( float ) ( pMaterial->getMiddleMaterialLodBias() ),
-						 0.0f );
-	t3dRdFillTierConfig( config.m_szTier[2],
-						 pMaterial->getFarMaterialSamplingQuality(),
-						 pMaterial->getFarTerrainNormalQuality(),
-						 pMaterial->getFarTerrainColorQuality(),
-						 pMaterial->getFarSurfaceResponseQuality(),
-						 pMaterial->getFarTextureSurfaceMode(),
-						 pMaterial->getFarLightingModel(),
-						 pMaterial->getFarDetilingQuality(),
-						 pMaterial->getFarTextureFiltering(),
-						 ( float ) ( pMaterial->getFarAuthoredColorContribution() ),
-						 ( float ) ( pMaterial->getFarWetnessContribution() ),
-						 ( float ) ( pMaterial->getFarMaterialLodBias() ),
-						 MAX( 0.0f, ( float ) ( pMaterial->getFarMaterialLod() ) - 4.0f ) );
+
 }
 
 void Terrain3DMaterialStateBuilder::buildMaterialLayers(
@@ -668,7 +645,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	const Ref< Terrain3DAssets >	  &rAssets ) {
 	if ( rAssets.is_null() ) {
 		rSnapshot.m_nMaterialLayerCount = 1u;
-		rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
+		rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 		return;
 	}
 	const PackedColorArray	 colors = rAssets->getTextureColors();
@@ -733,8 +710,9 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 			canonical_vt_v1 = canonical_vt_v1 && layer_canonical_v1;
 		}
 	}
-	rSnapshot.m_nTerrainMaterialBackend = canonical_vt_v1 ? T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1
-														  : T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED;
+	// The unified shader uses cooked pages when source generations match and
+    // retains the existing detailed evaluator for missing or unsupported pages.
+    rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
 }
 
 void Terrain3DMaterialStateBuilder::buildMaterialState(
@@ -755,6 +733,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialState(
 		buildMaterialTierConfig( rSnapshot.m_materialConfig, pMaterial );
 	}
 	buildMaterialLayers( rSources, rVtSnapshot, rSnapshot, assets );
+
 	rSnapshot.m_nMaterialGeneration = 0u;
 }
 

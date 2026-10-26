@@ -22,6 +22,7 @@
 #include "eastl_config.h"
 #include "lighting/runtime/terrain_3d_region_lighting.h"
 #include "rendering/rd/core/terrain_3d_rd_context.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 #include "rendering/compute/terrain_3d_compute.h"
 #include "rendering/material/terrain_3d_material.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
@@ -868,7 +869,8 @@ bool Terrain3DGpuRegionCache::rebuildTextures(
 	}
 
 	Ref< Image > pDefaultMiddleComposite;
-	if ( bControlSourceReady && pDefaultGpuColor.is_valid() ) {
+    if ( !Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold() &&
+         bControlSourceReady && pDefaultGpuColor.is_valid() ) {
 		const Ref< Terrain3DAssets > pAssets = m_pTerrain ? m_pTerrain->assetsResource() : Ref< Terrain3DAssets >();
 		const uint64_t material_signature = pAssets.is_valid() ? pAssets->getRuntimeMaterialSourceSignature() : 0u;
 		if ( refreshMiddleCompositeSources( material_signature,
@@ -1928,9 +1930,9 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 bool Terrain3DGpuRegionCache::serviceRuntimePages(
 	const t3dResidencyFrameState_s &rFrame ) {
 	const int color_size = MAX( 1, T3D_REGION_SIZE / MAX( 1, rFrame.m_runtimePageConfig.m_nColorDivisor ) );
-	if ( !refreshMiddleCompositeSources( rFrame.m_runtimePageConfig.m_nMaterialSourceSignature,
-										 color_size,
-										 color_size ) ) {
+    if ( !Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold() &&
+         !refreshMiddleCompositeSources( rFrame.m_runtimePageConfig.m_nMaterialSourceSignature,
+                                         color_size, color_size ) ) {
 		return false;
 	}
 	t3dRuntimePageServiceState_t state;

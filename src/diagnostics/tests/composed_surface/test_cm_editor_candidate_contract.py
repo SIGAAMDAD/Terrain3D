@@ -31,8 +31,11 @@ assert 'm_pAuthoring->m_composedCandidateSourcePack = shippingPackage;' in owner
 assert 'serviceComposedReferenceBakeCold();' in owner
 assert 'm_composedSurfaceEdits.statsCold()' in owner
 assert 'reference_stale_after_edit' in owner
-assert 'composed_parity_supported"] = false' in owner
-assert 'composed_cache_enabled"] = false' in owner
+# A completed prior patch replaced the old literal `false` with the
+# accepted-capture gate. The candidate must not turn that gate on by itself.
+assert 'composed_parity_supported"] = approvedComposed' in owner
+assert 'composed_bake_parity_ready"] = false' in owner
+assert 'composed_cache_enabled"] = approvedComposed' in owner
 assert 'composed_live_fallback_reason' in owner
 assert 'Composed candidate:' in ui and 'viewport still uses live materials' in ui
 

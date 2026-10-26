@@ -444,10 +444,9 @@ void Terrain3DRenderCoordinator::onTerrainMapsEdited(
 	bounds.m_fMaxWorldX = editEnd.x;
 	bounds.m_fMaxWorldZ = editEnd.z;
 	if ( m_terrainMegaVT.markEditorDirtyBoundsHot( bounds ) ) {
-#if defined( T3D_EDITOR_NATIVE ) && defined( T3D_COMPOSED_SURFACE_EDITOR_EXPERIMENT )
-		// CS02 material parity and live composed-page publication are not yet
-		// accepted. Never scan all editor regions on ordinary brush updates
-		// while composed authoring is inactive.
+#if defined( T3D_EDITOR_NATIVE )
+		// Record only affected composed pages. Cooking and publication remain
+		// explicit and never run from an interactive map edit callback.
 		t3dComposedSurfaceEditBounds_t composedBounds = {
 			bounds.m_fMinWorldX, bounds.m_fMinWorldZ,
 			bounds.m_fMaxWorldX, bounds.m_fMaxWorldZ
@@ -3583,7 +3582,8 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics(
     // No RD lock, readback, sync or GPU resource creation is performed here.
     const t3dComposedSurfaceEditStats_t &cs = m_composedSurfaceEdits.statsCold();
     Dictionary composed;
-    composed["enabled"] = false;
+    composed["enabled"] = false; // Production cutover remains unapproved.
+    composed["editor_dirty_tracking_enabled"] = true;
     composed["editor_backend"] = "live_until_parity_accepted";
     if ( m_pAuthoring ) {
         composed["reference_bake_state"] = m_pAuthoring->m_composedCandidateState;

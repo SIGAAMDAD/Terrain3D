@@ -15,11 +15,11 @@ from verify_fragment_material_variants import test_cpp
 import subprocess
 
 VARIANTS = (
-    ('terrain_clipmap_near.glsl', 'color_native', (0, 43)),
-    ('terrain_clipmap_middle.glsl', 'color_native', (0, 43)),
-    ('terrain_clipmap_far.glsl', 'color_native', (0, 43)),
-    ('terrain_clipmap_near.glsl', 'feedback_color_native', (0, 43)),
-    ('terrain_clipmap_near.glsl', 'depth_normal_roughness', (0, 43)),
+    ('terrain_clipmap.glsl', 'color_native', (0, 43)),
+    ('terrain_clipmap.glsl', 'color_native', (0, 43)),
+    ('terrain_clipmap.glsl', 'color_native', (0, 43)),
+    ('terrain_clipmap.glsl', 'feedback_color_native', (0, 43)),
+    ('terrain_clipmap.glsl', 'depth_normal_roughness', (0, 43)),
     ('terrain_world_raster.glsl', 'mesh_color_native', (1, 17)),
     ('terrain_world_raster.glsl', 'terrain_strip_color_native', (1, 17)),
     ('terrain_world_raster.glsl', 'feedback_mesh_color_native', (1, 17)),

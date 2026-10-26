@@ -231,7 +231,7 @@ static_assert( offsetof( t3dRdTierMaterialConfig_t, m_nTextureSurfaceMode ) == 1
 static_assert( offsetof( t3dRdTierMaterialConfig_t, m_fAuthoredColorContribution ) == 32u,
 			   "RD tier scalar ABI changed" );
 
-static_assert( sizeof( t3dRdMaterialConfig_t ) == 384u, "RD material config ABI changed" );
+static_assert( sizeof( t3dRdMaterialConfig_t ) == 288u, "RD material config ABI changed" );
 static_assert( offsetof( t3dRdMaterialConfig_t, m_fDisplacementSharpness ) == 32u, "RD material general ABI changed" );
 static_assert( offsetof( t3dRdMaterialConfig_t, m_fAutoSlope ) == 64u, "RD material auto ABI changed" );
 static_assert( offsetof( t3dRdMaterialConfig_t, m_nDualScaleTexture ) == 80u, "RD material dual ABI changed" );

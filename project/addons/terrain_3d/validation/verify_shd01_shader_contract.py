@@ -113,7 +113,7 @@ def main():
     for path in re.findall(r'"(res://[^"\n]+\.glsl)"', cs):
         ensure((ROOT / 'project' / path.removeprefix('res://')).is_file(),
                'Catalog references missing shader source ' + path)
-    targets = ['terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl', 'terrain_clipmap_far.glsl']
+    targets = ['terrain_clipmap.glsl']
     for name, group in [('s_forwardVersions', 11), ('s_oneSunVersions', 8)]:
         entries = array_initializer(cs, name)
         ensure(len(entries) == 3 * group, f'{name}: expected {3 * group}, got {len(entries)}')
@@ -174,7 +174,7 @@ def main():
                'Fragment-feedback layout lost ' + name)
 
     cases = {
-        'terrain_clipmap_near.glsl': ['color_native', 'compat_color_native', 'editor_color_native',
+        'terrain_clipmap.glsl': ['color_native', 'compat_color_native', 'editor_color_native',
             'color_specular_motion', 'depth', 'depth_normal_roughness',
             'depth_normal_roughness_voxel_gi', 'color_native_one_sun',
             'feedback_color_native', 'feedback_color_native_one_sun',
@@ -189,8 +189,6 @@ def main():
             'env_mesh_color_native_compact', 'env_mesh_shadow',
         ],
     }
-    cases['terrain_clipmap_middle.glsl'] = cases['terrain_clipmap_near.glsl'][:]
-    cases['terrain_clipmap_far.glsl'] = cases['terrain_clipmap_near.glsl'][:]
     terrain_blocks = {
         'TerrainVTAllocationBuffer': 26, 'TerrainVTPageTableBuffer': 27,
         'TerrainVTTailMetadataBuffer': 32, 'TerrainVTMipLayoutBuffer': 37,

@@ -37,6 +37,34 @@ constexpr t3dRdShaderId_t t3dRdTerrainFeedbackId( uint32_t tier, uint32_t varian
 										  tier * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + variant );
 }
 
+// UCMP-04/05: one cooked-material raster shader for every clipmap geometry group.
+// Variant identity depends on pass, lighting ABI and material path only.
+// The existing shader ID ranges remain append-stable for WORLD and legacy consumers.
+constexpr t3dRdShaderId_t t3dRdUnifiedTerrainId(
+    uint32_t path, uint32_t variant, bool feedback, bool oneSun, bool compact ) {
+    if ( feedback ) {
+        return ( t3dRdShaderId_t )( ( compact ? T3D_RD_SHADER_UCMP_FEEDBACK_COMPACT_BASE :
+            ( oneSun ? T3D_RD_SHADER_UCMP_FEEDBACK_ONE_SUN_BASE : T3D_RD_SHADER_UCMP_FEEDBACK_BASE ) ) + variant );
+    }
+    if ( oneSun ) {
+        return ( t3dRdShaderId_t )( T3D_RD_SHADER_UCMP_ONE_SUN_BASE +
+            path * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + variant );
+    }
+    if ( compact ) {
+        return ( t3dRdShaderId_t )( T3D_RD_SHADER_UCMP_COMPACT_BASE +
+            path * T3D_RD_FORWARD_COLOR_VARIANT_COUNT + variant );
+    }
+    return ( t3dRdShaderId_t )( T3D_RD_SHADER_UCMP_FORWARD_BASE +
+        path * T3D_RD_FORWARD_SHADER_VARIANT_MAX + variant );
+}
+
+static_assert( T3D_RD_SHADER_UCMP_ALIAS == T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE +
+    3u * T3D_RD_FORWARD_COLOR_VARIANT_COUNT, "UCMP shifted an existing shader ID" );
+static_assert( t3dRdUnifiedTerrainId( 0u, T3D_RD_FORWARD_SHADER_COLOR, false, false, false ) ==
+    T3D_RD_SHADER_UCMP_FORWARD_BASE, "UCMP material shader root ID mismatch" );
+static_assert( t3dRdUnifiedTerrainId( 0u, T3D_RD_FORWARD_SHADER_COLOR, true, false, false ) ==
+    T3D_RD_SHADER_UCMP_FEEDBACK_BASE, "UCMP feedback shader ID mismatch" );
+
 // SHD-01 canonical route declaration. A route with m_bAvailable == false has
 // no legal shader version in the current catalog; SHD-02 must add/merge the
 // missing compact+feedback combination before any consumer can select it.
@@ -129,11 +157,13 @@ t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet( t3dRdShaderId_t id );
 // Pass-specific raster variants are acquired during PREPARE. Startup only needs
 // the shared raster aliases, compute programs and fixed shadow programs.
 constexpr bool t3dRdShaderNeedsStartupPhysical(
-	const t3dRdShaderId_t id ) {
-	return id >= T3D_RD_SHADER_NEAR_ALIAS && id < T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE &&
-		   !( id >= T3D_RD_SHADER_INSTANCE_FORWARD_BASE && id < T3D_RD_SHADER_INSTANCE_ALIAS ) &&
-		   !( id >= T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE && id < T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) &&
-		   id != T3D_RD_SHADER_BRUSH_COMPUTE && id != T3D_RD_SHADER_DERIVED_COMPUTE;
+    const t3dRdShaderId_t id ) {
+    if ( id == T3D_RD_SHADER_UCMP_ALIAS ) return true;
+    if ( id < T3D_RD_SHADER_INSTANCE_FORWARD_BASE ) return false;
+    return id < T3D_RD_SHADER_INSTANCE_FEEDBACK_BASE &&
+           !( id >= T3D_RD_SHADER_INSTANCE_FORWARD_BASE && id < T3D_RD_SHADER_INSTANCE_ALIAS ) &&
+           !( id >= T3D_RD_SHADER_WORLD_RASTER_STRIP_BASE && id < T3D_RD_SHADER_WORLD_RASTER_STRIP_SHADOW ) &&
+           id != T3D_RD_SHADER_BRUSH_COMPUTE && id != T3D_RD_SHADER_DERIVED_COMPUTE;
 }
 
 uint32_t	t3dRdShaderCatalogGlobalSourceCount();

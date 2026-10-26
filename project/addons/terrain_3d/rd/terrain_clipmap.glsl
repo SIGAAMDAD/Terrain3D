@@ -124,6 +124,8 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 #extension GL_EXT_multiview : enable
 #VERSION_DEFINES
 #define T3D_TIER 0
+#define T3D_RUNTIME_TIER 1
+#define T3D_UCMP_COOKED 1
 #include "terrain_strip_topology_inc.glslinc"
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
@@ -151,6 +153,8 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 #endif
 #include "terrain_forward_lighting_inc.glslinc"
 #define T3D_TIER 0
+#define T3D_RUNTIME_TIER 1
+#define T3D_UCMP_COOKED 1
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_fragment_interface.glslinc"
 // Keep includes at the RDShaderFile stage root: nested includes are not expanded.
@@ -161,6 +165,7 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 vec3 decode_surface_normal(vec2 encoded_xy);
 #include "terrain_composed_surface_sampling.glslinc"
 #endif
+#define T3D_EDITOR_BRUSH_FRAGMENT_STAGE 1
 #include "terrain_clipmap_editor_brush_overlay.glslinc"
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \

@@ -29,8 +29,8 @@ for shader in ROOTS:
         assert not INCLUDE.search(expanded), f'nested #include leaked from {shader.name}'
         checked_stages += 1
 
-for name in ('terrain_clipmap_near.glsl', 'terrain_clipmap_middle.glsl',
-             'terrain_clipmap_far.glsl', 'terrain_world_raster.glsl'):
+for name in ('terrain_clipmap.glsl', 'terrain_clipmap.glsl',
+             'terrain_clipmap.glsl', 'terrain_world_raster.glsl'):
     frag = (RD / name).read_text().split('#[fragment]', 1)[1]
     math = frag.index('#include "terrain_composed_material_math.glslinc"')
     sampling = frag.index('#include "terrain_composed_surface_sampling.glslinc"')

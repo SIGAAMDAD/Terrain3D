@@ -32,6 +32,7 @@ typedef struct t3dRdShaderSharedState_s
 	t3dAtomicU64_t		 m_nPhysicalDeviceGeneration{ 0u };
 	bool				 m_bPhysicalMetadataPrepared = false;
 	bool m_bCompactClusters = false;
+	bool m_bUnifiedCookedPreview = false;
 	bool m_bEnvironmentFields = false;
 	bool m_bTerrainGpuTimestamp = false;
 	String				 m_instanceDiagnosticSuffix;
@@ -74,6 +75,7 @@ bool Terrain3DRdShaderLibrary::initializeSharedState(
 		s_pRdShaderSharedState->m_bCompactClusters = pSettings &&
 			pSettings->has_setting( "terrain3d/rendering/compact_clusters" ) &&
 			bool( pSettings->get_setting( "terrain3d/rendering/compact_clusters" ) );
+		s_pRdShaderSharedState->m_bUnifiedCookedPreview = true;
 		OS *const pOS = OS::get_singleton();
 		s_pRdShaderSharedState->m_bEnvironmentFields = pOS &&
 			pOS->get_environment( "TERRAIN3D_ENVIRONMENT_FIELDS" ) == "1";
@@ -116,6 +118,11 @@ uint32_t Terrain3DRdShaderLibrary::getInstanceGpuDiagnosticMode(
 	void ) {
 	const auto *state = t3dRdShaderSharedStateGet();
 	return state ? state->m_nInstanceDiagnosticMode : 0u;
+}
+
+bool Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold( void ) {
+    const t3dRdShaderSharedState_t *const pState = t3dRdShaderSharedStateGet();
+    return pState && pState->m_bUnifiedCookedPreview;
 }
 
 bool Terrain3DRdShaderLibrary::isCompactClustersEnabledCold( void ) {
@@ -190,7 +197,22 @@ static uint64_t t3dRdShaderTicksUsec(
 // Shader ID slots remain append-stable. Only real, reachable shader versions
 // are loaded and physically prewarmed; retired slots have no catalog source.
 static bool t3dRdShaderCatalogEntryEnabled( const t3dRdShaderId_t id ) {
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_COUNT ) {
+    if ( id >= T3D_RD_SHADER_TERRAIN_FORWARD_BASE && id < T3D_RD_SHADER_TERRAIN_CULL ) return false;
+    if ( id >= T3D_RD_SHADER_TERRAIN_FEEDBACK_BASE && id < T3D_RD_SHADER_WORLD_CS_BASE ) return false;
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE && id < T3D_RD_SHADER_INSTANCE_COMPACT_BASE ) return false;
+    if ( id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE && id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR ) return false;
+    if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) return false;
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS ) return false;
+    if ( id >= T3D_RD_SHADER_UCMP_ALIAS && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES ) {
+        // UCMP shaders are acquired on the accepted unified backend, never prewarmed
+        // as an additional copy of the legacy distance-tier family.
+        if ( id >= T3D_RD_SHADER_UCMP_COMPACT_BASE && id < T3D_RD_SHADER_UCMP_FEEDBACK_BASE )
+            return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
+        if ( id >= T3D_RD_SHADER_UCMP_FEEDBACK_COMPACT_BASE )
+            return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
+        return true;
+    }
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS ) {
         return Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
     }
     if ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE &&
@@ -1066,9 +1088,7 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics(
 	result["spirv_ready_local"] = ( int64_t ) spirv_by_domain[T3D_RD_SHADER_LOCAL_DEVICE];
 	result["physical_ready_global"] = ( int64_t ) physical_by_domain[T3D_RD_SHADER_GLOBAL_DEVICE];
 	result["physical_ready_local"] = ( int64_t ) physical_by_domain[T3D_RD_SHADER_LOCAL_DEVICE];
-	result["near_loaded"] = getShader( T3D_RD_SHADER_NEAR_ALIAS ).is_valid();
-	result["middle_loaded"] = getShader( T3D_RD_SHADER_MIDDLE_ALIAS ).is_valid();
-	result["far_loaded"] = getShader( T3D_RD_SHADER_FAR_ALIAS ).is_valid();
+	result["unified_material_loaded"] = getShader( T3D_RD_SHADER_UCMP_ALIAS ).is_valid();
 	result["cull_loaded"] = getShader( T3D_RD_SHADER_TERRAIN_CULL ).is_valid();
 	result["instances_loaded"] = getShader( T3D_RD_SHADER_INSTANCE_ALIAS ).is_valid();
 	result["instance_occluder_depth_loaded"] = getShader( T3D_RD_SHADER_INSTANCE_OCCLUDER_DEPTH ).is_valid();

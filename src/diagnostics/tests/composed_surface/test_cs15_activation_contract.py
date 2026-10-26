@@ -10,6 +10,6 @@ assert 'Image::FORMAT_BPTC_RGBA' in decode
 assert 'if (format != T3D_VT_PHYSICAL_FORMAT_BC7_UNORM) return false;' in decode
 assert 'family != T3D_VT_PHYSICAL_FORMAT_BC5_UNORM' in source
 assert 'terrain_composed_surface_sampling.glslinc' not in shader
-assert '#include "terrain_composed_surface_sampling.glslinc"' in (root / 'project/addons/terrain_3d/rd/terrain_clipmap_near.glsl').read_text()
+assert '#include "terrain_composed_surface_sampling.glslinc"' in (root / 'project/addons/terrain_3d/rd/terrain_clipmap.glsl').read_text()
 assert 'T3D_CS_ACTIVE' in (root / 'project/addons/terrain_3d/rd/terrain_clipmap_fragment_interface.glslinc').read_text()
 print('CS15 editor decoder and opt-in shader topology PASS')

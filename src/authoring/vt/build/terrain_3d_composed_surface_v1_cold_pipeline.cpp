@@ -46,6 +46,7 @@ uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &r )
          !r.m_nMaterialRevision || !r.m_nTerrainRevision || !r.m_nTopologyGeneration ) return 0u;
     uint64_t h = 14695981039346656037ull;
     h = t3d_cs13_hash_integer( h, T3D_CS_COMPOSITION_ABI );
+    h = t3d_cs13_hash_integer( h, T3D_CS_SOURCE_RECIPE_REVISION );
     h = t3d_cs13_hash_integer( h, r.m_nSourcePackageBytes );
     h = t3d_cs13_hash_bytes( h, r.m_pSourcePackage, r.m_nSourcePackageBytes );
     if ( r.m_bReferenceOnly && r.m_bPageLocalCompositionIdentity ) {
@@ -73,6 +74,11 @@ uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &r )
     h = t3d_cs13_hash_integer( h, s.m_nVtFiltering );
     h = t3d_cs13_hash_float( h, s.m_fStaticMipBias );
     h = t3d_cs13_hash_float( h, s.m_fBlendSharpness );
+    h = t3d_cs13_hash_integer( h, s.m_nDetilingMode );
+    h = t3d_cs13_hash_float( h, s.m_fAutoSlope );
+    h = t3d_cs13_hash_float( h, s.m_fAutoHeightReduction );
+    h = t3d_cs13_hash_integer( h, s.m_nAutoBaseTexture );
+    h = t3d_cs13_hash_integer( h, s.m_nAutoOverlayTexture );
     // Disallowed modes are still hashed so future eligibility expansions cannot
     // accidentally reuse an earlier composed result with different semantics.
     const bool flags[] = { s.m_bAutoShader, s.m_bDualScale, s.m_bSideProjection,

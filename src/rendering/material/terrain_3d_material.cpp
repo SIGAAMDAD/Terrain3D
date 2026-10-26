@@ -6,6 +6,7 @@
 #include "Terrain3DTypeSupport.h"
 #include "Terrain3DConstants.h"
 #include "rendering/material/terrain_3d_material.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 #include "rendering/material/terrain_3d_material_schema.h"
 #include "core/runtime/terrain_3d_eastl_helpers.h"
 
@@ -950,6 +951,95 @@ void Terrain3DMaterial::refreshGpuRegionChannelPolicy(
 	}
 	const uint64_t effective_budget_bytes = m_pTerrain->getEffectiveGpuRegionCacheBudgetBytes();
 	m_pTerrain->reconfigureGpuRegionCache( effective_budget_bytes > 0u );
+}
+
+// UCMP-06: one authored source-quality record for the unified shader.
+void Terrain3DMaterial::setCookedTextureFiltering( const t3dTextureFiltering_t filtering ) {
+	setNearTextureFiltering( filtering );
+}
+
+t3dTextureFiltering_t Terrain3DMaterial::getCookedTextureFiltering( void ) const {
+	return getNearTextureFiltering();
+}
+
+void Terrain3DMaterial::setCookedMaterialSamplingQuality( const t3dMaterialSamplingQuality_t quality ) {
+	setNearMaterialSamplingQuality( quality );
+}
+
+t3dMaterialSamplingQuality_t Terrain3DMaterial::getCookedMaterialSamplingQuality( void ) const {
+	return getNearMaterialSamplingQuality();
+}
+
+void Terrain3DMaterial::setCookedTerrainNormalQuality( const t3dTerrainNormalQuality_t quality ) {
+	setNearTerrainNormalQuality( quality );
+}
+
+t3dTerrainNormalQuality_t Terrain3DMaterial::getCookedTerrainNormalQuality( void ) const {
+	return getNearTerrainNormalQuality();
+}
+
+void Terrain3DMaterial::setCookedTerrainColorQuality( const t3dTerrainColorQuality_t quality ) {
+	setNearTerrainColorQuality( quality );
+}
+
+t3dTerrainColorQuality_t Terrain3DMaterial::getCookedTerrainColorQuality( void ) const {
+	return getNearTerrainColorQuality();
+}
+
+void Terrain3DMaterial::setCookedSurfaceResponseQuality( const t3dSurfaceResponseQuality_t quality ) {
+	setNearSurfaceResponseQuality( quality );
+}
+
+t3dSurfaceResponseQuality_t Terrain3DMaterial::getCookedSurfaceResponseQuality( void ) const {
+	return getNearSurfaceResponseQuality();
+}
+
+void Terrain3DMaterial::setCookedTextureSurfaceMode( const t3dTextureSurfaceMode_t mode ) {
+	setNearTextureSurfaceMode( mode );
+}
+
+t3dTextureSurfaceMode_t Terrain3DMaterial::getCookedTextureSurfaceMode( void ) const {
+	return getNearTextureSurfaceMode();
+}
+
+void Terrain3DMaterial::setCookedLightingModel( const t3dTierLightingModel_t model ) {
+	setNearLightingModel( model );
+}
+
+t3dTierLightingModel_t Terrain3DMaterial::getCookedLightingModel( void ) const {
+	return getNearLightingModel();
+}
+
+void Terrain3DMaterial::setCookedDetilingQuality( const t3dTierDetilingQuality_t quality ) {
+	setNearDetilingQuality( quality );
+}
+
+t3dTierDetilingQuality_t Terrain3DMaterial::getCookedDetilingQuality( void ) const {
+	return getNearDetilingQuality();
+}
+
+void Terrain3DMaterial::setCookedAuthoredColorContribution( const real_t contribution ) {
+	setNearAuthoredColorContribution( contribution );
+}
+
+real_t Terrain3DMaterial::getCookedAuthoredColorContribution( void ) const {
+	return getNearAuthoredColorContribution();
+}
+
+void Terrain3DMaterial::setCookedWetnessContribution( const real_t contribution ) {
+	setNearWetnessContribution( contribution );
+}
+
+real_t Terrain3DMaterial::getCookedWetnessContribution( void ) const {
+	return getNearWetnessContribution();
+}
+
+void Terrain3DMaterial::setCookedMaterialLodBias( const real_t bias ) {
+	setNearMaterialLodBias( bias );
+}
+
+real_t Terrain3DMaterial::getCookedMaterialLodBias( void ) const {
+	return getNearMaterialLodBias();
 }
 
 void Terrain3DMaterial::setNearTextureFiltering(
@@ -1911,6 +2001,19 @@ void Terrain3DMaterial::_get_property_list(
 	}
 }
 
+// Only the inspector projection changes; Godot still serializes every historical
+// tier property so old .tres files survive mode switches without data loss.
+void Terrain3DMaterial::_validate_property( PropertyInfo &rProperty ) const {
+    const bool bUnified = Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold();
+    const String name = String( rProperty.name );
+    const bool bLegacyTier = name.begins_with( "near_" ) ||
+        name.begins_with( "middle_" ) || name.begins_with( "far_" );
+    if ( ( bUnified && bLegacyTier ) ||
+         ( !bUnified && name.begins_with( "cooked_" ) ) ) {
+        rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
+    }
+}
+
 // Flag uniforms with non-default values
 // This is called 10x more than the others, so be efficient
 bool Terrain3DMaterial::_property_can_revert(
@@ -2142,6 +2245,53 @@ void Terrain3DMaterial::_bind_methods(
 	ADD_PROPERTY( PropertyInfo( Variant::BOOL, "auto_shader_enabled" ),
 				  "set_auto_shader_enabled",
 				  "get_auto_shader_enabled" );
+
+	// UCMP-06: these aliases edit the same persisted near/source settings.
+	ClassDB::bind_method( D_METHOD( "set_cooked_texture_filtering", "filtering" ), &Terrain3DMaterial::setCookedTextureFiltering );
+	ClassDB::bind_method( D_METHOD( "get_cooked_texture_filtering" ), &Terrain3DMaterial::getCookedTextureFiltering );
+	ClassDB::bind_method( D_METHOD( "set_cooked_material_sampling_quality", "quality" ), &Terrain3DMaterial::setCookedMaterialSamplingQuality );
+	ClassDB::bind_method( D_METHOD( "get_cooked_material_sampling_quality" ), &Terrain3DMaterial::getCookedMaterialSamplingQuality );
+	ClassDB::bind_method( D_METHOD( "set_cooked_terrain_normal_quality", "quality" ), &Terrain3DMaterial::setCookedTerrainNormalQuality );
+	ClassDB::bind_method( D_METHOD( "get_cooked_terrain_normal_quality" ), &Terrain3DMaterial::getCookedTerrainNormalQuality );
+	ClassDB::bind_method( D_METHOD( "set_cooked_terrain_color_quality", "quality" ), &Terrain3DMaterial::setCookedTerrainColorQuality );
+	ClassDB::bind_method( D_METHOD( "get_cooked_terrain_color_quality" ), &Terrain3DMaterial::getCookedTerrainColorQuality );
+	ClassDB::bind_method( D_METHOD( "set_cooked_surface_response_quality", "quality" ), &Terrain3DMaterial::setCookedSurfaceResponseQuality );
+	ClassDB::bind_method( D_METHOD( "get_cooked_surface_response_quality" ), &Terrain3DMaterial::getCookedSurfaceResponseQuality );
+	ClassDB::bind_method( D_METHOD( "set_cooked_texture_surface_mode", "mode" ), &Terrain3DMaterial::setCookedTextureSurfaceMode );
+	ClassDB::bind_method( D_METHOD( "get_cooked_texture_surface_mode" ), &Terrain3DMaterial::getCookedTextureSurfaceMode );
+	ClassDB::bind_method( D_METHOD( "set_cooked_lighting_model", "model" ), &Terrain3DMaterial::setCookedLightingModel );
+	ClassDB::bind_method( D_METHOD( "get_cooked_lighting_model" ), &Terrain3DMaterial::getCookedLightingModel );
+	ClassDB::bind_method( D_METHOD( "set_cooked_detiling_quality", "quality" ), &Terrain3DMaterial::setCookedDetilingQuality );
+	ClassDB::bind_method( D_METHOD( "get_cooked_detiling_quality" ), &Terrain3DMaterial::getCookedDetilingQuality );
+	ClassDB::bind_method( D_METHOD( "set_cooked_authored_color_contribution", "contribution" ), &Terrain3DMaterial::setCookedAuthoredColorContribution );
+	ClassDB::bind_method( D_METHOD( "get_cooked_authored_color_contribution" ), &Terrain3DMaterial::getCookedAuthoredColorContribution );
+	ClassDB::bind_method( D_METHOD( "set_cooked_wetness_contribution", "contribution" ), &Terrain3DMaterial::setCookedWetnessContribution );
+	ClassDB::bind_method( D_METHOD( "get_cooked_wetness_contribution" ), &Terrain3DMaterial::getCookedWetnessContribution );
+	ClassDB::bind_method( D_METHOD( "set_cooked_material_lod_bias", "bias" ), &Terrain3DMaterial::setCookedMaterialLodBias );
+	ClassDB::bind_method( D_METHOD( "get_cooked_material_lod_bias" ), &Terrain3DMaterial::getCookedMaterialLodBias );
+	ADD_GROUP( "Cooked Material Quality", "" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_texture_filtering", PROPERTY_HINT_ENUM, "Linear Anisotropic,Linear,Nearest Anisotropic,Nearest", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_texture_filtering", "get_cooked_texture_filtering" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_material_sampling_quality", PROPERTY_HINT_ENUM, "Fast,Full", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_material_sampling_quality", "get_cooked_material_sampling_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_terrain_normal_quality", PROPERTY_HINT_ENUM, "Geometry,Detailed", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_terrain_normal_quality", "get_cooked_terrain_normal_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_terrain_color_quality", PROPERTY_HINT_ENUM, "Fast,Exact", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_terrain_color_quality", "get_cooked_terrain_color_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_surface_response_quality", PROPERTY_HINT_ENUM, "Simple,Detailed", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_surface_response_quality", "get_cooked_surface_response_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_texture_surface_mode", PROPERTY_HINT_ENUM, "Textured,Silhouette / No Textures", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_texture_surface_mode", "get_cooked_texture_surface_mode" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_lighting_model", PROPERTY_HINT_ENUM, "Unshaded,Lambert,Blinn-Phong,PBR", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_lighting_model", "get_cooked_lighting_model" );
+	ADD_PROPERTY( PropertyInfo( Variant::INT, "cooked_detiling_quality", PROPERTY_HINT_ENUM, "Disabled,Rotation", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_detiling_quality", "get_cooked_detiling_quality" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cooked_authored_color_contribution", PROPERTY_HINT_RANGE, "0,1,0.01", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_authored_color_contribution", "get_cooked_authored_color_contribution" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cooked_wetness_contribution", PROPERTY_HINT_RANGE, "0,1,0.01", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_wetness_contribution", "get_cooked_wetness_contribution" );
+	ADD_PROPERTY( PropertyInfo( Variant::FLOAT, "cooked_material_lod_bias", PROPERTY_HINT_RANGE, "-2,4,0.25", PROPERTY_USAGE_EDITOR ),
+		"set_cooked_material_lod_bias", "get_cooked_material_lod_bias" );
 
 	ADD_GROUP( "Near Terrain Detail", "" );
 	ADD_SUBGROUP( "Sampling & Surface", "" );
@@ -2965,7 +3115,8 @@ bool t3dTerrainShaderPipelineKeyIsValid(
 		return false;
 	}
 	if ( rKey.m_nShaderPath == T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL ) {
-		if ( rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 ||
+		if ( ( rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 &&
+               rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) ||
 			 ( rKey.m_nShippingFeatureClass & ~T3D_TERRAIN_SHIPPING_FEATURE_MASK ) != 0u ) {
 			return false;
 		}

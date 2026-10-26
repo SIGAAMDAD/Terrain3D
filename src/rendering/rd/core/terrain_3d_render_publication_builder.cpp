@@ -990,7 +990,9 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 	resources.m_hDerivedTextureRd = data->getDerivedMapsRid();
 	resources.m_hControlTextureRd = data->getControlMapsRid();
 	resources.m_hColorTextureRd = data->getColorMapsRid();
-	resources.m_hMiddleCompositeTextureRd = data->getMiddleCompositeMapsRid();
+	resources.m_hMiddleCompositeTextureRd =
+		snapshot.m_nTerrainMaterialBackend == T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1
+			? RID() : data->getMiddleCompositeMapsRid();
 	resources.m_hTerrainShadowMaskTextureRd = data->getTerrainShadowMasksRid();
 	resources.m_hMiddleHeightTextureRd = data->getMiddleHeightMapsRid();
 	resources.m_hMiddleHeightRegionMapTextureRd = data->getMiddleHeightRegionMapRid();

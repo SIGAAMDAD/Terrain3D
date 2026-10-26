@@ -69,6 +69,8 @@ public:
 	static bool					isGroupedCullEnabledCold( void );
 	// Project setting: terrain3d/rendering/compact_clusters (default false).
 	static bool isCompactClustersEnabledCold( void );
+	// Cold opt-in only; cooked material parity is not yet approved for shipping.
+	static bool isUnifiedCookedPreviewEnabledCold( void );
 	static bool isEnvironmentFieldsEnabledCold( void );
 	static bool isTerrainGpuTimestampEnabledCold( void );
 	static bool					isWorldSmallCullEnabledCold( void );

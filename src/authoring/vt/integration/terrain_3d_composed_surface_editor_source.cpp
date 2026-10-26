@@ -9,6 +9,7 @@
 #include "assets/resources/terrain_3d_texture_asset.h"
 #include "data/model/terrain_3d_data.h"
 #include "rendering/material/terrain_3d_material.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 #include "rendering/rd/vt/runtime/terrain_3d_terrain_megavt.h"
 
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -23,7 +24,7 @@
 using namespace godot;
 
 // One additional control sample is needed for the four-corner interpolation.
-#define T3D_CS_EDITOR_SNAPSHOT_SIDE ( T3D_CS_PHYSICAL_TILE + 2u )
+#define T3D_CS_EDITOR_SNAPSHOT_SIDE ( T3D_CS_PHYSICAL_TILE + 4u )
 #define T3D_CS_EDITOR_SNAPSHOT_COUNT ( T3D_CS_EDITOR_SNAPSHOT_SIDE * T3D_CS_EDITOR_SNAPSHOT_SIDE )
 
 struct t3dCsEditorControlTile_t
@@ -31,6 +32,7 @@ struct t3dCsEditorControlTile_t
     uint32_t m_nRegionIndex = 0u;
     uint32_t m_nPageX = 0u;
     uint32_t m_nPageY = 0u;
+    uint32_t m_nMip = 0u;
     uint32_t m_nSnapshotSide = 0u;
     float m_fWorldOriginX = 0.0f;
     float m_fWorldOriginZ = 0.0f;
@@ -38,6 +40,10 @@ struct t3dCsEditorControlTile_t
     int32_t m_nOriginX = 0;
     int32_t m_nOriginZ = 0;
     PackedInt32Array m_controls;
+    // Immutable editor-only geometry snapshots, indexed by composed output
+    // texel (including gutters). Present only for auto-shader compositions.
+    PackedFloat32Array m_heights;
+    PackedFloat32Array m_normalY;
     uint64_t m_nControlsRevision = 0u;
 };
 
@@ -47,6 +53,7 @@ struct t3dCsEditorSourceContext_t
     const Terrain3DTerrainMegaVT *m_pMegaVT = nullptr;
     const Terrain3DComposedSurfaceEditJournal *m_pEdits = nullptr;
     const Terrain3DAssets *m_pAssets = nullptr;
+    const Terrain3DMaterial *m_pMaterial = nullptr;
     std::vector< t3dCsEditorControlTile_t > m_tiles;
     const t3dCsEditorControlTile_t *m_pActive = nullptr;
     uint64_t m_nTerrainRevision = 0u;
@@ -54,11 +61,70 @@ struct t3dCsEditorSourceContext_t
     uint64_t m_nTopologyRevision = 0u;
 };
 
-static uint64_t t3d_cs_editor_material_revision( const Terrain3DAssets &rAssets )
+static uint64_t t3d_cs_editor_material_revision( const Terrain3DAssets &rAssets,
+                                                  const Terrain3DMaterial &rMaterial )
 {
     const uint64_t a = rAssets.getTerrainVtContentGeneration();
     const uint64_t b = rAssets.getInstanceVtMaterialSourceGeneration();
-    uint64_t revision = ( a ^ ( b + 0x9e3779b97f4a7c15ull + ( a << 6u ) + ( a >> 2u ) ) );
+    uint64_t revision = a ^ ( b + 0x9e3779b97f4a7c15ull + ( a << 6u ) + ( a >> 2u ) );
+    // The canonical raster reads authored blend sharpness independently of the
+    // texture assets. Include it in the cold identity and in stale-job checks.
+    const Variant authored = rMaterial.getShaderParam( StringName( "blend_sharpness" ) );
+    const float sharpness = ( authored.get_type() == Variant::FLOAT ||
+                              authored.get_type() == Variant::INT ) ? float( authored ) : 0.5f;
+    uint32_t sharpnessBits = 0u;
+    memcpy( &sharpnessBits, &sharpness, sizeof( sharpnessBits ) );
+    revision ^= uint64_t( sharpnessBits ) + 0x9e3779b97f4a7c15ull +
+                ( revision << 6u ) + ( revision >> 2u );
+    // These authored controls are read again when the candidate is made.
+    // A material edit during a long cold cook must invalidate that result,
+    // including LOD/filtering changes that do not touch texture assets.
+    const bool unified = Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold();
+    const uint32_t flags[] = {
+        uint32_t( unified ? rMaterial.getTerrainSamplingMode() : rMaterial.getMiddleTerrainSamplingMode() ),
+        uint32_t( unified ? rMaterial.getCookedTextureFiltering() : rMaterial.getMiddleTextureFiltering() ),
+        uint32_t( unified ? rMaterial.getDetilingMode() : rMaterial.getMiddleDetilingMode() ),
+        uint32_t( rMaterial.getMiddleAutoShaderEnabled() ),
+        uint32_t( rMaterial.getDualScalingEnabled() ),
+        uint32_t( rMaterial.getProjectionEnabled() )
+    };
+    for ( uint32_t flag : flags ) {
+        revision ^= uint64_t( flag ) + 0x9e3779b97f4a7c15ull +
+                    ( revision << 6u ) + ( revision >> 2u );
+    }
+    // An auto-control blend changes when these authored values change,
+    // even when the terrain VT source pack is byte-identical.
+    const StringName autoKeys[] = { StringName( "auto_slope" ),
+                                    StringName( "auto_height_reduction" ),
+                                    StringName( "auto_base_texture" ),
+                                    StringName( "auto_overlay_texture" ) };
+    for ( const StringName &key : autoKeys ) {
+        const Variant value = rMaterial.getShaderParam( key );
+        const float number = ( value.get_type() == Variant::FLOAT || value.get_type() == Variant::INT )
+                            ? float( value ) : 0.0f;
+        uint32_t bits = 0u;
+        memcpy( &bits, &number, sizeof( bits ) );
+        revision ^= uint64_t( bits ) + 0x9e3779b97f4a7c15ull +
+                    ( revision << 6u ) + ( revision >> 2u );
+    }
+    // Layer detiling values are also static cook inputs.
+    const PackedVector2Array detiles = rAssets.getTextureDetiles();
+    for ( int64_t i = 0; i < detiles.size(); ++i ) {
+        const Vector2 value = detiles[i];
+        const float pair[] = { float( value.x ), float( value.y ) };
+        for ( float component : pair ) {
+            uint32_t bits = 0u;
+            memcpy( &bits, &component, sizeof( bits ) );
+            revision ^= uint64_t( bits ) + 0x9e3779b97f4a7c15ull +
+                        ( revision << 6u ) + ( revision >> 2u );
+        }
+    }
+    const float lodBias = float( unified ? rMaterial.getCookedMaterialLodBias() :
+                                                rMaterial.getMiddleMaterialLodBias() );
+    uint32_t lodBits = 0u;
+    memcpy( &lodBits, &lodBias, sizeof( lodBits ) );
+    revision ^= uint64_t( lodBits ) + 0x9e3779b97f4a7c15ull +
+                ( revision << 6u ) + ( revision >> 2u );
     return revision ? revision : 1u;
 }
 
@@ -73,11 +139,11 @@ static bool t3d_cs_editor_current( void *pUser, const uint64_t nTerrain,
                                    const uint64_t nMaterial, const uint64_t nTopology )
 {
     const auto &c = *static_cast< const t3dCsEditorSourceContext_t * >( pUser );
-    return c.m_pData && c.m_pMegaVT && c.m_pEdits && c.m_pAssets &&
+    return c.m_pData && c.m_pMegaVT && c.m_pEdits && c.m_pAssets && c.m_pMaterial &&
            nTerrain == c.m_nTerrainRevision && nMaterial == c.m_nMaterialRevision &&
            nTopology == c.m_nTopologyRevision &&
            t3d_cs_editor_terrain_revision( *c.m_pEdits ) == nTerrain &&
-           t3d_cs_editor_material_revision( *c.m_pAssets ) == nMaterial &&
+           t3d_cs_editor_material_revision( *c.m_pAssets, *c.m_pMaterial ) == nMaterial &&
            c.m_pMegaVT->getTopologyGeneration() == nTopology;
 }
 
@@ -86,12 +152,11 @@ static bool t3d_cs_editor_page( void *pUser, const t3dComposedSurfaceCookPage_t 
 {
     auto &c = *static_cast< t3dCsEditorSourceContext_t * >( pUser );
     c.m_pActive = nullptr;
-    if ( rPage.m_nMip != 0u ||
-         rPage.m_nRegionKey == 0u || rPage.m_nRegionKey > T3D_CS_EDITOR_REGION_COUNT ) return false;
+    if ( rPage.m_nRegionKey == 0u || rPage.m_nRegionKey > T3D_CS_EDITOR_REGION_COUNT ) return false;
     const uint32_t nIndex = uint32_t( rPage.m_nRegionKey - 1u );
     for ( const auto &tile : c.m_tiles ) {
         if ( tile.m_nRegionIndex != nIndex || tile.m_nPageX != rPage.m_nPageX ||
-             tile.m_nPageY != rPage.m_nPageY ) continue;
+             tile.m_nPageY != rPage.m_nPageY || tile.m_nMip != rPage.m_nMip ) continue;
         c.m_pActive = &tile;
         rFootprint = {};
         rFootprint.m_fWorldOrigin[0] = tile.m_fWorldOriginX;
@@ -123,6 +188,20 @@ static bool t3d_cs_editor_control( void *pUser, const int32_t nX, const int32_t 
     return rControl != UINT32_MAX;
 }
 
+static bool t3d_cs_editor_surface( void *pUser, uint32_t x, uint32_t y,
+                                    float &height, float &normal_y )
+{
+    const auto &c = *static_cast< const t3dCsEditorSourceContext_t * >( pUser );
+    const auto *pTile = c.m_pActive;
+    if ( !pTile || x >= T3D_CS_PHYSICAL_TILE || y >= T3D_CS_PHYSICAL_TILE ) return false;
+    const uint32_t i = y * T3D_CS_PHYSICAL_TILE + x;
+    if ( i >= uint32_t( pTile->m_heights.size() ) ||
+         i >= uint32_t( pTile->m_normalY.size() ) ) return false;
+    height = pTile->m_heights[i];
+    normal_y = pTile->m_normalY[i];
+    return std::isfinite( height ) && std::isfinite( normal_y );
+}
+
 bool t3d_cs_cook_editor_candidate_cold(
     const PackedByteArray &rPack, Terrain3DData &rData,
     const Ref< Terrain3DAssets > &rAssets,
@@ -135,13 +214,17 @@ bool t3d_cs_cook_editor_candidate_cold(
     rResult.m_error = "invalid_source";
     if ( rPack.is_empty() || rAssets.is_null() || rMaterial.is_null() || rDirectory.is_empty() ||
          !rMegaVT.isReady() ) return false;
-    const uint32_t nMode = uint32_t( rMaterial->getMiddleTerrainSamplingMode() );
-    const t3dTextureFiltering_t filter = rMaterial->getMiddleTextureFiltering();
+    const bool unified = Terrain3DRdShaderLibrary::isUnifiedCookedPreviewEnabledCold();
+    const uint32_t nMode = uint32_t( unified ? rMaterial->getTerrainSamplingMode() :
+                                             rMaterial->getMiddleTerrainSamplingMode() );
+    const t3dTextureFiltering_t filter = unified ? rMaterial->getCookedTextureFiltering() :
+                                                    rMaterial->getMiddleTextureFiltering();
+    const t3dDetilingMode_t detilingMode = unified ? rMaterial->getDetilingMode() :
+                                                    rMaterial->getMiddleDetilingMode();
     if ( ( nMode != 1u && nMode != 2u && nMode != 5u ) ||
          ( filter != LINEAR && filter != NEAREST ) ||
-         rMaterial->getMiddleDetilingMode() != DETILING_DISABLED ||
-         rMaterial->getMiddleAutoShaderEnabled() || rMaterial->getDualScalingEnabled() ||
-         rMaterial->getProjectionEnabled() ||
+         ( detilingMode != DETILING_DISABLED && detilingMode != DETILING_DISCRETE_8 ) ||
+         rMaterial->getDualScalingEnabled() || rMaterial->getProjectionEnabled() ||
          rData.getVertexSpacingInternal() != 1.0 ) {
         rResult.m_error = "unsupported_static_material_mode";
         return false;
@@ -151,6 +234,9 @@ bool t3d_cs_cook_editor_candidate_cold(
         rResult.m_error = "unsupported_material_count";
         return false;
     }
+    const bool autoShader = rMaterial->getMiddleAutoShaderEnabled();
+    const bool detiling = detilingMode != DETILING_DISABLED;
+    const PackedVector2Array detiles = rAssets->getTextureDetiles();
     t3dComposedStaticV1Layer_t layers[T3D_CS_STATIC_V1_MAX_LAYERS]{};
     t3dComposedStaticV1Layer_t resolved[T3D_CS_STATIC_V1_MAX_LAYERS]{};
     for ( uint32_t i = 0u; i < nLayers; ++i ) {
@@ -166,14 +252,18 @@ bool t3d_cs_cook_editor_candidate_cold(
         layers[i].m_fPbr0[3] = float( asset->getMetallic() );
         layers[i].m_fPbr1[0] = float( asset->getAoStrength() );
         layers[i].m_fPbr1[1] = float( asset->getAoLightAffect() );
+        const Vector2 detile = i < uint32_t( detiles.size() ) ? detiles[int64_t( i )] : Vector2();
+        layers[i].m_fPbr1[2] = float( detile.x );
+        layers[i].m_fPbr1[3] = float( detile.y );
     }
     t3dCsEditorSourceContext_t context{};
     context.m_pData = &rData;
     context.m_pMegaVT = &rMegaVT;
     context.m_pEdits = &rEdits;
     context.m_pAssets = rAssets.ptr();
+    context.m_pMaterial = rMaterial.ptr();
     context.m_nTerrainRevision = t3d_cs_editor_terrain_revision( rEdits );
-    context.m_nMaterialRevision = t3d_cs_editor_material_revision( *rAssets.ptr() );
+    context.m_nMaterialRevision = t3d_cs_editor_material_revision( *rAssets.ptr(), *rMaterial.ptr() );
     context.m_nTopologyRevision = rMegaVT.getTopologyGeneration();
     if ( !context.m_nTopologyRevision ) {
         rResult.m_error = "terrain_topology_unavailable";
@@ -197,19 +287,32 @@ bool t3d_cs_cook_editor_candidate_cold(
             rResult.m_error = "unsupported_region_page_layout";
             return false;
         }
-        for ( uint32_t pageY = 0u; pageY < tpm; ++pageY ) {
-        for ( uint32_t pageX = 0u; pageX < tpm; ++pageX ) {
+        // Bake the entire region-local authored mip hierarchy, rather than
+        // discarding all but mip 0 and asking the V1 importer to invent it.
+        // Each successive level covers the same 128 m region at half the
+        // resolution; a real neighbor halo is still sampled at every level.
+        const uint32_t mipCount = tpm == 4u ? 3u : 2u;
+        if ( info.m_nMips < mipCount ) {
+            rResult.m_error = "incomplete_composed_region_mips";
+            return false;
+        }
+        for ( uint32_t mip = 0u; mip < mipCount; ++mip ) {
+        const uint32_t pagesWide = MAX( 1u, tpm >> mip );
+        const uint32_t texelsPerCell = 1u << mip;
+        for ( uint32_t pageY = 0u; pageY < pagesWide; ++pageY ) {
+        for ( uint32_t pageX = 0u; pageX < pagesWide; ++pageX ) {
         t3dCsEditorControlTile_t tile{};
         tile.m_nRegionIndex = region;
         tile.m_nPageX = pageX;
         tile.m_nPageY = pageY;
-        tile.m_fWorldStep = 1.0f / float( tpm );
+        tile.m_nMip = mip;
+        tile.m_fWorldStep = float( texelsPerCell ) / float( tpm );
         tile.m_fWorldOriginX = float( info.m_nRegionX * 128 ) +
                                float( pageX * T3D_CS_PAGE_INTERIOR ) * tile.m_fWorldStep;
         tile.m_fWorldOriginZ = float( info.m_nRegionZ * 128 ) +
                                float( pageY * T3D_CS_PAGE_INTERIOR ) * tile.m_fWorldStep;
-        const uint32_t gutterCells = ( T3D_CS_PAGE_GUTTER + tpm - 1u ) / tpm;
-        const uint32_t interiorCells = T3D_CS_PAGE_INTERIOR / tpm;
+        const uint32_t gutterCells = ( T3D_CS_PAGE_GUTTER * texelsPerCell + tpm - 1u ) / tpm;
+        const uint32_t interiorCells = ( T3D_CS_PAGE_INTERIOR * texelsPerCell ) / tpm;
         tile.m_nOriginX = int32_t( floorf( tile.m_fWorldOriginX ) ) - int32_t( gutterCells );
         tile.m_nOriginZ = int32_t( floorf( tile.m_fWorldOriginZ ) ) - int32_t( gutterCells );
         tile.m_nSnapshotSide = interiorCells + gutterCells * 2u + 3u;
@@ -263,18 +366,61 @@ bool t3d_cs_cook_editor_candidate_cold(
         if ( boundaryClamped ) ++rResult.m_nBoundaryClampedPages;
         pControl = tile.m_controls.ptr();
         uint64_t pageHash = 14695981039346656037ull;
+        bool pageUsesAuto = false;
         for ( uint32_t i = 0u; i < count; ++i ) {
             const uint32_t value = uint32_t( pControl[i] );
+            pageUsesAuto |= ( value & 1u ) != 0u;
             for ( uint32_t b = 0u; b < 4u; ++b ) {
                 const uint8_t byte = uint8_t( value >> ( b * 8u ) );
                 pageHash = ( pageHash ^ byte ) * 1099511628211ull;
                 controlsHash = ( controlsHash ^ byte ) * 1099511628211ull;
             }
         }
+        // Avoid height/normal snapshots for authored pages without auto bits.
+        // Their material fingerprint must remain independent of height edits.
+        if ( autoShader && pageUsesAuto ) {
+            PackedVector3Array surfacePositions;
+            surfacePositions.resize( T3D_CS_PHYSICAL_TILE * T3D_CS_PHYSICAL_TILE );
+            Vector3 *pSurfacePositions = surfacePositions.ptrw();
+            for ( uint32_t py = 0u; py < T3D_CS_PHYSICAL_TILE; ++py ) {
+                for ( uint32_t px = 0u; px < T3D_CS_PHYSICAL_TILE; ++px ) {
+                    const float sx = float( int32_t( px ) - int32_t( T3D_CS_PAGE_GUTTER ) ) + 0.5f;
+                    const float sy = float( int32_t( py ) - int32_t( T3D_CS_PAGE_GUTTER ) ) + 0.5f;
+                    pSurfacePositions[py * T3D_CS_PHYSICAL_TILE + px] =
+                        Vector3( tile.m_fWorldOriginX + sx * tile.m_fWorldStep, 0.0f,
+                                 tile.m_fWorldOriginZ + sy * tile.m_fWorldStep );
+                }
+            }
+            tile.m_heights = rData.getHeights( surfacePositions );
+            const PackedVector3Array normals = rData.getNormals( surfacePositions );
+            if ( tile.m_heights.size() != surfacePositions.size() ||
+                 normals.size() != surfacePositions.size() ) {
+                rResult.m_error = "auto_surface_snapshot_failed";
+                return false;
+            }
+            tile.m_normalY.resize( normals.size() );
+            float *pNormalY = tile.m_normalY.ptrw();
+            const Vector3 *pNormals = normals.ptr();
+            const float *pHeight = tile.m_heights.ptr();
+            for ( uint32_t n = 0u; n < uint32_t( normals.size() ); ++n ) {
+                pNormalY[n] = float( pNormals[n].y );
+                // Fold sampled geometry into each page's material identity.
+                // Height sculpting can alter an auto-control blend while the
+                // authored packed control words remain unchanged.
+                const float geometry[] = { pHeight[n], pNormalY[n] };
+                for ( float sample : geometry ) {
+                    uint32_t bits = 0u;
+                    memcpy( &bits, &sample, sizeof( bits ) );
+                    for ( uint32_t b = 0u; b < 4u; ++b )
+                        pageHash = ( pageHash ^ uint8_t( bits >> ( b * 8u ) ) ) * 1099511628211ull;
+                }
+            }
+        }
         tile.m_nControlsRevision = pageHash ? pageHash : 1u;
         context.m_tiles.push_back( tile );
         pages.push_back( { uint64_t( region ) + 1u, tile.m_nControlsRevision,
-                           0u, pageX, pageY, 1u } );
+                           mip, pageX, pageY, 1u } );
+        }
         }
         }
     }
@@ -311,10 +457,35 @@ bool t3d_cs_cook_editor_candidate_cold(
     request.m_source.m_pUser = &context;
     request.m_source.m_pResolvePage = t3d_cs_editor_page;
     request.m_source.m_pReadControl = t3d_cs_editor_control;
+    request.m_source.m_pReadTerrainSurface = autoShader ? t3d_cs_editor_surface : nullptr;
+    request.m_source.m_bAutoShader = autoShader;
+    request.m_source.m_bDetiling = detiling;
+    request.m_source.m_nDetilingMode = uint32_t( detilingMode );
     request.m_source.m_nSamplingMode = nMode;
     request.m_source.m_nVtFiltering = filter == LINEAR ? 1u : 3u;
-    request.m_source.m_fStaticMipBias = float( rMaterial->getMiddleMaterialLodBias() );
-    request.m_source.m_fBlendSharpness = 0.5f; // Candidate only; canonical comparison still required.
+    request.m_source.m_fStaticMipBias = float( unified ? rMaterial->getCookedMaterialLodBias() :
+                                               rMaterial->getMiddleMaterialLodBias() );
+    const Variant authoredBlend = rMaterial->getShaderParam( StringName( "blend_sharpness" ) );
+    request.m_source.m_fBlendSharpness =
+        ( authoredBlend.get_type() == Variant::FLOAT || authoredBlend.get_type() == Variant::INT )
+            ? float( authoredBlend ) : 0.5f;
+    const auto material_float = [&]( const char *key, float fallback ) -> float {
+        const Variant v = rMaterial->getShaderParam( StringName( key ) );
+        return ( v.get_type() == Variant::FLOAT || v.get_type() == Variant::INT )
+            ? float( v ) : fallback;
+    };
+    request.m_source.m_fAutoSlope = material_float( "auto_slope", 1.0f );
+    request.m_source.m_fAutoHeightReduction = material_float( "auto_height_reduction", 0.1f );
+    const float autoBase = material_float( "auto_base_texture", 0.0f );
+    const float autoOverlay = material_float( "auto_overlay_texture", 1.0f );
+    if ( autoShader && ( !std::isfinite( autoBase ) || !std::isfinite( autoOverlay ) ||
+                         autoBase < 0.0f || autoOverlay < 0.0f ||
+                         autoBase >= float( nLayers ) || autoOverlay >= float( nLayers ) ) ) {
+        rResult.m_error = "unsupported_auto_material_id";
+        return false;
+    }
+    request.m_source.m_nAutoBaseTexture = autoShader ? uint32_t( autoBase ) : 0u;
+    request.m_source.m_nAutoOverlayTexture = autoShader ? uint32_t( autoOverlay ) : 1u;
     request.m_pEncode = t3d_cs_reference_encode;
     request.m_pDecode = t3d_cs12_decode_godot_image;
     request.m_pDecodedCache = cache.ptrw();

@@ -29,8 +29,8 @@ def ensure(value, label):
 
 def main():
     layout_checks = 0
-    for tier in ('near', 'middle', 'far'):
-        shader = RD / ('terrain_clipmap_' + tier + '.glsl')
+    for tier in ('unified',):
+        shader = RD / 'terrain_clipmap.glsl'
         names = module.versions(shader)
         for variant in CASES:
             ensure(variant in names, tier + ':' + variant + ' missing shader version')
@@ -75,8 +75,8 @@ def main():
            'requestedEntry.generation != allocation.generation' in resolver,
            'Hint validity/residency generation guard missing')
     # Validate all eight compact-feedback signatures for every terrain tier.
-    for tier in ('near', 'middle', 'far'):
-        shader = RD / ('terrain_clipmap_' + tier + '.glsl')
+    for tier in ('unified',):
+        shader = RD / 'terrain_clipmap.glsl'
         for variant in ('native', 'specular', 'motion', 'specular_motion',
                         'native_radiance_array', 'specular_radiance_array',
                         'motion_radiance_array', 'specular_motion_radiance_array'):
@@ -91,14 +91,14 @@ def main():
     ensure('!ensureVtSamplingTrialShaders(' not in preparation, 'VT trial still takes production slot')
     ensure('t3dRdCanonicalHintAvailable(' in preparation and 'ensureCanonicalVtShaders(' in preparation,
            'Missing canonical hint capability route')
-    ensure('m_hszForwardCompactShaders[path][tier][variant]' in cpp and
-           'm_hszForwardCompactShaders[shaderPath][nTier][variant]' in cpp,
+    ensure('m_hszUnifiedCompactShaders[path][variant]' in cpp and
+           'm_hszUnifiedForwardShaders[path][variant]' in cpp,
            'Compact shader RID must not reuse cached noncompact shader')
     ensure('!m_bForwardFeedbackActive;' not in
            cpp[cpp.index('const bool compact = m_forwardLighting.compactRequested() && !one_sun_lighting &&'):],
            'Compact cluster set may not be disabled just because feedback is active')
     ensure('m_forwardLighting.ensureCompactSet( shader )' in cpp and
-           'm_hszFeedbackCompactShaders[nTier][variant]' in cpp,
+           'm_hszUnifiedFeedbackCompactShaders[variant]' in cpp,
            'Compact feedback shader must receive the set-4 cluster descriptor')
     ensure('!bOneSunLighting && m_forwardLighting.compactRequested()' in cpp,
            'One-sun compact route must not shadow the one-sun shader')

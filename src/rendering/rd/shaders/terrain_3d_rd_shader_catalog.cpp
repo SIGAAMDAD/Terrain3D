@@ -2,12 +2,13 @@
 #include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 
 static const char *const s_terrainPaths[3] = {
-	"res://addons/terrain_3d/rd/terrain_clipmap_near.glsl",
-	"res://addons/terrain_3d/rd/terrain_clipmap_middle.glsl",
-	"res://addons/terrain_3d/rd/terrain_clipmap_far.glsl",
+    "res://addons/terrain_3d/rd/terrain_clipmap.glsl",
+    "res://addons/terrain_3d/rd/terrain_clipmap.glsl",
+    "res://addons/terrain_3d/rd/terrain_clipmap.glsl",
 };
 
 static const char *const s_otherGlobalPaths[] = {
+    "res://addons/terrain_3d/rd/terrain_clipmap.glsl",
 	"res://addons/terrain_3d/rd/terrain_instances.glsl",
 	"res://addons/terrain_3d/rd/terrain_instance_occluder_depth.glsl",
 	"res://addons/terrain_3d/rd/terrain_hlod_cull.glsl",
@@ -37,16 +38,13 @@ const char *t3dRdVisibilityBakeSourcePath() {
 }
 
 uint32_t t3dRdShaderCatalogGlobalSourceCount() {
-    const uint32_t standard = 3u + ( uint32_t ) ( sizeof( s_otherGlobalPaths ) / sizeof( s_otherGlobalPaths[0] ) );
+    const uint32_t standard = ( uint32_t ) ( sizeof( s_otherGlobalPaths ) / sizeof( s_otherGlobalPaths[0] ) );
     return standard + ( Terrain3DRdShaderLibrary::isEnvironmentFieldsEnabledCold() ? 1u : 0u );
 }
 
 const char *t3dRdShaderCatalogGlobalSourcePath(
 	const uint32_t index ) {
-	if ( index < 3u ) {
-		return s_terrainPaths[index];
-	}
-	const uint32_t other = index - 3u;
+    const uint32_t other = index;
     const uint32_t standard = ( uint32_t ) ( sizeof( s_otherGlobalPaths ) / sizeof( s_otherGlobalPaths[0] ) );
     if ( other < standard ) {
         return s_otherGlobalPaths[other];
@@ -182,9 +180,61 @@ static const char *const s_instanceFeedbackVersions[T3D_RD_FORWARD_COLOR_VARIANT
 
 t3dRdShaderCatalogEntry_t t3dRdShaderCatalogGet(
 	const t3dRdShaderId_t id ) {
+    // Retained numeric IDs are tombstones: no alternate shader root or
+    // hidden physical shader can be acquired through a direct catalog lookup.
+    const bool retired = ( id < T3D_RD_SHADER_TERRAIN_CULL ) ||
+        ( id >= T3D_RD_SHADER_TERRAIN_FEEDBACK_BASE && id < T3D_RD_SHADER_WORLD_CS_BASE ) ||
+        ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_BASE && id < T3D_RD_SHADER_INSTANCE_COMPACT_BASE ) ||
+        ( id >= T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE && id < T3D_RD_SHADER_RETIRED_OCEAN_PREPARED_COLOR ) ||
+        ( id >= T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE && id < T3D_RD_SHADER_ENVIRONMENT_STATE ) ||
+        ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS );
+    if ( retired ) {
+        return { id, NULL, NULL, T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+    }
     // SHD-02: same material/VT evaluator as ordinary compact lighting,
     // with legal set-3 fragment feedback for each output signature.
-    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES ) {
+    if ( id >= T3D_RD_SHADER_UCMP_ALIAS && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES ) {
+        const char *source = "res://addons/terrain_3d/rd/terrain_clipmap.glsl";
+        if ( id == T3D_RD_SHADER_UCMP_ALIAS ) {
+            return { id, source, "color", T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+        }
+        static const char *const compactVersions[T3D_TERRAIN_SHADER_PATH_COUNT][T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
+            { "color_native_compact", "color_specular_compact", "color_motion_compact", "color_specular_motion_compact",
+              "color_native_radiance_array_compact", "color_specular_radiance_array_compact", "color_motion_radiance_array_compact", "color_specular_motion_radiance_array_compact" },
+            { "compat_color_native_compact", "compat_color_specular_compact", "compat_color_motion_compact", "compat_color_specular_motion_compact",
+              "compat_color_native_radiance_array_compact", "compat_color_specular_radiance_array_compact", "compat_color_motion_radiance_array_compact", "compat_color_specular_motion_radiance_array_compact" },
+            { "editor_color_native_compact", "editor_color_specular_compact", "editor_color_motion_compact", "editor_color_specular_motion_compact",
+              "editor_color_native_radiance_array_compact", "editor_color_specular_radiance_array_compact", "editor_color_motion_radiance_array_compact", "editor_color_specular_motion_radiance_array_compact" }
+        };
+        static const char *const feedbackVersions[3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
+            { "feedback_color_native", "feedback_color_specular", "feedback_color_motion", "feedback_color_specular_motion",
+              "feedback_color_native_radiance_array", "feedback_color_specular_radiance_array", "feedback_color_motion_radiance_array", "feedback_color_specular_motion_radiance_array" },
+            { "feedback_color_native_one_sun", "feedback_color_specular_one_sun", "feedback_color_motion_one_sun", "feedback_color_specular_motion_one_sun",
+              "feedback_color_native_one_sun_radiance_array", "feedback_color_specular_one_sun_radiance_array", "feedback_color_motion_one_sun_radiance_array", "feedback_color_specular_motion_one_sun_radiance_array" },
+            { "feedback_color_native_compact", "feedback_color_specular_compact", "feedback_color_motion_compact", "feedback_color_specular_motion_compact",
+              "feedback_color_native_radiance_array_compact", "feedback_color_specular_radiance_array_compact", "feedback_color_motion_radiance_array_compact", "feedback_color_specular_motion_radiance_array_compact" }
+        };
+        const uint32_t index = ( uint32_t ) id;
+        if ( index >= T3D_RD_SHADER_UCMP_FEEDBACK_BASE ) {
+            const uint32_t group = ( index - T3D_RD_SHADER_UCMP_FEEDBACK_BASE ) / T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
+            const uint32_t variant = ( index - T3D_RD_SHADER_UCMP_FEEDBACK_BASE ) % T3D_RD_FORWARD_COLOR_VARIANT_COUNT;
+            return { id, source, feedbackVersions[group][variant], T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+        }
+        if ( index >= T3D_RD_SHADER_UCMP_COMPACT_BASE ) {
+            const uint32_t offset = index - T3D_RD_SHADER_UCMP_COMPACT_BASE;
+            return { id, source, compactVersions[offset / T3D_RD_FORWARD_COLOR_VARIANT_COUNT][offset % T3D_RD_FORWARD_COLOR_VARIANT_COUNT],
+                T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+        }
+        if ( index >= T3D_RD_SHADER_UCMP_ONE_SUN_BASE ) {
+            const uint32_t offset = index - T3D_RD_SHADER_UCMP_ONE_SUN_BASE;
+            return { id, source, s_oneSunVersions[offset / T3D_RD_FORWARD_COLOR_VARIANT_COUNT][offset % T3D_RD_FORWARD_COLOR_VARIANT_COUNT],
+                T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+        }
+        const uint32_t offset = index - T3D_RD_SHADER_UCMP_FORWARD_BASE;
+        return { id, source, s_forwardVersions[offset / T3D_RD_FORWARD_SHADER_VARIANT_MAX][offset % T3D_RD_FORWARD_SHADER_VARIANT_MAX],
+            T3D_RD_SHADER_GLOBAL_DEVICE, T3D_RD_SHADER_CATEGORY_TERRAIN, false };
+    }
+    if ( id >= T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE && id < T3D_RD_SHADER_UCMP_ALIAS ) {
         const uint32_t offset = ( uint32_t ) id - T3D_RD_SHADER_TERRAIN_COMPACT_FEEDBACK_BASE;
         static const char *const versions[T3D_RD_FORWARD_COLOR_VARIANT_COUNT] = {
             "feedback_color_native_compact", "feedback_color_specular_compact", "feedback_color_motion_compact", "feedback_color_specular_motion_compact", "feedback_color_native_radiance_array_compact", "feedback_color_specular_radiance_array_compact", "feedback_color_motion_radiance_array_compact", "feedback_color_specular_motion_radiance_array_compact"
