@@ -34,7 +34,7 @@ func execute_pages(terrain: Terrain3D, before_pages: Dictionary, after_pages: Di
 		target_generations: Dictionary = {}) -> Dictionary:
 	if FileAccess.file_exists(journal_path(terrain)):
 		return _failure("Pending foliage recovery must complete before another operation: " + journal_path(terrain))
-	_prune_archives(terrain)
+	# Archive cleanup is performed by the asynchronous I/O worker.
 	if before.terrain_identity != identity(terrain) or after.terrain_identity != identity(terrain):
 		return _failure("Foliage transaction belongs to another terrain")
 	var id: String = Crypto.new().generate_random_bytes(16).hex_encode()
@@ -358,6 +358,8 @@ func _failure(message: String) -> Dictionary:
 	return {"ok": false, "error": message}
 
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and has_method("_shutdown_worker"):
+		call("_shutdown_worker")
 	if what != NOTIFICATION_PREDELETE or _owned_directory.is_empty():
 		return
 	var directory: String = _owned_directory
@@ -371,11 +373,8 @@ func _notification(what: int) -> void:
 	var root: String = directory.get_base_dir()
 	if FileAccess.file_exists(root.path_join("pending.json")):
 		return
-	var folder: DirAccess = DirAccess.open(directory)
-	if folder != null:
-		for name: String in folder.get_files():
-			folder.remove(name)
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(directory))
+	# Artifact cleanup is deferred to bounded archive retention. Never issue a
+	# multi-region file-delete burst from an undo-action destructor/editor tick.
 
 func _pin(directory: String) -> void:
 	if _owned_directory == directory:

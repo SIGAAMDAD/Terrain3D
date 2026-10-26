@@ -6,6 +6,8 @@ const DEFINITION_SCRIPT = preload("res://addons/terrain_3d/src/foliage_definitio
 const RULE_SCRIPT = preload("res://addons/terrain_3d/src/foliage_mesh_rule.gd")
 const MANIFEST_SCRIPT = preload("res://addons/terrain_3d/src/foliage_manifest.gd")
 const TRANSACTION_SCRIPT = preload("res://addons/terrain_3d/tools/foliage_transaction.gd")
+const ASYNC_TRANSACTION = preload("res://addons/terrain_3d/tools/foliage_async_transaction.gd")
+const SOURCE_JOB = preload("res://addons/terrain_3d/tools/foliage_source_job.gd")
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
 
 var plugin: Terrain3DEditorPluginBase
@@ -35,6 +37,17 @@ var _asset_signal_source: Resource
 var _source_signatures: Dictionary = {}
 var _problems: Array[String] = []
 var _refresh_queued: bool = false
+var _preparation
+var _source_job
+var _transaction_job
+var _commit_terrain: Terrain3D
+var _watched_terrain: Terrain3D
+var _frozen_rules_signature: String = ""
+var _last_job_metrics: Dictionary = {}
+const GENERATION_BUDGET: Dictionary = {"usec": 2000, "candidates": 2048,
+	"neighbors": 4096, "samples": 4096, "transitions": 256}
+const COMMIT_BUDGET: Dictionary = {"usec": 2000, "pages": 1,
+	"decode_bytes": 1048576, "io_bytes": 262144}
 
 var _preset_picker: EditorResourcePicker
 var _scope: OptionButton
@@ -66,9 +79,14 @@ func open() -> void:
 func set_terrain(p_terrain: Terrain3D) -> void:
 	if _terrain == p_terrain:
 		return
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
+	if is_instance_valid(_watched_terrain) and _watched_terrain.tree_exiting.is_connected(_on_terrain_exiting):
+		_watched_terrain.tree_exiting.disconnect(_on_terrain_exiting)
 	_terrain = p_terrain
+	_watched_terrain = p_terrain
+	if _watched_terrain != null:
+		_watched_terrain.tree_exiting.connect(_on_terrain_exiting)
 	_load_manifest()
 	_sync_preset()
 	_populate_region_selector(false)
@@ -83,7 +101,7 @@ func _sync_preset() -> void:
 func _set_preset(p_preset: Terrain3DFoliagePreset) -> void:
 	if _terrain == null:
 		return
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
 	_discard_pending()
 	var previous: Terrain3DFoliagePreset = _terrain.foliage_profile as Terrain3DFoliagePreset if _terrain != null else _preset
@@ -441,6 +459,7 @@ func _watch_resources() -> void:
 	_watch(_preset)
 	if _terrain != null:
 		_watch(_terrain.assets)
+		_watch(_terrain.material)
 		_asset_signal_source = _terrain.assets
 		for signal_name: String in ["textures_changed", "meshes_changed"]:
 			if _asset_signal_source != null and _asset_signal_source.has_signal(signal_name):
@@ -463,7 +482,7 @@ func _watch(resource: Resource) -> void:
 		resource.changed.connect(_on_resource_changed)
 
 func _on_resource_changed() -> void:
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
 	if not _saving:
 		_set_state(JobState.IDLE)
@@ -472,7 +491,7 @@ func _on_resource_changed() -> void:
 		call_deferred("_refresh_changed_resources")
 
 func _scope_changed() -> void:
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
 	_set_state(JobState.IDLE)
 	_refresh_status()
@@ -548,27 +567,20 @@ func _refresh_status() -> void:
 	if not result["problems"].is_empty():
 		_status.text += "\n" + "\n".join(result["problems"])
 
-func _source_signature(region: Vector2i) -> String:
+func _source_signature(region: Vector2i, rules_signature: String = "") -> String:
 	if _terrain == null:
 		return ""
+	var targets: Array[Vector2i] = [region]
+	var revisions: Dictionary = _terrain.data.capture_foliage_sources(targets, 4)
 	var hasher := HashingContext.new()
 	hasher.start(HashingContext.HASH_SHA256)
-	var size: int = int(_terrain.region_size)
-	# Include neighbor maps in the hash because spacing and sampling depend on border context.
-	for dz: int in range(-1, 2):
-		for dx: int in range(-1, 2):
-			var neighbor: Terrain3DRegion = _terrain.data.get_region(region + Vector2i(dx, dz))
-			if neighbor == null:
-				continue
-			var height: Image = neighbor.get_height_map()
-			var control: Image = neighbor.get_control_map()
-			var color: Image = neighbor.get_color_map()
-			if height != null:
-				hasher.update(height.get_data())
-			if control != null:
-				hasher.update(control.get_data())
-			if color != null:
-				hasher.update(color.get_data())
+	hasher.update(var_to_bytes(revisions["regions"]))
+	hasher.update((_rules_signature() if rules_signature.is_empty() else rules_signature).to_utf8_buffer())
+	return hasher.finish().hex_encode()
+
+func _rules_signature() -> String:
+	if _preset == null:
+		return "clear"
 	var signature_records: Array[String] = []
 	for definition: Terrain3DFoliageDefinition in _preset.definitions:
 		if definition == null:
@@ -593,10 +605,11 @@ func _source_signature(region: Vector2i) -> String:
 		for parameter: String in ["auto_slope", "auto_height_reduction", "auto_base_texture", "auto_overlay_texture"]:
 			shader_state.append(_terrain.material.get_shader_param(parameter))
 	var details: String = JSON.stringify({"seed": _preset.random_seed, "density": _preset.global_density_multiplier,
-		"region_size": size, "limit": _preset.region_instance_limit,
+		"region_size": int(_terrain.region_size), "limit": _preset.region_instance_limit,
+		"material_identity": _terrain.material.get_instance_id() if _terrain.material != null else 0,
+		"auto_enabled": _terrain.material.get("auto_shader_enabled") if _terrain.material != null else false,
 		"shader_auto": shader_state, "rules": signature_records})
-	hasher.update(details.to_utf8_buffer())
-	return hasher.finish().hex_encode()
+	return details.sha256_text()
 
 func _is_region_stale(region: Vector2i) -> bool:
 	if _preset == null or _manifest == null:
@@ -627,8 +640,12 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 			for rule: Terrain3DFoliageMeshRule in definition.mesh_bank:
 				if rule != null:
 					rule.ensure_uid()
+	_frozen_rules_signature = _rules_signature()
+	var committed_by_key: Dictionary = {}
+	for entry: Dictionary in _manifest.entries:
+		committed_by_key[String(entry.get("key", ""))] = entry
 	for region: Vector2i in regions:
-		var source: String = _source_signature(region)
+		var source: String = _source_signature(region, _frozen_rules_signature)
 		_source_signatures[str(region)] = source
 		for definition: Terrain3DFoliageDefinition in _preset.definitions:
 			if definition == null or not definition.enabled or definition.terrain_material == null:
@@ -665,14 +682,8 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 						* rule.relative_weight / maxf(total_weight, 0.001)).is_empty():
 					continue
 				var key: String = "%s/%s/%s/%d,%d" % [_preset.stable_uid, definition.stable_uid, rule.stable_uid, region.x, region.y]
-				var existing: int = _manifest.owner_for(key)
-				if mode == "generate" and existing > 0:
-					var committed: bool = false
-					for entry: Dictionary in _manifest.entries:
-						if String(entry.get("key", "")) == key and String(entry.get("source", "")) != "":
-							committed = true
-					if committed:
-						continue
+				if mode == "generate" and committed_by_key.has(key) and not String(committed_by_key[key].get("source", "")).is_empty():
+					continue
 				_pending_keys[key] = source
 				requests.append({"key": key, "region": region, "mesh_id": mesh_id})
 				rules.append({"uid": definition.stable_uid + "/" + rule.stable_uid, "material_id": material_id, "mesh_id": mesh_id,
@@ -688,7 +699,7 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 					"excluded_materials": rule.excluded_material_ids})
 	requests.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["key"]) < String(b["key"]))
 	var changes: Dictionary = _manifest.prepare_owner_changes(requests, regions, mode,
-		Callable(_terrain.instancer, "is_owner_id_used"))
+		Callable(_source_job, "owner_is_used") if _source_job != null else Callable(_terrain.instancer, "is_owner_id_used"))
 	if not bool(changes.get("ok", false)):
 		_config_error = String(changes.get("error", "Cannot stage foliage ownership"))
 		_discard_pending()
@@ -696,7 +707,7 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 	_pending_manifest = changes["manifest"]
 	for request: Dictionary in requests:
 		var record: Dictionary = request.duplicate(true)
-		record["owner"] = _pending_manifest.owner_for(String(record["key"]))
+		record["owner"] = changes["owners"][String(record["key"])]
 		_pending_records.append(record)
 	for record: Dictionary in changes["removals"]:
 		_pending_removals.append({"region": record["region"], "owner": record["owner"],
@@ -705,7 +716,7 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 		retired["retired"] = true
 		_pending_records.append(retired)
 	for rule: Dictionary in rules:
-		rule["owner"] = _pending_manifest.owner_for(String(rule["key"]))
+		rule["owner"] = changes["owners"][String(rule["key"])]
 	rules.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var ar: Vector2i = a["region"]
 		var br: Vector2i = b["region"]
@@ -719,7 +730,7 @@ func _build_config(regions: Array[Vector2i], mode: String) -> Dictionary:
 		"scratch_mb": _preset.scratch_budget_mb}
 
 func _start(mode: String) -> void:
-	if _active or _terrain == null or (mode != "clear" and _preset == null):
+	if _active or _saving or _preparation != null or _terrain == null or (mode != "clear" and _preset == null):
 		return
 	_set_state(JobState.VALIDATING)
 	if not _recover_journal():
@@ -742,6 +753,24 @@ func _start(mode: String) -> void:
 	regions.assign(validation["regions"])
 	_pending_mode = mode
 	_pending_regions = regions
+	_source_job = SOURCE_JOB.new()
+	if not _source_job.begin(_terrain, regions, mode != "clear"):
+		_fail("Cannot start foliage source preparation.")
+		_source_job = null
+		return
+	_preparation = _source_job
+	_active = true
+	_set_busy(true)
+	set_process(true)
+	_status.text = "Preparing source revisions and instance ownership…"
+
+func _continue_start() -> void:
+	var mode: String = _pending_mode
+	var regions: Array[Vector2i] = _pending_regions.duplicate()
+	_active = false
+	_set_busy(false)
+	set_process(false)
+	_frozen_rules_signature = _rules_signature()
 	if mode == "clear":
 		_discard_pending()
 		var changes: Dictionary = _manifest.prepare_owner_changes([], regions, "clear")
@@ -782,13 +811,37 @@ func _start(mode: String) -> void:
 	set_process(true)
 
 func _process(_delta: float) -> void:
+	if _saving and _transaction_job != null:
+		_poll_commit()
+		return
+	if _preparation != null:
+		if not visible:
+			_preparation.cancel()
+		var preparation: Dictionary = _preparation.poll()
+		_status.text = "Preparing source ownership %d/%d…" % [int(preparation.get("index", 0)), int(preparation.get("count", 0))]
+		if bool(preparation.get("running", false)):
+			return
+		_preparation = null
+		if not bool(preparation.get("ok", false)):
+			_active = false
+			_set_busy(false)
+			set_process(false)
+			if bool(preparation.get("cancelled", false)):
+				_status.text = "Foliage cancelled before publication."
+			else:
+				_fail(String(preparation.get("error", "Foliage source preparation failed")))
+			_source_job = null
+			return
+		_continue_start()
+		return
 	if not _active:
 		return
 	if not visible:
 		_abort()
 		return
-	var result: Dictionary = _generator.step(2048)
-	_progress.value = float(result.get("progress", 0.0))
+	var result: Dictionary = _generator.step_budgeted(GENERATION_BUDGET)
+	_last_job_metrics = result.duplicate()
+	_progress.value = 0.7 * float(result.get("progress", 0.0))
 	_status.text = "Generating region %d/%d; rule %s; %d instances" % [int(result.get("region_index", 0)) + 1,
 		int(result.get("region_count", 0)), String(result.get("rule_uid", "")), int(result.get("instances", 0))]
 	if bool(result.get("running", false)):
@@ -805,6 +858,16 @@ func _process(_delta: float) -> void:
 	_commit(batches)
 
 func _abort() -> void:
+	if _saving and _transaction_job != null:
+		_transaction_job.cancel_async()
+		_status.text = "Cancelling foliage staging; waiting for worker acknowledgment…"
+		set_process(true)
+		return
+	if _preparation != null:
+		_preparation.cancel()
+		_status.text = "Cancelling source preparation…"
+		set_process(true)
+		return
 	if _generator != null:
 		_generator.cancel()
 	_active = false
@@ -852,39 +915,84 @@ func _commit(batches: Array) -> void:
 		_fail("Terrain ownership or data directory changed; restart generation.")
 		_discard_pending()
 		return
-	for region: Vector2i in _pending_regions:
-		if _source_signatures.has(str(region)) and _source_signature(region) != _source_signatures[str(region)]:
-			_fail("Terrain, rules or asset slots changed in region " + str(region) + "; restart generation.")
-			_discard_pending()
-			return
+	if not _commit_guard():
+		_fail("Terrain, rules, asset slots or instance ownership changed; restart generation.")
+		_discard_pending()
+		return
 	var after: Terrain3DFoliageManifest = _pending_manifest.duplicate(true) as Terrain3DFoliageManifest
 	after.publication_generation = _manifest.publication_generation + 1
+	var entry_indices: Dictionary = {}
+	for index: int in range(after.entries.size()):
+		entry_indices[String(after.entries[index]["key"])] = index
 	if _pending_mode != "clear":
 		for record: Dictionary in _pending_records:
 			if bool(record.get("retired", false)):
 				continue
 			var key: String = record["key"]
-			after.mark_baked(key, _pending_keys.get(key, ""), _pending_seed)
-			for index: int in range(after.entries.size()):
-				if String(after.entries[index].get("key", "")) == key:
-					after.entries[index]["mesh_id"] = int(record["mesh_id"])
+			var index: int = int(entry_indices[key])
+			after.entries[index]["source"] = _pending_keys.get(key, "")
+			after.entries[index]["seed"] = _pending_seed
+			after.entries[index]["revision"] = int(after.entries[index].get("revision", 0)) + 1
+			after.entries[index]["mesh_id"] = int(record["mesh_id"])
 	_saving = true
 	_set_busy(true)
 	_set_state(JobState.STAGING)
-	var transaction = _new_transaction()
-	transaction.progress = _transaction_phase
-	var result: Dictionary = transaction.execute(_terrain, batches, _manifest, after, _source_signatures)
+	_transaction_job = _new_transaction()
+	_commit_terrain = _terrain
+	_transaction_job.progress = _transaction_phase
+	var begun: Dictionary = _transaction_job.begin_async(_terrain, batches, _manifest, after, _source_signatures,
+		_commit_guard, _preset.scratch_budget_mb if _preset != null else 64)
+	if not bool(begun.get("ok", false)):
+		_saving = false
+		_set_busy(false)
+		_fail(String(begun.get("error", "Cannot stage foliage transaction")))
+		_transaction_job = null
+		return
+	set_process(true)
+
+func _commit_guard() -> bool:
+	if not is_instance_valid(_terrain) or _rules_signature() != _frozen_rules_signature:
+		return false
+	if _source_job != null:
+		return _source_job.valid_sources() and _source_job.valid_instances()
+	for region: Vector2i in _pending_regions:
+		if _source_signatures.has(str(region)) and _source_signature(region) != _source_signatures[str(region)]:
+			return false
+	return true
+
+func _poll_commit() -> void:
+	if not visible:
+		_transaction_job.cancel_async()
+	var result: Dictionary = _transaction_job.poll_async(COMMIT_BUDGET)
+	if bool(result.get("running", false)):
+		_status.text = "Foliage %s: region %d/%d; I/O %d KiB" % [String(result.get("phase", "staging")),
+			int(result.get("regions_prepared", 0)), int(result.get("region_count", 0)),
+			int(_transaction_job.metrics.get("io_bytes", 0)) / 1024]
+		return
 	_saving = false
 	_set_busy(false)
+	set_process(false)
+	_last_job_metrics["commit"] = result.get("metrics", {})
+	var transaction = _transaction_job
+	_transaction_job = null
+	_source_job = null
 	_discard_pending()
 	if not bool(result.get("ok", false)):
-		_fail(String(result.get("error", "Foliage publication failed")))
+		if bool(result.get("cancelled", false)):
+			_set_state(JobState.IDLE)
+			_status.text = "Foliage cancelled before publication."
+		else:
+			_fail(String(result.get("error", "Foliage publication failed")))
 		return
-	_manifest = result["manifest"]
+	if _terrain == _commit_terrain:
+		_manifest = result["manifest"]
 	var manager: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
-	manager.create_action("Generate Terrain3D Foliage", UndoRedo.MERGE_DISABLE, _terrain)
-	manager.add_do_method(transaction, "restore_history", _terrain, "after")
-	manager.add_undo_method(transaction, "restore_history", _terrain, "before")
+	if not is_instance_valid(_commit_terrain):
+		_status.text = "Foliage saved to the original terrain data directory."
+		return
+	manager.create_action("Generate Terrain3D Foliage", UndoRedo.MERGE_DISABLE, _commit_terrain)
+	manager.add_do_method(transaction, "restore_history", _commit_terrain, "after")
+	manager.add_undo_method(transaction, "restore_history", _commit_terrain, "before")
 	# Retain the transaction and its immutable snapshots until this undo action
 	# is evicted. A scene switch never changes its terrain/ledger target.
 	manager.add_do_reference(transaction)
@@ -896,7 +1004,7 @@ func _commit(batches: Array) -> void:
 	_progress.value = 1.0
 
 func _new_transaction():
-	return TRANSACTION_SCRIPT.new()
+	return ASYNC_TRANSACTION.new()
 
 func _persist_manifest(ledger: Terrain3DFoliageManifest, terrain: Terrain3D) -> bool:
 	# Importing a legacy ledger records already-published owners; generation and
@@ -926,12 +1034,23 @@ func _fail(message: String) -> void:
 	_status.text = message
 
 func _on_popup_hidden() -> void:
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
 
+func _on_terrain_exiting() -> void:
+	_generator.cancel()
+	if _transaction_job != null:
+		_transaction_job.cancel_async()
+	if _preparation != null:
+		_preparation.cancel()
+	_active = false
+
 func _exit_tree() -> void:
-	if _active:
-		_abort()
+	if _transaction_job != null:
+		_transaction_job.shutdown_async()
+	if _source_job != null:
+		_source_job.shutdown()
+	_generator.cancel()
 	for resource: Resource in _watched_resources:
 		if is_instance_valid(resource) and resource.changed.is_connected(_on_resource_changed):
 			resource.changed.disconnect(_on_resource_changed)
@@ -942,7 +1061,7 @@ func _on_history_changed() -> void:
 func _sync_after_history() -> void:
 	if not is_instance_valid(_terrain):
 		return
-	if _active:
+	if _active or _saving or _preparation != null:
 		_abort()
 	_load_manifest()
 	_sync_preset()

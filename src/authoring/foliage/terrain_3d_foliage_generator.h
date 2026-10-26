@@ -1,66 +1,72 @@
-// Editor-only foliage generation. Runtime instance stores remain authoritative.
+﻿// Editor-only deterministic foliage jobs. Runtime instance layout is unchanged.
 #ifndef TERRAIN3D_FOLIAGE_GENERATOR_H
-#include "Terrain3DTypes.h"
 #define TERRAIN3D_FOLIAGE_GENERATOR_H
-
+#include "Terrain3DTypes.h"
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
-
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
-
 class Terrain3D;
+class Terrain3DSampler;
 
-class Terrain3DFoliageGenerator : public RefCounted
-{
-	GDCLASS( Terrain3DFoliageGenerator, RefCounted );
-	CLASS_NAME();
-
-	Terrain3D				 *m_pTerrain = nullptr;
-	Array					  m_rules;
-	TypedArray< Vector2i >	  m_regions;
-	Array					  m_batches;
-	Dictionary				  m_rule;
-	TypedArray< Transform3D > m_transforms;
-	int						  m_nRegion = 0;
-	int						  m_nRule = 0;
-	int64_t					  m_nCandidate = 0;
-	int64_t					  m_nCandidateCount = 0;
-	int						  m_nGridMinX = 0;
-	int						  m_nGridMinZ = 0;
-	int						  m_nGridWidth = 0;
-	int						  m_nGridHeight = 0;
-	double					  m_fCellSize = 1.0;
-	uint64_t				  m_nSeed = 0;
-	int						  m_nRegionCap = 50000;
-	int						  m_nJobCap = 250000;
-	int64_t					  m_nMaxScratchBytes = 67108864;
-	int						  m_nRegionAdded = 0;
-	int						  m_nAdded = 0;
-	bool					  m_bRunning = false;
-	bool					  m_bFailed = false;
-	String					  m_error;
-
-	bool			prepareRule( void );
-	bool			sampleCandidate( void );
-	bool			finishRule( void );
-	static uint64_t hash64( uint64_t n );
-	static double	randomUnit( uint64_t n );
-	static uint64_t hashName( const String &rValue );
-
+class Terrain3DFoliageGenerator : public RefCounted {
+    GDCLASS( Terrain3DFoliageGenerator, RefCounted );
+    CLASS_NAME();
+    Terrain3D *m_pTerrain = nullptr;
+    Terrain3DSampler *m_pSampler = nullptr;
+    Array m_groups;
+    TypedArray<Vector2i> m_regions;
+    Array m_batches;
+    Dictionary m_rule, m_groupRules, m_cells, m_outputs, m_frozenSources;
+    TypedArray<Vector2i> m_domain;
+    TypedArray<Vector3> m_accepted;
+    Vector2i m_cell;
+    Vector3 m_pendingPosition, m_pendingNormal;
+    int m_group = 0, m_region = 0, m_phase = 0, m_finish = 0;
+    int m_minX = 0, m_maxX = 0, m_minZ = 0, m_maxZ = 0, m_scanX = 0, m_scanZ = 0;
+    int m_gridX = 0, m_gridZ = 0, m_gridWidth = 0, m_gridHeight = 0;
+    int64_t m_candidate = 0, m_candidateCount = 0;
+    int m_neighbor = 0, m_neighborPoint = 0;
+    int m_regionCap = 50000, m_jobCap = 250000, m_added = 0;
+    int64_t m_scratchCap = 67108864, m_scratchBytes = 0;
+    double m_gridSize = 1.0, m_macroSize = 1.0, m_spacing = 0.0;
+    uint64_t m_seed = 0, m_pendingKey = 0, m_sourceStamp = 0;
+    bool m_running = false, m_failed = false, m_groupReady = false, m_domainReady = false;
+    bool m_cellReady = false, m_pending = false;
+    String m_error;
+    bool m_auto = false;
+    double m_autoSlope = 0.0, m_autoHeight = 0.0;
+    int m_autoBase = 0, m_autoOverlay = 0;
+    Dictionary m_regionCounts;
+    Array m_assetBindings;
+    int64_t m_candidatesTested = 0, m_neighborTests = 0, m_samples = 0, m_transitions = 0;
+    int64_t m_lastUsec = 0, m_maxUsec = 0;
+    bool prepareGroup();
+    void prepareDomain();
+    bool prepareCell();
+    void advanceCell();
+    bool sampleCandidate();
+    bool acceptCandidate();
+    bool checkSpacing(int &rBudget);
+    bool sourcesUnchanged();
+    static int cellColor(const Vector2i &rCell);
+    static uint64_t hash64(uint64_t n);
+    static double randomUnit(uint64_t n);
+    static uint64_t hashName(const String &rValue);
 protected:
-	static void _bind_methods( void );
-
+    static void _bind_methods();
 public:
-	bool	   start( Terrain3D *pTerrain, const Dictionary &rConfig, const TypedArray< Vector2i > &rRegions );
-	Dictionary step( int nBudget = 2048 );
-	void	   cancel( void );
-	Array	   takeBatches( void );
-	Dictionary status( void ) const;
+    ~Terrain3DFoliageGenerator();
+    bool start(Terrain3D *pTerrain, const Dictionary &rConfig, const TypedArray<Vector2i> &rRegions);
+    Dictionary step(int nBudget = 2048);
+    Dictionary stepBudgeted(const Dictionary &rBudgets);
+    void cancel();
+    Array takeBatches();
+    Dictionary status() const;
 };
-
 #endif
+

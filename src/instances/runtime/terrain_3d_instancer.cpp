@@ -3458,6 +3458,7 @@ void Terrain3DInstancer::resetRuntimeState(
 
 void Terrain3DInstancer::destroy(
 	void ) {
+	cancelFoliageRestore();
 	resetRuntimeState( true );
 }
 
@@ -4227,6 +4228,114 @@ Dictionary Terrain3DInstancer::replaceFoliageOwnedRegions(
 Dictionary Terrain3DInstancer::prepareFoliageOwnedRegions(
 	const Array &rBatches ) {
 	return replaceFoliageOwnedRegionsInternal( rBatches, false, false );
+}
+
+struct Terrain3DInstancer::FoliageRestoreState {
+	String id;
+	Dictionary after, before, afterGenerations, beforeGenerations, persistence, expected;
+	Array locations;
+	TypedArray<Terrain3DRegion> regions;
+	eastl::vector<Terrain3DInstanceStore, Terrain3DEastlAllocator> afterStores, beforeStores;
+	int decoded = 0;
+	bool publishedAfter = false, publishedBefore = false;
+};
+
+Dictionary Terrain3DInstancer::beginFoliageRestore( const String &rId, const Dictionary &rAfter,
+	const Dictionary &rBefore, const Dictionary &rAfterGenerations, const Dictionary &rBeforeGenerations,
+	const Dictionary &rBeforePersistence, const Dictionary &rExpectedRevisions ) {
+	Dictionary result;
+	result["ok"] = false;
+	result["error"] = "Another foliage publication is pending or its input is invalid";
+	if (m_pFoliageRestore || !m_pTerrain || !m_pTerrain->dataObject() || rId.is_empty() || rAfter.is_empty()) { return result; }
+	FoliageRestoreState *state = memnew(FoliageRestoreState);
+	state->id = rId; state->after = rAfter; state->before = rBefore;
+	state->afterGenerations = rAfterGenerations; state->beforeGenerations = rBeforeGenerations;
+	state->persistence = rBeforePersistence; state->expected = rExpectedRevisions;
+	state->locations = rAfter.keys();
+	state->afterStores.set_allocator(m_placementPending.get_allocator());
+	state->beforeStores.set_allocator(m_placementPending.get_allocator());
+	if (!t3dContainerReserveCold(state->afterStores, (size_t)rAfter.size()) ||
+		!t3dContainerReserveCold(state->beforeStores, (size_t)rAfter.size())) { memdelete(state); return result; }
+	for (int i = 0; i < state->locations.size(); ++i) {
+		const Vector2i location = state->locations[i];
+		const Ref<Terrain3DRegion> region = m_pTerrain->dataObject()->getRegion(location);
+		if (region.is_null() || region->isDeleted() || !rBefore.has(location) || !rExpectedRevisions.has(location) ||
+			!rAfterGenerations.has(location) || !rBeforeGenerations.has(location)) { memdelete(state); return result; }
+		state->regions.push_back(region);
+	}
+	m_pFoliageRestore = state;
+	result["ok"] = true; result["error"] = "";
+	return result;
+}
+
+Dictionary Terrain3DInstancer::stepFoliageRestore( const String &rId, int nPages, int64_t nBytes ) {
+	Dictionary result;
+	result["ok"] = false; result["error"] = "No matching foliage publication";
+	FoliageRestoreState *state = m_pFoliageRestore;
+	if (!state || state->id != rId) { return result; }
+	nPages = CLAMP(nPages, 1, 16); nBytes = MAX((int64_t)65536, nBytes);
+	int pages = 0; int64_t bytes = 0;
+	const int count = state->locations.size();
+	while (state->decoded < 2 * count && pages < nPages) {
+		const bool after = state->decoded < count;
+		const int index = state->decoded % count;
+		const Vector2i location = state->locations[index];
+		const PackedByteArray page = (after ? state->after : state->before)[location];
+		if (pages > 0 && bytes + page.size() > nBytes) { break; }
+		Terrain3DInstanceStore store;
+		uint32_t counts[T3D_MAX_MESH_ASSETS] = {}; uint32_t total = 0; uint16_t meshes = 0;
+		if (!Terrain3DInstancePageCodec::decode(page, store, counts, total, meshes) || !store.validateDeep()) {
+			result["error"] = "Cannot decode prepared foliage publication page"; return result;
+		}
+		auto &stores = after ? state->afterStores : state->beforeStores;
+		if (!t3dVectorPushBackWithinCapacity(stores, eastl::move(store))) { result["error"] = "Foliage publication memory exhausted"; return result; }
+		bytes += page.size(); ++pages; ++state->decoded;
+	}
+	result["ok"] = true; result["error"] = "";
+	result["ready"] = state->decoded == 2 * count; result["decoded_pages"] = state->decoded;
+	result["slice_bytes"] = bytes;
+	return result;
+}
+
+Dictionary Terrain3DInstancer::publishFoliageRestore( const String &rId, const bool bAfter ) {
+	Dictionary result;
+	result["ok"] = false; result["error"] = "Prepared foliage publication is unavailable or stale";
+	FoliageRestoreState *state = m_pFoliageRestore;
+	if (!state || state->id != rId || !m_pTerrain || state->decoded != state->locations.size() * 2 ||
+		(bAfter ? state->publishedAfter : state->publishedBefore)) { return result; }
+	for (int i = 0; i < state->locations.size(); ++i) {
+		const Vector2i location = state->locations[i];
+		const Ref<Terrain3DRegion> region = state->regions[i];
+		if (m_pTerrain->dataObject()->getRegionPtr(location) != region.ptr() || region->isDeleted() ||
+			(bAfter && region->getFoliageInstanceRevision() != (uint64_t)(int64_t)state->expected[location])) { return result; }
+	}
+	auto &stores = bAfter ? state->afterStores : state->beforeStores;
+	const Dictionary pages = bAfter ? state->after : state->before;
+	const Dictionary generations = bAfter ? state->afterGenerations : state->beforeGenerations;
+	for (int i = 0; i < state->locations.size(); ++i) {
+		const Vector2i location = state->locations[i];
+		const Ref<Terrain3DRegion> region = state->regions[i];
+		region->setInstancePage(pages[location]);
+		region->adoptPreparedInstanceStoreInternal(eastl::move(stores[(size_t)i]));
+		region->setInstanceGeneration(generations[location]);
+		region->acknowledgeInstanceSave();
+		if (!bAfter && state->persistence.has(location)) {
+			const Dictionary flags = state->persistence[location];
+			region->restoreInstancePersistenceState(flags.get("dirty_domains", 0), flags.get("modified", false));
+		}
+		t3dInstancerRefreshCommittedResidentBytes(m_pTerrain->dataObject(), location);
+	}
+	if (bAfter) { state->publishedAfter = true; } else { state->publishedBefore = true; }
+	rebuildLogicalCountsFromStore();
+	for (int i = 0; i < state->locations.size(); ++i) { updateMmis(-1, state->locations[i]); }
+	result["ok"] = true; result["error"] = "";
+	return result;
+}
+
+void Terrain3DInstancer::cancelFoliageRestore( const String &rId ) {
+	if (m_pFoliageRestore && (rId.is_empty() || m_pFoliageRestore->id == rId)) {
+		memdelete(m_pFoliageRestore); m_pFoliageRestore = nullptr;
+	}
 }
 
 Dictionary Terrain3DInstancer::restoreFoliageInstancePages(
@@ -6560,6 +6669,10 @@ void Terrain3DInstancer::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "is_owner_id_used", "owner_id" ), &Terrain3DInstancer::isOwnerIdUsed );
 	ClassDB::bind_method( D_METHOD( "prepare_foliage_owned_regions", "batches" ),
 						  &Terrain3DInstancer::prepareFoliageOwnedRegions );
+	ClassDB::bind_method(D_METHOD("begin_foliage_restore", "id", "after", "before", "after_generations", "before_generations", "before_persistence", "expected_revisions"), &Terrain3DInstancer::beginFoliageRestore);
+	ClassDB::bind_method(D_METHOD("step_foliage_restore", "id", "pages", "bytes"), &Terrain3DInstancer::stepFoliageRestore, DEFVAL(1), DEFVAL((int64_t)1048576));
+	ClassDB::bind_method(D_METHOD("publish_foliage_restore", "id", "after"), &Terrain3DInstancer::publishFoliageRestore);
+	ClassDB::bind_method(D_METHOD("cancel_foliage_restore", "id"), &Terrain3DInstancer::cancelFoliageRestore, DEFVAL(String()));
 	ClassDB::bind_method( D_METHOD( "restore_foliage_instance_pages", "pages", "generations", "persistence_states" ),
 		&Terrain3DInstancer::restoreFoliageInstancePages );
 	ClassDB::bind_method( D_METHOD( "replace_foliage_owned_regions", "batches", "backup" ),

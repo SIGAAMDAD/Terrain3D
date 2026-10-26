@@ -77,6 +77,8 @@ func ensure_uid() -> void:
 		stable_uid = Resource.generate_scene_unique_id()
 
 func validate() -> String:
+	if not is_finite(minimum_spacing) or minimum_spacing < 0.0 or minimum_spacing > 50.0:
+		return "Spacing must be finite and between 0 and 50 metres."
 	if not is_instance_valid(mesh_asset):
 		return "Mesh rule has no Terrain3DMeshAsset"
 	if min_scale > max_scale or min_slope > max_slope or min_elevation > max_elevation:

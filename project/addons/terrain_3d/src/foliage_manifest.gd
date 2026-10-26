@@ -51,6 +51,14 @@ func prepare_owner_changes(requests: Array[Dictionary], regions: Array[Vector2i]
 	var staged: Terrain3DFoliageManifest = duplicate(true) as Terrain3DFoliageManifest
 	var removals: Array[Dictionary] = []
 	var requested: Dictionary[String, bool] = {}
+	var by_key: Dictionary = {}
+	var owners: Dictionary = {}
+	var scope: Dictionary = {}
+	for region: Vector2i in regions:
+		scope[region] = true
+	for entry: Dictionary in staged.entries:
+		by_key[String(entry["key"])] = int(entry["owner"])
+		owners[int(entry["owner"])] = true
 	for request: Dictionary in requests:
 		var key: String = String(request["key"])
 		if requested.has(key):
@@ -58,18 +66,31 @@ func prepare_owner_changes(requests: Array[Dictionary], regions: Array[Vector2i]
 		requested[key] = true
 	# Reserve old owner IDs before pruning so no retirement can reuse an ID in this job.
 	for request: Dictionary in requests:
-		var owner: int = staged.assign_owner(String(request["key"]), request["region"], is_used)
-		if owner <= 0:
-			return {"ok": false, "error": "Unable to reserve foliage owner ID"}
+		var key: String = String(request["key"])
+		if by_key.has(key):
+			continue
+		var owner: int = maxi(staged.next_owner_id, 1073741824)
+		var attempts: int = 0
+		while owner <= 2147483647 and (owners.has(owner) or (is_used.is_valid() and bool(is_used.call(owner)))):
+			owner += 1
+			attempts += 1
+			if attempts >= 1024:
+				return {"ok": false, "error": "Unable to find a free foliage owner ID"}
+		if owner > 2147483647:
+			return {"ok": false, "error": "Foliage owner IDs exhausted"}
+		staged.next_owner_id = owner + 1
+		staged.entries.append({"key": key, "owner": owner, "region": request["region"], "source": "", "seed": 0, "revision": 0})
+		by_key[key] = owner
+		owners[owner] = true
 	if mode == "regenerate" or mode == "clear":
 		for record: Dictionary in entries:
-			if regions.has(record["region"]) and not requested.has(String(record["key"])):
+			if scope.has(record["region"]) and not requested.has(String(record["key"])):
 				removals.append(record.duplicate(true))
 		for index: int in range(staged.entries.size() - 1, -1, -1):
 			var record: Dictionary = staged.entries[index]
-			if regions.has(record["region"]) and not requested.has(String(record["key"])):
+			if scope.has(record["region"]) and not requested.has(String(record["key"])):
 				staged.entries.remove_at(index)
-	return {"ok": true, "manifest": staged, "removals": removals}
+	return {"ok": true, "manifest": staged, "removals": removals, "owners": by_key}
 
 func mark_baked(key: String, signature: String, seed: int) -> void:
 	for index: int in range(entries.size()):

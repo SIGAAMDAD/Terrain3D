@@ -2781,6 +2781,29 @@ bool Terrain3DData::validateInstancePage( const PackedByteArray &rPage ) const {
 	return Terrain3DInstancePageCodec::inspect( rPage, counts, count, meshCount );
 }
 
+Dictionary Terrain3DData::captureFoliageSources( const TypedArray< Vector2i > &rRegions, int nHalo ) const {
+	Dictionary result;
+	Dictionary revisions;
+	nHalo = CLAMP( nHalo, 0, 8 );
+	for ( int i = 0; i < rRegions.size(); ++i ) {
+		const Vector2i location = rRegions[i];
+		for ( int z = -nHalo; z <= nHalo; ++z ) {
+			for ( int x = -nHalo; x <= nHalo; ++x ) {
+				const Vector2i neighbor = location + Vector2i( x, z );
+				if ( revisions.has( neighbor ) ) { continue; }
+				const Terrain3DRegion *region = m_regionRepository.getRegionPtr( neighbor );
+				Array revision;
+				revision.push_back( region && !region->isDeleted() ? (int64_t)region->get_instance_id() : (int64_t)0 );
+				revision.push_back( region && !region->isDeleted() ? (int64_t)region->getFoliageSourceRevision() : (int64_t)0 );
+				revisions[neighbor] = revision;
+			}
+		}
+	}
+	result["topology"] = (int64_t)m_regionRepository.getTopologyGeneration();
+	result["regions"] = revisions;
+	return result;
+}
+
 Error Terrain3DData::saveRegionInstances( const Vector2i &rRegionLoc, const String &rDir ) {
 	const Ref< Terrain3DRegion > region = getRegion( rRegionLoc );
 	if ( region.is_null() || !ensureInstanceRegionResident( rRegionLoc ) ) {
@@ -4542,6 +4565,8 @@ void Terrain3DData::_bind_methods(
 	ClassDB::bind_method( D_METHOD( "save_region_instances", "region_location", "directory" ),
 		&Terrain3DData::saveRegionInstances );
 	ClassDB::bind_method( D_METHOD( "validate_instance_page", "page" ), &Terrain3DData::validateInstancePage );
+	ClassDB::bind_method( D_METHOD( "capture_foliage_sources", "regions", "halo" ), &Terrain3DData::captureFoliageSources, DEFVAL(4) );
+	ClassDB::bind_method( D_METHOD( "get_foliage_source_stamp" ), &Terrain3DData::getFoliageSourceStamp );
 	ClassDB::bind_method( D_METHOD( "save_region", "region_location", "directory", "save_16_bit" ),
 						  &Terrain3DData::saveRegion,
 						  DEFVAL( false ) );

@@ -406,6 +406,8 @@ public:
 								const PackedByteArray &rPage, int64_t nGeneration );
 	Error saveRegionInstances( const Vector2i &rRegionLoc, const String &rDir );
 	bool validateInstancePage( const PackedByteArray &rPage ) const;
+	Dictionary captureFoliageSources( const TypedArray< Vector2i > &rRegions, int nHalo = 4 ) const;
+	int64_t getFoliageSourceStamp( void ) const { return (int64_t)Terrain3DRegion::getFoliageSourceStamp(); }
 	Error loadDirectory( const String &rDir );
 	void  loadRegion( const Vector2i &rRegionLoc, const String &rDir, const bool bUpdate = true );
 
