@@ -462,6 +462,17 @@ void Terrain3DMaterial::bumpRdPublicationGeneration(
 void Terrain3DMaterial::setRuntimeMaterialParam(
 	const StringName &strName,
 	const Variant	 &rValue ) {
+	// The editor cursor is transient overlay state. The UI already filters
+	// unchanged values; live Godot Arrays may share storage with the last
+	// published Variant, so comparing them here would miss in-place edits.
+	// Never invalidate authored material layers, WORLD geometry, HiZ or VT
+	// demand when only an editor decal/brush texture changed.
+	if ( strName.begins_with( "_editor_" ) ) {
+		m_runtimeState.m_runtimeMaterialParams[strName] = rValue;
+		m_runtimeState.m_nEditorOverlayGeneration =
+			t3dNextGeneration( m_runtimeState.m_nEditorOverlayGeneration );
+		return;
+	}
 	const Variant current = m_runtimeState.m_runtimeMaterialParams.get( strName, Variant() );
 	if ( current == rValue ) {
 		return;
@@ -862,9 +873,10 @@ void Terrain3DMaterial::updateEditorOverlay(
 	if ( !m_pTerrain || !m_pTerrain->dataObject() || !m_pTerrain->dataObject()->isRuntimeReady() ) {
 		return;
 	}
-	// Region/navigation editor modes alter shader defines, but showing the toolbar
-	// must not force terrain arrays or page tables through a lifecycle transition.
-	update( FULL_REBUILD & ~UPDATE_ARRAYS );
+	// Tool attachment and brush changes affect the overlay snapshot only.
+	// Authoring flags still invalidate via their own material setters.
+	m_runtimeState.m_nEditorOverlayGeneration =
+		t3dNextGeneration( m_runtimeState.m_nEditorOverlayGeneration );
 }
 
 void Terrain3DMaterial::updateRegionPageTable(
@@ -1488,6 +1500,7 @@ Dictionary Terrain3DMaterial::getShaderTierDiagnostics(
 	diagnostics["surface_response_quality"] = ( int ) quality.m_surfaceResponseQuality;
 	diagnostics["shader_performance_preset"] = ( int ) m_authoringState.m_shaderPerformancePreset;
 	diagnostics["material_publication_generation"] = ( int64_t ) m_runtimeState.m_nRdPublicationGeneration;
+	diagnostics["editor_overlay_generation"] = ( int64_t ) m_runtimeState.m_nEditorOverlayGeneration;
 	diagnostics["output_normal_map"] = m_authoringState.m_bOutputNormalMapEnabled;
 	diagnostics["material_normal_maps_enabled"] =
 		m_authoringState.m_bOutputNormalMapEnabled && quality.m_surfaceResponseQuality == SURFACE_RESPONSE_DETAILED;

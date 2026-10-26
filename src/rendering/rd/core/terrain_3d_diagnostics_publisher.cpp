@@ -670,6 +670,16 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 			? ( int64_t ) ( rInputs.m_virtualTexture.getTerrainMegaVTAllocationBase() )
 			: ( int64_t ) ( T3D_VT_INVALID_ALLOCATION );
 	result["coordinator_material_state_builds"] = ( int64_t ) ( rInputs.m_materialStateBuilder.getBuildCount() );
+	// Overlay updates have an independent generation: cursor motion must not
+	// advance the material/WORLD publications or invalidate temporal HiZ.
+	if ( rInputs.m_pTerrain ) {
+		const Ref< Terrain3DMaterial > material = rInputs.m_pTerrain->materialResource();
+		if ( material.is_valid() ) {
+			result["editor_overlay_generation"] = ( int64_t ) material->getEditorOverlayGeneration();
+			result["authored_material_publication_generation"] =
+				( int64_t ) material->getRdPublicationGeneration();
+		}
+	}
 	result["coordinator_region_lighting_scans"] = ( int64_t ) ( m_publicationBuilderView.m_nRegionLightingScanCount );
 	result["coordinator_mesh_source_builds"] = ( int64_t ) ( m_publicationBuilderView.m_nMeshSourceBuildCount );
 	result["coordinator_ocean_static_state_builds"] =

@@ -3386,10 +3386,37 @@ vec3 apply_editor_decals(vec3 color) {
         if (decal.state.x == 0u || (decal.state.y & 3u) == 0u || decal.color.a == 0.0) {
             continue;
         }
+        vec2 decal_delta = abs(world_position.xz - decal.transform.xy);
+        // A 0.499-size rotated brush square fits inside this axis-aligned
+        // envelope. Cull before the rotation, division and texture fetch.
+        float brush_extent = max(decal.transform.z, 1e-6) * 0.707107;
+        bool brush_near = i == 0 && (decal.state.y & 1u) != 0u &&
+            all(lessThanEqual(decal_delta, vec2(brush_extent)));
+        // terrain_camera_distance() is clamped to [0.001, 4000]. This
+        // envelope conservatively contains the entire reticle, including
+        // camera-scaled cross arms and their variable thickness, at every
+        // legal distance. Reject distant pixels before sqrt/log/smoothstep.
+        float reticle_extent = 1.5 * max(decal.transform.z, 0.0) + 160.0;
+        bool reticle_near = (decal.state.y & 2u) != 0u &&
+            all(lessThanEqual(decal_delta, vec2(reticle_extent)));
+        if (reticle_near) {
+            // Tighten the AABB using only squared camera distance. The
+            // bounds cover the original max-radius cross and variable-width
+            // ring for camera distances <= 32, 128, 512 and 4000 metres.
+            // Avoid computing fragment sqrt/log until inside that extent.
+            vec3 camera_delta = terrain_sampling_context.camera_position - world_position;
+            float camera_distance_sq = dot(camera_delta, camera_delta);
+            float camera_extent = camera_distance_sq <= 1024.0 ? 12.0 :
+                (camera_distance_sq <= 16384.0 ? 20.0 :
+                (camera_distance_sq <= 262144.0 ? 45.0 : 160.0));
+            reticle_near = all(lessThanEqual(decal_delta,
+                vec2(1.5 * max(decal.transform.z, 0.0) + camera_extent)));
+        }
+        if (!brush_near && !reticle_near) {
+            continue;
+        }
         float mask = 0.0;
-        // Only decal 0 can contain a painted brush. Reticle-only overlays
-        // do not need a rotated UV, division, or a texture fetch.
-        if (i == 0 && (decal.state.y & 1u) != 0u) {
+        if (brush_near) {
             float size = max(decal.transform.z, 1e-6);
             float c = uintBitsToFloat(decal.state.z);
             float sn = uintBitsToFloat(decal.state.w);
@@ -3400,7 +3427,7 @@ vec3 apply_editor_decals(vec3 color) {
                 mask = texture(editor_brush_texture, decal_uv + vec2(0.5)).r;
             }
         }
-        if ((decal.state.y & 2u) != 0u) {
+        if (reticle_near) {
             if (!reticle_constants_ready) {
                 float camera_distance = clamp(terrain_camera_distance(), 0.001, 4000.0);
                 reticle_sqrt_distance = sqrt(camera_distance);

@@ -1632,10 +1632,13 @@ bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
 	}
 	// Republish all live pass data, including unchanged records, into this frame's
 	// newly selected region. No section uploads or dirty-map advances survive.
-	return m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, editor ),
-									 &snapshot.m_editorOverlayConfig,
-									 sizeof( snapshot.m_editorOverlayConfig ) ) &&
-		   m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, patches ),
+	if ( !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, editor ),
+									   &snapshot.m_editorOverlayConfig,
+									   sizeof( snapshot.m_editorOverlayConfig ) ) ) {
+		return false;
+	}
+	m_nEditorOverlayUploads.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
+	return m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, patches ),
 									 snapshot.m_szPatches,
 									 snapshot.m_nPatchCount * sizeof( t3dRdPatch_t ) );
 }

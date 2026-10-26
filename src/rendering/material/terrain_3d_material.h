@@ -104,6 +104,7 @@ public:
 	mutable TypedArray< StringName > m_activeParams;
 	mutable Dictionary				 m_runtimeMaterialParams;
 	uint64_t						 m_nRdPublicationGeneration = 1u;
+	uint64_t						 m_nEditorOverlayGeneration = 1u;
 	uint64_t						 m_nShaderParameterListQueryCount = 0u;
 	uint64_t						 m_nShaderParameterDefaultQueryCount = 0u;
 	mutable uint64_t				 m_nShaderInspectorRuntimeReadCount = 0u;
@@ -231,6 +232,10 @@ public:
 	EA_FORCE_INLINE uint64_t getRdPublicationGeneration(
 		void ) const {
 		return m_runtimeState.m_nRdPublicationGeneration;
+	}
+	EA_FORCE_INLINE uint64_t getEditorOverlayGeneration(
+		void ) const {
+		return m_runtimeState.m_nEditorOverlayGeneration;
 	}
 	void uninitialize( Terrain3DOwner *pTerrain );
 	void destroy( void );
