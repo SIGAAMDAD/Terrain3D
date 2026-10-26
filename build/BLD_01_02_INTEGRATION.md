@@ -1,17 +1,18 @@
 # BLD-01/02: stable PCH and subsystem header ownership
 
-This archive does not include the parent repository's `SConstruct` or `build/source_sets.py`. `build/pch.py` is the integration-ready, opt-in adapter for that actual build root. **It cannot take effect until the existing native builder calls `build_flavor_pch()`**. Do not create a second source-set manifest.
+The supplied parent `SConstruct` is now included in the integrated source and calls `build_flavor_pch()` after native target defines, shader flags and include paths are configured. The source set remains the authoritative recursive `src/` discovery in that same SConstruct. **Install this updated SConstruct and the BLD-01 source files together.** The external `godot-cpp` checkout is still required for a real Windows build.
 
-## SCons integration
+## SCons integration (implemented)
 
-1. Import `build_flavor_pch` and `pch_eligible` from `build.pch` in the authoritative outer `SConstruct`.
-2. Register `pch=off|stable` in its existing command-line options (`off` by default). Call the adapter after creating each complete editor/runtime environment clone with its own `T3D_EDITOR_NATIVE` or `T3D_RUNTIME_NATIVE` and CRT/optimization flags.
-3. Compile normal objects using the returned PCH-enabled environment when `pch_eligible(src)` and the source has no file-specific compiler flags. Compile tests, SIMD backends, generated code and registration with the ordinary PCH-free environment. Do not compile `src/core/build/terrain_3d_pch.cpp` as an ordinary source.
-4. Keep runtime/editor objects/PCH files in separate output directories. The output PCH target directory is `build/obj/<flavor>/pch` by default; match the outer build's variant directory if it uses distinct targets for toolsets/flags.
-5. Use the PCH builder's first returned node as `env['PCH']`. Let SCons manage the `/Yu` dependency and the PCH object/link behavior. Do not manually link a duplicate PCH object.
-6. Confirm `/Yc` appears on PCH generation and `/Yu` plus `/FIterrain_3d_pch.h` on ordinary sources; run the PCH-off build before enabling by default.
+- On MSVC the default is `pch=stable`. Pass `pch=off` to restore the former build behavior; on non-MSVC the default is `pch=off`.
+- `pch` is hidden from `godot-cpp/SConstruct` argument validation, then restored for Terrain3D processing.
+- Each native target produces a PCH under `build/obj/<target>/<platform>/<arch>/<editor|runtime>/pch/`. The adapter uses MSVC `/Yc` on the producer and `/Yu` plus `/FI` on eligible translation units.
+- The PCH producer (`src/core/build/terrain_3d_pch.cpp`) is excluded from recursive source discovery.
+- Test, registration, generated and ISA backend translation units compile without PCH. `register_types.cpp` keeps its existing `T3D_TESTS_ENABLED` define in test builds.
+- The PCH producer shares the same native macros/optimization and CRT settings as the ordinary objects. Each native target gets its own PCH artifact, without a second source manifest.
+- For a PCH-only build run `scons terrain3d-pch target=editor ... pch=stable`. The ordinary target builds it as a dependency of eligible objects.
 
-The PCH deliberately excludes all Terrain3D types, renderer state, constants, enums, editor classes and ISA intrinsics. Build shared headers are not a way to combine subsystem-specific contracts. VT feedback's own header is now included directly by its consumers, never re-exported through `Terrain3DTypes.h`.
+**Windows acceptance:** run `scons target=editor platform=windows arch=x86_64 pch=stable use_static_cpp=yes debug_crt=no`, repeat `pch=off`, and verify both link. Repeat for `target=template_debug`, then inspect `/Yc` versus `/Yu` compile commands and benchmark clean/warm builds.
 
 ## Ownership rule
 
