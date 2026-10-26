@@ -3,10 +3,10 @@
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_binding_builder.h"
 #include "rendering/rd/forward/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/infrastructure/buffers/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/shaders/terrain_3d_rd_shader_library.h"
 
 #include <string.h>
 #include <godot_cpp/classes/rd_sampler_state.hpp>
-#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
@@ -17,8 +17,7 @@ Terrain3DRdForwardLighting::Terrain3DRdForwardLighting(
 	m_context( rContext ),
 	m_compact( rContext ),
 	m_descriptors( rContext, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING ) {
-	m_bCompactRequested = godot::OS::get_singleton() &&
-		godot::OS::get_singleton()->get_environment( "TERRAIN3D_GPU_COMPACT_CLUSTERS" ) == "1";
+	m_bCompactRequested = Terrain3DRdShaderLibrary::isCompactClustersEnabledCold();
 	m_frameBytes.resize( sizeof( t3dRdForwardLightFrame_t ) );
 }
 
@@ -355,8 +354,15 @@ bool Terrain3DRdForwardLighting::prepare(
 		setError( "Failed to update Forward+ lighting metadata UBO" );
 		return false;
 	}
-	// BR11 is strictly optional; failure preserves the native raster contract.
-	if ( m_bCompactRequested && !bOneSun ) m_compact.prepare( rContext );
+	// A requested compact profile needs valid inherited cluster metadata.
+	// Do not silently render with empty compact headers after prepare fails.
+	if ( m_bCompactRequested && !bOneSun &&
+		 ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ||
+		   rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) &&
+		 !m_compact.prepare( rContext ) ) {
+		setError( "Compact cluster profile could not prepare inherited Forward+ cluster data" );
+		return false;
+	}
 	m_nFrameGeneration = rContext.m_nFrameGeneration;
 	m_nFrameSurfaceMask = nDefaultSurfaceMask;
 	m_lastError = String();
@@ -470,6 +476,11 @@ RID Terrain3DRdForwardLighting::ensureSet(
 		return RID();
 	}
 	return set;
+}
+
+void Terrain3DRdForwardLighting::clearShaderSetsCold( void ) {
+	freeSets();
+	m_compact.clearRasterSetsCold();
 }
 
 void Terrain3DRdForwardLighting::invalidateBorrowedState(

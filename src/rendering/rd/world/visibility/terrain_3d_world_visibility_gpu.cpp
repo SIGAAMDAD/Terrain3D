@@ -65,27 +65,29 @@ bool Terrain3DWorldVisibilityGpu::initializeCold(
 	if ( m_bInitialized ) {
 		return true;
 	}
+	// A single WORLD cull owner selects existing kernels by batch size.
+	// The grouped kernel covers batches outside bounded small/scan scratch.
 	if ( !createPipelineCold( PIPELINE_RESET ) || !createPipelineCold( PIPELINE_CULL ) ||
-		 !createPipelineCold( PIPELINE_FINALIZE ) ||
-		 ( Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() && !createPipelineCold( PIPELINE_CULL_SMALL ) ) ||
-         ( Terrain3DRdShaderLibrary::isWorldScanEnabledCold() &&
-           ( !createPipelineCold( PIPELINE_SCAN_CLASSIFY ) || !createPipelineCold( PIPELINE_SCAN_PREFIX ) ||
-             !createPipelineCold( PIPELINE_SCAN_SCATTER ) || !createPipelineCold( PIPELINE_SCAN_FINALIZE ) ) ) ) {
+		 !createPipelineCold( PIPELINE_FINALIZE ) ) {
 		shutdownCold();
 		return false;
 	}
-    if ( Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ) {
-        t3dRdGpuBufferSpec_t spec;
-        spec.m_pName = "T3D.World.Visibility.ScanScratch";
-        spec.m_owner = T3D_RD_CONTEXT_OWNER_WORLD;
-        spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
-        spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
-        if ( !m_scanScratch.configure( spec ) ||
-             !m_scanScratch.createTracked( m_context, SCAN_WORDS * sizeof( uint32_t ) ) ) {
-            shutdownCold();
-            return false;
-        }
-    }
+	m_bSmallAvailable = createPipelineCold( PIPELINE_CULL_SMALL );
+	m_bScanAvailable = createPipelineCold( PIPELINE_SCAN_CLASSIFY ) &&
+		createPipelineCold( PIPELINE_SCAN_PREFIX ) &&
+		createPipelineCold( PIPELINE_SCAN_SCATTER ) &&
+		createPipelineCold( PIPELINE_SCAN_FINALIZE );
+	if ( m_bScanAvailable ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.World.Visibility.ScanScratch";
+		spec.m_owner = T3D_RD_CONTEXT_OWNER_WORLD;
+		spec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = T3D_RD_CONTEXT_MEMORY_STORAGE;
+		m_bScanAvailable = m_scanScratch.configure( spec ) &&
+			m_scanScratch.createTracked( m_context, SCAN_WORDS * sizeof( uint32_t ) );
+	}
+	// Shader/pipeline or scratch-allocation failures fall back to grouped cull.
+	// Optional resources are never a prerequisite for the normal WORLD owner.
 	m_pushBytes.resize( sizeof( t3dVisibilityPush_t ) );
 	m_bInitialized = true;
 	return true;
@@ -150,14 +152,14 @@ bool Terrain3DWorldVisibilityGpu::createSetsCold(
 														   m_hShader[PIPELINE_CULL].rid(),
 														   0u );
 
-    if ( Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() ) {
+    if ( m_bSmallAvailable ) {
         m_hSet[PIPELINE_CULL_SMALL] = m_descriptorCache.getOrCreate(
             { m_hShader[PIPELINE_CULL_SMALL].rid(), signature },
             "T3D.World.Visibility.Set.CullSmall", cull,
             m_hShader[PIPELINE_CULL_SMALL].rid(), 0u );
     }
 
-    if ( Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ) {
+    if ( m_bScanAvailable ) {
         if ( !m_scanScratch.isValid() ) {
             freeSetsCold();
             return false;
@@ -212,7 +214,7 @@ bool Terrain3DWorldVisibilityGpu::createSetsCold(
 															   finalize,
 															   m_hShader[PIPELINE_FINALIZE].rid(),
 															   0u );
-    if ( Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ) {
+    if ( m_bScanAvailable ) {
         TypedArray< Ref< RDUniform > > scan_finalize;
         for ( int i = 0; i < finalize.size(); ++i ) {
             scan_finalize.push_back( finalize[i] );
@@ -223,17 +225,17 @@ bool Terrain3DWorldVisibilityGpu::createSetsCold(
             "T3D.World.Visibility.Set.ScanFinalize", scan_finalize,
             m_hShader[PIPELINE_SCAN_FINALIZE].rid(), 0u );
     }
-	for ( uint32_t i = 0u; i < PIPELINE_COUNT; ++i ) {
-		if ( i >= PIPELINE_SCAN_CLASSIFY && !Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ) {
-            continue;
-        }
-		if ( i == PIPELINE_CULL_SMALL && !Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() ) {
-            continue;
-        }
-        if ( !m_hSet[i].is_valid() ) {
-			freeSetsCold();
-			return false;
-		}
+	// Optional descriptor failures use the already-resident grouped path.
+	if ( m_bSmallAvailable && !m_hSet[PIPELINE_CULL_SMALL].is_valid() )
+		m_bSmallAvailable = false;
+	if ( m_bScanAvailable &&
+		( !m_hSet[PIPELINE_SCAN_CLASSIFY].is_valid() || !m_hSet[PIPELINE_SCAN_PREFIX].is_valid() ||
+		  !m_hSet[PIPELINE_SCAN_SCATTER].is_valid() || !m_hSet[PIPELINE_SCAN_FINALIZE].is_valid() ) )
+		m_bScanAvailable = false;
+	if ( !m_hSet[PIPELINE_RESET].is_valid() || !m_hSet[PIPELINE_CULL].is_valid() ||
+		 !m_hSet[PIPELINE_FINALIZE].is_valid() ) {
+		freeSetsCold();
+		return false;
 	}
 	m_boundSignature = signature;
 	++m_nSetRebuildCount;
@@ -249,8 +251,8 @@ bool Terrain3DWorldVisibilityGpu::prepareBindingsCold(
 	if ( m_boundSignature ==
 			 t3dDescriptorKey_t::Signature{ rResources.getResourceGeneration(), rHiZ.getResourceGeneration() } &&
 		 m_hSet[PIPELINE_CULL].is_valid() &&
-		 ( !Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() || m_hSet[PIPELINE_CULL_SMALL].is_valid() ) &&
-         ( !Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ||
+		 ( !m_bSmallAvailable || m_hSet[PIPELINE_CULL_SMALL].is_valid() ) &&
+         ( !m_bScanAvailable ||
            ( m_scanScratch.isValid() && m_hSet[PIPELINE_SCAN_CLASSIFY].is_valid() &&
              m_hSet[PIPELINE_SCAN_PREFIX].is_valid() && m_hSet[PIPELINE_SCAN_SCATTER].is_valid() &&
              m_hSet[PIPELINE_SCAN_FINALIZE].is_valid() ) ) ) {
@@ -325,8 +327,8 @@ bool Terrain3DWorldVisibilityGpu::dispatchHot(
 	++m_nDispatchCount;
 	rd->compute_list_add_barrier( list );
     if ( candidate_count > 0u ) {
-        const bool use_small = Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() && candidate_count <= 64u;
-        const bool use_scan = !use_small && Terrain3DRdShaderLibrary::isWorldScanEnabledCold() &&
+        const bool use_small = m_bSmallAvailable && candidate_count <= 64u;
+        const bool use_scan = !use_small && m_bScanAvailable &&
                               candidate_count <= SCAN_MAX_CANDIDATES && m_scanScratch.isValid();
         const t3dVisibilityPipeline_t passes[3] = { PIPELINE_SCAN_CLASSIFY, PIPELINE_SCAN_PREFIX, PIPELINE_SCAN_SCATTER };
         const uint32_t scan_pass_count = use_scan ? 3u : 1u;
@@ -396,6 +398,8 @@ void Terrain3DWorldVisibilityGpu::shutdownCold(
 	m_pushBytes.clear();
 	m_nPatchBoundsGeneration = 0u;
 	m_nCachedPatchCount = UINT32_MAX;
+	m_bSmallAvailable = false;
+	m_bScanAvailable = false;
 	m_bInitialized = false;
 }
 
@@ -405,9 +409,9 @@ bool Terrain3DWorldVisibilityGpu::isReady(
 		   m_hPipeline[PIPELINE_RESET].is_valid() && m_hPipeline[PIPELINE_CULL].is_valid() &&
 		   m_hPipeline[PIPELINE_FINALIZE].is_valid() && m_hSet[PIPELINE_RESET].is_valid() &&
 		   m_hSet[PIPELINE_CULL].is_valid() && m_hSet[PIPELINE_FINALIZE].is_valid() &&
-           ( !Terrain3DRdShaderLibrary::isWorldSmallCullEnabledCold() ||
+           ( !m_bSmallAvailable ||
              ( m_hPipeline[PIPELINE_CULL_SMALL].is_valid() && m_hSet[PIPELINE_CULL_SMALL].is_valid() ) ) &&
-           ( !Terrain3DRdShaderLibrary::isWorldScanEnabledCold() ||
+           ( !m_bScanAvailable ||
              ( m_scanScratch.isValid() &&
                m_hPipeline[PIPELINE_SCAN_CLASSIFY].is_valid() && m_hSet[PIPELINE_SCAN_CLASSIFY].is_valid() &&
                m_hPipeline[PIPELINE_SCAN_PREFIX].is_valid() && m_hSet[PIPELINE_SCAN_PREFIX].is_valid() &&

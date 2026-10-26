@@ -62,6 +62,8 @@ private:
 	uint64_t					   m_nSetRebuildCount = 0u;
 	uint64_t					   m_nFailureCount = 0u;
 	uint32_t					   m_nLastCandidateCount = 0u;
+	bool                           m_bSmallAvailable = false;
+	bool                           m_bScanAvailable = false;
 	bool						   m_bInitialized = false;
 
 	bool createPipelineCold( t3dVisibilityPipeline_t ePipeline );

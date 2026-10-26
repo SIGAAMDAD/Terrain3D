@@ -12,7 +12,7 @@ struct t3dPageComputePush_t
 };
 static_assert( sizeof( t3dPageComputePush_t ) == 32u, "Page compute GLSL push constants" );
 // P30b: bounded 16x16 workgroup partials for pages up to 1024x1024.
-// A fixed 16 KiB scratch buffer is created only with the optional reduction path.
+// A fixed 16 KiB scratch buffer is reserved by the normal page-reduction path.
 static constexpr uint32_t T3D_PAGE_PARTIAL_TILE = 16u;
 static constexpr uint32_t T3D_PAGE_PARTIAL_MAX_EXTENT = 1024u;
 static constexpr uint32_t T3D_PAGE_PARTIAL_CAPACITY =
@@ -43,42 +43,47 @@ bool Terrain3DPageCompute::initializeCold(
 		shutdownCold( context );
 		return false;
 	}
-	// The small-page reduction is an opt-in cold-start experiment. Keep the
-	// original atomic shader compiled for all larger pages and fallback use.
+	// Hash/compare use one size-based production policy: 8x8 local reduction
+	// through 32x32, 16x16 partial/final through 1024x1024, then the
+	// existing atomic shader for larger pages. Editing always uses baseline.
 	if ( Terrain3DRdShaderLibrary::isPageReductionEnabledCold() ) {
 		const t3dRdShaderId_t reduceId = ( t3dRdShaderId_t ) (
 			T3D_RD_SHADER_PAGE_COMPUTE_R32F_REDUCE + ( id - T3D_RD_SHADER_PAGE_COMPUTE_R32F ) );
-		if ( !m_reduceShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-										 "T3D.PageCompute.ReduceShader", reduceId ) ||
-			 !m_reducePipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-										"T3D.PageCompute.ReducePipeline", m_reduceShader.rid() ) ) {
-			shutdownCold( context );
-			return false;
+		const bool reduceReady = m_reduceShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+			"T3D.PageCompute.ReduceShader", reduceId ) &&
+			m_reducePipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+			"T3D.PageCompute.ReducePipeline", m_reduceShader.rid() );
+		if ( !reduceReady ) {
+			m_reducePipeline.releaseTracked( context );
+			m_reduceShader.releaseTracked( context );
 		}
 		const t3dRdShaderId_t partialId = ( t3dRdShaderId_t ) (
 			T3D_RD_SHADER_PAGE_COMPUTE_R32F_PARTIAL + ( id - T3D_RD_SHADER_PAGE_COMPUTE_R32F ) );
-		if ( !m_partialShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-											"T3D.PageCompute.PartialShader", partialId ) ||
-			 !m_partialPipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-											  "T3D.PageCompute.PartialPipeline", m_partialShader.rid() ) ||
-			 !m_finalShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-										  "T3D.PageCompute.FinalShader", T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL ) ||
-			 !m_finalPipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
-											"T3D.PageCompute.FinalPipeline", m_finalShader.rid() ) ) {
-			shutdownCold( context );
-			return false;
-		}
 		t3dRdGpuBufferSpec_t partialSpec;
 		partialSpec.m_pName = "T3D.PageCompute.Partials";
 		partialSpec.m_owner = T3D_RD_CONTEXT_OWNER_TERRAIN;
 		partialSpec.m_type = T3D_RD_CONTEXT_RESOURCE_STORAGE_BUFFER;
 		partialSpec.m_memory = T3D_RD_CONTEXT_MEMORY_SCRATCH;
-		if ( !m_partialBuffer.configure( partialSpec ) ||
-			 !m_partialBuffer.createTracked( context, T3D_PAGE_PARTIAL_CAPACITY * sizeof( uint32_t ) ) ) {
-			shutdownCold( context );
-			return false;
+		const bool partialReady = m_partialShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+			"T3D.PageCompute.PartialShader", partialId ) &&
+			m_partialPipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+				"T3D.PageCompute.PartialPipeline", m_partialShader.rid() ) &&
+			m_finalShader.createTracked( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+				"T3D.PageCompute.FinalShader", T3D_RD_SHADER_PAGE_COMPUTE_REDUCE_FINAL ) &&
+			m_finalPipeline.createTrackedCompute( context, T3D_RD_CONTEXT_OWNER_TERRAIN,
+				"T3D.PageCompute.FinalPipeline", m_finalShader.rid() ) &&
+			m_partialBuffer.configure( partialSpec ) &&
+			m_partialBuffer.createTracked( context, T3D_PAGE_PARTIAL_CAPACITY * sizeof( uint32_t ) );
+		if ( !partialReady ) {
+			m_partialBuffer.releaseTracked( context );
+			m_finalPipeline.releaseTracked( context );
+			m_finalShader.releaseTracked( context );
+			m_partialPipeline.releaseTracked( context );
+			m_partialShader.releaseTracked( context );
 		}
+		// Unsupported kernels or exhausted scratch fall back to the baseline.
 	}
+
 	t3dRdGpuBufferSpec_t spec;
 	spec.m_pName = "T3D.PageCompute.Result";
 	spec.m_owner = T3D_RD_CONTEXT_OWNER_TERRAIN;
