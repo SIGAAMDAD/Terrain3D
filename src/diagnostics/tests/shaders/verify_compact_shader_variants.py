@@ -14,6 +14,9 @@ def main():
     p.add_argument('--glslang',default='glslangValidator')
     p.add_argument('--compute-only',action='store_true')
     a=p.parse_args()
+    if not __import__('shutil').which(a.glslang) and not Path(a.glslang).is_file():
+        print('SKIPPED SPIR-V compact gate: glslangValidator unavailable; no GPU compilation claimed')
+        return
     root=a.root.resolve()
     rd=root/'project/addons/terrain_3d/rd'
     sys.path.insert(0,str(root/'src/diagnostics/tests/shaders'))

@@ -88,26 +88,29 @@ def run():
                    'T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI',
                    'T3D_RD_SHADER_RETIRED_OCEAN_ENV_PREPARED_COLOR'):
         require(symbol in IDS, 'shader ID slot dropped: ' + symbol)
-    for symbol in ('t3dRdCanonicalVtColorHintId', 't3dRdCanonicalVtFeedbackHintId'):
-        require(symbol in (SRC/'rendering/rd/shaders/terrain_3d_rd_shader_catalog.h').read_text(),
-                'missing canonical hint route: ' + symbol)
+    require('t3dRdUnifiedTerrainId(' in (SRC/'rendering/rd/shaders/terrain_3d_rd_shader_catalog.h').read_text(),
+            'missing authoritative UCMP shader route')
+    for hint in ('color_native_vt_hints', 'feedback_color_native_vt_hints'):
+        require(hint in versions(RD / 'terrain_clipmap.glsl'),
+                'missing optional UCMP resident-hint shader variant: ' + hint)
     for prefix in ('TERRAIN3D_MATERIAL_SHADER_TRIAL', 'TERRAIN3D_VT_SAMPLING_TRIAL',
                    'TERRAIN3D_INSTANCE_ALPHA_TRIAL', 'TERRAIN3D_WORLD_ALPHA_TRIAL',
                    'TERRAIN3D_OCEAN_PREPARED_FRAGMENT', 'TERRAIN3D_COMPOSED_SHADER_EXPERIMENT',
                    'TERRAIN3D_SCREEN_SPACE_PILOT', 'TERRAIN3D_FRAGMENT_SUBGROUP_EXPERIMENT'):
         require(prefix not in LIB, 'retired dispatch flag still read: ' + prefix)
-    require('id < T3D_RD_SHADER_WORLD_CS_END' in LIB,
+    require('!t3dRdShaderCatalogIsActive( id )' in LIB and
+            'id >= T3D_RD_SHADER_WORLD_CS_BASE && id < T3D_RD_SHADER_WORLD_CS_END' in CAT,
             'composed shader tombstones were reactivated')
-    require('T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE' in LIB,
+    require('T3D_RD_SHADER_RETIRED_SCREEN_SPACE_COVERAGE' in CAT,
             'screen-space shader slots were reactivated')
-    require('T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI' in LIB,
+    require('T3D_RD_SHADER_RETIRED_VT_FEEDBACK_MULTI' in CAT,
             'multi-feedback shader slot was reactivated')
     require('T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE' in CAT and
             'T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE' in CAT,
             'canonical hint catalog mapping was dropped')
     # Resource and format authority are outside SHD-05.
-    require('T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS' in LIB,
-            'compile-time hint capability was dropped')
+    require('T3D_VT_ANCESTOR_PROBE_CAP' in (RD / 'vt/terrain_vt_resolve_core.glslinc').read_text(),
+            'canonical bounded VT ancestor fallback was dropped')
     print(f'SHD-05 PASS: {preprocess_count} canonical GLSL preprocessor cases, {shader_count} active versions in selected shader families')
     print('SHD-05 PASS: legacy shader/catalog tombstones, ID routes, retained fallback and ENV variant closure')
 

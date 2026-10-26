@@ -212,12 +212,7 @@ static uint32_t t3dRdExpectedPhysicalShaderCount(
 
 static uint32_t t3dRdExpectedShaderLoadCount(
 	void ) {
-	uint32_t nCount = 0u;
-	for ( uint32_t value = 0u; value < T3D_RD_SHADER_COUNT; ++value ) {
-		if ( t3dRdShaderCatalogIsActive( ( t3dRdShaderId_t ) value ) )
-			++nCount;
-	}
-	return nCount;
+	return t3dRdShaderCatalogActiveCount();
 }
 
 static String t3dRdShaderStatusName(
@@ -978,8 +973,10 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics(
 	result["physical_shader_demand_created"] = ( int64_t ) ( state.m_nPhysicalDemandCreateCount );
 	result["physical_shader_demand_failed"] = ( int64_t ) ( state.m_nPhysicalDemandFailureCount );
 	uint32_t startup_physical_count = 0u;
-	for ( uint32_t id = 0u; id < T3D_RD_SHADER_COUNT; ++id ) {
-		startup_physical_count += t3dRdShaderNeedsStartupPhysical( ( t3dRdShaderId_t ) id ) ? 1u : 0u;
+	const uint32_t nActiveShaders = t3dRdShaderCatalogActiveCount();
+	for ( uint32_t index = 0u; index < nActiveShaders; ++index ) {
+		const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( index );
+		startup_physical_count += t3dRdShaderNeedsStartupPhysical( id ) ? 1u : 0u;
 	}
 	result["physical_shader_startup_expected"] = ( int64_t ) startup_physical_count;
 	uint32_t catalog_by_category[5]{};
@@ -990,8 +987,9 @@ Dictionary Terrain3DRdShaderLibrary::getDiagnostics(
 	uint32_t physical_by_domain[2]{};
 	{
 		Terrain3DScopedLock lock( state.m_sourceMutex );
-		for ( uint32_t id = 0u; id < T3D_RD_SHADER_COUNT; ++id ) {
-			const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( ( t3dRdShaderId_t ) id );
+		for ( uint32_t index = 0u; index < nActiveShaders; ++index ) {
+			const t3dRdShaderId_t id = t3dRdShaderCatalogActiveIdAt( index );
+			const t3dRdShaderCatalogEntry_t entry = t3dRdShaderCatalogGet( id );
 			++catalog_by_category[entry.m_category];
 			++catalog_by_domain[entry.m_domain];
 			if ( state.m_spirv[id].is_valid() ) {
@@ -1065,12 +1063,9 @@ bool Terrain3DRdShaderLibrary::isReady(
 	if ( !isCpuReady( m_nStartupGeneration ) ) {
 		return false;
 	}
-	for ( uint32_t id = 0u; id < T3D_RD_SHADER_COUNT; ++id ) {
-		const t3dRdShaderId_t shaderId = ( t3dRdShaderId_t ) id;
-		// Match the CPU catalog resolver: retired shader IDs intentionally have no SPIR-V.
-		if ( !t3dRdShaderCatalogIsActive( shaderId ) ) {
-			continue;
-		}
+	const uint32_t nActiveShaders = t3dRdShaderCatalogActiveCount();
+	for ( uint32_t index = 0u; index < nActiveShaders; ++index ) {
+		const t3dRdShaderId_t shaderId = t3dRdShaderCatalogActiveIdAt( index );
 		if ( getCatalogShader( shaderId ).is_null() ) {
 			return false;
 		}

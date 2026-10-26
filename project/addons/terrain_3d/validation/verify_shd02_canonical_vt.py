@@ -63,10 +63,10 @@ def main():
                 ensure('t3d_br21_cursor_begin' in source and 't3d_cluster_buffer' in source,
                        label + ' compact lighting path did not activate')
             layout_checks += 1
-        # Nonshipping material modes retain original profile selection.
-        compat = module.preprocess(shader, 'compat_color_native')
-        ensure(re.search(r'float near_derivative_scale\s*=\s*exp2\([^;]*\.mipmap_bias\);', compat) is not None,
-               tier + ': compatibility evaluator unexpectedly changed')
+        # Shipping precomputes exp2 on CPU; editor keeps authored live value.
+        editor = module.preprocess(shader, 'editor_color_native')
+        ensure(re.search(r'float near_derivative_scale\s*=\s*exp2\([^;]*\.mipmap_bias\);', editor) is not None,
+               tier + ': editor authored mip-bias evaluator changed')
 
     resolver = (RD / 'vt/terrain_vt_resolve_core.glslinc').read_text()
     ensure('uint probeCap = min(T3D_VT_ANCESTOR_PROBE_CAP, allocationMipCount - requestedMip);' in resolver,
@@ -74,7 +74,7 @@ def main():
     ensure('hintHeader.resolvedPage == T3D_VT_HINT_ENABLED' in resolver and
            'requestedEntry.generation != allocation.generation' in resolver,
            'Hint validity/residency generation guard missing')
-    # Validate all eight compact-feedback signatures for every terrain tier.
+    # Validate all eight compact-feedback signatures for the unified terrain material.
     for tier in ('unified',):
         shader = RD / 'terrain_clipmap.glsl'
         for variant in ('native', 'specular', 'motion', 'specular_motion',
@@ -89,10 +89,10 @@ def main():
     preparation = cpp[cpp.index('bool Terrain3DRdClipmapRenderer::prepareForwardPass('):]
     ensure('!ensureMaterialTrialShaders(' not in preparation, 'Material trial still takes production slot')
     ensure('!ensureVtSamplingTrialShaders(' not in preparation, 'VT trial still takes production slot')
-    ensure('t3dRdCanonicalHintAvailable(' in preparation and 'ensureCanonicalVtShaders(' in preparation,
-           'Missing canonical hint capability route')
-    ensure('m_hszUnifiedCompactShaders[path][variant]' in cpp and
-           'm_hszUnifiedForwardShaders[path][variant]' in cpp,
+    ensure('t3dRdUnifiedTerrainId(' in preparation,
+           'Missing unified UCMP shader route')
+    ensure('m_hszUnifiedCompactShaders[capability][variant]' in cpp and
+           'm_hszUnifiedForwardShaders[capability][variant]' in cpp,
            'Compact shader RID must not reuse cached noncompact shader')
     ensure('!m_bForwardFeedbackActive;' not in
            cpp[cpp.index('const bool compact = m_forwardLighting.compactRequested() && !one_sun_lighting &&'):],
@@ -100,7 +100,7 @@ def main():
     ensure('m_forwardLighting.ensureCompactSet( shader )' in cpp and
            'm_hszUnifiedFeedbackCompactShaders[variant]' in cpp,
            'Compact feedback shader must receive the set-4 cluster descriptor')
-    ensure('!bOneSunLighting && m_forwardLighting.compactRequested()' in cpp,
+    ensure('!one_sun_lighting && m_forwardLighting.compactRequested()' in cpp,
            'One-sun compact route must not shadow the one-sun shader')
     ensure('Terrain3DRdDescriptorLeaseTable< t3dSetCacheKey_t, 8u >' in
            (SRC / 'rendering/rd/clipmap/terrain_3d_rd_clipmap_renderer.h').read_text(),

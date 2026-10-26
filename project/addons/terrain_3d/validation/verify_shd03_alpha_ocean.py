@@ -117,9 +117,11 @@ def main():
             'legacy ocean shader variant still selected')
     require('const Vector3 sun_direction = ( -rSnapshot.m_lightDirection ).normalized();' in ocean_cpp,
             'CPU side of canonical ocean preparation lost')
-    require('id >= T3D_RD_SHADER_RETIRED_MATERIAL_BASE' in lib and
-            'id < T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE' in lib,
-            'retired alpha IDs must remain inaccessible')
+    catalog = (SRC / 'rendering/rd/shaders/terrain_3d_rd_shader_catalog.cpp').read_text()
+    require('!t3dRdShaderCatalogIsActive( id )' in lib and
+            'T3D_RD_SHADER_TERRAIN_VT_COLOR_HINT_BASE' in catalog and
+            'T3D_RD_SHADER_TERRAIN_VT_FEEDBACK_HINT_BASE' in catalog,
+            'retired alpha IDs must be rejected by catalog and direct acquisitions')
     print('PASS: SHD-03 shared opacity and pass contracts, %d fragment cases' % preprocessed)
     print('PASS: exhaustive UNORM8 cutoff reference comparison, %d cases' % cases)
     print('PASS: ocean production-prepared GLSL for base + ENV; obsolete trial entrypoints removed')

@@ -442,18 +442,6 @@ static uint8_t t3dRdTerrainDnrOutputClass(
 	return output_class;
 }
 
-static uint8_t t3dRdTerrainMiddleSurfaceClass(
-	const t3dRdMaterialConfig_t &rConfig,
-	const t3dTerrainShaderPath_t shaderPath ) {
-	if ( shaderPath != T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL ) {
-		return T3D_TERRAIN_MIDDLE_SURFACE_RUNTIME;
-	}
-	// Sampling mode 2 is the serialized TERRAIN_SAMPLING_SINGLE_SAMPLE value
-	// selected by MATERIAL_SAMPLING_FAST / MIDDLE_SURFACE_BAKED_COMPOSITE.
-	const bool bComposite = rConfig.m_szTier[0].m_nSamplingMode == 2u &&
-							( rConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MIDDLE_COMPOSITE ) != 0u;
-	return bComposite ? T3D_TERRAIN_MIDDLE_SURFACE_COMPOSITE : T3D_TERRAIN_MIDDLE_SURFACE_DETAILED;
-}
 
 RID Terrain3DRdClipmapRenderer::getForwardShader(
     const uint32_t nTier,
@@ -2085,7 +2073,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 	for ( uint32_t tier = 0u; tier < 3u; ++tier ) {
 		dnr_output_classes[tier] = t3dRdTerrainDnrOutputClass( rSnapshot.m_materialConfig, shader_path, variant, tier );
 	}
-	const uint8_t middle_surface_class = t3dRdTerrainMiddleSurfaceClass( rSnapshot.m_materialConfig, shader_path );
+	const uint8_t middle_surface_class = T3D_TERRAIN_MIDDLE_SURFACE_RUNTIME;
 	const uint8_t editor_diagnostic_class = t3dRdTerrainEditorDiagnosticClass( rSnapshot, shader_path, variant );
 	const uint8_t noise_source_class = t3dRdTerrainNoiseSourceClass( rSnapshot.m_materialConfig );
 

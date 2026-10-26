@@ -25,29 +25,19 @@
   "cases": {
     "terrain_clipmap.glsl:color": {
       "current": {
-        "source_sha256": "6b4671305e1d9ee323bcfa3a814bf9c29080b1019233ea10a2da44c515dc1d57",
-        "cpp_sha256": "8f5a0a549edc339ac13fef96b9571b2b4e6ce2df3b4233fa7ddf8bcee7270afe",
-        "cpp_if_sites": 339,
-        "cpp_loop_sites": 10,
+        "source_sha256": "7ace03b0faa42f5caa634ac2c583dc7cb5021323df1edac3763a522a186d30da",
+        "cpp_sha256": "077112b05f142664c8c1dadf12e235f77f0627fa09de06b0bf49282e8d39f1b1",
+        "cpp_if_sites": 259,
+        "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native": {
       "current": {
-        "source_sha256": "c525b36bbd0d8abc6f090765fc4dadc0ae590ef0da9367112777acd78c2e8b05",
-        "cpp_sha256": "5b55c56243944e87c333af59059ac8efd88ef630c0e792d5135cc036048ea21a",
+        "source_sha256": "414452786abed06e9ef24d3e0ed95e6009f3063b440e0cb711a2b97429feff39",
+        "cpp_sha256": "3b9cc0301fcfcad680f4e2a3eccd886683cf37379e96ab0990e62b070bb8ff6a",
         "cpp_if_sites": 338,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native": {
-      "current": {
-        "source_sha256": "61ddfdaf7eca21fd1b86faa664df26727e99d33bb0bd992c90c181323e2a7ba0",
-        "cpp_sha256": "95238437824f4efead544c549713fece297c3f6765e3506ed9f77f9427699c8b",
-        "cpp_if_sites": 383,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -55,29 +45,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native": {
       "current": {
-        "source_sha256": "c58968e78780fd182287e046ee7e263d927e091a1e2e60e045085cfc6e0ed0a7",
-        "cpp_sha256": "8b6e06b1344836a83af9928efb5b5ddf3d7dfaa4e9a32d2f8cac241eb14d71e7",
-        "cpp_if_sites": 415,
-        "cpp_loop_sites": 18,
+        "source_sha256": "671855e740cf95ad33863592d45a654b594131604970caffd41b57988bf446ad",
+        "cpp_sha256": "6926eb7690f8d7b73c987885fb9c63a2fc3a598c1eb49524e33695e0348eaaaa",
+        "cpp_if_sites": 423,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular": {
       "current": {
-        "source_sha256": "f3da417235f7b1a69d6ac11a1fdb765fe8d2150460c238050dc1204a9293c79e",
-        "cpp_sha256": "2642d77f344583c2eefb62366f52654f359676423a03dd6fe5c6354cffacc479",
+        "source_sha256": "281f5deed3e93b5f41ab07652806b67f9b2069052af8a11d605cf60319f5ff15",
+        "cpp_sha256": "7c0c843434a45d22e201e8c0bcdf634e9bb99eb31bfaa4c549470e4601d3fe72",
         "cpp_if_sites": 338,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular": {
-      "current": {
-        "source_sha256": "049db52fe8a69ca79e9773ca516f5c38b1e87e6110744572b325d205ff875158",
-        "cpp_sha256": "f35f5b44d35f12d27ba6b69cc8cc1dd77aa0431b8914fbec7542ff70eeafb5fa",
-        "cpp_if_sites": 383,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -85,29 +65,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular": {
       "current": {
-        "source_sha256": "990831494905cb4f82f050852092d4967f885a4c9416c83eb28be50e4dea5075",
-        "cpp_sha256": "c0bbf26f7ca7895fea05b165882d1f231a35695736e7ce430ec97b88c6036d0e",
-        "cpp_if_sites": 412,
-        "cpp_loop_sites": 18,
+        "source_sha256": "0d98bc886eb7ba8acd9e6375f771ef0ca65ec8cb224aad0c2822b30894e10ebe",
+        "cpp_sha256": "abc5df492ef1cac1f67d6a5ce7295823c557266d0d96b3efeb775accb07601e4",
+        "cpp_if_sites": 420,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion": {
       "current": {
-        "source_sha256": "138426717aa0e0bd586b542a9684f7fb0c78ea624d95d68444277182de8c9e47",
-        "cpp_sha256": "b6aa19463130dcda65b52c3237da66a358df629ad1435055ead3dcbb53f4060b",
+        "source_sha256": "cc16640497da857d44c3f779f16213fa8fa3e875e4faf98ccdbb3342b6dfde7a",
+        "cpp_sha256": "e32290c107f8b8c48fcb14397ce1145704b28bbd1d1cb4da5480c402f442936a",
         "cpp_if_sites": 339,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion": {
-      "current": {
-        "source_sha256": "aae3c98b2f4b7d0820c68b99cab83ff431a1e4ab0062da4b817c3fd3266db5d5",
-        "cpp_sha256": "26faab8256fe2cbc88276f8343889526de2eccec5657d1ba640378f062f3cd1b",
-        "cpp_if_sites": 384,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -115,29 +85,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion": {
       "current": {
-        "source_sha256": "f19ab2e8308b6769f5549eddb46bb83e6b05ffc3f9ed8ab62d2004887f2995f1",
-        "cpp_sha256": "4fc3901c5856aa97a477dd0c52d072615c17a178c5c97585ece309fdcb206667",
-        "cpp_if_sites": 413,
-        "cpp_loop_sites": 18,
+        "source_sha256": "d5c1a0b0177641592fd2584cadb8704700a5088ab1a5dac84f13700a47bb40d6",
+        "cpp_sha256": "de3abde2a6313e87318c864a2f7f926a75ef84fda58f75135906552786d1e814",
+        "cpp_if_sites": 421,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion": {
       "current": {
-        "source_sha256": "722328685487da257d5dfe027b70aa7cbd031b4d1f674a6c85f11cda6a2c2d89",
-        "cpp_sha256": "43e109111f3d6c7117368b7394f7c7e94ca634c0706df6779bf8ffaacec5b5d7",
+        "source_sha256": "1620460d8267ded7d0cba2f8f62911bccdeca1d026f44ccc9abb0af13591dc2c",
+        "cpp_sha256": "5b90e315818e094022353bbdf28b543b099361392ba7d452e2a7641e8a06fa39",
         "cpp_if_sites": 339,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion": {
-      "current": {
-        "source_sha256": "01561ccf3116eb0da8f79633bb2977f3b94b2ca19776a194b720e77468ea004a",
-        "cpp_sha256": "3665838302bddd1e03a57ef9f79b05dfc72002fbc8f188a66f18bbac1feccb4e",
-        "cpp_if_sites": 384,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -145,29 +105,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion": {
       "current": {
-        "source_sha256": "e229dc89ae1e51eb87ee0e2038034cb5e8ccf0be400e1ffcf7ee23b7625a8afb",
-        "cpp_sha256": "f7c51a40584addd927b1330f9a704eb06b524012841a70f59358f553ce6083e4",
-        "cpp_if_sites": 413,
-        "cpp_loop_sites": 18,
+        "source_sha256": "ab1925858bb8913af2e174420ea6f66c74411029251a9db84c561e8a8a7b1312",
+        "cpp_sha256": "58742aa96f4821c4ce9062f042f1406a6ffe72573f6ea40cef9647822dfe71aa",
+        "cpp_if_sites": 421,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native_radiance_array": {
       "current": {
-        "source_sha256": "423d144e57a435deb199d3c3eacdabef68edc9495c3b0a11d0c8430a5fee3762",
-        "cpp_sha256": "dd473ad133902647540719847113e8d4bdad0ea4bdb7f1f28b676a6048e8a319",
+        "source_sha256": "b8ea7682398bbc16a178149df831af57c534e28d6a31f5b8792aace1d3eb79f8",
+        "cpp_sha256": "6c726406e3bb964121b51137f7ca06a660bb6e697ed873bf49895bd857ccd36f",
         "cpp_if_sites": 339,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native_radiance_array": {
-      "current": {
-        "source_sha256": "d079c184d50ce6d7cecf5d0c40f2f175e88d209d86928134a719a2e2607fcbc3",
-        "cpp_sha256": "fad3eae2b961ec5e29483d18c65736a53047d89a83a058c9c9418edd0f54edd7",
-        "cpp_if_sites": 384,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -175,29 +125,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native_radiance_array": {
       "current": {
-        "source_sha256": "255b13c333eeef0436982443d68a1597a3b211b7125b4b4f6e0ce0b31d690263",
-        "cpp_sha256": "d9feec7661b1e4946e4aa6abfd836c5ca26040e24df559f01f154a618aabd124",
-        "cpp_if_sites": 416,
-        "cpp_loop_sites": 18,
+        "source_sha256": "bda9332c1f102ee186a33268e49febf07eca329dac1b2a96f033e9aec9c35a76",
+        "cpp_sha256": "6388523c21097d1903ee618b0c9bba366e546d243503d0ae6f053a0c4fb04104",
+        "cpp_if_sites": 424,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_radiance_array": {
       "current": {
-        "source_sha256": "c63635f04ce3c445606199368aac202e60b3899682a87dfd1f33a9b53047454d",
-        "cpp_sha256": "4f68ff410bd3d89d8fb2632b244b72220e43d95ecb76b8ddc5e152359765c687",
+        "source_sha256": "1d029ecea3f825681df654bdecc966e4c54103b19fd67dfb349eca289fbba4c7",
+        "cpp_sha256": "207b1eddc2189161910c9516fea52359fb1454c74be137b45029f8d26746cfb6",
         "cpp_if_sites": 339,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_radiance_array": {
-      "current": {
-        "source_sha256": "eab594d2e9a90a1cc7987bbacf3937296420c432603463936007d6da8be9636e",
-        "cpp_sha256": "90d67572aac74be196d3bcb437c1b9599ce24e6a92ac36beb953fc2510b1e3bb",
-        "cpp_if_sites": 384,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -205,29 +145,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "43b04305048ee3f801cdb2e0ad8fd11af8f860911ead6ade2de390aa9af8dfae",
-        "cpp_sha256": "5da966b4d64daa32ab74334b25330395c956d5d0e0c343571ab79c64b86d6307",
-        "cpp_if_sites": 413,
-        "cpp_loop_sites": 18,
+        "source_sha256": "dd0d109389c2204ae18596f589d8d569628580f51402c95cab41f5c4a8daded4",
+        "cpp_sha256": "b5420f4136fc4d1e6a73f7d3172cf735ca73a3dd927478f3ec6182d120d4101e",
+        "cpp_if_sites": 421,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion_radiance_array": {
       "current": {
-        "source_sha256": "9c7ec3286bc30c1e17aa9106e04ca22f1c3182ec8f907f095d871c5e33dfb714",
-        "cpp_sha256": "71af10fc11885651afab9abc53a35c69b9d70233097d533f8d528858ca7b2098",
+        "source_sha256": "3793bca2f03b5bfebb94930b050671af009f35ac5497e9f1821036d0031d4e22",
+        "cpp_sha256": "03effc92356263350a2486f4b00e1f9425b16a2a2aa3d86015f938b22f462cb1",
         "cpp_if_sites": 340,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion_radiance_array": {
-      "current": {
-        "source_sha256": "a11bf036b4f1169bc9fa301415bea5a1ca34418d7256d2e67e25b5fbfa6d0236",
-        "cpp_sha256": "40201c256134f64e0189468087b0bfa150cf42c4d22f53d65de845342ff61668",
-        "cpp_if_sites": 385,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -235,29 +165,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "a24d9bd6e7b4de9ef0fa92e7eb5cd560c61ecb0575674323c83823c8f41d01ad",
-        "cpp_sha256": "d7f5d4deb8b9a286d9f88a9459705bd105d45d875289b0d2517bba1013bc1856",
-        "cpp_if_sites": 414,
-        "cpp_loop_sites": 18,
+        "source_sha256": "d6b83b85fd9e00b8d5031f4738bb5fe2fe57f87d1c21ca5753b5b8ec0c41a691",
+        "cpp_sha256": "eef503f0849b72e1a5c51551408b68802fd5d51863f5a3c835fdd03965e84848",
+        "cpp_if_sites": 422,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "7e34d3d62365f9f0b9c697c08484aea1b6232d014b9b4ffeb96d15c993ad1efe",
-        "cpp_sha256": "908614e9953806b524b7a4fd7c592a27ec2dc4919890c7a8abc03ccbdf9e20fd",
+        "source_sha256": "89da5380e7dcba5dba7053b28c42841df8073c5518f5ecff2d02833ce1b20954",
+        "cpp_sha256": "3cb2187a8f58c77689de4860b32fcc59c6592242ffa2cc811e041ca898cc26f0",
         "cpp_if_sites": 340,
-        "cpp_loop_sites": 17,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion_radiance_array": {
-      "current": {
-        "source_sha256": "bd14c5b3041297cdcdea71df6688ed8624f8ce8fa566bc2d08761744dc80bdf2",
-        "cpp_sha256": "c1ab2838c7b51f9622eb386101be6bd72edae0b904610d7a0224aa772e85d907",
-        "cpp_if_sites": 385,
         "cpp_loop_sites": 17,
         "native_compiled": false,
         "spirv_validated": false
@@ -265,29 +185,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "9832bf3ec0a6c4c32f8f0daec3b6ddbab4b29e4ff65bfb18e62913b038c6c8b5",
-        "cpp_sha256": "88ed08931850477bb94099eb403da201bc81ec07160be2b8ed38de2b3c807c38",
-        "cpp_if_sites": 414,
-        "cpp_loop_sites": 18,
+        "source_sha256": "bc647e307b26bc2441f87ef1dafa302ea89d897b37673b67058141b3792a7835",
+        "cpp_sha256": "87efce4b6cd8da317a1ab4f7fe891f9875a14ec56f9e344c07eace32c5aaea5b",
+        "cpp_if_sites": 422,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native_one_sun": {
       "current": {
-        "source_sha256": "362b67e3b21a31e6bb32ddfa03b5a46c4f2b7167ba7394531a0f86d4829f03aa",
-        "cpp_sha256": "842d75d8d10b83e80b175daaebd9dc8b2868aca035f30e537fe09a4a116b5b59",
+        "source_sha256": "d87ea87a7fcf9c36fac2b9371a9b7bc0e17a4a2d43bcb65d2a28439cfa23ca1e",
+        "cpp_sha256": "f00f6af6a760291a89d3f5e9d0cd4c61cebf2e19375d9ec7f7f61dd61d71d9eb",
         "cpp_if_sites": 293,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native_one_sun": {
-      "current": {
-        "source_sha256": "a54c71b620ddb40be75fa368cc61ce6f007adf63d78d97aee28bb458e3e105fc",
-        "cpp_sha256": "be09d082e4414b06d4ef0fcd97ed9f4ffd8d6c5d61cd64474e93da03b7fc1172",
-        "cpp_if_sites": 338,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -295,29 +205,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native_one_sun": {
       "current": {
-        "source_sha256": "5a504e8554ca03674eb56ad0d00807e9098314873783c0eff2b7f7c2f314de81",
-        "cpp_sha256": "32009e15e99c529f2a82e5d10e62aba1ede922a94636c89245f64286e167695d",
-        "cpp_if_sites": 370,
-        "cpp_loop_sites": 10,
+        "source_sha256": "92d701a5c479a6a5c1f90c1f9f58f9519f8992566f6bc0845551679e61db9845",
+        "cpp_sha256": "427ea336834553d392bfa4006d1e7e91bbc983133491f50a050a27d1df0ba95d",
+        "cpp_if_sites": 378,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_one_sun": {
       "current": {
-        "source_sha256": "08ee23e836c0cc33688bfa21c6b4563f588f154853d78f570f5ebb2cdcd10d30",
-        "cpp_sha256": "2e819e25a44e2e782fe6840be934c60737b12babcf3f9c3f32551bfded2f0c2a",
+        "source_sha256": "2737b3457edc1dc0e39c12e599cbfb68470588a018ff9df7334636fe89a5491e",
+        "cpp_sha256": "cb1aacd15a7274bacbc7adcd6928c12e01af048aac0cba4e499eef4442e7bbf3",
         "cpp_if_sites": 293,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_one_sun": {
-      "current": {
-        "source_sha256": "a7c14a6e4c5a4f49524e86b04680e96194761c7b9fefea6a98c5e693eccafdc3",
-        "cpp_sha256": "2f9ab8214c942a4d4aaec8ccbb564aedcb70b71d09704423bcd232e0a27f17c8",
-        "cpp_if_sites": 338,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -325,29 +225,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_one_sun": {
       "current": {
-        "source_sha256": "eded990d26509971eafeeef3552d0b557a756bb7161879d267b101128e1948e6",
-        "cpp_sha256": "106a030c75f579f698e3bb76523e60f9337757ba5387101a51b0d3d320cb7bf5",
-        "cpp_if_sites": 367,
-        "cpp_loop_sites": 10,
+        "source_sha256": "52602873dbeaeb63ab8bc3e05d646c502d569bedf5a0122c968cdb01a233b554",
+        "cpp_sha256": "47ac311de5fb296a326f356492734ac1bcde9363de9ae92bd36e09157c612821",
+        "cpp_if_sites": 375,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion_one_sun": {
       "current": {
-        "source_sha256": "dc75574d83b70cf3c34b8317939cdd236458f0d5a9d82f6f1cbe2e688f642715",
-        "cpp_sha256": "d361960d62055aec02ca3c346cf535c3c84c67e176ee33f7427e915e81ede8d2",
+        "source_sha256": "290153e75ec37a0b5d5d59fff7b0fe28a65d20a5f2f0ba3386e3586e23787497",
+        "cpp_sha256": "5abc67b1302f0fce85d2006bf61ad537247210773685885ef024325670ab7681",
         "cpp_if_sites": 294,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion_one_sun": {
-      "current": {
-        "source_sha256": "338f3ca8c9adb221efe87ff83e868be4d43ed3c4869955c75d8da290b2096d47",
-        "cpp_sha256": "cfd09442162511400e13eae3db15d98a879a0b8303f12c318adf184c9847854d",
-        "cpp_if_sites": 339,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -355,29 +245,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion_one_sun": {
       "current": {
-        "source_sha256": "06d50c83579a54a8387e3c59dc15c6620054e7f7d5ac709560baa8ae962944ec",
-        "cpp_sha256": "8d40d821a130a8480ebea213f287ab63449aa4e77a844f11291984f67ebe44ab",
-        "cpp_if_sites": 368,
-        "cpp_loop_sites": 10,
+        "source_sha256": "79ed4300f958a3d848dc9545c6a2d5edeb44ea835dcb16a644284e04cad3ab52",
+        "cpp_sha256": "29fe14da39fbcf33599764551e008d4cbe38a248cb01df5011a96b203f343631",
+        "cpp_if_sites": 376,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion_one_sun": {
       "current": {
-        "source_sha256": "1f3195cb1b561dd83382869d48bd741368c3cb81cad03bf6de0e38313eb5f5ca",
-        "cpp_sha256": "5807d94704a92ffef9748ba9aae9878b4f519c17c10c0d2aaac8b4f639403e6d",
+        "source_sha256": "59629bf38f2afb338b6fd99f28023e9d6225405f11048185faa0e98b18a3dcd3",
+        "cpp_sha256": "7ad73029cecae0d34c6d798989de0b8236203f8c695c5611f223479db5aa0e6b",
         "cpp_if_sites": 294,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion_one_sun": {
-      "current": {
-        "source_sha256": "10d0af8e7d1bd27e720ab59c5b64f784e6cfe3aa6cb1cb3daef50cae3158059f",
-        "cpp_sha256": "9115c59f92a75d87aaede82677d561b0e3631b2cb42d7616536b5bd34dbee8dd",
-        "cpp_if_sites": 339,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -385,29 +265,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion_one_sun": {
       "current": {
-        "source_sha256": "88c4169db8ff606d797f330435936f276d754e2d677b35b1ac70421471bfba7e",
-        "cpp_sha256": "018b404c484465503090643593a44983ba0fe6463ddd30a0d440b3ce5b74da68",
-        "cpp_if_sites": 368,
-        "cpp_loop_sites": 10,
+        "source_sha256": "3626d7d83e82db99bef7522c7820bfb40320ee8366e1599543e095098ead3916",
+        "cpp_sha256": "6b7a47e55f4e2576e647e0ca99876ec4727f301b21663e67e7df48bea5e671f9",
+        "cpp_if_sites": 376,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "946c01c5c9893c1a4b4a64fa21b7130091c0c9dc03e8c217794351105ce06a81",
-        "cpp_sha256": "69cc090cfb9a145e437f531541da54688396cf35c8ce725456cb1ac50ff75b7e",
+        "source_sha256": "5d4590adb48b8bf9c033050424788b305606cf8f29e8c08e4df544d197704cea",
+        "cpp_sha256": "f44bbbb2c43c7ac8c4ca5b795302eb6340b8250fbadd5910038179819e14ebd6",
         "cpp_if_sites": 294,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native_one_sun_radiance_array": {
-      "current": {
-        "source_sha256": "fecd53223cb9b0204c2f92c0f4804d4329d646a32c5fcd76f119286824e38f5e",
-        "cpp_sha256": "10cd0ac4dba7b8a60c163b7ae5f3da6ac31a6eb8896efd0bb5273ff3e715cf0e",
-        "cpp_if_sites": 339,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -415,29 +285,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "fd67f98e8bcb93328d3f0a1353c5568d1756d642c69edeb4e25a18ba2621c753",
-        "cpp_sha256": "1baccbd7d30916d5f5afca2d75c845ad42b93db3ea8523cccace32f008a9064f",
-        "cpp_if_sites": 371,
-        "cpp_loop_sites": 10,
+        "source_sha256": "d694834d046197b77ef18e3c04fb14f0b7730e21c81f4c2d39f498b3a2264efc",
+        "cpp_sha256": "7ddf6373295b653606e05d29d9148da3b8b566181980f4961bc1c4e967adbba8",
+        "cpp_if_sites": 379,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "da04c05515354660c28711db60dadd8cc5345a4015263d30b287d6b628bd6e0d",
-        "cpp_sha256": "df83350fc165a5bdb1859ea23650354e39726ef11f65e73a36353b4fb76afd04",
+        "source_sha256": "8d73ce18c92e18a9d88cd9826f08c9c367763dcb1c6994b480cf5bff3ba0ec46",
+        "cpp_sha256": "48f1620f1742222a3b8a83d936103613ae9a670b5ff9d903a58d8ac1d038a8bd",
         "cpp_if_sites": 294,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_one_sun_radiance_array": {
-      "current": {
-        "source_sha256": "98b4367bbe6f4bbd3bcda51eee69bab20e97cfb3cad5645f701e4166a6c0b112",
-        "cpp_sha256": "c7a71398659a23695e2db8e14b78aa3beb01ec47b54859fde6d0a845b23da88e",
-        "cpp_if_sites": 339,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -445,29 +305,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "9d72b105afa78dde3cdc1848e5eced2ee5dd82c5fdbf076171f48d46e922aced",
-        "cpp_sha256": "06cd265ef9ae3477ea8233379d64dffdf7aadf55252e75c3a4aacfe8ff335bdb",
-        "cpp_if_sites": 368,
-        "cpp_loop_sites": 10,
+        "source_sha256": "e7887b061599207935160307bfcd13bf53682e8e4669b24bdbd1faf7f1c35168",
+        "cpp_sha256": "197ba545af11418c90ac485adb2b979235d132cebadbecdb7d2cc6e6b23a1c78",
+        "cpp_if_sites": 376,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "0b45323c87af3dba107ff49fa5d353e3acc090af8ef983537f3a7e56ed0ab281",
-        "cpp_sha256": "90b37e233e5de33d1caa7a20bd18c482c6e6ac77018ba80bbf904d550c6e852c",
+        "source_sha256": "98ba5d0152723167f6940197b444a560996f545da78adbc4597dbc0974e19e9e",
+        "cpp_sha256": "fac45b4eaae33d319331b693defbf0726d51c1e3f0a2b88e6d1d7fc8a3b6f28c",
         "cpp_if_sites": 295,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion_one_sun_radiance_array": {
-      "current": {
-        "source_sha256": "c57dd17f51669c012d3ad83463f6b97122a539f36b317662e085c99f07ed912f",
-        "cpp_sha256": "e50daab5bc15d5ae94fb38fd5f89a0d6293a8a90fdbf70feb7298fdc4c7060ce",
-        "cpp_if_sites": 340,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -475,29 +325,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "22e5c6bac55043fd07fcae9a3efed19083435527cb0adff08bc936ba998ef309",
-        "cpp_sha256": "2952aedf0dba52298eddfe95ebfeee4fe4e1622608ab98a6fc489a70c2dc2fba",
-        "cpp_if_sites": 369,
-        "cpp_loop_sites": 10,
+        "source_sha256": "7fd1933444ae56db8f8401ef627af17f8c3a2b7674a09249600ae739989eedd3",
+        "cpp_sha256": "86b29dd8ec6c21d360874a2fbf9badc424f9a3516bac85f31129d8f7a4124550",
+        "cpp_if_sites": 377,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "f1eb660720fd0c20146d6e43a84d64dd7352aaa1195e3f2ff3ad7fc9019a6259",
-        "cpp_sha256": "88ffa8206a32995d40810d91f9775f8394a683abd461b7d1f81e08390b980e0d",
+        "source_sha256": "cdf0cc6d49b1fe3a42091abc6dd958893b56ad77e6b9547f304902c1dd80ebac",
+        "cpp_sha256": "e5ad426a5285122f7ccd8c88e32d33498e572ec3388c8c78048972a40a633d4c",
         "cpp_if_sites": 295,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion_one_sun_radiance_array": {
-      "current": {
-        "source_sha256": "2b8c6ce0fe9e4ad01e2e809e87670bb2f4f5b36213a631b15bf073c2c9f6eb83",
-        "cpp_sha256": "743cd1c69fa49522705152a92ef34f8906ccb2fa8a41c69bac75755cd1570f8a",
-        "cpp_if_sites": 340,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -505,29 +345,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "eb8f7b9f026ba22a2a949a27a07fabb26108aef0d00f92b991828eb89eb2c399",
-        "cpp_sha256": "4d37fa6ea32804c7442fd4efc946470f3f79d26c060c27c9bfa9e5a104da84ab",
-        "cpp_if_sites": 369,
-        "cpp_loop_sites": 10,
+        "source_sha256": "b4147b9aafae8cf141998599d960df0a74ea6fe8c09a682584aa973cddbc31e5",
+        "cpp_sha256": "9573395fc5452cafdeaccb6dd7f1376409d2f7340fa14163592f9e5c1a736913",
+        "cpp_if_sites": 377,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:depth": {
       "current": {
-        "source_sha256": "9479daaf6f683db8af7c409d44496a59ca52c60830f6fb6fdfe7121ca3e02e76",
-        "cpp_sha256": "4463f797aee368fce2df4629cc0ff5f2da4ca8783332b576a5a7b5e8444cf77a",
+        "source_sha256": "ff3df35f38940a7b1710ad9d6722f0b1ffaa3ef6d2df7ec46a500dce1fefcd33",
+        "cpp_sha256": "dfafd8ed4dee3ccc08525a91a8a4b5835a82fc32da38d1003f6a4ae4f446d20c",
         "cpp_if_sites": 250,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_depth": {
-      "current": {
-        "source_sha256": "ced123f6af9f46c2aedbda06b73726146edcccd059782f9eb27297991087e96f",
-        "cpp_sha256": "f4bb72c2d24be5e80a62271feda7cc5aa67ac73cc86b0aaf170a9eecfb952d9c",
-        "cpp_if_sites": 298,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -535,29 +365,19 @@
     },
     "terrain_clipmap.glsl:editor_depth": {
       "current": {
-        "source_sha256": "e6bd5d08db90919c50f9079c93fe63b3e66d0feeba733336e12ab526e9b4ccfb",
-        "cpp_sha256": "95da5219a47ef9c1d2dcb7e7672f7631625f59878d45953394ca9c4dd80da3fc",
-        "cpp_if_sites": 326,
-        "cpp_loop_sites": 10,
+        "source_sha256": "56b35513c46d857cbce8eaaf3789e704310192b85f7238f5117ea8410a013732",
+        "cpp_sha256": "3b6b4675384310c4ccc4438b2472efae08d2dd44a98e2820d61c81edf6ff6b1d",
+        "cpp_if_sites": 334,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:depth_normal_roughness": {
       "current": {
-        "source_sha256": "9bb819535b305dbbe16a7270753dd8885e07f3c01751934791c08c5da08b4698",
-        "cpp_sha256": "f7052ed0462b00497297ee356458a6d864dcf1b2ffcbc8440db24b1e8b42f271",
+        "source_sha256": "4b61feed8a82d007241163b3163d64889bcd28eefa8f136b0e38b66b6b581bc9",
+        "cpp_sha256": "909123d591a68ecb6205de0bc0c31d7be4089354006b7c85bd843c122110b5a8",
         "cpp_if_sites": 264,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_depth_normal_roughness": {
-      "current": {
-        "source_sha256": "df24aa6c987c49274c8ee10603cef40772ac1ed6631e38457a4980fbdc22d2a6",
-        "cpp_sha256": "d2007ad3d6caefa97a3ea14cb120f308172487d84b318fc9b6cdb1dca4e425ae",
-        "cpp_if_sites": 310,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -565,29 +385,19 @@
     },
     "terrain_clipmap.glsl:editor_depth_normal_roughness": {
       "current": {
-        "source_sha256": "1762e851d3a693a582cd84023c07d4bd20f3a8b7e42c9462f219c890e641d359",
-        "cpp_sha256": "35eb2429a731a339c59981323725331922df7f8c823d60bb84f53342f90c1660",
-        "cpp_if_sites": 338,
-        "cpp_loop_sites": 10,
+        "source_sha256": "934b48b01d98f7e16567de570697cc4242587252ee7b96e6c06b8c65900cb9ad",
+        "cpp_sha256": "6675feab9ac340a2b73a724da0e1793457d68d33cee294c281cf88900b335cbf",
+        "cpp_if_sites": 346,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "8eff8691adbe2c1faca2295c5393d05bc6e80c5d5918ce781a575b0a59e3c556",
-        "cpp_sha256": "7559998b99f3bc5797e6ef2313fc801fcb845368c21864f855132b913b34aff1",
+        "source_sha256": "c49402872efd341015b5aafcc04fd33475b771f13862d659c3eeb0e17eee053f",
+        "cpp_sha256": "4fcca2515a1f1f818ab25ac960098dcd2d267a95573deb592b41a4153d6705db",
         "cpp_if_sites": 264,
-        "cpp_loop_sites": 9,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_depth_normal_roughness_voxel_gi": {
-      "current": {
-        "source_sha256": "71450525236cac73a9d09a32ea8cdd97a5b6a435c6a3c069e0fc22782f64218f",
-        "cpp_sha256": "a0f205ef98da12b46d0ac355c8631dfd563bbdc2b311d6e3c635e1117e5d7157",
-        "cpp_if_sites": 310,
         "cpp_loop_sites": 9,
         "native_compiled": false,
         "spirv_validated": false
@@ -595,18 +405,18 @@
     },
     "terrain_clipmap.glsl:editor_depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "88d04a426336033c7a7e0c6de9972ba24a817e5e0ed6d7677bd401d16609aa4b",
-        "cpp_sha256": "f79a1395142e4dd15c479a83aadd17ea9d1d5b287f0a6d2e95d63b7aabd21708",
-        "cpp_if_sites": 338,
-        "cpp_loop_sites": 10,
+        "source_sha256": "34df17143a3c3ea998d2b4f361819883e48780cd0dfbc3ae5157ebb3f6b35605",
+        "cpp_sha256": "8603456e6332f2ec0209ed68657410f121225f1fc0bb0151808508dcac00ec89",
+        "cpp_if_sites": 346,
+        "cpp_loop_sites": 12,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:feedback_color_native": {
       "current": {
-        "source_sha256": "c2abeba34d481d5735f7766775ccefccb11da7ad1c53caa19d419a4a1ef04dbf",
-        "cpp_sha256": "e0bd6f916a7a077a3f8dfd7df4bf014fe05e55939d615c07f2b5ec0dc7d88b85",
+        "source_sha256": "bb6cfa6f53c9adcd148f9a133191497aaf67f99191c6399bde9d9cc0987148d4",
+        "cpp_sha256": "7609b2b81c0a8e05f3bb9eb023b5d1b90e163f0117d358fa69fbfb5b57c2f1e5",
         "cpp_if_sites": 367,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -615,8 +425,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_vt_hints": {
       "current": {
-        "source_sha256": "cf6e5a7c64a3fc12226d4029fcfad366f8868ca0dcff9f4aa1db40dcb60d0217",
-        "cpp_sha256": "5013269f47025b85ef322cf67566d4e612c1fef14d04b4dca3029573ab84647c",
+        "source_sha256": "1fd28d6cc07eb559d6f85c45b33df9b16e8e9a60fb14ec4b70e8d84f5d673faa",
+        "cpp_sha256": "3d123d3fde303a871c1062c91fe9e38e8aad6ad063b015b94a7f9ccb6386444c",
         "cpp_if_sites": 372,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -625,8 +435,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular": {
       "current": {
-        "source_sha256": "b524e3adf6154a84c63a88a1b51ae3b29fccf49f0edb60b036d66bf5c86bee6a",
-        "cpp_sha256": "51e4932f5a0f544981996f4181ceba3538b38ebea4854e65cb64d8e3b7e14061",
+        "source_sha256": "40ce5745e7402ce01546003093424e97e2f7d41b63b6145da6f5e4f8bf8b7185",
+        "cpp_sha256": "a6d2840b0f2accb7c6371f4c8173b06f719fe9f97e66becada8aa2b7c1d8a793",
         "cpp_if_sites": 367,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -635,8 +445,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion": {
       "current": {
-        "source_sha256": "02bc4cdbd452471a0e5fa13d604d0ff384de6cdcd6e96cb765bcccb1f1b9b6bd",
-        "cpp_sha256": "81dc3ea2f0c837331725468086365cdbbb38daf6a63fcc6203951bab45200ecc",
+        "source_sha256": "9a3382e5cb3c3b38ee2b42ded2727b5ea30b9dd4762239ef397c776d68969206",
+        "cpp_sha256": "e1bb898dfbc27a8a4c443dc9a2db570ea1f64840d1fc2fb8df45e0433078e253",
         "cpp_if_sites": 368,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -645,8 +455,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion": {
       "current": {
-        "source_sha256": "7954588d5aba095692cc9d2e13f1d488a3bdc7af2d0c93f47d659c7998b7ffc2",
-        "cpp_sha256": "4aa4ff81b0a7f5d5eaac274759a45019618f0dd44aa7d9380394cd01c6761e52",
+        "source_sha256": "c6abb462ad674cc14096707d222286c74e1e6bbeb21f8d55ce5e6853cc9019d3",
+        "cpp_sha256": "40751a968b5afe28ec016da25bcc2ff3aa07d23bbbe4e0ae2d5a1c596218f76b",
         "cpp_if_sites": 368,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -655,8 +465,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_radiance_array": {
       "current": {
-        "source_sha256": "9dba81e01a8aa096da5575a42c0a3ab1459efd013278ba3477b5613fdc84394c",
-        "cpp_sha256": "824d3175590277cda118e7589e9bbbf0184562b3afa4fc8828385d303b40ba79",
+        "source_sha256": "781e086f5b080444e8a3bca865dca694de467bc87d00de45d38c367e38b62692",
+        "cpp_sha256": "afb79dd0911e3f016a35fa025bb160fa8052204d37d980e25c4eed27b55556d5",
         "cpp_if_sites": 368,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -665,8 +475,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "58dcaca96c1e96939bc6ee5377b25559b142fad4690d1a481555b897302ad37e",
-        "cpp_sha256": "bd6c65f4cf0bf79afb404b59ab8c6c0c6f5be156f73543584e9b3d9c70f9a92e",
+        "source_sha256": "aff5e3e3f145a09df3763770ff2616ef06e686e63563830b13b35e0afb72a1a1",
+        "cpp_sha256": "a800ae49f56b5bed58069b7798a7fd66417c1512c4ec618e23571631a78c9cf3",
         "cpp_if_sites": 368,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -675,8 +485,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "7cbbd7a6acadb9c23c78f5cdc71342b371e2c91ffed92ba41f500d2a1f74ffca",
-        "cpp_sha256": "66cdd155d0d3c48ac1c5369b033238a2f21f72c055d3ca06eacccf22c78b8d77",
+        "source_sha256": "90395142a3fd0ed1c783b4c3d4918bfc7ea1fdb1a1d334e427fdc38788a726e5",
+        "cpp_sha256": "308ca2118f856ddad850b2d58710575eae80a4301b3e1e3cfcebe1d0b0b2bf4e",
         "cpp_if_sites": 369,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -685,8 +495,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "617b7ecd2126c8d55c5a95f2814cee7d36b9a7607597d2d2a3508fb982ed4fa5",
-        "cpp_sha256": "1619cdb4cba5082ebcdc12d348d4e65c70978d4e38b327bd977e92d467b5b62b",
+        "source_sha256": "445b0ac877ffa39fa22a1ee96ea12f1e7de10fd284a54f6c3a56f6e9876528e3",
+        "cpp_sha256": "11f03b2950bab102e5f84d30c1441569fe34f62fbcec18efaccbc4c8d04c9163",
         "cpp_if_sites": 369,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -695,8 +505,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_one_sun": {
       "current": {
-        "source_sha256": "8d0b0f5c082cf21c36078b4979e8d38c3d5fe3dedeb90d79d4c4f2f37b5f7cee",
-        "cpp_sha256": "2a9f0e362792ce58ed860a9ee24e12b7d5855c3a66ee82f4190e857227d29a65",
+        "source_sha256": "e28772bb2da44b9fe2369a4937a363b6f17c42106057adab7d21dd89a9c1e4ca",
+        "cpp_sha256": "95d2b9a8a6123ee306970b4df07a3a053ce76adf2881f2a4c467853fa5429b54",
         "cpp_if_sites": 322,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -705,8 +515,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_one_sun": {
       "current": {
-        "source_sha256": "90127a997e829e123ebc9fab5a4fb881ad93c36791d4cccc5e26c5d9d2fadc8c",
-        "cpp_sha256": "6bdd8a0cbce15ec370485fdb1b56b4f4b7b77316cd6c2e5af13cccc70046b76e",
+        "source_sha256": "99ed9ff7a99e66ba807f3be433fce5295fc56f0608c1adb3ea18bb2cf84e4c85",
+        "cpp_sha256": "e022b39af6bb68ace3200944a094e3c63e65ac4c8d481a0364d00178be746bbe",
         "cpp_if_sites": 322,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -715,8 +525,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion_one_sun": {
       "current": {
-        "source_sha256": "7d21104aa4112326765898d4b681abf78440845648277601c5613c6ed763409c",
-        "cpp_sha256": "4e794f129e1b22df6ebb185a968adb7f2761eeb94d921bc284840da932247fc8",
+        "source_sha256": "2e9be7aa1a787a7d409cc3895614af1f8bd82b792bb2d05d7b4d65bde111f0a7",
+        "cpp_sha256": "13725b16e43e86be8e3c89ff2db0f69eb414e67ffc89fe4f5d7f2cd2f460a44c",
         "cpp_if_sites": 323,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -725,8 +535,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion_one_sun": {
       "current": {
-        "source_sha256": "ddc30f7ad7d8753ffd929b973ecdf395aee425d95e4ac83702fd0e1e7b002a96",
-        "cpp_sha256": "2a50f4b53957f015914031662f07c7f12dc1587b26672e65b885f39ccc75cf23",
+        "source_sha256": "5016de91530c040aa7ffcaeed443d9c27a58f9eb65cc023b0347613df9f1a5af",
+        "cpp_sha256": "624500dd27b9d0aacc74158eceb58ab332e72f5b8110e1e923ea2d23e92f79af",
         "cpp_if_sites": 323,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -735,8 +545,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "ce26e853318251a67fb595c48ee6378f2ab71f8c5801e0fd9c176b2dbb4c89fa",
-        "cpp_sha256": "1122ac1b48a6723591bc096dd6c7ff8c9c30043f0bc12ef5de803ea74e611b13",
+        "source_sha256": "1b155fd88e71df7a5fd793f1c1874422e86c7baa12e2ef9dddfb603f61c7c20a",
+        "cpp_sha256": "a5b49eaae7f11d18c6812515db2efd757d1a4beab9d85a907f619da1a8e6d7e7",
         "cpp_if_sites": 323,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -745,8 +555,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "7388d72064c4fbf49c96acfd94f3af2ebb8e2ee741c899b72c50b09b5705664e",
-        "cpp_sha256": "7dd34c42e7f36ff136aecffaaee60ffbcf46ba4f0324e9308b9f98a5292816c3",
+        "source_sha256": "e7be7aa79f626db9724b75d1113b0bfcd47e3edfddf5578054db9425fc0d4971",
+        "cpp_sha256": "af0779c534076e6e38764a7e98b313aabad147bb1b49f197256e336d8e483ebc",
         "cpp_if_sites": 323,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -755,8 +565,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "1b5c8201d0ac01ef57858519377014c70849ee07b4fe40de73cccda5aaa6f08e",
-        "cpp_sha256": "8731b300fc45d472b05f47320702226d6fb407643155a66276d9b8cfd9a8ed42",
+        "source_sha256": "284c2110c8c515a54e235008dd239142d54f019bf0bbebfd176e6dbd7afcecb9",
+        "cpp_sha256": "1045fbc649a38bc4519451214d07c5917b7de7e5ab3cebc63afc47818de2cb8d",
         "cpp_if_sites": 324,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -765,8 +575,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion_one_sun_radiance_array": {
       "current": {
-        "source_sha256": "b15f27fec05264ade9da6d8deecc26351b519808af789386ac3ccc1b32257e87",
-        "cpp_sha256": "662dbab17de988b97bac9b746c5d2520663f3e3734abd62a2866185a678527ec",
+        "source_sha256": "fdb33b311abf6949d6a91b53fd08e4ceb3bab4e29336690e16439cf39068ef03",
+        "cpp_sha256": "a99362391be6cce179d550dacf6273acba5a0edf46309835461183b20abeed3a",
         "cpp_if_sites": 324,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -775,19 +585,9 @@
     },
     "terrain_clipmap.glsl:color_native_compact": {
       "current": {
-        "source_sha256": "3ab24053b0470ae24d4b0ce09dee57a1cd5d3965b64af13c12301f2aa13264f6",
-        "cpp_sha256": "504c1583c04707a28de7d5da5264de930291f4c9a044b6f2dcc86824cb80fcd3",
+        "source_sha256": "9fd41a7c642b13c5eadb158d8f1a3fb52503c74fc83743fe9a1af64efb3db5c7",
+        "cpp_sha256": "e22300f7a181f463246e4b9f455ef64cb67aa918bd7a01a383a9ba68c515f968",
         "cpp_if_sites": 344,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native_compact": {
-      "current": {
-        "source_sha256": "8ab82effc87ec60cf2b3e63e7226f3a20af348d303154017bbd8ac6918279817",
-        "cpp_sha256": "296d53b8bc8a1e7af5023f116bfd2c170473d4031298e5b55ad1a3fe4bd28d08",
-        "cpp_if_sites": 389,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -795,29 +595,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native_compact": {
       "current": {
-        "source_sha256": "b5a724dd0654417d311761a5e5d135fe8395b03771b6dbd4fbdd07a4cbc04ba1",
-        "cpp_sha256": "55c476388b8c09c09f7482208bf8e326612b8a9476aff20674c20711d250e4c2",
-        "cpp_if_sites": 421,
-        "cpp_loop_sites": 16,
+        "source_sha256": "9db156fb0c7d5c02a26a538d5bec27656777e668041011a5b986552a2ab4ade1",
+        "cpp_sha256": "69fceb933cdff4287e9aaffccb2787430477bc5113ef071dcdcc5c5e2c095157",
+        "cpp_if_sites": 429,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_compact": {
       "current": {
-        "source_sha256": "979e7fe4f055a2e0f0d55b966450af6acd16cdd1bea05ce7b14b72d25b0967f2",
-        "cpp_sha256": "56a416415fb069639ef7cb3814410aa874d33fff1098dcaa7031dabc2b601c33",
+        "source_sha256": "f592f522641b9e77ea810bbe7a4a8ec1b5826a3343b9c713e6a76ad8d61a6054",
+        "cpp_sha256": "2ed6ba22e995f586c2269eb38c2c78a40491f68ca346a6ff27879b585b33d618",
         "cpp_if_sites": 344,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_compact": {
-      "current": {
-        "source_sha256": "8335c9fd9c5d937d6c7532d82110df3fe6074f2c65e0f770aef5885dac27064b",
-        "cpp_sha256": "80119d53393211331b7aeac2a1df295d404f30c96d6b08051b0e23116e204ac0",
-        "cpp_if_sites": 389,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -825,29 +615,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_compact": {
       "current": {
-        "source_sha256": "1a007a1b75dc4d5e51d35b348ac31d747cd1af11cbaff83d21a80679c2d1b202",
-        "cpp_sha256": "423fbb3c845ec3ca0553e22de253711e1675d77e1932e0fe7834f17037fa2d4b",
-        "cpp_if_sites": 418,
-        "cpp_loop_sites": 16,
+        "source_sha256": "52266509a01a864f6c809dece96c009d33e29caef0293d1254552a852567120d",
+        "cpp_sha256": "9900cbfc5ac7f1e136dc7620cb9042827970e71ace64d6080f21b0b35bff2c20",
+        "cpp_if_sites": 426,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion_compact": {
       "current": {
-        "source_sha256": "0574b907f41e95c8118518225fbd8038c0b72deeb960699c2a1acad0fa2a86e8",
-        "cpp_sha256": "10f12019fbeef7305a2a603399ce9a4ca693ed8a07609a14652056a892c54dc3",
+        "source_sha256": "da0a5e545fe49eaf95afa9284f66bd5227adbd3c74b22c11cec2a72cf30027d4",
+        "cpp_sha256": "121580e470f9ce994c7cfd698d38e62b0db1fa86ee119870b10b302c131d6349",
         "cpp_if_sites": 345,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion_compact": {
-      "current": {
-        "source_sha256": "f67e68496edaea6e9e04c19bd69a3bcba623e122d9f9538379d42091d0d1f1cf",
-        "cpp_sha256": "7c45bb41f5c4bce5a89e401a3d6f9d90e8f877d7346d42fa7833ba4b40cf09fc",
-        "cpp_if_sites": 390,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -855,29 +635,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion_compact": {
       "current": {
-        "source_sha256": "799b27bf9eaff8b0d9d732adf2a5948160bf9fec090f3f8269cbb1266f679d3b",
-        "cpp_sha256": "283397175af16eaa08fab58c949c142f798d71f71fee04e521b032b2fe1e967f",
-        "cpp_if_sites": 419,
-        "cpp_loop_sites": 16,
+        "source_sha256": "656827f1252cdea559113de4cf76d55cf4baa4de1b463e6efed04f12f67c1974",
+        "cpp_sha256": "6952254b82983ae6c1443bc71452e4face3130e54bb2ab24deb27a6fe2578c9e",
+        "cpp_if_sites": 427,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion_compact": {
       "current": {
-        "source_sha256": "93a902603b51a609d5d2f676d56e8271cbb78374185ec4effdef4f8866781f2c",
-        "cpp_sha256": "2b38a50ae88b384364d7bdc9e2cf36ab436cb0aab54a1ac621bc51a8598d90fa",
+        "source_sha256": "6dae165fc153dd11a34cc514c0b356c66efdea1f4eaddfae329615b078853bb0",
+        "cpp_sha256": "6ec19eebd27beb5542c1e732e82ed539e29c58cb8ba0657c51606e103bda2dba",
         "cpp_if_sites": 345,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion_compact": {
-      "current": {
-        "source_sha256": "a2c0323836bf1631f694c0142fa686abed8ad120f8545a431285caf0ba38911c",
-        "cpp_sha256": "4241dd45e5ef1d0eea39ce4c8e91662db9fa98baea09af565ccc15e7220e8f9f",
-        "cpp_if_sites": 390,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -885,29 +655,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "81515b5abcb63ccbd9619701fccdcabbb9ae712f13ead4d2c069d1a183a30473",
-        "cpp_sha256": "8535a1bab1dd8e9894b9fa1150e50f2d39f26a71be3cc20220df88f75f4899be",
-        "cpp_if_sites": 419,
-        "cpp_loop_sites": 16,
+        "source_sha256": "7d9fa237170357f2616b06d94b30a79788d01aa1741f72048008292c9570b921",
+        "cpp_sha256": "b94ea15f6fa66732649d461487a26c1fa6b413f3852149878da672e68a3dc8b9",
+        "cpp_if_sites": 427,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "95c88b739b075703782a06e0ce5a5bbb66e9c70332e9c661615adcf4d4bb6b9b",
-        "cpp_sha256": "36e29e14e421ce9c176cc6a465d68ab0fc8e6353ffcc6b614325546cb9deebc0",
+        "source_sha256": "9a11361864c0a50d7d622460ae77f5894cf5616eccfb4bb247d4079a459a96b8",
+        "cpp_sha256": "2467d0c9cd0c60fabc55bd97ee468806ce48b015f4febb6a60b2541699999fe6",
         "cpp_if_sites": 345,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_native_radiance_array_compact": {
-      "current": {
-        "source_sha256": "5c6fb4ab181a5be6c6e5ab41f921fb9eee8bae27b64d8f227be20d6aee30ed8a",
-        "cpp_sha256": "d2c61f425bf85314a9b4fa291eba71711ad68b1c71d4c503680ebb730b98a83a",
-        "cpp_if_sites": 390,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -915,29 +675,19 @@
     },
     "terrain_clipmap.glsl:editor_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "406e21ba30048c69449a5fd8f6b448694fdda05386f9cf8db1e910d5e46002db",
-        "cpp_sha256": "d571a39d7fa2776f448e2c49a0a17a208c6bc0339a3acc3ecbdbb244b27ee97f",
-        "cpp_if_sites": 422,
-        "cpp_loop_sites": 16,
+        "source_sha256": "098e6528ceca9462c9ab91748d8c636ced911986e3a055f0cbe5e2f7a5a62926",
+        "cpp_sha256": "758eeb6b5cfd67f2ef77ed69a7a284f308f08f731ddeb1b149f4a5fb53802cce",
+        "cpp_if_sites": 430,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "c08c767e6bfb56a7f0b39df8fece989890702b8c17280f348b8e28e376649c1b",
-        "cpp_sha256": "306d4576fb9bfaa260ff6f9d5aff7b515f4a3ff8845cb944be161c2a1b0b0be9",
+        "source_sha256": "8991274c251f5dc5e445135776626d7b6af57b82631d6980d09e0a2030be8706",
+        "cpp_sha256": "4028e7a250cf7e70f53fdc90612248f955b576f32eab41f19b82d7c24c6d607e",
         "cpp_if_sites": 345,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_radiance_array_compact": {
-      "current": {
-        "source_sha256": "fe6eac16015737670dc26c18684837326486015838e638d8f17d42bab475ba94",
-        "cpp_sha256": "c9455eb5ba6d7c794fb04eab4a8be35c9542c78ab606e701c6c41d42299ed25b",
-        "cpp_if_sites": 390,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -945,29 +695,19 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "0ebb49902dacce49eb2667fa1183f71e4a9b1ed01f320ed4bfb10daa9b4d4004",
-        "cpp_sha256": "34353239ed984ffb071d3c24b28296c726df8deea4737b925c3858a7ab221e68",
-        "cpp_if_sites": 419,
-        "cpp_loop_sites": 16,
+        "source_sha256": "68754a0605218e63420d6df17bd34a5eddbe7b6fcfc312724ca520307ce51884",
+        "cpp_sha256": "b625041350f4ca69984d354f37225117021434116013523cc79fc466c17c62f9",
+        "cpp_if_sites": 427,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "752cc73daa682116634683c78938364e8b5d04855aabf22ed049445e04894c11",
-        "cpp_sha256": "332460f20e3d4c9e02f856aeb3b2f56892470b6f7c62e77fa3fbe7b9664c6098",
+        "source_sha256": "b222f4e5a4e636dc7f16d493a8c99f2a0f9e85754f30b55727066dd198c5da71",
+        "cpp_sha256": "f34e3f56101ede85fdd321507a1125dada4ba692468991a746a0e560a59a021a",
         "cpp_if_sites": 346,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_motion_radiance_array_compact": {
-      "current": {
-        "source_sha256": "e9c39e85580df9b5434c33cbc2bde9833e89c8fc1b5cd8d4979eabeb40afb364",
-        "cpp_sha256": "ae3c7b486cf6597a9b58309230b0543191a488a23ad7bb265c6ec924a39673e0",
-        "cpp_if_sites": 391,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -975,29 +715,19 @@
     },
     "terrain_clipmap.glsl:editor_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "65f8a162fd731a3abae02d3be93e72222f6c03c4d4c92d93b771db3e07759e81",
-        "cpp_sha256": "12acd9aa9aab795d6d6473be4f6f56d2e1686ba06e1e10231fd80e893c3d646e",
-        "cpp_if_sites": 420,
-        "cpp_loop_sites": 16,
+        "source_sha256": "2a76d2954d409c0c4abe03af0f0854b3af25fe8fe9c8453510f81c7fb6c31f47",
+        "cpp_sha256": "86acf07651c470462b5dd819a67151277f81ed46af199acf6222488581ad004d",
+        "cpp_if_sites": 428,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "900d2a6b6f727d684c98ba95161543299ab669c1f132da0f5aef803c390a21e9",
-        "cpp_sha256": "d4980aada1c52e4e675d25468c38c6a16048dc73b6153ee63211b607e889a110",
+        "source_sha256": "efa569ef1c9a34bbf6bc9ca0f4f6a3001af9b93ead4c6c7b4272183c28575d58",
+        "cpp_sha256": "db81e8ef874c687f0e03e6f20f70fd87be38fcd7178ed15b08f99dec7568459d",
         "cpp_if_sites": 346,
-        "cpp_loop_sites": 15,
-        "native_compiled": false,
-        "spirv_validated": false
-      }
-    },
-    "terrain_clipmap.glsl:compat_color_specular_motion_radiance_array_compact": {
-      "current": {
-        "source_sha256": "bebe8dcea155cb591daa89b9021a08771d5ab1b89506e6f03db62c0a7272c65a",
-        "cpp_sha256": "4b261f9a8c41fb9736e71a505f1f5e99acc7c99c6434abecf9cb5f28aef0a0a6",
-        "cpp_if_sites": 391,
         "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
@@ -1005,18 +735,18 @@
     },
     "terrain_clipmap.glsl:editor_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "3f862d17a57593d68350b3e78971b507da39a69b32bc2a9a3f5705b4c4cc7ecc",
-        "cpp_sha256": "47758e7efc56913d829abc97dac3ec6b6c2d39309dc3426033613ee10427123b",
-        "cpp_if_sites": 420,
-        "cpp_loop_sites": 16,
+        "source_sha256": "427acaa623b524d29e9042b5a7788921e77eefdd4b8e4bd54ccddf0bfcb1f643",
+        "cpp_sha256": "6d3257c2cef87df2fe57bf4da696d4100719d7f7db63f1764764efd834babf4a",
+        "cpp_if_sites": 428,
+        "cpp_loop_sites": 18,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "terrain_clipmap.glsl:color_native_vt_hints": {
       "current": {
-        "source_sha256": "770ad2ae5ac0a072910442d94ddd8e146b62e94da5e4e9819fc550a6dadd0255",
-        "cpp_sha256": "b47436ddb5fd4517fe21cdcfe3f39b002160068a9b59c4b21f5e5ccc761940dc",
+        "source_sha256": "ce876820f64b3dc0998a3df538b001122fef4e6c6f707aeb92f3a5d161004c5e",
+        "cpp_sha256": "4badd021c52e472d151cdc5f5f773e17815c46b6446581a0374b02ccf81da5ef",
         "cpp_if_sites": 343,
         "cpp_loop_sites": 17,
         "native_compiled": false,
@@ -1025,8 +755,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_compact": {
       "current": {
-        "source_sha256": "7e9e84e9c7a329406e4b4233faf5013179fdfafda16c541862ae8c956c58fa03",
-        "cpp_sha256": "53e283f1c5c6b9dc49d6465e88e3a72d4b824e5bd1df7ca05f55b7c838e09436",
+        "source_sha256": "48bac47f7836fd93849cb6c31e1cafec341bdf64f23674cfe68368d343b24f31",
+        "cpp_sha256": "2fd576dd4c2ddae9d704f7a9e7a6a007c4935636c6ac356da3fc2fe815d0899a",
         "cpp_if_sites": 373,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1035,8 +765,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_compact": {
       "current": {
-        "source_sha256": "c04bf1db03fe7e943052d32e6f970a8ef095dafe487917a9e8aa534b78dd462d",
-        "cpp_sha256": "5b05bcb5276415f496c74c3902548d682f74ac2aba2dd96c20bd1624539de15b",
+        "source_sha256": "69353c44f233349003b91c5f7db38b97d725585c549184181e366072bc4e8e4b",
+        "cpp_sha256": "f3de32f3e65354fa88ed1124d2f7855b42e30fd3f74d7d2cbc4f4d76b1d21c75",
         "cpp_if_sites": 373,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1045,8 +775,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion_compact": {
       "current": {
-        "source_sha256": "5d4d7acbc9fefe2399852de465f7d90f8dc48ddb8d126621127b4d9e86a7cfcc",
-        "cpp_sha256": "af084c4ceba0305e48bfc8008d992fde42c27e232d0323e47d4a3eb8a4e4c8f8",
+        "source_sha256": "eaa4e193bb693e470dfcd792e5782a8d0e38f99e4be9b82b396d6872ed2a912e",
+        "cpp_sha256": "dced886803906d2d1a8ae47ac8774d263df8283d9d8299521b53c6e6eb43a826",
         "cpp_if_sites": 374,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1055,8 +785,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "1d1f41291a898811c4729c48f6e5bc3cd709323bf4758754aa67ed9178a6b999",
-        "cpp_sha256": "d13023f5aae86f7e5f063a1f26a75e30e9a1b5a8dc9a612df81ed307c17a4aec",
+        "source_sha256": "3a9112a3e86957d47f5fcee207523c32dd7983fe96c8048e9b123d21e596c232",
+        "cpp_sha256": "548aed290ea33651736fa257cfdd950d2bae096cebc762a92e20c5b5351a4425",
         "cpp_if_sites": 374,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1065,8 +795,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "2aea1b6aecc2f9049bd1003db8b98ee7d0e012c6ef7e28c3ff5b4a24dfe8beb6",
-        "cpp_sha256": "140d5ab2b9f364a63106a8094f95ba27650cdc88ddb8d063e653182e72fdf709",
+        "source_sha256": "66902bbb7607cef6126b1f4dcfe8f36a8cb9bc7c803e1bb3f4e6c4e056779c0e",
+        "cpp_sha256": "6eeac87215f9ec23697059f45b14fca13b6d068affd11d57b5640339c40fa9f0",
         "cpp_if_sites": 374,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1075,8 +805,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "cba8dc00065805f426dd4c8617d484b56cea92428b353dfb68a91bfa812b89dc",
-        "cpp_sha256": "56111d2d5949a64b3d3c86e9156f99556b267733ef397a8eda148eb3c0706a58",
+        "source_sha256": "43f7e9fef419d241a660df3ae7a9c801e367f30d83bfff8c903223df09d2ca7f",
+        "cpp_sha256": "2ab52749c2ac45854f6782aad34c29c2eef403cd9f08316029039982be5ad8e8",
         "cpp_if_sites": 374,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1085,8 +815,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "46e4e2d59cad98b34991f2d80fd3ea76056601b11f4c027e70c87d0f646611aa",
-        "cpp_sha256": "3ac63061bb59b0b3ad2b1498c06cdf6a3c5fa97317548fa4965f870401327032",
+        "source_sha256": "07cb9ae7a45ee1ffebe0f02bdc4497cd71d699861f70496d96ab0ea3e7057f2b",
+        "cpp_sha256": "6b21dcede3612f5ee1356cf05dca317a9abe2b6a6a51757fe6d2a4d3bebda92f",
         "cpp_if_sites": 375,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1095,8 +825,8 @@
     },
     "terrain_clipmap.glsl:feedback_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "11d5d4020244347cc2e255b57f9dfeb5f92ef008913c3a17d0969cb55e6144bb",
-        "cpp_sha256": "342de71b3756906bb07e7439291a7b45218021ce5cf54e57f1ad040c4eca8275",
+        "source_sha256": "248e38fcd69cfb1edca6736f30b521f70d4fe55eb146907bac42bd4b8ab4ba9c",
+        "cpp_sha256": "bd89b26f7ccf372347f068b05f3e3fe0384d69be074d45bcb33a837e5da54c9f",
         "cpp_if_sites": 375,
         "cpp_loop_sites": 18,
         "native_compiled": false,
@@ -1105,7 +835,7 @@
     },
     "terrain_instances.glsl:color": {
       "current": {
-        "source_sha256": "22de5a482524779b9df0f06ce5a3599b08ff4e4d43a99e0402d38baf2b3faf65",
+        "source_sha256": "84ecccb7eeecddfdfb547cd44074da79e0d0a24bc301851d9a1a48afdb43c032",
         "cpp_sha256": "4c339388886d4cd401f1f196a7942cb2ed8af21d10db7c6fb6ec5369ad406aa7",
         "cpp_if_sites": 110,
         "cpp_loop_sites": 10,
@@ -1115,7 +845,7 @@
     },
     "terrain_instances.glsl:bringup": {
       "current": {
-        "source_sha256": "cf1cb7f5fb993c99bc0dc82e952447d1b153328b27dee5524425fdcc13e5a01e",
+        "source_sha256": "cdcffaf7e34377acec3ca48510efa8561d05dc2903a8f118fb52cab8a4120fda",
         "cpp_sha256": "9dfaa5b45670bb9ccf52e805be49c55c6b891f07d77b794fe028ff042330fde4",
         "cpp_if_sites": 0,
         "cpp_loop_sites": 0,
@@ -1125,7 +855,7 @@
     },
     "terrain_instances.glsl:color_native": {
       "current": {
-        "source_sha256": "e1a10c9ff5fbb8de271885a2518373d0093b5938a6b741d0eb38ee8283ca4b43",
+        "source_sha256": "c7118d45a751a72081589b64717a0c01926d2d12ef2e00490f838c97442a3b16",
         "cpp_sha256": "6b7c2a1fef5c359fbb6150c00e0ce129b0e791c2798577647e391ab298a0f272",
         "cpp_if_sites": 214,
         "cpp_loop_sites": 22,
@@ -1135,7 +865,7 @@
     },
     "terrain_instances.glsl:color_specular": {
       "current": {
-        "source_sha256": "2b7ef5af038ac7b9d2011dbd382177a6dabcd99678f1b3b660b9fe1fa1be3bda",
+        "source_sha256": "81805867a9d6f4feeb6bdcb1cec7f5abb67e67659d77253a656ea06e10bd98ff",
         "cpp_sha256": "ed850451603879d5b16717047da4a30afbec67c6751f471058e678cb969ddea5",
         "cpp_if_sites": 214,
         "cpp_loop_sites": 22,
@@ -1145,7 +875,7 @@
     },
     "terrain_instances.glsl:color_motion": {
       "current": {
-        "source_sha256": "960ca2730f24e3756d127bf8caceaf0cbfdd33170b320fa4a8602a34e14b17cc",
+        "source_sha256": "c2d9865198391236d99241a55d09a1f2aa3941f511b363a4281239fc44b24365",
         "cpp_sha256": "1159c87089af675a2e020c0ffb4fdae3891a62239b26cd6fcc68bf14e6dc36c4",
         "cpp_if_sites": 215,
         "cpp_loop_sites": 22,
@@ -1155,7 +885,7 @@
     },
     "terrain_instances.glsl:color_specular_motion": {
       "current": {
-        "source_sha256": "bb2d83f5a8c59900f4e19a760cd7470ed8f8ff88a43e150586293fb9ab24132a",
+        "source_sha256": "5daa787fd9f55e85ce52ac58e3baec747c1e108c521771ef0d2335a03c15fe99",
         "cpp_sha256": "3783485bd025a1e4c9c329b76f2eccbf33dbaf384be58303bba55e4ab32ca45e",
         "cpp_if_sites": 215,
         "cpp_loop_sites": 22,
@@ -1165,7 +895,7 @@
     },
     "terrain_instances.glsl:color_native_radiance_array": {
       "current": {
-        "source_sha256": "39ff66d20246c1c78cc8fcdf93390b802f03bcc8d21c0115712e3ffdad077943",
+        "source_sha256": "5f224c86091e746350652ef60dc3da3face495f55947fedb6bf84fdcef9734c0",
         "cpp_sha256": "d3b671a1eb978b1a0d39f892742c4db51aebbb65106c6e0575947ffc5136d9fc",
         "cpp_if_sites": 215,
         "cpp_loop_sites": 22,
@@ -1175,7 +905,7 @@
     },
     "terrain_instances.glsl:color_specular_radiance_array": {
       "current": {
-        "source_sha256": "53e7bcfb4c48a765e836eeb8ee0fb619cef5201636100ab5d5a964ed7f5ce2d9",
+        "source_sha256": "19f4b62dd3274b893514f08aee56a5e5531ab476f9e8a73330e911477c004465",
         "cpp_sha256": "6608d4076e04c8e56315e541d0059d55e93383cb0a0a55233798d998799d0a43",
         "cpp_if_sites": 215,
         "cpp_loop_sites": 22,
@@ -1185,7 +915,7 @@
     },
     "terrain_instances.glsl:color_motion_radiance_array": {
       "current": {
-        "source_sha256": "80c2d33fc5d4ad89813c0227ccde9ded2b7f2fa34499045db538848fcf121bdb",
+        "source_sha256": "3a7a369fcba366814ede5157e4bfc36b8076f57670d75ca3908d4795e2e76214",
         "cpp_sha256": "618c96d3e0f9eacfea05c4ad536e2a33964ef4c35d4c981ebc4c5628437287fe",
         "cpp_if_sites": 216,
         "cpp_loop_sites": 22,
@@ -1195,7 +925,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "b2306d27ddeda9d97f4ab3cff48ce530e0bfda87dc3aae96c91b86693d7141bf",
+        "source_sha256": "b0701b984907bb93d368bdad436b33deeeef9f1d0ccd2de710a8fd946b7fbd96",
         "cpp_sha256": "feec2d0169b086b4bcb16f93a3bb822216fbd582966bfd56090e8ef9bcf63adc",
         "cpp_if_sites": 216,
         "cpp_loop_sites": 22,
@@ -1205,7 +935,7 @@
     },
     "terrain_instances.glsl:feedback_color_native": {
       "current": {
-        "source_sha256": "06bc1faeb07d90af1773d594c8506dc0499478d61cae49312c73ce0c2e565009",
+        "source_sha256": "6c535d764ef6d30521902d6ea8989aacc06b960b80855fc0e70b557199c42e7c",
         "cpp_sha256": "0111d228e289c8a59a7b5f26bbad0d0e8bd795b4d1f466f3e41345cf6df4e407",
         "cpp_if_sites": 246,
         "cpp_loop_sites": 25,
@@ -1215,7 +945,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular": {
       "current": {
-        "source_sha256": "a50f0697d5d4fc5c11538ecd3e2b2450542535284bb238011ae1dc4525586d02",
+        "source_sha256": "5b0746c2c65b6270b996580495c9e84b7cbfec27690a8ace83b6417866c64168",
         "cpp_sha256": "bd47cacec98efbecedc5a54c892f6e3cbdf7b5b66754a09b1a182ea7308cc6b4",
         "cpp_if_sites": 246,
         "cpp_loop_sites": 25,
@@ -1225,7 +955,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion": {
       "current": {
-        "source_sha256": "14cdc341066cb2bcbda7eacb475ad62819b5ce150f39cf162945a3d44f0238c6",
+        "source_sha256": "268858e6dbfe83505a80dc3d486ce63f1fe200f8a3856a101694a0cb63dcb4e8",
         "cpp_sha256": "0ff1badd8b9ec9017d83eee27736abd24fdb724ca9f924e36d657ad7e46fc4e4",
         "cpp_if_sites": 247,
         "cpp_loop_sites": 25,
@@ -1235,7 +965,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion": {
       "current": {
-        "source_sha256": "d8f2091598a51db2d6d748d21de6727e61762360638ae3d4f5a4cd02b4228dda",
+        "source_sha256": "fcac90f0af7c35ce68afe082de573c53f6896ed34ae934d9c3c705346e653701",
         "cpp_sha256": "eba634c7b380b1eadac2b36ddebcc7418b79f863b09c0157e563843ed13a0ede",
         "cpp_if_sites": 247,
         "cpp_loop_sites": 25,
@@ -1245,7 +975,7 @@
     },
     "terrain_instances.glsl:feedback_color_native_radiance_array": {
       "current": {
-        "source_sha256": "39b8d33ac51ac308d7ca4484b153f39892f20d566f200126bc4c8684f10dd401",
+        "source_sha256": "4087f9c58a7c124ec3c06fae0723e0a6d18bb31847434316b06085c26e1ed22a",
         "cpp_sha256": "ce4f8959d72503f91183a145742f471a182053948300993b98cb40bd39c72b63",
         "cpp_if_sites": 247,
         "cpp_loop_sites": 25,
@@ -1255,7 +985,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "d17ea1725be7947d386e7f0a9fffc4e805a99d511ae820deb6b47f41e9f867df",
+        "source_sha256": "a85d41318fe7846768391f3fa672268746bfe65b9e976de01b4c55540f7575b9",
         "cpp_sha256": "5e01873100ac73b51a60d4cd072fd12f62fcbb6d4244d0f6fe6221aa982ab419",
         "cpp_if_sites": 247,
         "cpp_loop_sites": 25,
@@ -1265,7 +995,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "3814fcd4c1b046cd606ba5bf460a189f0b5f1795216da93b2580c728c48c472a",
+        "source_sha256": "572dbf8c3c3d50a32c5da443814af3c3348b930088c29abb67d7c57523f05695",
         "cpp_sha256": "e94e756170fcd799009b0c4f566066484105be250ac60e1efb8a704d13c1bfe7",
         "cpp_if_sites": 248,
         "cpp_loop_sites": 25,
@@ -1275,7 +1005,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "a1e98434a411fea479c2bfc0e94227c60b6f3aba770a26c177a0fc344702c109",
+        "source_sha256": "81d6bc658b0d9e722c420c63570a5fb3a26191868921de98c578ca26c543a9aa",
         "cpp_sha256": "de992775fae05c862506d20cc1208ceeee5379f9e27986e15ff4290eb15a33dc",
         "cpp_if_sites": 248,
         "cpp_loop_sites": 25,
@@ -1285,7 +1015,7 @@
     },
     "terrain_instances.glsl:depth": {
       "current": {
-        "source_sha256": "88f73c1be22a5150e1fed8b0ddfbd54a246ff0195a30ba02ef44f599d1a2f2c0",
+        "source_sha256": "a7cddcca2925a1bdce1f2637e1e20fd2e820d27686a1a906fdea8c59e1c260ab",
         "cpp_sha256": "1e2eb32f531d89b4941f6293b48ebf45156bc38edad2b484d5595018604bd950",
         "cpp_if_sites": 108,
         "cpp_loop_sites": 12,
@@ -1295,7 +1025,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness": {
       "current": {
-        "source_sha256": "cd00144dc6b750fb0f1de8d4031aff276ffe79037b74926a3cc5f5bd7bff09e2",
+        "source_sha256": "3069e2562422c9d25668465b274680f79a62c990479ec74bd22587e32c23910f",
         "cpp_sha256": "6ecc039dfcc08c94af99ae19965afef0702e7daf61272ccbe2f728b10eb54d13",
         "cpp_if_sites": 114,
         "cpp_loop_sites": 12,
@@ -1305,7 +1035,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "f3451871385ed01a032a3f2ee45ff6d2b042a9e2ba36960f713b7f59b91b671b",
+        "source_sha256": "62d12e559c70bcdf42d456214a96347498e3f0f2945e2e16432a311e8149ada2",
         "cpp_sha256": "d276d695ecc12321187b400baaf8407dcecb025410a91bf87a4d2bd78af07d4d",
         "cpp_if_sites": 114,
         "cpp_loop_sites": 12,
@@ -1315,7 +1045,7 @@
     },
     "terrain_instances.glsl:color_diag_constant": {
       "current": {
-        "source_sha256": "bd7ce40b20b9333531261f31cdd161a73da3e5f1d48f02ab1c4bbf0d8d6d8b71",
+        "source_sha256": "1a79eeaf6899c78348011d22a37b5a1f9c6df3a8923ff6aa688f7585e6333b3d",
         "cpp_sha256": "09bc7328857d641234497687bc6f2a8cf9138a4004cb48bbdc213fe167eeb28c",
         "cpp_if_sites": 89,
         "cpp_loop_sites": 10,
@@ -1325,7 +1055,7 @@
     },
     "terrain_instances.glsl:color_diag_opacity": {
       "current": {
-        "source_sha256": "83129254141bd859004542e7aa5e5693f54fba54142162e7a6bcc59ab5186489",
+        "source_sha256": "f21615c76d93877d81b4f516e85bc980b9af6aa06877b1f1947aeca6dac3655a",
         "cpp_sha256": "5e66fcbaf536baef26b8b985c4455d3d48751523eb1f41248a6a2cfee77051ee",
         "cpp_if_sites": 103,
         "cpp_loop_sites": 10,
@@ -1335,7 +1065,7 @@
     },
     "terrain_instances.glsl:color_native_diag_constant": {
       "current": {
-        "source_sha256": "02f4af954951933e6d39fc660b2ade0a220215970726aa5c12d4dd083f780899",
+        "source_sha256": "f85ad029934d0dd5037e1b104c128821efcca7846a22442abd82b292e36c0a6b",
         "cpp_sha256": "0bcdf5ae1e28845900b9981f59488b8913f7baa1641fb954445191504ab8bc7d",
         "cpp_if_sites": 192,
         "cpp_loop_sites": 22,
@@ -1345,7 +1075,7 @@
     },
     "terrain_instances.glsl:color_native_diag_opacity": {
       "current": {
-        "source_sha256": "4bf2bb058a1a019b64596dd72c236122b7aea2a49ad3266846e67db72a2b56ac",
+        "source_sha256": "0d8fa3b92af915394ec5442ff21f5864bb0f90ade268485868e44c2d700ad0e6",
         "cpp_sha256": "9169b78e314d1b63493ee0b22836083a97d34ccc65da1d93d3571a0eb9b6ea14",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 22,
@@ -1355,7 +1085,7 @@
     },
     "terrain_instances.glsl:color_specular_diag_constant": {
       "current": {
-        "source_sha256": "e8251f29dd03ceea291c7e6619e881d53ddb23e93722823003ccca8d97e982c6",
+        "source_sha256": "d6cdb4e504a2fefb33f4f6a88599b7ed6c0d89a3322a05da2305b8c27e75c95d",
         "cpp_sha256": "cb84c71859845e6fd7374b3bb437ede4e1e2d456021035247d981e8c1b7ca266",
         "cpp_if_sites": 192,
         "cpp_loop_sites": 22,
@@ -1365,7 +1095,7 @@
     },
     "terrain_instances.glsl:color_specular_diag_opacity": {
       "current": {
-        "source_sha256": "b47fb8de94b097171bd2a490208d05674ac63a20628f8158b7886188b6028235",
+        "source_sha256": "0c00647bb01e80300b1bcd800154847214c198ce3e08a6969cb13563b8b05980",
         "cpp_sha256": "b498b294dfb92563b72816993b212f4636f446bee7b189f5b6f1bd9b0a390b2c",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 22,
@@ -1375,7 +1105,7 @@
     },
     "terrain_instances.glsl:color_motion_diag_constant": {
       "current": {
-        "source_sha256": "450b22440d6fbab04be094fc15b6b7c4ce88e4747b02b61b22fc40bd55f3bd33",
+        "source_sha256": "c432702ec1da18bf539ca5009bfb394ffa36ff76390639a58a4616a7834e4756",
         "cpp_sha256": "18e5c7dcfb21aea7aa50c5c333d4ae960fa3a07b1aaf13f0da4ead8b02907e5d",
         "cpp_if_sites": 193,
         "cpp_loop_sites": 22,
@@ -1385,7 +1115,7 @@
     },
     "terrain_instances.glsl:color_motion_diag_opacity": {
       "current": {
-        "source_sha256": "5a71dc4a5e4f70e17c4f6feddabd14161f99f11c0260d7579784af439f16663b",
+        "source_sha256": "af9213d8481b706888e0a35db6077224ec8c3fe8ed46f0b9fa864aa373525aa4",
         "cpp_sha256": "3ae022a66f4000af8bcf7aa7472076ffd6ebb007434a55763ecbcfaf3fe60578",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 22,
@@ -1395,7 +1125,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_diag_constant": {
       "current": {
-        "source_sha256": "83c1969a78b77a91abb09dc045856c4f6e29c42563d97b2f04bca2ed83d0c5c0",
+        "source_sha256": "3f2827117636bb329fa670995b64f36da208e3b525202eee4446bba4c73456d9",
         "cpp_sha256": "3f2d7df99b944ca0530dff8126f17348883b609443bb78b4e3941d88326dfdee",
         "cpp_if_sites": 193,
         "cpp_loop_sites": 22,
@@ -1405,7 +1135,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_diag_opacity": {
       "current": {
-        "source_sha256": "b553e9e70f4a254baa84b76cf598078ae1aac19f3e264bf21bc604e152d275de",
+        "source_sha256": "9e9f3de51c3b76e2c9f350e85f66ff2328f572e99d3002c220fc14b00ec29f98",
         "cpp_sha256": "5d0470837255182b192445ff35c38490c600239bb6ffa168932fc4b2fc699d3d",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 22,
@@ -1415,7 +1145,7 @@
     },
     "terrain_instances.glsl:color_native_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "b5f3ca734ce354fbc6ef668230600976865b2fce815d8db3ed00f20852f03f54",
+        "source_sha256": "f8106be85728127fe829ebc9714817d386ac1f40289606a997349cdfde274979",
         "cpp_sha256": "1c9e50724c99600fce1b148865b8fb59d00270642e5110b835445ab0280ade01",
         "cpp_if_sites": 193,
         "cpp_loop_sites": 22,
@@ -1425,7 +1155,7 @@
     },
     "terrain_instances.glsl:color_native_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "71f1535788e93ff40adcb298c0e3cf0a1dc32f166c54e5152ce39775211fc352",
+        "source_sha256": "6a0fc427983346ef35d3fcf5ca07d36565cabaed3d867391ca820d0f1d9e2036",
         "cpp_sha256": "fe3883a49411b20b7a84cc599258e7a63d21d29936745671a5310dde08ed7419",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 22,
@@ -1435,7 +1165,7 @@
     },
     "terrain_instances.glsl:color_specular_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "769b189e5eeb419ae9d477bcb47329632ef23e9ffd719afee0291c9c69a66743",
+        "source_sha256": "7e14df074257c0929c3a1d9c034fa649b00e08db1cabaa96d03405f0f927f4a7",
         "cpp_sha256": "ffbcf637c68061667c016a4af5675158116b1dc861a3291811d73c3a47ef660d",
         "cpp_if_sites": 193,
         "cpp_loop_sites": 22,
@@ -1445,7 +1175,7 @@
     },
     "terrain_instances.glsl:color_specular_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "f101172ea805c2423780a2bb39b76f10e7822f7d8f01fba6eb25fb9c01a1de63",
+        "source_sha256": "003037e0dc7347ba08d0fcba2694580eea682fe0f621522c42b4319e360e4064",
         "cpp_sha256": "4c54cb726758f3228a6d46badd16d18bf8c48402b1311fc9389fb86388e8e64a",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 22,
@@ -1455,7 +1185,7 @@
     },
     "terrain_instances.glsl:color_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "54dc99e53fdd9c647dd695900438949c6ca184108a77bed8db813bd90d5e4d92",
+        "source_sha256": "e3e49cd48f8083dc99eaaba2849823e37bf62df392e07fec5a44b04c625c7bcf",
         "cpp_sha256": "3151cb99730c11c671a56f765aa715f6264b6baedfe416cea75a12c61100311c",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 22,
@@ -1465,7 +1195,7 @@
     },
     "terrain_instances.glsl:color_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "9b668ee145a6f01f999de08d28842d74b325afd567c991cda2bde507961b0423",
+        "source_sha256": "2e3d7a4ae34fdea755660d125d01ad0ba3cf0a3035df426b68bb7ad211777823",
         "cpp_sha256": "8113c0001898dc68af133be01e59ecee758d3f97c8d227ee2a66d0e35e2e0736",
         "cpp_if_sites": 208,
         "cpp_loop_sites": 22,
@@ -1475,7 +1205,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "dd0405d68ebf6d59b1fd9be814f9d6c80fe9c97dabf6f1bcb0a34a6fefd4b34e",
+        "source_sha256": "2ec9937a8988f66a4548351191a380561328121b6425890d55db6e4dfc609c53",
         "cpp_sha256": "d90cde6e9a2f843bfbd58ddfd28bd3a874f48aaa7c85477b1c17d65ebc501a50",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 22,
@@ -1485,7 +1215,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "044cf64f2dc31dbe815f4d8315e42eddc7aeca669735f297fbb8b047dc21bfef",
+        "source_sha256": "acacec4013f25f1a05a6ca1e17e7352766332e694c880ca66d09cd0a26a9597b",
         "cpp_sha256": "41af35ecd323fb4047eb5346193fb31576fc6330627d66e65fa06d88cd0fb3b7",
         "cpp_if_sites": 208,
         "cpp_loop_sites": 22,
@@ -1495,7 +1225,7 @@
     },
     "terrain_instances.glsl:feedback_color_native_diag_constant": {
       "current": {
-        "source_sha256": "a7fad4d74bddcd91b5efc0c8ecc1f69c86536c5f8e26149eea170ffc1d2842fc",
+        "source_sha256": "77a7b8c11d091e2ac868ce16c66a4de3281c4868189614c783af343b2bdaeda7",
         "cpp_sha256": "983b477bae4d5b468ab5bed1652fb480e326d4ce6497a4a31425c9ccad7a64e2",
         "cpp_if_sites": 224,
         "cpp_loop_sites": 25,
@@ -1505,7 +1235,7 @@
     },
     "terrain_instances.glsl:feedback_color_native_diag_opacity": {
       "current": {
-        "source_sha256": "d41466e0aac73dec3cd4eed6ac799e2d656cb96fe3635749d6576c8e505948e5",
+        "source_sha256": "731c2b446cbe2b23cfac160c6c0ef8f8a9cb6260f3a24446852cc7040f5bad0a",
         "cpp_sha256": "cb3779c7df104a06b108e9078a06bb72aae8c57aeb55a562b58aa27b6e3775c8",
         "cpp_if_sites": 238,
         "cpp_loop_sites": 25,
@@ -1515,7 +1245,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_diag_constant": {
       "current": {
-        "source_sha256": "3bb4c015f27655e2ae1fbc6b4cefab921247305ec9c701341fb006734ca343b3",
+        "source_sha256": "a2f881627fdb79732038357164c52b627822c1f083ae7d70aa4a27ec901b7b3b",
         "cpp_sha256": "057030be9cd2fedec0744a91f82fe93fcdbf7eaaf454b040f53617aa85b784c7",
         "cpp_if_sites": 224,
         "cpp_loop_sites": 25,
@@ -1525,7 +1255,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_diag_opacity": {
       "current": {
-        "source_sha256": "58e2a80f81ef564d0f8653d58a38b541ab96bf30ee1211aa9137878f29f49b8e",
+        "source_sha256": "e5c93c8b391914d35bc896144ee57f6a0c0e9c6fa1d2836243dcbbd31624c50d",
         "cpp_sha256": "1e8b5e20037be7381268181284e63420f3098ae6ea02d3fc3539268fe52348db",
         "cpp_if_sites": 238,
         "cpp_loop_sites": 25,
@@ -1535,7 +1265,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion_diag_constant": {
       "current": {
-        "source_sha256": "70634de0eb4b6a2fe6f02082900178c7d5bee21e451734707338aa5c410241e9",
+        "source_sha256": "dec2692de6fb57de5e22d59c2c254469f638da6cfb0fd65ae7d77d0541268cbe",
         "cpp_sha256": "7588bc4e1bfba9567089b5df24e97497deaf2767f86be738503c558964de1ab3",
         "cpp_if_sites": 225,
         "cpp_loop_sites": 25,
@@ -1545,7 +1275,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion_diag_opacity": {
       "current": {
-        "source_sha256": "2f9c561e2bffa2b6598b86fc0b2f80aed85cf7633616fa6c0db697cadb50b31d",
+        "source_sha256": "51c7813475d964bfa8eaa6d41035d608e208cfbb5310141670564f77316d8b54",
         "cpp_sha256": "41d3440f3b3d4a80501a5f7a9a1603bb3494a003bedcdf6d2facf87ba59f2433",
         "cpp_if_sites": 239,
         "cpp_loop_sites": 25,
@@ -1555,7 +1285,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion_diag_constant": {
       "current": {
-        "source_sha256": "8a2225b1676bc78517cdcc168db234aa9adaa7c738b57cf7256fc808c23c76aa",
+        "source_sha256": "79db7d0106cc43837d8d586c25def97f8d98984f8b16cb6374c5a2b8913d9835",
         "cpp_sha256": "a8d1910c6cad62647c3648c20e25fea4869083611afe543990aa3cf03ccdad5f",
         "cpp_if_sites": 225,
         "cpp_loop_sites": 25,
@@ -1565,7 +1295,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion_diag_opacity": {
       "current": {
-        "source_sha256": "83754e698da65f7e03696d1f956c21e81d1237cf0663afa9d8d4ba69736f8081",
+        "source_sha256": "4273b31789613964dac596ea7dfd1c0df8ee92bc80b2f301c88cc8f24fe0b6f8",
         "cpp_sha256": "6045c32d86ac2e456aded20bd1d423b8160e137f6cc5ac50db0186165f385036",
         "cpp_if_sites": 239,
         "cpp_loop_sites": 25,
@@ -1575,7 +1305,7 @@
     },
     "terrain_instances.glsl:feedback_color_native_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "74889f01002c84dca4f9702c1452473f53c67894cd9547e38b537fbead9b8820",
+        "source_sha256": "b30a71e506c6278265ff22eddb978bdcccce0d6454c8af7016a54e994a54bdf3",
         "cpp_sha256": "2861a43713ee133a37cd0edd811ec9fde22e3e0d58250bcac9535ef60385a01d",
         "cpp_if_sites": 225,
         "cpp_loop_sites": 25,
@@ -1585,7 +1315,7 @@
     },
     "terrain_instances.glsl:feedback_color_native_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "6c7328c0a7125a21c9d9b11db0fada625e63fd41741bb221b2a64d91641c68c0",
+        "source_sha256": "2214c2e01106e431f5c3d8a2c07a3b67e8617f43cca410838b6329690bb01d77",
         "cpp_sha256": "675fbf81d7ad3b1720e950af2790de451a31c59d1fdfcff7d50fe7ab6556e25c",
         "cpp_if_sites": 239,
         "cpp_loop_sites": 25,
@@ -1595,7 +1325,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "beffbb48781ff8747ee7a9197e9c2832b9f5aac692e0c27ee208459ee64b8754",
+        "source_sha256": "ac10439ebb052132b90735e9fe9ba0eb6fca631b1a5e1e0e4e2de3fbc5e9eb45",
         "cpp_sha256": "3fd9034268e2be525dcccd4a663903f1e26dd3170d77ce33ccfac2d0b4658780",
         "cpp_if_sites": 225,
         "cpp_loop_sites": 25,
@@ -1605,7 +1335,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "de211eacc0a38c32bf689466213da9c214be858b1ec0078846e74d703137cf02",
+        "source_sha256": "73202bffd137d12c194f4aa94f5ab0b7d297493236cc8c673703b211885b8dd0",
         "cpp_sha256": "635793fe7a13d03384b28e4eea864887e9fb6ae2c562313d83f8c17f1da4fb18",
         "cpp_if_sites": 239,
         "cpp_loop_sites": 25,
@@ -1615,7 +1345,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "d22738ef0f9059abf762519c22c90ea85d8c5a5087a753581174be6342a1c84e",
+        "source_sha256": "1cb9e1bd554563a12adf5d6955bf24b5753e9fcab36defb57261e5893323dfdf",
         "cpp_sha256": "04a297f1d15aff367018bbb610dca9bb9a32feedfc38077cca43f882e938b12f",
         "cpp_if_sites": 226,
         "cpp_loop_sites": 25,
@@ -1625,7 +1355,7 @@
     },
     "terrain_instances.glsl:feedback_color_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "5b82f471cbdc9c538df71285940e41a3e1f391ca8e65ca38ca2ee47e71d346b2",
+        "source_sha256": "3843a7b77402622a5a81eb83d5902e19edb9ed8fa17e5a1eb533b52169618706",
         "cpp_sha256": "f858d1e7c5c4560cefb3deb8c9e93ad03b7f696cd10eb07373cc9eb2689d5b82",
         "cpp_if_sites": 240,
         "cpp_loop_sites": 25,
@@ -1635,7 +1365,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "f8a3eae8d050b41468e6e5eab8fde51a3dca960d2abab6e9f4a66d4ad60433f9",
+        "source_sha256": "6d1d8697a4ed131c66656b4e401a42f030fdb52dd591c6e7474f9256d5c8dce1",
         "cpp_sha256": "b409e39251299437bb1bdbd0db0634d7adaadf0a124517702080cc75ef60f55f",
         "cpp_if_sites": 226,
         "cpp_loop_sites": 25,
@@ -1645,7 +1375,7 @@
     },
     "terrain_instances.glsl:feedback_color_specular_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "2a021c66e92524cd878a1fe4943b14aafa99783bcac49b1537b20fe0e01f3970",
+        "source_sha256": "aa28408629c9e9e9932960a3395ef1f3829dcb658263e717356a201f16e6cd2b",
         "cpp_sha256": "15772c855053cea9b8159fddd0cbdeb09ceaa2c651f28b2a5d3c4044171d4fe6",
         "cpp_if_sites": 240,
         "cpp_loop_sites": 25,
@@ -1655,7 +1385,7 @@
     },
     "terrain_instances.glsl:depth_diag_constant": {
       "current": {
-        "source_sha256": "73debb57efcb6be1b9e3db2114c66bf9da8ba10b6965956316a42579a1f0ec10",
+        "source_sha256": "cc661e67797bd13e7103d5b00834caee75df59d1095aad492ce884d17dccbf5f",
         "cpp_sha256": "06376541bb7afa60fea58ca73f82953909b899429a599057cf6b0e59f193f72a",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -1665,7 +1395,7 @@
     },
     "terrain_instances.glsl:depth_diag_opacity": {
       "current": {
-        "source_sha256": "0c6ad2408de53d3b567cd8f45afa6d5215e455390647d08a5b6e4eb36de4f0b3",
+        "source_sha256": "a98a28b9f9b12babf1a58c124c14ff7fee880f216c18df3d7232e2a00081d1bd",
         "cpp_sha256": "1e2eb32f531d89b4941f6293b48ebf45156bc38edad2b484d5595018604bd950",
         "cpp_if_sites": 108,
         "cpp_loop_sites": 12,
@@ -1675,7 +1405,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness_diag_constant": {
       "current": {
-        "source_sha256": "3cf8aca8587b16e91e170921646eb6b8de5357c54e001ea54fe574a2bd95ee50",
+        "source_sha256": "9dd1cfa56e4d36bb48bd03d3d29370bf34f293383e1512e3c94ce6bc1145e437",
         "cpp_sha256": "79200adc6b5c08b973b815d6e4e04f94627712dfcc1cb47d5a16baad6b0a09d3",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -1685,7 +1415,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness_diag_opacity": {
       "current": {
-        "source_sha256": "30feed87b3201b628dcdba2baeda949a649b153cf3e981d9aa5757f9d5ff986e",
+        "source_sha256": "b9fd65694bd15e08dcf15405fe9ddecc7b3361b9060bb3cd8d730e56d05ffb1a",
         "cpp_sha256": "a6af97adf6980207596dd180d22e4984b83eeeaa697f4f5be4c5da23ac3ba9cb",
         "cpp_if_sites": 108,
         "cpp_loop_sites": 12,
@@ -1695,7 +1425,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness_voxel_gi_diag_constant": {
       "current": {
-        "source_sha256": "637251cc6a3b8c6a4347e476f827271eb3acc763ede7dd7346bafea2ba761445",
+        "source_sha256": "92683542a32d405a86598f695aa77bffcb9640d3818a31f4e349f5bb9d016498",
         "cpp_sha256": "c5b0330e4fd06309af406b48b483bac0355263dbf8cf9022e7a2e46bb23d9b30",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -1705,7 +1435,7 @@
     },
     "terrain_instances.glsl:depth_normal_roughness_voxel_gi_diag_opacity": {
       "current": {
-        "source_sha256": "674c6a71b544b1a7810646db12ef4bca9ab31ee7dfdc82be01de37576f3eae7f",
+        "source_sha256": "a80af89c9b2509b5492126f43640a9ed6fc8219dba8363305551b197d9b5da7c",
         "cpp_sha256": "f31a3302b6246335a0a2f084126402784f4c514f6c0b994858035efd4cb20ce7",
         "cpp_if_sites": 108,
         "cpp_loop_sites": 12,
@@ -1715,7 +1445,7 @@
     },
     "terrain_instances.glsl:color_native_compact": {
       "current": {
-        "source_sha256": "07059f7892d61ddca755a69ca5543cfaafe6cc39ef94e8647364aff8c7dc20ac",
+        "source_sha256": "a6a8d5047ba01f07b28f357dd5543b39571ec8471e96841554379dbdb2765d6c",
         "cpp_sha256": "7dc6117ff48a05df43455d2f8dfbae6d257a114235ea02ea3324ed1531241a70",
         "cpp_if_sites": 220,
         "cpp_loop_sites": 20,
@@ -1725,7 +1455,7 @@
     },
     "terrain_instances.glsl:color_specular_compact": {
       "current": {
-        "source_sha256": "ef5b0196791cc6d9d02b2f832d041634884943d3787176a61fcf9ac37b8ddbf2",
+        "source_sha256": "b86bb57fbc44a07efdae00b20835228a407695fad7504af4ba9427487332dcf7",
         "cpp_sha256": "d979da59b263de8522c31e3edbffaa73c161a5fef1eb6de7218e9b5743c1f7ef",
         "cpp_if_sites": 220,
         "cpp_loop_sites": 20,
@@ -1735,7 +1465,7 @@
     },
     "terrain_instances.glsl:color_motion_compact": {
       "current": {
-        "source_sha256": "d1e957f72e807e3477d94946dffaa5b01e975dc123aa182739cb276ad7ecee89",
+        "source_sha256": "d36c7ad881d830111b366f829d833ce490dda6131d76d39d555e6e96e321748c",
         "cpp_sha256": "7d3105838b50374cf96d4ea601f0393c0c8e3a8b2391915dbb79a9611155106a",
         "cpp_if_sites": 221,
         "cpp_loop_sites": 20,
@@ -1745,7 +1475,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_compact": {
       "current": {
-        "source_sha256": "04e4e5cfd7f56b29a551f3c902f25ed37605f74d898c18eb173ede67d975c4cc",
+        "source_sha256": "2435fbf67b7eb9528cf7bd40a657335eb87885b865caf7799553eef2cdd30d72",
         "cpp_sha256": "411ce169c7007bf22073e86f96034acfdbc518b0d9f629c32cd536bc4d958d4d",
         "cpp_if_sites": 221,
         "cpp_loop_sites": 20,
@@ -1755,7 +1485,7 @@
     },
     "terrain_instances.glsl:color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "37a94296b8f116cf4ffc6a3a8ea8bbefafb1f6bfc035cfb95eb952da6ffee237",
+        "source_sha256": "e30a80277c75c27e170c85b9343b1dfc05d58ddfa31193f5b71966bec1af2425",
         "cpp_sha256": "8292c8f636091dfa31d7893600e203d3deb251675b8f1c0beae0a58f9d154321",
         "cpp_if_sites": 221,
         "cpp_loop_sites": 20,
@@ -1765,7 +1495,7 @@
     },
     "terrain_instances.glsl:color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "0f46d445d82b39f357a89e2740f4bd7f313205f8032def2c57794b88532b0bbb",
+        "source_sha256": "3110864a7c2e776efb3a20adaa2363f6f3997e49d65ba181c01ada1edb07846e",
         "cpp_sha256": "3d250504a37e20ea43a222ed843514e0291bfc3e8d53032a171d707ac081459b",
         "cpp_if_sites": 221,
         "cpp_loop_sites": 20,
@@ -1775,7 +1505,7 @@
     },
     "terrain_instances.glsl:color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "73f073644c01a73102e3a76eda9bb128b26d511b6bad6594aaaec64806ce9f09",
+        "source_sha256": "3d4ff3b4497e6a8641c487c859a5708b599164c5065e8b835f30ca18502d0967",
         "cpp_sha256": "0f90c93c2763394039829855e5590cd59ec61ce662f7a841e2faef3a2c2c8a44",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 20,
@@ -1785,7 +1515,7 @@
     },
     "terrain_instances.glsl:color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "fb7e404740a25ac4139e738cbea124a577c2dae758fc461bf8fb12d9bf5c587b",
+        "source_sha256": "8aa7cefe13270bf1e5dd1aa3b3e645e30f4397fd9bf297cdfa637c6b92c3fbdc",
         "cpp_sha256": "3071e4d472bd4a6a16e8595cec2bee84e883af72179c7a3f609517fcbfa66578",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 20,
@@ -1795,7 +1525,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native": {
       "current": {
-        "source_sha256": "574292fe3abaa8ebaf1974dd4f8d038fab8412c25e35ddc31960c4aa9c7307d4",
+        "source_sha256": "bd0256ab1e36b15d6b401016ef93c84d8cb7eaf9778eea8f2be52384885068aa",
         "cpp_sha256": "a496a1a5b2816a6ceaa15219b10cf7a7011a71b0fad0f113a0de091e2e002f42",
         "cpp_if_sites": 188,
         "cpp_loop_sites": 18,
@@ -1805,7 +1535,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular": {
       "current": {
-        "source_sha256": "a5b38a18f9f23ecc820cc5fb0995b53029e59ba5da2cbb7804bb01087c8abc1f",
+        "source_sha256": "d5b8148e7a04ed0e029b0fdfcec15df58adf5c4ca64aacef14762be0ce14a3ee",
         "cpp_sha256": "1b402e68a7bafc83edab5736937fe23667f5ffd9940319e965edd16389451a3a",
         "cpp_if_sites": 188,
         "cpp_loop_sites": 18,
@@ -1815,7 +1545,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion": {
       "current": {
-        "source_sha256": "8a111624161ef39d36945cd893000e2de452a71384709aa58f63ae4841000d44",
+        "source_sha256": "f68522ac2ee0ef58920af0f37b0237458a21701da439fcc10883d40fee5f3a92",
         "cpp_sha256": "8bae888813cdb7c5e8d0edf834991efa2613f9485446354d63fe55e7dbb003fc",
         "cpp_if_sites": 188,
         "cpp_loop_sites": 18,
@@ -1825,7 +1555,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion": {
       "current": {
-        "source_sha256": "5e2c03e44dc7bad4934aca242e0e74d716354fbb93d58e71a0bd928a04308c5d",
+        "source_sha256": "795630e5d6c4782969a81be9565e28a92f9029b8a9374bd21f718b2b6191c9b3",
         "cpp_sha256": "ca7e9b3e40943ec8d519a4c4204e3ca09473efef95621284e92fac3062d808cf",
         "cpp_if_sites": 188,
         "cpp_loop_sites": 18,
@@ -1835,7 +1565,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_radiance_array": {
       "current": {
-        "source_sha256": "0535f764b058b68485ffe3dc3fc7ee69b1f1cc361575c31109fc492fd79bbcda",
+        "source_sha256": "5ab38547e09386d98bf7f94568aef24bc2c9d609ac04a8d19ef87ba7658bf664",
         "cpp_sha256": "37755142509919da7841025cfebfe7141344b3a3f299d1fad6d1f4ffcc3699ac",
         "cpp_if_sites": 189,
         "cpp_loop_sites": 18,
@@ -1845,7 +1575,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "d235f20610cc40c5038bf05efaab8a29446f569dabf4d14161913cc3fb9fb3b8",
+        "source_sha256": "e1c783ee58c70631f66a2edbc4131afd5a0841227ff352f9a108418a190c16cb",
         "cpp_sha256": "72bf2d7e2c4cdcedca068447fe8993d6d0ec1d8263611640ea3066d30fc8a24a",
         "cpp_if_sites": 189,
         "cpp_loop_sites": 18,
@@ -1855,7 +1585,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "61760b01ce35eeb10bd1728b591e30a9c90e4a6cefdd632f2ff2172043a864c7",
+        "source_sha256": "0e7c22d19f0bfbc11d45c079fe5b4b89dcea3cbc8ea608bcdb68fa897490254d",
         "cpp_sha256": "9f2dc1d7374c66f608f82f8fb80761525b5f126856113c81ef0f609e7a3e68b6",
         "cpp_if_sites": 189,
         "cpp_loop_sites": 18,
@@ -1865,7 +1595,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "416694d1e1116589f082ddd3734530626eda7035176481ca806cea068c2025e3",
+        "source_sha256": "eac1ebb42c0bb6a30153a62e09f67ccc4fcdd19c45ddd27d30e5a08cd01514ea",
         "cpp_sha256": "7fc2425d132237820c782e7b1b3efb4c23c74a7263a2c893fa0a707e018807cc",
         "cpp_if_sites": 189,
         "cpp_loop_sites": 18,
@@ -1875,7 +1605,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native": {
       "current": {
-        "source_sha256": "cf0771fb27eb97d241b096d260cb85ef84d48622f70a6cec5378356ab2565b6f",
+        "source_sha256": "adc882e6dc1829f67cd90ef888b8ffac1df9b6ea1c9a01713065e2289e5dd473",
         "cpp_sha256": "503a08c95675e1a7be6d5fe9061e7d3dfaa9331dc8042dfac001b8f00fb64676",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 21,
@@ -1885,7 +1615,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular": {
       "current": {
-        "source_sha256": "6a515d922d9404d6633a1279f0b7dc8099b273f861a59c6788fd3a649990aaea",
+        "source_sha256": "1b5294163c5e528ec1b435b9e8b25202fd687d29c08e3c33193daf32a92732e9",
         "cpp_sha256": "3cb8890f6fef9caf8d137fbe46f9297573d6e85a9466c84d99e5d47cb2ed2ba1",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 21,
@@ -1895,7 +1625,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion": {
       "current": {
-        "source_sha256": "8a4562faa42443780a20e216225e9b6b9fb80ec6348b9198c5fec9b8c7b822c4",
+        "source_sha256": "615b11571d5e9ea3c1d86147d1cce9ba063d539081a580203ac72a6932af2de7",
         "cpp_sha256": "68755bcabcca6976150b11d244f4c36c20666cfa704e5ca24907630ed2d36e27",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 21,
@@ -1905,7 +1635,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion": {
       "current": {
-        "source_sha256": "e638d3906a8a4f8f8072df3da61bf053e4e7f092146f0baa7ad7bc2817f68917",
+        "source_sha256": "1aeab3d222bde06bada3c81509e35b468cf8c4b43381139dac31fd6476368a31",
         "cpp_sha256": "5eeaa3d74655d0b06c8c59ca3a90b2b37b431043f53a351a902ebc83549b1696",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 21,
@@ -1915,7 +1645,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native_radiance_array": {
       "current": {
-        "source_sha256": "87a60c36ac72f1736268fb49359b5b25a00efafd43ddc38acd1aafc1fdb6c6e5",
+        "source_sha256": "53d124919e0fbfce684770e3c037415879b927b695625ad4d1b0826c4bf510fa",
         "cpp_sha256": "abe7a9e303c69c7685f7a68337328c84096115bf301f0decbb1913e5ad60ec7e",
         "cpp_if_sites": 223,
         "cpp_loop_sites": 21,
@@ -1925,7 +1655,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "e5e02af9ba4372b5e1621c67f21bd1283d07fa72113433e7f49612d80c757f7c",
+        "source_sha256": "b738a5d15f7795c2eb93d6a70d894e158a67013a923e53bede50a21111a0be32",
         "cpp_sha256": "170a97e232949957d58a15e58e0b10b3c1eb99b5e15ee1fc6854c203fbaa2353",
         "cpp_if_sites": 223,
         "cpp_loop_sites": 21,
@@ -1935,7 +1665,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "0f015be733fbd14a2076994143edd13df0c5bdab51aed5f7709be5fd949a1803",
+        "source_sha256": "ab9f5ca9125f75325ec13cd4f5fff9d39fde69fca72d99248627de7411dd87d3",
         "cpp_sha256": "ab5b63fc2081a25b527f1e5c9b6bf8e3516d1d52e6ecfb3d799c03deb22f9fd8",
         "cpp_if_sites": 223,
         "cpp_loop_sites": 21,
@@ -1945,7 +1675,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "646ce0e090adaa8111268e8efdb325966dfeef442d00b791de8c83e495d6123d",
+        "source_sha256": "2ec1ff0be653ec23d1cd3bc6c3878b27b988928e5cdb8319a05e7ff75e4a40c5",
         "cpp_sha256": "24584614a9966a1d32583421b3ead9064a0d29cdb87940e195495c49abab7d15",
         "cpp_if_sites": 223,
         "cpp_loop_sites": 21,
@@ -1955,7 +1685,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth": {
       "current": {
-        "source_sha256": "1233837e0020d7765ad4658138f437a8123a328b2b8bdc3e28449dd1e914f2fe",
+        "source_sha256": "803604ffe6fc6db3b235825e2fb7d8b3aefd4bae15d8dbc3f5939ece60f71199",
         "cpp_sha256": "0aa26596376527d8d57d3eaaa3e2483e52ee24691e2fbec7da174210b8f5cd75",
         "cpp_if_sites": 100,
         "cpp_loop_sites": 12,
@@ -1965,7 +1695,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness": {
       "current": {
-        "source_sha256": "81ad927b12a695405ec1d91250bb75b9b68b20374a36a2584c01847fb2f314ea",
+        "source_sha256": "265e3f5c2321c97dd80b34f93e6973a4f8de6d4dde643798f71af5be4797f6c5",
         "cpp_sha256": "bc2ce785addacbf188b53a6d3a63dd21f27269fdffa60926a6e61b1475a19ee9",
         "cpp_if_sites": 106,
         "cpp_loop_sites": 12,
@@ -1975,7 +1705,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "34881c57734dacb1b567f45465419ba358d6dd09627bab3326f16e4d2210b50e",
+        "source_sha256": "742983cc681c99c2d82051e35e1103c024549472a9bfbfed4073a8d429b8db11",
         "cpp_sha256": "277be818d0c9e9461be2b01f3f54fdcbae7cb87a99a6b90c91612f4e04261a4d",
         "cpp_if_sites": 106,
         "cpp_loop_sites": 12,
@@ -1985,7 +1715,7 @@
     },
     "terrain_world_raster.glsl:mesh_shadow": {
       "current": {
-        "source_sha256": "de9bb218831cff71f813bf1b2bb3315e2c46b6fd266652fed1cd799f8299c9a6",
+        "source_sha256": "f1abc588f2e220d7996b78cae2c10034f8d5d87ec54aaa9f824a4393b27198fc",
         "cpp_sha256": "a4ab49f66f0b85cc222dde0ba92acfea3ca647349ac46713e135a3517ef07011",
         "cpp_if_sites": 101,
         "cpp_loop_sites": 12,
@@ -1995,8 +1725,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_native": {
       "current": {
-        "source_sha256": "61b3dfbc26b64dca52948db292ae716fa45ed3a0a62afbcc1804ad0bde25e907",
-        "cpp_sha256": "7b487bba12f1f5dfdfb665ef7d591799159a2bfbae3ba0fae2084db0ad905c47",
+        "source_sha256": "dec06bb6cd0bb72a26b9899ccc9a2c050aa761df198fc6f4e551a3393415a773",
+        "cpp_sha256": "65cf7b9c7db3f19a2ecd4255e4cf1e1e7b219b61669cd9fafe2ce3de6d0e405d",
         "cpp_if_sites": 404,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2005,8 +1735,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular": {
       "current": {
-        "source_sha256": "8eede7751854e52d60fcef26ac8f23920224ed61cf7d8ff92b7db7eb89f5faac",
-        "cpp_sha256": "1a605c42ae7de2d0406350b8df86bc10f3f26ebce0426479e34253a589e31666",
+        "source_sha256": "2ce330a94540c7380e8d99e2cfeffc87ca3ef9dda8a026c53a6ceb0b6c156cd0",
+        "cpp_sha256": "0870d57b7c767f185ab77d1e21f4f89596810a2262f3295c2aa194642a54cd61",
         "cpp_if_sites": 404,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2015,8 +1745,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_motion": {
       "current": {
-        "source_sha256": "c1be7d576b8b8310fd8f8a876472ff37a70aacec19f1bf10b03242c64b720981",
-        "cpp_sha256": "6cdebce5b083c95887e0d58db6e248386212c3207c41cfade2fc798939ced7f9",
+        "source_sha256": "4f8db8dcef356bfbc4cd3891c70570e4ba334b6c13851fce25fa53dc06e03114",
+        "cpp_sha256": "020b50780fc8de484a7854784f404687c33584dfd5b9a1ed283bbf7b66c8eb2e",
         "cpp_if_sites": 405,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2025,8 +1755,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_motion": {
       "current": {
-        "source_sha256": "99451512eea227c493b821ae46af5be2951a4446cf5df5997a6d2589bf9a3536",
-        "cpp_sha256": "c72921e73af11161d8aeaa660fe80d03e17fa65f1653e10af94a4e422248f4c9",
+        "source_sha256": "bef3147a618e0c67c8c8cbb7349459bd5f7a967336e3496a2d259f450fa52151",
+        "cpp_sha256": "0e1ddd6f010d097816b7dbfec0b7dba7cbcef1a8dbb31ab271db4db2fce89f10",
         "cpp_if_sites": 405,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2035,8 +1765,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_native_radiance_array": {
       "current": {
-        "source_sha256": "c47bb4a1e83c5e69676cc41fdf1e92dd2a8c542678b90ee888138c89e8b879e4",
-        "cpp_sha256": "799df39acc7b71e9ad3e0c9a3c1074b933dde619410c90d18d1eea2eda52b56e",
+        "source_sha256": "1e627cc0835fb702cb6acbe06f9d834a931a278bb397c46872f07ad0cb81cd4e",
+        "cpp_sha256": "cca53b9c3cb729edee52ef94a5bcc0790753d299228ece6fef9628cd671f9521",
         "cpp_if_sites": 405,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2045,8 +1775,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "c8e4b59e86a5bbe733040445971605765d5f7feab07ede07ed277e74777b73dc",
-        "cpp_sha256": "23300d51782793069728f71b6ac59ba1b9834b4bcb35c3f27a47e075d55c42e6",
+        "source_sha256": "cced53ac5763f6eee15d2d13454c0ff20e97668f51c5ea972973a0446b833bc6",
+        "cpp_sha256": "5712e619fe6f6a5ef562fe7e920c7e00568bd17b53a775b11be4266967da51d5",
         "cpp_if_sites": 405,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2055,8 +1785,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "5a5a15b1327b03f318cd976933fc075bcff34ee8a9b1ea487d1851841b0ae872",
-        "cpp_sha256": "4e6986008b099747c9d327f64ab5a2d9c274f91944e5c2e9c80177099139ecdc",
+        "source_sha256": "a695ae558a14624900c2dc79bbd4cfa0d122742de5a6bc51dd696547c2b7ff09",
+        "cpp_sha256": "82504d11808e13b387b92a2dcca1a32ae968b678422543c2682fe188f2cf09c8",
         "cpp_if_sites": 406,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2065,8 +1795,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "eea506c720b0ac61209e01a4a6a9b47cf4a57d2b0a730ee1a10f6c4815776cca",
-        "cpp_sha256": "115fae3541fa705482823512e94bba51f9710e6058e01d2dbbc05884bd10119d",
+        "source_sha256": "2282d948b5d76ce05981fa4c858fcd35ea77a4a9873ff99b1d283fd05a65f2b7",
+        "cpp_sha256": "c363ec6b9b508ed431fa969f7543f6a39e795e711525dde3efaebb794889b8b0",
         "cpp_if_sites": 406,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2075,8 +1805,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_depth": {
       "current": {
-        "source_sha256": "a3cfc6189426a3e231db1016bfeb02bd55d29143a980bdc7da6cac5f35398029",
-        "cpp_sha256": "3eb89e6ccacb0cf10ad8331311c84384c427e4090c935ac02f75c51a34a966f3",
+        "source_sha256": "ebeaba08876aceebfae09d9f53fc003eb6a7eb19fe11bc94897ceb4b760f0f18",
+        "cpp_sha256": "56aae1b5f4e89ec604e389287345358bda3f8c62ceb5f3512a36018f9d340bff",
         "cpp_if_sites": 326,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2085,8 +1815,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_depth_normal_roughness": {
       "current": {
-        "source_sha256": "0dc5bf03e9b56de82dd4b81f156462ff19e10342ba238d352107d32ab941d75d",
-        "cpp_sha256": "1bfedef02c1852279d2e0d6b0adeafc7726eb4afcdf97f024784783d3b498753",
+        "source_sha256": "84e7fdbbd830e0082864f1948f96c200235d3274445d5f1ad36ae54070f1498a",
+        "cpp_sha256": "e78c3169543c56fdde2fcf12e3db15aa067228bf2ce7c6dc97f22140e94e2693",
         "cpp_if_sites": 347,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2095,8 +1825,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "e46cde93fe6459023508af5da19d74c36226c845fe84bb60363754c199aae62c",
-        "cpp_sha256": "2bc523dc838364c6c4534551f26fb5799444ca6a632207f1c6a29bdfd12e3078",
+        "source_sha256": "9cbada5e61c5256ef64bcf6b84b4ac038380a00b7fb35da36f736eac3ec751f0",
+        "cpp_sha256": "0a2adb3643b8d50de885bbf1662a25deb41777b81380a199c4d41363e88f6298",
         "cpp_if_sites": 347,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2105,8 +1835,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_shadow": {
       "current": {
-        "source_sha256": "898fc5e9ee15ed575479b5fa3a3fc3ab76376c4f002e65d295e71657681bc3f3",
-        "cpp_sha256": "3eb89e6ccacb0cf10ad8331311c84384c427e4090c935ac02f75c51a34a966f3",
+        "source_sha256": "8df9a6b56cb0b3bb7c744e85811da12695b5b902cdc4fff1493dd31af2951e43",
+        "cpp_sha256": "56aae1b5f4e89ec604e389287345358bda3f8c62ceb5f3512a36018f9d340bff",
         "cpp_if_sites": 326,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2115,7 +1845,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_diag_constant": {
       "current": {
-        "source_sha256": "5507f78bdb0662e76c4243f5d58ea3ec5da520e457a81511931a7b0d70ede769",
+        "source_sha256": "9f93fc9fb27be897ac07b83b40551d511dd13505bb6e72de3ef5e1f5217159e2",
         "cpp_sha256": "a998c16dd0af7667651aaf2ddb41de021425c7d23819aa7dd309228aa06d0327",
         "cpp_if_sites": 176,
         "cpp_loop_sites": 18,
@@ -2125,7 +1855,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_diag_opacity": {
       "current": {
-        "source_sha256": "8f0c49b6dfbf014f5663f3e909e2e76653c6b8e173c7bd5ad536ffac89489db4",
+        "source_sha256": "2dc5ef74a8dbe83ee9a38f36d6c55fc1affe0a396d498154faec4e0d3f274852",
         "cpp_sha256": "a500eba88aa89f61146740fd4c7c81be6f7cf7ddf11fd4cab039a11cef834e6e",
         "cpp_if_sites": 180,
         "cpp_loop_sites": 18,
@@ -2135,7 +1865,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_diag_constant": {
       "current": {
-        "source_sha256": "29858564ba24851de44dbe6f69bdcf2f25aadc687a6beff371aeadc3489d77b2",
+        "source_sha256": "3b0e67c310879d52d2f9f6b3450e6dc84b603217e0bd99472e4cbd311b663f49",
         "cpp_sha256": "31933ae24f1b7109a89bf955c335b5de0ded7960cfa384f284da0f55513af7d6",
         "cpp_if_sites": 176,
         "cpp_loop_sites": 18,
@@ -2145,7 +1875,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_diag_opacity": {
       "current": {
-        "source_sha256": "288893742f79ab3bbb3f0046625443411d76ddf309c5b79b7bf7f0ee44cedc4d",
+        "source_sha256": "0c639155fb728e6b4c2739df07b5f513f5fd935a27b24d0406248c14f10428b9",
         "cpp_sha256": "85e32cd95376ef46dee9eeb9111cb3d62509aa88a3d53da66cf2e933eb501066",
         "cpp_if_sites": 180,
         "cpp_loop_sites": 18,
@@ -2155,7 +1885,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_diag_constant": {
       "current": {
-        "source_sha256": "94a86926ecbefcd7382f44a71213e714794d47363e58b6bc59ccf4082fcb1747",
+        "source_sha256": "817ecc6fa5cb4e023bdb795c9b0dc6e27a4c8c68b26b568aca7d70acf10b7607",
         "cpp_sha256": "b0339ab8e0508f84b1997aa43f985ae00294deb01d2e12ffd5e7fa25120904a0",
         "cpp_if_sites": 176,
         "cpp_loop_sites": 18,
@@ -2165,7 +1895,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_diag_opacity": {
       "current": {
-        "source_sha256": "4d382b21d53c2b1ef9457b5e893e8479b1ad0deea8f722867850442c2fa19706",
+        "source_sha256": "995bbc1e8503b719bffa04a851bc6300cd5813c58b862d5eea3cb2b35112c991",
         "cpp_sha256": "37fc830e51eb386aff99c7388b7c81b346d3880c04e74315b689252b9c1c4c78",
         "cpp_if_sites": 180,
         "cpp_loop_sites": 18,
@@ -2175,7 +1905,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_diag_constant": {
       "current": {
-        "source_sha256": "970944f1f8f3de770611cd95730f9487b5470e41997e7537038ea91ac87eb297",
+        "source_sha256": "70dec80eac366e4a4ab20bc10eea6dec633aba742808da09d443672ef6b367fb",
         "cpp_sha256": "ae7cae9a0cd641853a6c97639bb9c2f0720f7afcfe17935a7ada0128b9c98fea",
         "cpp_if_sites": 176,
         "cpp_loop_sites": 18,
@@ -2185,7 +1915,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_diag_opacity": {
       "current": {
-        "source_sha256": "1516cb5eaf27d97b79a51a74c01a806cad41c910d74bbb8bea0127c027374260",
+        "source_sha256": "c16e0f9157f40ce45d571e9427b7531d1730aba615509919d3886a503eca4fe0",
         "cpp_sha256": "e874ad69d70956aedfa9ad050847f4ce5782fc02d807ad6f5e12b42950685447",
         "cpp_if_sites": 180,
         "cpp_loop_sites": 18,
@@ -2195,7 +1925,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "45bd8d49702cb0a5abc101bc3b5564cd6f3dd39a73ff1c4212f05c15f18a41a8",
+        "source_sha256": "9da400ccabd0cb525f86d583c3501e45938dd0a5826b556edbb4599afa70fa15",
         "cpp_sha256": "88e71de7903c0c828c84790236a6216573dcb76377909997f4df450a0bd74992",
         "cpp_if_sites": 177,
         "cpp_loop_sites": 18,
@@ -2205,7 +1935,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "8cacd4672f30002c3f79372051268af92746b71ae7d9d5122451e0f87806bb1d",
+        "source_sha256": "a3b85897a98be151680d152f0a605ebc45fbbf3b4c5d327e364f3e786689feb7",
         "cpp_sha256": "62de6cf07f7baf2c99d18dd910a4964ee46ea7913be5c70854f11a76edf62b7e",
         "cpp_if_sites": 181,
         "cpp_loop_sites": 18,
@@ -2215,7 +1945,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "27327eb55473b5fe89a4900455a86647ebaf381a323efa4931e10ee91f348593",
+        "source_sha256": "8f18463a8d645cc829ac7536b3e8f38a250784afc58749fdbb45f7305da80092",
         "cpp_sha256": "a744ce507bf7095ab28afe1aeca011d47b7e0064b08e10096e5cae52ccab482f",
         "cpp_if_sites": 177,
         "cpp_loop_sites": 18,
@@ -2225,7 +1955,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "a741b40e12a923e960afbdbb1a2c49323dea15428707f8f8905fa3f139673be1",
+        "source_sha256": "a648622d5ef9ef61f1c2a9f6e302bb215c2e4ea09c680d35c97756f1ee6d65cf",
         "cpp_sha256": "5648ef2a90fab9cdae4a1d2cd77d015e7f245115f3ac03219fc1e53e6d0851e7",
         "cpp_if_sites": 181,
         "cpp_loop_sites": 18,
@@ -2235,7 +1965,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "a43e53b4acbfe3601c08b5c4fa75ad4124282104cf0447eaaac2b372fc60ed9c",
+        "source_sha256": "b98362918eb358502867fa83d3a4b8f7ae211966f6d5d37728c15c27c8ce609c",
         "cpp_sha256": "bb6518e38727274f0658059a04cfd6d10fdb6f94e0219acc2c81ed47519b88b2",
         "cpp_if_sites": 177,
         "cpp_loop_sites": 18,
@@ -2245,7 +1975,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "387977672ccf711250c9d5044f4b0cdafc38523b929302c7778e12ce9e50132d",
+        "source_sha256": "2d98d05cacc79cb1b47a174b949c3e2e25dca591a68ea3bac202f3614bc78179",
         "cpp_sha256": "eda36887b03775d3905ca72fa5e83048d1facaffc0efa604096190e4a36c286b",
         "cpp_if_sites": 181,
         "cpp_loop_sites": 18,
@@ -2255,7 +1985,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "0a2688ca11f005e2903d395c21a95493a8a7229fe8f8b7882aaa4db7015fb040",
+        "source_sha256": "9010de6db83f9872eb0c7f2a495c9accf8d84307586aa54b883fc05474973e5c",
         "cpp_sha256": "cde470355ed82b42fa914f7d4924ceb45ff3b68d5d33860f6b957a4eaafcab14",
         "cpp_if_sites": 177,
         "cpp_loop_sites": 18,
@@ -2265,7 +1995,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "653c1268ab199abadfb54221fa5ed645d6f832d95a70c660d7b83e6b4a4036e6",
+        "source_sha256": "334801aba263e7b00d08cb93d5acaecabe6b7190bc17bba3ee814d0ea4e6903d",
         "cpp_sha256": "5dd7f423fe1970d5de3656fbebba7df002b99c6b4a3d185021f187528611cea6",
         "cpp_if_sites": 181,
         "cpp_loop_sites": 18,
@@ -2275,7 +2005,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native_diag_constant": {
       "current": {
-        "source_sha256": "60b198778b77a385f1d929edc7f8d5d309f8ae3f342691a5b7a868a78a54ea9d",
+        "source_sha256": "7bb305097a20bba1c9c2ca940b801ee9cd5ca1ee9ea6aea713f34f03d373bfdd",
         "cpp_sha256": "6e50c531a79c206aedfe29dc0130eba17b896e1ef552f4a5f36584468a71e92d",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 21,
@@ -2285,7 +2015,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native_diag_opacity": {
       "current": {
-        "source_sha256": "ca3777c8c0c2677d5b69e02a134825de51d4ef3b8e7a5bd86c7c033f8f72dbf0",
+        "source_sha256": "337cdf71cf38a46289a4f02248c9427b613fccce9c1a1c3afec6aee3a8e04f2c",
         "cpp_sha256": "4a86ee212eae6072abc72cd9b15db59b9355e66dc1a120cd142dc4af1c5757ed",
         "cpp_if_sites": 211,
         "cpp_loop_sites": 21,
@@ -2295,7 +2025,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_diag_constant": {
       "current": {
-        "source_sha256": "38c253ca50438cf0ae5ec7108663347c01f67ac33763ad227998790d6bef54f6",
+        "source_sha256": "c7dc211cf8711e2070c818d2deaa912f057bbd99ed9a44b7718fddc6542e5882",
         "cpp_sha256": "3519b8067ba06cba6f07de50a13ad4cc4b9d5217b02f46cbdb83aaad4f14b99e",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 21,
@@ -2305,7 +2035,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_diag_opacity": {
       "current": {
-        "source_sha256": "ef9f981d06ae206764ef3da2335b6c64b58c6360902bb4ee0ad715182ce18826",
+        "source_sha256": "b4ffd59895bcf1ba932e577fc1059dab2fbf1237b79664ad538525b27429e5e5",
         "cpp_sha256": "758a1b83cc6e2f5d4da3dd753e2450a18456a8296d4e078c07cc45df209a6b35",
         "cpp_if_sites": 211,
         "cpp_loop_sites": 21,
@@ -2315,7 +2045,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion_diag_constant": {
       "current": {
-        "source_sha256": "edee509d627eb4763ea7eb682585b8a04fcb1e1e950af74fabaa058bf7988930",
+        "source_sha256": "27686797ac1bfcd75350b4579194202a49cd90ea8a4387c59fdefb77f226e307",
         "cpp_sha256": "4c86c470ccccf2c931d912fca74151c51d8bb3aaf93656d5edbf0dd26c8f39a9",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 21,
@@ -2325,7 +2055,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion_diag_opacity": {
       "current": {
-        "source_sha256": "85ed102cf74f4f7808f2832d2c685d49cb8347e1eca8a702449ecd1e811d6171",
+        "source_sha256": "124d94be05dcc5d4244e835da0a7269ed180c82eef88096a58e17430ceca3a75",
         "cpp_sha256": "b7f8c64b25b52ca64529921429b95a60222e20bb626cd51dca7c500224f675f2",
         "cpp_if_sites": 211,
         "cpp_loop_sites": 21,
@@ -2335,7 +2065,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion_diag_constant": {
       "current": {
-        "source_sha256": "cef1881e19aff67b12fc01598c6d7363530658ec76f3e800bb69eca7cd7db840",
+        "source_sha256": "510e7455107e16970425ee4542156227bdfff32dd99c53b5defcd346100888ae",
         "cpp_sha256": "cad681c5aaab1a1c2733719a81b1a9a95cf336da3cf1e6bcb1f8abcbad15a7a0",
         "cpp_if_sites": 206,
         "cpp_loop_sites": 21,
@@ -2345,7 +2075,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion_diag_opacity": {
       "current": {
-        "source_sha256": "aab9beb44862f8b068e364f623ef163250b159e93a8460583468436a50c57eb3",
+        "source_sha256": "38d9c38086b4ec4a4d1ffd139ec4c98e1968989758785350befb7d88b9fd632a",
         "cpp_sha256": "fe94e2dc14c6069467c8838e208ae59c71b305e187ff61b02f1b08183e025127",
         "cpp_if_sites": 211,
         "cpp_loop_sites": 21,
@@ -2355,7 +2085,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "98c242b75611ef4c49180a2f872280d92edef6917245ee5b284ce24fce6ed852",
+        "source_sha256": "3b195132a356cb9ef04513929e3e9d9b5f3ab50228ea670fc4d8f340d56b2690",
         "cpp_sha256": "51d908a800d8d5e4f9c9c6c03a55740c3a71c475d3278d7034f5d97cafda9edc",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 21,
@@ -2365,7 +2095,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_native_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "ace298c1b6418a2feb1df4b4dc6322c91d00dc284b5b264daf98aa1f7260f83a",
+        "source_sha256": "30522b9c809e28551f9d37652863389bcf764b256313427f6041050c62802ff0",
         "cpp_sha256": "df89a5b1c8f8a2634e28f333d874f2b902f9a4579cb9ff2904648e33396c0d24",
         "cpp_if_sites": 212,
         "cpp_loop_sites": 21,
@@ -2375,7 +2105,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "6ef62b265905792108cc7dba8f327c85fafa704b83480cbae731824f74dbf5f0",
+        "source_sha256": "a4258ef46657659f8812f2a48bebdc4cb83e9984f4d8a88d0f214421bba2d53f",
         "cpp_sha256": "4d77d9aef0ef1bde0b1360e4c86d4970134d3b1adbf2e1a752ee27981cbd459b",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 21,
@@ -2385,7 +2115,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "846c7621aced316dcb6ac330a80f88eadd6f94c2182438e12c3df75792199fd0",
+        "source_sha256": "42a72ebbe67af439a58efdef77687fe36a56aecace318c8899c862971d68f96b",
         "cpp_sha256": "26f8e25a437c53f62d7d470a460a23c7c77d9809cce899a6a52a6af8caf139d9",
         "cpp_if_sites": 212,
         "cpp_loop_sites": 21,
@@ -2395,7 +2125,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "83bff718290dc013bb472ab36daaa53e4c7c9cc6111ed3c911e06ea00f4a05ba",
+        "source_sha256": "548c04cfea636199abe0b765fdfd19e90173980a22c5f9a3a94b366b878e5293",
         "cpp_sha256": "0514a5beaf846032d8283bc66284632f31267c688e346b49be7a4bd719880cca",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 21,
@@ -2405,7 +2135,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "850a2ffefd8a556e4bb7743449c94db49af6fa81cc3ff96ee035a250895154f1",
+        "source_sha256": "9a20354f368c57ff7812fb8253a85bd83729be39e15cd223b8916c6b9b1a4c99",
         "cpp_sha256": "368d7eaf9e70374cf9db4a9f8c57248b57a06782b2e521a75e675eb701b1c58e",
         "cpp_if_sites": 212,
         "cpp_loop_sites": 21,
@@ -2415,7 +2145,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion_radiance_array_diag_constant": {
       "current": {
-        "source_sha256": "e323ee6943ae639e9cfa1e71d72d75e4c29710e116bb8a0b910a7b12b709c8d4",
+        "source_sha256": "04d264808edf5d9c0f3317903e8a59a6898e831fe036bea20398239ca37e44c3",
         "cpp_sha256": "4f5d32c14059014dd90352d8f3633117363efb03e66f207e367964e911c15e9d",
         "cpp_if_sites": 207,
         "cpp_loop_sites": 21,
@@ -2425,7 +2155,7 @@
     },
     "terrain_world_raster.glsl:feedback_mesh_color_specular_motion_radiance_array_diag_opacity": {
       "current": {
-        "source_sha256": "5cbf021d89ea6146725a2b970b754cf0d8416ad4632f83ce6befd733af22f11d",
+        "source_sha256": "fc505a864894e78f0a31dc2fd08199b001762e4835ddf0faadaef1b3190c4825",
         "cpp_sha256": "c2c7ca12f6310db06bd04f7ba79eda19dd754fdbe842b5d193184c12d3abac7b",
         "cpp_if_sites": 212,
         "cpp_loop_sites": 21,
@@ -2435,7 +2165,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_diag_constant": {
       "current": {
-        "source_sha256": "c299da4def3b7b8f50670c271c51cd8d71461c8bef969c6a2a5abdb21ac85fe8",
+        "source_sha256": "52ac2a146453c572b7a4a343c09acf7881b597c87d943c621305c74faaa3b29f",
         "cpp_sha256": "d913698799e88b7226aa165f8c88e938f8602b43adc743695799173fd88cb05a",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -2445,7 +2175,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_diag_opacity": {
       "current": {
-        "source_sha256": "c831fdc1404a9e54aab5dc8a6a566b08bddf5ed46e1088e1341b06df9177bbc2",
+        "source_sha256": "5cdb90e59829cf8ee0d5066170e55fdb69e8d92cbdebba7861c0dfb6cfd47370",
         "cpp_sha256": "0aa26596376527d8d57d3eaaa3e2483e52ee24691e2fbec7da174210b8f5cd75",
         "cpp_if_sites": 100,
         "cpp_loop_sites": 12,
@@ -2455,7 +2185,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness_diag_constant": {
       "current": {
-        "source_sha256": "042cd577668016162d4dbade56bd5e866159e87700e86e62eda6ee1482ae2a99",
+        "source_sha256": "3079b946fb881e5ae20bf7e793ae571e98338c71648ad975c6514f02e696a8fb",
         "cpp_sha256": "e2e9d5034a266acf21c997b6ddcba04ab074448ce25cc0d7e5e8c8e93e17f628",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -2465,7 +2195,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness_diag_opacity": {
       "current": {
-        "source_sha256": "31a918125899b2e464e0847b239d824398b53667c467a4b4ae65e96209aa6990",
+        "source_sha256": "d461288b2eeef1352181e9d0b58812ebad60ff92541722bed01dfb126b961eca",
         "cpp_sha256": "104caeb1d1994c48ed82578b7befcfd7d457ddfc7eb3a38e9224e2378994036b",
         "cpp_if_sites": 100,
         "cpp_loop_sites": 12,
@@ -2475,7 +2205,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness_voxel_gi_diag_constant": {
       "current": {
-        "source_sha256": "b7bbc874518bdcaaa9aa370c5ec27863915fc07935e0a43ec932b253192ab4b7",
+        "source_sha256": "bdd5314eb9b0113051123d3f0338f3a4f03112751e5e7d363779d7f48624ce1c",
         "cpp_sha256": "dec665a365c67d46dcac3e3bc6e1db97b9cf261e52926aba341a5c9ac6f3939b",
         "cpp_if_sites": 97,
         "cpp_loop_sites": 12,
@@ -2485,7 +2215,7 @@
     },
     "terrain_world_raster.glsl:mesh_depth_normal_roughness_voxel_gi_diag_opacity": {
       "current": {
-        "source_sha256": "6b3706399086f496ce3cd01d75f4018d9712f3cea1605e9e41bd628d552d537d",
+        "source_sha256": "0953aff0f5f6d96bf4de7ffd21ea98dc68e937ced285703771357f37975067b3",
         "cpp_sha256": "de2b61e66bedf79fcfce94a884d5844e638d08edb3b89e468ff6e470f484fd8c",
         "cpp_if_sites": 100,
         "cpp_loop_sites": 12,
@@ -2495,7 +2225,7 @@
     },
     "terrain_world_raster.glsl:mesh_shadow_diag_constant": {
       "current": {
-        "source_sha256": "75cfc8b99e131cfaac4d417277ffadc3a350842b3098b4374ab1fa46cb11b9e3",
+        "source_sha256": "43f99923c9d30ecdfc760df5182900990d61601ad61428b392d27e3567a66178",
         "cpp_sha256": "39bbc3867a4264930519c4c5cfcd69d07fce73d4af3f1d8aa923e630ddb01d2e",
         "cpp_if_sites": 98,
         "cpp_loop_sites": 12,
@@ -2505,7 +2235,7 @@
     },
     "terrain_world_raster.glsl:mesh_shadow_diag_opacity": {
       "current": {
-        "source_sha256": "ae41838af6558e77c2880ec9054ce9534bba068c7aa93984bbaf74f3d924e98d",
+        "source_sha256": "75d08bee0b6fd43c92faeb7e8da891d80b67ed5b44de788065a98af9d4272342",
         "cpp_sha256": "a4ab49f66f0b85cc222dde0ba92acfea3ca647349ac46713e135a3517ef07011",
         "cpp_if_sites": 101,
         "cpp_loop_sites": 12,
@@ -2515,7 +2245,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_compact": {
       "current": {
-        "source_sha256": "327deea677f1c48f71568f374a7fb2aa07a93312980efa362112cff7a40ed7cb",
+        "source_sha256": "90bd13faa81b9ff23a71a654d0f33df442aa320dc3352b45d5fb17be81449253",
         "cpp_sha256": "d4a959a569570a6b2476bad09f91c7107c8db81e715aa9954c92fa85733b3659",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 16,
@@ -2525,7 +2255,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_compact": {
       "current": {
-        "source_sha256": "aed0e2035260249a0face51726e1ab01c5549cb30becbabae8783950ce97287b",
+        "source_sha256": "b39385d0e93be0fc3424ffe43b256f70ddf8150611577c29cef333b65c2cfb87",
         "cpp_sha256": "e09db7260ece5633451120745dcfb7ce00f329fc9f6c122d3c813dfa79ffad21",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 16,
@@ -2535,7 +2265,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_compact": {
       "current": {
-        "source_sha256": "31a5f283de39b3ebb231592ff9eae5b8ffd9e9b1232a6fbee47eb551eac2be71",
+        "source_sha256": "128df8118cb80d76f841685cd581f2e86da7f4b192daadbccb2863ce445f6b56",
         "cpp_sha256": "e071a58465a6d89977ae00a9c212f59bca0bdea2f49429048bb36f29f2e019ca",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 16,
@@ -2545,7 +2275,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "70b48ebc99212d9c14812728d6b666cf8a98bd1c21c60ec9e3a2a56c684cce71",
+        "source_sha256": "bd489cd03c770c10d4479e08cd4eda9bd9f753c8b451fbfc0e890dfe42a5b3c8",
         "cpp_sha256": "bedc5ac01b9ba4dafdfebec44e9f6d9c14088fde7452abd8dc4f23b702cb6c19",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 16,
@@ -2555,7 +2285,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "13ec612e5a52f97ca5c2ee1f9d41353a727d5f0645a2288f2bcc40e36f71555b",
+        "source_sha256": "023a8d62e88be8e9c626226d408bb61caf44772c340a56615e51beb5216bcee9",
         "cpp_sha256": "59e67451a2a2cf0276800b3bf202c5ab2623b307fb181127259d9ff8b0f2b019",
         "cpp_if_sites": 195,
         "cpp_loop_sites": 16,
@@ -2565,7 +2295,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "1068385d6b669b125123439e13478eaa525c05f42503f2a81938fbf828e1575a",
+        "source_sha256": "ba76ee7e43edabb8f92badf0db2ef7218ad16663187de38280ba012f10cd6651",
         "cpp_sha256": "76af6e9efb18e343001394aa79edad0350726700bd8a584f58f921e17cd2d555",
         "cpp_if_sites": 195,
         "cpp_loop_sites": 16,
@@ -2575,7 +2305,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "0e3c9a3c49e37b1ff5dc52cacf4c3aba7c9a968e86c46aa29b920490328222f0",
+        "source_sha256": "51fbc091f6d24907192fec0c85cdc582b067ed6784af5cc0131338e2fa9ba291",
         "cpp_sha256": "2bdd5be85fc00d9982a7c4a607fedeb47fced8b686c4ef13895f593898bdf858",
         "cpp_if_sites": 195,
         "cpp_loop_sites": 16,
@@ -2585,7 +2315,7 @@
     },
     "terrain_world_raster.glsl:mesh_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "6987c82d14d087fd43ca1f4a7c5c75ce405e7d7845952c45d338fc5b38955b7b",
+        "source_sha256": "d3e15ab1ae5280f56bfdd55c0a40f60765fe4c2e19550b0fae983de8adf234cf",
         "cpp_sha256": "a6833697cdd3797f0b0b80e8d33bf581f64bdb46a90d4f70f46b3f10483f5263",
         "cpp_if_sites": 195,
         "cpp_loop_sites": 16,
@@ -2595,8 +2325,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_native_compact": {
       "current": {
-        "source_sha256": "1e7d0bbc57ad59c8f45cc0460d99eb4c9cdd18a9911a647031d0080f2ce29e3b",
-        "cpp_sha256": "d35e16dcb4a33d5e8c760e25c4d10dd9ab1244308629d76f4dad644900a3110e",
+        "source_sha256": "86caf845ee0e41d405e61919a4129b48b26f0e68c2928b2d78cbfb132b7065e0",
+        "cpp_sha256": "4a2814cfa6fe5584c20dbb54db741cb816254e9184034117c8ba544bfdabffe7",
         "cpp_if_sites": 410,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2605,8 +2335,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_compact": {
       "current": {
-        "source_sha256": "2c618e5fa87d4fa8bce58907198546752c8001078163dc0bba74ec391421ded2",
-        "cpp_sha256": "f58b0acda8b9017408f990f663b988552dd9d8ad141e9e0a7ffeb8471e51eec6",
+        "source_sha256": "0d228410994b618b3f9d8313242193f4864b6801ccc57f6e5af0daece088aed8",
+        "cpp_sha256": "c3b0f946e0ba60c5ae29d79ae23aab225709a24155fbd08d82f78134af22472b",
         "cpp_if_sites": 410,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2615,8 +2345,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_motion_compact": {
       "current": {
-        "source_sha256": "e527e8e92404022dd5a704c6122dbfbec5c5b63f620b08fd28cf1ce5830e5bef",
-        "cpp_sha256": "c8282dac904cfbfc54033857188287b644317f61a60d21ee9b62e2f2e0c5403f",
+        "source_sha256": "05dd30445a26073b2e2d1e96759580dbc515567a3f2df14168ba380c6fd5a6a8",
+        "cpp_sha256": "a5b517a6b1b726952f35ae8ec2b1c0bf574375fdd54e5957ab2c436e53f13e58",
         "cpp_if_sites": 411,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2625,8 +2355,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "a96aa6025461d3be738d362b404930ca1e48b3c735a2033ac95f5112215eeafe",
-        "cpp_sha256": "9eae7f2ffd360bbf5c52393a63e19f8bb15ae9423515d8b921629df0afe089fc",
+        "source_sha256": "16005889b3320b9b9e65cd037252e507426b5cca6003db3db79095829680e8ae",
+        "cpp_sha256": "60526a6f89c0e6999c968b9aaafdaa2344484553fc1f67c1665b8112141e27a0",
         "cpp_if_sites": 411,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2635,8 +2365,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "985c25a1220675dc9d5f9e846b9290f8394a922d2e64e3e1f4256879760702e7",
-        "cpp_sha256": "1c23b09ded6da9cd7d98f25a02791d6c47f8b01b73fc5247e97cdbf352216d9a",
+        "source_sha256": "28d8290e88aacce7a739e7c61ee76fee407ed6552c7ebe6d6920bc49e0a7ce61",
+        "cpp_sha256": "1b2946e3c74986242b3e7b5843f67efb0e325ea23ce8abdcf26ca98febafe5d0",
         "cpp_if_sites": 411,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2645,8 +2375,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "20f863d88ca41132d4cebcc3cc4673ab5233728c8d7e37298a5d1b0b5b090118",
-        "cpp_sha256": "7b873c566f41147ca9a89e7f02bd358210c1559d1465bc8d94c56107e40af445",
+        "source_sha256": "9dc39ff8e3d02a97b86628243d80be4b174b0fb04d8254b7c46bc585552f9db0",
+        "cpp_sha256": "b495b6e4c0f376e556682ac4e5e1a84df577958c7e6acffb2152a8affb550229",
         "cpp_if_sites": 411,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2655,8 +2385,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "c8779b9274ca506bda256b1c1b6f411e157c4286617111ee4b5a54ae00bef8f1",
-        "cpp_sha256": "57bb64d5a63d20bc9b8cc496b95e615a9d7e93c92718d88b8a329e730ec88bfb",
+        "source_sha256": "6d1fec10aa55afd652e83052d02cbe4876ea753a53107f756dd71501d06a995d",
+        "cpp_sha256": "51b811e96ec5b0d67fa59094cc482436553faa9716345d5321a1e4d70e9a2dc4",
         "cpp_if_sites": 412,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2665,8 +2395,8 @@
     },
     "terrain_world_raster.glsl:terrain_strip_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "02872a5670507715752b6c8dcbf6c542c0135dddbee5aa5d6235b9cdabe4800d",
-        "cpp_sha256": "473f4ac942fc1a09e5b40972d80caef99c8e9ac1d896217683fc3a1f84d518aa",
+        "source_sha256": "a69144762228eeb2fe66af8ff1bac3dfe5d0dce027a33b6a9334d14ba9d2800f",
+        "cpp_sha256": "44cee1a05ddaf71e6adf9e972c7d4a9d9b55af49017777428fdff09ebbd339cc",
         "cpp_if_sites": 412,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2675,8 +2405,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_native": {
       "current": {
-        "source_sha256": "08c93544ed9c658173d1703e3fcb4644e618a959071fbc5a5756e3f5707f2d48",
-        "cpp_sha256": "78e943a99bc3dfa5414db9470bd437aea098f7e34423a73fdfbec8bb48dcf134",
+        "source_sha256": "824901b37242d2707ee82bdaebfad038e5dd383c423b011914de549de471ec77",
+        "cpp_sha256": "d057c95147307f84678d6662d27f2eda53a722774ec3caf947b18533278e99ca",
         "cpp_if_sites": 406,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2685,8 +2415,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular": {
       "current": {
-        "source_sha256": "eb1abcf3f8e6b0447f4080c1b626070bd2264d0e5deef6df45b7c7a60d6515d0",
-        "cpp_sha256": "dff35a14c492a2b9b2c474f456cf476bb60bb37c07db430b7d54ae47c2cecd65",
+        "source_sha256": "5240487426e6c71ae1950e4a0bca296d6b3a95c3e1ac00edac575ada8971ef76",
+        "cpp_sha256": "ea3f577e1e29e60636f70122cff5cd526d6ac33fceb85e30ff9cf8e77b848d33",
         "cpp_if_sites": 406,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2695,8 +2425,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_motion": {
       "current": {
-        "source_sha256": "8fa7b5cffdb7fbccc334616976d0d5475930a675e57548f26ffa35c46c406e11",
-        "cpp_sha256": "46d4c5ef92d2e86eaa024a716a5031387d39f76b8b8dcf457b988929d20dc808",
+        "source_sha256": "b4bc207dbe058d9abf6dabc7fb88fbe5fb49cfa4b5eea2281bf8618c59b955be",
+        "cpp_sha256": "90d46f1f4c609d0e5be26af95a968bb8bc8b7774ca74897fcfc6872754d0e404",
         "cpp_if_sites": 407,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2705,8 +2435,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_motion": {
       "current": {
-        "source_sha256": "51ad2d5d3f9185fb608f68b9836a173bba5b178dd140454a57ab3c443a76a853",
-        "cpp_sha256": "1ea2bf079c994c3168b1a9354b7610cefd7c319518e500962e1b2ad25d6a6c3c",
+        "source_sha256": "d0bb6d3e699f8a3aa53999f7cbb02e9611f904822d5138829b01fc1cf5cbeea3",
+        "cpp_sha256": "d58379a5d0fe1d4714a3734ce6dd7d6d7244e266ee51d420aff568842a460e0f",
         "cpp_if_sites": 407,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2715,8 +2445,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_native_radiance_array": {
       "current": {
-        "source_sha256": "84884cb4c79ec9b3bd511e502ec578414f138f01c469a074ea0cf2e41cc82463",
-        "cpp_sha256": "9ef4b6e81365d200f91c69f88ec2460a82afc4c8ab5c211deefdf0d3f738f87a",
+        "source_sha256": "aa188742c6269986030d383f0e36f6982723324bdbae4cc9d22759aec613a7ac",
+        "cpp_sha256": "0d5bb4638b006008cc0dfd7e8b9fbe2a7dcbc1fa886be306e8eb2d771d4866c0",
         "cpp_if_sites": 407,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2725,8 +2455,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "fff44d5d69a4af6d20d8d84623b86cc415630480650b97dea490caac0f050385",
-        "cpp_sha256": "ae7d1ae3f4963d1c280c82e8e6851118bd4f4e94e445ba4cce89b15972e3ca71",
+        "source_sha256": "3fb89b78800876f1a4f6452b67b0260e399e07235132339091d6b22f04ab0de8",
+        "cpp_sha256": "1ee899c76b8d8e91c1c00670464cc59539a98c1b1ebb485dec57ba7513e24bd4",
         "cpp_if_sites": 407,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2735,8 +2465,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "63526f90f5ec6f8fa73f00932076e3ec5c43c9c616661ad1ebeb66a4064079d8",
-        "cpp_sha256": "c9480e72f008cd8cb60f047139588cc8314066cb2dded9b3f058b401dfc51c57",
+        "source_sha256": "5c57988c54d455792f520a8fe78483d952cb002b9dee0478ba6ed3c85f00a5e8",
+        "cpp_sha256": "38e02ef34dde21dcf8d7878d2007c2a008dc477626ee867e29058bf20272c445",
         "cpp_if_sites": 408,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2745,8 +2475,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "41f4ead98f3e62863c0a1303bffd8467cc9d2d20504b706ede3dabcece2f2a65",
-        "cpp_sha256": "2f030e316cd7ffac19ed3f729c16c74e083a723a19bc4d07af18628ed8f155d3",
+        "source_sha256": "4169d1ad6558201de9caa94a82fc5fb405c2255ef653976d378aa6a07175b7c4",
+        "cpp_sha256": "c3408318f16bf46b18f8639045a2592191080aa1ee2975158c05aea9589d262c",
         "cpp_if_sites": 408,
         "cpp_loop_sites": 26,
         "native_compiled": false,
@@ -2755,8 +2485,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_depth": {
       "current": {
-        "source_sha256": "58fe0f613e640383b422b0408ef2d89351bf9ba24bbac8ae006986119a7f80fc",
-        "cpp_sha256": "bd7da1c159ffb7b86b2e20dcf14330fec4e0aeb194ca58bac5b5f6ccc0128085",
+        "source_sha256": "db42dae907967cdd28de8b8f0203711d8888e18a3e7f9a9c9db3f7d97f9630cb",
+        "cpp_sha256": "bc1d88604903be83e5fa967b621ebe6087e3de02c43e92e141abf6503b566c9c",
         "cpp_if_sites": 328,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2765,8 +2495,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_depth_normal_roughness": {
       "current": {
-        "source_sha256": "b4acffa7fc17f8f7557e3e873ca186953e89f9cd2c6ae745507b1485bd4a08b3",
-        "cpp_sha256": "ada96d7c165f2c9b9db8743271d07fe8a7fdca60d2283811fcac72cf30cedd7a",
+        "source_sha256": "109123b2481197230ea7f95ccf0bae839bd00fd3431f3fe76fa1e72423ed7c9a",
+        "cpp_sha256": "99ccddfbf9677b8909ea24d09165bb17de85f62ae8ede5ce0e5dd0017af5d569",
         "cpp_if_sites": 349,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2775,8 +2505,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "8b392fb9f1c5fa31c012948a722519002b5f19fbda8667a30b89533039758f75",
-        "cpp_sha256": "78f4e824779898b073eaced39325b797600c8dc6d119e16e635c15ebbedae2d5",
+        "source_sha256": "856d0de4c5a0321e8c19ec14e1881596d6548fb2d9ca3011df0a5970a771fb00",
+        "cpp_sha256": "4a6fb7388598028d95827cf59fee70ca8cbe64b17690dd9cab1388dab1a5abe4",
         "cpp_if_sites": 349,
         "cpp_loop_sites": 20,
         "native_compiled": false,
@@ -2785,8 +2515,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_native_compact": {
       "current": {
-        "source_sha256": "19bf6ec5ef406fc9391f4039de13e5c9a0b348b78e3018d5daa9e5b8ebffaf14",
-        "cpp_sha256": "de61c4765e799731811ef29726a7290e2f4051cb5af53dcdcebca89d017d2586",
+        "source_sha256": "4bde19d8f3ef7bf64b09cfb35b9436ca00a93d7c1c32b0c9fe0985be601389e3",
+        "cpp_sha256": "4ab4af79814597327d0383d9c49e974ac50b52633b9d55f3c3b64aacc1f2ce4b",
         "cpp_if_sites": 412,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2795,8 +2525,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_compact": {
       "current": {
-        "source_sha256": "1429d961ea6b2aa9687cadcbd6fb8eaeff203727d879f88f1bacef3f6bd76396",
-        "cpp_sha256": "6080c53ee9c4a1b84454edb1f86969a4731a72e546077882e65a017cd41f211c",
+        "source_sha256": "991dda95241309e8899ed57627d4d69e6f668b96872c62b03d0abafe0867a129",
+        "cpp_sha256": "f029c2929062ff313a473ba30194dbbe9a03f9fb9dad4cb42840c1d7a78a61bd",
         "cpp_if_sites": 412,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2805,8 +2535,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_motion_compact": {
       "current": {
-        "source_sha256": "e800f111bccaff6d41531719b91f9bb7958b1474737ddcb96227ef4ecc1e4a13",
-        "cpp_sha256": "127b1c8fe396c66bef3e0c049d2759682cb5f4831b52004eabb0320daee70758",
+        "source_sha256": "18ceb64b99e9bf9665393aa0def75748e40e4eb4d1081b96ec741fc9257928db",
+        "cpp_sha256": "4810ec83e9f17c427052a054062cbe135c2015817f1661205432702113c17791",
         "cpp_if_sites": 413,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2815,8 +2545,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "e147fee9c6cefbfb04b24a7f395abf4cfd5a95592e1e7aac79d47069e166d0e4",
-        "cpp_sha256": "ea2fb81bd3b78cd0e9ef5089c34b2dffc8b6245db368fde054d4de6035fd7df9",
+        "source_sha256": "af289384c9c8465456a69bd23041a2e24515d0ea5f98c457520013086070e70c",
+        "cpp_sha256": "e8125133d1d9f710336aecf4f68638fdbe36739bcc04b3ecd21de291f2b2bc0b",
         "cpp_if_sites": 413,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2825,8 +2555,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "d4a4d2f2a634b45cfd65b5006f693073ba3b90cd0e133cd1c954d50b030b4d71",
-        "cpp_sha256": "8a2d60e6b08b93c81109b83e09750a2729a0dadc2405f96c2a50e6ab653c882d",
+        "source_sha256": "33b00f343f2d3457e48f4c5a6f664de7537c7785295072668581d25280ffab41",
+        "cpp_sha256": "179f82ae3b2bcad23be1b3f36e0ba058e1ca50fbbf03e71dcae21f5b80a9c657",
         "cpp_if_sites": 413,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2835,8 +2565,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "598022ed47b4dfa0b9446cce5e090e15a18351b8234f23f18e71a40666e8c937",
-        "cpp_sha256": "7102d6712f3228928a85b965f352fd242e4637f5ce9f93e315e6e32611da38ba",
+        "source_sha256": "b30b53721c37d13bf5e3ff2144abf535e449c978cf75de4a537dec7810ae5664",
+        "cpp_sha256": "c4ef43fe2ae25a41f527a8e7274a68bf5ffbe290801c16cc02d18009ec52992d",
         "cpp_if_sites": 413,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2845,8 +2575,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "262d79286ccd46eff20247ac45d91986c39ad48e7bb805261f6ca74137b0f3e2",
-        "cpp_sha256": "9b7625887e90140426c33f0371a8e9ef1e0b3b9808e6a2970b4f688fbff9ce77",
+        "source_sha256": "be41427c0558c3bfe9b1f31e70fbbe87cec62da0b9b5663b515ed44c9e9d9c6a",
+        "cpp_sha256": "016d582f1e26cae1739d827f30f55bdc91040211d1f1083575b060feed43c642",
         "cpp_if_sites": 414,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2855,8 +2585,8 @@
     },
     "terrain_world_raster.glsl:env_terrain_strip_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "38c2ee7d99f2d0df843ba23389744dbb2ac3017bb43aad083bbbc6730cfe6586",
-        "cpp_sha256": "1bcbfa11ca8f4e29ba7e11a893807e72d80c710f3afcfe22321e2c8b8f189dfb",
+        "source_sha256": "4042cf6f3629d03289bba0d1c8ac5b2d1ed414a873501684dae37aa793903008",
+        "cpp_sha256": "b71b5677dd57bdaa9af0f8d273747d7ac95fa7f6e2686c2cb8cb4b418f519783",
         "cpp_if_sites": 414,
         "cpp_loop_sites": 24,
         "native_compiled": false,
@@ -2865,7 +2595,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_native": {
       "current": {
-        "source_sha256": "63a79704cecffe5e3a212fe28a6f2f9c6d04bfeedea9e0ebc584b4d9035527fd",
+        "source_sha256": "7a92442364b51e15ce988a89be0b46b1b2f39b099b5eb6e13fd38e409c4b82b1",
         "cpp_sha256": "d03d17b3f6552864ccd3bcca940925f461dc7cb33f74a12490e3a5efa779be13",
         "cpp_if_sites": 196,
         "cpp_loop_sites": 19,
@@ -2875,7 +2605,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular": {
       "current": {
-        "source_sha256": "b402b0c1bafa91d2d49bbdbb26af452f126e8ffa48ce03f9a9549ac3f4a592b6",
+        "source_sha256": "091b8f400d042e290b3934e3115e8f37972af1fa915bdaca3583c49de46dd91a",
         "cpp_sha256": "a8c73c90cc6f1d86160d36774061961c4de865a62bd02d6e5ecc959492ac1669",
         "cpp_if_sites": 196,
         "cpp_loop_sites": 19,
@@ -2885,7 +2615,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_motion": {
       "current": {
-        "source_sha256": "bb54504a88ad8b644a3e4ddb196e8e7edb5990be164ea44c71e6cfeafbc88d2f",
+        "source_sha256": "66f838c7989850a75945f8deb02aa062400e91d94610bfecce83b2c9ffe410ae",
         "cpp_sha256": "17b974ff598311b48b9b5ac4b755e9215d34a6275016db2779e5702cd57b7d0d",
         "cpp_if_sites": 198,
         "cpp_loop_sites": 19,
@@ -2895,7 +2625,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_motion": {
       "current": {
-        "source_sha256": "1193cc5044a6f32c64a2a18a2ca02d7231d2240fcedfda60bbf5ca57c9ab5aff",
+        "source_sha256": "bed85a10fedc55aaa4528b1c9a4e44cca64226262dacbc1efe87296bb1a322bf",
         "cpp_sha256": "fe43a2f5bb0f6f525d3d7cbe32268224abfb3f43c9d64bcc53cbd9e6ef4c8ddd",
         "cpp_if_sites": 198,
         "cpp_loop_sites": 19,
@@ -2905,7 +2635,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_native_radiance_array": {
       "current": {
-        "source_sha256": "c6c841654a34065c92ac4728af054a8ee7d35c9ca8f136b51bb68f25ee816611",
+        "source_sha256": "7f0b86ecb75ca946e3b1de3ff0364a79a2e8f3587fd5385ccfc1801cb9c7798e",
         "cpp_sha256": "631fcdfa7d36af55814d0da23816632d7f8526c2da1c6e0ed8b7b8ddba9afdf1",
         "cpp_if_sites": 197,
         "cpp_loop_sites": 19,
@@ -2915,7 +2645,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "e19f77528ba36e89ee7138d6031a9e260bcc4d3807c53a0691f4dd5e4da2bec9",
+        "source_sha256": "438170e353b39e9880f9e07523d8cc0963e34479dba41b0e862fcf8444977863",
         "cpp_sha256": "c8c277c46a6cd334f520eab9bf5c1e0c92a24cfbc1a353c6f5dd00552db93f00",
         "cpp_if_sites": 197,
         "cpp_loop_sites": 19,
@@ -2925,7 +2655,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "4e57fe4796ff0da9887a531ed1550a948a64a5c57c62e879b159633f4ce0afa6",
+        "source_sha256": "704028b8a58591f5ecbb044c3c69781eeb015b3ddeac27190376dfa08368b8a3",
         "cpp_sha256": "dd05f334afabfebfa5485f1d20d1560d736a8cba3e03d6627f7fa5872c6a6cba",
         "cpp_if_sites": 199,
         "cpp_loop_sites": 19,
@@ -2935,7 +2665,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "163e04a10061a0357c1064412adb48ddbe1f16648452391e0d19e5d29f9c7069",
+        "source_sha256": "78885957992658faaf27aad18215add56c8f8c8f215fcc3a655a46fb577abde1",
         "cpp_sha256": "143cc62e4ae58417a8c0e61c37110dd509d4f21747cc1b8be55f2ec3d45ade68",
         "cpp_if_sites": 199,
         "cpp_loop_sites": 19,
@@ -2945,7 +2675,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_native": {
       "current": {
-        "source_sha256": "e108c4abf19cb9144b0e947b81b2fdf0e010d1924d29ac916a71119387cb100e",
+        "source_sha256": "c94bf2a36b7dcc0e99fc8819d20fe8c96b5c2b5991f7df91a67f502a6f0e1d2e",
         "cpp_sha256": "75ae69c85a45ad67c4caf7b0ce94b2158ff9408e343cfcf37be47cf7ae3b0294",
         "cpp_if_sites": 230,
         "cpp_loop_sites": 22,
@@ -2955,7 +2685,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_specular": {
       "current": {
-        "source_sha256": "06d9cc1e0be0a6884d1df3e12393d41b29b1861846c8dbdb02dbbf2a402de0f4",
+        "source_sha256": "86b4d34bdcf1edb1100f3b997a849c6278cc4ae7d3c9a43c76ec7c688d8f1577",
         "cpp_sha256": "f6875fbbcfbd210d64297d6fe463cb9c60b2add5df54fdcd3907fb2dddbc3c8d",
         "cpp_if_sites": 230,
         "cpp_loop_sites": 22,
@@ -2965,7 +2695,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_motion": {
       "current": {
-        "source_sha256": "87c1aaa5e4814506e0327fee4972bdaf9f8b973f2ca38b2ee81109f26458c18a",
+        "source_sha256": "7b18f1b0630f388800ad82dc572b7dc67fc8a714178d4e95eedf4220fd050487",
         "cpp_sha256": "1d4f6847d4e0e47eaae57e3751284c7405beefd4dd54565fb8e236d871e539d6",
         "cpp_if_sites": 232,
         "cpp_loop_sites": 22,
@@ -2975,7 +2705,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_specular_motion": {
       "current": {
-        "source_sha256": "1aab9f156a92dfb10a976d5a9ead81837ae9ef6f0440710f5abf798be0580a90",
+        "source_sha256": "d52e543eea4a14f70ba5eddc08c70b6d21451fc15080b20f3c002d854ebcd53a",
         "cpp_sha256": "9e748631367595f328715b286970647fa9b7f7e35d5099b47287f9b2d0b9cbc7",
         "cpp_if_sites": 232,
         "cpp_loop_sites": 22,
@@ -2985,7 +2715,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_native_radiance_array": {
       "current": {
-        "source_sha256": "54d8f720510a8655fdaf9c1980855400f5e56b62775bc4a7faf5a9fc6bd94341",
+        "source_sha256": "3ff911e476ca37747d609b3e29d8d0584916e18571194c834b80ab8ceb847031",
         "cpp_sha256": "68b4cb6021689f415feac67a5050caecf0d23f7cfcbd1cd8957796c15bd0d15c",
         "cpp_if_sites": 231,
         "cpp_loop_sites": 22,
@@ -2995,7 +2725,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_specular_radiance_array": {
       "current": {
-        "source_sha256": "fa6c1064f109eeff333e36a285a89ca7d6f08b07f1ddb7b80b64e4a6132bf6b9",
+        "source_sha256": "f3b302c986a97cbe208afbc37865f37ba38f1569724c420bb020bd5f8c4c7d79",
         "cpp_sha256": "3f7c4a471282707c9b080ee8873d5ee1f62ab444ebd3f26cf5c72631482bafb0",
         "cpp_if_sites": 231,
         "cpp_loop_sites": 22,
@@ -3005,7 +2735,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_motion_radiance_array": {
       "current": {
-        "source_sha256": "71a613a195f655966a1447bf42b3db3a80e6315ff090f2a0e52517749a6a0a26",
+        "source_sha256": "86d168439e6942d387f81e90d5261e8991a1ef4fc7d011c9f110be91456806f3",
         "cpp_sha256": "b5e00c99caa2716356c11a6b91ad60af4bb0ae219196624667db6e1692474481",
         "cpp_if_sites": 233,
         "cpp_loop_sites": 22,
@@ -3015,7 +2745,7 @@
     },
     "terrain_world_raster.glsl:env_feedback_mesh_color_specular_motion_radiance_array": {
       "current": {
-        "source_sha256": "dddbd57e037652a1845ebe7e727d791164cc7837b911cf06d15fa7d4e7a5686c",
+        "source_sha256": "84acb9dbea7f16caf24e591c754fc0ba2f17652846e037dc33d47d3cbe60815f",
         "cpp_sha256": "35767282730c196b173f577e8813adc3d94a139158820a5f7b924079c4cb71e8",
         "cpp_if_sites": 233,
         "cpp_loop_sites": 22,
@@ -3025,7 +2755,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_depth": {
       "current": {
-        "source_sha256": "40dbb480569c3a55995f768e8f200f1181cd85ab56be108293f0adb1fd0a124c",
+        "source_sha256": "5f87dc2126c9f6d82c97bf03e09371d818c2d19c6932f98a598cbcbe47378624",
         "cpp_sha256": "d90cfbc4db9228d4ad9216d018f04e8cb6127613d7cdf8618e579cb0902b3581",
         "cpp_if_sites": 105,
         "cpp_loop_sites": 13,
@@ -3035,7 +2765,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_depth_normal_roughness": {
       "current": {
-        "source_sha256": "68bf3f49aa767f3e4ac97e309f345b531d76373663fde906efc98fe5f9a3bf60",
+        "source_sha256": "593f9a4592bb6a268f43e7fd123e4f862e0a5a3ef3febbecb3f3e58233a70d06",
         "cpp_sha256": "066a8e3752965a330f90f5c2956ed5b9a4db7b6b1b841ecda09bbdacf53cddeb",
         "cpp_if_sites": 114,
         "cpp_loop_sites": 13,
@@ -3045,7 +2775,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_depth_normal_roughness_voxel_gi": {
       "current": {
-        "source_sha256": "0b355f21029287cb6f09d97614d7369f83267d19acd00f7c301013d7d8b75d52",
+        "source_sha256": "854ae5a2721592ffa554a81ff957d997d64d53cdf33e20f480e46ff2a6c7b41d",
         "cpp_sha256": "1b999b42a467f21cdfedd0f9d77ff92ef63134409bc91b60fdef1ba596264923",
         "cpp_if_sites": 114,
         "cpp_loop_sites": 13,
@@ -3055,7 +2785,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_native_compact": {
       "current": {
-        "source_sha256": "d651cc66c660155084198857be5fa2402ecb65b9fb7036a61f37ebf12e363731",
+        "source_sha256": "64c810cac56681a8d3756ab6ad36055bdb7359824808fcb6b0a6bd57384c0823",
         "cpp_sha256": "1e7fbebac0cf6508e073ec89a926fea0b53e54ac28ffa6fe864f134ee523c63b",
         "cpp_if_sites": 202,
         "cpp_loop_sites": 17,
@@ -3065,7 +2795,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_compact": {
       "current": {
-        "source_sha256": "193a48d4663854e91ac6a2cbc7c0806c2bdcf102cbe338d2991757c24025346d",
+        "source_sha256": "d04a08bfeb76e127061542398c54f0c93f916e7ee89465be48f5fcc0cb23be82",
         "cpp_sha256": "dc89d8751e5a9f8b36be3881203a39e321f2a613354ffa9c6c01f17401c4f701",
         "cpp_if_sites": 202,
         "cpp_loop_sites": 17,
@@ -3075,7 +2805,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_motion_compact": {
       "current": {
-        "source_sha256": "20af67a83060ffb0f3a9d025451a0c6fa809f79feffe78d1dd496430126a36e9",
+        "source_sha256": "680e1d5815b5734f385e92ee91196b71791987442ce3ed16879bb892beaa4fc6",
         "cpp_sha256": "b213ad0979c58d84ac51ea5db8f77770cd87f1977c5ab4f534c757167fe21df8",
         "cpp_if_sites": 204,
         "cpp_loop_sites": 17,
@@ -3085,7 +2815,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_motion_compact": {
       "current": {
-        "source_sha256": "0d480f6ea1f389f63b138214843a53b7b9e69750d1e5cb0efba48abcea4e5257",
+        "source_sha256": "6ab84207a956b9ad7b411bc1b78ad51eb6b07705fece720a525e2e1f335167fc",
         "cpp_sha256": "7c42f17429d08a3b3b38c2a5266e04cf20c1e25b5a40247821028bb13706d870",
         "cpp_if_sites": 204,
         "cpp_loop_sites": 17,
@@ -3095,7 +2825,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_native_radiance_array_compact": {
       "current": {
-        "source_sha256": "30f28880fe3fa300dd9f88129d2c09fc97631126cf5ef13b759989ec07fe5185",
+        "source_sha256": "3e0faa12eaf4d7db4188bcc645003e1b4f5b88abb472cdd4da663a47019e4af2",
         "cpp_sha256": "4d2d56ee5ec9c13e69dc4fa3d0031d9aee04d478bd25cdc79d36c18aa727f2fd",
         "cpp_if_sites": 203,
         "cpp_loop_sites": 17,
@@ -3105,7 +2835,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_radiance_array_compact": {
       "current": {
-        "source_sha256": "db208077e51892c2be038f2fa2601638387d8478448c32f5974e7359ea9cb220",
+        "source_sha256": "b34e834d38378e0a0e82b9afb7caeee66d5f34c9317c11214ce6d11d64fdd956",
         "cpp_sha256": "cb83af1d88bc81c0799f0a557fbe5d713ea89eeab60dd590e61bc7eb2bcbca68",
         "cpp_if_sites": 203,
         "cpp_loop_sites": 17,
@@ -3115,7 +2845,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "c8a56c9ad7cb568277a41610076f5fe791246cc8aad12f5fcb7fba0dca062ee3",
+        "source_sha256": "ceed7d0f4c2315a8f22f7c2d543ce12f628c30c0559df39b3b05fb61b7afa9a9",
         "cpp_sha256": "d1cfcef87bedded016ae10c3694b6ce1fcfed7522c4300f390f65b59e44d5a84",
         "cpp_if_sites": 205,
         "cpp_loop_sites": 17,
@@ -3125,7 +2855,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_color_specular_motion_radiance_array_compact": {
       "current": {
-        "source_sha256": "eca2fe42ae6434c3be97de99e4495adcb2009692fce6f4d13a8ba54bce5b6583",
+        "source_sha256": "2bd65d59409c66fe454e972f91bf6dda7c82ef7d7acc7ea5bcee5bcdf350eb04",
         "cpp_sha256": "492ce3f26118bfc836d130b80256a4abdc253fdb42657b6dd033d9ee9be19060",
         "cpp_if_sites": 205,
         "cpp_loop_sites": 17,
@@ -3135,7 +2865,7 @@
     },
     "terrain_world_raster.glsl:env_mesh_shadow": {
       "current": {
-        "source_sha256": "7faefbaae6d0a742f6336b02edd368c72a1cd9d627ab83a600235dbf6a10ea98",
+        "source_sha256": "143cf81768dc705b466e6ae81421508a2c450973b79ed550a419bcd9fdd3dd74",
         "cpp_sha256": "5c48adf492c86f48b9f00b7362590643505c1c9af0d2833285cb6c9547d3fed1",
         "cpp_if_sites": 106,
         "cpp_loop_sites": 13,
@@ -3145,8 +2875,8 @@
     },
     "opt:terrain_clipmap.glsl:color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP": {
       "current": {
-        "source_sha256": "52765a7ff3bb5ffde4e4b7d67307b427c98852c87f88ac2422005cfd299f1411",
-        "cpp_sha256": "8c0e7d6df4a4530f08cdd73101828563c2044822b24837ee5f076cbc4eab792e",
+        "source_sha256": "b3d3a99d974dcb0d89fc13399c3e15194dc8b2edab37e76d3b4e35252021309f",
+        "cpp_sha256": "ba60534e4cc04a1c7eceb3f1bf238509a22ccfa06b8bc004972e3669c4722213",
         "cpp_if_sites": 336,
         "cpp_loop_sites": 16,
         "native_compiled": false,
@@ -3155,8 +2885,8 @@
     },
     "opt:terrain_clipmap.glsl:color_native:T3D_VT_FIXED_FILTER_TAPS": {
       "current": {
-        "source_sha256": "7d1d84e82c7ed442dad5ccb80fa913d98257e6adf20a1753d23299249a3fd5bb",
-        "cpp_sha256": "173d960fcfca4207797e982b82a962404d2e06882bd2168519a56526fe586061",
+        "source_sha256": "6e50e350237e6b5d3150b75c00e5038cae47e899565b73e2e2511efbb76a8cda",
+        "cpp_sha256": "1c00617732eb72d275b356a0614865725b71ec2ac2a973890d365b114e438aee",
         "cpp_if_sites": 342,
         "cpp_loop_sites": 13,
         "native_compiled": false,
@@ -3165,8 +2895,8 @@
     },
     "opt:terrain_clipmap.glsl:color_native:T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "d070db4b5da4eac677a16998dfde8814d84cc3aebd3322905b61ebfc8fabfdaf",
-        "cpp_sha256": "46cf530ba2493347c410cf0b91f3ddbcebbf24140123d6d618f5e41afc1e2e2b",
+        "source_sha256": "5d7bf6eee3dff666329bc580b5069fb2b0ea1c332b6d87ad5ae2aa31fe0e32ea",
+        "cpp_sha256": "87c5cc6a40ddbef1ca0e755db33f40f0f904875055c8f6a14b968d2e33b0da34",
         "cpp_if_sites": 336,
         "cpp_loop_sites": 17,
         "native_compiled": false,
@@ -3175,8 +2905,8 @@
     },
     "opt:terrain_clipmap.glsl:color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP+T3D_VT_FIXED_FILTER_TAPS+T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "a192636d6db2651ac8f11585eaf86be0fe71c56044636fde386bd2b692d45ad8",
-        "cpp_sha256": "27eec4af6ea57366e168e8e6513adf9153ec8c83ec17e6026bbec3fb6a28d736",
+        "source_sha256": "cc4c2b3d87e73437725020c932d7ac244bc9c11ed1f824f6a77948a2790bb85c",
+        "cpp_sha256": "57e0511c608b268381040d80cf5775cc1557316220a706ceb8722f8dc5075d80",
         "cpp_if_sites": 338,
         "cpp_loop_sites": 12,
         "native_compiled": false,
@@ -3185,48 +2915,48 @@
     },
     "opt:terrain_clipmap.glsl:editor_color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP": {
       "current": {
-        "source_sha256": "3e9470ef126f9c0548db5628f74f186311968e7ea1774e6c9115d9fd7d7f6321",
-        "cpp_sha256": "9fa402c6984507d7ee9efaf488b78cef41b295a2050e54f851b91c6d5f5b4474",
-        "cpp_if_sites": 413,
-        "cpp_loop_sites": 17,
+        "source_sha256": "e5f76c0e876e60bde4ad5c3ed930ea0d96b671019692c57cf85238f8e684e0e0",
+        "cpp_sha256": "fb3103fcf6c9d81799fed09fefbe20f329d28a6838ed980e56415c3e5e968bdb",
+        "cpp_if_sites": 421,
+        "cpp_loop_sites": 19,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "opt:terrain_clipmap.glsl:editor_color_native:T3D_VT_FIXED_FILTER_TAPS": {
       "current": {
-        "source_sha256": "f9f958f275146914fcf0c3a0f8f4666707ef3d244271e4a72b6a52807658c850",
-        "cpp_sha256": "8e08aa1b1bebc41402b9eeab87fe0afa14c99868256bc0f1f9a3eed5e97bfc43",
-        "cpp_if_sites": 419,
-        "cpp_loop_sites": 14,
+        "source_sha256": "73910290c9c5a9be3a1cdeb5dda73d3b0098ecee130c1be2e647bc88bee9a501",
+        "cpp_sha256": "1fa571d57e177627417bf614c21687daf26d8116af7dbd705370213ffabe7edb",
+        "cpp_if_sites": 427,
+        "cpp_loop_sites": 16,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "opt:terrain_clipmap.glsl:editor_color_native:T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "28aeaa321d5f865426a8f2ae424eba4bdaa5d2c12ade2356a684cc7490a8d06d",
-        "cpp_sha256": "4ad74ee226e44010b92b1ffa57b84ee89976874abff118ba2e5de51b6232377a",
-        "cpp_if_sites": 412,
-        "cpp_loop_sites": 18,
+        "source_sha256": "dde470e9d22e5e40316c0e345cae6f059a151bf5cc9224c4d78ec98accee7a25",
+        "cpp_sha256": "e0630109ba229001a87416a6514dbc1886cd478cee977f7ba87b034f168a6ddb",
+        "cpp_if_sites": 420,
+        "cpp_loop_sites": 20,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "opt:terrain_clipmap.glsl:editor_color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP+T3D_VT_FIXED_FILTER_TAPS+T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "e1079375d23c80f854f644012e104eebbe41cd08688cc88a0b85d15151edb8c8",
-        "cpp_sha256": "801d5c11aac5f76e5a0fb6d8d4796c49079de417f513fff5b50b7a09c71f0b10",
-        "cpp_if_sites": 414,
-        "cpp_loop_sites": 13,
+        "source_sha256": "4fdd35b5c602025ab846814647926bfe686474ac7a4e64580d29c612ec7132dd",
+        "cpp_sha256": "236f316c7d646eb09bb28bebe38776b53e36c9b017ac36914297a354342a952e",
+        "cpp_if_sites": 422,
+        "cpp_loop_sites": 15,
         "native_compiled": false,
         "spirv_validated": false
       }
     },
     "opt:terrain_clipmap.glsl:depth_normal_roughness:T3D_MATERIAL_ACTIVE_KEY_LOOP": {
       "current": {
-        "source_sha256": "aeff47fa2715ea986021f898ce10eff40e6f8554bda12004783bd097ac5e8be1",
-        "cpp_sha256": "a5b2d199e3c397c97f008691249cd0021152d72526738ee8f2414944cf0acebc",
+        "source_sha256": "2bb8e132e9e47c10a49c31e34d51d16c366c07600e40dc808eb2029ef3a8f054",
+        "cpp_sha256": "4cbfef73871312bec2ab7fa7e0dae522d3d48831ca49b1f91c9d1096405ef05e",
         "cpp_if_sites": 262,
         "cpp_loop_sites": 8,
         "native_compiled": false,
@@ -3235,8 +2965,8 @@
     },
     "opt:terrain_clipmap.glsl:depth_normal_roughness:T3D_VT_FIXED_FILTER_TAPS": {
       "current": {
-        "source_sha256": "50ab9204802da93443ff7ad5f046d8379ee22113be22e97f1b5d9721fa495869",
-        "cpp_sha256": "a417a93ada335818ff6f073df740a657dbfe0543111eae7be5d334ba11a9cedd",
+        "source_sha256": "0cd9e3985d86627c1d38bd2e9ad0822c7aa0c9e1fd45fe250779ee6fa1f85c5e",
+        "cpp_sha256": "3991409cdca2efb5c221640bc5fff9bb9af81b9d4a4788db4484c1282566da0f",
         "cpp_if_sites": 268,
         "cpp_loop_sites": 5,
         "native_compiled": false,
@@ -3245,8 +2975,8 @@
     },
     "opt:terrain_clipmap.glsl:depth_normal_roughness:T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "1199fd19ea7c5148a5b4d88b741263fb3a3e3224442ea31db2b8e8547393e491",
-        "cpp_sha256": "f7052ed0462b00497297ee356458a6d864dcf1b2ffcbc8440db24b1e8b42f271",
+        "source_sha256": "b2788d0b83a4ed719fbcca58e1e4d3e26047ff05b1b11edf55b99dd1c8b53442",
+        "cpp_sha256": "909123d591a68ecb6205de0bc0c31d7be4089354006b7c85bd843c122110b5a8",
         "cpp_if_sites": 264,
         "cpp_loop_sites": 9,
         "native_compiled": false,
@@ -3255,8 +2985,8 @@
     },
     "opt:terrain_clipmap.glsl:depth_normal_roughness:T3D_MATERIAL_ACTIVE_KEY_LOOP+T3D_VT_FIXED_FILTER_TAPS+T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "71954ecab0207bf64a4a8660168bedaaabd958f6bda749062298ed8c9d002833",
-        "cpp_sha256": "fc61f1fb57092687fa188b32b9f4b92a0945bef47daf2008f6ffda0380cc484d",
+        "source_sha256": "54f725a620d53c9aa759c9342a7413012fbe7fc75da4e570f780f6cb5175b09f",
+        "cpp_sha256": "8321e1dbeeb519d93b5682657bea2d12a1e898c2995a1cb238cf38b2eb8012ac",
         "cpp_if_sites": 266,
         "cpp_loop_sites": 4,
         "native_compiled": false,
@@ -3265,7 +2995,7 @@
     },
     "opt:terrain_instances.glsl:color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP": {
       "current": {
-        "source_sha256": "45da871f16c39634c2be2c7139e029021987f45ddf486c1b4cf9d2031043bbf2",
+        "source_sha256": "c41de6080cd3811ec5f16b8bfe2c259b62ffe59841684cefb5be0bb014f26460",
         "cpp_sha256": "6b7c2a1fef5c359fbb6150c00e0ce129b0e791c2798577647e391ab298a0f272",
         "cpp_if_sites": 214,
         "cpp_loop_sites": 22,
@@ -3275,7 +3005,7 @@
     },
     "opt:terrain_instances.glsl:color_native:T3D_VT_FIXED_FILTER_TAPS": {
       "current": {
-        "source_sha256": "11ce8152c3ab0c35f771b31fb4b8803414649a3139fb784b2256542e6abb0baf",
+        "source_sha256": "b15718519e49efbef18144ba36330c2cc27c211484d91dfad196d100a07070f4",
         "cpp_sha256": "5d3c0611647a27e065ff2911b9ea3d726bdfac0422bd68a2dfa7926862be9966",
         "cpp_if_sites": 222,
         "cpp_loop_sites": 14,
@@ -3285,7 +3015,7 @@
     },
     "opt:terrain_instances.glsl:color_native:T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "89bc1180312c312137cd60b661d60d67795552ed30a16302c7114e27df933dcb",
+        "source_sha256": "e2ef12396b6fefe1bdaea9267e9368811094c84a2d24ca10b794895d50bd8d54",
         "cpp_sha256": "dcbc20ecec4d9556645e76c7bc2b26c1a47a7616aa2d94639927835e9d5113dc",
         "cpp_if_sites": 212,
         "cpp_loop_sites": 22,
@@ -3295,7 +3025,7 @@
     },
     "opt:terrain_instances.glsl:color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP+T3D_VT_FIXED_FILTER_TAPS+T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "c793591537c9e3022c70e3a7f886bf6434a81d0e7d1c62ba6d590cfa30447be4",
+        "source_sha256": "21534ba018c1c1061a05ec91efbc58869e3d3ba30c1def5755393adea679baec",
         "cpp_sha256": "bcee14fe085f0eaad62200de95224261c30decd5d850b3a00b5526ce330f839e",
         "cpp_if_sites": 220,
         "cpp_loop_sites": 14,
@@ -3305,7 +3035,7 @@
     },
     "opt:terrain_world_raster.glsl:mesh_color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP": {
       "current": {
-        "source_sha256": "b46e9b80340f02c417d42fe61ead36ef431357e92f53b1ae03d85d8ba45ec745",
+        "source_sha256": "7d2c4f7ad361bf1a3b6feafb39601e4990e57dd65df7820a02802f06a3c5fd50",
         "cpp_sha256": "a496a1a5b2816a6ceaa15219b10cf7a7011a71b0fad0f113a0de091e2e002f42",
         "cpp_if_sites": 188,
         "cpp_loop_sites": 18,
@@ -3315,7 +3045,7 @@
     },
     "opt:terrain_world_raster.glsl:mesh_color_native:T3D_VT_FIXED_FILTER_TAPS": {
       "current": {
-        "source_sha256": "a14e13e886860c139c0c6b4fd2150e0f4bfd409af4f2a62e66da0b02510c8fb0",
+        "source_sha256": "12b5189eefa864317a26746babbac851d3dde29dbdd1ad69c7ed42475c62bf85",
         "cpp_sha256": "fff19f7120fc5e073adfd6891c13db855e2f34b91680f13c2dc32cc5f3b3b5fa",
         "cpp_if_sites": 196,
         "cpp_loop_sites": 10,
@@ -3325,7 +3055,7 @@
     },
     "opt:terrain_world_raster.glsl:mesh_color_native:T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "20e013a7a50b718c6715dd151788056addfe68626f9e878040a7f5b648f69664",
+        "source_sha256": "8d0a052010c37e9786729142a2fd4857bbed57424228eb0b85d91813d4ef21bb",
         "cpp_sha256": "a6c724213b9cd4302c955e7cd1d20c942107c24224552920c00868a90316623b",
         "cpp_if_sites": 186,
         "cpp_loop_sites": 18,
@@ -3335,7 +3065,7 @@
     },
     "opt:terrain_world_raster.glsl:mesh_color_native:T3D_MATERIAL_ACTIVE_KEY_LOOP+T3D_VT_FIXED_FILTER_TAPS+T3D_FORWARD_SPECIALIZED_BRDF": {
       "current": {
-        "source_sha256": "1fb3b6a090ebf5c6d098a7595c67173acc4e186aeeb57a9573fd530716e097dd",
+        "source_sha256": "4cd85a4a8e5806200f0b14f6350802d748e17a5e2caed302bd581a4de4c30a5d",
         "cpp_sha256": "f6d5e0ecd9ce23e04f2f40bf60d91d7959df2b49c90082eef93907e38a2a8e3c",
         "cpp_if_sites": 194,
         "cpp_loop_sites": 10,

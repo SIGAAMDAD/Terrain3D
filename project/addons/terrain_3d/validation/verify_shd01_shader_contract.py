@@ -116,8 +116,8 @@ def main():
     targets = ['terrain_clipmap.glsl']
     for name, group in [('s_forwardVersions', 11), ('s_oneSunVersions', 8)]:
         entries = array_initializer(cs, name)
-        ensure(len(entries) == 3 * group, f'{name}: expected {3 * group}, got {len(entries)}')
-        for path in range(3):
+        ensure(len(entries) == 2 * group, f'{name}: expected {2 * group}, got {len(entries)}')
+        for path in range(2):
             for file in targets:
                 for version in entries[path * group:(path + 1) * group]:
                     ensure(version in choices[file], f'{name}: {file} missing {version}')
@@ -174,7 +174,7 @@ def main():
                'Fragment-feedback layout lost ' + name)
 
     cases = {
-        'terrain_clipmap.glsl': ['color_native', 'compat_color_native', 'editor_color_native',
+        'terrain_clipmap.glsl': ['color_native', 'editor_color_native',
             'color_specular_motion', 'depth', 'depth_normal_roughness',
             'depth_normal_roughness_voxel_gi', 'color_native_one_sun',
             'feedback_color_native', 'feedback_color_native_one_sun',

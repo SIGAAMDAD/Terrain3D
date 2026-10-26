@@ -19,7 +19,8 @@ class UcmpBrpMergeContract(unittest.TestCase):
         self.assertIn('case T3D_RD_SHADER_EDITOR_BRUSH_TILES:', cat)
         self.assertIn('terrain_brush_tiles.glsl', cat)
         lib = source('src/rendering/rd/shaders/terrain_3d_rd_shader_library.cpp')
-        self.assertIn('id >= T3D_RD_SHADER_UCMP_ALIAS && id < T3D_RD_SHADER_EDITOR_BRUSH_TILES', lib)
+        self.assertIn('!t3dRdShaderCatalogIsActive( id )', lib)
+        self.assertIn('t3dRdShaderCatalogIsActive( id )', lib)
 
     def test_unified_shader_editor_preview(self):
         root = 'project/addons/terrain_3d/rd/'

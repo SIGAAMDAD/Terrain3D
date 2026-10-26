@@ -29,7 +29,8 @@ assert 'setNearMaterialLodBias' in hdr and 'setMiddleMaterialLodBias' in hdr
 assert 't3dRdFillTierConfig( config.m_szTier[0]' in builder
 assert 'config.m_szTier[1]' not in builder
 assert 'T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1' in publication
-assert 'RID() : data->getMiddleCompositeMapsRid()' in publication
+assert 'getMiddleCompositeMapsRid()' not in publication
+assert 'snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1' in publication
 assert 't3d_cs_editor_dirty_bounds(' in coordinator
 assert '#if defined( T3D_EDITOR_NATIVE ) && defined( T3D_COMPOSED_SURFACE_EDITOR_EXPERIMENT )' not in coordinator
 assert 'journal.dirtyRegionCold(' in journal and 'locationToRegionIndex( x, z, index )' in journal
