@@ -326,6 +326,41 @@ public partial class Terrain3DMaterial
 	public new static Terrain3DMaterial Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 }
 
+public partial class Terrain3DOceanSettings
+{
+	private new static readonly StringName NativeName = new StringName("Terrain3DOceanSettings");
+
+	[Obsolete("Wrapper types cannot be constructed directly; use Instantiate().")]
+	protected Terrain3DOceanSettings() { }
+
+	private static CSharpScript _wrapperScriptAsset;
+
+	public new static Terrain3DOceanSettings Bind(GodotObject godotObject)
+	{
+		if (!IsInstanceValid(godotObject))
+			return null;
+		if (godotObject is Terrain3DOceanSettings wrapperScriptInstance)
+			return wrapperScriptInstance;
+#if DEBUG
+		var expectedType = typeof(Terrain3DOceanSettings);
+		var currentObjectClassName = godotObject.GetClass();
+		if (!ClassDB.IsParentClass(expectedType.Name, currentObjectClassName))
+			throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not the {expectedType.Name} type.");
+#endif
+		if (_wrapperScriptAsset is null)
+		{
+			var scriptPathAttribute = typeof(Terrain3DOceanSettings).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
+			if (scriptPathAttribute is null) throw new UnreachableException();
+			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
+		}
+		var instanceId = godotObject.GetInstanceId();
+		godotObject.SetScript(_wrapperScriptAsset);
+		return (Terrain3DOceanSettings)InstanceFromId(instanceId);
+	}
+
+	public new static Terrain3DOceanSettings Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
+}
+
 public partial class Terrain3DMeshAsset
 {
 	private new static readonly StringName NativeName = new StringName("Terrain3DMeshAsset");

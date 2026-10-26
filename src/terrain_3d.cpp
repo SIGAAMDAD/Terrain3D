@@ -1,30 +1,30 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "terrain_3d.h"
-#include "core/terrain_3d_sync.h"
+#include "core/utility/terrain_3d_sync.h"
 
 #include "Terrain3DConstants.h"
-#include "authoring/terrain_3d_editor.h"
-#include "core/logger.h"
-#include "core/terrain_3d_integration_helpers.h"
-#include "core/terrain_3d_util.h"
-#include "data/terrain_3d_region_codec.h"
-#include "data/terrain_3d_runtime_bake_codec.h"
+#include "authoring/editor/terrain_3d_editor.h"
+#include "core/utility/logger.h"
+#include "core/utility/terrain_3d_integration_helpers.h"
+#include "core/utility/terrain_3d_util.h"
+#include "data/persistence/terrain_3d_region_codec.h"
+#include "data/runtime/terrain_3d_runtime_bake_codec.h"
 #include "eastl_config.h"
-#include "hlod/terrain_3d_hlod_streamer.h"
-#include "instances/terrain_3d_instance_occlusion.h"
-#include "instances/terrain_3d_instance_physics.h"
-#include "lighting/terrain_3d_lighting_policy.h"
-#include "lighting/terrain_3d_lightmap_streamer.h"
-#include "memory/terrain_3d_linear_arena.h"
-#include "memory/terrain_3d_memory.h"
-#include "memory/terrain_3d_zone_allocator.h"
-#include "rendering/rd/terrain_3d_render_coordinator.h"
-#include "rendering/terrain_3d_compute.h"
-#include "simd/terrain_3d_parallel.h"
-#include "streaming/terrain_3d_node_streamer.h"
-#include "streaming/terrain_3d_performance_profile.h"
-#include "streaming/terrain_3d_streaming_policy.h"
+#include "hlod/runtime/terrain_3d_hlod_streamer.h"
+#include "instances/physics/terrain_3d_instance_occlusion.h"
+#include "instances/physics/terrain_3d_instance_physics.h"
+#include "lighting/policy/terrain_3d_lighting_policy.h"
+#include "lighting/runtime/terrain_3d_lightmap_streamer.h"
+#include "memory/arena/terrain_3d_linear_arena.h"
+#include "memory/core/terrain_3d_memory.h"
+#include "memory/arena/terrain_3d_zone_allocator.h"
+#include "rendering/rd/core/terrain_3d_render_coordinator.h"
+#include "rendering/compute/terrain_3d_compute.h"
+#include "simd/core/terrain_3d_parallel.h"
+#include "streaming/runtime/terrain_3d_node_streamer.h"
+#include "streaming/policy/terrain_3d_performance_profile.h"
+#include "streaming/policy/terrain_3d_streaming_policy.h"
 
 #include <EASTL/numeric_limits.h>
 #include <math.h>
@@ -40,15 +40,15 @@
 #include <godot_cpp/classes/physics_ray_query_parameters3d.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/quad_mesh.hpp>
-#include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/sub_viewport.hpp>
+#include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/core/memory.hpp>
 
 // Initialize static member variable
-t3dDebugLevel_t Terrain3D::s_debugLevel{ ERROR };
 
 // -----------------------------------------------------------------------------
 // Private functions
@@ -219,6 +219,101 @@ void Terrain3D::initializeInternal( void ) {
 	update_configuration_warnings();
 }
 
+void Terrain3D::runStartupOwnerStage( const char *const pszStage, void ( Terrain3D::*pStage )( void ) ) {
+	const uint64_t nStageStartedUsec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][OwnerPrepare][", pszStage, "] BEGIN generation=", m_nStartupGeneration );
+	( this->*pStage )();
+	LOG( INFO,
+	        "[Terrain3D][Startup][OwnerPrepare][",
+	        pszStage,
+	        "] END generation=",
+	        m_nStartupGeneration,
+	        " elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - nStageStartedUsec,
+	        " us" );
+	
+}
+
+void Terrain3D::prepareStartupAssetsStageCold( void ) {
+	m_assets->initialize( this );
+}
+
+void Terrain3D::prepareStartupMemoryPolicyStageCold( void ) {
+	serviceMemoryBudgetPolicy( true );
+		applyRuntimeAdaptiveWorkBudgets();
+		normalizeRuntimeTierLayout( true );
+}
+
+void Terrain3D::prepareStartupResidencyStageCold( void ) {
+	updateRegionStreamingPolicy( m_startupInitialTarget, 0.0, true );
+		m_pData->serviceColdInstanceResidency( m_startupInitialTarget, true );
+		m_pData->updateRegionResidency( m_startupInitialTarget, true );
+}
+
+void Terrain3D::prepareStartupFarAtlasesStageCold( void ) {
+	m_pData->ensureFarAtlases();
+}
+
+void Terrain3D::prepareStartupMaterialStageCold( void ) {
+	m_material->initialize( this );
+}
+
+void Terrain3D::prepareStartupCollisionStageCold( void ) {
+	m_pCollision->initialize( this );
+}
+
+void Terrain3D::prepareStartupInstancerStageCold( void ) {
+	m_pInstancer->initialize( this );
+}
+
+void Terrain3D::prepareStartupInstanceOcclusionStageCold( void ) {
+	m_pInstanceOcclusion->initialize( this );
+}
+
+void Terrain3D::prepareStartupInstancePhysicsStageCold( void ) {
+	m_pInstancePhysics->initialize( this );
+}
+
+void Terrain3D::prepareStartupNodeStreamerStageCold( void ) {
+	m_pNodeStreamer->initialize( this );
+		m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
+		m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
+		m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
+		m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
+		m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
+}
+
+void Terrain3D::prepareStartupLightmapStreamerStageCold( void ) {
+	m_pLightmapStreamer->initialize( this );
+		m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
+		m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
+		m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
+		m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
+		m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
+}
+
+void Terrain3D::prepareStartupHLODStreamerStageCold( void ) {
+	m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
+		m_pHlodStreamer->setEnabled( m_bHlodEnabled );
+		m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
+		m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
+		m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
+		m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
+		m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
+		m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
+		m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
+		m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
+		m_pHlodStreamer->initialize( this );
+}
+
+void Terrain3D::prepareStartupTerrainMesherStageCold( void ) {
+	setupTerrainMesher( m_startupInitialTarget );
+}
+
+void Terrain3D::prepareStartupOceanMesherStageCold( void ) {
+	setupOceanMesher( m_startupInitialTarget );
+}
+
 bool Terrain3D::prepareStartupOwnerCold( void ) {
 	if ( m_runtimeLifecycleState != TERRAIN3D_RUNTIME_INITIALIZING || m_pData == NULL
 	        || !m_pData->isStartupCommitted( m_nStartupGeneration ) ) {
@@ -226,19 +321,7 @@ bool Terrain3D::prepareStartupOwnerCold( void ) {
 	}
 	const uint64_t owner_prepare_started_usec = Time::get_singleton()->get_ticks_usec();
 	LOG( INFO, "[Terrain3D][Startup][OwnerPrepare] BEGIN generation=", m_nStartupGeneration );
-	auto run_owner_stage = [this]( const char *const pszStage, auto &&rStage ) {
-		const uint64_t nStageStartedUsec = Time::get_singleton()->get_ticks_usec();
-		LOG( INFO, "[Terrain3D][Startup][OwnerPrepare][", pszStage, "] BEGIN generation=", m_nStartupGeneration );
-		rStage();
-		LOG( INFO,
-		        "[Terrain3D][Startup][OwnerPrepare][",
-		        pszStage,
-		        "] END generation=",
-		        m_nStartupGeneration,
-		        " elapsed=",
-		        Time::get_singleton()->get_ticks_usec() - nStageStartedUsec,
-		        " us" );
-	};
+
 	t3dStartupDomainSetStartUsecIfZero( m_startupFinalizationState, owner_prepare_started_usec );
 	t3dStartupDomainSetStage( m_startupFinalizationState, T3D_STARTUP_PREPARING );
 	// Finalize the aggregate owner-controlled memory grants after the terrain
@@ -250,30 +333,22 @@ bool Terrain3D::prepareStartupOwnerCold( void ) {
 	// signature includes owner-dependent Terrain3D settings. Bind/initialize the
 	// asset owner before the first cooked-page residency pass so startup never
 	// validates a freshly cooked page against a provisional ownerless signature.
-	run_owner_stage( "Assets", [this]() { m_assets->initialize( this ); } );
+	runStartupOwnerStage( "Assets", &Terrain3D::prepareStartupAssetsStageCold );
 
-	run_owner_stage( "MemoryPolicy", [this]() {
-		serviceMemoryBudgetPolicy( true );
-		applyRuntimeAdaptiveWorkBudgets();
-		normalizeRuntimeTierLayout( true );
-	} );
+	runStartupOwnerStage( "MemoryPolicy", &Terrain3D::prepareStartupMemoryPolicyStageCold );
 
 	// Establish the authoritative residency map before the tier materials take
 	// their initial sampler bindings. Physical GPU publication remains bounded
 	// in authoring as well as runtime; CPU data and the far atlas remain the
 	// whole-world authority. Force the first reconciliation even when the actual
 	// center/generation equals the zero/default cached state.
-	run_owner_stage( "Residency", [this]() {
-		updateRegionStreamingPolicy( m_startupInitialTarget, 0.0, true );
-		m_pData->serviceColdInstanceResidency( m_startupInitialTarget, true );
-		m_pData->updateRegionResidency( m_startupInitialTarget, true );
-	} );
+	runStartupOwnerStage( "Residency", &Terrain3D::prepareStartupResidencyStageCold );
 
 	// Asset arrays are already initialized above so cooked-page source signatures
 	// are authoritative before residency. Build the whole-world far atlases before
 	// tier materials take their initial sampler bindings.
-	run_owner_stage( "FarAtlases", [this]() { m_pData->ensureFarAtlases(); } );
-	run_owner_stage( "Material", [this]() { m_material->initialize( this ); } );
+	runStartupOwnerStage( "FarAtlases", &Terrain3D::prepareStartupFarAtlasesStageCold );
+	runStartupOwnerStage( "Material", &Terrain3D::prepareStartupMaterialStageCold );
 	if ( !m_material->isRenderShaderReady() ) {
 		m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
 		LOG( ERROR,
@@ -284,54 +359,26 @@ bool Terrain3D::prepareStartupOwnerCold( void ) {
 		        " us" );
 		return false;
 	}
-	run_owner_stage( "Collision", [this]() { m_pCollision->initialize( this ); } );
-	m_pInstancer->m_runtimePolicy.m_nCellSize = m_nInstancerCellSize;
-	m_pInstancer->m_runtimePolicy.m_bCellStreamingEnabled = effectiveInstancerCellStreamingEnabled();
-	m_pInstancer->m_runtimePolicy.m_bSingleLodInstanceBuffers = m_bInstancerSingleLodBuffers;
-	m_pInstancer->m_runtimePolicy.m_fCellStreamingMargin = m_fInstancerCellStreamingMargin;
-	m_pInstancer->m_runtimePolicy.m_fCellStreamingStep = m_fInstancerCellStreamingUpdateDistance;
-	m_pInstancer->m_runtimePolicy.m_nUpdateCellBudget = ( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) );
-	run_owner_stage( "Instancer", [this]() { m_pInstancer->initialize( this ); } );
-	run_owner_stage( "InstanceOcclusion", [this]() { m_pInstanceOcclusion->initialize( this ); } );
-	run_owner_stage( "InstancePhysics", [this]() { m_pInstancePhysics->initialize( this ); } );
-	run_owner_stage( "NodeStreamer", [this]() {
-		m_pNodeStreamer->initialize( this );
-		m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
-		m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
-		m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
-		m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
-		m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
-	} );
-	run_owner_stage( "LightmapStreamer", [this]() {
-		m_pLightmapStreamer->initialize( this );
-		m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
-		m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
-		m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
-		m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
-		m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
-	} );
+	runStartupOwnerStage( "Collision", &Terrain3D::prepareStartupCollisionStageCold );
+	m_pInstancer->configureInitialPolicy( { m_nInstancerCellSize,
+		effectiveInstancerCellStreamingEnabled(), m_bInstancerSingleLodBuffers,
+		m_fInstancerCellStreamingMargin, m_fInstancerCellStreamingUpdateDistance,
+		( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) ) } );
+	runStartupOwnerStage( "Instancer", &Terrain3D::prepareStartupInstancerStageCold );
+	runStartupOwnerStage( "InstanceOcclusion", &Terrain3D::prepareStartupInstanceOcclusionStageCold );
+	runStartupOwnerStage( "InstancePhysics", &Terrain3D::prepareStartupInstancePhysicsStageCold );
+	runStartupOwnerStage( "NodeStreamer", &Terrain3D::prepareStartupNodeStreamerStageCold );
+	runStartupOwnerStage( "LightmapStreamer", &Terrain3D::prepareStartupLightmapStreamerStageCold );
 	if ( m_hlodManifestPath.is_empty() && !m_dataDirectory.is_empty() ) {
 		m_hlodManifestPath = m_dataDirectory.path_join( "terrain3d_hlod_manifest.tres" );
 	}
-	run_owner_stage( "HLODStreamer", [this]() {
-		m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
-		m_pHlodStreamer->setEnabled( m_bHlodEnabled );
-		m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
-		m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
-		m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
-		m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
-		m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
-		m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
-		m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
-		m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
-		m_pHlodStreamer->initialize( this );
-	} );
+	runStartupOwnerStage( "HLODStreamer", &Terrain3D::prepareStartupHLODStreamerStageCold );
 	// Construct all CPU clipmaps against the same target used for residency, then
 	// let the coordinator publish. This prevents its first snapshot from racing
 	// an origin-centered/default mesher state. Ocean topology is also ready before
 	// initializeOcean() runs.
-	run_owner_stage( "TerrainMesher", [this]() { setupTerrainMesher( m_startupInitialTarget ); } );
-	run_owner_stage( "OceanMesher", [this]() { setupOceanMesher( m_startupInitialTarget ); } );
+	runStartupOwnerStage( "TerrainMesher", &Terrain3D::prepareStartupTerrainMesherStageCold );
+	runStartupOwnerStage( "OceanMesher", &Terrain3D::prepareStartupOceanMesherStageCold );
 	m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
 	LOG( INFO,
 	        "[Terrain3D][Startup][OwnerPrepare] END generation=",
@@ -395,7 +442,7 @@ bool Terrain3D::finalizeStartupOwnerCold( void ) {
 	        "[lifecycle] Main subsystems ready: regions=",
 	        m_pData->getRegionCount(),
 	        "; region_size=",
-	        ( int )( s_nRegionSize ),
+	        ( int )( T3D_REGION_SIZE ),
 	        "; mesh_lods=",
 	        m_nMeshLods,
 	        "; tessellation=",
@@ -552,7 +599,7 @@ void Terrain3D::deactivateRuntime( const bool bStartupFailure ) {
  */
 void Terrain3D::physicsProcess( const double fDelta ) {
 	if ( m_runtimeLifecycleState == TERRAIN3D_RUNTIME_INITIALIZING ) { serviceStartup(); }
-	if ( m_bInitialized ) { m_runtimeFrameScheduler.tick( *this, fDelta ); }
+	if ( m_bInitialized ) { m_runtimeFrameScheduler.tick( runtimeFrameServices(), fDelta ); }
 }
 
 /**
@@ -616,14 +663,14 @@ void t3dBakeSnapshot_t::getSample( const int32_t iX, const int32_t iZ, uint32_t 
 	}
 	const int32_t local_x = t3dRegionLocalFromGrid( iX );
 	const int32_t local_z = t3dRegionLocalFromGrid( iZ );
-	const int32_t index = local_z * s_nRegionSize + local_x;
+	const int32_t index = local_z * T3D_REGION_SIZE + local_x;
 	fHeight = ( real_t )( t3dRegionCodecReadHeightBytes( pRegion->m_pHeightBytes, index, Image::FORMAT_R16 ) );
 	if ( pRegion->m_pControlBytes ) {
-		uint32_t control = s_nRegionDefaultControl;
+		uint32_t control = T3D_REGION_DEFAULT_CONTROL;
 		memcpy( &control, pRegion->m_pControlBytes + ( size_t )( index ) * sizeof( uint32_t ), sizeof( uint32_t ) );
 		nControl = control;
 	} else {
-		nControl = s_nRegionDefaultControl;
+		nControl = T3D_REGION_DEFAULT_CONTROL;
 	}
 	return;
 }
@@ -645,12 +692,12 @@ bool t3dBakeSnapshot_t::getMinimumRect(
 			}
 			const int32_t local_x = t3dRegionLocalFromGrid( global_x );
 			const int32_t local_z = t3dRegionLocalFromGrid( global_z );
-			const int32_t run = MIN( nWidth - copied, s_nRegionSize - local_x );
-			const int32_t index = local_z * s_nRegionSize + local_x;
+			const int32_t run = MIN( nWidth - copied, T3D_REGION_SIZE - local_x );
+			const int32_t index = local_z * T3D_REGION_SIZE + local_x;
 			const uint16_t *pHeight = ( const uint16_t * )( pRegion->m_pHeightBytes ) + index;
 			const uint32_t *pControl = pRegion->m_pControlBytes ? ( const uint32_t * )( pRegion->m_pControlBytes ) + index : NULL;
 			for ( int32_t i = 0; i < run; ++i ) {
-				const uint32_t sample_control = pControl ? pControl[i] : s_nRegionDefaultControl;
+				const uint32_t sample_control = pControl ? pControl[i] : T3D_REGION_DEFAULT_CONTROL;
 				if ( t3dIsHole( sample_control ) ) {
 					return false;
 				}
@@ -729,8 +776,8 @@ Terrain3D::~Terrain3D( void ) {
 }
 
 void Terrain3D::setDebugLevel( const t3dDebugLevel_t level ) {
-	SET_IF_DIFF( s_debugLevel, CLAMP( level, ERROR, EXTREME ) );
-	LOG( INFO, "Setting debug level: ", s_debugLevel );
+	Terrain3DLogPolicy::setLevel( level );
+	LOG( INFO, "Setting debug level: ", Terrain3DLogPolicy::getLevel() );
 }
 
 #define T3D_OCEAN_MODE_SETTER( NAME, TYPE, FIELD )                                                                                         \
@@ -741,7 +788,6 @@ void Terrain3D::setDebugLevel( const t3dDebugLevel_t level ) {
 		FIELD = valueArg;                                                                                                                  \
 		m_oceanPerformancePreset = OCEAN_PRESET_CUSTOM;                                                                                    \
 		markOceanPublicationDirty();                                                                                                       \
-		updateOceanShaderVariant();                                                                                                        \
 	}
 
 T3D_OCEAN_MODE_SETTER( setOceanRefractionMode, t3dOceanRefractionMode_t, m_oceanRefractionMode )
@@ -994,5 +1040,49 @@ void Terrain3D::_notification( const int nWhat ) {
 
 		default:
 			break;
+	}
+}
+
+// M39 extracted non-template triangle-buffer implementation.
+void t3dTriangleBuffer_s::bindExternal( Vector3 *const pVertices, Vector2 *const pUvs, const size_t nCapacity ) {
+	m_pExternalVertices = pVertices;
+	m_pExternalUvs = pUvs;
+	m_nExternalCapacity = nCapacity;
+	m_nExternalSize = 0u;
+	m_bOverflowed = false;
+}
+
+void t3dTriangleBuffer_s::reserve( const size_t nCapacity, const bool bUvs ) {
+	m_ownedVertices.reserve( nCapacity );
+	if ( bUvs ) {
+		m_ownedUvs.reserve( nCapacity );
+	}
+}
+
+void t3dTriangleBuffer_s::appendTriangle( const Vector3 &rA, const Vector3 &rB, const Vector3 &rC, const bool bUvs ) {
+	if ( m_pExternalVertices ) {
+		if ( m_nExternalSize + 3u > m_nExternalCapacity ) {
+			m_bOverflowed = true;
+			return;
+		}
+		m_pExternalVertices[ m_nExternalSize ] = rA;
+		m_pExternalVertices[ m_nExternalSize + 1u ] = rB;
+		m_pExternalVertices[ m_nExternalSize + 2u ] = rC;
+		if ( bUvs && m_pExternalUvs ) {
+			m_pExternalUvs[ m_nExternalSize ] = Vector2( rA.x, rA.z );
+			m_pExternalUvs[ m_nExternalSize + 1u ] = Vector2( rB.x, rB.z );
+			m_pExternalUvs[ m_nExternalSize + 2u ] = Vector2( rC.x, rC.z );
+		}
+		m_nExternalSize += 3u;
+		return;
+	}
+
+	m_ownedVertices.push_back( rA );
+	m_ownedVertices.push_back( rB );
+	m_ownedVertices.push_back( rC );
+	if ( bUvs ) {
+		m_ownedUvs.push_back( Vector2( rA.x, rA.z ) );
+		m_ownedUvs.push_back( Vector2( rB.x, rB.z ) );
+		m_ownedUvs.push_back( Vector2( rC.x, rC.z ) );
 	}
 }

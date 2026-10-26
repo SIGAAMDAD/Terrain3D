@@ -1,11 +1,14 @@
 #ifndef TERRAIN3D_EASTL_CONFIG_H
 #define TERRAIN3D_EASTL_CONFIG_H
+
+#include "Terrain3DTypes.h"
+#include "Terrain3DConstants.h"
 #define TERRAIN3D_EASTL_CONFIGURED 1
 
-#include "core/terrain_3d_compiler.h"
-#include "core/terrain_3d_sync.h"
-#include "memory/terrain_3d_memory.h"
-#include "memory/terrain_3d_zone_allocator.h"
+#include "core/config/terrain_3d_compiler.h"
+#include "core/utility/terrain_3d_sync.h"
+#include "memory/core/terrain_3d_memory.h"
+#include "memory/arena/terrain_3d_zone_allocator.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -33,26 +36,8 @@
 #define EASTL_NAME( x ) x
 #define EASTL_NAME_VAL( x ) x
 
-// EASTL assumes the plain allocator entry point satisfies
-// EASTL_ALLOCATOR_MIN_ALIGNMENT. MSVC's max_align_t is not a reliable proxy
-// for that contract across toolchain/runtime combinations, especially when a
-// zone allocation spills to the editor heap. Keep the allocator's plain-path
-// guarantee identical to EASTL's configured platform minimum.
-#if INTPTR_MAX == INT64_MAX
-static constexpr size_t s_nTerrain3DEastlDefaultAlignment = 16u;
-#else
-static constexpr size_t s_nTerrain3DEastlDefaultAlignment = 8u;
-#endif
+// t3dEastlAllocationStats_s centralized in Terrain3DTypes.h.
 
-typedef struct t3dEastlAllocationStats_s {
-	size_t m_nLiveBytes = 0u;
-	size_t m_nPeakBytes = 0u;
-	size_t m_nLiveAllocations = 0u;
-	size_t m_nTotalAllocations = 0u;
-	size_t m_nFailedAllocations = 0u;
-	size_t m_nOverflowAllocations = 0u;
-	size_t m_nOverflowLiveBytes = 0u;
-} t3dEastlAllocationStats_t;
 
 typedef struct t3dEastlAllocationHeader_s {
 	void *m_pRaw = NULL;
@@ -61,20 +46,21 @@ typedef struct t3dEastlAllocationHeader_s {
 	uint8_t m_nOrigin = TERRAIN3D_ALLOCATION_BOOTSTRAP;
 } t3dEastlAllocationHeader_t;
 
+
 #define s_nEastlAllocationHeaderSize ( sizeof( t3dEastlAllocationHeader_t ) )
 
 class Terrain3DEastlAllocator {
-	typedef t3dEastlAllocationHeader_t AllocationHeader;
+	
 	Terrain3DMemoryZone *m_pZone = NULL;
 	t3dAllocatorOverflowPolicy_t m_eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT;
 
-	inline static t3dAtomic_t<size_t> s_nLiveBytes{ 0u };
-	inline static t3dAtomic_t<size_t> s_nPeakBytes{ 0u };
-	inline static t3dAtomic_t<size_t> s_nLiveAllocations{ 0u };
-	inline static t3dAtomic_t<size_t> s_nTotalAllocations{ 0u };
-	inline static t3dAtomic_t<size_t> s_nFailedAllocations{ 0u };
-	inline static t3dAtomic_t<size_t> s_nOverflowAllocations{ 0u };
-	inline static t3dAtomic_t<size_t> s_nOverflowLiveBytes{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nLiveBytes{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nPeakBytes{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nLiveAllocations{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nTotalAllocations{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nFailedAllocations{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nOverflowAllocations{ 0u };
+	inline static Terrain3DAtomic<size_t> s_nOverflowLiveBytes{ 0u };
 
 	static void recordAllocation( const size_t nSize, const uint8_t nOrigin ) {
 		const size_t live = s_nLiveBytes.fetch_add( nSize, T3D_MEMORY_ORDER_RELAXED ) + nSize;
@@ -124,9 +110,9 @@ public:
 	}
 
 	EA_FORCE_INLINE void *allocate( const size_t n, int = 0 ) {
-		return allocate( n, s_nTerrain3DEastlDefaultAlignment, 0, 0 );
+		return allocate( n, T3D_EASTL_DEFAULT_ALIGNMENT, 0, 0 );
 	}
-	bool canAllocate( const size_t n, size_t alignment = s_nTerrain3DEastlDefaultAlignment, const size_t alignment_offset = 0u ) const {
+	bool canAllocate( const size_t n, size_t alignment = T3D_EASTL_DEFAULT_ALIGNMENT, const size_t alignment_offset = 0u ) const {
 		if ( alignment < alignof( void * ) ) {
 			alignment = alignof( void * );
 		}
@@ -180,7 +166,7 @@ public:
 		const uintptr_t effective_offset = ( uintptr_t )( alignment_offset & alignment_slack );
 		uintptr_t aligned = ( begin + effective_offset + alignment_slack ) & ~( uintptr_t )alignment_slack;
 		aligned -= effective_offset;
-		AllocationHeader header;
+		t3dEastlAllocationHeader_t header;
 		header.m_pRaw = pRaw;
 		header.m_pZone = pZone;
 		header.m_nSize = n;
@@ -195,8 +181,8 @@ public:
 		if ( !p ) {
 			return;
 		}
-		AllocationHeader header;
-		memcpy( &header, ( unsigned char * )p - sizeof( AllocationHeader ), sizeof( AllocationHeader ) );
+		t3dEastlAllocationHeader_t header;
+		memcpy( &header, ( unsigned char * )p - sizeof( t3dEastlAllocationHeader_t ), sizeof( t3dEastlAllocationHeader_t ) );
 		s_nLiveBytes.fetch_sub( header.m_nSize, T3D_MEMORY_ORDER_RELAXED );
 		s_nLiveAllocations.fetch_sub( 1u, T3D_MEMORY_ORDER_RELAXED );
 		if ( header.m_nOrigin == TERRAIN3D_ALLOCATION_OVERFLOW ) {

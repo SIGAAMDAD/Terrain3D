@@ -21,7 +21,7 @@
 #define T3D_VT_TAIL_TILES_PER_ROW (T3D_VT_TAIL_ATLAS_WIDTH / T3D_VT_TAIL_TILE)
 
 // P21/P22 fixed request hash contract. These values mirror
-// src/rendering/rd/vt/terrain_3d_vt_contract.h.
+// src/rendering/rd/vt/core/terrain_3d_vt_contract.h.
 #define T3D_VT_REQUEST_HASH_EMPTY_KEY 0xffffffffu
 #define T3D_VT_REQUEST_HASH_PROBE_COUNT 8u
 #define T3D_VT_REQUEST_HASH_SLOTS_PER_REQUEST 2u

@@ -1,7 +1,7 @@
 #ifndef TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL
 #define TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL
 
-// Mirrored by src/rendering/terrain_3d_clipmap_strip_contract.h. P02's
+// Mirrored by src/rendering/geometry/terrain_3d_clipmap_strip_contract.h. P02's
 // verifier rejects any numeric drift between the C++ and GLSL contracts.
 #define T3D_CLIPMAP_PART_STATIC 0u
 #define T3D_CLIPMAP_PART_EDGE_X0 1u

@@ -1001,6 +1001,8 @@ func is_picking() -> bool:
 
 func pick(p_global_position: Vector3) -> void:
 	if picking != Terrain3DEditor.TOOL_MAX:
+		if not plugin.terrain.data.prepare_sampling_area(p_global_position):
+			return
 		var color: Color
 		match picking:
 			Terrain3DEditor.HEIGHT, Terrain3DEditor.SCULPT:

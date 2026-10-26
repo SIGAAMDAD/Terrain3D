@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://1i4eaxdmjbhx"
+path="res://.godot/imported/render_world_vt_reset.glsl-f7f695473c15feec0b61ecfc0f2d1fc2.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/render_world_vt_reset.glsl"
+dest_files=["res://.godot/imported/render_world_vt_reset.glsl-f7f695473c15feec0b61ecfc0f2d1fc2.res"]
+
+[params]
+

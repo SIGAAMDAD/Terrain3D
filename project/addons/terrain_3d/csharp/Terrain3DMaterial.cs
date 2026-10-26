@@ -27,16 +27,6 @@ public partial class Terrain3DMaterial : Resource
 		Nearest = 3,
 	}
 
-	public enum ShaderVariantModeEnum
-	{
-		Disabled = 0,
-		OnDemand = 1,
-		PrewarmActiveBranches = 2,
-		PrewarmCommon = 2,
-		PrewarmActiveAndRecent = 3,
-		PrewarmFeatureMatrix = PrewarmActiveAndRecent,
-	}
-
 	public enum ShaderPerformancePresetEnum
 	{
 		Custom = 0,
@@ -46,10 +36,6 @@ public partial class Terrain3DMaterial : Resource
 		Low = 4,
 		Minimum = 5,
 		Xbox360Authentic = 6,
-		BranchlessQuality = Cinematic,
-		Xbox360Styled = Runtime360,
-		Xbox360 = Xbox360Styled,
-		Fastest = Minimum,
 	}
 
 	public enum TerrainSamplingModeEnum
@@ -164,16 +150,6 @@ public partial class Terrain3DMaterial : Resource
 		/// Cached name for the 'texture_filtering' member.
 		/// </summary>
 		public new static readonly StringName TextureFiltering = "texture_filtering";
-		/// <summary>
-		/// Cached name for the 'shader_variant_mode' member.
-		/// </summary>
-		public new static readonly StringName ShaderVariantMode = "shader_variant_mode";
-		/// <summary>Cached name for the 'shader_variant_cache_limit' member.</summary>
-		public new static readonly StringName ShaderVariantCacheLimit = "shader_variant_cache_limit";
-		/// <summary>Cached name for the 'shader_variant_prewarm_limit' member.</summary>
-		public new static readonly StringName ShaderVariantPrewarmLimit = "shader_variant_prewarm_limit";
-		/// <summary>Cached name for the 'shader_variant_source_budget_mb' member.</summary>
-		public new static readonly StringName ShaderVariantSourceBudgetMb = "shader_variant_source_budget_mb";
 		/// <summary>Cached name for the 'shader_performance_preset' member.</summary>
 		public new static readonly StringName ShaderPerformancePreset = "shader_performance_preset";
 		/// <summary>Cached name for the 'terrain_sampling_mode' member.</summary>
@@ -256,14 +232,6 @@ public partial class Terrain3DMaterial : Resource
 		/// </summary>
 		public new static readonly StringName OutputAmbientOcclusion = "output_ambient_occlusion";
 		/// <summary>
-		/// Cached name for the 'shader_override_enabled' member.
-		/// </summary>
-		public new static readonly StringName ShaderOverrideEnabled = "shader_override_enabled";
-		/// <summary>
-		/// Cached name for the 'shader_override' member.
-		/// </summary>
-		public new static readonly StringName ShaderOverride = "shader_override";
-		/// <summary>
 		/// Cached name for the 'show_region_grid' member.
 		/// </summary>
 		public new static readonly StringName ShowRegionGrid = "show_region_grid";
@@ -291,14 +259,6 @@ public partial class Terrain3DMaterial : Resource
 		/// Cached name for the 'displacement_sharpness' member.
 		/// </summary>
 		public new static readonly StringName DisplacementSharpness = "displacement_sharpness";
-		/// <summary>
-		/// Cached name for the 'buffer_shader_override_enabled' member.
-		/// </summary>
-		public new static readonly StringName BufferShaderOverrideEnabled = "buffer_shader_override_enabled";
-		/// <summary>
-		/// Cached name for the 'buffer_shader_override' member.
-		/// </summary>
-		public new static readonly StringName BufferShaderOverride = "buffer_shader_override";
 		/// <summary>
 		/// Cached name for the 'show_checkered' member.
 		/// </summary>
@@ -379,30 +339,6 @@ public partial class Terrain3DMaterial : Resource
 	{
 		get => Get(GDExtensionPropertyName.TextureFiltering).As<Terrain3DMaterial.TextureFilteringEnum>();
 		set => Set(GDExtensionPropertyName.TextureFiltering, Variant.From(value));
-	}
-
-	public new Terrain3DMaterial.ShaderVariantModeEnum ShaderVariantMode
-	{
-		get => Get(GDExtensionPropertyName.ShaderVariantMode).As<Terrain3DMaterial.ShaderVariantModeEnum>();
-		set => Set(GDExtensionPropertyName.ShaderVariantMode, Variant.From(value));
-	}
-
-	public new long ShaderVariantCacheLimit
-	{
-		get => Get(GDExtensionPropertyName.ShaderVariantCacheLimit).As<long>();
-		set => Set(GDExtensionPropertyName.ShaderVariantCacheLimit, value);
-	}
-
-	public new long ShaderVariantPrewarmLimit
-	{
-		get => Get(GDExtensionPropertyName.ShaderVariantPrewarmLimit).As<long>();
-		set => Set(GDExtensionPropertyName.ShaderVariantPrewarmLimit, value);
-	}
-
-	public new long ShaderVariantSourceBudgetMb
-	{
-		get => Get(GDExtensionPropertyName.ShaderVariantSourceBudgetMb).As<long>();
-		set => Set(GDExtensionPropertyName.ShaderVariantSourceBudgetMb, value);
 	}
 
 	public new Terrain3DMaterial.ShaderPerformancePresetEnum ShaderPerformancePreset
@@ -645,18 +581,6 @@ public partial class Terrain3DMaterial : Resource
 		set => Set(GDExtensionPropertyName.OutputAmbientOcclusion, value);
 	}
 
-	public new bool ShaderOverrideEnabled
-	{
-		get => Get(GDExtensionPropertyName.ShaderOverrideEnabled).As<bool>();
-		set => Set(GDExtensionPropertyName.ShaderOverrideEnabled, value);
-	}
-
-	public new Shader ShaderOverride
-	{
-		get => Get(GDExtensionPropertyName.ShaderOverride).As<Shader>();
-		set => Set(GDExtensionPropertyName.ShaderOverride, value);
-	}
-
 	public new bool ShowRegionGrid
 	{
 		get => Get(GDExtensionPropertyName.ShowRegionGrid).As<bool>();
@@ -697,18 +621,6 @@ public partial class Terrain3DMaterial : Resource
 	{
 		get => Get(GDExtensionPropertyName.DisplacementSharpness).As<double>();
 		set => Set(GDExtensionPropertyName.DisplacementSharpness, value);
-	}
-
-	public new bool BufferShaderOverrideEnabled
-	{
-		get => Get(GDExtensionPropertyName.BufferShaderOverrideEnabled).As<bool>();
-		set => Set(GDExtensionPropertyName.BufferShaderOverrideEnabled, value);
-	}
-
-	public new Shader BufferShaderOverride
-	{
-		get => Get(GDExtensionPropertyName.BufferShaderOverride).As<Shader>();
-		set => Set(GDExtensionPropertyName.BufferShaderOverride, value);
 	}
 
 	public new bool ShowCheckered
@@ -820,48 +732,6 @@ public partial class Terrain3DMaterial : Resource
 		/// </summary>
 		public new static readonly StringName Update = "update";
 		/// <summary>
-		/// Cached name for the 'get_shader_rid' member.
-		/// </summary>
-		public new static readonly StringName GetShaderRid = "get_shader_rid";
-		/// <summary>
-		/// Cached name for the 'get_buffer_shader_rid' member.
-		/// </summary>
-		public new static readonly StringName GetBufferShaderRid = "get_buffer_shader_rid";
-		/// <summary>
-		/// Cached name for the 'prewarm_shader_variants' member.
-		/// </summary>
-		public new static readonly StringName PrewarmShaderVariants = "prewarm_shader_variants";
-		/// <summary>
-		/// Cached name for the 'clear_shader_variant_cache' member.
-		/// </summary>
-		public new static readonly StringName ClearShaderVariantCache = "clear_shader_variant_cache";
-		/// <summary>
-		/// Cached name for the 'get_shader_variant_count' member.
-		/// </summary>
-		public new static readonly StringName GetShaderVariantCount = "get_shader_variant_count";
-		/// <summary>Cached name for the 'get_runtime_shader_variant_count' member.</summary>
-		public new static readonly StringName GetRuntimeShaderVariantCount = "get_runtime_shader_variant_count";
-		/// <summary>Cached name for the 'get_editor_shader_variant_count' member.</summary>
-		public new static readonly StringName GetEditorShaderVariantCount = "get_editor_shader_variant_count";
-		/// <summary>
-		/// Cached name for the 'get_buffer_shader_variant_count' member.
-		/// </summary>
-		public new static readonly StringName GetBufferShaderVariantCount = "get_buffer_shader_variant_count";
-		/// <summary>Cached name for the 'get_speculative_shader_variant_count' member.</summary>
-		public new static readonly StringName GetSpeculativeShaderVariantCount = "get_speculative_shader_variant_count";
-		/// <summary>Cached name for the 'get_shader_variant_source_bytes' member.</summary>
-		public new static readonly StringName GetShaderVariantSourceBytes = "get_shader_variant_source_bytes";
-		/// <summary>Cached name for the 'get_last_prewarm_variant_count' member.</summary>
-		public new static readonly StringName GetLastPrewarmVariantCount = "get_last_prewarm_variant_count";
-		/// <summary>Cached name for the 'get_last_prewarm_skipped_count' member.</summary>
-		public new static readonly StringName GetLastPrewarmSkippedCount = "get_last_prewarm_skipped_count";
-		/// <summary>Cached name for the 'get_theoretical_shader_variant_count' member.</summary>
-		public new static readonly StringName GetTheoreticalShaderVariantCount = "get_theoretical_shader_variant_count";
-		/// <summary>Cached name for the 'get_shader_variant_diagnostics' member.</summary>
-		public new static readonly StringName GetShaderVariantDiagnostics = "get_shader_variant_diagnostics";
-		/// <summary>Cached name for the 'reset_shader_variant_diagnostics' member.</summary>
-		public new static readonly StringName ResetShaderVariantDiagnostics = "reset_shader_variant_diagnostics";
-		/// <summary>
 		/// Cached name for the 'set_shader_param' member.
 		/// </summary>
 		public new static readonly StringName SetShaderParam = "set_shader_param";
@@ -877,57 +747,6 @@ public partial class Terrain3DMaterial : Resource
 
 	public new void Update(long flags = 0) =>
 		Call(GDExtensionMethodName.Update, [flags]);
-
-	public new Rid GetMaterialRid() =>
-		Call(GDExtensionMethodName.GetMaterialRid, []).As<Rid>();
-
-	public new Rid GetShaderRid() =>
-		Call(GDExtensionMethodName.GetShaderRid, []).As<Rid>();
-
-	public new Rid GetBufferMaterialRid() =>
-		Call(GDExtensionMethodName.GetBufferMaterialRid, []).As<Rid>();
-
-	public new Rid GetBufferShaderRid() =>
-		Call(GDExtensionMethodName.GetBufferShaderRid, []).As<Rid>();
-
-	public new void PrewarmShaderVariants() =>
-		Call(GDExtensionMethodName.PrewarmShaderVariants, []);
-
-	public new void ClearShaderVariantCache() =>
-		Call(GDExtensionMethodName.ClearShaderVariantCache, []);
-
-	public new long GetShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetShaderVariantCount, []).As<long>();
-
-	public new long GetRuntimeShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetRuntimeShaderVariantCount, []).As<long>();
-
-	public new long GetEditorShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetEditorShaderVariantCount, []).As<long>();
-
-	public new long GetBufferShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetBufferShaderVariantCount, []).As<long>();
-
-	public new long GetSpeculativeShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetSpeculativeShaderVariantCount, []).As<long>();
-
-	public new long GetShaderVariantSourceBytes() =>
-		Call(GDExtensionMethodName.GetShaderVariantSourceBytes, []).As<long>();
-
-	public new long GetLastPrewarmVariantCount() =>
-		Call(GDExtensionMethodName.GetLastPrewarmVariantCount, []).As<long>();
-
-	public new long GetLastPrewarmSkippedCount() =>
-		Call(GDExtensionMethodName.GetLastPrewarmSkippedCount, []).As<long>();
-
-	public new long GetTheoreticalShaderVariantCount() =>
-		Call(GDExtensionMethodName.GetTheoreticalShaderVariantCount, []).As<long>();
-
-	public new Godot.Collections.Dictionary GetShaderVariantDiagnostics() =>
-		Call(GDExtensionMethodName.GetShaderVariantDiagnostics, []).As<Godot.Collections.Dictionary>();
-
-	public new void ResetShaderVariantDiagnostics() =>
-		Call(GDExtensionMethodName.ResetShaderVariantDiagnostics, []);
 
 	public new void SetShaderParam(StringName name, Variant value) =>
 		Call(GDExtensionMethodName.SetShaderParam, [name, value]);
@@ -1004,18 +823,6 @@ file static class WorldNoiseShaderModeEnumExtensions
 public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue) => Convert.ToInt32(enumValue);
 public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum enumValue, int defaultValue) => Convert.ToInt32(enumValue);
 public static int SafeAsInt32(this Terrain3DMaterial.WorldNoiseShaderModeEnum? enumValue, int defaultValue = 0) => enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
-}
-
-file static class ShaderVariantModeEnumExtensions
-{
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue) =>
-Convert.ToInt32(enumValue);
-
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum enumValue, int defaultValue) =>
-Convert.ToInt32(enumValue);
-
-public static int SafeAsInt32(this Terrain3DMaterial.ShaderVariantModeEnum? enumValue, int defaultValue = 0) =>
-enumValue.HasValue ? Convert.ToInt32(enumValue.Value) : defaultValue;
 }
 
 file static class UpdateFlagsExtensions

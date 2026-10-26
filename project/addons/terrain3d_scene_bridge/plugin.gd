@@ -139,15 +139,15 @@ func bake_source_to_terrain() -> void:
 		_log(String(prepared.get("error", "Bake preparation failed.")))
 		return
 
-	var transaction_id: int = int(prepared["transaction_id"])
+	var transaction: Dictionary = prepared["transaction"]
 	var undo_redo: EditorUndoRedoManager = get_undo_redo()
 	undo_redo.create_action(
 		"Extract GLB meshes to Terrain3D",
 		UndoRedo.MERGE_DISABLE,
 		scene_root
 	)
-	undo_redo.add_do_method(_service, &"apply_transaction", transaction_id)
-	undo_redo.add_undo_method(_service, &"revert_transaction", transaction_id)
+	undo_redo.add_do_method(_service, &"apply_transaction", transaction)
+	undo_redo.add_undo_method(_service, &"revert_transaction", transaction)
 	undo_redo.add_do_reference(prepared["anchor"])
 	if bool(prepared["remove_source"]):
 		undo_redo.add_undo_reference(prepared["source_root"])
@@ -178,15 +178,15 @@ func restore_terrain_to_nodes() -> void:
 		_log(String(prepared.get("error", "Restore preparation failed.")))
 		return
 
-	var transaction_id: int = int(prepared["transaction_id"])
+	var transaction: Dictionary = prepared["transaction"]
 	var undo_redo: EditorUndoRedoManager = get_undo_redo()
 	undo_redo.create_action(
 		"Restore Terrain3D placements to scene nodes",
 		UndoRedo.MERGE_DISABLE,
 		scene_root
 	)
-	undo_redo.add_do_method(_service, &"apply_transaction", transaction_id)
-	undo_redo.add_undo_method(_service, &"revert_transaction", transaction_id)
+	undo_redo.add_do_method(_service, &"apply_transaction", transaction)
+	undo_redo.add_undo_method(_service, &"revert_transaction", transaction)
 	undo_redo.add_do_reference(prepared["output_root"])
 	if bool(prepared["clear_terrain_instances"]):
 		undo_redo.add_undo_reference(prepared["anchor"])

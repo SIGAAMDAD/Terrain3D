@@ -10,6 +10,9 @@ using namespace godot;
 #include "modules/register_module_types.h"
 #endif
 
+// Generated documentation participates in the same module initialization contract.
+void t3dRegisterGeneratedDocData( void );
+
 // NOTE: These have module ending for custom module build compatibility.
 void t3dInitializeTerrain3DModule( ModuleInitializationLevel level );
 void t3dUninitializeTerrain3DModule( ModuleInitializationLevel level );

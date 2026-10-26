@@ -78,7 +78,6 @@ var _auto_freeze: CheckButton
 var _freeze_threshold: SpinBox
 var _freeze_on_missing: CheckButton
 var _freeze_on_failure: CheckButton
-var _freeze_on_shader: CheckButton
 var _post_trigger_samples: SpinBox
 var _freeze_trigger_sequence: int = -1
 var _freeze_target_sequence: int = -1
@@ -470,11 +469,6 @@ func _build_timeline_tab() -> void:
 	_freeze_on_failure.text = "Load failure"
 	_freeze_on_failure.button_pressed = true
 	controls.add_child(_freeze_on_failure)
-	_freeze_on_shader = CheckButton.new()
-	_freeze_on_shader.tooltip_text = "Trigger timeline auto-freeze when a terrain shader variant changes, rebuilds, or reports a compile/validation event."
-	_freeze_on_shader.text = "Shader update"
-	_freeze_on_shader.button_pressed = true
-	controls.add_child(_freeze_on_shader)
 	controls.add_child(_make_label("Post-trigger"))
 	_post_trigger_samples = SpinBox.new()
 	_post_trigger_samples.tooltip_text = "Number of profiler samples to continue collecting after an auto-freeze trigger before the display freezes."

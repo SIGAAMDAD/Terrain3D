@@ -114,7 +114,6 @@ const NO_SAVE: int = 0x20 # Don't save this in EditorSettings
 
 var plugin: Terrain3DEditorPluginBase
 var asset_dock: Terrain3DAssetDock
-var brush_preview_material: ShaderMaterial
 var select_brush_button: Button
 var selected_brush_imgs: Array[Resource] = []
 var main_list: HBoxContainer
@@ -534,6 +533,15 @@ func add_brushes(p_parent: Control) -> void:
 						thumbimg.resize(84, 84, Image.INTERPOLATE_CUBIC)
 					thumbimg = Terrain3DUtil.black_to_alpha(thumbimg)
 					thumbimg.convert(Image.FORMAT_LA8)
+					# Bake the former preview shader's alpha response into the thumbnail once.
+					# LA8 luminance is forced white so the normal CanvasItem draw path can
+					# supply button/theme modulation without a custom preview material.
+					var thumb_data: PackedByteArray = thumbimg.get_data()
+					for pixel_index: int in range(0, thumb_data.size(), 2):
+						var mask: float = float(thumb_data[pixel_index + 1]) / 255.0
+						thumb_data[pixel_index] = 255
+						thumb_data[pixel_index + 1] = int(round(pow(mask, 0.666) * 255.0))
+					thumbimg.set_data(thumbimg.get_width(), thumbimg.get_height(), false, Image.FORMAT_LA8, thumb_data)
 					var thumbtex: ImageTexture = ImageTexture.create_from_image(thumbimg)
 
 					var brush_btn: Button = Button.new()
@@ -541,7 +549,6 @@ func add_brushes(p_parent: Control) -> void:
 					brush_btn.set_button_icon(thumbtex)
 					brush_btn.set_meta("image", img)
 					brush_btn.set_expand_icon(true)
-					brush_btn.set_material(_get_brush_preview_material())
 					brush_btn.set_toggle_mode(true)
 					brush_btn.set_button_group(brush_button_group)
 					brush_btn.mouse_entered.connect(_on_brush_hover.bind(true, brush_btn))
@@ -1003,24 +1010,6 @@ func _on_drawable_toggled(p_button_pressed: bool) -> void:
 	if not p_button_pressed:
 		settings["gradient_points"].clear()
 
-
-func _get_brush_preview_material() -> ShaderMaterial:
-	if !brush_preview_material:
-		brush_preview_material = ShaderMaterial.new()
-		var shader: Shader = Shader.new()
-		var code: String = "shader_type canvas_item;\n"
-		code += "varying vec4 v_vertex_color;\n"
-		code += "void vertex() {\n"
-		code += "	v_vertex_color = COLOR;\n"
-		code += "}\n"
-		code += "void fragment(){\n"
-		code += "	vec4 tex = texture(TEXTURE, UV);\n"
-		code += "	COLOR.a *= pow(tex.r, 0.666);\n"
-		code += "	COLOR.rgb = v_vertex_color.rgb;\n"
-		code += "}\n"
-		shader.set_code(code)
-		brush_preview_material.set_shader(shader)
-	return brush_preview_material
 
 
 # Counts digits of a number including negative sign, decimal points, and up to 3 decimals

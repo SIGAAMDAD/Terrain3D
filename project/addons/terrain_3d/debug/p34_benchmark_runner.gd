@@ -123,6 +123,7 @@ func _capture(frame_index: int) -> Dictionary:
 	var frame: Dictionary = runtime.get("frame", {})
 	var memory: Dictionary = runtime.get("memory", {})
 	var inst: Dictionary = rd.get("instances", {})
+	var world: Dictionary = rd.get("world_renderer", {})
 	var renderer: Dictionary = rd.get("renderer", {})
 	var shaders: Dictionary = runtime.get("shaders", {})
 	return {
@@ -158,8 +159,9 @@ func _capture(frame_index: int) -> Dictionary:
 		"uniform_set_rebuilds": _num(renderer, "uniform_set_rebuilds"),
 		"bytes_uploaded_frame": _num(renderer, "bytes_uploaded_frame"),
 		"buffer_updates_frame": _num(renderer, "buffer_updates_frame"),
-		"shader_variant_creations": _num(shaders, "creations_total"),
-		"shader_updates": _num(shaders, "shader_update_count"),
+		"shader_physical_ready": _num(shaders, "physical_shader_ready"),
+		"shader_physical_expected": _num(shaders, "physical_shader_expected"),
+		"shader_misses_after_ready": _num(shaders, "physical_shader_misses_after_ready"),
 		"instance_dirty_upload_bytes": _num(inst, "instance_dirty_upload_bytes"),
 		"instance_dirty_upload_ranges": _num(inst, "instance_dirty_upload_ranges"),
 		"owner_buffer_rebuilds": _num(inst, "owner_buffer_rebuilds"),
@@ -170,7 +172,7 @@ func _capture(frame_index: int) -> Dictionary:
 		"instance_submissions_shadow": _num(inst, "instance_submissions_shadow"),
 		"visible_instances": _num(inst, "visible_instances"),
 		"hlod_gpu_cull_descriptors": _num(inst, "hlod_gpu_cull_descriptors"),
-		"instance_hiz_unavailable_frames": _num(inst, "instance_hiz_unavailable_frames"),
+		"world_hiz_unavailable_frames": _num(world, "hiz_unavailable_frames"),
 		"memory_resident_bytes": _num(memory, "resident_bytes", _num(memory, "physical_bytes", 0)),
 		"memory_high_water_bytes": _num(memory, "high_water_bytes", _num(memory, "peak_bytes", 0)),
 	}
@@ -194,7 +196,11 @@ func _run() -> void:
 		quit(2)
 		return
 	if _scene_path.is_empty():
-		_scene_path = String(manifest.get("scene", "res://demo/components/DemoBenchmark.tscn"))
+		_scene_path = String(manifest.get("scene", ""))
+	if _scene_path.is_empty():
+		push_error("P34 benchmark requires --scene <res://...> or a manifest scene path")
+		quit(3)
+		return
 	var packed := load(_scene_path) as PackedScene
 	if packed == null:
 		push_error("Cannot load P34 benchmark scene: " + _scene_path)

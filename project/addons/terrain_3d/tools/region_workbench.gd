@@ -4,6 +4,7 @@
 extends Node
 
 const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
+const ResourcePublisher = preload("res://addons/terrain_3d/tools/transactional_resource_publisher.gd")
 
 
 const WORKBENCH_ROOT: String = "res://Terrain3D_Workbench"
@@ -52,7 +53,6 @@ const TERRAIN_SCALAR_PROPERTIES: PackedStringArray = [
 	"displacement_sharpness",
 	"compute_displacement_enabled",
 	"displacement_update_distance",
-	"buffer_shader_override_enabled",
 	"total_memory_budget_mb",
 	"memory_transient_reserve_mb",
 	"gpu_region_cache_budget_auto",
@@ -121,8 +121,7 @@ const TERRAIN_RESOURCE_PROPERTIES: PackedStringArray = [
 	"assets",
 	"auto_shader_profile",
 	"physics_material",
-	"buffer_shader_override",
-	"ocean_material",
+	"ocean_settings",
 ]
 
 var plugin: Terrain3DEditorPluginBase
@@ -1776,7 +1775,7 @@ func _open_source_after_commit(scene_path: String, session_directory: String) ->
 
 
 func _write_manifest(path: String, manifest: Terrain3DRegionWorkbenchManifest) -> Error:
-	if path.is_empty():
+	if path.is_empty() or manifest == null:
 		return ERR_INVALID_PARAMETER
 	var staged_path: String = path + ".incoming"
 	var backup_path: String = path + ".previous"
@@ -1785,25 +1784,13 @@ func _write_manifest(path: String, manifest: Terrain3DRegionWorkbenchManifest) -
 		return FileAccess.get_open_error()
 	file.store_string(JSON.stringify(manifest.to_dictionary(), "\t"))
 	file.flush()
+	var write_error: Error = file.get_error()
 	file = null
-	if FileAccess.file_exists(backup_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(backup_path))
-	var had_original: bool = FileAccess.file_exists(path)
-	if had_original:
-		var backup_error: Error = DirAccess.rename_absolute(
-			ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(backup_path))
-		if backup_error != OK:
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(staged_path))
-			return backup_error
-	var publish_error: Error = DirAccess.rename_absolute(
-		ProjectSettings.globalize_path(staged_path), ProjectSettings.globalize_path(path))
-	if publish_error != OK:
-		if had_original and FileAccess.file_exists(backup_path):
-			DirAccess.rename_absolute(ProjectSettings.globalize_path(backup_path), ProjectSettings.globalize_path(path))
-		return publish_error
-	if FileAccess.file_exists(backup_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(backup_path))
-	return OK
+	if write_error != OK:
+		return write_error
+	if Terrain3DRegionWorkbenchManifest.from_value(JSON.parse_string(FileAccess.get_file_as_string(staged_path))) == null:
+		return ERR_FILE_CORRUPT
+	return ResourcePublisher.publish_staged(path, staged_path, backup_path)
 
 
 func _read_manifest(path: String) -> Terrain3DRegionWorkbenchManifest:
@@ -1833,13 +1820,7 @@ func _copy_file(source_path: String, destination_path: String) -> Error:
 
 
 func _replace_file(staged_path: String, destination_path: String) -> Error:
-	var absolute_staged: String = ProjectSettings.globalize_path(staged_path)
-	var absolute_destination: String = ProjectSettings.globalize_path(destination_path)
-	if FileAccess.file_exists(destination_path):
-		var remove_error: Error = DirAccess.remove_absolute(absolute_destination)
-		if remove_error != OK:
-			return remove_error
-	return DirAccess.rename_absolute(absolute_staged, absolute_destination)
+	return ResourcePublisher.publish_staged(destination_path, staged_path, destination_path + ".previous")
 
 
 func _source_identifier(scene_path: String, data_directory: String) -> String:

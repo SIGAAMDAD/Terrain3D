@@ -1,5 +1,5 @@
 # Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
-# Metadata-driven runtime shader quality controls.
+# Metadata-driven runtime render quality controls.
 @tool
 extends PopupPanel
 
@@ -56,7 +56,7 @@ func _build_ui() -> void:
 	margin.add_child(root)
 
 	var title: Label = Label.new()
-	title.text = "Runtime Shader Quality"
+	title.text = "Runtime Render Quality"
 	title.add_theme_font_size_override("font_size", 17)
 	root.add_child(title)
 
@@ -69,8 +69,8 @@ func _build_ui() -> void:
 	search_row.add_theme_constant_override("separation", 6)
 	root.add_child(search_row)
 	_search_box = LineEdit.new()
-	_search_box.placeholder_text = "Filter shader settings"
-	_search_box.tooltip_text = "Filter the documented shader/performance setting list by name or metadata. This changes the editor view only."
+	_search_box.placeholder_text = "Filter render settings"
+	_search_box.tooltip_text = "Filter the documented render/performance setting list by name or metadata. This changes the editor view only."
 	_search_box.clear_button_enabled = true
 	_search_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	EditorUI.configure_compact_control(_search_box)
@@ -95,24 +95,12 @@ func _build_ui() -> void:
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.custom_minimum_size.y = EditorUI.scaled(50.0)
 	_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_status.tooltip_text = "Current profile and shader-cache/compilation status."
+	_status.tooltip_text = "Current profile and direct-RD shader catalog readiness."
 	root.add_child(_status)
 
 	var actions: HBoxContainer = HBoxContainer.new()
 	actions.add_theme_constant_override("separation", int(EditorUI.scaled(6.0)))
 	root.add_child(actions)
-	var prewarm: Button = Button.new()
-	prewarm.text = "Compile Current Variants"
-	prewarm.tooltip_text = "Compile the current shader and the immediately reachable quality branches."
-	EditorUI.configure_action_button(prewarm)
-	prewarm.pressed.connect(_on_prewarm)
-	actions.add_child(prewarm)
-	var clear: Button = Button.new()
-	clear.text = "Reset Shader Cache"
-	clear.tooltip_text = "Discard cached runtime, editor, and displacement variants so they compile again when needed."
-	EditorUI.configure_action_button(clear)
-	clear.pressed.connect(_on_clear_cache)
-	actions.add_child(clear)
 	var action_spacer := Control.new()
 	action_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.add_child(action_spacer)
@@ -178,7 +166,7 @@ func _add_descriptor_groups(p_root: VBoxContainer, p_class_name: String, p_prefi
 func _add_group(p_root: VBoxContainer, p_title: String) -> GridContainer:
 	var foldable := FoldableContainer.new()
 	foldable.title = p_title
-	foldable.folded = p_title.contains("Advanced") or p_title in ["PBR Output / Debug", "Custom Shader", "Terrain Rendering / Displacement / Tessellation"]
+	foldable.folded = p_title.contains("Advanced") or p_title in ["PBR Output / Debug", "Terrain Rendering / Displacement / Tessellation"]
 	foldable.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foldable.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	p_root.add_child(foldable)
@@ -294,19 +282,20 @@ func sync_from_material() -> void:
 		var descriptor: Dictionary = _binding_descriptors[key]
 		var target: Object = material if str(descriptor.get("class_name", "")) == "Terrain3DMaterial" else terrain_node
 		SettingControlFactory.sync_control(_bindings[key], descriptor, target.get(str(descriptor.get("property_name", ""))))
+	var diagnostics: Dictionary = terrain_node.get_runtime_diagnostics(false)
+	var shader_diagnostics: Dictionary = diagnostics.get("shaders", {})
 	_status.text = (
-		"Profile: %s — %s. Cache: %d terrain, %d editor, %d displacement; %d speculative.\n"
-		+ "Generated source: %.2f MiB. Last compile: %d retained, %d skipped."
+		"Profile: %s — %s. RD shaders: %d/%d physical ready, %d/%d SPIR-V sources ready.\n"
+		+ "Startup stage: %s. Post-ready cache misses: %d."
 	) % [
 		terrain_node.get_performance_profile_manifest().get("display_name", "Custom"),
 		terrain_node.get_performance_profile_status_name(),
-		material.get_runtime_shader_variant_count(),
-		material.get_editor_shader_variant_count(),
-		material.get_buffer_shader_variant_count(),
-		material.get_speculative_shader_variant_count(),
-		float(material.get_shader_variant_source_bytes()) / 1048576.0,
-		material.get_last_prewarm_variant_count(),
-		material.get_last_prewarm_skipped_count(),
+		int(shader_diagnostics.get("physical_shader_ready", 0)),
+		int(shader_diagnostics.get("physical_shader_expected", 0)),
+		int(shader_diagnostics.get("shader_source_ready", 0)),
+		int(shader_diagnostics.get("shader_source_count", 0)),
+		str(shader_diagnostics.get("startup_stage_name", "UNINITIALIZED")),
+		int(shader_diagnostics.get("physical_shader_misses_after_ready", 0)),
 	]
 	_syncing = false
 
@@ -330,18 +319,3 @@ func _set_descriptor_value(p_descriptor: Dictionary, p_value: Variant) -> void:
 	terrain_node.notify_property_list_changed()
 	EditorInterface.mark_scene_as_unsaved()
 	sync_from_material.call_deferred()
-
-
-func _on_prewarm() -> void:
-	var material: Terrain3DMaterial = _get_material()
-	if is_instance_valid(material):
-		material.prewarm_shader_variants()
-		sync_from_material()
-
-
-func _on_clear_cache() -> void:
-	var material: Terrain3DMaterial = _get_material()
-	if is_instance_valid(material):
-		material.clear_shader_variant_cache()
-		material.update(Terrain3DMaterial.FULL_REBUILD)
-		sync_from_material()

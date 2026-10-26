@@ -17,6 +17,7 @@ const uint T3D_FEATURE_WORLD_NOISE_CACHE = 1u << 12u;
 const uint T3D_FEATURE_MACRO_NOISE = 1u << 13u;
 const uint T3D_FEATURE_MICRO_VT = 1u << 14u;
 const uint T3D_FEATURE_MEGAVT = 1u << 15u;
+const uint T3D_FEATURE_FLAT_TERRAIN_NORMALS = 1u << 16u;
 const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
 const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
 const uint T3D_FEATURE_MIDDLE_COMPOSITE = 1u << 8u;
@@ -105,6 +106,18 @@ bool t3d_feature_megavt_enabled() {
     }
 #endif
     return (material_config.feature_flags & T3D_FEATURE_MEGAVT) != 0u;
+}
+
+bool t3d_near_tier_active() {
+#ifdef T3D_RUNTIME_TIER
+    return patch_tier == 0u;
+#else
+    return T3D_TIER == 0;
+#endif
+}
+
+bool t3d_feature_flat_terrain_normals_enabled() {
+    return t3d_near_tier_active() && (material_config.feature_flags & T3D_FEATURE_FLAT_TERRAIN_NORMALS) != 0u;
 }
 
 // WG-H P11/P12: bounded pass/tier specialization. DNR output requirements
@@ -952,7 +965,9 @@ bool terrain_megavt_region_record(ivec2 region_cell, out TerrainRegionRecord rec
         return false;
     }
     record = region_map[(map_pos.y << 5) + map_pos.x];
-    return (record.packed_physical_flags & 0x80000000u) != 0u && record.megavt_allocation != 0xffffffffu;
+    // Cooked data is authoritative only after the owner's publication receipt.
+    return (record.packed_physical_flags & 0x80000000u) != 0u && record.megavt_allocation != 0xffffffffu
+        && (record.megavt_flags & 2u) != 0u && (record.megavt_flags & 4u) == 0u;
 }
 uint terrain_megavt_allocation(ivec2 region_cell) {
     TerrainRegionRecord record;
@@ -1258,6 +1273,24 @@ mat2 terrain_control_rotation(uint angle_index) {
     return mat2(cs.x, -cs.y, cs.y, cs.x);
 }
 
+float terrain_camera_distance();
+
+float terrain_authored_mip_bias() {
+    float transition = smoothstep(0.0, 1.0, (terrain_camera_distance() - material_config.bias_distance) / 1024.0);
+    float near_derivative_scale = exp2(material_config.mipmap_bias);
+    float far_derivative_scale = max(material_config.depth_blur + 1.0, 0.0001);
+    float derivative_scale = mix(near_derivative_scale, far_derivative_scale, transition);
+    return log2(max(derivative_scale, 0.0001));
+}
+
+float terrain_dual_scale_reduction() {
+    float reduction = max(material_config.dual_scale_reduction, 0.001);
+    if (terrain_sampling_context.side_projection != 0u) {
+        reduction *= max(material_config.tri_scale_reduction, 0.001);
+    }
+    return reduction;
+}
+
 void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config) {
     terrain_sampling_context.position = world_position;
     terrain_sampling_context.ddx_position = dFdx(world_position);
@@ -1281,10 +1314,8 @@ void terrain_sampling_context_init(vec3 normal, TierMaterialConfig tier_config) 
 #if T3D_TERRAIN_MATERIAL_BACKEND == T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V3
     // WG-B P04/P07: canonical shipping materials all use the same tier-level
     // micro-VT bias and dual transition factor, so derive both once per fragment.
-    float bias_distance = max(material_config.bias_distance, 1.0);
-    float distance_factor = smoothstep(0.0, bias_distance, terrain_camera_distance());
     terrain_sampling_context.micro_vt_mip_bias =
-        tier_config.material_lod_bias + tier_config.quality_lod_offset + distance_factor * max(material_config.mipmap_bias, 0.0);
+        tier_config.material_lod_bias + tier_config.quality_lod_offset + terrain_authored_mip_bias();
     terrain_sampling_context.micro_vt_mip_bias_valid = 1u;
     if (t3d_feature_dual_scale_enabled()) {
         terrain_sampling_context.dual_scale_factor = smoothstep(material_config.dual_scale_near,
@@ -1304,10 +1335,8 @@ float terrain_camera_distance() {
 
 float terrain_micro_vt_mip_bias(TierMaterialConfig tier_config) {
     if (terrain_sampling_context.micro_vt_mip_bias_valid == 0u) {
-        float bias_distance = max(material_config.bias_distance, 1.0);
-        float distance_factor = smoothstep(0.0, bias_distance, terrain_camera_distance());
         terrain_sampling_context.micro_vt_mip_bias =
-            tier_config.material_lod_bias + tier_config.quality_lod_offset + distance_factor * max(material_config.mipmap_bias, 0.0);
+            tier_config.material_lod_bias + tier_config.quality_lod_offset + terrain_authored_mip_bias();
         terrain_sampling_context.micro_vt_mip_bias_valid = 1u;
     }
     return terrain_sampling_context.micro_vt_mip_bias;
@@ -1474,7 +1503,7 @@ MaterialEvalContext prepare_canonical_material_eval_context(int id,
 #endif
 
     if (dual_eligible) {
-        float reduction = max(material_config.dual_scale_reduction, 0.001);
+        float reduction = terrain_dual_scale_reduction();
         vec2 far_uv = layer_uv * reduction;
         vec2 far_ddx = layer_ddx_uv * reduction;
         vec2 far_ddy = layer_ddy_uv * reduction;
@@ -1660,7 +1689,7 @@ SampledMaterial sample_material(int logical_id,
         dual_far_factor = smoothstep(material_config.dual_scale_near,
             max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001),
             terrain_camera_distance());
-        float dual_scale_reduction = max(material_config.dual_scale_reduction, 0.001);
+        float dual_scale_reduction = terrain_dual_scale_reduction();
         dual_far_uv = layer_uv * dual_scale_reduction;
         dual_far_ddx = layer_ddx_uv * dual_scale_reduction;
         dual_far_ddy = layer_ddy_uv * dual_scale_reduction;
@@ -1820,35 +1849,24 @@ SampledMaterial sample_unrotated_material(int logical_id, vec2 world_xz, TierMat
     return sample_material(logical_id, world_xz, control_state, tier_config, use_far_array);
 }
 
-void apply_megavt_macro(inout SampledMaterial material, TierMaterialConfig tier_config) {
-    if (!t3d_feature_megavt_enabled()) {
-        return;
-    }
+bool sample_megavt_macro(out vec4 color) {
+    color = vec4(1.0, 1.0, 1.0, 0.5);
+    if (!t3d_feature_megavt_enabled()) return false;
     ivec2 region_cell = ivec2(floor(world_position.xz * T3D_REGION_INV_SIZE_F));
     TerrainRegionRecord record;
-    if (!terrain_megavt_region_record(region_cell, record)) {
-        return;
-    }
+    if (!terrain_megavt_region_record(region_cell, record)) return false;
     vec2 uv = world_position.xz * record.megavt_world_to_uv.xy + record.megavt_world_to_uv.zw;
-    vec2 ddx_uv = dFdx(uv);
-    vec2 ddy_uv = dFdy(uv);
-    TerrainVTResolvedAddress address =
+    vec2 ddx_uv = dFdx(uv), ddy_uv = dFdy(uv);
+    TerrainVTResolvedAddress albedo =
         terrain_vt_resolve_address(record.megavt_allocation, uv, ddx_uv, ddy_uv, 0.0, false, record.megavt_generation);
-    vec4 macro_albedo = terrain_vt_sample_albedo(address);
-    vec4 macro_normal_sample = terrain_vt_sample_normal(address);
-    vec4 macro_surface = terrain_vt_sample_surface(address);
-    // P26 contract: MegaVT carries authoritative low-frequency macro response;
-    // reusable material VT carries high-frequency detail centered on neutral.
-    material.albedo *= macro_albedo.rgb;
-    material.ao *= macro_surface.r;
-    material.roughness = clamp(material.roughness * macro_surface.g, 0.0, 1.0);
-    material.metallic = clamp(material.metallic * macro_surface.b, 0.0, 1.0);
-    if (tier_config.surface_response != 0u) {
-        vec3 macro_normal = decode_surface_normal(macro_normal_sample.rg);
-        material.tangent_normal = normalize(vec3(material.tangent_normal.x + macro_normal.x,
-            material.tangent_normal.y * max(macro_normal.y, 0.0001),
-            material.tangent_normal.z + macro_normal.z));
-    }
+    TerrainVTResolvedAddress pbr =
+        terrain_vt_resolve_address(record.megavt_allocation + 1u, uv, ddx_uv, ddy_uv, 0.0, false, record.megavt_generation);
+    if (albedo.valid == 0u || pbr.valid == 0u) return false;
+    // V3 PackedPBR blue stores painted color-map alpha for this allocation.
+    // Material detail, slope classification and macro noise remain live.
+    color.rgb = terrain_vt_sample_albedo(albedo).rgb;
+    color.a = terrain_vt_sample_pbr(pbr).b;
+    return true;
 }
 
 uint auto_control(uint authored_control, vec3 terrain_normal, float height, bool outside_region) {
@@ -2197,10 +2215,22 @@ vec3 apply_macro_variation(vec3 albedo, vec2 world_texel, vec3 terrain_normal) {
     return albedo * mix(vec3(1.0), macro, clamp(terrain_normal.y + material_config.macro_variation_slope, 0.0, 1.0));
 }
 
+float terrain_distant_normal_amplifier() {
+    if (!t3d_near_tier_active()) {
+        return 1.0;
+    }
+    float footprint_sq = max(dot(terrain_sampling_context.ddx_position.xz, terrain_sampling_context.ddx_position.xz),
+        dot(terrain_sampling_context.ddy_position.xz, terrain_sampling_context.ddy_position.xz));
+    return clamp(sqrt(max(footprint_sq, 0.0)), 1.0, max(material_config.distant_normal_scale, 1.0));
+}
+
 vec3 apply_surface_normal(vec3 terrain_normal, vec3 tangent_normal) {
+    vec3 amplified_tangent_normal = tangent_normal;
+    amplified_tangent_normal.xz *= terrain_distant_normal_amplifier();
+    amplified_tangent_normal = normalize(amplified_tangent_normal);
     vec3 tangent = normalize(cross(terrain_normal, abs(terrain_normal.z) < 0.99 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0)));
     vec3 bitangent = normalize(cross(terrain_normal, tangent));
-    return normalize(tangent * tangent_normal.x + terrain_normal * tangent_normal.y + bitangent * tangent_normal.z);
+    return normalize(tangent * amplified_tangent_normal.x + terrain_normal * amplified_tangent_normal.y + bitangent * amplified_tangent_normal.z);
 }
 // WG-H P11: final DNR state carries only attachment-visible channels. Height
 // exists only in a material source while resolving a base/overlay pair.
@@ -2401,7 +2431,7 @@ NormalRoughnessSource sample_material_normal_roughness(int logical_id,
         dual_far_factor = smoothstep(material_config.dual_scale_near,
             max(material_config.dual_scale_far, material_config.dual_scale_near + 0.001),
             terrain_camera_distance());
-        float dual_scale_reduction = max(material_config.dual_scale_reduction, 0.001);
+        float dual_scale_reduction = terrain_dual_scale_reduction();
         dual_far_uv = layer_uv * dual_scale_reduction;
         dual_far_ddx = layer_ddx_uv * dual_scale_reduction;
         dual_far_ddy = layer_ddy_uv * dual_scale_reduction;
@@ -3083,7 +3113,7 @@ void main() {
     vec2 world_texel = terrain_world_texel;
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
     vec3 terrain_normal = normalize(world_normal);
-    if (tier_config.normal_mode == 2u) {
+    if (t3d_feature_flat_terrain_normals_enabled() || tier_config.normal_mode == 2u) {
         terrain_normal = normalize(cross(dFdy(world_position), dFdx(world_position)));
     } else if (tier_config.normal_mode < 2u) {
         terrain_normal = apply_fragment_world_noise_normal(terrain_normal, world_texel);
@@ -3408,7 +3438,8 @@ material.roughness = clamp(material.roughness, 0.0, 1.0);
 material.ao = clamp(material.ao, 0.0, 1.0);
 material.metallic = clamp(material.metallic, 0.0, 1.0);
 
-apply_megavt_macro(material, tier_config);
+vec4 cooked_macro;
+if (sample_megavt_macro(cooked_macro)) color_map = cooked_macro;
 
 if (tier_config.texture_surface_mode == 1u) {
     material.albedo = vec3(material_config.silhouette_r, material_config.silhouette_g, material_config.silhouette_b);

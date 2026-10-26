@@ -466,7 +466,6 @@ public partial class Terrain3DTextureAsset : Resource
 		public new static readonly StringName GetEffectiveSurfaceTexture = "get_effective_surface_texture";
 		public new static readonly StringName GetPackedPbrTexture = "get_packed_pbr_texture";
 		public new static readonly StringName GetEffectiveDisplacementTexture = "get_effective_displacement_texture";
-		public new static readonly StringName GetEffectivePbrTexture = "get_effective_pbr_texture";
 	}
 
 	public new void Clear() =>
@@ -489,9 +488,5 @@ public partial class Terrain3DTextureAsset : Resource
 
 	public new Texture2D GetEffectiveDisplacementTexture() =>
 		Call(GDExtensionMethodName.GetEffectiveDisplacementTexture, []).As<Texture2D>();
-
-	[Obsolete("Use GetEffectiveSurfaceTexture().")]
-	public new Texture2D GetEffectivePbrTexture() =>
-		Call(GDExtensionMethodName.GetEffectivePbrTexture, []).As<Texture2D>();
 
 }

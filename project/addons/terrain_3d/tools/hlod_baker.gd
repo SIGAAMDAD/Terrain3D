@@ -275,10 +275,14 @@ func clear_generated(terrain: Terrain3D) -> Dictionary:
 	var manifest_path: String = _resolve_manifest_path(terrain)
 	var output_dir: String = data_dir.path_join(HLOD_DIR)
 	if FileAccess.file_exists(manifest_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(manifest_path))
+		var removal: Error = DirAccess.remove_absolute(ProjectSettings.globalize_path(manifest_path))
+		if removal != OK:
+			return _failure("HLOD manifest removal failed: " + error_string(removal))
 		_update_editor_file(manifest_path)
-	_remove_directory_recursive(output_dir)
 	terrain.reload_hlod_manifest()
+	var cleanup: Error = _remove_directory_recursive(output_dir)
+	if cleanup != OK:
+		return _failure("HLOD package cleanup failed: " + error_string(cleanup))
 	return {"ok": true}
 
 
@@ -948,12 +952,17 @@ func _garbage_collect_directory(path: String, referenced: Dictionary[String, boo
 			var child: String = path.path_join(name)
 			if dir.current_is_dir():
 				if _garbage_collect_directory(child, referenced):
-					DirAccess.remove_absolute(ProjectSettings.globalize_path(child))
+					if DirAccess.remove_absolute(ProjectSettings.globalize_path(child)) != OK:
+						empty = false
+						push_warning("HLOD unused directory could not be removed: " + child)
 				else:
 					empty = false
 			elif name.get_extension().to_lower() in ["res", "tres"] and not referenced.has(child):
-				DirAccess.remove_absolute(ProjectSettings.globalize_path(child))
-				_update_editor_file(child)
+				if DirAccess.remove_absolute(ProjectSettings.globalize_path(child)) == OK:
+					_update_editor_file(child)
+				else:
+					empty = false
+					push_warning("HLOD unused package could not be removed: " + child)
 			else:
 				empty = false
 		name = dir.get_next()
@@ -969,26 +978,32 @@ func _update_editor_file(path: String) -> void:
 		fs.update_file(path)
 
 
-func _remove_directory_recursive(path: String) -> void:
+func _remove_directory_recursive(path: String) -> Error:
 	var absolute: String = ProjectSettings.globalize_path(path)
 	if not DirAccess.dir_exists_absolute(absolute):
-		return
+		return ERR_FILE_BAD_PATH if FileAccess.file_exists(absolute) else OK
 	var dir := DirAccess.open(absolute)
 	if dir == null:
-		return
-	dir.list_dir_begin()
+		return DirAccess.get_open_error()
+	var result: Error = dir.list_dir_begin()
+	if result != OK:
+		return result
 	var name: String = dir.get_next()
 	while not name.is_empty():
 		if name != "." and name != "..":
 			var child: String = absolute.path_join(name)
 			if dir.current_is_dir():
-				_remove_directory_recursive(ProjectSettings.localize_path(child))
+				result = _remove_directory_recursive(ProjectSettings.localize_path(child))
 			else:
-				DirAccess.remove_absolute(child)
-				_update_editor_file(ProjectSettings.localize_path(child))
+				result = DirAccess.remove_absolute(child)
+				if result == OK:
+					_update_editor_file(ProjectSettings.localize_path(child))
+			if result != OK:
+				dir.list_dir_end()
+				return result
 		name = dir.get_next()
 	dir.list_dir_end()
-	DirAccess.remove_absolute(absolute)
+	return DirAccess.remove_absolute(absolute)
 
 
 func _failure(message: String) -> Dictionary:

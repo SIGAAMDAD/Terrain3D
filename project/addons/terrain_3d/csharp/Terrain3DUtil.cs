@@ -133,10 +133,6 @@ public partial class Terrain3DUtil : GodotObject
 		public new static readonly StringName PackSurfaceRgba8 = "pack_surface_rgba8";
 		public new static readonly StringName PackDisplacementR8 = "pack_displacement_r8";
 		public new static readonly StringName SaveDisplacementR8Dds = "save_displacement_r8_dds";
-		[Obsolete("Use PackDisplacementR8.")]
-		public new static readonly StringName PackDisplacementR16 = "pack_displacement_r16";
-		[Obsolete("Use SaveDisplacementR8Dds.")]
-		public new static readonly StringName SaveDisplacementR16Dds = "save_displacement_r16_dds";
 		/// <summary>
 		/// Cached name for the 'luminance_to_height' member.
 		/// </summary>
@@ -233,14 +229,6 @@ public partial class Terrain3DUtil : GodotObject
 
 	public new static Error SaveDisplacementR8Dds(Image displacement, string path) =>
 		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.SaveDisplacementR8Dds, [displacement, path]).As<Error>();
-
-	[Obsolete("Use PackDisplacementR8.")]
-	public new static Image PackDisplacementR16(Image displacement, long channel = 0, bool generateMipmaps = true) =>
-		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.PackDisplacementR16, [displacement, channel, generateMipmaps]).As<Image>();
-
-	[Obsolete("Use SaveDisplacementR8Dds.")]
-	public new static Error SaveDisplacementR16Dds(Image displacement, string path) =>
-		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.SaveDisplacementR16Dds, [displacement, path]).As<Error>();
 
 	public new static Image LuminanceToHeight(Image srcRgb) =>
 		ClassDB.ClassCallStatic(NativeName, GDExtensionMethodName.LuminanceToHeight, [srcRgb]).As<Image>();

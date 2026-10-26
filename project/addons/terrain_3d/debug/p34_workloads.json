@@ -1,6 +1,5 @@
 {
   "schema_version": 1,
-  "scene": "res://demo/components/DemoBenchmark.tscn",
   "workloads": [
     {"id":"stationary_warm","warmup_frames":360,"sample_frames":600,"movement":"stationary","speed_mps":0.0},
     {"id":"slow_traversal","warmup_frames":240,"sample_frames":900,"movement":"linear","speed_mps":4.0},

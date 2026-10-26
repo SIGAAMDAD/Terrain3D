@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bah2iy4jnwqkw"
+path="res://.godot/imported/render_world_hiz_cluster.glsl-5b4028b5a6117c51fb6f9906cc4e6e86.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/render_world_hiz_cluster.glsl"
+dest_files=["res://.godot/imported/render_world_hiz_cluster.glsl-5b4028b5a6117c51fb6f9906cc4e6e86.res"]
+
+[params]
+

@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://lxvivr1f82ch"
+path="res://.godot/imported/render_world_visibility_reset.glsl-4542acd0b4c3dcf2ef52eabb8165b19e.res"
+
+[deps]
+
+source_file="res://addons/terrain_3d/rd/render_world_visibility_reset.glsl"
+dest_files=["res://.godot/imported/render_world_visibility_reset.glsl-4542acd0b4c3dcf2ef52eabb8165b19e.res"]
+
+[params]
+

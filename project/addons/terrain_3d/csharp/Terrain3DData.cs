@@ -641,6 +641,10 @@ public partial class Terrain3DData : GodotObject
 	public new Color GetPixel(Terrain3DRegion.MapType mapType, Vector3 globalPosition) =>
 		Call(GDExtensionMethodName.GetPixel, [Variant.From(mapType), globalPosition]).As<Color>();
 
+	/// <summary>Explicitly loads a sample footprint before reading nonresident terrain.</summary>
+	public bool PrepareSamplingArea(Vector3 globalPosition, int radiusTexels = 1) =>
+		Call("prepare_sampling_area", [globalPosition, radiusTexels]).As<bool>();
+
 	public new void SetHeight(Vector3 globalPosition, double height) =>
 		Call(GDExtensionMethodName.SetHeight, [globalPosition, height]);
 

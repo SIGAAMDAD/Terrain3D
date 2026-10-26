@@ -440,14 +440,6 @@ public partial class Terrain3D : Node3D
 		/// </summary>
 		public new static readonly StringName DisplacementSharpness = "displacement_sharpness";
 		/// <summary>
-		/// Cached name for the 'buffer_shader_override_enabled' member.
-		/// </summary>
-		public new static readonly StringName BufferShaderOverrideEnabled = "buffer_shader_override_enabled";
-		/// <summary>
-		/// Cached name for the 'buffer_shader_override' member.
-		/// </summary>
-		public new static readonly StringName BufferShaderOverride = "buffer_shader_override";
-		/// <summary>
 		/// Cached name for the 'ocean_enabled' member.
 		/// </summary>
 		public new static readonly StringName OceanEnabled = "ocean_enabled";
@@ -484,13 +476,9 @@ public partial class Terrain3D : Node3D
 		/// </summary>
 		public new static readonly StringName OceanRenderLayers = "ocean_render_layers";
 		/// <summary>
-		/// Cached name for the 'ocean_material' member.
+		/// Cached name for the 'ocean_settings' member.
 		/// </summary>
-		public new static readonly StringName OceanMaterial = "ocean_material";
-		/// <summary>
-		/// Cached name for the 'mouse_layer' member.
-		/// </summary>
-		public new static readonly StringName MouseLayer = "mouse_layer";
+		public new static readonly StringName OceanSettings = "ocean_settings";
 		/// <summary>
 		/// Cached name for the 'free_editor_textures' member.
 		/// </summary>
@@ -1422,18 +1410,6 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.DisplacementSharpness, value);
 	}
 
-	public new bool BufferShaderOverrideEnabled
-	{
-		get => Get(GDExtensionPropertyName.BufferShaderOverrideEnabled).As<bool>();
-		set => Set(GDExtensionPropertyName.BufferShaderOverrideEnabled, value);
-	}
-
-	public new Shader BufferShaderOverride
-	{
-		get => Get(GDExtensionPropertyName.BufferShaderOverride).As<Shader>();
-		set => Set(GDExtensionPropertyName.BufferShaderOverride, value);
-	}
-
 	public new bool OceanEnabled
 	{
 		get => Get(GDExtensionPropertyName.OceanEnabled).As<bool>();
@@ -1488,17 +1464,12 @@ public partial class Terrain3D : Node3D
 		set => Set(GDExtensionPropertyName.OceanRenderLayers, value);
 	}
 
-	public new Material OceanMaterial
+	public new Terrain3DOceanSettings OceanSettings
 	{
-		get => Get(GDExtensionPropertyName.OceanMaterial).As<Material>();
-		set => Set(GDExtensionPropertyName.OceanMaterial, value);
+		get => Terrain3DOceanSettings.Bind(Get(GDExtensionPropertyName.OceanSettings).As<Resource>());
+		set => Set(GDExtensionPropertyName.OceanSettings, value);
 	}
 
-	public new long MouseLayer
-	{
-		get => Get(GDExtensionPropertyName.MouseLayer).As<long>();
-		set => Set(GDExtensionPropertyName.MouseLayer, value);
-	}
 
 	public new bool FreeEditorTextures
 	{

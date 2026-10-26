@@ -28,8 +28,6 @@ signal operation_finished(success: bool, message: String)
 var _scene_rules: SceneRulesScript = SceneRulesScript.new()
 var _region_index: RegionIndexScript = RegionIndexScript.new()
 var _terrain_io: TerrainIOScript = TerrainIOScript.new()
-var _transactions: Dictionary[int, Dictionary] = {}
-var _next_transaction_id: int = 1
 var _last_progress_msec: int = 0
 var _last_progress_value: float = -1.0
 var _last_progress_status: String = ""
@@ -522,11 +520,10 @@ func prepare_bake(
 		"alpha_coerced_surface_count": alpha_coerced_surface_count,
 		"prepare_msec": Time.get_ticks_msec() - prepare_started_msec,
 	}
-	var transaction_id: int = _store_transaction(transaction)
 	_emit_progress(0.55, "Bake prepared", true)
 	return {
 		"ok": true,
-		"transaction_id": transaction_id,
+		"transaction": transaction,
 		"anchor": anchor,
 		"source_root": source_root,
 		"remove_source": remove_source,
@@ -769,11 +766,10 @@ func prepare_restore(
 		"type_count": bindings.size(),
 		"region_count": restored_regions.size(),
 	}
-	var transaction_id: int = _store_transaction(transaction)
 	_emit_progress(0.80, "Restore prepared", true)
 	return {
 		"ok": true,
-		"transaction_id": transaction_id,
+		"transaction": transaction,
 		"anchor": anchor,
 		"output_root": output_root,
 		"clear_terrain_instances": clear_terrain_instances,
@@ -784,8 +780,9 @@ func prepare_restore(
 		"cell_size": int(subdivision_info.get("cell_size", 0)),
 	}
 
-func apply_transaction(transaction_id: int) -> void:
-	var transaction: Dictionary = _transactions.get(transaction_id, {})
+# Undo/redo method arguments own this shared record. Once its history entry is
+# discarded, no service-wide registry keeps the snapshots and resources alive.
+func apply_transaction(transaction: Dictionary) -> void:
 	if transaction.is_empty():
 		operation_finished.emit(false, "Bridge transaction no longer exists.")
 		return
@@ -797,8 +794,7 @@ func apply_transaction(transaction_id: int) -> void:
 		_:
 			operation_finished.emit(false, "Unknown bridge transaction kind.")
 
-func revert_transaction(transaction_id: int) -> void:
-	var transaction: Dictionary = _transactions.get(transaction_id, {})
+func revert_transaction(transaction: Dictionary) -> void:
 	if transaction.is_empty():
 		operation_finished.emit(false, "Bridge transaction no longer exists.")
 		return
@@ -1287,12 +1283,6 @@ func _resolve_owner_id(terrain: Node, assets: Object, bridge_id: String) -> int:
 func _generate_bridge_id() -> String:
 	var crypto: Crypto = Crypto.new()
 	return crypto.generate_random_bytes(16).hex_encode()
-
-func _store_transaction(transaction: Dictionary) -> int:
-	var transaction_id: int = _next_transaction_id
-	_next_transaction_id += 1
-	_transactions[transaction_id] = transaction
-	return transaction_id
 
 func _move_child_safely(parent: Node, child: Node, requested_index: int) -> void:
 	if child.get_parent() != parent:

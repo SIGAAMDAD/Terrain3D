@@ -6,6 +6,7 @@ const WINDOW_SCENE: String = "res://addons/terrain_3d/menu/channel_packer.tscn"
 const TEMPLATE_PATH: String = "res://addons/terrain_3d/menu/channel_packer_import_template.txt"
 const DRAG_DROP_SCRIPT: String = "res://addons/terrain_3d/menu/channel_packer_dragdrop.gd"
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
+const TransactionalResourcePublisher = preload("res://addons/terrain_3d/tools/transactional_resource_publisher.gd")
 enum {
 	INFO,
 	WARN,
@@ -615,12 +616,20 @@ func _pack_albedo_displacement_dds(p_albedo: Image, p_height: Image, p_dst_path:
 		_show_message(ERROR, "R8 displacement packing failed.")
 		return FAILED
 	var displacement_path: String = p_dst_path.get_basename() + "_displacement.dds"
-	if _save_and_validate_dds(albedo, p_dst_path, [Image.FORMAT_DXT1]) != OK:
+	var final_paths: PackedStringArray = [p_dst_path, displacement_path]
+	var staging_paths: PackedStringArray = [p_dst_path + ".staged.dds", displacement_path + ".staged.dds"]
+	var previous_paths: PackedStringArray = [p_dst_path + ".previous", displacement_path + ".previous"]
+	var publication_error: Error = TransactionalResourcePublisher.prepare_staged_group(final_paths, staging_paths, previous_paths)
+	if publication_error != OK:
+		_show_message(ERROR, "DDS pair preparation failed (error %d); existing files preserved." % publication_error)
 		return FAILED
-	if _save_and_validate_dds(displacement, displacement_path, [Image.FORMAT_R8]) != OK:
-		DirAccess.remove_absolute(p_dst_path)
-		DirAccess.remove_absolute(displacement_path)
-		_show_message(ERROR, "DDS pair publication failed; removed the incomplete albedo/displacement outputs.")
+	if _save_and_validate_dds(albedo, staging_paths[0], [Image.FORMAT_DXT1]) != OK:
+		return FAILED
+	if _save_and_validate_dds(displacement, staging_paths[1], [Image.FORMAT_R8]) != OK:
+		return FAILED
+	publication_error = TransactionalResourcePublisher.publish_staged_group(final_paths, staging_paths, previous_paths)
+	if publication_error != OK:
+		_show_message(ERROR, "DDS pair publication or cleanup failed (error %d); retained recovery files must be preserved." % publication_error)
 		return FAILED
 	_show_message(INFO, "Saved BC1 sRGB albedo and R8 displacement DDS. Reload validation passed.")
 	return OK

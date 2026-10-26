@@ -22,10 +22,6 @@ public partial class Terrain3DAssets : Resource
 	{
 		Legacy = 0,
 		PackedPbrR8 = 1,
-		[Obsolete("Use PackedPbrR8.")]
-		SurfaceR16 = PackedPbrR8,
-		[Obsolete("Use PackedPbrR8.")]
-		PbrRgba16Ui = PackedPbrR8,
 	}
 
 	public new class GDExtensionSignalName : Resource.SignalName
@@ -144,12 +140,8 @@ public partial class Terrain3DAssets : Resource
 		/// Cached name for the 'get_normal_array_rid' member.
 		/// </summary>
 		public new static readonly StringName GetNormalArrayRid = "get_normal_array_rid";
-		/// <summary>
-		/// Cached name for the 'get_pbr_array_rid' member.
-		/// </summary>
 		public new static readonly StringName GetSurfaceArrayRid = "get_surface_array_rid";
 		public new static readonly StringName GetDisplacementArrayRid = "get_displacement_array_rid";
-		public new static readonly StringName GetPbrArrayRid = "get_pbr_array_rid";
 		/// <summary>
 		/// Cached name for the 'set_texture_packing_mode' member.
 		/// </summary>
@@ -249,10 +241,6 @@ public partial class Terrain3DAssets : Resource
 
 	public new Rid GetDisplacementArrayRid() =>
 		Call(GDExtensionMethodName.GetDisplacementArrayRid, []).As<Rid>();
-
-	[Obsolete("Use GetSurfaceArrayRid().")]
-	public new Rid GetPbrArrayRid() =>
-		Call(GDExtensionMethodName.GetPbrArrayRid, []).As<Rid>();
 
 	public new void SetTexturePackingMode(TexturePackingMode mode) =>
 		Call(GDExtensionMethodName.SetTexturePackingMode, [(long)mode]);

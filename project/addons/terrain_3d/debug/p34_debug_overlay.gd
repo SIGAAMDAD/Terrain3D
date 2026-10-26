@@ -87,6 +87,8 @@ func _rows(runtime: Dictionary, rd: Dictionary) -> Array[Array]:
 	var frame: Dictionary = runtime.get("frame", {})
 	var memory: Dictionary = runtime.get("memory", {})
 	var inst: Dictionary = rd.get("instances", {})
+	var world: Dictionary = rd.get("world_renderer", {})
+	var shaders: Dictionary = rd.get("shader", {})
 	match view_mode:
 		ViewMode.VT_RESIDENCY:
 			return [
@@ -134,15 +136,15 @@ func _rows(runtime: Dictionary, rd: Dictionary) -> Array[Array]:
 			]
 		ViewMode.OCCLUSION:
 			return [
-				["Hi-Z enabled", _value(inst, "instance_hiz_occlusion_enabled")], ["Hi-Z ready", _value(inst, "instance_hiz_ready_for_frame")],
-				["Hi-Z build dispatches", _value(inst, "instance_hiz_build_dispatches")], ["Hi-Z unavailable frames", _value(inst, "instance_hiz_unavailable_frames")],
-				["Hi-Z cell descriptors", _value(inst, "instance_hiz_cell_descriptors")], ["Hi-Z instance descriptors", _value(inst, "instance_hiz_per_instance_descriptors")],
+				["World Hi-Z ready", _value(world, "ready")], ["Hi-Z builds", _value(world, "hiz_builds")],
+				["Hi-Z build dispatches", _value(world, "hiz_build_dispatches")], ["Hi-Z unavailable frames", _value(world, "hiz_unavailable_frames")],
+				["Hi-Z invalid history", _value(world, "hiz_invalid_history_frames")], ["Hi-Z GPU bytes", _value(world, "hiz_gpu_bytes")],
 			]
 		ViewMode.RESOURCE_REBUILD:
 			return [
 				["VT descriptor rebuilds", _value(rd, "vt_descriptor_rebuilds_runtime")], ["VT creates after seal", _value(rd, "vt_gpu_resource_creates_after_seal")],
 				["instance buffer rebuilds", _value(inst, "owner_buffer_rebuilds")], ["mesh arena rebuilds", _value(inst, "mesh_owner_arena_rebuilds")],
-				["shader variant creates", frame.get("shader_variant_creations", 0)], ["shader updates", frame.get("shader_updates", 0)],
+				["shader physical ready", shaders.get("physical_shader_ready", 0)], ["shader expected", shaders.get("physical_shader_expected", 0)],
 			]
 		ViewMode.UPLOAD_DIRTY_RANGES:
 			return [
