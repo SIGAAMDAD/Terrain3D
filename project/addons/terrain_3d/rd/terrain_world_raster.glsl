@@ -159,8 +159,8 @@ env_mesh_shadow = "#define T3D_WORLD_SHADOW\n#define T3D_FORWARD_DEPTH\n#define 
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
-#include "terrain_far_height_vertex_v1.glslinc"
 #include "terrain_clipmap_vertex_inc.glslinc"
+#include "terrain_far_height_vertex_v1.glslinc"
 #include "terrain_environment_sampling_inc.glslinc"
 #include "terrain_world_contract.glslinc"
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP

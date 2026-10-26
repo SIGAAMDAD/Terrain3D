@@ -103,9 +103,9 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
-#include "terrain_far_height_vertex_v1.glslinc"
 #include "terrain_clipmap_editor_brush_overlay.glslinc"
 #include "terrain_clipmap_vertex_inc.glslinc"
+#include "terrain_far_height_vertex_v1.glslinc"
 
 #[fragment]
 #version 450

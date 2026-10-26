@@ -21,6 +21,11 @@ const float T3D_REGION_INV_SIZE_F = 0.0078125;
 const float T3D_WORLD_SIZE_F = 4096.0;
 const float T3D_WORLD_HALF_SIZE_F = 2048.0;
 
+// The stage root defines this V1 implementation after the common vertex helpers.
+// Keep its prototype here so height sampling can call it without requiring
+// region constants before the vertex include has declared them.
+bool t3d_far_height_v1(vec2 world_texel, out float encoded);
+
 struct HeightSamples4 {
     float h0;
     float h1;

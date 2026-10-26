@@ -101,6 +101,10 @@ func _enter_tree() -> void:
 	if not _validate_native_editor_build():
 		return
 	editor = Terrain3DEditor.new()
+	if not editor.has_method(&"poll_editor_brush_commit"):
+		push_error("Terrain3D editor DLL lacks poll_editor_brush_commit. Rebuild the T3D_EDITOR_NATIVE DLL and check terrain.gdextension's editor library selection.")
+		editor = null
+		return
 	_native_editor_initialized = true
 	setup_editor_settings()
 	vt_demand_export_plugin = VtDemandExportPlugin.new()

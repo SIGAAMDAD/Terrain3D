@@ -1016,7 +1016,9 @@ func _generate_brush_texture(p_btn: Button) -> void:
 		# The brush buttons own immutable source masks. Reusing the generated
 		# texture prevents another GPU image allocation each time a brush is
 		# selected and keeps selection cost separate from actual stroke compute.
-		var tex: ImageTexture = p_btn.get_meta("terrain3d_cached_brush_texture", null) as ImageTexture
+		var tex: ImageTexture = null
+		if p_btn.has_meta(&"terrain3d_cached_brush_texture"):
+			tex = p_btn.get_meta(&"terrain3d_cached_brush_texture") as ImageTexture
 		if not is_instance_valid(tex):
 			tex = ImageTexture.create_from_image(img)
 			p_btn.set_meta("terrain3d_cached_brush_texture", tex)
