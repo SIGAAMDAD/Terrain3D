@@ -73,7 +73,7 @@ bool Terrain3DGeneratedTexture::ensureRegionStaging(
 		return true;
 	}
 	// Both scratch resources are created only at initial publication/explicit
-	// reconfiguration for far atlas 16x16 and full-region upload sizes.
+	// reconfiguration for shared FAR V1 source 16x16 and full-region upload sizes.
 	Terrain3DRdTexture *const		 target = !m_regionStaging.isValid() ? &m_regionStaging : &m_alternateRegionStaging;
 	Terrain3DRdTextureManager *const manager = t3dGeneratedTextureManager();
 	if ( !manager ) {

@@ -17,6 +17,7 @@ private:
 	Terrain3DWorldRaster		m_raster;
 	t3dWorldResourceLimits_t	m_limits{};
 	uint64_t					m_nPreparedPublicationGeneration = 0u;
+	uint64_t m_nPreparedGeometryCacheEpoch = 0u;
 	uint64_t					m_nResolvedVtPackagePublicationGeneration = UINT64_MAX;
 	uint64_t					m_nGeometryGeneration = 0u;
 	uint64_t					m_nMaterialGeneration = 0u;
@@ -37,6 +38,7 @@ private:
 	uint64_t					m_nPublicationUploadCreditBytes = 0u;
 	uint64_t					m_nPublicationBudgetFrame = UINT64_MAX;
 	uint64_t					m_nBudgetCheckedPublicationGeneration = 0u;
+	uint64_t m_nBudgetCheckedGeometryCacheEpoch = 0u;
 	uint64_t					m_nBudgetCheckedVtGeneration = UINT64_MAX;
 	uint64_t					m_nLastRequiredUploadBytes = 0u;
 	uint32_t					m_nLastRequiredClusterCredit = 0u;
@@ -60,6 +62,9 @@ private:
 
 public:
 	Terrain3DWorldRuntime();
+    void discardSuperTerrainCandidateCold( void );
+    bool uploadSuperTerrainCandidateCold( const Terrain3DStPublicationImage &rCandidate,
+                                           uint32_t nFinePageSlots );
 	bool configureComposedExperimentalCold( bool bEnable );
 	bool isComposedExperimentalEnabled() const { return m_raster.isComposedExperimentalEnabled(); }
 	bool		initializeCold( bool bPersistentFrameBuffer, bool bPersistentCpuBuffers );

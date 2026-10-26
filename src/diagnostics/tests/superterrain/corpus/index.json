@@ -1,0 +1,277 @@
+{
+  "byte_order": "little",
+  "fixtures": [
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 32,
+      "description": "missing logical region: no payload, no residency",
+      "name": "absent",
+      "region_index": 0,
+      "sha256": "85080a9c168b29c9eb44cda4707fa8bc5dd6adf53d0d8a8936262d7d4eef0f9d",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "present region, all texels cut out",
+      "name": "empty_holes",
+      "region_index": 480,
+      "sha256": "990fac18c41395acb107de97226cc177e5d07f00c887e6fb718fa2fd9e9c39d8",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "flat zero elevation and implicit-safe authored controls",
+      "name": "flat",
+      "region_index": 481,
+      "sha256": "19ad80a4613a4d2c29206cc9409bc2c7f5e95da6ae9371545a62bcc22b0b80cc",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "large negative slope and quantization floor",
+      "name": "negative_steep",
+      "region_index": 482,
+      "sha256": "4a8f91d55ababa4cab029d4b61fcc0b5913dc934af26ff15fadba8f76c30386c",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "step discontinuity and mixed page fallback",
+      "name": "cliff",
+      "region_index": 483,
+      "sha256": "6724aa23538930df6722ccb69d57c642ba8190253abe49475794f0ca07b90308",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "west neighbor: right edge equals east left edge",
+      "name": "border_west",
+      "region_index": 527,
+      "sha256": "28e89b85811171f862f8ac56c52dabf3590d933f09225a90e6473ecf9e82da8a",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "east neighbor: left edge equals west right edge",
+      "name": "border_east",
+      "region_index": 528,
+      "sha256": "f02ed386ef03ad96abee1bac758408c717cde0dbf752801bf7f7ac44a8d07a55",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "hole chessboard and texels at page boundaries",
+      "name": "coverage_edges",
+      "region_index": 529,
+      "sha256": "5e634f8a28b5532c99b97a0179e7c95595c332f1ddc03963bf1794e146ca6daf",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": [
+          0,
+          85,
+          170,
+          255
+        ],
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "four authored-alpha quantization outcomes",
+      "name": "alpha_extremes",
+      "region_index": 530,
+      "sha256": "b6d7e358bfdc5d960739f17814ccd70ea2932ca69832eb2e8da4196a4ee47832",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "empty-looking controls, auto shader and isolated overrides",
+      "name": "sparse_controls",
+      "region_index": 531,
+      "sha256": "fcec09c4fa48ec1e20a0df39d78dd177e29347087349968f7cff4c08f4d354f6",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": "gradient",
+        "camera_distance_m": [],
+        "detiling": true,
+        "projection_mode": "default",
+        "wetness_contribution": 1.0
+      },
+      "bytes": 196640,
+      "description": "authored alpha plus wetness parameter permutation",
+      "name": "wet_surface",
+      "region_index": 532,
+      "sha256": "c9918ccbd37745ad66cfa0de05ce909216e72d2ef5a75846cfbaa90dd7ff1a9f",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": "row gradient",
+        "camera_distance_m": [],
+        "detiling": true,
+        "projection_mode": "varying",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "UV rotation/scale fields, slope and auto shader",
+      "name": "rotated_slopes",
+      "region_index": 533,
+      "sha256": "8a9ff6d5d230cbd2678e4da5219a3044eb7e0c40a099fe200dae26a6aeb9b606",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    },
+    {
+      "authored_variants": {
+        "alpha": 128,
+        "camera_distance_m": [
+          8,
+          150,
+          1100
+        ],
+        "detiling": false,
+        "projection_mode": "default",
+        "wetness_contribution": 0.0
+      },
+      "bytes": 196640,
+      "description": "same field observed from near, middle and far camera probes",
+      "name": "distance_regimes",
+      "region_index": 534,
+      "sha256": "cdd04c63c7172c5d5e9b2a9b22f442a7742c8b25d953a58a1b8e04d2f2a46234",
+      "source_schema": {
+        "color": "RGBA8",
+        "control": "RF32 bit-pattern LE",
+        "derived": "RG8 XZ normal component",
+        "height": "R16_UNORM global [-384,768] LE"
+      }
+    }
+  ],
+  "note": "Synthetic SOURCE data, not a canonical material render or screenshot",
+  "schema": "ST00_SYNTHETIC_REGION_CORPUS_V1",
+  "side": 128
+}

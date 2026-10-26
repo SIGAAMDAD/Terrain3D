@@ -210,7 +210,6 @@ private:
 	int								   getRegionSlotReserve( void ) const;
 	bool							   canUpdateRegionSlotsIncrementally( void ) const;
 	void							   syncCacheDefaultMaps( void );
-	t3dFarRegionalCookConfig_t		   getFarRegionalCookConfig( void ) const;
 	t3dMiddleHeightRegionCacheConfig_t getMiddleHeightCacheConfig( void ) const;
 	void		applyInstanceRegionCacheChanges( const t3dInstanceRegionCacheChanges_s &rChanges );
 	static void residencyApplyInstanceChanges( void *pContext, const t3dInstanceRegionCacheChanges_s &rChanges );
@@ -220,9 +219,6 @@ private:
 	void		invalidateGpuRegionLocation( const Vector2i &vLocation );
 	bool		republishGpuRegionLocation( const Vector2i &vLocation );
 	void		queueGpuRegionRepublish( const Vector2i &vLocation );
-	bool		writeCookedFarVtRegions( const String &rDirectory = String() );
-	void		markAllGpuFarRegionsDirty( t3dMapType_t mapType );
-	void		markGpuFarRegionDirty( const Vector2i &vLocation, t3dMapType_t mapType );
 	void		resetMiddleHeightCache( void );
 	bool		configureMiddleHeightCache( void );
 	void		updateMiddleHeightResidencyInternal( const t3dResidencyFrameState_s &rFrame, bool bForce );
@@ -663,9 +659,6 @@ public:
 	Dictionary			getMiddleHeightCacheStats( void ) const;
 	size_t				getMiddleHeightCacheReservedBytes( void ) const;
 	int					fillGpuMaterialPriorityIds( uint8_t *pIds, int nCapacity ) const;
-	uint64_t getGpuFarAvtPublicationRevision() const;
-	bool isGpuFarAvtRegionCookDirty( const Vector2i &vLocation ) const;
-	uint32_t getGpuFarAvtCookedPackageGeneration( const Vector2i &vLocation ) const;
 	EA_FORCE_INLINE bool areControlMapsImplicit(
 		void ) const {
 		return m_bControlMapsImplicit;

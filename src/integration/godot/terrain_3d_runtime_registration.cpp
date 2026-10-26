@@ -17,8 +17,10 @@
 #include "hlod/format/terrain_3d_hlod_manifest.h"
 #include "hlod/format/terrain_3d_hlod_package.h"
 #include "hlod/runtime/terrain_3d_hlod_streamer.h"
+#include "hlod/runtime/terrain_3d_hlod_mesh.h"
 #include "instances/runtime/terrain_3d_instancer.h"
 #include "instances/runtime/terrain_3d_world_instance_3d.h"
+#include "instances/runtime/terrain_3d_mesh.h"
 #include "lighting/runtime/terrain_3d_lightmap_streamer.h"
 #include "lighting/runtime/terrain_3d_region_lighting.h"
 #include "physics/runtime/terrain_3d_collision.h"
@@ -39,6 +41,7 @@ void t3dRegisterRuntimeTypes(
 	ClassDB::register_class< Terrain3DRenderingMaterial >();
 	ClassDB::register_class< Terrain3DWorldImportProfile >();
 	ClassDB::register_class< Terrain3DWorldInstance3D >();
+	ClassDB::register_class< Terrain3DMesh >();
 	ClassDB::register_class< Terrain3DRdCompositorEffect >();
 	ClassDB::register_internal_class< Terrain3DRdTextureManager >();
 	Terrain3DRdTextureManager::initializeSingleton();
@@ -57,6 +60,7 @@ void t3dRegisterRuntimeTypes(
 	ClassDB::register_class< Terrain3DHLODPackage >();
 	ClassDB::register_class< Terrain3DHLODManifest >();
 	ClassDB::register_class< Terrain3DHLODStreamer >();
+	ClassDB::register_class< Terrain3DHLODMesh >();
 	ClassDB::register_class< Terrain3DNodeStreamer >();
 	ClassDB::register_class< Terrain3DMaterial >();
 	ClassDB::register_class< Terrain3DOceanSettings >();

@@ -987,7 +987,7 @@ typedef enum t3dRdMaterialFeatureBits_e
 	T3D_RD_MATERIAL_FEATURE_DERIVED_MAPS = 1u << 7u,
 	T3D_RD_MATERIAL_FEATURE_MIDDLE_COMPOSITE = 1u << 8u,
 	T3D_RD_MATERIAL_FEATURE_MIDDLE_HEIGHT = 1u << 9u,
-	T3D_RD_MATERIAL_FEATURE_FAR_VT = 1u << 10u,
+	// Feature bit 10 retired: coarse V1 samples use the common VT availability bit.
 	T3D_RD_MATERIAL_FEATURE_FAR_ALBEDO = 1u << 11u,
 	T3D_RD_MATERIAL_FEATURE_WORLD_NOISE_CACHE = 1u << 12u,
 	T3D_RD_MATERIAL_FEATURE_MACRO_NOISE = 1u << 13u,
@@ -1198,7 +1198,7 @@ typedef enum t3dVTLogicalChannel_e : uint32_t
 	T3D_VT_LOGICAL_CHANNEL_HEIGHT = 2u,
 	T3D_VT_LOGICAL_CHANNEL_NORMAL = 3u,
 	T3D_VT_LOGICAL_CHANNEL_ORM = 4u,
-	T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT = 5u,
+	T3D_VT_LOGICAL_CHANNEL_RESERVED_5 = 5u,
 } t3dVTLogicalChannel_t;
 
 typedef enum t3dVTLogicalChannelFormat_e : uint32_t
@@ -1208,7 +1208,7 @@ typedef enum t3dVTLogicalChannelFormat_e : uint32_t
 	T3D_VT_LOGICAL_FORMAT_HEIGHT_R8_UNORM = 2u,
 	T3D_VT_LOGICAL_FORMAT_NORMAL_BC5_UNORM = 3u,
 	T3D_VT_LOGICAL_FORMAT_ORM_BC1_UNORM = 4u,
-	T3D_VT_LOGICAL_FORMAT_FAR_HEIGHT_R16_UNORM = 5u,
+	T3D_VT_LOGICAL_FORMAT_RESERVED_5 = 5u,
 } t3dVTLogicalChannelFormat_t;
 
 typedef enum t3dVTPhysicalFormatFamily_e : uint32_t
@@ -1228,7 +1228,7 @@ typedef enum t3dVTChannelSemantic_e : uint32_t
 	T3D_VT_CHANNEL_SEMANTIC_LINEAR_HEIGHT = 2u,
 	T3D_VT_CHANNEL_SEMANTIC_NORMAL_XY = 3u,
 	T3D_VT_CHANNEL_SEMANTIC_LINEAR_ORM = 4u,
-	T3D_VT_CHANNEL_SEMANTIC_FAR_HEIGHT_R16 = 5u,
+	T3D_VT_CHANNEL_SEMANTIC_RESERVED_5 = 5u,
 } t3dVTChannelSemantic_t;
 
 typedef enum t3dVTConsumer_e : uint32_t
@@ -1236,7 +1236,6 @@ typedef enum t3dVTConsumer_e : uint32_t
 	T3D_VT_CONSUMER_CLIPMAP = 0u,
 	T3D_VT_CONSUMER_INSTANCE = 1u,
 	T3D_VT_CONSUMER_COMPOSED = 2u,
-	T3D_VT_CONSUMER_FAR = 3u,
 } t3dVTConsumer_t;
 
 typedef enum t3dVTSamplerClass_e : uint32_t

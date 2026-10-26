@@ -446,10 +446,6 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags(
 	if ( pData && pData->getMiddleHeightMapsRid().is_valid() && pData->getMiddleHeightRegionMapRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MIDDLE_HEIGHT;
 	}
-	// FAR tint/index/height are V1 page allocations, not standalone atlas RIDs.
-	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
-		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_FAR_VT;
-	}
 	if ( rAssets.is_valid() && rAssets->getFarAlbedoArrayRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_FAR_ALBEDO;
 	}
@@ -567,7 +563,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialParameters(
 	config.m_fRegionBlend = t3dRdMaterialFloatParam( pMaterial, "region_blend", 0.25f );
 	config.m_fBiasDistance = t3dRdMaterialFloatParam( pMaterial, "bias_distance", 512.0f );
 	config.m_fMipmapBias = t3dRdMaterialMipmapLodBias( pMaterial );
-	// The derivative multiplier is draw-invariant. reserved_2 belongs to the far atlas.
+	// The derivative multiplier is draw-invariant. reserved_2 belongs to the shared FAR V1 source.
 	config.m_fReserved3 = exp2f( config.m_fMipmapBias );
 	config.m_fDepthBlur = t3dRdMaterialFloatParam( pMaterial, "depth_blur", 0.0f );
 	config.m_fAutoSlope = t3dRdMaterialFloatParam( pMaterial, "auto_slope", 1.0f );

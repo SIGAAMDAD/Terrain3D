@@ -20,12 +20,14 @@ static_assert( T3D_VT_FILE_VERSION_V1 == 1u, "Sparse VT V1 file ABI version is f
 static_assert( T3D_VT_V1_ABI_VERSION == 2u, "Sparse VT V1 ABI version is frozen" );
 static_assert( T3D_VT_V1_FILTER_ABI_VERSION == 1u, "Sparse VT V1 filter ABI version is frozen" );
 static_assert( T3D_VT_V1_COMPRESSOR_ABI_VERSION == 1u, "Sparse VT V1 RGBA compressor recipe revision" );
+// V1 regional coarse-surface source recipe. Changes invalidate cooked fingerprints.
+#define T3D_VT_REGIONAL_SOURCE_RECIPE_VERSION 3u
 #define T3D_VT_PAGE_INTERIOR			128u
 #define T3D_VT_PAGE_GUTTER				4u
 #define T3D_VT_PHYSICAL_TILE			136u
 #define T3D_VT_MAX_ANISOTROPY			4u
 #define T3D_VT_CHANNEL_MASK_ALL			( ( 1u << T3D_VT_CHANNEL_COUNT ) - 1u )
-#define T3D_VT_LOGICAL_CHANNEL_MASK_ALL ( ( 1u << T3D_VT_LOGICAL_CHANNEL_COUNT ) - 1u )
+#define T3D_VT_LOGICAL_CHANNEL_MASK_ALL ( ( ( 1u << T3D_VT_LOGICAL_CHANNEL_COUNT ) - 1u ) & ~( 1u << 5u ) )
 #define T3D_VT_INVALID_PAGE				0xffffffffu
 #define T3D_VT_INVALID_SLOT				0xffffffffu
 #define T3D_VT_INVALID_TAIL				0xffffffffu
@@ -89,13 +91,6 @@ inline bool t3d_vt_is_composed_region_stable_key( const uint64_t nStableKey ) {
     return ( nStableKey & 0xffffffffffff0000ull ) == 0x5443535245470000ull;
 }
 
-// Far-surface allocations use V1's own allocation table and physical-page scheduler.
-inline uint64_t t3d_vt_far_region_stable_key( const uint32_t nRegionMapIndex ) {
-    return 0x5446415252450000ull | uint64_t( nRegionMapIndex );
-}
-inline bool t3d_vt_is_far_region_stable_key( const uint64_t nStableKey ) {
-    return ( nStableKey & 0xffffffffffff0000ull ) == 0x5446415252450000ull;
-}
 inline bool t3d_vt_is_terrain_region_stable_key(
 	const uint64_t nStableKey ) {
 	return ( nStableKey & 0xffffffffffff0000ull ) == 0x5445525245470000ull;
@@ -223,8 +218,6 @@ static inline t3dVTPhysicalFormatFamily_t t3d_vt_logical_channel_physical_family
 		return T3D_VT_PHYSICAL_FORMAT_BC7_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_PHYSICAL_FORMAT_BC5_UNORM;
-	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
-		return T3D_VT_PHYSICAL_FORMAT_R16_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 	default:
 		return T3D_VT_PHYSICAL_FORMAT_R8_UNORM;
@@ -240,8 +233,6 @@ static inline t3dVTChannelSemantic_t t3d_vt_logical_channel_semantic(
 		return T3D_VT_CHANNEL_SEMANTIC_TERRAIN_PBR;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return T3D_VT_CHANNEL_SEMANTIC_LINEAR_HEIGHT;
-	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
-		return T3D_VT_CHANNEL_SEMANTIC_FAR_HEIGHT_R16;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_CHANNEL_SEMANTIC_NORMAL_XY;
 	case T3D_VT_LOGICAL_CHANNEL_ORM:
@@ -272,9 +263,6 @@ static inline bool t3d_vt_v1_runtime_slot_for_channel(
 			rSlot = 2u;
 			return true;
 		}
-    } else if ( Consumer == T3D_VT_CONSUMER_FAR ) {
-        if ( Channel == T3D_VT_LOGICAL_CHANNEL_HEIGHT ) { rSlot = 1u; return true; }
-        if ( Channel == T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) { rSlot = 2u; return true; }
     } else if ( Consumer == T3D_VT_CONSUMER_COMPOSED ) {
         if ( Channel == T3D_VT_LOGICAL_CHANNEL_NORMAL ) { rSlot = 1u; return true; }
         if ( Channel == T3D_VT_LOGICAL_CHANNEL_PBR ) { rSlot = 2u; return true; }
@@ -314,9 +302,6 @@ static inline bool t3d_vt_v1_logical_channel_for_runtime_slot(
 			rChannel = T3D_VT_LOGICAL_CHANNEL_HEIGHT;
 			return true;
 		}
-    } else if ( Consumer == T3D_VT_CONSUMER_FAR ) {
-        if ( nSlot == 1u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_HEIGHT; return true; }
-        if ( nSlot == 2u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT; return true; }
     } else if ( Consumer == T3D_VT_CONSUMER_COMPOSED ) {
         if ( nSlot == 1u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_NORMAL; return true; }
         if ( nSlot == 2u ) { rChannel = T3D_VT_LOGICAL_CHANNEL_PBR; return true; }
@@ -345,11 +330,6 @@ static inline bool t3d_vt_v1_logical_channel_for_runtime_slot(
       T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_NORMAL ) | \
       T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_PBR ) )
 #define T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK T3D_VT_COMPOSED_ALLOWED_CHANNEL_MASK
-#define T3D_VT_FAR_ALLOWED_CHANNEL_MASK \
-    ( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) | \
-      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_HEIGHT ) | \
-      T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT ) )
-#define T3D_VT_FAR_REQUIRED_CHANNEL_MASK T3D_VT_FAR_ALLOWED_CHANNEL_MASK
 
 #define T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK                                                                           \
 	( T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO ) |                                                    \
@@ -361,7 +341,6 @@ static inline uint32_t t3d_vt_consumer_allowed_mask( const t3dVTConsumer_t consu
     case T3D_VT_CONSUMER_CLIPMAP: return T3D_VT_CLIPMAP_ALLOWED_CHANNEL_MASK;
     case T3D_VT_CONSUMER_INSTANCE: return T3D_VT_INSTANCE_ALLOWED_CHANNEL_MASK;
     case T3D_VT_CONSUMER_COMPOSED: return T3D_VT_COMPOSED_ALLOWED_CHANNEL_MASK;
-    case T3D_VT_CONSUMER_FAR: return T3D_VT_FAR_ALLOWED_CHANNEL_MASK;
     default: return 0u;
     }
 }
@@ -373,7 +352,6 @@ static inline uint32_t t3d_vt_consumer_required_mask( const t3dVTConsumer_t cons
     case T3D_VT_CONSUMER_INSTANCE:
         return T3D_VT_LOGICAL_CHANNEL_BIT( T3D_VT_LOGICAL_CHANNEL_ALBEDO );
     case T3D_VT_CONSUMER_COMPOSED: return T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK;
-    case T3D_VT_CONSUMER_FAR: return T3D_VT_FAR_REQUIRED_CHANNEL_MASK;
     default: return 0u;
     }
 }
@@ -387,8 +365,6 @@ static inline t3dVTLogicalChannelFormat_t t3d_vt_logical_channel_format(
 		return T3D_VT_LOGICAL_FORMAT_PBR_BC7_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_HEIGHT:
 		return T3D_VT_LOGICAL_FORMAT_HEIGHT_R8_UNORM;
-	case T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT:
-		return T3D_VT_LOGICAL_FORMAT_FAR_HEIGHT_R16_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_NORMAL:
 		return T3D_VT_LOGICAL_FORMAT_NORMAL_BC5_UNORM;
 	case T3D_VT_LOGICAL_CHANNEL_ORM:

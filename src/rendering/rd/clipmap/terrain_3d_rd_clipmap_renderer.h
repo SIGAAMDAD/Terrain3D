@@ -20,6 +20,7 @@
 #include "rendering/geometry/terrain_3d_clipmap_strip_contract.h"
 #include "rendering/rd/core/terrain_3d_rd_types.h"
 #include "rendering/rd/forward/terrain_3d_rd_forward_pipeline_base.h"
+#include "rendering/rd/superterrain/terrain_3d_st_gpu_resources.h"
 #include "rendering/rd/vt/gpu/terrain_3d_vt_shared_bindings.h"
 class Terrain3DVTGpu;
 #include "rendering/material/terrain_3d_shader_specializer.h"
@@ -288,6 +289,7 @@ m_shaderPath == rOther.m_shaderPath &&
 
 	Terrain3DRdPipelineCache< t3dRdForwardPipelineKey_t, T3D_FORWARD_PIPELINE_CAPACITY > m_forwardPipelines;
 	mutable t3dRdForwardPipelineEntry_t m_currentForwardPipelineEntry{};
+    t3dStGpuBindings_t m_stGpuBorrowed; // Tracked by the WORLD cold publication owner.
 	uint64_t							m_nRegionMapGeneration = 0u;
 	uint64_t							m_nMaterialGeneration = 0u;
 	bool								m_bRegionMapUploadInitialized = false;
@@ -429,9 +431,15 @@ public:
 											 bool							  bViewportReconfigured,
 											 bool							  bOneSunLighting,
 											 bool							  bPrepareRasterPipelines = true );
+    // Render-thread cold handoff after WORLD's all-or-nothing resource upload.
+    // Invalid input switches back to safe legacy typed fallbacks.
+    void setSuperTerrainBindingsCold( const t3dStGpuBindings_t &rBindings );
 	bool				 renderForwardPass( const t3dRdForwardPassContext_t &rContext );
 	bool				 snapshotWorldRasterBindingsHot( t3dRdWorldTerrainRasterBindings_t &rBindings ) const;
 	Dictionary			 getDiagnostics( void ) const;
+	EA_FORCE_INLINE uint32_t getForwardPrepareFailureStage( void ) const {
+		return m_nForwardPrepareFailureStage;
+	}
 	EA_FORCE_INLINE void setCullingComparisonEnabled(
 		const bool bEnabled ) {
 		m_bCullingComparisonEnabled.store( bEnabled, T3D_MEMORY_ORDER_RELEASE );

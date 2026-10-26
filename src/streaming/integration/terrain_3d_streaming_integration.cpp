@@ -334,7 +334,7 @@ Dictionary Terrain3D::getRegionStreamingConfigurationStatus(
 		}
 	}
 	// Authoring deliberately keeps a bounded physical detail pool. Correctness
-	// comes from authoritative CPU data + the far atlas, not from pinning every
+	// comes from authoritative CPU data + the shared FAR V1 source, not from pinning every
 	// authored region into the GPU texture arrays.
 	const bool active_surface_budget_valid = required_active_surface_pages <= surface_capacity;
 	const bool hot_height_budget_valid =

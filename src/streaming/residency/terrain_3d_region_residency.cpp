@@ -7,7 +7,6 @@
 #include "Terrain3DTypeSupport.h"
 #include "streaming/residency/terrain_3d_region_residency.h"
 
-#include "rendering/surface/terrain_3d_far_regional_cooker.h"
 #include "streaming/residency/terrain_3d_active_height_residency.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
 #include "streaming/cache/terrain_3d_gpu_region_cache.h"
@@ -24,8 +23,7 @@ Terrain3DRegionResidency::Terrain3DRegionResidency(
 	Terrain3DCpuRegionCache *const			pCpuRegionCache,
 	Terrain3DInstanceRegionCache *const		pInstanceRegionCache,
 	Terrain3DMiddleHeightRegionCache *const pMiddleHeightRegionCache,
-	Terrain3DGpuRegionCache *const			pGpuRegionCache,
-	Terrain3DFarRegionalCooker *const	pFarRegionalCooker ) :
+	Terrain3DGpuRegionCache *const			pGpuRegionCache ) :
 	m_pRepository( pRepository ),
 	m_pSamplingStorage( pSamplingStorage ),
 	m_pRuntimePageStore( pRuntimePageStore ),
@@ -33,8 +31,7 @@ Terrain3DRegionResidency::Terrain3DRegionResidency(
 	m_pCpuRegionCache( pCpuRegionCache ),
 	m_pInstanceRegionCache( pInstanceRegionCache ),
 	m_pMiddleHeightRegionCache( pMiddleHeightRegionCache ),
-	m_pGpuRegionCache( pGpuRegionCache ),
-	m_pFarRegionalCooker( pFarRegionalCooker ) {
+	m_pGpuRegionCache( pGpuRegionCache ) {
 }
 
 void Terrain3DRegionResidency::reset(
@@ -157,8 +154,6 @@ void Terrain3DRegionResidency::appendRuntimeProfileSample(
 	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};
 	const t3dInstanceRegionCacheStats_t instance =
 		m_pInstanceRegionCache ? m_pInstanceRegionCache->getStats() : t3dInstanceRegionCacheStats_t{};
-	const t3dFarRegionalCookStats_t far =
-		m_pFarRegionalCooker ? m_pFarRegionalCooker->getStats() : t3dFarRegionalCookStats_t{};
 
 	rSample.m_nStallFlags |= gpu.m_nStallFlagsLastTick | cpu.m_nStallFlagsLastTick | instance.m_nStallFlagsLastTick;
 	rSample.m_nGpuResident = gpu.m_nResident;
@@ -182,8 +177,8 @@ void Terrain3DRegionResidency::appendRuntimeProfileSample(
 	rSample.m_nGpuCookedHits = gpu.m_nCookedHitsLastTick;
 	rSample.m_nGpuCookedMisses = gpu.m_nCookedMissesLastTick;
 	rSample.m_nGpuRuntimePrepares = gpu.m_nRuntimePreparesLastTick;
-	rSample.m_nGpuFarDirtyRegions = m_pFarRegionalCooker ? m_pFarRegionalCooker->getDirtyRegionCount() : 0;
-	rSample.m_nGpuFarRegionsProcessed = far.m_nHeightRegionsLastTick + far.m_nColorRegionsLastTick;
+	rSample.m_nGpuFarDirtyRegions = 0;
+	rSample.m_nGpuFarRegionsProcessed = 0;
 	rSample.m_nGpuPrepareLatencyUsec = runtimePageStats.m_nPrepareLatencyUsecLast;
 	rSample.m_nGpuPrepareQueueWaitUsec = runtimePageStats.m_nPrepareQueueWaitUsecLast;
 	rSample.m_nGpuPrepareFileOpenUsec = runtimePageStats.m_nPrepareFileOpenUsecLast;

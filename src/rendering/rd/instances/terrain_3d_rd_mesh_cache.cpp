@@ -702,6 +702,7 @@ bool Terrain3DRdMeshCache::bindRuntimeAllocator(
 	}
 	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
 	m_surfaces.set_allocator( allocator );
+	m_sourceLookup.set_allocator( allocator );
 	m_lods.set_allocator( allocator );
 	m_materials.set_allocator( allocator );
 	m_vtMaterials.set_allocator( allocator );
@@ -1408,6 +1409,13 @@ bool Terrain3DRdMeshCache::upload(
 		setError( "RD mesh-cache upload failed to create/register the instance vertex format" );
 		return false;
 	}
+	// Reserve only on the cold publication path. A failed lookup-table reserve
+	// must not begin an RD geometry update or invalidate existing handles.
+	if ( !t3dContainerReserveCold( m_sourceLookup, pSnapshot->m_lods.size() ) ) {
+		++m_nUploadFailureCount;
+		setError( "RD mesh-cache source lookup table capacity was exhausted" );
+		return false;
+	}
 	const bool grow_vertex = m_vertexArena.needsCapacity( ( uint32_t ) ( pSnapshot->m_vertexBytes.size() ) );
 	const bool grow_i32 = !pSnapshot->m_index32Bytes.is_empty() &&
 						  m_index32Arena.needsCapacity( ( uint32_t ) ( pSnapshot->m_index32Bytes.size() ) );
@@ -1506,6 +1514,21 @@ bool Terrain3DRdMeshCache::upload(
 		setError( "RD mesh-cache upload failed to retain published mesh metadata" );
 		return false;
 	}
+	// Source keys are unique in validated snapshots; sort the slot map once
+	// after retaining metadata rather than repeatedly scanning every mesh LOD.
+	m_sourceLookup.clear();
+	for ( uint32_t iLod = 0u; iLod < ( uint32_t ) m_lods.size(); ++iLod ) {
+		if ( !t3dVectorPushBackWithinCapacity( m_sourceLookup,
+			t3dRdMeshSourceLookup_t{ m_lods[iLod].m_nSourceKey, iLod, 0u } ) ) {
+			++m_nUploadFailureCount;
+			setError( "RD mesh-cache could not build its reserved source-key index" );
+			return false;
+		}
+	}
+	eastl::sort( m_sourceLookup.begin(), m_sourceLookup.end(),
+		[]( const t3dRdMeshSourceLookup_t &rA, const t3dRdMeshSourceLookup_t &rB ) {
+			return rA.m_nSourceKey < rB.m_nSourceKey;
+		} );
 	m_nSourceGeneration = pSnapshot->m_nGeneration;
 	m_nGeneration = t3dNextGeneration( m_nGeneration );
 	m_lastError = String();
@@ -1523,6 +1546,7 @@ void Terrain3DRdMeshCache::shutdown(
 	m_lastError = String();
 	m_surfaces.clear();
 	m_lods.clear();
+	m_sourceLookup.clear();
 	m_materials.clear();
 	m_vtMaterials.clear();
 	m_vtStableKeys.clear();
@@ -1545,13 +1569,18 @@ t3dRdMeshHandle_t Terrain3DRdMeshCache::getOcclusionProxyMeshHandle(
 
 t3dRdMeshHandle_t Terrain3DRdMeshCache::getMeshHandleBySourceKey(
 	const uint64_t nSourceKey ) const {
-	for ( uint32_t i = 0u; i < ( uint32_t ) ( m_lods.size() ); ++i ) {
-		if ( m_lods[i].m_nSourceKey == nSourceKey ) {
-			t3dRdMeshHandle_t handle;
-			handle.m_nSlot = i;
-			handle.m_nGeneration = m_nGeneration;
-			return handle;
+	size_t low = 0u;
+	size_t high = m_sourceLookup.size();
+	while ( low < high ) {
+		const size_t middle = low + ( high - low ) / 2u;
+		if ( m_sourceLookup[middle].m_nSourceKey < nSourceKey ) {
+			low = middle + 1u;
+		} else {
+			high = middle;
 		}
+	}
+	if ( low < m_sourceLookup.size() && m_sourceLookup[low].m_nSourceKey == nSourceKey ) {
+		return t3dRdMeshHandle_t{ m_sourceLookup[low].m_nLodSlot, m_nGeneration };
 	}
 	t3dRdMeshHandle_t handle;
 	handle.m_nSlot = UINT32_MAX;

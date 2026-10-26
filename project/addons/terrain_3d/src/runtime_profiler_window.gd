@@ -787,7 +787,7 @@ func _build_spatial_tab() -> void:
 	var legend: RichTextLabel = RichTextLabel.new()
 	legend.fit_content = true
 	legend.bbcode_enabled = true
-	legend.text = "[b]Region state[/b]\nRed: ACTIVE\nGold: HOT\nBlue: COLD\nDark: UNLOADED\nCyan outline: predicted promotion\n\n[b]Residency markers[/b]\nGreen inner box: full surface GPU page\nPurple bottom line: Middle height page\nBlue top line: CPU full maps\nOrange dot: instance resident\nYellow dot: Far atlas dirty\nPurple center: preparing/ready\nGray outline: retiring\nWhite box: target/selection"
+	legend.text = "[b]Region state[/b]\nRed: ACTIVE\nGold: HOT\nBlue: COLD\nDark: UNLOADED\nCyan outline: predicted promotion\n\n[b]Residency markers[/b]\nGreen inner box: full surface GPU page\nPurple bottom line: Middle height page\nBlue top line: CPU full maps\nOrange dot: instance resident\nYellow dot: Regional coarse V1 cook dirty\nPurple center: preparing/ready\nGray outline: retiring\nWhite box: target/selection"
 	sidebar.add_child(legend)
 	_residency_detail = RichTextLabel.new()
 	_residency_detail.bbcode_enabled = true
@@ -1574,7 +1574,7 @@ func _update_validation(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 	if gpu.bool_value("cooked_pages_enabled") and gpu.int_value("cooked_misses_last_tick") > 0:
 		lines.append("[color=orange]Cooked pages missed this tick; runtime fallback was used.[/color]")
 	if gpu.int_value("far_height_dirty_regions") + gpu.int_value("far_color_dirty_regions") > 0:
-		lines.append("Far-atlas patches remain dirty.")
+		lines.append("FAR V1 source patches remain dirty.")
 	var adaptive: Terrain3DRuntimeValueMap = p_snapshot.map_value("adaptive_budgets")
 	if adaptive.bool_value("enabled"):
 		var requested_minimum: Terrain3DRuntimeValueMap = adaptive.map_value("requested_minimum")

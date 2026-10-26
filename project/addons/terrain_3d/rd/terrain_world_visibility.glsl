@@ -361,6 +361,19 @@ out uint bucket, out uint actual_vertex_count, out uint rejection)
 		float lod_begin = inst.lod_range.x;
 		float lod_end = inst.lod_range.y;
 		float fade = max(inst.fade_margin, 0.0);
+        // Per-cluster authored LOD bounds are FP16 distances in the existing
+        // previously-unused reserved DWORD. Single-LOD/static legacy clusters are zero.
+        if (item.geometryKind == KIND_STATIC && cl.reserved != 0u)
+        {
+            vec2 authored_range = unpackHalf2x16(cl.reserved);
+            // All LOD clusters of one instance use the same transform origin
+            // so differing simplified-cluster centroids cannot open LOD gaps.
+            float authored_distance = length(frame.cameraAndMaxDistance.xyz -
+                vec3(tr.row0.w, tr.row1.w, tr.row2.w));
+            if (authored_distance < authored_range.x ||
+                authored_distance >= authored_range.y)
+                return false;
+        }
 		if (lod_end > lod_begin && (distance_to_camera < max(0.0, lod_begin - fade) || distance_to_camera > lod_end + fade))
 		{
 			rejection = 0u;
@@ -639,6 +652,19 @@ void main()
 		float lod_begin = inst.lod_range.x;
 		float lod_end = inst.lod_range.y;
 		float fade = max(inst.fade_margin, 0.0);
+        // Per-cluster authored LOD bounds are FP16 distances in the existing
+        // previously-unused reserved DWORD. Single-LOD/static legacy clusters are zero.
+        if (item.geometryKind == KIND_STATIC && cl.reserved != 0u)
+        {
+            vec2 authored_range = unpackHalf2x16(cl.reserved);
+            // All LOD clusters of one instance use the same transform origin
+            // so differing simplified-cluster centroids cannot open LOD gaps.
+            float authored_distance = length(frame.cameraAndMaxDistance.xyz -
+                vec3(tr.row0.w, tr.row1.w, tr.row2.w));
+            if (authored_distance < authored_range.x ||
+                authored_distance >= authored_range.y)
+                return;
+        }
 		if (lod_end > lod_begin && (distance_to_camera < max(0.0, lod_begin - fade) || distance_to_camera > lod_end + fade))
 		{
 			atomicAdd(counter_storage[t3d_hot_records[T3D_HOT_INDEX].world_bases[16] + T3D_WORLD_VIS_COUNTER_LOD_REJECT], 1u);

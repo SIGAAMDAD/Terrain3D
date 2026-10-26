@@ -94,31 +94,6 @@ static t3dWorldTransform_t t3dWorldDecodeInstanceTransform(
 	return result;
 }
 
-static bool t3dWorldFindMeshClusterSpan(
-	const t3dRdMeshSourceSnapshot_t &rMeshes,
-	const uint64_t					 nSourceKey,
-	uint32_t						&rFirstCluster,
-	uint32_t						&rClusterCount ) {
-	uint32_t first = UINT32_MAX;
-	uint32_t end = 0u;
-	for ( size_t i = 0u; i < rMeshes.m_surfaces.size(); ++i ) {
-		const t3dRdMeshSourceSurface_t &surface = rMeshes.m_surfaces[i];
-		if ( surface.m_nSourceKey != nSourceKey || surface.m_nWorldClusterCount == 0u ) {
-			continue;
-		}
-		first = MIN( first, surface.m_nWorldClusterOffset );
-		end = MAX( end, surface.m_nWorldClusterOffset + surface.m_nWorldClusterCount );
-	}
-	if ( first == UINT32_MAX || end <= first ) {
-		rFirstCluster = 0u;
-		rClusterCount = 0u;
-		return false;
-	}
-	rFirstCluster = first;
-	rClusterCount = end - first;
-	return true;
-}
-
 static uint32_t t3dWorldSourceId(
 	const uint64_t nSourceKey ) {
 	return ( uint32_t ) ( nSourceKey ) ^ ( uint32_t ) ( nSourceKey >> 32u );
@@ -264,6 +239,9 @@ bool Terrain3DRenderPublicationBuilder::hasInstancePublicationCapacity(
 
 bool Terrain3DRenderPublicationBuilder::hasInstanceMeshBankCapacity(
 	void ) const {
+	if ( m_meshSourceIndex.capacity() < m_cachedInstanceMeshes.m_lods.size() ) {
+		return false;
+	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceMeshBanks ); iBank++ ) {
 		const t3dRdMeshSourceSnapshot_t &snapshot = ( m_instanceMeshBanks )[iBank].m_snapshot;
 		if ( snapshot.m_vertexChunkHashes.capacity() < m_cachedInstanceMeshes.m_vertexChunkHashes.size() ||
@@ -385,6 +363,9 @@ bool Terrain3DRenderPublicationBuilder::ensureInstanceMeshBankStorage(
 	if ( !m_bColdCapacityServiceActive ) {
 		++m_nOwnerGrowthDeniedCount;
 		LOG( ERROR, "RD mesh-bank owner backing growth requested outside serviceColdCapacity()" );
+		return false;
+	}
+	if ( !m_meshSourceIndex.reserveCold( m_cachedInstanceMeshes.m_lods.size() ) ) {
 		return false;
 	}
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_instanceMeshBanks ); iBank++ ) {
@@ -784,6 +765,24 @@ bool Terrain3DRenderPublicationBuilder::publishOceanState(
 	return true;
 }
 
+bool Terrain3DRenderPublicationBuilder::commitSuperTerrainCandidateCold(
+    Terrain3DStPublicationImage &rImage, uint64_t nExpectedRegionTopology )
+{
+    if ( !rImage.valid() || nExpectedRegionTopology == 0u )
+    {
+        return false;
+    }
+    if ( m_stCommitted.valid() && m_stCommitted.signature() == rImage.signature() &&
+         m_nStExpectedTopology == nExpectedRegionTopology )
+    {
+        return true;
+    }
+    m_stCommitted.swap( rImage );
+    m_nStExpectedTopology = nExpectedRegionTopology;
+    m_nStCommitEpoch = t3dNextGeneration( m_nStCommitEpoch );
+    return true;
+}
+
 bool Terrain3DRenderPublicationBuilder::publishRegionState(
 	const t3dPublicationServices_t		 &rServices,
 	t3dRdFrameSnapshotSlot_t			 &publication,
@@ -853,16 +852,15 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 		LOG( ERROR, "Unable to refresh Terrain3D regional shadowmask residency after lighting change" );
 		return false;
 	}
-    const uint64_t far_vt_publication_generation = rServices.m_virtualTexture.getPackagePublicationGeneration();
-    const uint64_t far_avt_source_publication_revision = data->getGpuFarAvtPublicationRevision();
+    const uint64_t vt_package_publication_generation = rServices.m_virtualTexture.getPackagePublicationGeneration();
 	const bool	   region_map_changed =
 		!m_bRegionMapInitialized ||
 		physical_region_map_generation != m_nPhysicalRegionMapGeneration ||
 		region_topology_generation != m_nRegionTopologyGeneration || bRegionLightingChanged ||
 		height_texture_ready != m_bRegionMapHeightTextureReady || bTerrainMegaVTReady != m_bTerrainMegaVTReady ||
 		nTerrainMegaVTPublicationGeneration != m_nTerrainMegaVTPublicationGeneration ||
-        far_vt_publication_generation != m_nFarVTPublicationGeneration ||
-        far_avt_source_publication_revision != m_nFarAvtSourcePublicationRevision;
+        vt_package_publication_generation != m_nVTPackagePublicationGeneration ||
+        m_nStCommitEpoch != m_nStRegionMapEpoch;
 	if ( region_map_changed ) {
 		const uint32_t pending_bank = pPending ? pPending->m_nRegionMapBank : T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 		const uint32_t bank =
@@ -907,40 +905,11 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 			gpu_region.m_nPackedPhysicalFlags =
 				nPhysicalLayer | ( nShadowmaskMode << 16u ) | nLogicalPresent;
 			gpu_region.m_nMegaVTAllocation = T3D_VT_INVALID_ALLOCATION;
-            gpu_region.m_nFarVTAllocation = T3D_VT_INVALID_ALLOCATION;
+            gpu_region.m_nVhmRootIndex = 0xffffffffu;
+            gpu_region.m_nMaskRootIndex = 0xffffffffu;
             gpu_region.m_nComposedVTAllocation = T3D_VT_INVALID_ALLOCATION;
             gpu_region.m_nComposedVTGeneration = 0u;
-            if ( nLogicalPresent != 0u ) {
-                // The renderer may keep its previous package while an authoring
-                // transaction is dirty. Never sample its stale FAR allocation.
-                bool current = true;
-#if defined( T3D_EDITOR_NATIVE )
-                current = !data->isGpuFarAvtRegionCookDirty( map_location );
-#endif
-                if ( current ) {
-                    const bool farReady = rServices.m_virtualTexture.getFarSurfaceAllocationCold(
-                        ( uint32_t ) source_index, gpu_region.m_nFarVTAllocation,
-                        gpu_region.m_nFarVTGeneration );
-#if defined( T3D_EDITOR_NATIVE )
-                    // A successful regional disk cook can precede (or survive a
-                    // failure of) the shared V1 package publication. Compare
-                    // the authored tile signature against the active package;
-                    // an older package must not silently become current.
-                    current = farReady && gpu_region.m_nFarVTGeneration ==
-                        data->getGpuFarAvtCookedPackageGeneration( map_location );
-#else
-                    current = farReady;
-#endif
-                    if ( current ) {
-                        rServices.m_virtualTexture.getComposedRegionAllocationCold(
-                            ( uint32_t ) source_index, gpu_region.m_nComposedVTAllocation,
-                            gpu_region.m_nComposedVTGeneration );
-                    } else {
-                        gpu_region.m_nFarVTAllocation = T3D_VT_INVALID_ALLOCATION;
-                        gpu_region.m_nFarVTGeneration = 0u;
-                    }
-                }
-            }
+            gpu_region.m_nRegionStateFlags = 0u; // Transitional FAR V1 shader alias.
 			if ( nLogicalPresent != 0u && bTerrainMegaVTReady ) {
 				const t3dTerrainMegaVTRegion_t *const pMegaRegion =
 					rServices.m_terrainMegaVT.getRegion( ( uint32_t ) ( source_index ) );
@@ -953,6 +922,28 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 							sizeof( gpu_region.m_vMegaVTWorldToUv ) );
 				}
 			}
+            if ( nLogicalPresent != 0u && source_index >= 0 &&
+                 m_stCommitted.valid() && m_nStExpectedTopology == region_topology_generation )
+            {
+                const t3dStRegionRecordV1_t &stRegion = m_stCommitted.regions()[ (uint32_t) i ];
+                uint32_t currentComposed = T3D_VT_INVALID_ALLOCATION;
+                uint32_t currentGeneration = 0u;
+                if ( t3dStRegionReady( &stRegion ) &&
+                     rServices.m_virtualTexture.getComposedRegionAllocationCold(
+                         (uint32_t) source_index, currentComposed, currentGeneration ) &&
+                     currentComposed == stRegion.m_nComposedVTAllocation &&
+                     currentGeneration == stRegion.m_nComposedVTGeneration )
+                {
+                    gpu_region.m_nComposedVTAllocation = currentComposed;
+                    gpu_region.m_nComposedVTGeneration = currentGeneration;
+                    gpu_region.m_nVhmRootIndex = stRegion.m_nVhmRootIndex;
+                    gpu_region.m_nVhmGeneration = stRegion.m_nVhmGeneration;
+                    gpu_region.m_nMaskRootIndex = stRegion.m_nMaskRootIndex;
+                    gpu_region.m_nMaskGeneration = stRegion.m_nMaskGeneration;
+                    gpu_region.m_nPublicationGeneration = stRegion.m_nPublicationGeneration;
+                    gpu_region.m_nRegionStateFlags = stRegion.m_nRegionStateFlags;
+                }
+            }
 			memcpy( pPackedRegionMap + i * ( int64_t ) ( sizeof( t3dRdTerrainRegionGpu_t ) ),
 					&gpu_region,
 					sizeof( gpu_region ) );
@@ -962,8 +953,8 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
 		m_nRegionLightingSignature = region_lighting_signature;
 		m_bRegionMapHeightTextureReady = height_texture_ready;
 		m_nTerrainMegaVTPublicationGeneration = nTerrainMegaVTPublicationGeneration;
-        m_nFarVTPublicationGeneration = far_vt_publication_generation;
-        m_nFarAvtSourcePublicationRevision = far_avt_source_publication_revision;
+        m_nVTPackagePublicationGeneration = vt_package_publication_generation;
+        m_nStRegionMapEpoch = m_nStCommitEpoch;
 		m_bTerrainMegaVTReady = bTerrainMegaVTReady;
 		m_nRegionMapGeneration = t3dNextGeneration( m_nRegionMapGeneration );
 		m_regionMapBanks[bank].m_nGeneration = m_nRegionMapGeneration;
@@ -1112,6 +1103,12 @@ bool Terrain3DRenderPublicationBuilder::publishInstanceState(
 			recordCapacityMiss( "RD instance mesh bank", required, capacity, true );
 			return false;
 		}
+	}
+
+	if ( m_meshSourceIndex.getSourceGeneration() != m_cachedInstanceMeshes.m_nGeneration &&
+		 !m_meshSourceIndex.rebuildCold( m_cachedInstanceMeshes ) ) {
+		rServices.m_host.reportPublicationError( "RD mesh source index has invalid spans or insufficient capacity" );
+		return false;
 	}
 
 	Terrain3DInstancer *const instancer = rServices.m_pTerrain->instancerObject();
@@ -1308,13 +1305,24 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 		return true;
 	}
 
+	// Cold-only geometry admission. Existing source revisions keep stable WORLD
+	// offsets even when an earlier HLOD source leaves the active scene.
+	{
+		Terrain3DColdPhaseScope cold_phase_scope;
+		if ( !m_worldGeometryCache.synchronizeCold( m_cachedInstanceMeshes, pStaticWorld,
+				world_lease.producerId(), rServices.m_pTerrain->getWorldResourceLimitsInternal() ) ) {
+			rServices.m_host.reportPublicationError( "WORLD stable geometry cache admission failed" );
+			return false;
+		}
+	}
+	const Terrain3DWorldPublication &cached_geometry = m_worldGeometryCache.geometry();
 	t3dWorldPublicationCapacity_t required{};
-	required.m_nVertices = m_cachedInstanceMeshes.m_worldVertices.size();
-	required.m_nClusterVertexIndices = m_cachedInstanceMeshes.m_worldClusterVertexIndices.size();
-	required.m_nTriangleWords = m_cachedInstanceMeshes.m_worldTriangleWords.size();
-	required.m_nClusters = m_cachedInstanceMeshes.m_worldClusters.size();
-	required.m_nClusterVtMetadata = m_cachedInstanceMeshes.m_worldClusterVtMetadata.size();
-	required.m_nMaterials = m_cachedInstanceMeshes.m_vtMaterials.size();
+	required.m_nVertices = cached_geometry.m_vertices.size();
+	required.m_nClusterVertexIndices = cached_geometry.m_clusterVertexIndices.size();
+	required.m_nTriangleWords = cached_geometry.m_triangleWords.size();
+	required.m_nClusters = cached_geometry.m_clusters.size();
+	required.m_nClusterVtMetadata = cached_geometry.m_clusterVtMetadata.size();
+	required.m_nMaterials = cached_geometry.m_materials.size();
 	required.m_nInstances = m_cachedInstanceScene.m_instances.size();
 	required.m_nCells = m_cachedInstanceScene.m_cells.size();
 	required.m_nTransforms = required.m_nInstances;
@@ -1323,7 +1331,7 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 	required.m_nVisibilityCandidates = required.m_nTerrainStripClusters;
 	for ( size_t i = 0u; i < m_cachedInstanceScene.m_cells.size(); ++i ) {
 		uint32_t cluster_offset = 0u, cluster_count = 0u;
-		if ( t3dWorldFindMeshClusterSpan( m_cachedInstanceMeshes,
+		if ( m_worldGeometryCache.findActiveSpan(
 										  m_cachedInstanceScene.m_cells[i].m_nMeshSourceKey,
 										  cluster_offset,
 										  cluster_count ) ) {
@@ -1333,12 +1341,6 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 		}
 	}
 	if ( pStaticWorld ) {
-		t3dWorldAccumulateCapacity( required.m_nVertices, pStaticWorld->m_vertices.size() );
-		t3dWorldAccumulateCapacity( required.m_nClusterVertexIndices, pStaticWorld->m_clusterVertexIndices.size() );
-		t3dWorldAccumulateCapacity( required.m_nTriangleWords, pStaticWorld->m_triangleWords.size() );
-		t3dWorldAccumulateCapacity( required.m_nClusters, pStaticWorld->m_clusters.size() );
-		t3dWorldAccumulateCapacity( required.m_nClusterVtMetadata, pStaticWorld->m_clusterVtMetadata.size() );
-		t3dWorldAccumulateCapacity( required.m_nMaterials, pStaticWorld->m_materials.size() );
 		t3dWorldAccumulateCapacity( required.m_nTransforms, pStaticWorld->m_transforms.size() );
 		t3dWorldAccumulateCapacity( required.m_nInstances, pStaticWorld->m_instances.size() );
 		t3dWorldAccumulateCapacity( required.m_nCells, pStaticWorld->m_cells.size() );
@@ -1367,54 +1369,39 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 		return false;
 	}
 	Terrain3DWorldPublication &world = m_worldPublicationBanks[bank_index].m_publication;
-	const uint64_t			   mesh_payload_parts[3] = { m_cachedInstanceMeshes.m_nGeneration,
-														 static_payload_signature,
-														 ( uint64_t ) m_cachedInstanceMeshes.m_vtMaterials.size() };
+	const uint64_t mesh_payload_parts[3] = { m_worldGeometryCache.getCacheEpoch(),
+													m_worldGeometryCache.getGeometryRevision(),
+													m_worldGeometryCache.getMaterialRevision() };
 	const uint64_t mesh_payload_signature = t3dHashPublicationBytes( mesh_payload_parts, sizeof( mesh_payload_parts ) );
-	const bool	   reuse_mesh_payload =
-		world.m_nMeshPayloadSignature == mesh_payload_signature && world.m_nGeneration != 0u;
-	world.clearForBuild( reuse_mesh_payload );
+	const bool reuse_mesh_payload = world.m_nMeshPayloadSignature == mesh_payload_signature && world.m_nGeneration != 0u;
+	world.clearForBuild( true );
 	if ( reuse_mesh_payload ) {
 		++m_nWorldMeshPayloadReuseCount;
 	}
-	world.m_nSourceSignature = source_signature;
-
-	if ( !reuse_mesh_payload ) {
-		world.m_vertices.insert( world.m_vertices.end(),
-								 m_cachedInstanceMeshes.m_worldVertices.begin(),
-								 m_cachedInstanceMeshes.m_worldVertices.end() );
-		world.m_clusterVertexIndices.insert( world.m_clusterVertexIndices.end(),
-											 m_cachedInstanceMeshes.m_worldClusterVertexIndices.begin(),
-											 m_cachedInstanceMeshes.m_worldClusterVertexIndices.end() );
-		world.m_triangleWords.insert( world.m_triangleWords.end(),
-									  m_cachedInstanceMeshes.m_worldTriangleWords.begin(),
-									  m_cachedInstanceMeshes.m_worldTriangleWords.end() );
-		world.m_clusters.insert( world.m_clusters.end(),
-								 m_cachedInstanceMeshes.m_worldClusters.begin(),
-								 m_cachedInstanceMeshes.m_worldClusters.end() );
-		world.m_clusterVtMetadata.insert( world.m_clusterVtMetadata.end(),
-										  m_cachedInstanceMeshes.m_worldClusterVtMetadata.begin(),
-										  m_cachedInstanceMeshes.m_worldClusterVtMetadata.end() );
+	if ( !m_worldGeometryCache.copyGeometryInto( world ) ) {
+		return false;
 	}
-	world.m_materials.insert( world.m_materials.end(),
-							  m_cachedInstanceMeshes.m_vtMaterials.begin(),
-							  m_cachedInstanceMeshes.m_vtMaterials.end() );
+	world.m_nSourceSignature = source_signature;
+	world.m_materials.insert( world.m_materials.end(), cached_geometry.m_materials.begin(),
+										 cached_geometry.m_materials.end() );
 	world.m_instanceMaterialStableKeys.insert( world.m_instanceMaterialStableKeys.end(),
-											   m_cachedInstanceMeshes.m_vtStableKeys.begin(),
-											   m_cachedInstanceMeshes.m_vtStableKeys.end() );
-	for ( size_t i = 0u; i < m_cachedInstanceMeshes.m_worldClusters.size(); ++i ) {
-		const uint32_t kind = m_cachedInstanceMeshes.m_worldClusters[i].m_nPackedLodGeometryKind >> 16u;
-		if ( kind == T3D_WORLD_GEOMETRY_HLOD_CLUSTER ) {
-			++world.m_nHlodClusterCount;
+		cached_geometry.m_instanceMaterialStableKeys.begin(), cached_geometry.m_instanceMaterialStableKeys.end() );
+	for ( size_t i = 0u; i < m_cachedInstanceMeshes.m_lods.size(); ++i ) {
+		uint32_t offset = 0u, count = 0u;
+		if ( !m_worldGeometryCache.findActiveSpan( m_cachedInstanceMeshes.m_lods[i].m_nSourceKey, offset, count ) ) {
+			continue;
+		}
+		if ( ( m_cachedInstanceMeshes.m_lods[i].m_nSourceKey >> 60u ) == 2u ) {
+			world.m_nHlodClusterCount += count;
 		} else {
-			++world.m_nInstanceClusterCount;
+			world.m_nInstanceClusterCount += count;
 		}
 	}
 
 	for ( size_t iCell = 0u; iCell < m_cachedInstanceScene.m_cells.size(); ++iCell ) {
 		const t3dRdInstanceCell_t &source_cell = m_cachedInstanceScene.m_cells[iCell];
 		uint32_t				   cluster_offset = 0u, cluster_count = 0u;
-		if ( !t3dWorldFindMeshClusterSpan( m_cachedInstanceMeshes,
+		if ( !m_worldGeometryCache.findActiveSpan(
 										   source_cell.m_nMeshSourceKey,
 										   cluster_offset,
 										   cluster_count ) ) {
@@ -1486,42 +1473,15 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 	}
 
 	if ( pStaticWorld ) {
-		const uint32_t vertex_base = ( uint32_t ) m_cachedInstanceMeshes.m_worldVertices.size();
-		const uint32_t index_base = ( uint32_t ) m_cachedInstanceMeshes.m_worldClusterVertexIndices.size();
-		const uint32_t triangle_base = ( uint32_t ) m_cachedInstanceMeshes.m_worldTriangleWords.size();
-		const uint32_t cluster_base = ( uint32_t ) m_cachedInstanceMeshes.m_worldClusters.size();
-		const uint32_t material_base = ( uint32_t ) world.m_materials.size();
+		uint32_t cluster_base = 0u, static_cluster_count = 0u;
+		if ( !pStaticWorld->m_clusters.empty() &&
+			 !m_worldGeometryCache.getStaticSpan( cluster_base, static_cluster_count ) ) {
+			return false;
+		}
 		const uint32_t transform_base = ( uint32_t ) world.m_transforms.size();
 		const uint32_t instance_base = ( uint32_t ) world.m_instances.size();
 		const uint32_t cell_base = ( uint32_t ) world.m_cells.size();
 
-		if ( !reuse_mesh_payload ) {
-			world.m_vertices.insert( world.m_vertices.end(),
-									 pStaticWorld->m_vertices.begin(),
-									 pStaticWorld->m_vertices.end() );
-			for ( size_t i = 0u; i < pStaticWorld->m_clusterVertexIndices.size(); ++i ) {
-				world.m_clusterVertexIndices.push_back( vertex_base + pStaticWorld->m_clusterVertexIndices[i] );
-			}
-			world.m_triangleWords.insert( world.m_triangleWords.end(),
-										  pStaticWorld->m_triangleWords.begin(),
-										  pStaticWorld->m_triangleWords.end() );
-		}
-		world.m_materials.insert( world.m_materials.end(),
-								  pStaticWorld->m_materials.begin(),
-								  pStaticWorld->m_materials.end() );
-		if ( !reuse_mesh_payload ) {
-			for ( size_t i = 0u; i < pStaticWorld->m_clusters.size(); ++i ) {
-				t3dWorldCluster_t cluster = pStaticWorld->m_clusters[i];
-				cluster.m_nVertexIndexOffset += index_base;
-				cluster.m_nTriangleOffset += triangle_base;
-				if ( cluster.m_nMaterial != T3D_WORLD_INVALID_ID )
-					cluster.m_nMaterial += material_base;
-				world.m_clusters.push_back( cluster );
-			}
-			world.m_clusterVtMetadata.insert( world.m_clusterVtMetadata.end(),
-											  pStaticWorld->m_clusterVtMetadata.begin(),
-											  pStaticWorld->m_clusterVtMetadata.end() );
-		}
 		world.m_transforms.insert( world.m_transforms.end(),
 								   pStaticWorld->m_transforms.begin(),
 								   pStaticWorld->m_transforms.end() );
@@ -1533,8 +1493,11 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 			instance.m_nClusterOffset += cluster_base;
 			instance.m_nTransformIndex += transform_base;
 			instance.m_nPreviousTransformIndex += transform_base;
-			if ( instance.m_nMaterialOverride != T3D_WORLD_INVALID_ID )
-				instance.m_nMaterialOverride += material_base;
+			if ( instance.m_nMaterialOverride != T3D_WORLD_INVALID_ID &&
+				 !m_worldGeometryCache.getStaticMaterialSlot( instance.m_nMaterialOverride,
+														instance.m_nMaterialOverride ) ) {
+				return false;
+			}
 			if ( instance.m_nCellId != T3D_WORLD_INVALID_ID )
 				instance.m_nCellId += cell_base;
 			world.m_instances.push_back( instance );
@@ -1566,7 +1529,7 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 		const t3dWorldInstance_t &instance = world.m_instances[iInstance];
 		for ( uint32_t local = 0u; local < instance.m_nClusterCount; ++local ) {
 			const uint32_t cluster_id = instance.m_nClusterOffset + local;
-			if ( cluster_id >= world.m_clusters.size() ) {
+			if ( cluster_id >= world.clusters().size() ) {
 				break;
 			}
 			t3dWorldVisibleItem_t candidate{};
@@ -1588,12 +1551,14 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState(
 	}
 
 	m_nWorldPublicationGeneration = t3dNextGeneration( m_nWorldPublicationGeneration );
-	m_nWorldGeometryGeneration = t3dNextGeneration( m_nWorldGeometryGeneration );
-	m_nWorldMaterialGeneration = t3dNextGeneration( m_nWorldMaterialGeneration );
+	m_nWorldGeometryGeneration = m_worldGeometryCache.getGeometryRevision();
+	m_nWorldMaterialGeneration = m_worldGeometryCache.getMaterialRevision();
 	world.m_nGeneration = m_nWorldPublicationGeneration;
+	m_worldGeometryCache.tagRetiredSourcesCold( world.m_nGeneration );
 	world.m_nGeometryGeneration = m_nWorldGeometryGeneration;
 	world.m_nMaterialGeneration = m_nWorldMaterialGeneration;
 	world.m_nInstanceGeneration = m_cachedInstanceScene.m_nGeneration;
+	world.m_nHlodSourceGeneration = m_nHlodSceneGeneration;
 	world.m_nTerrainGeneration = terrain_topology_signature;
 	world.m_nStaticGeneration = static_payload_signature;
 	world.m_nMeshPayloadSignature = mesh_payload_signature;
@@ -2017,14 +1982,18 @@ void Terrain3DRenderPublicationBuilder::reset(
 	m_nInstanceSceneReaderBank.store( T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX, T3D_MEMORY_ORDER_RELEASE );
 	m_nOceanStripReaderBank.store( T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX, T3D_MEMORY_ORDER_RELEASE );
 	m_nWorldPublicationReaderBank.store( T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX, T3D_MEMORY_ORDER_RELEASE );
+    Terrain3DStPublicationImage emptySuperTerrain;
+    m_stCommitted.swap( emptySuperTerrain );
+    m_nStExpectedTopology = UINT64_MAX;
+    m_nStCommitEpoch = 0u;
+    m_nStRegionMapEpoch = UINT64_MAX;
 	m_nCurrentRegionMapBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nCurrentInstanceMeshBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nCurrentInstanceSceneBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nCurrentOceanStripBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nCurrentWorldPublicationBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
 	m_nRegionTopologyGeneration = 0u;
-    m_nFarVTPublicationGeneration = UINT64_MAX;
-    m_nFarAvtSourcePublicationRevision = UINT64_MAX;
+    m_nVTPackagePublicationGeneration = UINT64_MAX;
 	m_nPhysicalRegionMapGeneration = 0u;
 	m_nRegionLightingSignature = 0u;
 	m_nRegionMapGeneration = 0u;
@@ -2048,6 +2017,7 @@ void Terrain3DRenderPublicationBuilder::reset(
 	m_bRegionCacheInitialized = false;
 	m_bPatchStateInitialized = false;
 	m_bPublishedResourcesInitialized = false;
+	m_worldGeometryCache.reset();
 }
 
 bool Terrain3DRenderPublicationBuilder::bindRuntimeAllocator(
@@ -2058,6 +2028,8 @@ bool Terrain3DRenderPublicationBuilder::bindRuntimeAllocator(
 	}
 	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
 	m_cachedHlodMeshSources.set_allocator( allocator );
+	m_meshSourceIndex.bindRuntimeAllocator( allocator );
+	m_worldGeometryCache.bindRuntimeAllocator( allocator );
 	m_cachedInstanceMeshes.bindRuntimeAllocator( allocator );
 	m_cachedRegularInstanceScene.bindRuntimeAllocator( pZone, ePolicy );
 	m_cachedHlodInstanceScene.bindRuntimeAllocator( pZone, ePolicy );
@@ -2066,6 +2038,7 @@ bool Terrain3DRenderPublicationBuilder::bindRuntimeAllocator(
 		m_instanceMeshBanks[i].m_snapshot.bindRuntimeAllocator( allocator );
 		m_instanceSceneBanks[i].m_snapshot.bindRuntimeAllocator( pZone, ePolicy );
 		m_worldPublicationBanks[i].m_publication.bindRuntimeAllocator( allocator );
+        m_worldPublicationBanks[i].m_publication.enableSharedGeometryConsumerCold();
 	}
 	return true;
 }
@@ -2113,6 +2086,8 @@ void Terrain3DRenderPublicationBuilder::initializeOcean(
 
 void Terrain3DRenderPublicationBuilder::clearCachedSources(
 	void ) {
+	m_meshSourceIndex.reset();
+	m_worldGeometryCache.reset();
 	m_cachedInstanceMeshes = t3dRdMeshSourceSnapshot_t{};
 	m_bCachedInstanceMeshesValid = false;
 	m_cachedRegularInstanceScene = t3dRdInstanceSceneSnapshot_t{};
@@ -2137,6 +2112,73 @@ void Terrain3DRenderPublicationBuilder::clearCachedSources(
 	m_bWorldPublicationCapacityPending = true;
 }
 
+bool Terrain3DRenderPublicationBuilder::compactRetiredGlobalMeshesOwner(
+    const uint64_t nCompletedPublicationGeneration, const t3dWorldResourceLimits_t &rLimits )
+{
+    // A fence covering the first prepared WORLD publication that excludes a
+    // retired source also completes all earlier draws of that source. Later
+    // publications cannot revive a zero-lease allocation without first
+    // reactivating it, which prevents the cache from retiring it. Waiting for
+    // the latest generation would starve reclamation during active streaming.
+    if ( !nCompletedPublicationGeneration ) {
+        return false;
+    }
+    Terrain3DColdPhaseScope cold_phase_scope;
+    // Fence-certified retirement returns independent WORLD stream ranges without
+    // relocating live sources or invalidating their published cluster offsets.
+    if ( m_worldGeometryCache.releaseCompletedRetirementsCold( nCompletedPublicationGeneration ) ) {
+        return true;
+    }
+    const uint64_t nRetiredBytes = m_worldGeometryCache.getQuarantinedGeometryBytes();
+    const uint64_t nLiveBytes = m_worldGeometryCache.getLiveGeometryBytes();
+    const Terrain3DWorldPublication &cached = m_worldGeometryCache.geometry();
+    const bool bCapacityPressure =
+        ( rLimits.m_nMaxSourceVertices && cached.m_vertices.size() * 4u >=
+            uint64_t( rLimits.m_nMaxSourceVertices ) * 3u ) ||
+        ( rLimits.m_nMaxClusterVertexIndices && cached.m_clusterVertexIndices.size() * 4u >=
+            uint64_t( rLimits.m_nMaxClusterVertexIndices ) * 3u ) ||
+        ( rLimits.m_nMaxTriangleSlots && cached.m_triangleWords.size() * 4u >=
+            uint64_t( rLimits.m_nMaxTriangleSlots ) * 3u ) ||
+        ( rLimits.m_nMaxClusters && cached.m_clusters.size() * 4u >=
+            uint64_t( rLimits.m_nMaxClusters ) * 3u );
+    // Avoid rebuilding all live geometry for small isolated unloads. Reclaim
+    // immediately under capacity pressure; otherwise batch retired spans until
+    // they exceed 4 MiB or half the retained geometry. No allocation in hot paths.
+    if ( !nRetiredBytes ||
+         ( !bCapacityPressure && nRetiredBytes < 4u * 1024u * 1024u &&
+           nRetiredBytes < nLiveBytes ) ) {
+        return false;
+    }
+    if ( !m_worldGeometryCache.compactAfterGpuCompletionCold( nCompletedPublicationGeneration, rLimits ) ) {
+        return false;
+    }
+    // The compacted offsets are a new immutable layout. A new publication
+    // must be built even when imported scene/terrain source signatures match.
+    m_nCurrentWorldPublicationBank = T3D_RD_INVALID_FRAME_SNAPSHOT_INDEX;
+    return true;
+}
+
+godot::Dictionary Terrain3DRenderPublicationBuilder::getGlobalMeshCacheDiagnosticsOwner( void ) const
+{
+	godot::Dictionary stats;
+	stats["active_source_records"] = ( int64_t ) m_worldGeometryCache.getActiveSourceCount();
+	stats["tracked_source_records"] = ( int64_t ) m_worldGeometryCache.getTrackedSourceCount();
+	stats["deduplicated_sources_total"] = ( int64_t ) m_worldGeometryCache.getDeduplicatedSourceCount();
+	stats["deduplicated_upload_bytes_total"] = ( int64_t ) m_worldGeometryCache.getDeduplicatedGpuBytes();
+	stats["live_geometry_bytes"] = ( int64_t ) m_worldGeometryCache.getLiveGeometryBytes();
+	stats["quarantined_geometry_bytes"] = ( int64_t ) m_worldGeometryCache.getQuarantinedGeometryBytes();
+	stats["owner_retained_cpu_bytes"] = ( int64_t ) m_worldGeometryCache.getRetainedCpuBytes();
+	stats["admission_failures_total"] = ( int64_t ) m_worldGeometryCache.getAdmissionFailureCount();
+	stats["cache_epoch"] = ( int64_t ) m_worldGeometryCache.getCacheEpoch();
+	stats["recyclable_geometry_bytes"] = ( int64_t ) m_worldGeometryCache.getFreeGeometryBytes();
+    stats["recycled_physical_spans_total"] = ( int64_t ) m_worldGeometryCache.getRecycledSpanCount();
+    stats["recyclable_physical_ranges"] = ( int64_t ) m_worldGeometryCache.getFreeGeometryRangeCount();
+    stats["reused_geometry_bytes_total"] = ( int64_t ) m_worldGeometryCache.getReusedGeometryBytes();
+    stats["gpu_safe_compactions"] = ( int64_t ) m_worldGeometryCache.getSafeCompactionCount();
+	stats["reclaimed_geometry_bytes_total"] = ( int64_t ) m_worldGeometryCache.getReclaimedGeometryBytes();
+	return stats;
+}
+
 size_t Terrain3DRenderPublicationBuilder::getRetainedCpuBytes(
 	void ) const {
 	size_t bytes = sizeof( m_snapshotSlots );
@@ -2152,10 +2194,26 @@ size_t Terrain3DRenderPublicationBuilder::getRetainedCpuBytes(
 	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_oceanStripBanks ); ++iBank ) {
 		bytes += sizeof( m_oceanStripBanks[iBank].m_snapshot );
 	}
-	for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_worldPublicationBanks ); ++iBank ) {
-		bytes += m_worldPublicationBanks[iBank].m_publication.getRetainedCpuBytes();
-	}
-	bytes += m_cachedInstanceMeshes.getRetainedCpuBytes();
+    // Count historical frozen payloads still leased by render banks once each.
+    // The current frozen payload is counted by the global cache below.
+    const Terrain3DSharedWorldGeometry *pCurrentFrozen = m_worldGeometryCache.getFrozenGeometryIdentity();
+    for ( size_t iBank = 0u; iBank < T3D_ARRAY_COUNT( m_worldPublicationBanks ); ++iBank ) {
+        const Terrain3DWorldPublication &rBank = m_worldPublicationBanks[iBank].m_publication;
+        bytes += rBank.getRetainedCpuBytes();
+        const Terrain3DSharedWorldGeometry *pSnapshot = rBank.getSharedGeometryIdentity();
+        if ( !pSnapshot || pSnapshot == pCurrentFrozen ) { continue; }
+        bool bAlreadyCounted = false;
+        for ( size_t iEarlier = 0u; iEarlier < iBank; ++iEarlier ) {
+            if ( m_worldPublicationBanks[iEarlier].m_publication.getSharedGeometryIdentity() == pSnapshot ) {
+                bAlreadyCounted = true;
+                break;
+            }
+        }
+        if ( !bAlreadyCounted ) { bytes += pSnapshot->getRetainedCpuBytes(); }
+    }
+    bytes += m_cachedInstanceMeshes.getRetainedCpuBytes();
+	bytes += m_meshSourceIndex.getRetainedCpuBytes();
+	bytes += m_worldGeometryCache.getRetainedCpuBytes();
 	bytes += m_cachedRegularInstanceScene.getRetainedCpuBytes();
 	bytes += m_cachedHlodInstanceScene.getRetainedCpuBytes();
 	bytes += m_cachedInstanceScene.getRetainedCpuBytes();

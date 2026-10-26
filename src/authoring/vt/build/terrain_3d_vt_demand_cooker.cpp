@@ -288,6 +288,78 @@ bool t3d_vt_demand_publish_triplet_cold(
     return true;
 }
 
+bool t3d_vt_demand_publish_quartet_cold(
+    const String &packagePath, const PackedByteArray &package,
+    const String &demandPath, const PackedByteArray &demand,
+    const String &v1Path, const PackedByteArray &v1,
+    const String &surfacePath, const PackedByteArray &surface,
+    String &error )
+{
+    const bool hasDemand = !demandPath.is_empty() && !demand.is_empty();
+    const bool hasV1 = !v1Path.is_empty() && !v1.is_empty();
+    if ( packagePath.is_empty() || package.is_empty() ||
+         surfacePath.is_empty() || surface.is_empty() ||
+         ( demandPath.is_empty() != demand.is_empty() ) ||
+         ( v1Path.is_empty() != v1.is_empty() ) || ( hasV1 && !hasDemand ) ||
+         packagePath == surfacePath ||
+         ( hasDemand && ( demandPath == packagePath || demandPath == surfacePath ) ) ||
+         ( hasV1 && ( v1Path == packagePath || v1Path == surfacePath || v1Path == demandPath ) ) )
+    {
+        error = "SuperTerrain package publication requires non-overlapping complete artifacts";
+        return false;
+    }
+    Terrain3DFilePublication pack( packagePath, packagePath + String( ".staged" ), packagePath + String( ".previous" ) );
+    Terrain3DFilePublication surf( surfacePath, surfacePath + String( ".staged" ), surfacePath + String( ".previous" ) );
+    Terrain3DFilePublication fallback( demandPath, demandPath + String( ".staged" ), demandPath + String( ".previous" ) );
+    Terrain3DFilePublication hist( v1Path, v1Path + String( ".staged" ), v1Path + String( ".previous" ) );
+    if ( pack.stagePacked( package ) != OK ) { error = pack.getError(); return false; }
+    if ( surf.stagePacked( surface ) != OK )
+    {
+        error = surf.getError();
+        ( void ) pack.rollback();
+        return false;
+    }
+    if ( hasDemand && fallback.stagePacked( demand ) != OK )
+    {
+        error = fallback.getError();
+        ( void ) surf.rollback();
+        ( void ) pack.rollback();
+        return false;
+    }
+    if ( hasV1 && hist.stagePacked( v1 ) != OK )
+    {
+        error = hist.getError();
+        if ( hasDemand ) ( void ) fallback.rollback();
+        ( void ) surf.rollback();
+        ( void ) pack.rollback();
+        return false;
+    }
+    if ( pack.publish() != OK || surf.publish() != OK ||
+         ( hasDemand && fallback.publish() != OK ) ||
+         ( hasV1 && hist.publish() != OK ) )
+    {
+        error = hasV1 && !hist.getError().is_empty() ? hist.getError() :
+            ( hasDemand && !fallback.getError().is_empty() ? fallback.getError() :
+              ( !surf.getError().is_empty() ? surf.getError() : pack.getError() ) );
+        if ( hasV1 ) ( void ) hist.rollback();
+        if ( hasDemand ) ( void ) fallback.rollback();
+        ( void ) surf.rollback();
+        ( void ) pack.rollback();
+        return false;
+    }
+    const Error eHist = hasV1 ? hist.commit() : OK;
+    const Error eDemand = hasDemand ? fallback.commit() : OK;
+    const Error eSurface = surf.commit();
+    const Error ePackage = pack.commit();
+    if ( eHist != OK || eDemand != OK || eSurface != OK || ePackage != OK )
+    {
+        error = eHist != OK ? hist.getError() : eDemand != OK ? fallback.getError() :
+            eSurface != OK ? surf.getError() : pack.getError();
+        return false;
+    }
+    return true;
+}
+
 bool t3d_vt_demand_publish_pair_cold(
     const String &packagePath, const PackedByteArray &package,
     const String &demandPath, const PackedByteArray &demand,

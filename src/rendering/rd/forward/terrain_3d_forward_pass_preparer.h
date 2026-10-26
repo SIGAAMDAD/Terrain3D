@@ -220,7 +220,9 @@ private:
 	bool						m_bForwardPreparedHasOcean = false;
 	bool						m_bForwardPreparedHasWorld = false;
 
-	void logWorldPrepareStateHot( const t3dRdForwardPassContext_t &rContext, uint32_t nStage );
+	void logWorldPrepareStateHot( const t3dRdForwardPassContext_t &rContext,
+								  uint32_t nStage, const Terrain3DRdClipmapRenderer *pTerrainProvider = NULL,
+								  const t3dRdFrameSnapshot_t *pSnapshot = NULL );
 	bool
 	prepareLifecycle( const t3dRdForwardPassContext_t &rContext, bool &rHistoryValid, bool &rViewportReconfigured );
 	bool prepare( Terrain3DForwardPassHost		  &rHost,

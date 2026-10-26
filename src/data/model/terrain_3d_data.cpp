@@ -112,7 +112,6 @@ void Terrain3DData::clear(
 	resetInstanceRegionCache( false );
 	resetMiddleHeightCache();
 	resetGpuRegionCache( true );
-	m_residency.resetFarSurface();
 	LOG( INFO, "Clearing data" );
 	m_regionRepository.clear();
 	m_sparseRasterTiles.clear();
@@ -300,22 +299,6 @@ void Terrain3DData::syncCacheDefaultMaps(
 												 m_defaultDerivedMap,
 												 m_bControlMapsImplicit,
 												 m_bColorMapsImplicit );
-	m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
-}
-
-t3dFarRegionalCookConfig_t Terrain3DData::getFarRegionalCookConfig(
-	void ) const {
-	t3dFarRegionalCookConfig_t config;
-		config.m_nHeightSourceSide = m_pTerrain ? m_pTerrain->getFarVtHeightSourceSide() : T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE;
-	config.m_nSurfaceSourceSide = m_pTerrain ? m_pTerrain->getFarVtSurfaceSourceSide() : T3D_FAR_VT_MAX_SOURCE_HEIGHT_SIDE;
-	config.m_dataDirectory = m_pTerrain ? m_pTerrain->getDataDirectory() : String();
-	config.m_pData = this;
-	config.m_defaultHeightMap = m_defaultHeightMap;
-	config.m_defaultControlMap = m_defaultControlMap;
-	config.m_defaultColorMap = m_defaultColorMap;
-	config.m_material = m_pTerrain ? m_pTerrain->materialResource() : Ref< Terrain3DMaterial >();
-	config.m_assets = m_pTerrain ? m_pTerrain->assetsResource() : Ref< Terrain3DAssets >();
-	return config;
 }
 
 t3dMiddleHeightRegionCacheConfig_t Terrain3DData::getMiddleHeightCacheConfig(
@@ -748,54 +731,6 @@ bool Terrain3DData::isGpuRegionDerivedChannelEnabled(
 void Terrain3DData::resetGpuRegionCache(
 	const bool bClearTextures ) {
 	m_residency.resetGpu( bClearTextures );
-}
-
-uint64_t Terrain3DData::getGpuFarAvtPublicationRevision() const
-{
-    return m_residency.farRegionalCooker().getRegionalAvtPublicationRevision();
-}
-
-uint32_t Terrain3DData::getGpuFarAvtCookedPackageGeneration(
-    const Vector2i &vLocation ) const
-{
-    return m_residency.farRegionalCooker().getRegionalAvtCookedPackageGeneration( vLocation );
-}
-
-bool Terrain3DData::isGpuFarAvtRegionCookDirty( const Vector2i &vLocation ) const
-{
-    return m_residency.farRegionalCooker().isRegionalAvtCookDirty( vLocation );
-}
-
-bool Terrain3DData::writeCookedFarVtRegions(
-	const String &rDirectory ) {
-	const t3dFarRegionalCookConfig_t config = getFarRegionalCookConfig();
-	m_residency.farRegionalCooker().setConfig( config );
-	const int mapSize = T3D_REGION_MAP_SIZE;
-	LOG( INFO,
-		 "Cooking far atlases: height ",
-		 config.m_nHeightSourceSide,
-		 " (",
-		 mapSize > 0 ? config.m_nHeightSourceSide / mapSize : 0,
-		 " samples/region), surface ",
-		 config.m_nSurfaceSourceSide,
-		 " (",
-		 mapSize > 0 ? config.m_nSurfaceSourceSide / mapSize : 0,
-		 " samples/region), region map ",
-		 mapSize );
-	// AVT-08 publishes only indexed regional pages. No 4096x4096 image or
-	// independent far-atlas GPU resource exists after this call.
-	return m_residency.farRegionalCooker().writeRegionalAvtCooked( rDirectory );
-}
-
-void Terrain3DData::markAllGpuFarRegionsDirty(
-	const t3dMapType_t eMapType ) {
-	m_residency.farRegionalCooker().markAllDirty( eMapType );
-}
-
-void Terrain3DData::markGpuFarRegionDirty(
-	const Vector2i	  &vLocation,
-	const t3dMapType_t eMapType ) {
-	m_residency.farRegionalCooker().markRegionDirty( vLocation, eMapType );
 }
 
 void Terrain3DData::armPendingGpuRegionRetirements(
@@ -1295,7 +1230,6 @@ void Terrain3DData::configureGpuRegionCache(
 																		 nUploadBudgetMb,
 																		 nSparePages,
 																		 nRetireFrames );
-	m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
 	if ( bStorageChanged && m_pTerrain && T3D_REGION_SIZE > 0 ) {
 		updateMaps( REGION_TYPE_MAX, true, false );
 	}
@@ -1316,13 +1250,11 @@ void Terrain3DData::updateGpuRegionResidencyInternal(
 }
 
 void Terrain3DData::invalidateGpuFarSurface( void ) {
-    m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
-    m_residency.farRegionalCooker().invalidateSurface();
+    // COMPOSED pages are invalidated by the authored revision/cook transaction.
 }
 
 void Terrain3DData::invalidateFarVtSourceLayout( void ) {
-    m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
-    m_residency.farRegionalCooker().invalidateLayout();
+    // The regional VHM/cutout package is regenerated on explicit recook.
 }
 
 Dictionary Terrain3DData::getRuntimeResidencyGrid(
@@ -1375,8 +1307,6 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid(
 			cell["prepared"] = m_runtimeArtifacts.isPrepared( location );
 			cell["prepare_pending"] = isGpuRuntimePagePreparePending( location );
 			cell["gpu_slot_state"] = m_residency.gpuRegionCache().getSlotStateForLocation( location );
-			cell["far_height_dirty"] = m_residency.farRegionalCooker().isRegionHeightDirty( location );
-			cell["far_color_dirty"] = m_residency.farRegionalCooker().isRegionColorDirty( location );
 			cells[write_index++] = cell;
 		}
 	}
@@ -1395,11 +1325,6 @@ Dictionary Terrain3DData::getRuntimeResidencyGrid(
 Dictionary Terrain3DData::getGpuRegionCacheStatsFast(
 	void ) const {
 	Dictionary		 stats = m_residency.gpuRegionCache().getStatsDictionary( false );
-	const Dictionary farStats = m_residency.farRegionalCooker().getStatsDictionary();
-	const Array		 keys = farStats.keys();
-	for ( int index = 0; index < keys.size(); ++index ) {
-		stats[keys[index]] = farStats[keys[index]];
-	}
 	return stats;
 }
 
@@ -1443,11 +1368,6 @@ Dictionary Terrain3DData::getStartupLoadStats(
 Dictionary Terrain3DData::getGpuRegionCacheStats(
 	void ) const {
 	Dictionary		 stats = m_residency.gpuRegionCache().getStatsDictionary( true );
-	const Dictionary farStats = m_residency.farRegionalCooker().getStatsDictionary();
-	const Array		 keys = farStats.keys();
-	for ( int index = 0; index < keys.size(); ++index ) {
-		stats[keys[index]] = farStats[keys[index]];
-	}
 	if ( m_pTerrain ) {
 		stats["far_quality_divisor"] = m_pTerrain->getGpuFarQualityDivisor();
 		stats["cooked_pages_enabled"] = m_pTerrain->isGpuRegionCookedPagesEnabled();
@@ -2461,7 +2381,6 @@ void Terrain3DData::removeRegion(
 		LOG( ERROR, "Region repository failed to deactivate ", regionLoc );
 		return;
 	}
-	markGpuFarRegionDirty( regionLoc, REGION_TYPE_MAX );
 	calcHeightRange();
 
 	invalidateSamplingCache();
@@ -2612,8 +2531,6 @@ void Terrain3DData::saveDirectory(
 	for ( size_t iRegion = 0u; iRegion < ( size_t ) ( ( saveResult.m_regions ).size() ); iRegion++ ) {
 		const t3dRegionSaveResult_t &regionResult = ( saveResult.m_regions )[iRegion];
 		if ( regionResult.succeeded() && regionResult.m_bSourceChanged ) {
-			m_residency.farRegionalCooker().noteRegionSaved(
-				regionResult.m_location, regionResult.m_path, regionResult.m_bDeleted );
 			sourceChanged = true;
 		}
 	}
@@ -2657,7 +2574,15 @@ void Terrain3DData::saveDirectory(
 #if defined( T3D_EDITOR_NATIVE )
 		const Dictionary baked = cookGpuRegionPages();
 		if ( !( bool ) baked.get( "complete", false ) ) {
-			LOG( ERROR, "Authored regions saved, but packed baked terrain generation failed" );
+			const PackedStringArray cookErrors = baked.get( "errors", PackedStringArray() );
+			LOG( ERROR, "Authored regions saved, but V1 runtime package generation failed; package_ready=",
+				 bool( baked.get( "package_ready", false ) ), " far_v1=",
+				 bool( baked.get( "far_vt_regions_cooked", false ) ), " instance_v1=",
+				 bool( baked.get( "instance_vt_package_cooked", false ) ), " manifest=",
+				 bool( baked.get( "world_manifest_cooked", false ) ), " errors=", cookErrors.size() );
+			for ( int i = 0; i < cookErrors.size(); ++i ) {
+				LOG( ERROR, "[Terrain3D][Cook][FAIL] ", cookErrors[i] );
+			}
 		}
 #endif
 	}
@@ -2676,7 +2601,6 @@ void Terrain3DData::saveRegion(
 										&Terrain3DData::ensurePersistenceRegionResident,
 										this );
 	if ( result.succeeded() && result.m_bSourceChanged ) {
-		m_residency.farRegionalCooker().noteRegionSaved( result.m_location, result.m_path, result.m_bDeleted );
 	}
 	if ( result.m_bSourceChanged || result.m_bDeleted ) {
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
@@ -3066,7 +2990,6 @@ void Terrain3DData::updateMaps(
 	const bool		   bAllRegions,
 	const bool		   bGenerateMipmaps ) {
 	( void ) bGenerateMipmaps; // GPU publication builds transient mip chains; CPU maps stay base-level only.
-	markAllGpuFarRegionsDirty( eMapType );
 	if ( m_residency.gpuRegionCache().isEnabled() ) {
 		updateMapsBounded( eMapType, bAllRegions );
 		return;
@@ -3531,14 +3454,12 @@ void Terrain3DData::commitMapEdits(
 	// Authoring dirtiness belongs to the changed source regions, independent
 	// of whether the GPU region cache or far-render tier is currently enabled.
 	for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( activeLocations ).size() ); iLocation++ ) {
-		markGpuFarRegionDirty( activeLocations[iLocation], eMapType );
 	}
 	if ( eMapType == TYPE_HEIGHT && m_pTerrain ) {
 		const Ref< Terrain3DMaterial > pMaterial = m_pTerrain->materialResource();
 		if ( pMaterial.is_valid() && pMaterial->getAutoShaderEnabled() ) {
 			for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( derivedLocations ).size() ); iLocation++ ) {
 				const Vector2i &location = ( derivedLocations )[iLocation];
-				markGpuFarRegionDirty( location, TYPE_COLOR );
 			}
 		}
 	}

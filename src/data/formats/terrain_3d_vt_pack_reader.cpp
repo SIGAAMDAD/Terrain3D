@@ -140,6 +140,8 @@ static bool t3d_vt_pack_validate_allocations_v1(
             ( t3dVTConsumer_t ) rAllocation.m_nConsumer );
         const uint32_t							nExpectedProfileMask =
 			t3d_vt_pack_v1_expected_profile_mask( rAllocation.m_nHighestAvailableProfile );
+		// V1 contains the coarse regional (FAR) consumer too. The cooker and
+		// residency reader must agree on the supported consumer range.
 		if ( rAllocation.m_nConsumer > T3D_VT_CONSUMER_COMPOSED ||
 			 ( rAllocation.m_nChannelMask & nRequiredMask ) != nRequiredMask ||
 			 ( rAllocation.m_nChannelMask & ~nAllowedMask ) != 0u ||

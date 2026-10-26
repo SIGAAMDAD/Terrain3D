@@ -1,0 +1,62 @@
+// ST03 exact 1-bit solidity + 2-bit authored alpha. No texture filtering.
+// Standalone consumer; ST05 assigns descriptor sets and includes this source
+// in color, DNR, depth and shadow passes after coherent region publication.
+#ifndef T3D_ST_CUTOUT_GLSLINC
+#define T3D_ST_CUTOUT_GLSLINC
+
+#define T3D_ST_CUTOUT_ENTRY_VALID 0x40000000u
+#define T3D_ST_CUTOUT_ENTRY_UNIFORM 0x80000000u
+#define T3D_ST_CUTOUT_INVALID 0xffffffffu
+
+struct T3DStCutoutPageEntry
+{
+    uint physical_slot;
+    uint pinned_word_offset;
+    uint generation;
+    uint packed_state;
+};
+
+// Integrator defines T3D_ST_CUTOUT_BINDINGS plus *_SET, *_ENTRY_BINDING and
+// *_WORD_BINDING. These buffers are one globally published generation.
+#ifdef T3D_ST_CUTOUT_BINDINGS
+layout(set = T3D_ST_CUTOUT_SET, binding = T3D_ST_CUTOUT_ENTRY_BINDING, std430)
+readonly buffer T3DStCutoutPageBuffer
+{
+    T3DStCutoutPageEntry t3d_st_cutout_entries[];
+};
+layout(set = T3D_ST_CUTOUT_SET, binding = T3D_ST_CUTOUT_WORD_BINDING, std430)
+readonly buffer T3DStCutoutPinnedBuffer
+{
+    uint t3d_st_cutout_pinned_words[];
+};
+
+bool t3d_cutout_sample(uint regionIndex, uvec2 localTexel, uint publicationGeneration, out uint value)
+{
+    if (regionIndex >= 1024u || any(greaterThanEqual(localTexel, uvec2(128u))) ||
+        publicationGeneration == 0u)
+    {
+        return false;
+    }
+    uint pageIndex = (localTexel.x >> 6u) + (localTexel.y >> 6u) * 2u;
+    T3DStCutoutPageEntry entry = t3d_st_cutout_entries[regionIndex * 4u + pageIndex];
+    if (entry.generation != publicationGeneration ||
+        (entry.packed_state & T3D_ST_CUTOUT_ENTRY_VALID) == 0u)
+    {
+        return false;
+    }
+    if ((entry.packed_state & T3D_ST_CUTOUT_ENTRY_UNIFORM) != 0u)
+    {
+        value = entry.packed_state & 7u;
+        return true;
+    }
+    uint texel = (localTexel.y & 63u) * 64u + (localTexel.x & 63u);
+    uint wordIndex = entry.pinned_word_offset + (texel >> 5u);
+    uint bitIndex = texel & 31u;
+    uint solid = (t3d_st_cutout_pinned_words[wordIndex] >> bitIndex) & 1u;
+    uint alphaLow = (t3d_st_cutout_pinned_words[wordIndex + 128u] >> bitIndex) & 1u;
+    uint alphaHigh = (t3d_st_cutout_pinned_words[wordIndex + 256u] >> bitIndex) & 1u;
+    value = solid | (alphaLow << 1u) | (alphaHigh << 2u);
+    return true;
+}
+#endif // T3D_ST_CUTOUT_BINDINGS
+#endif // T3D_ST_CUTOUT_GLSLINC

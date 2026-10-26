@@ -64,11 +64,11 @@ public:
 		if ( nProducerId == 0u ) {
 			return false;
 		}
-		const t3dWorldPublicationCapacity_t required = { rWorld.m_vertices.size(),
-														 rWorld.m_clusterVertexIndices.size(),
-														 rWorld.m_triangleWords.size(),
-														 rWorld.m_clusters.size(),
-														 rWorld.m_clusterVtMetadata.size(),
+		const t3dWorldPublicationCapacity_t required = { rWorld.vertices().size(),
+														 rWorld.clusterVertexIndices().size(),
+														 rWorld.triangleWords().size(),
+														 rWorld.clusters().size(),
+														 rWorld.clusterVtMetadata().size(),
 														 rWorld.m_terrainStripClusters.size(),
 														 rWorld.m_transforms.size(),
 														 rWorld.m_instances.size(),

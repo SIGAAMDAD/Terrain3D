@@ -32,4 +32,12 @@ bool t3d_vt_demand_publish_triplet_cold( const godot::String &rPackagePath,
     const godot::String &rDemandPath, const godot::PackedByteArray &rDemand,
     const godot::String &rV1Path, const godot::PackedByteArray &rV1,
     godot::String &rError );
+// Atomic four-artifact publication for parity-approved SuperTerrain. The
+// surface sidecar is mandatory; the v2/v1 demand indexes remain optional.
+bool t3d_vt_demand_publish_quartet_cold( const godot::String &rPackagePath,
+    const godot::PackedByteArray &rPackage,
+    const godot::String &rDemandPath, const godot::PackedByteArray &rDemand,
+    const godot::String &rV1Path, const godot::PackedByteArray &rV1,
+    const godot::String &rSurfacePath, const godot::PackedByteArray &rSurface,
+    godot::String &rError );
 #endif

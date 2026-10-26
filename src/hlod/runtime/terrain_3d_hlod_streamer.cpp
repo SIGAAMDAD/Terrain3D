@@ -635,6 +635,25 @@ bool Terrain3DHLODStreamer::replacementReady(
 	return true;
 }
 
+bool Terrain3DHLODStreamer::refreshGpuReadiness( void )
+{
+	const uint64_t prepared = m_pTerrain ? m_pTerrain->getPreparedHlodSourceGenerationCold() : 0u;
+	bool changed = false;
+	for ( size_t i = 0u; i < m_activeEntries.size(); ++i ) {
+		t3dEntry_t &entry = m_entries[( size_t ) m_activeEntries[i]];
+		const bool ready = entry.m_bActive && entry.m_nAwaitedGpuGeneration != 0u &&
+			prepared >= entry.m_nAwaitedGpuGeneration;
+		if ( entry.m_bGpuReady != ready ) {
+			entry.m_bGpuReady = ready;
+			changed = true;
+		}
+	}
+	if ( changed ) {
+		m_bSelectionDirty = true;
+	}
+	return changed;
+}
+
 void Terrain3DHLODStreamer::selectRecursive(
 	const int	   index,
 	const Vector3 &rLocalTarget ) {
@@ -645,7 +664,7 @@ void Terrain3DHLODStreamer::selectRecursive(
 	const bool	preferred = !entry.m_bLoadFailed && packageAcceptable( entry, rLocalTarget );
 	if ( preferred ) {
 		markDesired( index );
-		if ( entry.m_bActive ) {
+		if ( entry.m_bActive && entry.m_bGpuReady ) {
 			return;
 		}
 		// Until the preferred parent is active, retain the best available child representation.
@@ -728,16 +747,15 @@ bool Terrain3DHLODStreamer::requestOrActivate(
 		return false;
 	}
 	entry.m_bActive = true;
+	entry.m_bGpuReady = false;
 	removeLoadingEntry( index );
 	removeRetiringEntry( index );
 	addActiveEntry( index );
 	m_bSelectionDirty = true;
-	// Fallback descendants were marked desired only while this proxy was not
-	// ready. Once the replacement exists they must immediately become retirement
-	// candidates instead of rendering on top of their parent for another tick.
-	clearDesiredDescendants( index );
+	// Keep descendants until the exact WORLD geometry publication reaches the GPU.
 	m_nResidentEstimatedBytes += bytes;
 	markRdPublicationDirty();
+	entry.m_nAwaitedGpuGeneration = m_nRdPublicationGeneration;
 	++m_nLoadsLastTick;
 	return true;
 }
@@ -791,6 +809,8 @@ void Terrain3DHLODStreamer::deactivate(
 		}
 	}
 	entry.m_bActive = false;
+	entry.m_bGpuReady = false;
+	entry.m_nAwaitedGpuGeneration = 0u;
 	removeActiveEntry( index );
 	removeLoadingEntry( index );
 	removeRetiringEntry( index );
@@ -821,7 +841,7 @@ void Terrain3DHLODStreamer::publishRepresentationMap(
 				if ( region >= 0 ) {
 					m_szRegionResidentRepresentationLevel[region] =
 						MAX< uint8_t >( m_szRegionResidentRepresentationLevel[region], ( uint8_t ) entry.m_nLevel );
-					if ( entry.m_bRetiring || !isDesired( entry ) ) {
+					if ( !entry.m_bGpuReady || entry.m_bRetiring || !isDesired( entry ) ) {
 						m_szRegionRetiringRepresentationLevel[region] =
 							MAX< uint8_t >( m_szRegionRetiringRepresentationLevel[region], ( uint8_t ) entry.m_nLevel );
 					} else {
@@ -868,6 +888,7 @@ void Terrain3DHLODStreamer::updateResidency(
 		return;
 	}
 
+	const bool gpuReadinessChanged = refreshGpuReadiness();
 	const Vector3 localTarget =
 		m_pTerrain->sceneNode().get_global_transform().affine_inverse().xform( rTargetPosition );
 	real_t projectionValue = 0.0f;
@@ -890,7 +911,7 @@ void Terrain3DHLODStreamer::updateResidency(
 										 !Math::is_equal_approx( viewportHeight, m_fLastSelectionViewportHeight );
 	const bool rebuildSelection = bForce || m_bSelectionDirty || selectionContextChanged;
 
-	bool representationDirty = false;
+	bool representationDirty = gpuReadinessChanged;
 	if ( rebuildSelection ) {
 		beginSelectionGeneration();
 		m_loadCandidates.clear();
@@ -1104,16 +1125,21 @@ void Terrain3DHLODStreamer::onInstanceMutation(
 Dictionary Terrain3DHLODStreamer::getStats(
 	void ) const {
 	Dictionary d;
-	int		   active = 0, desired = 0, failed = 0, retiring = 0;
+	int		   active = 0, desired = 0, failed = 0, retiring = 0, gpuReady = 0, pendingGpu = 0;
 	for ( size_t iEntry = 0u; iEntry < ( size_t ) ( ( m_entries ).size() ); iEntry++ ) {
 		const t3dEntry_t &e = ( m_entries )[iEntry];
 		active += e.m_bActive;
+		gpuReady += e.m_bGpuReady;
+		pendingGpu += e.m_bActive && !e.m_bGpuReady;
 		desired += isDesired( e );
 		failed += e.m_bLoadFailed;
 		retiring += e.m_bRetiring;
 	}
 	d["entries"] = ( int ) m_entries.size();
 	d["active"] = active;
+	d["gpu_ready"] = gpuReady;
+	d["awaiting_gpu_publication"] = pendingGpu;
+	d["gpu_prepared_generation"] = m_pTerrain ? ( int64_t ) m_pTerrain->getPreparedHlodSourceGenerationCold() : 0;
 	d["desired"] = desired;
 	d["failed"] = failed;
 	d["retiring"] = retiring;
@@ -1152,6 +1178,8 @@ Array Terrain3DHLODStreamer::getDebugEntries(
 		d["package_path"] = e.m_packagePath;
 		d["desired"] = isDesired( e );
 		d["active"] = e.m_bActive;
+	d["gpu_ready"] = e.m_bGpuReady;
+	d["awaited_gpu_generation"] = ( int64_t ) e.m_nAwaitedGpuGeneration;
 		d["retiring"] = e.m_bRetiring;
 		d["load_failed"] = e.m_bLoadFailed;
 		d["request_started"] = e.m_bRequestStarted;

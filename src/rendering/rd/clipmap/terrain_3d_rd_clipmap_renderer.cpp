@@ -832,10 +832,10 @@ bool Terrain3DRdClipmapRenderer::ensureBuffers(
 												sizeof( m_szStripParts ),
 												0u,
 												0u,
-												T3D_REGION_MAP_SIZE * T3D_REGION_MAP_SIZE * 32u,
+												T3D_REGION_MAP_SIZE * T3D_REGION_MAP_SIZE * sizeof( t3dRdTerrainRegionGpu_t ),
 												visible_bytes };
 		const uint32_t strides[SECTION_COUNT] =
-			{ sizeof( t3dRdMaterialConfig_t ), sizeof( t3dRdMaterialLayer_t ), 4u, 16u, 64u, 32u, 4u };
+			{ sizeof( t3dRdMaterialConfig_t ), sizeof( t3dRdMaterialLayer_t ), 4u, 16u, 64u, sizeof( t3dRdTerrainRegionGpu_t ), 4u };
 		uint32_t totals[Terrain3DRdContext::SHARED_ARENA_COUNT]{}, offsets[SECTION_COUNT]{};
 		for ( uint32_t i = 0u; i < SECTION_COUNT; ++i ) {
 			if ( sizes[i] && !t3dRdGpuBufferSection( totals[arenaFor( static_cast< Section >( i ) )],
@@ -994,6 +994,18 @@ bool Terrain3DRdClipmapRenderer::hasCompatibleUniformSetDescriptorKey(
 	return m_bBoundDescriptorKeyValid && m_boundDescriptorKey == rKey;
 }
 
+void Terrain3DRdClipmapRenderer::setSuperTerrainBindingsCold( const t3dStGpuBindings_t &rBindings )
+{
+    const uint64_t next = rBindings.valid() ? rBindings.m_nSignature : 0u;
+    const uint64_t previous = m_stGpuBorrowed.valid() ? m_stGpuBorrowed.m_nSignature : 0u;
+    if ( next == previous && rBindings.m_nDeviceGeneration == m_stGpuBorrowed.m_nDeviceGeneration )
+    {
+        return;
+    }
+    freeUniformSets();
+    m_stGpuBorrowed = rBindings.valid() ? rBindings : t3dStGpuBindings_t{};
+}
+
 bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 	const t3dRdTerrainBindings_t	  &rBindings,
 	const t3dRdMaterialConfig_t		  &rMaterialConfig,
@@ -1140,6 +1152,33 @@ bool Terrain3DRdClipmapRenderer::ensureUniformSets(
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_TERRAIN_VT_MIP_LAYOUT_BINDING,
 															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 															   hVTMipLayout ) );
+        // ST05: reserve the native schema for the same VHM/cutout representation.
+        // The active native candidate is installed in the shared WORLD publication
+        // stage; until then these are never sampled (region_state_flags == 0).
+        const bool stReady = m_stGpuBorrowed.valid() &&
+            m_stGpuBorrowed.m_nDeviceGeneration == m_context.getDeviceGeneration();
+        const RID hSTHeightBuffer = stReady ? m_stGpuBorrowed.m_hVhmPages : hVTPageTable;
+        const RID hSTTailBuffer = stReady ? m_stGpuBorrowed.m_hVhmTails : hVTTailMetadata;
+        const RID hSTHeightFine = stReady ? m_stGpuBorrowed.m_hVhmFine : hHeight16;
+        const RID hSTHeightRoot = stReady ? m_stGpuBorrowed.m_hVhmRoot : hHeight16Tail;
+        const RID hSTMaskEntries = stReady ? m_stGpuBorrowed.m_hMaskEntries : hVTPageTable;
+        const RID hSTMaskWords = stReady ? m_stGpuBorrowed.m_hMaskWords : hVTTailMetadata;
+        uniforms.push_back( Terrain3DRdBindingBuilder::single(
+            T3D_RD_TERRAIN_ST_VHM_PAGES_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+            hSTHeightBuffer ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::single(
+            T3D_RD_TERRAIN_ST_VHM_TAILS_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+            hSTTailBuffer ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+            T3D_RD_TERRAIN_ST_VHM_FINE_BINDING, m_hszVtSamplers[nFiltering].rid(), hSTHeightFine ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture(
+            T3D_RD_TERRAIN_ST_VHM_ROOT_BINDING, m_hszVtSamplers[nFiltering].rid(), hSTHeightRoot ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::single(
+            T3D_RD_TERRAIN_ST_MASK_ENTRIES_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+            hSTMaskEntries ) );
+        uniforms.push_back( Terrain3DRdBindingBuilder::single(
+            T3D_RD_TERRAIN_ST_MASK_WORDS_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
+            hSTMaskWords ) );
 		uniforms.push_back( Terrain3DRdBindingBuilder::single( 38,
 															   RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER,
 															   sectionRid( STRIP_PARTS ) ) );
@@ -1491,11 +1530,15 @@ bool Terrain3DRdClipmapRenderer::updateFrameUniforms(
 	uint32_t bases[4] = { ( uint32_t ) ( m_sections[MATERIAL_CONFIG].m_nOffsetBytes / sizeof( t3dRdMaterialConfig_t ) ),
 						  ( uint32_t ) ( m_sections[MATERIALS].m_nOffsetBytes / sizeof( t3dRdMaterialLayer_t ) ),
 						  m_sections[STRIP_PARTS].m_nOffsetBytes / 4u,
-						  m_sections[REGION_MAP].m_nOffsetBytes / 32u };
+						  ( uint32_t ) ( m_sections[REGION_MAP].m_nOffsetBytes / sizeof( t3dRdTerrainRegionGpu_t ) ) };
 	uint32_t scratch[8] = { m_sections[VISIBLE].m_nOffsetBytes / 4u };
-	return m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, terrain ), &frame, sizeof( frame ) ) &&
-		   m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, terrain_bases ), bases, sizeof( bases ) ) &&
-		   m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, scratch_bases ), scratch, sizeof( scratch ) );
+	if ( !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, terrain ), &frame, sizeof( frame ) ) ||
+		 !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, terrain_bases ), bases, sizeof( bases ) ) ||
+		 !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, scratch_bases ), scratch, sizeof( scratch ) ) ) {
+		setError( "UCMP WORLD provider could not write frame uniforms to shared HOT record" );
+		return false;
+	}
+	return true;
 }
 
 bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
@@ -1508,6 +1551,7 @@ bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
 	}
 	if ( !m_bRegionMapUploadInitialized || region_generation != m_nRegionMapGeneration ) {
 		if ( !uploadSection( REGION_MAP, 0u, regions.ptr(), uint32_t( regions.size() ), T3D_GPU_DIRTY_UPLOAD ) ) {
+			setError( "UCMP WORLD provider could not publish the region map section" );
 			return false;
 		}
 		m_nRegionMapGeneration = region_generation;
@@ -1524,6 +1568,7 @@ bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
 							 snapshot.m_szMaterials,
 							 sizeof( snapshot.m_szMaterials ),
 							 T3D_GPU_PUBLICATION ) ) {
+			setError( "UCMP WORLD provider could not publish material configuration/layers" );
 			return false;
 		}
 		m_nMaterialGeneration = snapshot.m_nMaterialGeneration;
@@ -1534,12 +1579,17 @@ bool Terrain3DRdClipmapRenderer::uploadSnapshotBuffers(
 	if ( !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, editor ),
 									   &snapshot.m_editorOverlayConfig,
 									   sizeof( snapshot.m_editorOverlayConfig ) ) ) {
+		setError( "UCMP WORLD provider could not write the editor hot-frame record" );
 		return false;
 	}
 	m_nEditorOverlayUploads.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
-	return m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, patches ),
+	if ( !m_context.writeHotRecord( offsetof( Terrain3DRdHotRecord, patches ),
 									 snapshot.m_szPatches,
-									 snapshot.m_nPatchCount * sizeof( t3dRdPatch_t ) );
+									 snapshot.m_nPatchCount * sizeof( t3dRdPatch_t ) ) ) {
+		setError( "UCMP WORLD provider could not write the clipmap patch hot-frame record" );
+		return false;
+	}
+	return true;
 }
 
 bool Terrain3DRdClipmapRenderer::runGpuCulling(

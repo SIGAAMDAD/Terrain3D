@@ -779,10 +779,12 @@ void Terrain3DRdPreviewService::renderPreviewAsyncOnRenderThread(
 	context.beginRecoverableFailureScope();
 	t3dRdPreviewFailure_t eFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
 	bool				  bScheduled = false;
+	const char *pszFailedStage = "preview_source_or_shader_unavailable";
 	do {
 		if ( !m_bPendingPreviewMeshesValid || rServices.m_shaderLibrary.getInstances().is_null() ) {
 			break;
 		}
+		pszFailedStage = "shared_vt_acquisition";
 		if ( !rServices.m_host.ensurePreviewSharedVt( T3D_VT_SHARED_RESOURCES_PREVIEW ) ) {
 			break;
 		}
@@ -793,11 +795,13 @@ void Terrain3DRdPreviewService::renderPreviewAsyncOnRenderThread(
 												  T3D_RENDER_READY_PREVIEW );
 			}
 		}
+		pszFailedStage = "preview_target_or_draw";
 		if ( !m_bPreviewRendererInitialized || !m_previewRenderer.renderPreviewToTarget( &m_pendingPreviewMeshes,
 																						 m_nPendingPreviewAssetId,
 																						 m_pendingPreviewSize ) ) {
 			break;
 		}
+		pszFailedStage = "readback_scheduling";
 		const Callable callback =
 			callable_mp( rServices.m_effect.ptr(), &Terrain3DRdCompositorEffect::consumePreviewReadbackOnRenderThread )
 				.bind( ( int32_t ) nSlot, ( int64_t ) nRequestGeneration );
@@ -817,6 +821,8 @@ void Terrain3DRdPreviewService::renderPreviewAsyncOnRenderThread(
 		bScheduled = true;
 	} while ( false );
 	if ( !bScheduled ) {
+		LOG( WARN, "[Terrain3D][Preview][Async] FAIL stage=", pszFailedStage,
+			 " asset=", m_nPendingPreviewAssetId, " renderer_error=", m_previewRenderer.getLastError() );
 		m_previewRenderer.shutdown();
 		m_bPreviewRendererInitialized = false;
 		rServices.m_host.clearPreviewReady( T3D_RENDER_READY_PREVIEW );
@@ -846,11 +852,14 @@ void Terrain3DRdPreviewService::consumePreviewReadbackOnRenderThread(
 		size = slot.size;
 	}
 	if ( rReadbackBytes.size() != ( int64_t ) size.x * ( int64_t ) size.y * 4 ) {
+		LOG( WARN, "[Terrain3D][Preview][Async] FAIL stage=readback_size expected=",
+			 ( int64_t ) size.x * ( int64_t ) size.y * 4, " received=", rReadbackBytes.size() );
 		completePreviewAsyncOnRenderThread( nSlot, T3D_RD_PREVIEW_SYSTEMIC_RD, Ref< Image >() );
 		return;
 	}
 	Ref< Image > image = Image::create_from_data( size.x, size.y, false, Image::FORMAT_RGBA8, rReadbackBytes );
 	if ( image.is_null() ) {
+		LOG( WARN, "[Terrain3D][Preview][Async] FAIL stage=readback_image_create" );
 		completePreviewAsyncOnRenderThread( nSlot, T3D_RD_PREVIEW_SYSTEMIC_RD, Ref< Image >() );
 		return;
 	}

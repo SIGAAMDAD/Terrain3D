@@ -1,0 +1,144 @@
+// ST04 unified R16 height, with 64+2 pages and a guaranteed packed mip3..7
+// tail per region. ST05 supplies descriptor bindings and vertex-pass wiring.
+#ifndef T3D_ST_VHM_GLSLINC
+#define T3D_ST_VHM_GLSLINC
+
+#define T3D_ST_VHM_INVALID 0xffffffffu
+#define T3D_ST_VHM_VALID 0x00010000u
+#define T3D_ST_VHM_RESIDENT 0x00020000u
+#define T3D_ST_VHM_TAIL_VALID 1u
+
+struct T3DStVhmPageEntry
+{
+    uint physical_slot;
+    uint parent_page;
+    uint generation;
+    uint packed_mip_flags;
+};
+struct T3DStVhmTailEntry
+{
+    uint atlas_x;
+    uint atlas_y;
+    uint first_mip;
+    uint mip_count;
+    uint generation;
+    uint flags;
+    uint reserved0;
+    uint reserved1;
+};
+
+#ifdef T3D_ST_VHM_BINDINGS
+layout(set = T3D_ST_VHM_SET, binding = T3D_ST_VHM_PAGE_BINDING, std430)
+readonly buffer T3DStVhmPageBuffer
+{
+    T3DStVhmPageEntry t3d_st_vhm_pages[];
+};
+layout(set = T3D_ST_VHM_SET, binding = T3D_ST_VHM_TAIL_BINDING, std430)
+readonly buffer T3DStVhmTailBuffer
+{
+    T3DStVhmTailEntry t3d_st_vhm_tails[];
+};
+layout(set = T3D_ST_VHM_SET, binding = T3D_ST_VHM_FINE_IMAGE_BINDING)
+uniform sampler2DArray t3d_st_vhm_fine_image;
+layout(set = T3D_ST_VHM_SET, binding = T3D_ST_VHM_ROOT_IMAGE_BINDING)
+uniform sampler2D t3d_st_vhm_root_image;
+
+uint t3d_vhm_local_page(uint mip, uvec2 pageXY)
+{
+    return mip == 0u ? pageXY.y * 2u + pageXY.x : mip + 3u;
+}
+uint t3d_vhm_tail_mip_x(uint mip)
+{
+    const uint offsets[5] = uint[5](0u, 20u, 32u, 40u, 46u);
+    return offsets[mip - 3u];
+}
+
+// Manually bilinear fetch from R16 texel centers. The 2-texel gutters make
+// this safe across both 64-texel page seams and 128-texel region boundaries.
+float t3d_vhm_fetch_fine(uint slot, vec2 pageTexel)
+{
+    ivec2 base = ivec2(floor(pageTexel));
+    vec2 weight = fract(pageTexel);
+    ivec2 limitXY = ivec2(67);
+    ivec2 p00 = clamp(base, ivec2(0), limitXY);
+    ivec2 p10 = clamp(base + ivec2(1, 0), ivec2(0), limitXY);
+    ivec2 p01 = clamp(base + ivec2(0, 1), ivec2(0), limitXY);
+    ivec2 p11 = clamp(base + ivec2(1, 1), ivec2(0), limitXY);
+    float a = texelFetch(t3d_st_vhm_fine_image, ivec3(p00, int(slot)), 0).r;
+    float b = texelFetch(t3d_st_vhm_fine_image, ivec3(p10, int(slot)), 0).r;
+    float c = texelFetch(t3d_st_vhm_fine_image, ivec3(p01, int(slot)), 0).r;
+    float d = texelFetch(t3d_st_vhm_fine_image, ivec3(p11, int(slot)), 0).r;
+    return mix(mix(a, b, weight.x), mix(c, d, weight.x), weight.y);
+}
+
+float t3d_vhm_fetch_tail(T3DStVhmTailEntry tail, uint mip, vec2 regionTexel)
+{
+    vec2 texel = regionTexel / float(1u << mip);
+    vec2 slotTexel = vec2(float(tail.atlas_x + t3d_vhm_tail_mip_x(mip)), float(tail.atlas_y)) +
+                     texel + vec2(2.0);
+    ivec2 base = ivec2(floor(slotTexel));
+    vec2 weight = fract(slotTexel);
+    float a = texelFetch(t3d_st_vhm_root_image, base, 0).r;
+    float b = texelFetch(t3d_st_vhm_root_image, base + ivec2(1, 0), 0).r;
+    float c = texelFetch(t3d_st_vhm_root_image, base + ivec2(0, 1), 0).r;
+    float d = texelFetch(t3d_st_vhm_root_image, base + ivec2(1, 1), 0).r;
+    return mix(mix(a, b, weight.x), mix(c, d, weight.x), weight.y);
+}
+
+bool t3d_vhm_sample(uint regionIndex, vec2 localTexel, uint desiredMip,
+                    uint publicationGeneration, out float encodedHeight)
+{
+    if (regionIndex >= 1024u || desiredMip >= 8u || publicationGeneration == 0u)
+    {
+        return false;
+    }
+    vec2 local = clamp(localTexel, vec2(0.0), vec2(127.0));
+    T3DStVhmTailEntry tail = t3d_st_vhm_tails[regionIndex];
+    if (tail.generation != publicationGeneration || tail.first_mip != 3u ||
+        tail.mip_count != 5u || (tail.flags & T3D_ST_VHM_TAIL_VALID) == 0u)
+    {
+        return false;
+    }
+    for (uint mip = desiredMip; mip < 8u; ++mip)
+    {
+        if (mip >= 3u)
+        {
+            encodedHeight = t3d_vhm_fetch_tail(tail, mip, local);
+            return true;
+        }
+        vec2 mipTexel = local / float(1u << mip);
+        uvec2 pageXY = mip == 0u ? min(uvec2(mipTexel) / 64u, uvec2(1u)) : uvec2(0u);
+        uint pageId = regionIndex * 11u + t3d_vhm_local_page(mip, pageXY);
+        T3DStVhmPageEntry page = t3d_st_vhm_pages[pageId];
+        if (page.generation != publicationGeneration ||
+            (page.packed_mip_flags & T3D_ST_VHM_VALID) == 0u)
+        {
+            return false;
+        }
+        if ((page.packed_mip_flags & T3D_ST_VHM_RESIDENT) == 0u ||
+            page.physical_slot == T3D_ST_VHM_INVALID)
+        {
+            continue;
+        }
+        vec2 pageLocal = mipTexel - vec2(pageXY * 64u) + vec2(2.0);
+        encodedHeight = t3d_vhm_fetch_fine(page.physical_slot, pageLocal);
+        return true;
+    }
+    return false;
+}
+
+bool t3d_vhm_sample_morph(uint regionIndex, vec2 localTexel, uint mip,
+                          float morph, uint generation, out float heightMeters)
+{
+    float fineHeight = 0.0;
+    float coarseHeight = 0.0;
+    if (!t3d_vhm_sample(regionIndex, localTexel, mip, generation, fineHeight) ||
+        !t3d_vhm_sample(regionIndex, localTexel, min(mip + 1u, 7u), generation, coarseHeight))
+    {
+        return false;
+    }
+    heightMeters = -384.0 + mix(fineHeight, coarseHeight, clamp(morph, 0.0, 1.0)) * 1152.0;
+    return true;
+}
+#endif // T3D_ST_VHM_BINDINGS
+#endif // T3D_ST_VHM_GLSLINC

@@ -10,7 +10,6 @@
 #include "authoring/vt/build/terrain_3d_composed_surface_cooker.h"
 #include "data/runtime/terrain_3d_composed_surface_sidecar.h"
 #include "rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.h"
-#include "rendering/rd/vt/io/terrain_3d_far_avt_region_file.h"
 #include "assets/resources/terrain_3d_mesh_asset.h"
 #include "assets/resources/terrain_3d_texture_asset.h"
 #include "memory/core/terrain_3d_memory.h"
@@ -2214,100 +2213,6 @@ bool t3d_vt_godot_compile_material_record(
 // allocations, root tails, uploads and eviction all belong to VirtualTexture.
 // This function is called only after the editor has verified material parity
 // and supplied the independently computed current source fingerprint.
-// AVT-04/05: convert the exact authored far-tile interior into one V1 FAR allocation.
-// Authoring is sequential/bounded; V1 retains exclusive upload/residency ownership.
-bool t3d_vt_godot_import_far_region_directory_v1(
-    const String &rDataDirectory, const uint32_t nGeneration,
-    PackedByteArray &rFragment, String *pError )
-{
-    rFragment.clear();
-    const String directory = rDataDirectory.path_join( "terrain3d_far_vt" );
-    eastl::vector< PackedByteArray, Terrain3DEastlAllocator > fragments;
-    PackedByteArray encoded, decoded[3], interior[3];
-    const uint32_t tile = T3D_VT_PHYSICAL_TILE;
-    const uint32_t interiorSize = T3D_VT_PAGE_INTERIOR;
-    if ( encoded.resize( ( int64_t ) tile * tile * 4u ) != OK ) return false;
-    for ( uint32_t c = 0u; c < 3u; ++c ) {
-        const uint32_t components = c == 0u ? 4u : ( c == 1u ? 1u : 2u );
-        const uint32_t extent = c == 0u ? 256u : interiorSize;
-        if ( decoded[c].resize( ( int64_t ) tile * tile * components ) != OK ||
-             interior[c].resize( ( int64_t ) extent * extent * components ) != OK ) return false;
-    }
-    for ( uint32_t region = 0u; region < T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY; ++region ) {
-        const int32_t x = int32_t( region & T3D_REGION_MAP_MASK ) - T3D_REGION_MAP_HALF;
-        const int32_t y = int32_t( region >> T3D_REGION_MAP_SHIFT ) - T3D_REGION_MAP_HALF;
-        const String path = directory.path_join( "region_" + String::num_int64( x ) +
-                                                   "_" + String::num_int64( y ) + ".t3avt" );
-        if ( !FileAccess::file_exists( path ) ) continue;
-        const Ref< FileAccess > file = FileAccess::open( path, FileAccess::READ );
-        t3dColdIndexHeader_t header{};
-        eastl::vector< t3dColdChunkRecord_t > records;
-        if ( !t3dColdIndexOpenFile( file, header, records ) || records.empty() ||
-             !t3dFarAvtOpenRegionCold( file, x, y, records[0].m_nMaterialGeneration,
-                                      header, records ) ) {
-            if ( pError ) *pError = "Invalid far region index: " + path;
-            return false;
-        }
-        for ( uint32_t c = 0u; c < 3u; ++c ) {
-            if ( !t3dFarAvtReadTileCold( file, header, records, x, y, c + 1u, 0u,
-                   records[0].m_nMaterialGeneration, encoded.ptrw(), ( size_t ) encoded.size(),
-                   decoded[c].ptrw(), ( size_t ) decoded[c].size() ) ) {
-                if ( pError ) *pError = "Invalid far page payload: " + path;
-                return false;
-            }
-            const uint32_t components = c == 0u ? 4u : ( c == 1u ? 1u : 2u );
-            const uint32_t scale = c == 0u ? 2u : 1u;
-            const uint32_t extent = interiorSize * scale;
-            const uint8_t *src = decoded[c].ptr();
-            uint8_t *dst = interior[c].ptrw();
-            for ( uint32_t ry = 0u; ry < extent; ++ry ) {
-                const uint32_t sy = ry / scale + T3D_VT_PAGE_GUTTER;
-                for ( uint32_t rx = 0u; rx < extent; ++rx ) {
-                    const uint32_t sx = rx / scale + T3D_VT_PAGE_GUTTER;
-                    memcpy( dst + ( ry * extent + rx ) * components,
-                            src + ( sy * tile + sx ) * components, components );
-                }
-            }
-        }
-        t3dVTCookSparseSourceV1_t source{};
-        source.m_nStableKey = t3d_vt_far_region_stable_key( region );
-        source.m_nConsumer = T3D_VT_CONSUMER_FAR;
-        source.m_nAuthoredChannelMask = T3D_VT_FAR_REQUIRED_CHANNEL_MASK;
-        source.m_nWrapMode = T3D_VT_COOK_WRAP_CLAMP;
-        source.m_nAllocationFlags = T3D_VT_ALLOCATION_MEGATEXTURE |
-                                   T3D_VT_ALLOCATION_CLAMP | T3D_VT_ALLOCATION_SHIPPING_IMMUTABLE;
-        source.m_nGenerationSeed = ( uint32_t ) ( header.m_nGeneration ^ ( header.m_nGeneration >> 32u ) );
-        if ( !source.m_nGenerationSeed ) source.m_nGenerationSeed = 1u;
-        const uint32_t logical[3] = { T3D_VT_LOGICAL_CHANNEL_ALBEDO,
-                                      T3D_VT_LOGICAL_CHANNEL_HEIGHT,
-                                      T3D_VT_LOGICAL_CHANNEL_FAR_HEIGHT };
-        for ( uint32_t c = 0u; c < 3u; ++c ) {
-            t3dVTCookImageView_t &view = source.m_Channels[logical[c]];
-            view.m_pPixels = interior[c].ptr();
-            view.m_nWidth = c == 0u ? 256u : interiorSize;
-            view.m_nHeight = view.m_nWidth;
-            view.m_nComponents = c == 0u ? 4u : ( c == 1u ? 1u : 2u );
-            view.m_nRowBytes = view.m_nWidth * view.m_nComponents;
-            source.m_nSourceFingerprint[logical[c]] =
-                header.m_nGeneration ^ ( uint64_t( c + 1u ) << 48u );
-        }
-        PackedByteArray fragment;
-        if ( !t3d_vt_godot_cook_source_fragment_v1( source, fragment ) || fragment.is_empty() ) {
-            if ( pError ) *pError = "Unable to encode far V1 allocation: " + path;
-            return false;
-        }
-        fragments.push_back( fragment );
-    }
-    if ( fragments.empty() ) return true;
-    if ( !t3d_vt_godot_merge_packages_v1( fragments.data(),
-             ( uint32_t ) fragments.size(), nGeneration, rFragment ) ) {
-        if ( pError ) *pError = "Unable to merge regional FAR allocations into V1";
-        return false;
-    }
-    if ( pError ) *pError = String();
-    return true;
-}
-
 // UCMP-03: decode one complete authored composed mip from the validated .t3sc
 // sidecar into its V1 logical format. The BC decoder is the existing CS15
 // decoder. No independent GPU residency or second page table is created.

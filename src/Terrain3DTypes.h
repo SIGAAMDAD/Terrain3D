@@ -1882,18 +1882,33 @@ typedef struct t3dTerrainMegaVTCookTicket_s
 	uint64_t m_nClaimId;
 } t3dTerrainMegaVTCookTicket_t;
 
-typedef struct t3dRdTerrainRegionGpu_s
+// ST05: 64-byte std430 region publication. A legacy FAR V1 alias is kept
+// temporarily in the composed slot ONLY while region_state_flags == 0.
+// The ST05 READY flag commits all three new resource families together.
+typedef struct alignas( 16 ) t3dRdTerrainRegionGpu_s
 {
-	uint32_t m_nPackedPhysicalFlags;
-	uint32_t m_nMegaVTAllocation;
-	uint32_t m_nMegaVTGeneration;
-	uint32_t m_nMegaVTFlags;
-	float	 m_vMegaVTWorldToUv[4];
-    uint32_t m_nFarVTAllocation;
-    uint32_t m_nFarVTGeneration;
+    uint32_t m_nPackedPhysicalFlags;
+    uint32_t m_nMegaVTAllocation;
+    uint32_t m_nMegaVTGeneration;
+    uint32_t m_nMegaVTFlags;
+    float m_vMegaVTWorldToUv[4];
     uint32_t m_nComposedVTAllocation;
     uint32_t m_nComposedVTGeneration;
+    uint32_t m_nVhmRootIndex;
+    uint32_t m_nVhmGeneration;
+    uint32_t m_nMaskRootIndex;
+    uint32_t m_nMaskGeneration;
+    uint32_t m_nPublicationGeneration;
+    uint32_t m_nRegionStateFlags;
 } t3dRdTerrainRegionGpu_t;
+static_assert( sizeof( t3dRdTerrainRegionGpu_t ) == 64u, "ST05 region std430 ABI" );
+static_assert( alignof( t3dRdTerrainRegionGpu_t ) == 16u, "ST05 region record alignment" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_vMegaVTWorldToUv ) == 16u, "ST05 region vec4 offset" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_nComposedVTAllocation ) == 32u, "ST05 COMPOSED ABI" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_nVhmRootIndex ) == 40u, "ST05 VHM ABI" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_nMaskRootIndex ) == 48u, "ST05 MASK ABI" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_nPublicationGeneration ) == 56u, "ST05 generation ABI" );
+static_assert( offsetof( t3dRdTerrainRegionGpu_t, m_nRegionStateFlags ) == 60u, "ST05 flags ABI" );
 
 typedef struct t3dVirtualTextureStats_s
 {

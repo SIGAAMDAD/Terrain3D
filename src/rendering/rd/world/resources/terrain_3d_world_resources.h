@@ -34,6 +34,16 @@ private:
 	t3dRdGpuBufferSlice_t	   m_fixedIndirectSlice;
 	uint64_t				   m_nResourceGeneration = 0u;
 	uint64_t				   m_nUploadedPublicationGeneration = 0u;
+	uint64_t m_nUploadedGeometryCacheEpoch = 0u;
+    uint64_t m_nUploadedGeometryMutationRevision = 0u;
+    const Terrain3DWorldPublication *m_pPendingGeometryPublication = NULL;
+	uint64_t m_nPendingGeometryCacheEpoch = 0u;
+	uint64_t m_nGeometryDeltaUploadBytes = 0u;
+	uint64_t m_nGeometryFullUploadBytes = 0u;
+	uint64_t m_nGeometryDeltaUploadCount = 0u;
+	uint64_t m_nGeometryFullUploadCount = 0u;
+	uint64_t m_nQueuedSectionBytes[WORLD_BUFFER_COUNT]{};
+	bool m_bQueuedGeometryDeltas[WORLD_BUFFER_COUNT]{};
 	uint64_t				   m_nGpuBufferBytes = 0u;
 	uint64_t				   m_nUploadBytes = 0u;
 	uint64_t				   m_nSkippedPublicationUploadBytes = 0u;

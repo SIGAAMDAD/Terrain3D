@@ -10,6 +10,8 @@
 #include "diagnostics/core/terrain_3d_diagnostics.h"
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_descriptor_recipe.h"
 #include "rendering/rd/world/resources/terrain_3d_world_resources.h"
+#include "rendering/rd/world/runtime/terrain_3d_world_geometry_cache.h"
+#include "rendering/rd/world/geometry/terrain_3d_world_geometry.h"
 #include <godot_cpp/classes/rendering_server.hpp>
 #include "rendering/rd/forward/terrain_3d_rd_forward_pipeline_base.h"
 #include "rendering/rd/shaders/terrain_3d_rd_shader_catalog.h"
@@ -43,6 +45,476 @@ typedef struct t3dRdUnitTestState_s
 		}
 	}
 } t3dRdUnitTestState_t;
+
+// Synthetic WORLD clusters exercise the owner-thread cache without allocating GPU RIDs.
+static void t3dWorldGeometryCacheFixtureAddSource( t3dRdMeshSourceSnapshot_t &rSnapshot,
+                                                   const uint64_t nKey, const float fX )
+{
+    const uint32_t nVertexBase = ( uint32_t ) rSnapshot.m_worldVertices.size();
+    const uint32_t nIndexBase = ( uint32_t ) rSnapshot.m_worldClusterVertexIndices.size();
+    const uint32_t nTriangleBase = ( uint32_t ) rSnapshot.m_worldTriangleWords.size();
+    const uint32_t nClusterBase = ( uint32_t ) rSnapshot.m_worldClusters.size();
+    t3dWorldVertex_t vertex{};
+    vertex.m_fPosition[0] = fX;
+    rSnapshot.m_worldVertices.push_back( vertex );
+    for ( uint32_t i = 0u; i < 3u; ++i ) {
+        rSnapshot.m_worldClusterVertexIndices.push_back( nVertexBase );
+    }
+    for ( uint32_t i = 0u; i < T3D_WORLD_CLUSTER_MAX_TRIANGLES; ++i ) {
+        rSnapshot.m_worldTriangleWords.push_back( 0u );
+    }
+    t3dWorldCluster_t cluster{};
+    cluster.m_nVertexIndexOffset = nIndexBase;
+    cluster.m_nTriangleOffset = nTriangleBase;
+    cluster.m_nPackedCounts = t3dWorldPackU16Pair( 3u, 1u );
+    cluster.m_nMaterial = T3D_WORLD_INVALID_ID;
+    cluster.m_nSourceId = ( uint32_t ) nKey;
+    rSnapshot.m_worldClusters.push_back( cluster );
+    rSnapshot.m_worldClusterVtMetadata.push_back( t3dWorldClusterVTMetadata_t{} );
+    t3dRdMeshSourceSurface_t surface{};
+    surface.m_nSourceKey = nKey;
+    surface.m_nWorldVertexOffset = nVertexBase;
+    surface.m_nWorldVertexCount = 1u;
+    surface.m_nWorldClusterOffset = nClusterBase;
+    surface.m_nWorldClusterCount = 1u;
+    t3dRdMeshSourceLod_t lod{};
+    lod.m_nSourceKey = nKey;
+    lod.m_nFirstSurface = ( uint32_t ) rSnapshot.m_surfaces.size();
+    lod.m_nSurfaceCount = 1u;
+    rSnapshot.m_surfaces.push_back( surface );
+    rSnapshot.m_lods.push_back( lod );
+}
+
+static void t3dRunWorldGeometryCacheResidencyTests( t3dRdUnitTestState_t &rState )
+{
+    Terrain3DColdPhaseScope cold_phase_scope;
+    t3dWorldResourceLimits_t limits{};
+    limits.m_nMaxSourceVertices = 3u;
+    limits.m_nMaxClusterVertexIndices = 9u;
+    limits.m_nMaxTriangleSlots = 3u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    limits.m_nMaxClusters = 3u;
+    limits.m_nMaxMaterials = 8u;
+    const uint64_t nKeyA = 0x1000000000001234ull;
+    const uint64_t nKeyB = 0x1000000000005678ull;
+    const uint64_t nKeyC = 0x1000000000009012ull;
+    Terrain3DWorldGeometryCache cache;
+    t3dRdMeshSourceSnapshot_t source;
+    t3dWorldGeometryCacheFixtureAddSource( source, nKeyA, 1.0f );
+    t3dWorldGeometryCacheFixtureAddSource( source, nKeyB, 2.0f );
+    const bool bInitial = cache.synchronizeCold( source, NULL, 0u, limits );
+    uint32_t nFirstA = UINT32_MAX, nCountA = 0u;
+    uint32_t nFirstB = UINT32_MAX, nCountB = 0u;
+    const bool bLookup = bInitial && cache.findActiveSpan( nKeyA, nFirstA, nCountA ) &&
+        cache.findActiveSpan( nKeyB, nFirstB, nCountB );
+    rState.expect( bLookup && nFirstA == 0u && nFirstB == 1u && nCountA == 1u && nCountB == 1u,
+                   "WORLD cache allocates two immutable source cluster spans" );
+    if ( !bLookup ) {
+        return;
+    }
+    t3dWorldPublicationCapacity_t required{};
+    required.m_nVertices = 3u;
+    required.m_nClusterVertexIndices = 9u;
+    required.m_nTriangleWords = 3u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    required.m_nClusters = 3u;
+    required.m_nClusterVtMetadata = 3u;
+    Terrain3DWorldPublication publication;
+    const bool bReserved = publication.reserveCold( required );
+    const bool bCopied = bReserved && cache.copyGeometryInto( publication );
+    const uint64_t nEpoch = cache.getCacheEpoch();
+    Terrain3DWorldPublication sharedA;
+    Terrain3DWorldPublication sharedB;
+    sharedA.enableSharedGeometryConsumerCold();
+    sharedB.enableSharedGeometryConsumerCold();
+    const bool bShareA = cache.copyGeometryInto( sharedA );
+    const bool bShareB = cache.copyGeometryInto( sharedB );
+    rState.expect( bShareA && bShareB && sharedA.m_clusters.empty() && sharedB.m_clusters.empty() &&
+                       sharedA.clusters().size() == 2u &&
+                       sharedA.clusters().data() == sharedB.clusters().data(),
+                   "WORLD publication banks share one immutable cluster payload without duplicate vectors" );
+    rState.expect( bShareA && sharedA.vertices().size() == 2u &&
+                       sharedA.vertices().data() == sharedB.vertices().data(),
+                   "WORLD publication banks share frozen vertices and index streams" );
+    rState.expect( bCopied && publication.m_nStableGeometryEpoch == nEpoch &&
+                       publication.m_clusters.size() == 2u,
+                   "WORLD publication begins with two stable source records" );
+
+    t3dRdMeshSourceSnapshot_t onlyB;
+    t3dWorldGeometryCacheFixtureAddSource( onlyB, nKeyB, 2.0f );
+    const bool bRemovedA = cache.synchronizeCold( onlyB, NULL, 0u, limits );
+    uint32_t nUnchangedB = UINT32_MAX, nCount = 0u;
+    uint32_t nRemovedCluster = UINT32_MAX, nRemovedCount = 0u;
+    rState.expect( bRemovedA && !cache.findActiveSpan( nKeyA, nRemovedCluster, nRemovedCount ) &&
+                       cache.findActiveSpan( nKeyB, nUnchangedB, nCount ) &&
+                       nUnchangedB == nFirstB && cache.geometry().m_clusters.size() == 2u,
+                   "Removing source A retains source B's physical offset without rebuilding geometry" );
+
+    t3dWorldMeshSourceHandle_t handleB{};
+    const bool bHandleB = cache.getActiveSourceHandle( nKeyB, handleB );
+    uint32_t nHandleCluster = UINT32_MAX, nHandleCount = 0u;
+    rState.expect( bHandleB && cache.resolveActiveSourceHandle( handleB, nHandleCluster, nHandleCount ) &&
+                       nHandleCluster == nFirstB && nHandleCount == 1u,
+                   "Stable source handles resolve to active WORLD cluster spans" );
+
+    const bool bReaddedA = cache.synchronizeCold( source, NULL, 0u, limits );
+    uint32_t nRestoredA = UINT32_MAX;
+    rState.expect( bReaddedA && cache.findActiveSpan( nKeyA, nRestoredA, nCount ) &&
+                       nRestoredA == nFirstA && cache.geometry().m_clusters.size() == 2u,
+                   "Reactivating an unchanged source reuses its prior physical allocation" );
+
+    t3dWorldMeshSourceHandle_t handlePriorRevision{};
+    const bool bHadOldHandle = cache.getActiveSourceHandle( nKeyA, handlePriorRevision );
+    t3dRdMeshSourceSnapshot_t revised;
+    t3dWorldGeometryCacheFixtureAddSource( revised, nKeyA, 3.0f );
+    t3dWorldGeometryCacheFixtureAddSource( revised, nKeyB, 2.0f );
+    const bool bRevised = cache.synchronizeCold( revised, NULL, 0u, limits );
+    Terrain3DWorldPublication sharedRevised;
+    sharedRevised.enableSharedGeometryConsumerCold();
+    const bool bPublishedRevised = bRevised && cache.copyGeometryInto( sharedRevised );
+    rState.expect( bPublishedRevised && sharedRevised.clusters().size() == 3u &&
+                       sharedA.clusters().size() == 2u &&
+                       sharedB.clusters().data() == sharedA.clusters().data() &&
+                       sharedRevised.clusters().data() != sharedA.clusters().data(),
+                   "WORLD render leases preserve old geometry while the owner publishes a new revision" );
+    sharedA.clearForBuild();
+    rState.expect( sharedA.clusters().empty() && sharedB.clusters().size() == 2u,
+                   "Releasing one render-bank geometry lease does not invalidate another bank" );
+    uint32_t nRevisedA = UINT32_MAX;
+    uint32_t nReusedB = UINT32_MAX;
+    const bool bLookups = bRevised && cache.findActiveSpan( nKeyA, nRevisedA, nCount ) &&
+        cache.findActiveSpan( nKeyB, nReusedB, nCount );
+    rState.expect( bLookups && nRevisedA == 2u && nReusedB == nFirstB &&
+                       cache.geometry().m_clusters.size() == 3u,
+                   "Revised source A appends new geometry without relocating B" );
+    uint32_t nRejectedCluster = 0u, nRejectedCount = 0u;
+    t3dWorldMeshSourceHandle_t handleNewRevision{};
+    rState.expect( bHadOldHandle && bRevised &&
+                       !cache.resolveActiveSourceHandle( handlePriorRevision, nRejectedCluster, nRejectedCount ) &&
+                       cache.getActiveSourceHandle( nKeyA, handleNewRevision ) &&
+                       cache.resolveActiveSourceHandle( handleNewRevision, nRejectedCluster, nRejectedCount ) &&
+                       nRejectedCluster == nRevisedA,
+                   "Replacing a mesh source revision invalidates its previous logical handle" );
+    const bool bAppended = bLookups && bCopied && cache.copyGeometryInto( publication );
+    rState.expect( bAppended && publication.m_clusters.size() == 3u &&
+                       publication.m_clusterVertexIndices[3u] == 1u &&
+                       publication.m_clusterVertexIndices[6u] == 2u,
+                   "Incremental CPU bank publication appends only the new normalized source" );
+
+    t3dRdMeshSourceSnapshot_t overLimit;
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nKeyA, 3.0f );
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nKeyB, 2.0f );
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nKeyC, 4.0f );
+    t3dWorldMeshSourceHandle_t oldA{};
+    cache.getActiveSourceHandle( nKeyA, oldA );
+    const bool bRejected = !cache.synchronizeCold( overLimit, NULL, 0u, limits );
+    uint32_t nAfterRejectB = UINT32_MAX;
+    rState.expect( bRejected && cache.geometry().m_clusters.size() == 3u &&
+                       cache.findActiveSpan( nKeyB, nAfterRejectB, nCount ) &&
+                       nAfterRejectB == nFirstB && cache.getAdmissionFailureCount() != 0u,
+                   "Failed capacity admission preserves the previously committed residency set" );
+    // The removing WORLD publication must first be GPU-fence acknowledged.
+    cache.tagRetiredSourcesCold( 77u );
+    const uint64_t nBeforeCompaction = cache.getCacheEpoch();
+    const uint64_t nBeforeBytes = cache.getQuarantinedGeometryBytes();
+    rState.expect( !cache.compactAfterGpuCompletionCold( 76u, limits ) &&
+                   cache.getCacheEpoch() == nBeforeCompaction && nBeforeBytes > 0u,
+                   "Cache refuses physical reclamation without exact GPU completion proof" );
+    const bool bCompacted = cache.compactAfterGpuCompletionCold( 77u, limits );
+    uint32_t nCompactedA = UINT32_MAX, nCompactedB = UINT32_MAX;
+    rState.expect( bCompacted && cache.getCacheEpoch() != nBeforeCompaction &&
+                   cache.geometry().m_clusters.size() == 2u &&
+                   cache.findActiveSpan( nKeyA, nCompactedA, nCount ) &&
+                   cache.findActiveSpan( nKeyB, nCompactedB, nCount ) &&
+                   nCompactedA != nCompactedB && cache.getQuarantinedGeometryBytes() == 0u &&
+                   cache.getReclaimedGeometryBytes() >= nBeforeBytes &&
+                   !cache.resolveActiveSourceHandle( oldA, nCompactedA, nCount ),
+                   "Fence-certified compaction rebuilds active geometry and invalidates stale handles" );
+    cache.reset();
+    uint32_t nStaleCluster = 0u, nStaleCount = 0u;
+    rState.expect( !cache.resolveActiveSourceHandle( oldA, nStaleCluster, nStaleCount ) &&
+                       !cache.resolveActiveSourceHandle( handleB, nStaleCluster, nStaleCount ),
+                   "Cache-epoch reset invalidates all outstanding source handles" );
+    rState.expect( cache.getCacheEpoch() != nEpoch && cache.geometry().m_clusters.empty(),
+                   "Cache teardown invalidates stable geometry epochs" );
+}
+
+static void t3dRunWorldGeometryDeduplicationTests( t3dRdUnitTestState_t &rState )
+{
+	Terrain3DColdPhaseScope cold_phase_scope;
+	t3dWorldResourceLimits_t limits{};
+	limits.m_nMaxSourceVertices = 2u;
+	limits.m_nMaxClusterVertexIndices = 6u;
+	limits.m_nMaxTriangleSlots = 2u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+	limits.m_nMaxClusters = 2u;
+	limits.m_nMaxMaterials = 8u;
+	const uint64_t nA = 0x1000000000001001ull;
+	const uint64_t nB = 0x1000000000002002ull;
+	Terrain3DWorldGeometryCache cache;
+	t3dRdMeshSourceSnapshot_t both;
+	t3dWorldGeometryCacheFixtureAddSource( both, nA, 5.0f );
+	t3dWorldGeometryCacheFixtureAddSource( both, nB, 5.0f );
+	const bool bAdmitted = cache.synchronizeCold( both, NULL, 0u, limits );
+	uint32_t nOffsetA = UINT32_MAX, nOffsetB = UINT32_MAX, nCount = 0u;
+	rState.expect( bAdmitted && cache.findActiveSpan( nA, nOffsetA, nCount ) &&
+		cache.findActiveSpan( nB, nOffsetB, nCount ) && nOffsetA == nOffsetB &&
+		cache.geometry().m_clusters.size() == 1u && cache.getDeduplicatedSourceCount() == 1u &&
+		cache.getDeduplicatedGpuBytes() > 0u && cache.getPhysicalSourceLeaseCount( nA ) == 2u,
+		"WORLD cache shares identical source geometry across distinct GLB keys" );
+	if ( !bAdmitted ) {
+		return;
+	}
+	t3dRdMeshSourceSnapshot_t threeAliases;
+	t3dWorldGeometryCacheFixtureAddSource( threeAliases, nA, 5.0f );
+	t3dWorldGeometryCacheFixtureAddSource( threeAliases, nB, 5.0f );
+	t3dWorldGeometryCacheFixtureAddSource( threeAliases, 0x1000000000003003ull, 5.0f );
+	rState.expect( cache.synchronizeCold( threeAliases, NULL, 0u, limits ) &&
+		cache.getActiveSourceCount() == 3u && cache.geometry().m_clusters.size() == 1u,
+		"Third identical GLB consumes a metadata slot but zero additional GPU geometry capacity" );
+	t3dRdMeshSourceSnapshot_t onlyB;
+	t3dWorldGeometryCacheFixtureAddSource( onlyB, nB, 5.0f );
+	const bool bRemovedA = cache.synchronizeCold( onlyB, NULL, 0u, limits );
+	uint32_t nBStill = UINT32_MAX;
+	rState.expect( bRemovedA && cache.findActiveSpan( nB, nBStill, nCount ) &&
+		nBStill == nOffsetB && cache.getPhysicalSourceLeaseCount( nA ) == 1u &&
+		cache.getLiveGeometryBytes() > 0u &&
+		cache.getQuarantinedGeometryBytes() == 0u,
+		"Unloading one alias retains its shared geometry for the remaining live source" );
+	t3dRdMeshSourceSnapshot_t empty;
+	const bool bRemovedBoth = cache.synchronizeCold( empty, NULL, 0u, limits );
+	rState.expect( bRemovedBoth && cache.getActiveSourceCount() == 0u &&
+		cache.getLiveGeometryBytes() == 0u && cache.getQuarantinedGeometryBytes() > 0u,
+		"Last source release quarantines GPU geometry until fence-confirmed retirement" );
+	t3dRdMeshSourceSnapshot_t revised;
+	t3dWorldGeometryCacheFixtureAddSource( revised, nA, 6.0f );
+	const bool bRevised = cache.synchronizeCold( revised, NULL, 0u, limits );
+	uint32_t nRevisedOffset = UINT32_MAX;
+	rState.expect( bRevised && cache.findActiveSpan( nA, nRevisedOffset, nCount ) &&
+		nRevisedOffset != nOffsetA && cache.geometry().m_clusters.size() == 2u,
+		"Revised content is isolated from the retired shared source allocation" );
+}
+
+static void t3dRunWorldGeometryRecyclingTests( t3dRdUnitTestState_t &rState )
+{
+    Terrain3DColdPhaseScope cold_phase_scope;
+    t3dWorldResourceLimits_t limits{};
+    limits.m_nMaxSourceVertices = 2u;
+    limits.m_nMaxClusterVertexIndices = 6u;
+    limits.m_nMaxTriangleSlots = 2u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    limits.m_nMaxClusters = 2u;
+    limits.m_nMaxMaterials = 8u;
+    const uint64_t nA = 0x1000000000001414ull;
+    const uint64_t nB = 0x1000000000002424ull;
+    const uint64_t nC = 0x1000000000003434ull;
+    const uint64_t nD = 0x1000000000004444ull;
+    Terrain3DWorldGeometryCache cache;
+    t3dRdMeshSourceSnapshot_t both;
+    t3dWorldGeometryCacheFixtureAddSource( both, nA, 1.0f );
+    t3dWorldGeometryCacheFixtureAddSource( both, nB, 2.0f );
+    if ( !cache.synchronizeCold( both, NULL, 0u, limits ) ) {
+        rState.expect( false, "Recycling fixture admits its two original meshes" );
+        return;
+    }
+    uint32_t nACluster = UINT32_MAX, nBCluster = UINT32_MAX, nCount = 0u;
+    cache.findActiveSpan( nA, nACluster, nCount );
+    cache.findActiveSpan( nB, nBCluster, nCount );
+    t3dWorldMeshSourceHandle_t originalA{};
+    cache.getActiveSourceHandle( nA, originalA );
+    Terrain3DWorldPublication publication;
+    t3dWorldPublicationCapacity_t capacity{};
+    capacity.m_nVertices = 2u;
+    capacity.m_nClusterVertexIndices = 6u;
+    capacity.m_nTriangleWords = 2u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    capacity.m_nClusters = 2u;
+    capacity.m_nClusterVtMetadata = 2u;
+    const bool bBank = publication.reserveCold( capacity ) && cache.copyGeometryInto( publication );
+    t3dRdMeshSourceSnapshot_t onlyB;
+    t3dWorldGeometryCacheFixtureAddSource( onlyB, nB, 2.0f );
+    cache.synchronizeCold( onlyB, NULL, 0u, limits );
+    cache.tagRetiredSourcesCold( 44u );
+    t3dRdMeshSourceSnapshot_t replacement;
+    t3dWorldGeometryCacheFixtureAddSource( replacement, nB, 2.0f );
+    t3dWorldGeometryCacheFixtureAddSource( replacement, nC, 3.0f );
+    const bool bUncertified = !cache.releaseCompletedRetirementsCold( 43u ) &&
+        !cache.synchronizeCold( replacement, NULL, 0u, limits );
+    rState.expect( bUncertified && cache.getFreeGeometryBytes() == 0u,
+        "Uncertified retirement cannot recycle an in-flight WORLD geometry address" );
+    const uint64_t nEpoch = cache.getCacheEpoch();
+    const bool bCertified = cache.releaseCompletedRetirementsCold( 44u );
+    rState.expect( bCertified && cache.getFreeGeometryBytes() > 0u &&
+        cache.getQuarantinedGeometryBytes() == 0u && cache.getCacheEpoch() == nEpoch,
+        "Completed publication fence returns a whole physical mesh span without compaction" );
+    // A failed multi-source transaction consumes no free-list entries, even
+    // when an earlier source wrote into the free CPU span provisionally.
+    t3dRdMeshSourceSnapshot_t overLimit;
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nB, 2.0f );
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nC, 3.0f );
+    t3dWorldGeometryCacheFixtureAddSource( overLimit, nD, 4.0f );
+    const uint64_t nFreeBytes = cache.getFreeGeometryBytes();
+    const bool bRollback = !cache.synchronizeCold( overLimit, NULL, 0u, limits ) &&
+        cache.getFreeGeometryBytes() == nFreeBytes && cache.getRecycledSpanCount() == 0u;
+    rState.expect( bRollback, "Failed transactional admission preserves recyclable geometry spans" );
+    const bool bReplaced = cache.synchronizeCold( replacement, NULL, 0u, limits );
+    uint32_t nCCluster = UINT32_MAX, nBStill = UINT32_MAX;
+    const bool bOffsets = bReplaced && cache.findActiveSpan( nC, nCCluster, nCount ) &&
+        cache.findActiveSpan( nB, nBStill, nCount );
+    rState.expect( bOffsets && nCCluster == nACluster && nBStill == nBCluster &&
+        cache.geometry().m_clusters.size() == 2u && cache.getRecycledSpanCount() == 1u &&
+        cache.getFreeGeometryBytes() == 0u && cache.getCacheEpoch() == nEpoch,
+        "New mesh reuses a certified hole while unrelated WORLD offsets remain stable" );
+    uint32_t nUnused = 0u;
+    rState.expect( !cache.resolveActiveSourceHandle( originalA, nUnused, nCount ),
+        "A recycled physical slot never resurrects a previous source handle" );
+    const uint64_t nOldMutation = publication.m_nGeometryMutationRevision;
+    const bool bPatched = bBank && cache.copyGeometryInto( publication );
+    rState.expect( bOffsets && bPatched && publication.m_nGeometryMutationRevision > nOldMutation &&
+        publication.m_vertices[nCCluster].m_fPosition[0] == 3.0f &&
+        publication.m_vertices[nBCluster].m_fPosition[0] == 2.0f &&
+        publication.m_geometryDirtyRanges.size() == 5u &&
+        publication.m_nStableGeometryEpoch == nEpoch,
+        "WORLD CPU publication overwrites recycled ranges and journals GPU delta uploads" );
+}
+
+// A two-cluster source consumes a two-element span in every WORLD geometry
+// stream. Once released, two smaller sources must split its physical allocation
+// without moving a third live source. Subsequent retirement must coalesce it.
+static void t3dWorldGeometryCacheFixtureAddPair( t3dRdMeshSourceSnapshot_t &rSnapshot,
+    const uint64_t nKey, const float fFirst, const float fSecond )
+{
+    const uint32_t nLodBase = ( uint32_t ) rSnapshot.m_lods.size();
+    t3dWorldGeometryCacheFixtureAddSource( rSnapshot, nKey, fFirst );
+    t3dWorldGeometryCacheFixtureAddSource( rSnapshot, nKey, fSecond );
+    rSnapshot.m_lods[nLodBase].m_nSurfaceCount = 2u;
+    rSnapshot.m_lods.pop_back();
+}
+
+static void t3dRunWorldGeometryFreeRangeTests( t3dRdUnitTestState_t &rState )
+{
+    Terrain3DColdPhaseScope cold_phase_scope;
+    t3dWorldResourceLimits_t limits{};
+    limits.m_nMaxSourceVertices = 3u;
+    limits.m_nMaxClusterVertexIndices = 9u;
+    limits.m_nMaxTriangleSlots = 3u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    limits.m_nMaxClusters = 3u;
+    limits.m_nMaxMaterials = 8u;
+    const uint64_t nA = 0x1000000000100001ull;
+    const uint64_t nB = 0x1000000000100002ull;
+    const uint64_t nC = 0x1000000000100003ull;
+    const uint64_t nD = 0x1000000000100004ull;
+    const uint64_t nE = 0x1000000000100005ull;
+    Terrain3DWorldGeometryCache cache;
+    t3dRdMeshSourceSnapshot_t initial;
+    t3dWorldGeometryCacheFixtureAddPair( initial, nA, 1.0f, 2.0f );
+    t3dWorldGeometryCacheFixtureAddSource( initial, nC, 3.0f );
+    if ( !cache.synchronizeCold( initial, NULL, 0u, limits ) ) {
+        rState.expect( false, "Free-range fixture admits two-cluster mesh and independent resident" );
+        return;
+    }
+    const uint64_t nEpoch = cache.getCacheEpoch();
+    uint32_t nOriginalC = UINT32_MAX, nCount = 0u;
+    cache.findActiveSpan( nC, nOriginalC, nCount );
+    t3dRdMeshSourceSnapshot_t onlyC;
+    t3dWorldGeometryCacheFixtureAddSource( onlyC, nC, 3.0f );
+    const bool bRemoved = cache.synchronizeCold( onlyC, NULL, 0u, limits );
+    cache.tagRetiredSourcesCold( 87u );
+    const bool bCertified = bRemoved && cache.releaseCompletedRetirementsCold( 87u );
+    const uint64_t nFreeBefore = cache.getFreeGeometryBytes();
+    t3dRdMeshSourceSnapshot_t firstSmall;
+    t3dWorldGeometryCacheFixtureAddSource( firstSmall, nB, 4.0f );
+    t3dWorldGeometryCacheFixtureAddSource( firstSmall, nC, 3.0f );
+    const bool bFirst = bCertified && cache.synchronizeCold( firstSmall, NULL, 0u, limits );
+    uint32_t nFirstB = UINT32_MAX, nUnchangedC = UINT32_MAX;
+    const bool bSplit = bFirst && cache.findActiveSpan( nB, nFirstB, nCount ) &&
+        cache.findActiveSpan( nC, nUnchangedC, nCount ) &&
+        nFirstB == 0u && nUnchangedC == nOriginalC &&
+        cache.getFreeGeometryBytes() * 2u == nFreeBefore &&
+        cache.geometry().m_clusters.size() == 3u && cache.getCacheEpoch() == nEpoch;
+    rState.expect( bSplit, "Fence-certified mesh free range splits without moving an unrelated WORLD mesh" );
+    t3dRdMeshSourceSnapshot_t secondSmall;
+    t3dWorldGeometryCacheFixtureAddSource( secondSmall, nB, 4.0f );
+    t3dWorldGeometryCacheFixtureAddSource( secondSmall, nD, 5.0f );
+    t3dWorldGeometryCacheFixtureAddSource( secondSmall, nC, 3.0f );
+    const bool bSecond = cache.synchronizeCold( secondSmall, NULL, 0u, limits );
+    uint32_t nFirstD = UINT32_MAX;
+    rState.expect( bSplit && bSecond && cache.findActiveSpan( nD, nFirstD, nCount ) &&
+        nFirstD == 1u && cache.getFreeGeometryBytes() == 0u &&
+        cache.getCacheEpoch() == nEpoch,
+        "Second mesh consumes split remainder with no geometry buffer growth" );
+    const bool bRetired = cache.synchronizeCold( onlyC, NULL, 0u, limits );
+    cache.tagRetiredSourcesCold( 91u );
+    const bool bCoalesced = bRetired && cache.releaseCompletedRetirementsCold( 91u ) &&
+        cache.getFreeGeometryBytes() == nFreeBefore;
+    t3dRdMeshSourceSnapshot_t largeAgain;
+    t3dWorldGeometryCacheFixtureAddPair( largeAgain, nE, 6.0f, 7.0f );
+    t3dWorldGeometryCacheFixtureAddSource( largeAgain, nC, 3.0f );
+    const bool bLarge = bCoalesced && cache.synchronizeCold( largeAgain, NULL, 0u, limits );
+    uint32_t nFirstE = UINT32_MAX;
+    rState.expect( bLarge && cache.findActiveSpan( nE, nFirstE, nCount ) &&
+        nFirstE == 0u && nCount == 2u && cache.getFreeGeometryBytes() == 0u &&
+        cache.geometry().m_clusters.size() == 3u && cache.getCacheEpoch() == nEpoch,
+        "Adjacent retired free ranges coalesce and accept a larger mesh without compaction" );
+}
+
+static void t3dRunAuthoredStaticLodCookTests( t3dRdUnitTestState_t &rState )
+{
+    t3dWorldVertex_t vertices[3]{};
+    vertices[0].m_fPosition[0] = 0.0f;
+    vertices[0].m_fPosition[1] = 0.0f;
+    vertices[1].m_fPosition[0] = 1.0f;
+    vertices[1].m_fPosition[1] = 0.0f;
+    vertices[2].m_fPosition[0] = 0.0f;
+    vertices[2].m_fPosition[1] = 1.0f;
+    const uint32_t indices[3] = { 0u, 1u, 2u };
+    t3dWorldGeometrySourceLod_t lods[2]{};
+    lods[0].pIndices = indices;
+    lods[0].nIndexCount = 3u;
+    lods[0].fMinDistance = 0.0f;
+    lods[0].fMaxDistance = 64.0f;
+    lods[1].pIndices = indices;
+    lods[1].nIndexCount = 3u;
+    lods[1].fMinDistance = 64.0f;
+    lods[1].fMaxDistance = 65504.0f;
+    t3dWorldGeometrySourceMesh_t source{};
+    source.pVertices = vertices;
+    source.pLods = lods;
+    source.nVertexCount = 3u;
+    source.nLodCount = 2u;
+    t3dWorldVertex_t vertexHeap[3]{};
+    uint32_t clusterIndices[6]{};
+    t3dWorldPackedClusterTriangle_t triangleHeap[2 * T3D_WORLD_CLUSTER_MAX_TRIANGLES]{};
+    t3dWorldMeshRecord_t meshRecord[1]{};
+    t3dWorldMeshLodRecord_t lodRecords[2]{};
+    t3dWorldClusterRecord_t clusters[2]{};
+    t3dWorldCluster_t gpuClusters[2]{};
+    t3dWorldClusterVTMetadata_t vtClusters[2]{};
+    t3dWorldGeometryDatabaseBuffers_t buffers{};
+    buffers.pVertexHeap = vertexHeap;
+    buffers.nVertexCapacity = 3u;
+    buffers.pClusterVertexIndexHeap = clusterIndices;
+    buffers.nClusterVertexIndexCapacity = 6u;
+    buffers.pTriangleHeap = triangleHeap;
+    buffers.nTriangleCapacity = 2u * T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+    buffers.pMeshRecords = meshRecord;
+    buffers.nMeshCapacity = 1u;
+    buffers.pLodRecords = lodRecords;
+    buffers.nLodCapacity = 2u;
+    buffers.pClusterRecords = clusters;
+    buffers.pWorldClusterRecords = gpuClusters;
+    buffers.pWorldClusterVtMetadata = vtClusters;
+    buffers.nClusterCapacity = 2u;
+    t3dWorldGeometryDatabase_t database{};
+    t3d_world_geometry_database_initialize_cold( database, buffers );
+    t3dWorldGeometryCookedMeshSpan_t span{};
+    t3dWorldGeometryCookStats_t stats{};
+    const bool cooked = t3d_world_geometry_append_mesh_cold( database, source, span, stats ) ==
+        T3D_WORLD_GEOMETRY_COOK_OK;
+    rState.expect( cooked && database.nLodCount == 2u && database.nClusterCount == 2u &&
+        span.nClusterCount == 2u &&
+        t3dWorldUnpackU16Low( gpuClusters[0].m_nPackedLodGeometryKind ) == 0u &&
+        t3dWorldUnpackU16Low( gpuClusters[1].m_nPackedLodGeometryKind ) == 1u &&
+        gpuClusters[0].m_nReserved != 0u && gpuClusters[1].m_nReserved != 0u &&
+        t3dHalfDecode( ( uint16_t ) ( gpuClusters[0].m_nReserved >> 16u ) ) == 64.0f &&
+        t3dHalfDecode( ( uint16_t ) ( gpuClusters[1].m_nReserved & 0xffffu ) ) == 64.0f,
+        "Static authored LOD0/LOD1 cook and encode adjacent GPU visibility ranges" );
+}
 
 static bool t3dRunEastlContainerOwnershipTests(
 	t3dRdUnitTestState_t &rState ) {
@@ -1059,6 +1531,11 @@ bool t3dRunRdCpuTests(
 	t3dRdUnitTestState_t state;
 	UtilityFunctions::print( "=== Running Terrain3D RD CPU tests ===" );
 	t3dRunEastlContainerOwnershipTests( state );
+	t3dRunWorldGeometryCacheResidencyTests( state );
+	t3dRunWorldGeometryDeduplicationTests( state );
+	t3dRunWorldGeometryRecyclingTests( state );
+	t3dRunWorldGeometryFreeRangeTests( state );
+	t3dRunAuthoredStaticLodCookTests( state );
 	t3dRunReductionBudgetTests( state );
 	t3dRunRdAbiAndPublicationTests( state );
 	t3dRunRdCullingAndIndirectTests( state );

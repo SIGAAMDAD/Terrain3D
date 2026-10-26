@@ -14,6 +14,7 @@
 #include "rendering/rd/world/resources/terrain_3d_world_resources.h"
 #include "rendering/rd/environment/terrain_3d_rd_environment_field.h"
 #include "rendering/rd/vt/gpu/terrain_3d_composed_surface_gpu.h"
+#include "rendering/rd/superterrain/terrain_3d_st_gpu_resources.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 
@@ -65,6 +66,7 @@ private:
 	} t3dSetSignature_t;
 
 	Terrain3DRdContext		  &m_context;
+    Terrain3DStGpuImage m_stGpuImage; // Immutable six-resource candidate, swapped cold.
 	PackedByteArray			   m_hotPushBytes;
 	Terrain3DRdForwardLighting m_forwardLighting;
 	Terrain3DRdShader		   m_hShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
@@ -126,6 +128,14 @@ private:
 public:
 	explicit Terrain3DWorldRaster( Terrain3DRdContext &rContext );
 	~Terrain3DWorldRaster( void );
+    // Render-device-thread cold boundary. The input must already have passed
+    // sidecar, source/recipe signature and revision validation in prepareCold.
+    // The region-table producer must publish matching records after success.
+    // Render-thread cold rollback: only callable before owner-side commit.
+    void discardSuperTerrainCandidateCold( void );
+    bool uploadSuperTerrainCandidateCold( const Terrain3DStPublicationImage &rCandidate,
+                                           uint32_t nFinePageSlots );
+    t3dStGpuBindings_t getSuperTerrainBindingsCold( void ) const { return m_stGpuImage.bindings(); }
 	bool configureComposedExperimentalCold( bool bEnable );
 	bool isComposedExperimentalEnabled() const { return m_bExperimentalComposed; }
 	bool	 initializeCold( bool bPersistentFrameBuffer, bool bPersistentCpuBuffers );

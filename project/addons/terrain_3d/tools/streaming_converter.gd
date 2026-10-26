@@ -92,13 +92,17 @@ func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int
 			continue
 		record.roots.push_back(SourceRecord.new(root, parent, root.get_index()))
 		if root_mode == MODE_HLOD_VISUAL:
+			var hlod_group: Terrain3DHLODMesh = root as Terrain3DHLODMesh
+			if hlod_group != null and not hlod_group.hlod_enabled_for_bake:
+				record.unsupported.push_back(str(root.get_path()) + " [HLOD baking disabled for this group]")
+				continue
 			var reason: String = HLODVisualValidator.validate(root)
 			if not reason.is_empty():
 				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual: " + reason + "]")
 			elif _append_dynamic(root, record.dynamic_nodes):
 				var descriptor: DynamicDescriptor = record.dynamic_nodes.back()
 				descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
-				descriptor.hlod_min_level = hlod_min_level
+				descriptor.hlod_min_level = hlod_group.hlod_minimum_level if hlod_group != null else hlod_min_level
 			else:
 				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual scene packing failed]")
 		else:
@@ -138,6 +142,23 @@ func _scan_node(
 	dynamic_nodes: Array[DynamicDescriptor],
 	unsupported: PackedStringArray
 ) -> bool:
+	# Dedicated group nodes are converted using the existing HLOD visual
+	# descriptor path. This preserves UndoRedo, PackedScene and baker inputs.
+	var hlod_group: Terrain3DHLODMesh = node as Terrain3DHLODMesh
+	if hlod_group != null:
+		if not hlod_group.hlod_enabled_for_bake:
+			return _scan_children(node, terrain, static_groups, planned_assets, dynamic_nodes, unsupported)
+		var reason: String = HLODVisualValidator.validate(node)
+		if not reason.is_empty():
+			unsupported.push_back(str(node.get_path()) + " [HLOD group: " + reason + "]")
+			return false
+		if not _append_dynamic(node as Node3D, dynamic_nodes):
+			unsupported.push_back(str(node.get_path()) + " [HLOD group packing failed]")
+			return false
+		var descriptor: DynamicDescriptor = dynamic_nodes.back()
+		descriptor.flags = Terrain3DNodeStreamer.NODE_FLAG_STATIC | Terrain3DNodeStreamer.NODE_FLAG_HLOD_VISUAL
+		descriptor.hlod_min_level = hlod_group.hlod_minimum_level
+		return true
 	if node.has_meta(MODE_META):
 		var explicit_mode := StringName(str(node.get_meta(MODE_META)).to_lower())
 		if explicit_mode == MODE_IGNORE:

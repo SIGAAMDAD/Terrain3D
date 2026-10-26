@@ -274,11 +274,8 @@ Dictionary Terrain3DData::cookGpuRegionPages(
 		++failed;
 		errors.push_back( "Authoritative terrain_stream.t3sp + .t3pm rebake/verification failed" );
 	}
-	const bool bFarVtRegionsCooked = writeCookedFarVtRegions();
-	if ( !bFarVtRegionsCooked ) {
-		errors.push_back( "Regional FAR VT cook failed" );
-	}
-	bool		 bInstanceVtPackageCooked = bFarVtRegionsCooked;
+	// The unified V1 package contains no FAR material, height or coverage allocation.
+	bool bInstanceVtPackageCooked = packReady;
 	uint32_t	 nInstanceVtPackageGeneration = 0u;
 	uint32_t	 nInstanceVtMaterialCount = 0u;
 	const String instance_vt_package_path = data_dir.path_join( "terrain3d_instances.t3dvt" );
@@ -307,23 +304,6 @@ Dictionary Terrain3DData::cookGpuRegionPages(
 				bInstanceVtPackageCooked = false;
 				errors.push_back( String( "Runtime instance VT package cook failed: " ) +
 								  ( vt_error.is_empty() ? String( "unknown error" ) : vt_error ) );
-			} else {
-                PackedByteArray farFragment;
-                if ( !t3d_vt_godot_import_far_region_directory_v1(
-                         data_dir, nInstanceVtPackageGeneration, farFragment, &vt_error ) ) {
-                    bInstanceVtPackageCooked = false;
-                    errors.push_back( String( "Regional FAR VT import failed: " ) + vt_error );
-                } else if ( !farFragment.is_empty() ) {
-                    const PackedByteArray parts[2] = { package_bytes, farFragment };
-                    PackedByteArray merged;
-                    if ( !t3d_vt_godot_merge_packages_v1( parts, 2u,
-                             nInstanceVtPackageGeneration, merged ) ) {
-                        bInstanceVtPackageCooked = false;
-                        errors.push_back( "Regional FAR VT merge failed" );
-                    } else {
-                        package_bytes = merged;
-                    }
-                }
             }
             if ( !bInstanceVtPackageCooked ) {
                 // Withhold package publication; leave the last valid package intact.
@@ -441,9 +421,30 @@ Dictionary Terrain3DData::cookGpuRegionPages(
 			}
 			pStripFile->store_line( "[runtime_artifact_authority]" );
 			pStripFile->store_line( "instance_virtual_texture=terrain3d_instances.t3dvt" );
-			pStripFile->store_line( "far_surface_vt_regions=terrain3d_far_vt/" );
+			pStripFile->store_line( "region_surface_vt=terrain3d_instances.t3dvt" );
+			pStripFile->store_line( "region_height_cutout=terrain3d_surface.t3dst" );
 		}
 	}
+    // The retired .t3avt intermediary is cleaned only after the shared V1
+    // package and world manifest are successfully published.
+    // A successfully published shared V1 package supersedes the old .t3avt
+    // intermediates. Remove only known derived files; cleanup errors are
+    // advisory, never reasons to invalidate the committed package.
+    if ( bInstanceVtPackageCooked && bWorldManifestCooked ) {
+        const String oldDirectory = data_dir.path_join( "terrain3d_far_vt" );
+        const Ref< DirAccess > oldCache = DirAccess::open( oldDirectory );
+        if ( oldCache.is_valid() ) {
+            const PackedStringArray oldFiles = oldCache->get_files();
+            for ( int i = 0; i < oldFiles.size(); ++i ) {
+                const String &name = oldFiles[i];
+                if ( name.begins_with( "region_" ) && name.ends_with( ".t3avt" ) &&
+                     DirAccess::remove_absolute( oldDirectory.path_join( name ) ) != OK ) {
+                    LOG( WARN, "Obsolete FAR source intermediate could not be removed: ", name );
+                }
+            }
+            ( void ) DirAccess::remove_absolute( oldDirectory );
+        }
+    }
     // Legacy atlas images are not part of V1 publication. Retire any previously
     // cooked monolithic files only after the replacement package and world
     // manifest were successfully published by this explicit cook.
@@ -453,7 +454,7 @@ Dictionary Terrain3DData::cookGpuRegionPages(
             const String oldPath = data_dir.path_join( String( oldFile ) );
             if ( FileAccess::file_exists( oldPath ) && DirAccess::remove_absolute( oldPath ) != OK ) {
                 ++failed;
-                errors.push_back( String( "Unable to retire obsolete far atlas: " ) + oldPath );
+                errors.push_back( String( "Unable to remove obsolete FAR intermediate: " ) + oldPath );
             }
         }
     }
@@ -462,7 +463,7 @@ Dictionary Terrain3DData::cookGpuRegionPages(
 	result["package_path"] = streamPackPath;
 	result["package_metadata_path"] = streamPackPath + String( ".t3pm" );
 	result["package_ready"] = packReady;
-	result["far_vt_regions_cooked"] = bFarVtRegionsCooked;
+	result["far_vt_regions_cooked"] = false;
 	result["instance_vt_package_cooked"] = bInstanceVtPackageCooked;
 	result["instance_vt_package_path"] = instance_vt_package_path;
 	result["instance_vt_package_generation"] = ( int64_t ) nInstanceVtPackageGeneration;
@@ -480,7 +481,7 @@ Dictionary Terrain3DData::cookGpuRegionPages(
 	result["failed"] = failed;
 	result["region_count"] = m_regionRepository.getActiveRegionCount();
 	result["complete"] =
-		packReady && failed == 0 && bFarVtRegionsCooked && bInstanceVtPackageCooked && bWorldManifestCooked;
+		packReady && failed == 0 && bInstanceVtPackageCooked && bWorldManifestCooked;
 	result["errors"] = errors;
 	return result;
 }
@@ -510,13 +511,7 @@ bool Terrain3DData::publishRuntimeVirtualTexturesCold(
 		return false;
 	}
 	rOutputPath = m_pTerrain->getDataDirectory().path_join( "terrain3d_instances.t3dvt" );
-	// Reconcile committed region source and gutter dependencies before package
-	// import. This remains under the existing explicit VT bake transaction.
-	m_residency.farRegionalCooker().setConfig( getFarRegionalCookConfig() );
-	if ( !m_residency.farRegionalCooker().writeRegionalAvtCooked( m_pTerrain->getDataDirectory() ) ) {
-		rError = "Unable to publish current regional FAR source pages";
-		return false;
-	}
+	// FAR-free source package; the shipping composer merges the canonical COMPOSED allocation.
 	PackedByteArray bytes;
 	if ( !t3d_vt_godot_cook_runtime_assets_package( m_pTerrain->assetsResource(),
 													bytes,
@@ -532,18 +527,6 @@ bool Terrain3DData::publishRuntimeVirtualTexturesCold(
 			 rGeneration,
 			 rError ) ) {
 		return false;
-	}
-	PackedByteArray farFragment;
-	if ( !t3d_vt_godot_import_far_region_directory_v1(
-	         m_pTerrain->getDataDirectory(), rGeneration, farFragment, &rError ) ) return false;
-	if ( !farFragment.is_empty() ) {
-		const PackedByteArray parts[2] = { bytes, farFragment };
-		PackedByteArray merged;
-		if ( !t3d_vt_godot_merge_packages_v1( parts, 2u, rGeneration, merged ) ) {
-			rError = "FAR pages could not merge into the V1 VT package";
-			return false;
-		}
-		bytes = merged;
 	}
 	if ( bytes.is_empty() ) {
 		rError = "No authored virtual-texture sources to save";

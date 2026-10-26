@@ -60,7 +60,6 @@ const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
 const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
 const uint T3D_FEATURE_MIDDLE_COMPOSITE = 1u << 8u;
 const uint T3D_FEATURE_MIDDLE_HEIGHT = 1u << 9u;
-const uint T3D_FEATURE_FAR_VT = 1u << 10u;
 const int T3D_REGION_SIZE = 128;
 const int T3D_REGION_SHIFT = 7;
 const int T3D_REGION_MASK = 127;
@@ -1378,7 +1377,7 @@ vec3 apply_fragment_world_noise_normal(vec3 base_normal, vec2 world_texel)
 	}
 	float half_world_size = T3D_WORLD_HALF_SIZE_F;
 	bool inside_far_vt_world = all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && inside_far_vt_world)
+	if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && inside_far_vt_world)
 	{
 		return base_normal;
 	}
@@ -1409,76 +1408,15 @@ vec2 far_vt_world_uv(vec2 world_texel)
 	float world_size = T3D_WORLD_SIZE_F;
 	return clamp((world_texel + vec2(world_size * 0.5)) / world_size, vec2(0.0), vec2(1.0));
 }
-// FAR V1: one source-region allocation owns BC1 tint, byte-exact R8
-// material/coverage, and the R16 height channel. All three use the normal
-// VT allocation table, bounded ancestor resolver and residency manager.
-float terrain_far_index_exact(TerrainVTResolvedAddress address)
-{
-	if (address.valid == 1u)
-	{
-		ivec3 size3 = textureSize(terrain_vt_height_bank0, 0);
-		ivec2 pixel = clamp(ivec2(floor(address.tile_uv * vec2(size3.xy))),
-		ivec2(0), size3.xy - ivec2(1));
-		return texelFetch(terrain_vt_height_bank0, ivec3(pixel, int(address.layer)), 0).r;
-	}
-	if (address.valid == 2u && address.tail_index != T3D_VT_INVALID_TAIL)
-	{
-		T3DVTTailMetadata tail = terrain_vt_tails[address.tail_index];
-		if ((tail.channelMask & (1u << T3D_VT_CHANNEL_HEIGHT)) == 0u)
-			return 0.0;
-		T3DVTBoundedFilterPlan plan = terrain_vt_tail_plan(address, textureSize(terrain_vt_height_tail, 0));
-		ivec2 size2 = textureSize(terrain_vt_height_tail, 0);
-		ivec2 pixel = clamp(ivec2(floor(t3d_vt_bounded_filter_tap_uv(plan, 0u) * vec2(size2))),
-		ivec2(0), size2 - ivec2(1));
-		return texelFetch(terrain_vt_height_tail, pixel, 0).r;
-	}
-	return 0.0;
-}
-
-bool sample_far_surface_v1(vec2 world_texel, out vec4 value)
-{
-	ivec2 region_cell = ivec2(floor(world_texel * T3D_REGION_INV_SIZE_F));
-	ivec2 map_pos = region_cell + ivec2(T3D_REGION_MAP_HALF);
-	if (any(lessThan(map_pos, ivec2(0))) || any(greaterThanEqual(map_pos, ivec2(T3D_REGION_MAP_SIZE))))
-		return false;
-	TerrainRegionRecord record = region_map[T3D_CLIPMAP_REGION_BASE + map_pos.y * T3D_REGION_MAP_SIZE + map_pos.x];
-	if (record.far_vt_allocation == T3D_VT_INVALID_ALLOCATION ||
-	(record.packed_physical_flags & 0x80000000u) == 0u) return false;
-	vec2 uv = fract(world_texel * T3D_REGION_INV_SIZE_F);
-	vec2 dx = dFdx(world_texel) * T3D_REGION_INV_SIZE_F;
-	vec2 dy = dFdy(world_texel) * T3D_REGION_INV_SIZE_F;
-	TerrainVTResolvedAddress tint = terrain_vt_resolve_address(
-	record.far_vt_allocation, uv, dx, dy, 0.0, false, record.far_vt_generation);
-	TerrainVTResolvedAddress index = terrain_vt_resolve_address_filtered(
-	record.far_vt_allocation + 1u, uv, dx, dy, 0.0, false,
-	record.far_vt_generation, 3u);
-	if (tint.valid == 0u || index.valid == 0u)
-		return false;
-	value.rgb = terrain_vt_sample_albedo(tint).rgb;
-	value.a = terrain_far_index_exact(index);
-	return true;
-}
-
+// The indexed FAR surface was removed. COMPOSED sampling happens in the
+// canonical material path, and exact holes/alpha use the cutout page family.
 vec4 sample_far_surface(vec2 world_texel)
 {
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) == 0u || !far_vt_world_contains(world_texel))
-	{
-		return vec4(1.0, 1.0, 1.0, 0.0);
-	}
-	vec4 resident;
-	if (sample_far_surface_v1(world_texel, resident))
-		return resident;
-	// Missing/invalid pages resolve as empty derived surface. The V1 residency
-	// owner pins coarse tails; there is no second atlas/slot fallback.
-	return vec4(1.0, 1.0, 1.0, 0.0);
+    return vec4(1.0, 1.0, 1.0, 0.0);
 }
 uint decode_far_surface_bits(float packed_alpha)
 {
 	return uint(round(clamp(packed_alpha, 0.0, 1.0) * 255.0));
-}
-bool far_surface_solid(uint bits)
-{
-	return (bits & 0x80u) != 0u;
 }
 int far_surface_material(uint bits)
 {
@@ -1516,7 +1454,7 @@ vec4 far_authored_color(vec2 world_texel)
 {
 	vec4 color = sample_far_surface(world_texel);
 	uint bits = decode_far_surface_bits(color.a);
-	color.a = far_surface_solid(bits) ? far_surface_alpha(bits) : 0.5;
+	color.a = false ? far_surface_alpha(bits) : 0.5;
 	return color;
 }
 vec4 color_texel(ivec2 texel)
@@ -1844,6 +1782,19 @@ vec3 decode_surface_normal(vec2 encoded_xy)
 // Common composed surface lookup from the published regional V1 allocation.
 // All three channels must have a legal ancestor or tail before use.
 #ifdef T3D_CS_ACTIVE
+bool t3d_cs_region_ready_v1(vec2 world_texel)
+{
+    ivec2 regionCell = ivec2(floor(world_texel * T3D_REGION_INV_SIZE_F));
+    ivec2 mapPos = regionCell + ivec2(T3D_REGION_MAP_HALF);
+    if (any(lessThan(mapPos, ivec2(0))) ||
+        any(greaterThanEqual(mapPos, ivec2(T3D_REGION_MAP_SIZE))))
+    {
+        return false;
+    }
+    TerrainRegionRecord region = region_map[
+        T3D_CLIPMAP_REGION_BASE + mapPos.y * T3D_REGION_MAP_SIZE + mapPos.x];
+    return t3d_st_region_ready(region);
+}
 bool t3d_cs_resolve_v1(vec2 world_texel, vec2 world_grad_x, vec2 world_grad_y,
 bool need_albedo, bool need_normal, bool need_surface,
 out TerrainVTResolvedAddress albedo, out TerrainVTResolvedAddress normal,
@@ -1856,7 +1807,7 @@ out TerrainVTResolvedAddress surface)
 	TerrainRegionRecord region = region_map[T3D_CLIPMAP_REGION_BASE + map_pos.y * T3D_REGION_MAP_SIZE + map_pos.x];
 	uint allocation = region.composed_vt_allocation;
 	uint generation = region.composed_vt_generation;
-	if ((region.packed_physical_flags & 0x80000000u) == 0u ||
+	if (!t3d_st_region_ready(region) ||
 	allocation == T3D_VT_INVALID_ALLOCATION || generation == 0u) return false;
 	vec2 uv = fract(world_texel * T3D_REGION_INV_SIZE_F);
 	vec2 dx = world_grad_x * T3D_REGION_INV_SIZE_F;
@@ -4170,19 +4121,21 @@ out vec4 color_map)
 	uint tier = uint(T3D_TIER);
 #endif
 #ifdef T3D_CS_ACTIVE
-	if (
+    bool stCommitted = t3d_cs_region_ready_v1(world_texel);
+    bool legacyComposedEligible = (
 #ifdef T3D_UCMP_COOKED
-	true &&
+        true
 #else
-	tier == 1u &&
+        tier == 1u
 #endif
-	!outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)
+        ) && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config);
+    if ((stCommitted || legacyComposedEligible)
 #if defined(T3D_UCMP_EDITOR)
-	&& !t3d_editor_brush_invalidates_composed(world_texel)
+        && !t3d_editor_brush_invalidates_composed(world_texel)
 #endif
-	)
-	{
-		T3DComposedSample composed;
+    )
+    {
+        T3DComposedSample composed;
 		if (t3d_cs_sample(world_texel, composed_grad_x, composed_grad_y, composed))
 		{
 			SampledMaterial result = material_zero();
@@ -4206,8 +4159,8 @@ out vec4 color_map)
 	composite_mode = false; // Miss => full detailed evaluation, not legacy RGB-only cache.
 #endif
 	bool far_mode = tier == 2u
-	? (material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_surface_solid(far_bits)
-	: outside_region && far_surface_solid(far_bits);
+	? (material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && false
+	: outside_region && false;
 	if (composite_mode && terrain_region_layer >= 0)
 	{
 		vec4 composite = sample_middle_composite(world_texel);
@@ -4224,7 +4177,7 @@ out vec4 color_map)
 	}
 	if (far_mode)
 	{
-		// The far atlas identifies a single material. Skip control-key
+		// The resident coarse-region source identifies a single material. Skip control-key
 		// construction, four-corner iteration, and source-pair dispatch.
 		color_map = far_surface;
 		color_map.a = far_surface_alpha(far_bits);
@@ -4389,8 +4342,8 @@ bool outside_region, vec4 far_surface, uint far_bits, bool need_authored_color)
 		return vec4(1.0, 1.0, 1.0, float(bits & 0x7Fu) * (1.0 / 127.0));
 	}
 	bool far_mode = tier == 2u
-	? (material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_surface_solid(far_bits)
-	: outside_region && far_surface_solid(far_bits);
+	? (material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && false
+	: outside_region && false;
 	if (far_mode)
 	{
 		vec4 color = far_surface;
@@ -4467,7 +4420,7 @@ void main()
 	vec2 screen_space_texel_dy = dFdy(world_texel);
 #endif
 	bool outside_region = terrain_region_layer < 0;
-	// An occupied near/middle region cannot consume the far atlas. Avoid an
+	// An occupied near/middle region does not need coarse-region sampling. Avoid an
 	// extra texelFetch on every covered pixel in the depth and color passes.
 	bool need_far_surface = outside_region;
 #ifdef T3D_RUNTIME_TIER
@@ -4482,17 +4435,48 @@ void main()
 	{
 		far_surface = sample_far_surface(world_texel);
 	}
-	uint far_bits = decode_far_surface_bits(far_surface.a);
-	if (outside_region && material_config.background_mode == 0u && !far_surface_solid(far_bits))
-	{
-		discard;
-	}
+    uint far_bits = decode_far_surface_bits(far_surface.a);
+    bool hasExactStCoverage = false;
+#ifdef T3D_ST_CUTOUT_BINDINGS
+    ivec2 stRegionCell = ivec2(floor(world_texel * T3D_REGION_INV_SIZE_F));
+    ivec2 stMapPos = stRegionCell + ivec2(T3D_REGION_MAP_HALF);
+    if (all(greaterThanEqual(stMapPos, ivec2(0))) &&
+        all(lessThan(stMapPos, ivec2(T3D_REGION_MAP_SIZE))))
+    {
+        TerrainRegionRecord stRecord = region_map[
+            T3D_CLIPMAP_REGION_BASE + stMapPos.y * T3D_REGION_MAP_SIZE + stMapPos.x];
+        if (t3d_st_region_ready(stRecord))
+        {
+            uvec2 stLocal = uvec2(clamp(ivec2(floor(world_texel - vec2(stRegionCell) * 128.0)),
+                                         ivec2(0), ivec2(127)));
+            uint stExact = 0u;
+            if (!t3d_cutout_sample(stRecord.mask_root_index / 4u, stLocal,
+                                   stRecord.publication_generation, stExact))
+            {
+                // Never use stale or filtered cutouts from a different generation.
+                discard;
+            }
+            hasExactStCoverage = true;
+            if ((stExact & 1u) == 0u)
+            {
+                discard;
+            }
+            // Alpha metadata is exact. Composed material indices are independent.
+            far_bits = 0x80u | ((stExact >> 1u) & 3u);
+        }
+    }
+#endif
+    if (!hasExactStCoverage && outside_region && material_config.background_mode == 0u &&
+        !false)
+    {
+        discard;
+    }
 
-	uint nearest_control = read_control(ivec2(floor(world_texel)));
-	if (!outside_region && ((nearest_control >> 2u) & 1u) != 0u)
-	{
-		discard;
-	}
+    uint nearest_control = read_control(ivec2(floor(world_texel)));
+    if (!hasExactStCoverage && !outside_region && ((nearest_control >> 2u) & 1u) != 0u)
+    {
+        discard;
+    }
 
 #if !defined(T3D_FORWARD_DEPTH) || defined(T3D_FORWARD_NORMAL_ROUGHNESS)
 	// Coverage is resolved before procedural world-normal noise. Gradients
@@ -4563,9 +4547,10 @@ void main()
 #if defined(T3D_UCMP_EDITOR)
 	composed_eligible = composed_eligible && !t3d_editor_brush_invalidates_composed(world_texel);
 #endif
-	if (composed_eligible && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config))
-	{
-		vec3 composed_normal;
+    if (t3d_cs_region_ready_v1(world_texel) ||
+        (composed_eligible && !outside_region && t3d_cs_static_v1_runtime_eligible(tier_config)))
+    {
+        vec3 composed_normal;
 		float composed_roughness;
 		if (t3d_cs_sample_normal_roughness(world_texel, t3d_cs_world_grad_x, t3d_cs_world_grad_y,
 		require_normal, require_roughness,
@@ -4589,7 +4574,7 @@ void main()
 #elif defined(T3D_RUNTIME_TIER)
 		if (patch_tier == 2u)
 		{
-			if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_surface_solid(far_bits))
+			if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && false)
 			{
 				int material_id = far_surface_material(far_bits);
 				nr_material = sample_unrotated_material_normal_roughness(material_id,
@@ -4622,7 +4607,7 @@ void main()
 				nr_material.roughness = 1.0;
 				wetness_alpha = float(composite_bits & 0x7Fu) * (1.0 / 127.0);
 			}
-			else if (outside_region && far_surface_solid(far_bits))
+			else if (outside_region && false)
 			{
 				nr_material = sample_unrotated_material_normal_roughness(far_surface_material(far_bits),
 				world_position.xz,
@@ -4641,7 +4626,7 @@ void main()
 				wetness_alpha = sample_color_map(world_texel, tier_config).a;
 			}
 		}
-		else if (outside_region && far_surface_solid(far_bits))
+		else if (outside_region && false)
 		{
 			nr_material = sample_unrotated_material_normal_roughness(far_surface_material(far_bits),
 			world_position.xz,
@@ -4660,7 +4645,7 @@ void main()
 		}
 #else
 #if T3D_TIER == 2
-		if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_surface_solid(far_bits))
+		if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && false)
 		{
 			int material_id = far_surface_material(far_bits);
 			nr_material = sample_unrotated_material_normal_roughness(material_id,
@@ -4697,7 +4682,7 @@ void main()
 				nr_material.roughness = 1.0;
 				wetness_alpha = float(composite_bits & 0x7Fu) * (1.0 / 127.0);
 			}
-			else if (outside_region && far_surface_solid(far_bits))
+			else if (outside_region && false)
 			{
 				nr_material = sample_unrotated_material_normal_roughness(far_surface_material(far_bits),
 				world_position.xz,
@@ -4718,7 +4703,7 @@ void main()
 				}
 			}
 		}
-		else if (outside_region && far_surface_solid(far_bits))
+		else if (outside_region && false)
 		{
 			nr_material = sample_unrotated_material_normal_roughness(far_surface_material(far_bits),
 			world_position.xz,
@@ -4738,7 +4723,7 @@ void main()
 			}
 		}
 #else
-		if (outside_region && far_surface_solid(far_bits))
+		if (outside_region && false)
 		{
 			nr_material = sample_unrotated_material_normal_roughness(far_surface_material(far_bits),
 			world_position.xz,

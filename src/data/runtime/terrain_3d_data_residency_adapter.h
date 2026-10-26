@@ -4,7 +4,6 @@
 #define TERRAIN3D_DATA_RESIDENCY_ADAPTER_H
 
 #include "rendering/material/terrain_3d_material.h"
-#include "rendering/surface/terrain_3d_far_regional_cooker.h"
 #include "streaming/residency/terrain_3d_active_height_residency.h"
 #include "streaming/cache/terrain_3d_cpu_region_cache.h"
 #include "streaming/cache/terrain_3d_gpu_region_cache.h"
@@ -63,14 +62,6 @@ public:
 		void ) const {
 		return m_gpuRegionCache;
 	}
-	EA_FORCE_INLINE Terrain3DFarRegionalCooker &farRegionalCooker(
-		void ) {
-		return m_farRegionalCooker;
-	}
-	EA_FORCE_INLINE const Terrain3DFarRegionalCooker &farRegionalCooker(
-		void ) const {
-		return m_farRegionalCooker;
-	}
 	EA_FORCE_INLINE Terrain3DActiveHeightResidency &activeHeightResidency(
 		void ) {
 		return m_activeHeightResidency;
@@ -91,7 +82,6 @@ public:
 	void resetCpu( bool bReleaseCleanMaps );
 	void resetMiddleHeight( void );
 	void resetGpu( bool bClearTextures );
-	void resetFarSurface( void );
 	void resetRegionResidency( void );
 	void deactivateCaches( bool bClearGpuTextures );
 
@@ -112,7 +102,6 @@ private:
 	Terrain3DInstanceRegionCache	 m_instanceRegionCache;
 	Terrain3DMiddleHeightRegionCache m_middleHeightRegionCache;
 	Terrain3DGpuRegionCache			 m_gpuRegionCache;
-	Terrain3DFarRegionalCooker	 m_farRegionalCooker;
 	Terrain3DActiveHeightResidency	 m_activeHeightResidency;
 	Terrain3DRegionResidency		 m_regionResidency;
 };

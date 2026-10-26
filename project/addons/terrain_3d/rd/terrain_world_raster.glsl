@@ -157,8 +157,16 @@ env_mesh_shadow = "#define T3D_WORLD_SHADOW\n#define T3D_FORWARD_DEPTH\n#define 
 #include "vt/terrain_vt_common_inc.glslinc"
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
+#ifndef T3D_WORLD_RASTER_MESH
+#define T3D_ST_VHM_BINDINGS 1
+#define T3D_ST_VHM_SET 1
+#define T3D_ST_VHM_PAGE_BINDING 20
+#define T3D_ST_VHM_TAIL_BINDING 21
+#define T3D_ST_VHM_FINE_IMAGE_BINDING 22
+#define T3D_ST_VHM_ROOT_IMAGE_BINDING 23
+#include "terrain_clipmap_height_vhm.glslinc"
+#endif
 #include "terrain_clipmap_vertex_inc.glslinc"
-#include "terrain_far_height_vertex_v1.glslinc"
 #include "terrain_environment_sampling_inc.glslinc"
 #include "terrain_world_contract.glslinc"
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP
@@ -417,6 +425,13 @@ void main()
 // The decoding implementation is supplied later by terrain_clipmap_fragment_inc.
 vec3 decode_surface_normal(vec2 encoded_xy);
 #include "terrain_composed_surface_sampling.glslinc"
+#endif
+#ifndef T3D_WORLD_RASTER_MESH
+#define T3D_ST_CUTOUT_BINDINGS 1
+#define T3D_ST_CUTOUT_SET 1
+#define T3D_ST_CUTOUT_ENTRY_BINDING 24
+#define T3D_ST_CUTOUT_WORD_BINDING 25
+#include "terrain_clipmap_cutout.glslinc"
 #endif
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \

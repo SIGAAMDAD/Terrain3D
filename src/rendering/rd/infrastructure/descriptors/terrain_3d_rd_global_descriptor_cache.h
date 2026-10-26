@@ -76,6 +76,9 @@ public:
 	void setCompletionCallbackCold( const godot::Callable &rCallback );
 	void beginRenderFrameHot( uint64_t nRenderFrame );
 	uint64_t currentSubmissionEpochHot() const { return m_nCurrentEpoch; }
+	uint64_t completedSubmissionEpochHot() const { return m_nCompletedEpoch; }
+	// Asynchronously certify completion of the previous draw epoch for WORLD reclamation.
+	void requestCompletionProbeHot( void ) { m_bFenceRequired = true; }
 	void consumeCompletionReadbackOnRenderThread( const godot::PackedByteArray &rBytes,
 		uint64_t nEpoch, uint64_t nDeviceGeneration, uint64_t nTicket );
 	uint32_t capacity() const {

@@ -103,8 +103,16 @@ feedback_color_specular_motion_radiance_array_compact = "#define T3D_VT_FRAGMENT
 #include "terrain_clipmap_contract.glslinc"
 #include "terrain_clipmap_vertex_interface.glslinc"
 #include "terrain_clipmap_editor_brush_overlay.glslinc"
+#ifndef T3D_WORLD_RASTER_MESH
+#define T3D_ST_VHM_BINDINGS 1
+#define T3D_ST_VHM_SET 0
+#define T3D_ST_VHM_PAGE_BINDING 46
+#define T3D_ST_VHM_TAIL_BINDING 47
+#define T3D_ST_VHM_FINE_IMAGE_BINDING 48
+#define T3D_ST_VHM_ROOT_IMAGE_BINDING 49
+#include "terrain_clipmap_height_vhm.glslinc"
+#endif
 #include "terrain_clipmap_vertex_inc.glslinc"
-#include "terrain_far_height_vertex_v1.glslinc"
 
 #[fragment]
 #version 450
@@ -139,6 +147,13 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #endif
 #define T3D_EDITOR_BRUSH_FRAGMENT_STAGE 1
 #include "terrain_clipmap_editor_brush_overlay.glslinc"
+#ifndef T3D_WORLD_RASTER_MESH
+#define T3D_ST_CUTOUT_BINDINGS 1
+#define T3D_ST_CUTOUT_SET 0
+#define T3D_ST_CUTOUT_ENTRY_BINDING 50
+#define T3D_ST_CUTOUT_WORD_BINDING 51
+#include "terrain_clipmap_cutout.glslinc"
+#endif
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \
 T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \

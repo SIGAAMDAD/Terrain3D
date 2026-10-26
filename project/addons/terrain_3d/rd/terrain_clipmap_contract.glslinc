@@ -31,18 +31,40 @@ struct TerrainFrameData
 	vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
 };
 
+// ST05 frozen 64-byte region record; mirror of t3dRdTerrainRegionGpu_t.
+const uint T3D_ST_REGION_READY = 1u;
+const uint T3D_ST_REGION_MATERIAL = 2u;
+const uint T3D_ST_REGION_HEIGHT = 4u;
+const uint T3D_ST_REGION_MASK = 8u;
+const uint T3D_ST_REGION_COMPLETE = 15u;
 struct TerrainRegionRecord
 {
-	uint packed_physical_flags;
-	uint megavt_allocation;
-	uint megavt_generation;
-	uint megavt_flags;
-	vec4 megavt_world_to_uv;
-	uint far_vt_allocation;
-	uint far_vt_generation;
-	uint composed_vt_allocation;
-	uint composed_vt_generation;
+    uint packed_physical_flags;
+    uint megavt_allocation;
+    uint megavt_generation;
+    uint megavt_flags;
+    vec4 megavt_world_to_uv;
+    uint composed_vt_allocation;
+    uint composed_vt_generation;
+    uint vhm_root_index;
+    uint vhm_generation;
+    uint mask_root_index;
+    uint mask_generation;
+    uint publication_generation;
+    uint region_state_flags;
 };
+bool t3d_st_region_ready(TerrainRegionRecord record)
+{
+    return (record.packed_physical_flags & 0x80000000u) != 0u &&
+        (record.region_state_flags & T3D_ST_REGION_COMPLETE) == T3D_ST_REGION_COMPLETE &&
+        record.publication_generation != 0u &&
+        record.composed_vt_allocation != 0xffffffffu &&
+        record.vhm_root_index != 0xffffffffu &&
+        record.mask_root_index != 0xffffffffu &&
+        record.composed_vt_generation == record.publication_generation &&
+        record.vhm_generation == record.publication_generation &&
+        record.mask_generation == record.publication_generation;
+}
 
 struct TierMaterialConfig
 {

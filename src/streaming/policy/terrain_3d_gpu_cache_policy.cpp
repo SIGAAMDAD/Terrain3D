@@ -143,7 +143,7 @@ size_t t3dGpuCacheEstimateSharedBytes(
 		}
 		bytes += color_bytes;
 	}
-	// The aggregate memory policy owns far-atlas residency as fixed terrain
+	// The aggregate memory policy owns FAR V1 source residency as fixed terrain
 	// memory. This helper only accounts for storage owned by the managed GPU page
 	// cache itself: implicit default maps plus its bounded page-table allocation.
 	const size_t page_cache_owned_fixed_metadata_bytes = T3D_GPU_CACHE_MAX_PAGE_TABLE_BYTES;

@@ -2,6 +2,7 @@
 
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "authoring/world/conversion/terrain_3d_world_godot_converter.h"
+#include "instances/runtime/terrain_3d_mesh.h"
 #include "data/formats/terrain_3d_half_buffer.h"
 
 #include <godot_cpp/classes/array_mesh.hpp>
@@ -274,7 +275,7 @@ uint64_t Terrain3DWorldGodotConverter::computePrototypeKeyCold(
 	nHash = t3dHashCombine64( nHash, ( uint64_t ) Mesh->get_rid().get_id() );
 	nHash = t3dHashCombine64( nHash, pTier );
 	if ( pExplicitMaterial.is_valid() ) {
-		return t3dHashCombine64( nHash, pExplicitMaterial->get_instance_id() );
+		nHash = t3dHashCombine64( nHash, pExplicitMaterial->get_instance_id() );
 	}
 
 	Ref< ArrayMesh > ArrayMeshRef = Mesh;
@@ -289,6 +290,31 @@ uint64_t Terrain3DWorldGodotConverter::computePrototypeKeyCold(
 		const uint64_t nMaterialKey = Material.is_valid() ? ( uint64_t ) Material->get_rid().get_id() : 0u;
 		nHash = t3dHashCombine64( nHash, nMaterialKey );
 	}
+    const Terrain3DMesh *const pT3DMesh = Object::cast_to< Terrain3DMesh >( pMeshInstance );
+    const Ref< Terrain3DMeshAsset > asset = pT3DMesh ? pT3DMesh->getMeshAsset() : Ref< Terrain3DMeshAsset >();
+    if ( asset.is_valid() ) {
+        const int32_t nLodCount = MIN( asset->getLodCount(), T3D_MESH_MAX_LOD_COUNT );
+        for ( int32_t iLod = 0; iLod < nLodCount; ++iLod ) {
+            const auto lodMesh = asset->getMesh( iLod );
+            nHash = t3dHashCombine64( nHash, lodMesh.is_valid() ? ( uint64_t ) lodMesh->get_rid().get_id() : 0u );
+            const float minDistance = ( float ) asset->getLodRangeBegin( iLod );
+            const float maxDistance = ( float ) asset->getLodRangeEnd( iLod );
+            nHash = t3dHashFnv1a64( &minDistance, sizeof( minDistance ), nHash );
+            nHash = t3dHashFnv1a64( &maxDistance, sizeof( maxDistance ), nHash );
+            const Ref< ArrayMesh > arrayLod = lodMesh;
+            if ( arrayLod.is_valid() ) {
+                nHash = t3dHashCombine64( nHash, ( uint64_t ) arrayLod->get_surface_count() );
+                for ( int32_t iSurface = 0; iSurface < arrayLod->get_surface_count(); ++iSurface ) {
+                    Ref< Material > surfaceMaterial = pMeshInstance->get_surface_override_material( iSurface );
+                    if ( surfaceMaterial.is_null() ) {
+                        surfaceMaterial = arrayLod->surface_get_material( iSurface );
+                    }
+                    nHash = t3dHashCombine64( nHash,
+                        surfaceMaterial.is_valid() ? ( uint64_t ) surfaceMaterial->get_rid().get_id() : 0u );
+                }
+            }
+        }
+    }
 	return nHash == 0u ? 1u : nHash;
 }
 
@@ -298,9 +324,13 @@ bool Terrain3DWorldGodotConverter::flattenMeshCold(
 	const Ref< Terrain3DWorldMaterial > &pExplicitMaterial,
 	t3dWorldGeometrySourceMesh_t		&rSource,
 	t3dWorldGeometrySourceLod_t			&rLod,
+    const Ref< ArrayMesh > &rOverrideMesh,
 	uint64_t							&rPrototypeKey,
 	t3dWorldConversionReason_t			&rReason ) {
-	Ref< ArrayMesh > Mesh = pMeshInstance->get_mesh();
+	Ref< ArrayMesh > Mesh = rOverrideMesh;
+	if ( Mesh.is_null() ) {
+		Mesh = pMeshInstance->get_mesh();
+	}
 	if ( Mesh.is_null() ) {
 		rReason = T3D_WORLD_CONVERSION_UNSUPPORTED_KIND;
 		return false;
@@ -480,14 +510,83 @@ bool Terrain3DWorldGodotConverter::findOrCookPrototypeCold(
 
 	const uint32_t				 nMaterialCountBefore = m_pBuffers->nMaterialCount;
 	const uint32_t				 nMaterialEntryCountBefore = m_pBuffers->nMaterialEntryCount;
-	t3dWorldGeometrySourceMesh_t Source;
-	t3dWorldGeometrySourceLod_t	 Lod;
-	uint64_t					 nComputedKey = 0u;
-	if ( !flattenMeshCold( pMeshInstance, pTier, pExplicitMaterial, Source, Lod, nComputedKey, rReason ) ) {
-		m_pBuffers->nMaterialCount = nMaterialCountBefore;
-		m_pBuffers->nMaterialEntryCount = nMaterialEntryCountBefore;
-		return false;
-	}
+    t3dWorldGeometrySourceMesh_t Source{};
+    t3dWorldGeometrySourceLod_t Lods[T3D_MESH_MAX_LOD_COUNT]{};
+    uint32_t aIndexOffsets[T3D_MESH_MAX_LOD_COUNT]{};
+    uint32_t aTriangleOffsets[T3D_MESH_MAX_LOD_COUNT]{};
+    eastl::vector< t3dWorldVertex_t, Terrain3DEastlAllocator > vertices;
+    eastl::vector< uint32_t, Terrain3DEastlAllocator > indices;
+    eastl::vector< uint32_t, Terrain3DEastlAllocator > materialIds;
+    eastl::vector< uint8_t, Terrain3DEastlAllocator > tiers;
+    uint64_t nComputedKey = 0u;
+    uint32_t nMaterialBase = UINT32_MAX;
+    const Terrain3DMesh *const pT3DMesh = Object::cast_to< Terrain3DMesh >( pMeshInstance );
+    const Ref< Terrain3DMeshAsset > asset = pT3DMesh ? pT3DMesh->getMeshAsset() : Ref< Terrain3DMeshAsset >();
+    const uint32_t nRequestedLods = asset.is_valid() ?
+        ( uint32_t ) MIN( asset->getLodCount(), T3D_MESH_MAX_LOD_COUNT ) : 1u;
+    bool bCookOk = nRequestedLods > 0u;
+    uint32_t nCookedLods = 0u;
+    for ( uint32_t iLod = 0u; bCookOk && iLod < nRequestedLods; ++iLod ) {
+        Ref< ArrayMesh > lodMesh;
+        if ( asset.is_valid() ) {
+            lodMesh = asset->getMesh( ( int32_t ) iLod );
+        }
+        if ( asset.is_valid() && lodMesh.is_null() ) {
+            bCookOk = false;
+            break;
+        }
+        t3dWorldGeometrySourceMesh_t oneMesh{};
+        t3dWorldGeometrySourceLod_t oneLod{};
+        bCookOk = flattenMeshCold( pMeshInstance, pTier, pExplicitMaterial, oneMesh,
+            oneLod, lodMesh, nComputedKey, rReason );
+        if ( !bCookOk || vertices.size() + oneMesh.nVertexCount > UINT32_MAX ||
+             indices.size() + oneLod.nIndexCount > UINT32_MAX ) {
+            bCookOk = false;
+            break;
+        }
+        const uint32_t nVertexOffset = ( uint32_t ) vertices.size();
+        aIndexOffsets[nCookedLods] = ( uint32_t ) indices.size();
+        aTriangleOffsets[nCookedLods] = ( uint32_t ) materialIds.size();
+        for ( uint32_t i = 0u; i < oneMesh.nVertexCount; ++i ) {
+            vertices.push_back( oneMesh.pVertices[i] );
+        }
+        for ( uint32_t i = 0u; i < oneLod.nIndexCount; ++i ) {
+            indices.push_back( nVertexOffset + oneLod.pIndices[i] );
+        }
+        for ( uint32_t i = 0u; i < oneLod.nIndexCount / 3u; ++i ) {
+            const uint32_t materialId = oneMesh.nMaterialBase + oneLod.pTriangleMaterialOffsets[i];
+            materialIds.push_back( materialId );
+            tiers.push_back( oneLod.pTriangleTiers[i] );
+            nMaterialBase = MIN( nMaterialBase, materialId );
+        }
+        Lods[nCookedLods] = oneLod;
+        if ( asset.is_valid() && nRequestedLods > 1u ) {
+            // Ranges are asset-authored; last LOD remains the distant fallback.
+            Lods[nCookedLods].fMinDistance = MAX( 0.0f, ( float ) asset->getLodRangeBegin( ( int32_t ) iLod ) );
+            Lods[nCookedLods].fMaxDistance = iLod + 1u == nRequestedLods ? 65504.0f :
+                MIN( 65504.0f, ( float ) asset->getLodRangeEnd( ( int32_t ) iLod ) );
+            bCookOk = Lods[nCookedLods].fMaxDistance > Lods[nCookedLods].fMinDistance;
+        }
+        ++nCookedLods;
+    }
+    if ( !bCookOk || vertices.empty() || indices.empty() || materialIds.empty() ) {
+        m_pBuffers->nMaterialCount = nMaterialCountBefore;
+        m_pBuffers->nMaterialEntryCount = nMaterialEntryCountBefore;
+        return false;
+    }
+    for ( uint32_t i = 0u; i < materialIds.size(); ++i ) {
+        materialIds[i] -= nMaterialBase;
+    }
+    for ( uint32_t iLod = 0u; iLod < nCookedLods; ++iLod ) {
+        Lods[iLod].pIndices = indices.data() + aIndexOffsets[iLod];
+        Lods[iLod].pTriangleMaterialOffsets = materialIds.data() + aTriangleOffsets[iLod];
+        Lods[iLod].pTriangleTiers = tiers.data() + aTriangleOffsets[iLod];
+    }
+    Source.pVertices = vertices.data();
+    Source.nVertexCount = ( uint32_t ) vertices.size();
+    Source.pLods = Lods;
+    Source.nLodCount = nCookedLods;
+    Source.nMaterialBase = nMaterialBase;
 	t3dWorldGeometryCookedMeshSpan_t   Span;
 	t3dWorldGeometryCookStats_t		   Stats;
 	const t3dWorldGeometryCookResult_t eCook =

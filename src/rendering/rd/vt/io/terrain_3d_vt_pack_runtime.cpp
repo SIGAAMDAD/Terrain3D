@@ -1,6 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/vt/io/terrain_3d_vt_pack_runtime.h"
+#include "rendering/rd/vt/io/terrain_3d_vt_compact_tail_layout.h"
 #include "core/utility/terrain_3d_checked_math.h"
 #include "rendering/rd/vt/io/terrain_3d_vt_file_source.h"
 #include <new>
@@ -175,7 +176,10 @@ static bool t3d_vt_pack_runtime_open_v1_cold(
 	RuntimeHeader.nGutterTexels = T3D_VT_PAGE_GUTTER;
 	RuntimeHeader.nPhysicalTexels = T3D_VT_PHYSICAL_TILE;
 
-	uint32_t nFamilyTailSlots[T3D_VT_PHYSICAL_FORMAT_COUNT] = {};
+	// Two 64x32 COMPOSED roots share one V1 128x64 tail slot. Retain the
+	// original 64-row alignment so resource planning, shader coordinates and
+	// the existing RD tail uploader need no ABI or descriptor changes.
+	uint32_t nFamilyTailHalfSlots[T3D_VT_PHYSICAL_FORMAT_COUNT] = {};
 	for ( uint32_t iAllocation = 0u; iAllocation < Header.m_nAllocationCount; ++iAllocation ) {
 		const t3dVTPackAllocationRecordV1_t &SourceAllocation = Candidate.PackViewV1.m_pAllocations[iAllocation];
 		const t3dVTConsumer_t				 Consumer = ( t3dVTConsumer_t ) SourceAllocation.m_nConsumer;
@@ -241,11 +245,19 @@ static bool t3d_vt_pack_runtime_open_v1_cold(
 			const uint32_t		 nFamily =
 				( uint32_t ) t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t ) iChannel,
 																	 SourceChannel.m_nFlags );
-			// Allocate positions independently per physical texture family. Instance
-			// ALBEDO and ORM share BC1 and must occupy distinct positions.
-			const uint32_t nAtlasSlot = nFamilyTailSlots[nFamily]++;
-			RuntimeTail.m_nAtlasX = ( nAtlasSlot % T3D_VT_PACK_TAILS_PER_ROW ) * T3D_VT_PACK_TAIL_SLOT_WIDTH;
-			RuntimeTail.m_nAtlasY = ( nAtlasSlot / T3D_VT_PACK_TAILS_PER_ROW ) * T3D_VT_PACK_TAIL_SLOT_HEIGHT;
+			// Pack only COMPOSED chains which fit the left/right half. Other
+			// consumers retain their full 128x64 layout and a half-slot gap
+			// is deliberately skipped before them to prevent any overlap.
+			const bool bCompact = Consumer == T3D_VT_CONSUMER_COMPOSED &&
+				SourceTail.m_nAtlasInteriorWidth <= T3D_VT_PACK_TAIL_SLOT_WIDTH / 2u &&
+				SourceTail.m_nAtlasInteriorHeight <= T3D_VT_PACK_TAIL_SLOT_HEIGHT;
+			if ( !t3dVtPlaceCompactTailCold( nFamilyTailHalfSlots[nFamily], bCompact,
+				T3D_VT_PACK_TAILS_PER_ROW, T3D_VT_PACK_TAIL_SLOT_WIDTH,
+				T3D_VT_PACK_TAIL_SLOT_HEIGHT, RuntimeTail.m_nAtlasX,
+				RuntimeTail.m_nAtlasY ) ) {
+				rAllocator.pFree( rAllocator.pUser, pBlock );
+				return false;
+			}
 			RuntimeTail.m_nWidthTexels = SourceTail.m_nFirstMipWidth;
 			RuntimeTail.m_nHeightTexels = SourceTail.m_nFirstMipHeight;
 			RuntimeTail.m_nFirstMip = SourceTail.m_nFirstMip;

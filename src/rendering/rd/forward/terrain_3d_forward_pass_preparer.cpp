@@ -87,8 +87,8 @@ static void t3dStageWorldMaterialFootprintsHot(
 		}
 		const t3dWorldVisibleItem_t &item = rWorld.m_visibilityCandidates[rCursor++];
 		if ( item.m_nGeometryKind == T3D_WORLD_GEOMETRY_TERRAIN ||
-			 item.m_nClusterOrTerrainId >= rWorld.m_clusters.size() ||
-			 item.m_nClusterOrTerrainId >= rWorld.m_clusterVtMetadata.size() ||
+			 item.m_nClusterOrTerrainId >= rWorld.clusters().size() ||
+			 item.m_nClusterOrTerrainId >= rWorld.clusterVtMetadata().size() ||
 			 item.m_nInstanceOrPatchId >= rWorld.m_instances.size() ) {
 			continue;
 		}
@@ -97,7 +97,7 @@ static void t3dStageWorldMaterialFootprintsHot(
 			 instance.m_nTransformIndex >= rWorld.m_transforms.size() ) {
 			continue;
 		}
-		const t3dWorldCluster_t &cluster = rWorld.m_clusters[item.m_nClusterOrTerrainId];
+		const t3dWorldCluster_t &cluster = rWorld.clusters()[item.m_nClusterOrTerrainId];
 		const uint32_t			 nMaterial =
 			  instance.m_nMaterialOverride == T3D_WORLD_INVALID_ID ? cluster.m_nMaterial : instance.m_nMaterialOverride;
 		t3dRenderingMaterialGpu_t material{};
@@ -147,7 +147,7 @@ static void t3dStageWorldMaterialFootprintsHot(
 		if ( fPixels <= 0.0f ) {
 			continue;
 		}
-		const t3dWorldClusterVTMetadata_t &meta = rWorld.m_clusterVtMetadata[item.m_nClusterOrTerrainId];
+		const t3dWorldClusterVTMetadata_t &meta = rWorld.clusterVtMetadata()[item.m_nClusterOrTerrainId];
 		float							   uvMin[2], uvMax[2];
 		float							   fUvSpan = 0.0f;
 		for ( uint32_t axis = 0u; axis < 2u; ++axis ) {
@@ -369,7 +369,9 @@ void Terrain3DForwardPassPreparer::reset(
 
 void Terrain3DForwardPassPreparer::logWorldPrepareStateHot(
 	const t3dRdForwardPassContext_t &rContext,
-	const uint32_t					 nStage ) {
+	const uint32_t					 nStage,
+	const Terrain3DRdClipmapRenderer *const pTerrainProvider,
+	const t3dRdFrameSnapshot_t *const pSnapshot ) {
 	const uint32_t nPass = ( uint32_t ) rContext.m_passKind;
 	if ( nPass >= T3D_RD_FORWARD_PASS_MAX ) {
 		return;
@@ -418,6 +420,15 @@ void Terrain3DForwardPassPreparer::logWorldPrepareStateHot(
 								 rContext.m_nRenderFrame,
 								 " scene_pass=",
 								 rContext.m_nScenePass );
+	} else if ( nStage == 5u && pTerrainProvider ) {
+		UtilityFunctions::push_warning( "[Terrain3D][World][Prepare] FAIL pass=", pPass,
+										" stage=", pReason, " stage_id=", nStage,
+										" provider_stage=", pTerrainProvider->getForwardPrepareFailureStage(),
+										" provider_error=", pTerrainProvider->getLastError(),
+										" patch_count=", pSnapshot ? pSnapshot->m_nPatchCount : 0u,
+										" material_backend=", pSnapshot ? ( uint32_t ) pSnapshot->m_nTerrainMaterialBackend : 0u,
+											" frame=", rContext.m_nRenderFrame,
+										" scene_pass=", rContext.m_nScenePass );
 	} else {
 		UtilityFunctions::push_warning( "[Terrain3D][World][Prepare] FAIL pass=",
 										pPass,
@@ -749,7 +760,7 @@ bool Terrain3DForwardPassPreparer::prepare(
 				( uint32_t ) MAX( rContext.m_renderSize.y, 0 ) );
 		}
 		const bool no_world_mesh_feedback =
-			!world_publication_available || pWorld->m_publication.m_clusters.size() == 0u;
+			!world_publication_available || pWorld->m_publication.clusters().size() == 0u;
 		const bool all_terrain_predicted =
 			feedback_material_mask != 0u &&
 			( predicted_terrain_mask & feedback_material_mask ) == feedback_material_mask;
@@ -1038,7 +1049,9 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes(
 		m_nWorldPrepareFailureStage = nFailureStage;
 		m_nWorldPrepareFailurePassKind = ( uint32_t ) rContext.m_passKind;
 		m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_WORLD;
-		logWorldPrepareStateHot( rContext, nFailureStage );
+		logWorldPrepareStateHot( rContext, nFailureStage,
+								 nFailureStage == 5u ? &rServices.m_renderer : NULL,
+								 nFailureStage == 5u ? &snapshot : NULL );
 	}
 	return world_ok;
 }

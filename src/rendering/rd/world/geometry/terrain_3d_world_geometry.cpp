@@ -677,6 +677,7 @@ static bool t3d_world_geometry_write_cluster(
 	const t3dWorldGeometryClusterBuilder_t &pBuilder,
 	uint32_t								pVertexBase,
 	uint32_t								pLodIndex,
+    uint32_t nEncodedLodRange,
 	uint32_t							   &rClusterCursor,
 	uint32_t							   &rVertexIndexCursor,
 	uint32_t							   &rTriangleCursor ) {
@@ -754,6 +755,7 @@ static bool t3d_world_geometry_write_cluster(
 		World.m_nMaterial = pBuilder.nMaterialId;
 		World.m_nFlags = pSource.nFlags;
 		World.m_nSourceId = rClusterCursor;
+        World.m_nReserved = nEncodedLodRange;
 
 		t3dWorldClusterVTMetadata_t &WorldVt = rDatabase.Buffers.pWorldClusterVtMetadata[rClusterCursor];
 		WorldVt.m_nPackedUvMin = Derived.nPackedUvMin;
@@ -779,6 +781,8 @@ static bool t3d_world_geometry_write_lod(
 	uint32_t						   &rVertexIndexCursor,
 	uint32_t						   &rTriangleCursor ) {
 	const uint32_t					 nLodClusterOffset = rClusterCursor;
+    const uint32_t nEncodedLodRange = pSource.nLodCount > 1u ?
+        t3d_world_geometry_pack_half2( pLod.fMinDistance, MIN( 65504.0f, pLod.fMaxDistance ) ) : 0u;
 	t3dWorldGeometryClusterBuilder_t Builder = {};
 	t3d_world_geometry_builder_reset( Builder );
 	const uint32_t nTriangleCount = pLod.nIndexCount / 3u;
@@ -807,6 +811,7 @@ static bool t3d_world_geometry_write_lod(
 													Builder,
 													pVertexBase,
 													pLodIndex,
+													nEncodedLodRange,
 													rClusterCursor,
 													rVertexIndexCursor,
 													rTriangleCursor ) ) {
@@ -826,6 +831,7 @@ static bool t3d_world_geometry_write_lod(
 												Builder,
 												pVertexBase,
 												pLodIndex,
+												nEncodedLodRange,
 												rClusterCursor,
 												rVertexIndexCursor,
 												rTriangleCursor ) ) {

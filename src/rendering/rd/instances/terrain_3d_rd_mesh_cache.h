@@ -120,6 +120,17 @@ typedef struct t3dRdMeshSourceSnapshot_s
 	}
 } t3dRdMeshSourceSnapshot_t;
 
+// Cold-sorted source identity table. Lookup slots remain the original m_lods
+// indices so the existing uint32 slot/generation handle contract is unchanged.
+typedef struct t3dRdMeshSourceLookup_s
+{
+	uint64_t m_nSourceKey = 0u;
+	uint32_t m_nLodSlot = 0u;
+	uint32_t m_nReserved = 0u;
+} t3dRdMeshSourceLookup_t;
+
+static_assert( sizeof( t3dRdMeshSourceLookup_t ) == 16u, "Indexed mesh source lookup layout changed" );
+
 class Terrain3DRdMeshCache
 {
 private:
@@ -140,6 +151,7 @@ private:
 	uint64_t				m_nUploadFailureCount = 0u;
 	String					m_lastError;
 	eastl::vector< t3dRdMeshSourceSurface_t, Terrain3DEastlAllocator >	m_surfaces;
+	eastl::vector< t3dRdMeshSourceLookup_t, Terrain3DEastlAllocator >  m_sourceLookup;
 	eastl::vector< t3dRdMeshSourceLod_t, Terrain3DEastlAllocator >		m_lods;
 	eastl::vector< t3dRdInstanceMaterial_t, Terrain3DEastlAllocator >	m_materials;
 	eastl::vector< t3dRenderingMaterialGpu_t, Terrain3DEastlAllocator > m_vtMaterials;

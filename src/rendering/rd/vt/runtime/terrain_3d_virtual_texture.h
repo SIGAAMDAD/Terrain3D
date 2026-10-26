@@ -50,6 +50,9 @@ public:
 	void						  set_frame_budgets_hot( uint32_t nRequestBudget, uint32_t nAdmissionBudget );
 	const t3dVTStreamingLimits_t &get_streaming_limits() const;
 	bool						  configure_residency_policy_cold( const t3dVTResidencyPolicy_t &pPolicy );
+	// ST02: opt out of transitional FAR material demand only after the
+	// composed authoring/parity gate is approved by the integration owner.
+	bool                          configure_unified_regional_demand_cold( bool bComposedOnly );
 	const t3dVTResidencyPolicy_t &get_residency_policy() const;
 	bool						  prepare_cpu_cold( const t3dWorldLimits_t		 &pLimits,
 													const t3dVTGpuResourcePlan_t &pPlan,
@@ -136,7 +139,6 @@ public:
 	bool	 supportsSparseV1() const;
 	uint32_t getTerrainMegaVTAllocationBase() const;
 	uint32_t getTerrainMegaVTAllocationId( uint32_t nRegionMapIndex ) const;
-    bool getFarSurfaceAllocationCold( uint32_t nRegionMapIndex, uint32_t &rAllocation, uint32_t &rGeneration ) const;
     bool getComposedRegionAllocationCold( uint32_t nRegionMapIndex, uint32_t &rAllocation, uint32_t &rGeneration ) const;
 	bool	 getTerrainMegaVTCookedGenerationCold( uint32_t nRegionMapIndex, uint32_t &rGeneration ) const;
 	const t3dVTDatabaseView_t	   *get_database() const;
@@ -207,7 +209,7 @@ public:
 
 private:
 	void rebuildFarRegionAllocationTableCold();
-	uint32_t stage_far_region_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
+	uint32_t stage_region_surface_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
 		uint32_t nFrameId, float fFovDegrees, uint32_t nViewportHeight );
 	uint32_t stage_v1_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
                                      uint32_t nFrameId, float fFovDegrees, uint32_t nViewportHeight );
@@ -248,12 +250,15 @@ private:
 	// Rebuilt only on cold package publication. Fixed-size hot registry; no
 	// package mutex, stable-key lookups, or allocations during frame demand.
 	uint32_t m_szFarRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
-    uint32_t m_szFarSurfaceAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
     uint32_t m_szComposedRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
 	uint8_t m_szFarLastMip[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
 	uint32_t m_szFarLastMipFrame[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
 	uint32_t m_nFarRegionLastStageFrame = UINT32_MAX;
 	uint64_t m_nFarRegionRequests = 0u;
+	bool m_bComposedOnlyRegionalDemand = false;
+	uint32_t m_nRegionalCameraFrame = UINT32_MAX;
+	float m_fRegionalCameraX = 0.0f;
+	float m_fRegionalCameraZ = 0.0f;
 
 	godot::String				m_demandIndexSourceIdentity;
 	uint32_t					m_nSpatialDemandLastStageFrame = UINT32_MAX;

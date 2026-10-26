@@ -50,7 +50,7 @@ def check(root, trace=None, glslang=None):
         assert obsolete not in catalog
     assert not (root/'project/addons/terrain_3d/shaders').exists() or not list((root/'project/addons/terrain_3d/shaders').rglob('*.*'))
     assert (root/'project/addons/terrain_3d/rd/terrain_world_raster.glsl').exists()
-    assert (root/'project/addons/terrain_3d/rd/terrain_far_height_vertex_v1.glslinc').exists()
+    assert not (root/'project/addons/terrain_3d/rd/terrain_far_height_vertex_v1.glslinc').exists()
     assert (root/'project/addons/terrain_3d/compute/terrain_brush_tiles.glsl').exists()
     for n in ('color_native','color_native_one_sun','color_native_compact',
               'feedback_color_native','feedback_color_native_one_sun','feedback_color_native_compact',

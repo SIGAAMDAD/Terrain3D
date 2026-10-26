@@ -19,7 +19,6 @@ Terrain3DDataResidencyAdapter::Terrain3DDataResidencyAdapter(
 	m_instanceRegionCache( &rRepository, &rRuntimeArtifacts.pageStore() ),
 	m_middleHeightRegionCache( &rRepository, &rSamplingStorage, &rRuntimeArtifacts.pageStore() ),
 	m_gpuRegionCache( rRepository, rSamplingStorage, rMapEditService, rRuntimeArtifacts.pageStore(), m_cpuRegionCache ),
-	m_farRegionalCooker( &rRepository, &rSamplingStorage, &m_cpuRegionCache ),
 	m_activeHeightResidency( &rRepository, &rSamplingStorage, &rRuntimeArtifacts.pageStore() ),
 	m_regionResidency( &rRepository,
 					   &rSamplingStorage,
@@ -28,8 +27,7 @@ Terrain3DDataResidencyAdapter::Terrain3DDataResidencyAdapter(
 					   &m_cpuRegionCache,
 					   &m_instanceRegionCache,
 					   &m_middleHeightRegionCache,
-					   &m_gpuRegionCache,
-					   &m_farRegionalCooker ) {
+					   &m_gpuRegionCache ) {
 }
 
 void Terrain3DDataResidencyAdapter::resetCpu(
@@ -45,11 +43,6 @@ void Terrain3DDataResidencyAdapter::resetMiddleHeight(
 void Terrain3DDataResidencyAdapter::resetGpu(
 	const bool bClearTextures ) {
 	m_gpuRegionCache.reset( bClearTextures );
-}
-
-void Terrain3DDataResidencyAdapter::resetFarSurface(
-	void ) {
-	m_farRegionalCooker.reset();
 }
 
 void Terrain3DDataResidencyAdapter::resetRegionResidency(

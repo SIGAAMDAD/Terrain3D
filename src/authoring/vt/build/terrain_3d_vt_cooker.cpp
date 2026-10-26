@@ -295,12 +295,18 @@ static bool t3d_vt_cooker_add_payload(
 	return false;
 }
 
+// COMPOSED roots begin at 32 texels. Their horizontal mip chain occupies
+// at most 64x32, allowing two roots per existing 128x64 atlas slot. Fine
+// 64x64 pages stay in the normal streamed V1 page hierarchy; the root is
+// always resident via the shared tail atlas. Other consumers retain V1 layout.
 static uint32_t t3d_vt_cooker_tail_first_mip(
 	uint32_t	   nWidth,
 	uint32_t	   nHeight,
-	const uint32_t nMipCount ) {
+	const uint32_t nMipCount,
+	const t3dVTConsumer_t eConsumer ) {
+	const uint32_t nRootExtent = eConsumer == T3D_VT_CONSUMER_COMPOSED ? 32u : 64u;
 	for ( uint32_t iMip = 0u; iMip < nMipCount; ++iMip ) {
-		if ( nWidth <= 64u && nHeight <= 64u ) {
+		if ( nWidth <= nRootExtent && nHeight <= nRootExtent ) {
 			return iMip;
 		}
 		nWidth = nWidth > 1u ? nWidth >> 1u : 1u;
@@ -576,7 +582,7 @@ static bool t3d_vt_cooker_validate_sparse_source_v1(
 	const t3dVTCookSparseSourceV1_t &rSource,
 	t3dVTFixedProfile_t				&rProfile,
 	uint32_t						&rEnabledMask ) {
-	if ( rSource.m_nStableKey == 0u || rSource.m_nConsumer > T3D_VT_CONSUMER_FAR ||
+	if ( rSource.m_nStableKey == 0u || rSource.m_nConsumer > T3D_VT_CONSUMER_COMPOSED ||
 		 rSource.m_nWrapMode > T3D_VT_COOK_WRAP_CLAMP ||
 		 rSource.m_nOrmSourceLayout > T3D_VT_SURFACE_SOURCE_ROUGHNESS_A ) {
 		return false;
@@ -939,7 +945,8 @@ public:
 				const uint32_t nExtent =
 					t3d_vt_fixed_profile_channel_extent( pProfiles[iSource], ( t3dVTLogicalChannel_t ) iChannel );
 				const uint32_t nMipCount = t3d_vt_page_builder_mip_count( nExtent, nExtent );
-				const uint32_t nTailFirstMip = t3d_vt_cooker_tail_first_mip( nExtent, nExtent, nMipCount );
+				const uint32_t nTailFirstMip = t3d_vt_cooker_tail_first_mip( nExtent, nExtent, nMipCount,
+					( t3dVTConsumer_t ) pSources[iSource].m_nConsumer );
 				const uint32_t nPages = t3d_vt_cooker_regular_page_count_v1( nExtent, nTailFirstMip );
 				nTotalPages64 += nPages;
 				++nTotalTails64;
@@ -1103,7 +1110,8 @@ bool t3d_vt_cooker_cook_sparse_pages_v1(
 				bOk = false;
 				break;
 			}
-			const uint32_t nTailFirstMip = t3d_vt_cooker_tail_first_mip( nExtent, nExtent, Layout.m_nMipCount );
+			const uint32_t nTailFirstMip = t3d_vt_cooker_tail_first_mip( nExtent, nExtent, Layout.m_nMipCount,
+				( t3dVTConsumer_t ) rSource.m_nConsumer );
 			const uint32_t nRegularPages = t3d_vt_cooker_regular_page_count_v1( nExtent, nTailFirstMip );
 			rChannelAllocation.m_nBaseVirtualPage = nPageCursor;
 			rChannelAllocation.m_nPageCount = nRegularPages;

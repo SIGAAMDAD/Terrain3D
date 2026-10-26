@@ -454,7 +454,7 @@ bool Terrain3D::prepareStartupOwnerCold(
 
 	// Establish the authoritative residency map before the tier materials take
 	// their initial sampler bindings. Physical GPU publication remains bounded
-	// in authoring as well as runtime; CPU data and the far atlas remain the
+	// in authoring as well as runtime; CPU data and the shared FAR V1 source remain the
 	// whole-world authority. Force the first reconciliation even when the actual
 	// center/generation equals the zero/default cached state.
 	runStartupOwnerStage( "Residency", &Terrain3D::prepareStartupResidencyStageCold );
@@ -1453,4 +1453,9 @@ PackedByteArray Terrain3D::exportEnvironmentRegionClimate() const {
 
 bool Terrain3D::importEnvironmentRegionClimate( const PackedByteArray &rData ) {
     return m_pRenderCoordinator && m_pRenderCoordinator->importEnvironmentRegionClimateOwner( rData );
+}
+
+uint64_t Terrain3D::getPreparedHlodSourceGenerationCold( void ) const
+{
+	return m_pRenderCoordinator ? m_pRenderCoordinator->getPreparedHlodSourceGenerationCold() : 0u;
 }

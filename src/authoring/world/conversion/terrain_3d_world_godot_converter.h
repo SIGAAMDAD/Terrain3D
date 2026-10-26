@@ -62,6 +62,7 @@ private:
 							  const godot::Ref< Terrain3DWorldMaterial > &pExplicitMaterial,
 							  t3dWorldGeometrySourceMesh_t				 &rSource,
 							  t3dWorldGeometrySourceLod_t				 &rLod,
+                              const godot::Ref< godot::ArrayMesh > &rOverrideMesh,
 							  uint64_t									 &rPrototypeKey,
 							  t3dWorldConversionReason_t				 &rReason );
 	bool	 findOrCompileMaterialCold( const godot::Ref< godot::Material >		   &pMaterial,

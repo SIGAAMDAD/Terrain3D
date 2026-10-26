@@ -45,7 +45,7 @@ typedef Error ( *t3dMapEditAcquireEditableRegionFn_t )( void				   *pContext,
 														Ref< Terrain3DRegion > &rRegion );
 
 // Owns authoritative terrain-map mutation mechanics and edit bookkeeping.
-// Renderer publication, far-atlas invalidation, collision/instance updates,
+// Renderer publication, FAR V1 source invalidation, collision/instance updates,
 // terrain snapping, and Godot signal emission remain integration concerns.
 class Terrain3DMapEditService
 {

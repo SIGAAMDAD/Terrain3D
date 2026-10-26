@@ -16,6 +16,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include "rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.h"
 #include "data/runtime/terrain_3d_composed_surface_sidecar.h"
+#include "data/persistence/terrain_3d_file_publication.h"
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/char_string.hpp>
 #include <vector>
@@ -115,6 +116,33 @@ static uint64_t t3d_cs_editor_material_revision( const Terrain3DAssets &rAssets,
         for ( float component : pair ) {
             uint32_t bits = 0u;
             memcpy( &bits, &component, sizeof( bits ) );
+            revision ^= uint64_t( bits ) + 0x9e3779b97f4a7c15ull +
+                        ( revision << 6u ) + ( revision >> 2u );
+        }
+    }
+    // The asset generation is a fast invalidation signal, but the canonical
+    // material also reads individual authored layer uniforms. Hash those
+    // values directly so a setter which misses the asset generation counter
+    // cannot silently validate an obsolete long-running editor cook.
+    const uint32_t layerCount = uint32_t( rAssets.getTextureCount() );
+    revision ^= uint64_t( layerCount ) + 0x9e3779b97f4a7c15ull +
+                ( revision << 6u ) + ( revision >> 2u );
+    for ( uint32_t i = 0u; i < layerCount; ++i ) {
+        const Ref< Terrain3DTextureAsset > asset = rAssets.getTextureAsset( int( i ) );
+        if ( asset.is_null() ) {
+            revision ^= 0x756e617661696c31ull + ( revision << 6u ) + ( revision >> 2u );
+            continue;
+        }
+        const Color tint = asset->getAlbedoColor();
+        const float values[] = {
+            float( tint.r ), float( tint.g ), float( tint.b ), float( tint.a ),
+            float( asset->getUvScale() ), float( asset->getNormalDepth() ),
+            float( asset->getRoughness() ), float( asset->getMetallic() ),
+            float( asset->getAoStrength() ), float( asset->getAoLightAffect() )
+        };
+        for ( float value : values ) {
+            uint32_t bits = 0u;
+            memcpy( &bits, &value, sizeof( bits ) );
             revision ^= uint64_t( bits ) + 0x9e3779b97f4a7c15ull +
                         ( revision << 6u ) + ( revision >> 2u );
         }
@@ -444,7 +472,17 @@ bool t3d_cs_cook_editor_candidate_cold(
         return false;
     }
     const String path = rDirectory.path_join( "terrain_composed.t3sc.candidate" );
-    const CharString pathUtf8 = path.utf8();
+    // Preserve the last verified candidate until the new cook has been
+    // reopened, CRC checked and source-generation checked. This uses the
+    // existing rollback-capable terrain file transaction; the GPU is never
+    // handed a partially authored candidate.
+    const String stagedPath = path + String( ".staged" );
+    Terrain3DFilePublication publication( path, stagedPath, path + String( ".previous" ) );
+    if ( publication.prepare() != OK ) {
+        rResult.m_error = String( "candidate_publication_prepare_failed: " ) + publication.getError();
+        return false;
+    }
+    const CharString pathUtf8 = stagedPath.utf8();
     t3dCs13ColdCookRequest_t request{};
     request.m_pSourcePackage = rPack.ptr();
     request.m_nSourcePackageBytes = uint64_t( rPack.size() );
@@ -525,6 +563,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     t3dCs13ColdCookResult_t cooked{};
     rResult.m_nPages = request.m_nPageCount;
     if ( !t3d_cs13_cook_source_pack_cold( request, cooked ) ) {
+        ( void ) publication.rollback();
         rResult.m_error = String( "candidate_cook_failed_status=" ) + String::num_int64( cooked.m_status );
         rResult.m_nReusedPages = 0u;
         return false;
@@ -532,14 +571,47 @@ bool t3d_cs_cook_editor_candidate_cold(
     // Publication is successful only after the actual on-disk sidecar can
     // be reopened and every channel payload passes its CRC checks. This is
     // not a claim of canonical color/DNR/alpha material parity.
-    PackedByteArray committed = FileAccess::get_file_as_bytes( path );
+    PackedByteArray committed = FileAccess::get_file_as_bytes( stagedPath );
     t3dComposedSurfaceSidecarView_t verified{};
     if ( uint64_t( committed.size() ) != cooked.m_nWrittenBytes ||
          !t3d_cs_validate_sidecar_bytes( committed.ptr(), size_t( committed.size() ), true ) ||
          !t3d_cs_open_sidecar_cold( committed.ptr(), uint64_t( committed.size() ),
                                     identity, verified ) ||
          verified.m_header.m_nPageCount != request.m_nPageCount ) {
+        ( void ) publication.rollback();
         rResult.m_error = "candidate_reopen_or_crc_failed";
+        rResult.m_nReusedPages = 0u;
+        return false;
+    }
+    // CRC alone proves byte integrity, not a complete, current authored mip
+    // hierarchy. Verify all emitted source pages after the atomic disk write
+    // before presenting the candidate as a valid editor bake.
+    for ( const auto &page : pages ) {
+        uint32_t index = 0u;
+        if ( !t3d_cs_find_page( verified, page.m_nRegionKey, page.m_nMip,
+                                page.m_nPageX, page.m_nPageY,
+                                page.m_nCompositionRevision, index ) ) {
+            ( void ) publication.rollback();
+            rResult.m_error = "candidate_missing_or_stale_mip_page";
+            rResult.m_nReusedPages = 0u;
+            return false;
+        }
+    }
+    if ( !t3d_cs_editor_current( &context, context.m_nTerrainRevision,
+                                 context.m_nMaterialRevision, context.m_nTopologyRevision ) ) {
+        ( void ) publication.rollback();
+        rResult.m_error = "source_changed_before_candidate_acceptance";
+        rResult.m_nReusedPages = 0u;
+        return false;
+    }
+    if ( publication.publish() != OK ) {
+        ( void ) publication.rollback();
+        rResult.m_error = String( "candidate_publish_failed: " ) + publication.getError();
+        rResult.m_nReusedPages = 0u;
+        return false;
+    }
+    if ( publication.commit() != OK ) {
+        rResult.m_error = String( "candidate_commit_failed: " ) + publication.getError();
         rResult.m_nReusedPages = 0u;
         return false;
     }

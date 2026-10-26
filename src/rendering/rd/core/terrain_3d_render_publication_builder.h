@@ -13,8 +13,11 @@
 #include "core/utility/terrain_3d_sync.h"
 #include "rendering/rd/core/terrain_3d_rd_types.h"
 #include "rendering/rd/instances/terrain_3d_rd_instance_renderer.h"
+#include "rendering/rd/instances/terrain_3d_mesh_source_index.h"
 #include "rendering/rd/ocean/terrain_3d_rd_ocean_renderer.h"
 #include "rendering/rd/world/runtime/terrain_3d_world_publication.h"
+#include "rendering/rd/superterrain/terrain_3d_st_publication.h"
+#include "rendering/rd/world/runtime/terrain_3d_world_geometry_cache.h"
 #include "eastl_config.h"
 #include "memory/arena/terrain_3d_memory_zone.h"
 
@@ -149,12 +152,18 @@ private:
 	t3dAtomicU64_t			  m_nStaleSnapshots{ 0u };
 	t3dAtomicU64_t			  m_nLastStaleSnapshotToken{ 0u };
 
+    // Cold-published immutable copy. Only the explicitly committed matching
+    // generation may override the transitional FAR region fields. The upload
+    // owner must finish and publish its six descriptor resources first.
+    Terrain3DStPublicationImage m_stCommitted;
+    uint64_t m_nStExpectedTopology = UINT64_MAX;
+    uint64_t m_nStCommitEpoch = 0u;
+    uint64_t m_nStRegionMapEpoch = UINT64_MAX;
 	uint64_t			   m_nRegionTopologyGeneration = 0u;
 	uint64_t			   m_nRegionLightingSignature = 0u;
 	uint64_t			   m_nRegionMapGeneration = 0u;
 	uint64_t			   m_nTerrainMegaVTPublicationGeneration = 0u;
-    uint64_t m_nFarVTPublicationGeneration = UINT64_MAX;
-    uint64_t m_nFarAvtSourcePublicationRevision = UINT64_MAX;
+    uint64_t m_nVTPackagePublicationGeneration = UINT64_MAX;
 	uint64_t			   m_nTerrainMegaVTPersistenceTopologyGeneration = UINT64_MAX;
 	uint64_t			   m_nPhysicalRegionMapGeneration = 0u;
 	uint64_t			   m_nLastRegionCacheSourceGeneration = 0u;
@@ -181,6 +190,8 @@ private:
 	bool																m_bCachedOceanStripValid = false;
 	uint64_t															m_nOceanStripGeneration = 0u;
 	t3dRdMeshSourceSnapshot_t											m_cachedInstanceMeshes;
+	Terrain3DMeshSourceIndex                                        m_meshSourceIndex;
+	Terrain3DWorldGeometryCache m_worldGeometryCache;
 	t3dRdInstanceSceneSnapshot_t										m_cachedRegularInstanceScene;
 	t3dRdInstanceSceneSnapshot_t										m_cachedHlodInstanceScene;
 	t3dRdInstanceSceneSnapshot_t										m_cachedInstanceScene;
@@ -243,6 +254,10 @@ private:
 	void	 recordStaleSnapshot( uint64_t nToken );
 
 public:
+    // Owner-thread cold boundary, after the render-side candidate upload has
+    // succeeded. Retains a coherent last-good CPU image on validation failure.
+    bool commitSuperTerrainCandidateCold( Terrain3DStPublicationImage &rImage,
+                                            uint64_t nExpectedRegionTopology );
 	t3dPublicationDiagnosticsView_t getDiagnosticsView(
 		void ) const {
 		return { m_bColdCapacityServiceActive,
@@ -427,6 +442,9 @@ public:
 		void ) const {
 		return m_nWorldMeshPayloadReuseCount;
 	}
+    bool compactRetiredGlobalMeshesOwner( uint64_t nCompletedPublicationGeneration,
+        const t3dWorldResourceLimits_t &rLimits );
+	godot::Dictionary getGlobalMeshCacheDiagnosticsOwner( void ) const;
 	size_t getRetainedCpuBytes( void ) const;
 };
 

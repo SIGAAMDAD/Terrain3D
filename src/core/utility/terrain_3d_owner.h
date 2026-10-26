@@ -59,6 +59,8 @@ public:
 	}
 	virtual Terrain3DCollision						*collisionObject( void ) const = 0;
 	virtual Terrain3DHLODStreamer					*hlodObject( void ) const = 0;
+	// The WORLD render thread publishes the exact prepared HLOD source generation.
+	virtual uint64_t getPreparedHlodSourceGenerationCold( void ) const = 0;
 	virtual Terrain3DNodeStreamer					*nodeStreamerObject( void ) const = 0;
 	virtual Terrain3DAuthoringHooks					*authoringHooks( void ) const = 0;
 	virtual godot::Ref< Terrain3DAssets >			 assetsResource( void ) const = 0;

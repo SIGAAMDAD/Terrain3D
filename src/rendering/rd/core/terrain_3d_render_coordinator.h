@@ -83,6 +83,18 @@ private:
 	// consume only acquired immutable snapshots and immutable banks selected by a
 	// published bank index; it must not inspect producer-side mutable counters.
 	Terrain3DRenderPublicationBuilder m_publicationBuilder;
+	// Prepared on the owner before startup CPU publication; immutable until the
+	// GPU startup stage acknowledges its resources and the owner commits them.
+	Terrain3DStPublicationImage m_stStartupCandidate;
+    // Render-side upload token published only after all six device resources and
+    // the native/WORLD bindings are installed. It is cleared before teardown.
+    t3dAtomicU64_t m_nStGpuReadySignature{ 0u };
+    // The owner marks only successfully committed candidates. The render side
+    // may discard a prepared, uncommitted GPU candidate without racing reads.
+    t3dAtomicU64_t m_nStCommittedSignature{ 0u };
+    // Two-thread cold activation: 0 idle, 1 ready, 2 owner commit in
+    // progress, 3 committed, 4 render-side discard in progress.
+    t3dAtomicU32_t m_nStActivationState{ 0u };
 	Terrain3DMaterialStateBuilder	  m_materialStateBuilder;
 	Terrain3DForwardPassPreparer	  m_forwardPassPreparer;
 	Terrain3DDiagnosticsPublisher	  m_diagnosticsPublisher;
@@ -145,6 +157,10 @@ private:
 	void serviceAuthoringUpdateCold( void );
 #endif
 public:
+	EA_FORCE_INLINE uint64_t getPreparedHlodSourceGenerationCold( void ) const {
+		return m_nPreparedHlodSourceGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
+	}
+
     void clearEnvironmentRegionClimateOwner() {
         m_publicationBuilder.clearEnvironmentRegionClimateOwner();
     }
@@ -430,6 +446,12 @@ private:
 	uint64_t						m_nRecoveryRequestRevision = 0u;
 	uint64_t						m_nRecoveryQueuedRevision = 0u;
 	t3dAtomicU64_t					m_nRecoveryActiveRevision{ 0u };
+	// Render-thread exact WORLD upload acknowledgement, owner-thread read only.
+	t3dAtomicU64_t                 m_nPreparedHlodSourceGeneration{ 0u };
+	t3dAtomicU64_t m_nGpuSafeMeshPublicationGeneration{ 0u };
+	// Render-thread-only pending async fence target; never interpreted as completion.
+	uint64_t m_nPendingMeshRetirementPublication = 0u;
+	uint64_t m_nPendingMeshRetirementEpoch = 0u;
 	t3dAtomicBool_t					m_bRecoveryInProgress{ false };
 	bool							m_bForwardBridgeAttached = false;
 	bool							m_bCompositorDebugEnabled = false;
@@ -529,6 +551,22 @@ private:
 	void persistTerrainMegaVTEditorStateHot( void );
 
 public:
+    // Strict cold two-phase activation. The owner prepares ST03/ST04 sidecars
+    // and a parity-approved COMPOSED allocation before calling these methods.
+    // Upload runs on the render thread; commit runs on the owner thread only
+    // after the matching GPU token is published. Live replacement is deferred
+    // until the ST06 generation-safe double-bank migration.
+    // Load a published ST06 surface package, validating every region against
+    // the currently loaded V1 COMPOSED allocation before GPU submission.
+    bool prepareSuperTerrainPackageOwnerCold( const PackedByteArray &rPackage,
+                                               Terrain3DStPublicationImage &rCandidate,
+                                               uint32_t nPinnedMaskWords,
+                                               uint32_t nFinePageBudget );
+    bool uploadSuperTerrainCandidateOnRenderThread( const Terrain3DStPublicationImage &rCandidate,
+                                                     uint32_t nFinePageSlots );
+    bool discardSuperTerrainUncommittedOnRenderThread( uint64_t nExpectedSignature );
+    bool commitSuperTerrainCandidateOwnerCold( Terrain3DStPublicationImage &rCandidate,
+                                                uint64_t nRegionTopology );
 	bool	   bindRuntimeAllocator( Terrain3DMemoryZone *pZone, t3dAllocatorOverflowPolicy_t ePolicy );
 	bool	   loadVirtualTexturePackageCold( const void *pPackageBytes, uint64_t nPackageBytes );
 	bool	   setVirtualTextureQualityProfile( uint32_t nProfile );

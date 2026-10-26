@@ -1,8 +1,59 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/runtime/terrain_3d_world_publication.h"
 
+
+void Terrain3DSharedWorldGeometry::bindRuntimeAllocator( const Terrain3DEastlAllocator &rAllocator )
+{
+    m_vertices.set_allocator( rAllocator );
+    m_clusterVertexIndices.set_allocator( rAllocator );
+    m_triangleWords.set_allocator( rAllocator );
+    m_clusters.set_allocator( rAllocator );
+    m_clusterVtMetadata.set_allocator( rAllocator );
+}
+
+bool Terrain3DSharedWorldGeometry::copyCold( const Terrain3DWorldPublication &rSource )
+{
+    const auto &vertices = rSource.vertices();
+    const auto &indices = rSource.clusterVertexIndices();
+    const auto &triangles = rSource.triangleWords();
+    const auto &clusters = rSource.clusters();
+    const auto &metadata = rSource.clusterVtMetadata();
+    if ( !t3dContainerReserveCold( m_vertices, vertices.size() ) ||
+         !t3dContainerReserveCold( m_clusterVertexIndices, indices.size() ) ||
+         !t3dContainerReserveCold( m_triangleWords, triangles.size() ) ||
+         !t3dContainerReserveCold( m_clusters, clusters.size() ) ||
+         !t3dContainerReserveCold( m_clusterVtMetadata, metadata.size() ) ) {
+        return false;
+    }
+    return t3dVectorCopyWithinCapacity( m_vertices, vertices ) &&
+           t3dVectorCopyWithinCapacity( m_clusterVertexIndices, indices ) &&
+           t3dVectorCopyWithinCapacity( m_triangleWords, triangles ) &&
+           t3dVectorCopyWithinCapacity( m_clusters, clusters ) &&
+           t3dVectorCopyWithinCapacity( m_clusterVtMetadata, metadata );
+}
+
+size_t Terrain3DSharedWorldGeometry::getRetainedCpuBytes( void ) const
+{
+    return m_vertices.capacity() * sizeof( t3dWorldVertex_t ) +
+           ( m_clusterVertexIndices.capacity() + m_triangleWords.capacity() ) * sizeof( uint32_t ) +
+           m_clusters.capacity() * sizeof( t3dWorldCluster_t ) +
+           m_clusterVtMetadata.capacity() * sizeof( t3dWorldClusterVTMetadata_t );
+}
+
+void Terrain3DWorldPublication::attachSharedGeometryCold( const Terrain3DWorldGeometryLease &rGeometry )
+{
+    // Only the publisher's selected writable bank may release its local storage.
+    m_vertices.clear(); m_vertices.shrink_to_fit();
+    m_clusterVertexIndices.clear(); m_clusterVertexIndices.shrink_to_fit();
+    m_triangleWords.clear(); m_triangleWords.shrink_to_fit();
+    m_clusters.clear(); m_clusters.shrink_to_fit();
+    m_clusterVtMetadata.clear(); m_clusterVtMetadata.shrink_to_fit();
+    m_sharedGeometry = rGeometry;
+}
+
 void Terrain3DWorldPublication::bindRuntimeAllocator(
 	const Terrain3DEastlAllocator &rAllocator ) {
+	m_geometryDirtyRanges.set_allocator( rAllocator );
 	m_vertices.set_allocator( rAllocator );
 	m_clusterVertexIndices.set_allocator( rAllocator );
 	m_triangleWords.set_allocator( rAllocator );
@@ -21,10 +72,10 @@ void Terrain3DWorldPublication::bindRuntimeAllocator(
 
 bool Terrain3DWorldPublication::hasCapacity(
 	const t3dWorldPublicationCapacity_t &rRequired ) const {
-	return m_vertices.capacity() >= rRequired.m_nVertices &&
-		   m_clusterVertexIndices.capacity() >= rRequired.m_nClusterVertexIndices &&
-		   m_triangleWords.capacity() >= rRequired.m_nTriangleWords && m_clusters.capacity() >= rRequired.m_nClusters &&
-		   m_clusterVtMetadata.capacity() >= rRequired.m_nClusterVtMetadata &&
+	return ( m_bUseSharedGeometry || m_vertices.capacity() >= rRequired.m_nVertices ) &&
+		   ( m_bUseSharedGeometry || m_clusterVertexIndices.capacity() >= rRequired.m_nClusterVertexIndices ) &&
+		   ( m_bUseSharedGeometry || m_triangleWords.capacity() >= rRequired.m_nTriangleWords ) && ( m_bUseSharedGeometry || m_clusters.capacity() >= rRequired.m_nClusters ) &&
+		   ( m_bUseSharedGeometry || m_clusterVtMetadata.capacity() >= rRequired.m_nClusterVtMetadata ) &&
 		   m_terrainStripClusters.capacity() >= rRequired.m_nTerrainStripClusters &&
 		   m_transforms.capacity() >= rRequired.m_nTransforms &&
 		   m_previousTransforms.capacity() >= rRequired.m_nTransforms &&
@@ -36,11 +87,11 @@ bool Terrain3DWorldPublication::hasCapacity(
 
 bool Terrain3DWorldPublication::reserveCold(
 	const t3dWorldPublicationCapacity_t &rRequired ) {
-	return t3dContainerReserveCold( m_vertices, rRequired.m_nVertices ) &&
-		   t3dContainerReserveCold( m_clusterVertexIndices, rRequired.m_nClusterVertexIndices ) &&
-		   t3dContainerReserveCold( m_triangleWords, rRequired.m_nTriangleWords ) &&
-		   t3dContainerReserveCold( m_clusters, rRequired.m_nClusters ) &&
-		   t3dContainerReserveCold( m_clusterVtMetadata, rRequired.m_nClusterVtMetadata ) &&
+	return ( m_bUseSharedGeometry || t3dContainerReserveCold( m_vertices, rRequired.m_nVertices ) ) &&
+		   ( m_bUseSharedGeometry || t3dContainerReserveCold( m_clusterVertexIndices, rRequired.m_nClusterVertexIndices ) ) &&
+		   ( m_bUseSharedGeometry || t3dContainerReserveCold( m_triangleWords, rRequired.m_nTriangleWords ) ) &&
+		   ( m_bUseSharedGeometry || t3dContainerReserveCold( m_clusters, rRequired.m_nClusters ) ) &&
+		   ( m_bUseSharedGeometry || t3dContainerReserveCold( m_clusterVtMetadata, rRequired.m_nClusterVtMetadata ) ) &&
 		   t3dContainerReserveCold( m_terrainStripClusters, rRequired.m_nTerrainStripClusters ) &&
 		   t3dContainerReserveCold( m_transforms, rRequired.m_nTransforms ) &&
 		   t3dContainerReserveCold( m_previousTransforms, rRequired.m_nTransforms ) &&
@@ -55,7 +106,10 @@ bool Terrain3DWorldPublication::reserveCold(
 void Terrain3DWorldPublication::clearForBuild(
 	const bool bRetainMeshPayload ) {
 	if ( !bRetainMeshPayload ) {
+        m_sharedGeometry.reset();
 		m_nMeshPayloadSignature = 0u;
+        m_nGeometryMutationRevision = 0u;
+        m_geometryDirtyRanges.clear();
 	}
 	m_nStaticSceneProducerId = 0u;
 	m_nStaticScenePublicationGeneration = 0u;
@@ -83,11 +137,11 @@ void Terrain3DWorldPublication::clearForBuild(
 
 bool Terrain3DWorldPublication::copyFrom(
 	const Terrain3DWorldPublication &rOther ) {
-	if ( !hasCapacity( t3dWorldPublicationCapacity_t{ rOther.m_vertices.size(),
-													  rOther.m_clusterVertexIndices.size(),
-													  rOther.m_triangleWords.size(),
-													  rOther.m_clusters.size(),
-													  rOther.m_clusterVtMetadata.size(),
+	if ( !hasCapacity( t3dWorldPublicationCapacity_t{ rOther.vertices().size(),
+													  rOther.clusterVertexIndices().size(),
+													  rOther.triangleWords().size(),
+													  rOther.clusters().size(),
+													  rOther.clusterVtMetadata().size(),
 													  rOther.m_terrainStripClusters.size(),
 													  rOther.m_transforms.size(),
 													  rOther.m_instances.size(),
@@ -97,11 +151,14 @@ bool Terrain3DWorldPublication::copyFrom(
 													  rOther.m_visibilityCandidates.size() } ) ) {
 		return false;
 	}
-	if ( !t3dVectorCopyWithinCapacity( m_vertices, rOther.m_vertices ) ||
-		 !t3dVectorCopyWithinCapacity( m_clusterVertexIndices, rOther.m_clusterVertexIndices ) ||
-		 !t3dVectorCopyWithinCapacity( m_triangleWords, rOther.m_triangleWords ) ||
-		 !t3dVectorCopyWithinCapacity( m_clusters, rOther.m_clusters ) ||
-		 !t3dVectorCopyWithinCapacity( m_clusterVtMetadata, rOther.m_clusterVtMetadata ) ||
+	if ( m_geometryDirtyRanges.capacity() < rOther.m_geometryDirtyRanges.size() &&
+         !t3dContainerReserveCold( m_geometryDirtyRanges, rOther.m_geometryDirtyRanges.size() ) ) { return false; }
+    if ( !t3dVectorCopyWithinCapacity( m_geometryDirtyRanges, rOther.m_geometryDirtyRanges ) ||
+         !t3dVectorCopyWithinCapacity( m_vertices, rOther.vertices() ) ||
+		 !t3dVectorCopyWithinCapacity( m_clusterVertexIndices, rOther.clusterVertexIndices() ) ||
+		 !t3dVectorCopyWithinCapacity( m_triangleWords, rOther.triangleWords() ) ||
+		 !t3dVectorCopyWithinCapacity( m_clusters, rOther.clusters() ) ||
+		 !t3dVectorCopyWithinCapacity( m_clusterVtMetadata, rOther.clusterVtMetadata() ) ||
 		 !t3dVectorCopyWithinCapacity( m_terrainStripClusters, rOther.m_terrainStripClusters ) ||
 		 !t3dVectorCopyWithinCapacity( m_transforms, rOther.m_transforms ) ||
 		 !t3dVectorCopyWithinCapacity( m_previousTransforms, rOther.m_previousTransforms ) ||
@@ -113,14 +170,18 @@ bool Terrain3DWorldPublication::copyFrom(
 		 !t3dVectorCopyWithinCapacity( m_visibilityCandidates, rOther.m_visibilityCandidates ) ) {
 		return false;
 	}
+	m_sharedGeometry.reset();
 	m_nSourceSignature = rOther.m_nSourceSignature;
 	m_nGeneration = rOther.m_nGeneration;
 	m_nGeometryGeneration = rOther.m_nGeometryGeneration;
 	m_nMaterialGeneration = rOther.m_nMaterialGeneration;
 	m_nInstanceGeneration = rOther.m_nInstanceGeneration;
+	m_nHlodSourceGeneration = rOther.m_nHlodSourceGeneration;
 	m_nTerrainGeneration = rOther.m_nTerrainGeneration;
 	m_nStaticGeneration = rOther.m_nStaticGeneration;
 	m_nMeshPayloadSignature = rOther.m_nMeshPayloadSignature;
+	m_nStableGeometryEpoch = rOther.m_nStableGeometryEpoch;
+    m_nGeometryMutationRevision = rOther.m_nGeometryMutationRevision;
 	m_nStaticSceneProducerId = rOther.m_nStaticSceneProducerId;
 	m_nStaticScenePublicationGeneration = rOther.m_nStaticScenePublicationGeneration;
 	m_nInstanceClusterCount = rOther.m_nInstanceClusterCount;
@@ -132,7 +193,8 @@ bool Terrain3DWorldPublication::copyFrom(
 
 size_t Terrain3DWorldPublication::getRetainedCpuBytes(
 	void ) const {
-	return m_vertices.capacity() * sizeof( t3dWorldVertex_t ) + m_clusterVertexIndices.capacity() * sizeof( uint32_t ) +
+	return m_geometryDirtyRanges.capacity() * sizeof( t3dWorldGeometryDirtyRange_t ) +
+           m_vertices.capacity() * sizeof( t3dWorldVertex_t ) + m_clusterVertexIndices.capacity() * sizeof( uint32_t ) +
 		   m_triangleWords.capacity() * sizeof( uint32_t ) + m_clusters.capacity() * sizeof( t3dWorldCluster_t ) +
 		   m_clusterVtMetadata.capacity() * sizeof( t3dWorldClusterVTMetadata_t ) +
 		   m_terrainStripClusters.capacity() * sizeof( t3dWorldTerrainCluster_t ) +

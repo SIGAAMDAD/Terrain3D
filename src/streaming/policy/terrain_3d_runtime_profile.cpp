@@ -642,7 +642,7 @@ Array Terrain3D::getRuntimeProfileProblems(
 								 "info",
 								 "far_vt_backlog",
 								 "far_vt",
-								 "Far-atlas region patches remain dirty.",
+								 "FAR V1 source region patches remain dirty.",
 								 sample.m_nGpuFarDirtyRegions );
 	}
 	if ( sample.m_nPhysicsTotalUsec >= 2000u ) {

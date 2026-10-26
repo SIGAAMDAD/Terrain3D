@@ -41,6 +41,37 @@ Terrain3DWorldRaster::~Terrain3DWorldRaster(
 	void ) {
 }
 
+bool Terrain3DWorldRaster::uploadSuperTerrainCandidateCold(
+    const Terrain3DStPublicationImage &rCandidate, uint32_t nFinePageSlots )
+{
+    if ( !m_bInitialized || m_stGpuImage.valid() || !rCandidate.valid() || !m_context.getDevice() )
+    {
+        return false;
+    }
+    Terrain3DStGpuImage candidate;
+    if ( !candidate.uploadCandidateCold( m_context, rCandidate, nFinePageSlots,
+                                        m_context.getDeviceGeneration() ) )
+    {
+        return false;
+    }
+    // Invalidate cached sets while they still refer to the preceding RID set.
+    // The caller is responsible for the render-thread cold publication boundary.
+    m_bCurrentValid = false;
+    freeSetsCold();
+    m_stGpuImage.swap( candidate );
+    candidate.releaseCold( m_context );
+    return true;
+}
+
+void Terrain3DWorldRaster::discardSuperTerrainCandidateCold( void )
+{
+    // Caller first clears all borrowed clipmap RIDs. Set caches must release
+    // descriptors before their backing GPU resources are destroyed.
+    m_bCurrentValid = false;
+    freeSetsCold();
+    m_stGpuImage.releaseCold( m_context );
+}
+
 bool Terrain3DWorldRaster::configureComposedExperimentalCold( const bool bEnable ) {
 	if ( m_bInitialized || bEnable ) return false;
 	m_bExperimentalComposed = bEnable;
@@ -267,8 +298,12 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 		( ( uint64_t ) pComposed->m_hChannels[1].get_id() << 2u ) ^
 		( ( uint64_t ) pComposed->m_hChannels[2].get_id() << 3u ) ^
 		( ( uint64_t ) pComposed->m_nDeviceGeneration << 32u ) : 0u;
+    const t3dStGpuBindings_t st = m_stGpuImage.bindings();
+    const uint64_t st_dependency = st.valid() ?
+        (st.m_nSignature ^ ((uint64_t) st.m_nDeviceGeneration << 32u) ^
+         (uint64_t) st.m_hVhmPages.get_id() ^ ((uint64_t) st.m_hMaskWords.get_id() << 1u)) : 0u;
 	const t3dSetSignature_t set1_key{ rShader, world_generation,
-		rVT.nBindingGeneration ^ composed_dependency };
+		rVT.nBindingGeneration ^ composed_dependency ^ st_dependency };
 	if ( m_set0Signature[primitive][nDescriptorSlot] == set0_key &&
 		 m_set1Signature[primitive][nDescriptorSlot] == set1_key ) {
 		const RID liveSet0 = m_set0Cache.resolve( hSet0 );
@@ -415,6 +450,29 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 		rVT.hTail[T3D_VT_CHANNEL_HEIGHT16] ) );
 	set1.push_back(
 		Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_MIP_LAYOUT_BINDING, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, rVT.hMipLayoutTable ) );
+    if ( primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP )
+    {
+        // Legacy-only frames borrow well-typed live resources; no additional
+        // allocation is made until an ST05 candidate has been committed.
+        const RID hVhmPages = st.valid() ? st.m_hVhmPages : rVT.hPageTable;
+        const RID hVhmTails = st.valid() ? st.m_hVhmTails : rVT.hTailMetadata;
+        const RID hVhmFine = st.valid() ? st.m_hVhmFine : rVT.hPhysical[T3D_VT_CHANNEL_HEIGHT16][0];
+        const RID hVhmRoot = st.valid() ? st.m_hVhmRoot : rVT.hTail[T3D_VT_CHANNEL_HEIGHT16];
+        const RID hMaskEntries = st.valid() ? st.m_hMaskEntries : rVT.hPageTable;
+        const RID hMaskWords = st.valid() ? st.m_hMaskWords : rVT.hAllocationTable;
+        set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_ST_VHM_PAGES_BINDING,
+            RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, hVhmPages ) );
+        set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_ST_VHM_TAILS_BINDING,
+            RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, hVhmTails ) );
+        set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_ST_VHM_FINE_BINDING,
+            rTerrain.m_hTerrainSampler, hVhmFine ) );
+        set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_ST_VHM_ROOT_BINDING,
+            rTerrain.m_hMapSampler, hVhmRoot ) );
+        set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_ST_MASK_ENTRIES_BINDING,
+            RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, hMaskEntries ) );
+        set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_ST_MASK_WORDS_BINDING,
+            RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, hMaskWords ) );
+    }
 // BR20: this consumer keeps its original descriptor ABI until a hint-specific shader version is selected.
 	if ( pComposed && primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP ) {
 		if ( !pComposed->m_hPageTable.is_valid() || !pComposed->m_nTableCapacity ||
@@ -769,6 +827,7 @@ void Terrain3DWorldRaster::shutdownCold(
 	void ) {
 	m_bCurrentValid = false;
 	freeSetsCold();
+    m_stGpuImage.releaseCold( m_context );
 	m_forwardLighting.shutdown();
 	m_pipelines.clear();
 	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {

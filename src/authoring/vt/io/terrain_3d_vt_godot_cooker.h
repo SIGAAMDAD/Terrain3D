@@ -68,12 +68,6 @@ typedef struct t3dVTGodotAssetMaterials_s
 // cooker. The expected source fingerprint must come from the authoring owner;
 // its value is never inferred from the sidecar itself. This is a cold operation.
 // The result is one normal V1 package fragment with COMPOSED stable keys.
-// Imports indexed .t3avt region files as ordinary FAR consumer allocations.
-// Empty region directories return an empty fragment and success; malformed files fail.
-bool t3d_vt_godot_import_far_region_directory_v1(
-    const godot::String &rDataDirectory, uint32_t nGeneration,
-    godot::PackedByteArray &rFragment, godot::String *pError );
-
 bool t3d_vt_godot_import_composed_sidecar_v1(
     const uint8_t *pSidecar, uint64_t nSidecarBytes,
     uint64_t nExpectedSourceFingerprint, uint32_t nPackageGeneration,

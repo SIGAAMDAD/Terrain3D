@@ -1,0 +1,104 @@
+// ST00 test-only std430 mirror. The ST05 integrator owns promotion to shaders.
+#ifndef T3D_ST_REGION_V1_GLSLINC
+#define T3D_ST_REGION_V1_GLSLINC
+#define T3D_ST_REGION_VERSION                  1u
+#define T3D_ST_REGION_SIZE_BYTES              64u
+#define T3D_ST_REGION_MAP_SIDE                32u
+#define T3D_ST_REGION_SIDE                   128u
+#define T3D_ST_REGION_COUNT                 1024u
+#define T3D_ST_INVALID_ID               0xffffffffu
+#define T3D_ST_REGION_READY_FLAG               1u
+#define T3D_ST_REGION_HAS_MATERIAL_FLAG        2u
+#define T3D_ST_REGION_HAS_HEIGHT_FLAG          4u
+#define T3D_ST_REGION_HAS_MASK_FLAG            8u
+#define T3D_ST_REGION_VALID_MASK              15u
+#define T3D_ST_MATERIAL_CHANNELS                3u
+#define T3D_ST_MATERIAL_PAGE_INTERIOR         128u
+#define T3D_ST_MATERIAL_PAGE_GUTTER             4u
+#define T3D_ST_MATERIAL_PHYSICAL_TILE         136u
+#define T3D_ST_VHM_PAGE_INTERIOR               64u
+#define T3D_ST_VHM_PAGE_GUTTER                  2u
+#define T3D_ST_VHM_PHYSICAL_TILE               68u
+#define T3D_ST_VHM_MIP_COUNT                    8u
+#define T3D_ST_VHM_PAGES_PER_REGION            11u
+#define T3D_ST_VHM_TAIL_FIRST_MIP               3u
+#define T3D_ST_VHM_TAIL_MIP_COUNT               5u
+#define T3D_ST_VHM_TAIL_SLOT_WIDTH             52u
+#define T3D_ST_VHM_TAIL_SLOT_HEIGHT            20u
+#define T3D_ST_VHM_TAIL_ATLAS_WIDTH          1664u
+#define T3D_ST_VHM_TAIL_ATLAS_HEIGHT          640u
+#define T3D_ST_VHM_TAIL_BYTES             2129920u
+#define T3D_ST_VHM_PAGE_BYTES                9248u
+#define T3D_ST_VHM_PAGE_MIP_MASK           0x0000ffffu
+#define T3D_ST_VHM_PAGE_VALID_FLAG         0x00010000u
+#define T3D_ST_VHM_PAGE_RESIDENT_FLAG      0x00020000u
+#define T3D_ST_VHM_PAGE_PINNED_FLAG        0x00040000u
+#define T3D_ST_VHM_TAIL_VALID_FLAG                  1u
+#define T3D_ST_MASK_PAGE_INTERIOR              64u
+#define T3D_ST_MASK_PAGES_PER_REGION            4u
+#define T3D_ST_MASK_BITPLANES                   3u
+#define T3D_ST_MASK_PLANE_WORDS               128u
+#define T3D_ST_MASK_PAGE_BYTES               1536u
+#define T3D_ST_MASK_MAX_PINNED_BYTES       6291456u
+#define T3D_ST_MASK_ENTRY_VALID_FLAG           0x40000000u
+#define T3D_ST_MASK_ENTRY_UNIFORM_FLAG         0x80000000u
+#define T3D_ST_MASK_ENTRY_VALUE_MASK                  7u
+#define T3D_ST_SIDECAR_FORMAT_VERSION           1u
+#define T3D_ST_SIDECAR_VHM_MAGIC         0x31484d56u
+#define T3D_ST_SIDECAR_MASK_MAGIC        0x314b4d53u
+#define T3D_ST_RECIPE_VERSION                   1u
+
+struct StRegionRecordV1
+{
+    uint packed_physical_flags;
+    uint megavt_allocation;
+    uint megavt_generation;
+    uint megavt_flags;
+    vec4 megavt_world_to_uv;
+    uint composed_vt_allocation;
+    uint composed_vt_generation;
+    uint vhm_root_index;
+    uint vhm_generation;
+    uint mask_root_index;
+    uint mask_generation;
+    uint publication_generation;
+    uint region_state_flags;
+};
+bool stRegionReady(StRegionRecordV1 region)
+{
+    return (region.packed_physical_flags & 0x80000000u) != 0u &&
+           region.publication_generation != 0u &&
+           (region.region_state_flags & T3D_ST_REGION_VALID_MASK) == T3D_ST_REGION_VALID_MASK &&
+           region.composed_vt_allocation != T3D_ST_INVALID_ID &&
+           region.vhm_root_index != T3D_ST_INVALID_ID &&
+           region.mask_root_index != T3D_ST_INVALID_ID &&
+           region.composed_vt_generation == region.publication_generation &&
+           region.vhm_generation == region.publication_generation &&
+           region.mask_generation == region.publication_generation;
+}
+struct StVhmPageEntryV1
+{
+    uint physical_slot;
+    uint parent_page;
+    uint generation;
+    uint packed_mip_flags;
+};
+struct StVhmTailV1
+{
+    uint atlas_x;
+    uint atlas_y;
+    uint first_mip;
+    uint mip_count;
+    uint generation;
+    uint flags;
+    uint reserved0;
+    uint reserved1;
+};
+struct StMaskPageEntryV1
+{
+    uint physical_slot;
+    uint pinned_word_offset;
+    uint generation;
+    uint packed_state;
+};
+#endif // T3D_ST_REGION_V1_GLSLINC

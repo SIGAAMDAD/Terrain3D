@@ -207,6 +207,14 @@ bool Terrain3DVirtualTexture::configure_residency_policy_cold(
 	return true;
 }
 
+bool Terrain3DVirtualTexture::configure_unified_regional_demand_cold( const bool bComposedOnly ) {
+    if ( m_bInitialized || m_bHotSealed || m_bWarmPackagePending ) {
+        return false;
+    }
+    m_bComposedOnlyRegionalDemand = bComposedOnly;
+    return true;
+}
+
 const t3dVTResidencyPolicy_t &Terrain3DVirtualTexture::get_residency_policy() const {
 	return m_ResidencyPolicy;
 }
@@ -1070,10 +1078,8 @@ bool Terrain3DVirtualTexture::validate_package_limits(
          nV1Count > UINT32_MAX / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) return false;
     for ( uint32_t i = 0u; i < nV1Count; ++i ) {
         const t3dVTPackAllocationRecordV1_t &source = rCandidate.PackViewV1.m_pAllocations[i];
-        if ( source.m_nConsumer != T3D_VT_CONSUMER_FAR &&
-             source.m_nConsumer != T3D_VT_CONSUMER_COMPOSED ) continue;
-        const uint32_t required = source.m_nConsumer == T3D_VT_CONSUMER_FAR
-            ? T3D_VT_FAR_REQUIRED_CHANNEL_MASK : T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK;
+        if ( source.m_nConsumer != T3D_VT_CONSUMER_COMPOSED ) continue;
+        const uint32_t required = T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK;
         if ( !source.m_nGeneration || ( source.m_nChannelMask & required ) != required ) return false;
         const uint32_t base = t3d_vt_v1_runtime_allocation_base( i );
         for ( uint32_t c = 0u; c < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION; ++c ) {
@@ -1335,11 +1341,11 @@ uint32_t Terrain3DVirtualTexture::stage_v1_demand_hot(
 void Terrain3DVirtualTexture::rebuildFarRegionAllocationTableCold()
 {
     memset( m_szFarRegionAllocations, 0, sizeof( m_szFarRegionAllocations ) );
-    memset( m_szFarSurfaceAllocations, 0, sizeof( m_szFarSurfaceAllocations ) );
     memset( m_szComposedRegionAllocations, 0, sizeof( m_szComposedRegionAllocations ) );
     memset( m_szFarLastMip, 0xff, sizeof( m_szFarLastMip ) );
     memset( m_szFarLastMipFrame, 0, sizeof( m_szFarLastMipFrame ) );
     m_nFarRegionLastStageFrame = UINT32_MAX;
+    m_nRegionalCameraFrame = UINT32_MAX;
     if ( !m_bRuntimePackLoaded || m_RuntimePack.PackViewV1.m_pHeader == NULL ||
          m_RuntimePack.PackViewV1.m_pAllocationKeys == NULL ||
          m_RuntimePack.PackViewV1.m_pAllocations == NULL ) return;
@@ -1347,35 +1353,46 @@ void Terrain3DVirtualTexture::rebuildFarRegionAllocationTableCold()
     for ( uint32_t i = 0u; i < view.m_pHeader->m_nAllocationCount; ++i ) {
         const uint64_t key = view.m_pAllocationKeys[i].m_nStableKey;
         const bool composed = t3d_vt_is_composed_region_stable_key( key );
-        const bool farSurface = t3d_vt_is_far_region_stable_key( key );
-        if ( !composed && !farSurface && !t3d_vt_is_terrain_region_stable_key( key ) ) continue;
+        if ( !composed && !t3d_vt_is_terrain_region_stable_key( key ) ) continue;
         const uint32_t region = ( uint32_t ) ( key & 0xffffu );
         if ( region >= T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) continue;
         const uint32_t source = view.m_pAllocationKeys[i].m_nAllocationId;
         if ( source >= view.m_pHeader->m_nAllocationCount ) continue;
         if ( view.m_pAllocations[source].m_nConsumer !=
-             ( composed ? T3D_VT_CONSUMER_COMPOSED :
-               farSurface ? T3D_VT_CONSUMER_FAR : T3D_VT_CONSUMER_CLIPMAP ) ) continue;
+             ( composed ? T3D_VT_CONSUMER_COMPOSED : T3D_VT_CONSUMER_CLIPMAP ) ) continue;
         const uint32_t allocation = t3d_vt_v1_runtime_allocation_base( source );
         if ( allocation + 2u >= m_Residency.nAllocationCount && m_bInitialized ) continue;
         // Tag with +1; zero is an absent package allocation. All physical
         // slots, page table, upload budgets and eviction remain V1-owned.
-        ( composed ? m_szComposedRegionAllocations :
-          farSurface ? m_szFarSurfaceAllocations : m_szFarRegionAllocations )[region] = allocation + 1u;
+        ( composed ? m_szComposedRegionAllocations : m_szFarRegionAllocations )[region] = allocation + 1u;
     }
 }
 
 // Adaptively prefetch the already cooked regional page hierarchy, through
 // the same staged-request heap and residency/eviction path as source materials.
-uint32_t Terrain3DVirtualTexture::stage_far_region_demand_hot(
+uint32_t Terrain3DVirtualTexture::stage_region_surface_demand_hot(
     const float cameraX, const float cameraZ, const float forwardX, const float forwardZ,
     const uint32_t frame, const float fov, const uint32_t viewHeight )
 {
     if ( !m_bInitialized || !m_Streaming.bInitialized || !m_Residency.pDatabase ||
-         m_bWarmPackagePending || !viewHeight || m_nFarRegionLastStageFrame == frame ||
-         ( frame & 3u ) != 0u ) return 0u;
-    m_nFarRegionLastStageFrame = frame;
+         m_bWarmPackagePending || !viewHeight || m_nFarRegionLastStageFrame == frame ) return 0u;
     const float cell = ( float ) T3D_REGION_WORLD_SIZE_METERS;
+    // A teleport must not wait for the next quarter-frame prediction tick.
+    // All state is fixed-size and updated on the render lane; page admission
+    // and physical uploads remain governed by the existing VT budgets.
+    const bool bTeleport = m_nRegionalCameraFrame != UINT32_MAX &&
+        ( fabsf( cameraX - m_fRegionalCameraX ) > cell * 1.5f ||
+          fabsf( cameraZ - m_fRegionalCameraZ ) > cell * 1.5f );
+    m_nRegionalCameraFrame = frame;
+    m_fRegionalCameraX = cameraX;
+    m_fRegionalCameraZ = cameraZ;
+    if ( ( frame & 3u ) != 0u && !bTeleport ) return 0u;
+    if ( bTeleport ) {
+        // Old near-mip hysteresis belongs to the previous camera locality.
+        memset( m_szFarLastMip, 0xff, sizeof( m_szFarLastMip ) );
+        memset( m_szFarLastMipFrame, 0, sizeof( m_szFarLastMipFrame ) );
+    }
+    m_nFarRegionLastStageFrame = frame;
     const int32_t regionsX[2] = { ( int32_t ) floorf( cameraX / cell ),
         ( int32_t ) floorf( ( cameraX + forwardX * cell ) / cell ) };
     const int32_t regionsZ[2] = { ( int32_t ) floorf( cameraZ / cell ),
@@ -1396,8 +1413,9 @@ uint32_t Terrain3DVirtualTexture::stage_far_region_demand_hot(
                      rx >= T3D_REGION_MAP_HALF || rz >= T3D_REGION_MAP_HALF ) continue;
                 const uint32_t region = ( uint32_t ) ( rz + T3D_REGION_MAP_HALF ) * T3D_REGION_MAP_SIZE +
                                         ( uint32_t ) ( rx + T3D_REGION_MAP_HALF );
-                if ( !m_szFarRegionAllocations[region] && !m_szComposedRegionAllocations[region] &&
-                     !m_szFarSurfaceAllocations[region] ) continue;
+                if ( !m_szComposedRegionAllocations[region] &&
+                     ( m_bComposedOnlyRegionalDemand ||
+                       !m_szFarRegionAllocations[region] ) ) continue;
                 const float dx = ( ( float ) rx + 0.5f ) * cell - cameraX;
                 const float dz = ( ( float ) rz + 0.5f ) * cell - cameraZ;
                 const float distance = MAX( 16.0f, sqrtf( dx * dx + dz * dz ) - cell * 0.5f );
@@ -1405,9 +1423,8 @@ uint32_t Terrain3DVirtualTexture::stage_far_region_demand_hot(
                     ? T3D_VT_PRIORITY_NEAR_MIN : T3D_VT_PRIORITY_PREFETCH_MIN;
                 // One V1 admission queue and LRU. Prefer already-authored
                 // composed pages, then the regional source and its height data.
-                for ( uint32_t family = 0u; family < 3u && attempted < limit; ++family ) {
+                for ( uint32_t family = 0u; family < 2u && attempted < limit; ++family ) {
                     const uint32_t tagged = family == 0u ? m_szComposedRegionAllocations[region]
-                                          : family == 1u ? m_szFarSurfaceAllocations[region]
                                           : m_szFarRegionAllocations[region];
                     if ( !tagged ) continue;
                     const uint32_t base = tagged - 1u;
@@ -1454,7 +1471,7 @@ uint32_t Terrain3DVirtualTexture::stage_spatial_demand_hot(
     const uint32_t v1Requests = stage_v1_demand_hot(
         fCameraX, fCameraZ, fForwardX, fForwardZ, nFrameId,
         fFovDegrees, nViewportHeight );
-	const uint32_t farRequests = stage_far_region_demand_hot(
+	const uint32_t farRequests = stage_region_surface_demand_hot(
 		fCameraX, fCameraZ, fForwardX, fForwardZ, nFrameId, fFovDegrees, nViewportHeight );
 	const t3dVTDatabaseView_t *const db = m_Residency.pDatabase;
     if ( !m_bInitialized || !m_Streaming.bInitialized || db == NULL ||
@@ -2040,31 +2057,6 @@ bool Terrain3DVirtualTexture::supportsSparseV1() const {
 
 uint32_t Terrain3DVirtualTexture::getTerrainMegaVTAllocationBase() const {
 	return m_Limits.nMaxMaterials * T3D_VT_CHANNEL_COUNT;
-}
-
-bool Terrain3DVirtualTexture::getFarSurfaceAllocationCold(
-    const uint32_t nRegionMapIndex, uint32_t &rAllocation, uint32_t &rGeneration ) const {
-    rAllocation = T3D_VT_INVALID_ALLOCATION;
-    rGeneration = 0u;
-    if ( nRegionMapIndex >= T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) return false;
-    Terrain3DScopedLock packageLock( m_packageMutex );
-    if ( !m_bInitialized || !m_bRuntimePackLoaded || m_bWarmPackagePending ||
-         m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ) return false;
-    uint32_t source = T3D_VT_INVALID_ALLOCATION;
-    if ( !t3d_vt_pack_runtime_find_allocation_by_stable_key( m_RuntimePack,
-             t3d_vt_far_region_stable_key( nRegionMapIndex ), source ) ||
-         m_RuntimePack.PackViewV1.m_pHeader == NULL ||
-         source >= m_RuntimePack.PackViewV1.m_pHeader->m_nAllocationCount ) return false;
-    const t3dVTPackAllocationRecordV1_t &allocation = m_RuntimePack.PackViewV1.m_pAllocations[source];
-    if ( allocation.m_nConsumer != T3D_VT_CONSUMER_FAR || allocation.m_nGeneration == 0u ) return false;
-    const uint32_t runtimeAllocation = t3d_vt_v1_runtime_allocation_base( source );
-    if ( runtimeAllocation > m_Residency.nAllocationCount ||
-         m_Residency.nAllocationCount - runtimeAllocation < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) {
-        return false;
-    }
-    rAllocation = runtimeAllocation;
-    rGeneration = allocation.m_nGeneration;
-    return true;
 }
 
 bool Terrain3DVirtualTexture::getComposedRegionAllocationCold(

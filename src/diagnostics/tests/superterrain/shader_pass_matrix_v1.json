@@ -1,0 +1,3803 @@
+{
+  "inputs": [
+    {
+      "includes": [
+        "terrain_clipmap_contract.glslinc",
+        "terrain_clipmap_editor_brush_overlay.glslinc",
+        "terrain_clipmap_fragment_inc.glslinc",
+        "terrain_clipmap_fragment_interface.glslinc",
+        "terrain_clipmap_vertex_inc.glslinc",
+        "terrain_clipmap_vertex_interface.glslinc",
+        "terrain_composed_material_math.glslinc",
+        "terrain_composed_surface_sampling.glslinc",
+        "terrain_far_height_vertex_v1.glslinc",
+        "terrain_forward_lighting_inc.glslinc",
+        "terrain_material_vt_contract.glslinc",
+        "terrain_strip_topology_inc.glslinc",
+        "vt/terrain_vt_common_inc.glslinc",
+        "vt/terrain_vt_feedback_inc.glslinc",
+        "vt/terrain_vt_filter_math_inc.glslinc",
+        "vt/terrain_vt_resolve_core.glslinc",
+        "vt/terrain_vt_tail_filter_inc.glslinc"
+      ],
+      "path": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "sha256": "ee178eedb0bc7ee93d8743089d7dbea2fbc40c12c7db9ceb3e32f9541f13e43a"
+    },
+    {
+      "includes": [
+        "terrain_alpha_coverage_inc.glslinc",
+        "terrain_clipmap_contract.glslinc",
+        "terrain_clipmap_fragment_inc.glslinc",
+        "terrain_clipmap_fragment_interface.glslinc",
+        "terrain_clipmap_vertex_inc.glslinc",
+        "terrain_clipmap_vertex_interface.glslinc",
+        "terrain_composed_material_math.glslinc",
+        "terrain_composed_surface_sampling.glslinc",
+        "terrain_environment_sampling_inc.glslinc",
+        "terrain_far_height_vertex_v1.glslinc",
+        "terrain_forward_lighting_inc.glslinc",
+        "terrain_material_vt_contract.glslinc",
+        "terrain_strip_topology_inc.glslinc",
+        "terrain_world_contract.glslinc",
+        "vt/terrain_vt_common_inc.glslinc",
+        "vt/terrain_vt_consumer_sample_inc.glslinc",
+        "vt/terrain_vt_feedback_inc.glslinc",
+        "vt/terrain_vt_filter_math_inc.glslinc",
+        "vt/terrain_vt_resolve_core.glslinc",
+        "vt/terrain_vt_tail_filter_inc.glslinc"
+      ],
+      "path": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "sha256": "34aa59364c45c1ef69cd301e091240e27ea80a9d96a8e8cc732bbc8641894e7f"
+    }
+  ],
+  "schema": "ST00_SHADER_PASS_MATRIX_V1",
+  "variant_count": 216,
+  "variants": [
+    {
+      "defines": [],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 4,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 5,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 6,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 7,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 8,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 9,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 10,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 11,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 12,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 13,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 14,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 15,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 16,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 17,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 18,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 19,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 20,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 21,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 22,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 23,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 24,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 25,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 26,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 27,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 28,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion_one_sun",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 29,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 30,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 31,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 32,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 33,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 34,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 35,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 36,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion_one_sun_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 37,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 38,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 39,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 40,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_VOXEL_GI"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 41,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 42,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 44,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_PREPARED_MIP_BIAS",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_VT_RESIDENT_ANCESTOR_HINTS"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 45,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_vt_hints",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 46,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 47,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 48,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 49,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 50,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 51,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 52,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 53,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_one_sun",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 54,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_one_sun",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 55,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion_one_sun",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 56,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion_one_sun",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 57,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_one_sun_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 58,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_one_sun_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 59,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion_one_sun_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_ONE_SUN",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 60,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion_one_sun_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 64,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 65,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 66,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 67,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 68,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 69,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 70,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 71,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 72,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 73,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 74,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 75,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 76,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 77,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 78,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_UCMP_EDITOR"
+      ],
+      "editor": true,
+      "geometry": "clipmap",
+      "line": 79,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "editor_color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_PREPARED_MIP_BIAS",
+        "T3D_VT_RESIDENT_ANCESTOR_HINTS"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 83,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "color_native_vt_hints",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 85,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 86,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 87,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 88,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 89,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_native_radiance_array_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 90,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_radiance_array_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 91,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_motion_radiance_array_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK"
+      ],
+      "editor": false,
+      "geometry": "clipmap",
+      "line": 92,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_clipmap.glsl",
+      "variant": "feedback_color_specular_motion_radiance_array_compact",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 5,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 6,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 7,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 8,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 9,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 10,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 11,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 12,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 13,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 14,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 15,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 16,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 17,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 18,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 19,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 20,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 21,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 22,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 23,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH",
+        "T3D_WORLD_SHADOW"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 24,
+      "pass": "shadow",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_shadow",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 25,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 26,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 27,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 28,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 29,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 30,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 31,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 32,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 33,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 34,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 35,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP",
+        "T3D_WORLD_SHADOW"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 36,
+      "pass": "shadow",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_shadow",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 37,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 38,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 39,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 40,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 41,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 42,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 43,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 44,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 45,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 46,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 47,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 48,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 49,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 50,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 51,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 52,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 53,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 54,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 55,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 56,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 57,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 58,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 59,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 60,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 61,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 62,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_native_radiance_array_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 63,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 64,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_radiance_array_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 65,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 66,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_motion_radiance_array_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 67,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array_diag_constant",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 68,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "feedback_mesh_color_specular_motion_radiance_array_diag_opacity",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 69,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 70,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 71,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 72,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 73,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 74,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_depth_normal_roughness_voxel_gi_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_CONSTANT",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH",
+        "T3D_WORLD_SHADOW"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 75,
+      "pass": "shadow",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_shadow_diag_constant",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_INSTANCE_GPU_DIAG_OPACITY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH",
+        "T3D_WORLD_SHADOW"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 76,
+      "pass": "shadow",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_shadow_diag_opacity",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 80,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 81,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 82,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 83,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 84,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 85,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 86,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 87,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "mesh_color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 88,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 89,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 90,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 91,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 92,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 93,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 94,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 95,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "terrain_strip_color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 100,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 101,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 102,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 103,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 104,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 105,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 106,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 107,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_DEPTH",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 108,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 109,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 110,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 111,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 112,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 113,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 114,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 115,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 116,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 117,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_TERRAIN_STRIP"
+      ],
+      "editor": false,
+      "geometry": "terrain_strip",
+      "line": 118,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_terrain_strip_color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 121,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_native",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 122,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 123,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 124,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_motion",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 125,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_native_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 126,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 127,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 128,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_motion_radiance_array",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 129,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_native",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 130,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_specular",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 131,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 132,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_specular_motion",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 133,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_native_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 134,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_specular_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 135,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_VT_COARSE_FEEDBACK",
+        "T3D_VT_FRAGMENT_FEEDBACK",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 136,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_feedback_mesh_color_specular_motion_radiance_array",
+      "vt_feedback": true
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 137,
+      "pass": "depth",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_depth",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 138,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_depth_normal_roughness",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_NORMAL_ROUGHNESS",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_VOXEL_GI",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 139,
+      "pass": "depth_normal_roughness",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_depth_normal_roughness_voxel_gi",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 140,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_native_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 141,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 142,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 143,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_motion_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 144,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_native_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 145,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 146,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_MOTION_RECEIVER",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_COMPACT_CLUSTER_LISTS",
+        "T3D_FORWARD_MOTION",
+        "T3D_FORWARD_NATIVE_LIGHTING",
+        "T3D_FORWARD_RADIANCE_ARRAY",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_FORWARD_SPECULAR",
+        "T3D_TERRAIN_MATERIAL_BACKEND",
+        "T3D_TERRAIN_SHADER_PATH",
+        "T3D_WORLD_RASTER_MESH"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 147,
+      "pass": "color",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_color_specular_motion_radiance_array_compact",
+      "vt_feedback": false
+    },
+    {
+      "defines": [
+        "T3D_ENVIRONMENT_FIELD",
+        "T3D_ENVIRONMENT_VERTEX_RECEIVER",
+        "T3D_FORWARD_DEPTH",
+        "T3D_FORWARD_RUNTIME_SHADOW_TOGGLE",
+        "T3D_WORLD_RASTER_MESH",
+        "T3D_WORLD_SHADOW"
+      ],
+      "editor": false,
+      "geometry": "mesh",
+      "line": 148,
+      "pass": "shadow",
+      "root": "project/addons/terrain_3d/rd/terrain_world_raster.glsl",
+      "variant": "env_mesh_shadow",
+      "vt_feedback": false
+    }
+  ]
+}

@@ -797,6 +797,7 @@ public:
 		void ) const {
 		return m_pRenderCoordinator;
 	}
+	uint64_t getPreparedHlodSourceGenerationCold( void ) const override;
 	// Native startup orchestration boundary. P01 keeps execution synchronous, but
 	// generation and domain readiness are now explicit contracts for later lanes.
 	EA_FORCE_INLINE uint32_t getStartupGenerationInternal(

@@ -78,8 +78,8 @@ void Terrain3DWorldRuntime::setFramePolicyHot(
 static bool t3dWorldPublicationMaterialReferencesValid(
 	const Terrain3DWorldPublication &rPublication ) {
 	const uint32_t nMaterialCount = ( uint32_t ) rPublication.m_materials.size();
-	for ( size_t i = 0u; i < rPublication.m_clusters.size(); ++i ) {
-		const uint32_t nMaterial = rPublication.m_clusters[i].m_nMaterial;
+	for ( size_t i = 0u; i < rPublication.clusters().size(); ++i ) {
+		const uint32_t nMaterial = rPublication.clusters()[i].m_nMaterial;
 		if ( nMaterial != T3D_WORLD_INVALID_ID && nMaterial >= nMaterialCount ) {
 			return false;
 		}
@@ -98,13 +98,13 @@ static bool t3dWorldPublicationFitsLimits(
 	const t3dWorldResourceLimits_t	&rLimits ) {
 	const size_t nStripTerrain = rPublication.m_terrainStripClusters.size();
 	const size_t nActiveVisibleCapacity = rPublication.m_visibilityCandidates.size();
-	return rPublication.m_vertices.size() <= rLimits.m_nMaxSourceVertices &&
-		   rPublication.m_clusters.size() <= rLimits.m_nMaxClusters && nStripTerrain <= rLimits.m_nMaxTerrainClusters &&
+	return rPublication.vertices().size() <= rLimits.m_nMaxSourceVertices &&
+		   rPublication.clusters().size() <= rLimits.m_nMaxClusters && nStripTerrain <= rLimits.m_nMaxTerrainClusters &&
 		   rPublication.m_transforms.size() <= rLimits.m_nMaxTransforms &&
 		   nActiveVisibleCapacity <= rLimits.m_nMaxVisibleItems &&
 		   rPublication.m_materials.size() <= rLimits.m_nMaxMaterials &&
-		   rPublication.m_clusterVertexIndices.size() <= rLimits.m_nMaxClusterVertexIndices &&
-		   rPublication.m_triangleWords.size() <= rLimits.m_nMaxTriangleSlots;
+		   rPublication.clusterVertexIndices().size() <= rLimits.m_nMaxClusterVertexIndices &&
+		   rPublication.triangleWords().size() <= rLimits.m_nMaxTriangleSlots;
 }
 
 bool Terrain3DWorldRuntime::initializeCold(
@@ -150,6 +150,7 @@ bool Terrain3DWorldRuntime::preparePublicationCold(
 	// pass. Avoid rewalking all publication containers and their references.
 	// Still check descriptor generations: the shared RD arenas can be rebuilt.
 	if ( m_bReady && m_nPreparedPublicationGeneration == rPublication.m_nGeneration &&
+		 m_nPreparedGeometryCacheEpoch == rPublication.m_nStableGeometryEpoch &&
 		 m_nResolvedVtPackagePublicationGeneration == nVtPublicationGeneration ) {
 		if ( !m_bInitialized || m_visibility.prepareBindingsCold( m_resources, m_hiZ ) ) {
 			return true;
@@ -163,7 +164,8 @@ bool Terrain3DWorldRuntime::preparePublicationCold(
 		++m_nPrepareFailureCount;
 		return false;
 	}
-	if ( m_nPreparedPublicationGeneration != rPublication.m_nGeneration ) {
+	if ( m_nPreparedPublicationGeneration != rPublication.m_nGeneration ||
+		 m_nPreparedGeometryCacheEpoch != rPublication.m_nStableGeometryEpoch ) {
 		if ( !t3dWorldPublicationMaterialReferencesValid( rPublication ) ) {
 			m_bReady = false;
 			++m_nPrepareFailureCount;
@@ -185,12 +187,14 @@ bool Terrain3DWorldRuntime::preparePublicationCold(
 		// An immutable publication needs only one dirty-section preflight, even
 		// when several render passes defer its commit under the same frame credit.
 		if ( m_nBudgetCheckedPublicationGeneration != rPublication.m_nGeneration ||
+			 m_nBudgetCheckedGeometryCacheEpoch != rPublication.m_nStableGeometryEpoch ||
 			 m_nBudgetCheckedVtGeneration != nVtPublicationGeneration ) {
 			m_nLastRequiredUploadBytes =
 				m_resources.estimateChangedPublicationUploadBytes( rPublication,
 																   pVirtualTexture != NULL,
 																   m_nLastRequiredClusterCredit );
 			m_nBudgetCheckedPublicationGeneration = rPublication.m_nGeneration;
+			m_nBudgetCheckedGeometryCacheEpoch = rPublication.m_nStableGeometryEpoch;
 			m_nBudgetCheckedVtGeneration = nVtPublicationGeneration;
 		}
 		const uint64_t nRequiredBytes = m_nLastRequiredUploadBytes;
@@ -230,10 +234,11 @@ bool Terrain3DWorldRuntime::preparePublicationCold(
 				MIN( m_nPublicationClusterCredit, ( uint32_t ) MIN( nRequiredClusters, ( uint64_t ) UINT32_MAX ) );
 		}
 		m_nPreparedPublicationGeneration = rPublication.m_nGeneration;
+		m_nPreparedGeometryCacheEpoch = rPublication.m_nStableGeometryEpoch;
 		m_nResolvedVtPackagePublicationGeneration = nVtPublicationGeneration;
 		m_nGeometryGeneration = rPublication.m_nGeometryGeneration;
 		m_nMaterialGeneration = rPublication.m_nMaterialGeneration;
-		m_nClusterCount = ( uint32_t ) rPublication.m_clusters.size();
+		m_nClusterCount = ( uint32_t ) rPublication.clusters().size();
 		m_nTerrainStripClusterCount = ( uint32_t ) rPublication.m_terrainStripClusters.size();
 		m_nTransformCount = ( uint32_t ) rPublication.m_transforms.size();
 		m_nMaterialCount = ( uint32_t ) rPublication.m_materials.size();
@@ -369,6 +374,20 @@ bool Terrain3DWorldRuntime::prepareVisibilityPass(
 	return true;
 }
 
+bool Terrain3DWorldRuntime::uploadSuperTerrainCandidateCold(
+    const Terrain3DStPublicationImage &rCandidate, uint32_t nFinePageSlots )
+{
+    return m_bReady && m_raster.uploadSuperTerrainCandidateCold( rCandidate, nFinePageSlots );
+}
+
+void Terrain3DWorldRuntime::discardSuperTerrainCandidateCold( void )
+{
+    if ( m_bReady )
+    {
+        m_raster.discardSuperTerrainCandidateCold();
+    }
+}
+
 bool Terrain3DWorldRuntime::configureComposedExperimentalCold( const bool bEnable ) {
 	return !m_bInitialized && m_raster.configureComposedExperimentalCold( bEnable );
 }
@@ -401,7 +420,9 @@ void Terrain3DWorldRuntime::shutdownCold(
 	m_hiZ.shutdownCold();
 	m_resources.shutdownCold();
 	m_nPreparedPublicationGeneration = 0u;
+	m_nPreparedGeometryCacheEpoch = 0u;
 	m_nBudgetCheckedPublicationGeneration = 0u;
+	m_nBudgetCheckedGeometryCacheEpoch = 0u;
 	m_nBudgetCheckedVtGeneration = UINT64_MAX;
 	m_nLastRequiredUploadBytes = 0u;
 	m_nLastRequiredClusterCredit = 0u;

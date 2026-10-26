@@ -25,13 +25,13 @@ struct WorldUploadTable
 };
 static std::array< WorldUploadTable, WORLD_BUFFER_COUNT > worldPublicationTables(
 	const Terrain3DWorldPublication &p ) {
-	return { { { p.m_vertices.data(), uint64_t( p.m_vertices.size() ) * sizeof( *p.m_vertices.data() ) },
-			   { p.m_clusterVertexIndices.data(),
-				 uint64_t( p.m_clusterVertexIndices.size() ) * sizeof( *p.m_clusterVertexIndices.data() ) },
-			   { p.m_triangleWords.data(), uint64_t( p.m_triangleWords.size() ) * sizeof( *p.m_triangleWords.data() ) },
-			   { p.m_clusters.data(), uint64_t( p.m_clusters.size() ) * sizeof( *p.m_clusters.data() ) },
-			   { p.m_clusterVtMetadata.data(),
-				 uint64_t( p.m_clusterVtMetadata.size() ) * sizeof( *p.m_clusterVtMetadata.data() ) },
+	return { { { p.vertices().data(), uint64_t( p.vertices().size() ) * sizeof( *p.vertices().data() ) },
+			   { p.clusterVertexIndices().data(),
+				 uint64_t( p.clusterVertexIndices().size() ) * sizeof( *p.clusterVertexIndices().data() ) },
+			   { p.triangleWords().data(), uint64_t( p.triangleWords().size() ) * sizeof( *p.triangleWords().data() ) },
+			   { p.clusters().data(), uint64_t( p.clusters().size() ) * sizeof( *p.clusters().data() ) },
+			   { p.clusterVtMetadata().data(),
+				 uint64_t( p.clusterVtMetadata().size() ) * sizeof( *p.clusterVtMetadata().data() ) },
 			   { p.m_terrainStripClusters.data(),
 				 uint64_t( p.m_terrainStripClusters.size() ) * sizeof( *p.m_terrainStripClusters.data() ) },
 			   { NULL, 0u },
@@ -131,6 +131,70 @@ uint64_t Terrain3DWorldResources::estimateColdStagingBytes(
 		return UINT64_MAX;
 	}
 	return materials + MAX( uint64_t( TRANSFER_BYTES ), materials );
+}
+
+static bool worldIsStableGeometryBuffer( const t3dWorldBufferId_t id )
+{
+	return id == WORLD_BUFFER_VERTICES || id == WORLD_BUFFER_CLUSTER_VERTEX_INDICES ||
+		   id == WORLD_BUFFER_TRIANGLES || id == WORLD_BUFFER_CLUSTERS ||
+		   id == WORLD_BUFFER_CLUSTER_VT_METADATA;
+}
+
+// Merged byte intervals for recycled WORLD geometry writes. Four intervals per
+// buffer cap upload batch requests; excess fragmentation falls back to a single
+// enclosing interval (correctness before transfer granularity).
+typedef struct t3dWorldDirtyByteInterval_s
+{
+    uint32_t m_nBegin = 0u;
+    uint32_t m_nEnd = 0u;
+} t3dWorldDirtyByteInterval_t;
+
+static uint32_t worldCollectGeometryDirtyIntervals(
+    const Terrain3DWorldPublication &rPublication, const t3dWorldBufferId_t id,
+    const uint64_t nUploadedMutationRevision, const uint32_t nPreviousBytes,
+    const uint32_t nCurrentBytes, t3dWorldDirtyByteInterval_t rRanges[4] )
+{
+    uint32_t nCount = 0u;
+    const uint32_t nSafeOldBytes = MIN( nPreviousBytes, nCurrentBytes );
+    for ( size_t i = 0u; i < rPublication.m_geometryDirtyRanges.size() + 1u; ++i ) {
+        uint32_t nBegin = 0u, nEnd = 0u;
+        if ( i == rPublication.m_geometryDirtyRanges.size() ) {
+            nBegin = nSafeOldBytes;
+            nEnd = nCurrentBytes;
+        } else {
+            const t3dWorldGeometryDirtyRange_t &dirty = rPublication.m_geometryDirtyRanges[i];
+            if ( dirty.m_nBuffer != ( uint32_t ) id ||
+                 dirty.m_nRevision <= nUploadedMutationRevision ||
+                 dirty.m_nFirstByte >= nCurrentBytes ) { continue; }
+            nBegin = dirty.m_nFirstByte;
+            nEnd = MIN( nCurrentBytes, dirty.m_nFirstByte + dirty.m_nByteCount );
+        }
+        if ( nEnd <= nBegin ) { continue; }
+        // Insert in increasing order, combining overlaps/adjacent ranges.
+        uint32_t nInsert = 0u;
+        while ( nInsert < nCount && rRanges[nInsert].m_nEnd < nBegin ) { ++nInsert; }
+        uint32_t nMergeEnd = nInsert;
+        while ( nMergeEnd < nCount && rRanges[nMergeEnd].m_nBegin <= nEnd ) {
+            nBegin = MIN( nBegin, rRanges[nMergeEnd].m_nBegin );
+            nEnd = MAX( nEnd, rRanges[nMergeEnd].m_nEnd );
+            ++nMergeEnd;
+        }
+        if ( nInsert == nMergeEnd && nCount == 4u ) {
+            // All changes are still uploaded; only the transfer size grows.
+            nBegin = MIN( nBegin, rRanges[0].m_nBegin );
+            nEnd = MAX( nEnd, rRanges[nCount - 1u].m_nEnd );
+            nCount = 0u;
+            nInsert = 0u;
+            nMergeEnd = 0u;
+        }
+        const uint32_t nRemove = nMergeEnd - nInsert;
+        for ( uint32_t j = nMergeEnd; j < nCount; ++j ) {
+            rRanges[nInsert + 1u + j - nMergeEnd] = rRanges[j];
+        }
+        nCount = nCount - nRemove + 1u;
+        rRanges[nInsert] = { nBegin, nEnd };
+    }
+    return nCount;
 }
 
 static uint64_t worldUploadSignature(
@@ -233,8 +297,47 @@ bool Terrain3DWorldResources::uploadBufferWarm(
 	if ( bytes > section.m_nCapacityBytes || bytes > INT32_MAX ) {
 		return false;
 	}
-	const uint64_t signature = publication ? worldUploadSignature( data, bytes ) : 0u;
-	if ( publication && m_bPublicationUploadCached[id] && section.m_nSizeBytes == bytes &&
+	const bool bStableGeometry = publication && worldIsStableGeometryBuffer( id );
+	// GPU offsets are the immutable-prefix layout prepared on the owner thread.
+	// The previously prepared epoch is the only valid basis for a suffix write.
+	const bool bCanAppend = bStableGeometry && m_pPublicationBatch &&
+		 m_nPendingGeometryCacheEpoch != 0u &&
+		 m_nPendingGeometryCacheEpoch == m_nUploadedGeometryCacheEpoch &&
+		 m_bPublicationUploadCached[id] && bytes >= section.m_nSizeBytes;
+    if ( bCanAppend ) {
+        const uint32_t nOldBytes = section.m_nSizeBytes;
+        t3dWorldDirtyByteInterval_t ranges[4]{};
+        // The cold publication journal is cumulative within one cache epoch.
+        // It handles skipped intermediate publications by comparing with the
+        // last successful GPU revision instead of the last CPU publication.
+        const uint32_t nRanges = m_pPendingGeometryPublication
+            ? worldCollectGeometryDirtyIntervals( *m_pPendingGeometryPublication, id,
+                m_nUploadedGeometryMutationRevision, nOldBytes, bytes, ranges )
+            : 0u;
+        if ( !nRanges && bytes == nOldBytes ) {
+            m_nSkippedPublicationUploadBytes += bytes;
+            return true;
+        }
+        uint32_t nUploadedBytes = 0u;
+        for ( uint32_t i = 0u; i < nRanges; ++i ) {
+            const uint32_t nSize = ranges[i].m_nEnd - ranges[i].m_nBegin;
+            if ( !m_pPublicationBatch->queueRangeWrite( bufferFor( id ),
+                    section.m_nOffsetBytes + ranges[i].m_nBegin,
+                    ( const uint8_t * ) data + ranges[i].m_nBegin, nSize,
+                    m_transfer, T3D_GPU_PUBLICATION ) ) { return false; }
+            nUploadedBytes += nSize;
+        }
+        bufferFor( id ).setSliceUsedBytes( m_sections[id], bytes );
+        // Failed GPU completion may partially write an interval: never trust
+        // this buffer as an immutable prefix until a subsequent full upload.
+        m_bPublicationUploadCached[id] = false;
+        m_dirtySections[id] = true;
+        m_nQueuedSectionBytes[id] = nUploadedBytes;
+        m_bQueuedGeometryDeltas[id] = true;
+        return true;
+    }
+	const uint64_t signature = publication && !bStableGeometry ? worldUploadSignature( data, bytes ) : 0u;
+	if ( publication && !bStableGeometry && m_bPublicationUploadCached[id] && section.m_nSizeBytes == bytes &&
 		 m_sectionSignatures[id] == signature &&
 		 ( id != WORLD_BUFFER_MATERIALS || !bytes || !memcmp( m_materialShadow.ptr(), data, bytes ) ) ) {
 		m_nSkippedPublicationUploadBytes += bytes;
@@ -262,6 +365,8 @@ bool Terrain3DWorldResources::uploadBufferWarm(
 		buffer->setSliceUsedBytes( m_sections[id], bytes );
 		m_sectionSignatures[id] = signature;
 		m_dirtySections[id] = true;
+		m_nQueuedSectionBytes[id] = bytes;
+		m_bQueuedGeometryDeltas[id] = false;
 		return true;
 	}
 	if ( !buffer || !buffer->writeSliceTracked( *m_pContext,
@@ -309,7 +414,7 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 	const t3dVTResidencyState_t &residency = rVirtualTexture.get_residency();
 	for ( size_t i = 0u; i < nMaterialCount; ++i ) {
 		t3dRenderingMaterialGpu_t material = rPublication.m_materials[i];
-		if ( i < nInstanceMaterialCount ) {
+		if ( i < nInstanceMaterialCount && rPublication.m_instanceMaterialStableKeys[i] != 0u ) {
 			uint32_t nAllocation = T3D_VT_INVALID_ALLOCATION;
 			if ( !bV1 ||
 				 !rVirtualTexture.findMaterialAllocationCold( rPublication.m_instanceMaterialStableKeys[i],
@@ -379,7 +484,7 @@ uint64_t Terrain3DWorldResources::estimateChangedPublicationUploadBytes(
 	if ( !isInitialized() ) {
 		rChangedClusterCount =
 			( uint32_t ) MIN( uint64_t( UINT32_MAX ),
-							  uint64_t( rPublication.m_clusters.size() ) + rPublication.m_terrainStripClusters.size() );
+							  uint64_t( rPublication.clusters().size() ) + rPublication.m_terrainStripClusters.size() );
 		return estimatePublicationUploadBytes( rPublication );
 	}
 	const auto tables = worldPublicationTables( rPublication );
@@ -393,7 +498,28 @@ uint64_t Terrain3DWorldResources::estimateChangedPublicationUploadBytes(
 			return UINT64_MAX;
 		}
 		const uint32_t bytes = ( uint32_t ) byte_count;
-		const bool	   changed =
+		const t3dWorldBufferId_t id = ( t3dWorldBufferId_t ) i;
+		if ( worldIsStableGeometryBuffer( id ) ) {
+			const bool bCanAppend = rPublication.m_nStableGeometryEpoch != 0u &&
+				rPublication.m_nStableGeometryEpoch == m_nUploadedGeometryCacheEpoch &&
+				m_bPublicationUploadCached[i] && bytes >= m_sections[i].m_nSizeBytes;
+            uint32_t nNeeded = bytes;
+            if ( bCanAppend ) {
+                t3dWorldDirtyByteInterval_t ranges[4]{};
+                const uint32_t nRanges = worldCollectGeometryDirtyIntervals( rPublication, id,
+                    m_nUploadedGeometryMutationRevision, m_sections[i].m_nSizeBytes, bytes, ranges );
+                nNeeded = 0u;
+                for ( uint32_t k = 0u; k < nRanges; ++k ) {
+                    nNeeded += ranges[k].m_nEnd - ranges[k].m_nBegin;
+                }
+            }
+            changed_bytes += nNeeded;
+            if ( id == WORLD_BUFFER_CLUSTERS ) {
+                rChangedClusterCount += nNeeded / sizeof( t3dWorldCluster_t );
+            }
+			continue;
+		}
+		const bool changed =
 			( i == WORLD_BUFFER_MATERIALS && bResolveVtMaterials ) || !m_bPublicationUploadCached[i] ||
 			m_sections[i].m_nSizeBytes != bytes ||
 			m_sectionSignatures[i] != worldUploadSignature( tables[i].data, bytes ) ||
@@ -402,10 +528,8 @@ uint64_t Terrain3DWorldResources::estimateChangedPublicationUploadBytes(
 			continue;
 		}
 		changed_bytes += bytes;
-		if ( i == WORLD_BUFFER_CLUSTERS || i == WORLD_BUFFER_TERRAIN_STRIP_CLUSTERS ) {
-			rChangedClusterCount +=
-				( uint32_t ) ( i == WORLD_BUFFER_CLUSTERS ? rPublication.m_clusters.size()
-														  : rPublication.m_terrainStripClusters.size() );
+		if ( id == WORLD_BUFFER_TERRAIN_STRIP_CLUSTERS ) {
+			rChangedClusterCount += ( uint32_t ) rPublication.m_terrainStripClusters.size();
 		}
 	}
 	// Counter and indirect command initialization happens on every new publication.
@@ -417,7 +541,8 @@ bool Terrain3DWorldResources::uploadPublicationWarm(
 	const Terrain3DWorldPublication		&rPublication,
 	const Terrain3DVirtualTexture *const pVirtualTexture ) {
 	T3D_STREAM_PROFILE_SCOPE( T3D_SP_WORLD_BUFFER_UPLOAD );
-	if ( rPublication.m_nGeneration != 0u && rPublication.m_nGeneration == m_nUploadedPublicationGeneration ) {
+	if ( rPublication.m_nGeneration != 0u && rPublication.m_nGeneration == m_nUploadedPublicationGeneration &&
+		 rPublication.m_nStableGeometryEpoch == m_nUploadedGeometryCacheEpoch ) {
 		return true;
 	}
 	if ( !isInitialized() ) {
@@ -447,6 +572,10 @@ bool Terrain3DWorldResources::uploadPublicationWarm(
 	const auto				  tables = worldPublicationTables( rPublication );
 	Terrain3DRdGpuBufferBatch uploads( *m_pContext );
 	memset( m_dirtySections, 0, sizeof( m_dirtySections ) );
+	memset( m_nQueuedSectionBytes, 0, sizeof( m_nQueuedSectionBytes ) );
+	memset( m_bQueuedGeometryDeltas, 0, sizeof( m_bQueuedGeometryDeltas ) );
+	m_nPendingGeometryCacheEpoch = rPublication.m_nStableGeometryEpoch;
+    m_pPendingGeometryPublication = &rPublication;
 	m_pPublicationBatch = &uploads;
 	const bool staged = [&]() {
 		for ( uint32_t i = 0u; i < WORLD_BUFFER_MATERIALS; ++i ) {
@@ -467,15 +596,28 @@ bool Terrain3DWorldResources::uploadPublicationWarm(
 				   uint32_t( rPublication.m_visibilityCandidates.size() * sizeof( t3dWorldVisibleItem_t ) ) );
 	}();
 	m_pPublicationBatch = NULL;
+	m_nPendingGeometryCacheEpoch = 0u;
+    m_pPendingGeometryPublication = NULL;
 	if ( !staged || !uploads.flush() ) {
 		return false;
 	}
 	for ( uint32_t i = 0u; i < WORLD_BUFFER_INDIRECT; ++i ) {
 		if ( m_dirtySections[i] ) {
 			m_bPublicationUploadCached[i] = true;
-			m_nUploadBytes += m_sections[i].m_nSizeBytes;
+			m_nUploadBytes += m_nQueuedSectionBytes[i];
+			if ( worldIsStableGeometryBuffer( ( t3dWorldBufferId_t ) i ) ) {
+				if ( m_bQueuedGeometryDeltas[i] ) {
+					m_nGeometryDeltaUploadBytes += m_nQueuedSectionBytes[i];
+					++m_nGeometryDeltaUploadCount;
+				} else {
+					m_nGeometryFullUploadBytes += m_nQueuedSectionBytes[i];
+					++m_nGeometryFullUploadCount;
+				}
+			}
 		}
 	}
+	m_nUploadedGeometryCacheEpoch = rPublication.m_nStableGeometryEpoch;
+    m_nUploadedGeometryMutationRevision = rPublication.m_nGeometryMutationRevision;
 	if ( !uploadBufferWarm( WORLD_BUFFER_VISIBILITY_COUNTERS, counters, sizeof( counters ) ) ||
 		 !uploadBufferWarm( WORLD_BUFFER_INDIRECT, indirect, sizeof( indirect ) ) ) {
 		return false;
@@ -505,6 +647,13 @@ void Terrain3DWorldResources::shutdownCold() {
 		// Keep fixed spans and CPU staging across pipeline/lane recovery. Physical
 		// retirement and reuse belong to an explicit shared generation transition.
 		m_nUploadedPublicationGeneration = 0u;
+		m_nUploadedGeometryCacheEpoch = 0u;
+    m_nUploadedGeometryMutationRevision = 0u;
+		for ( uint32_t i = 0u; i < WORLD_BUFFER_COUNT; ++i ) {
+			if ( worldIsStableGeometryBuffer( ( t3dWorldBufferId_t ) i ) ) {
+				m_bPublicationUploadCached[i] = false;
+			}
+		}
 		return;
 	}
 	m_materialShadow.clear();
@@ -522,6 +671,8 @@ void Terrain3DWorldResources::shutdownCold() {
 	m_pFixedIndirectBuffer = NULL;
 	m_pContext = NULL;
 	m_nGpuBufferBytes = m_nUploadedPublicationGeneration = m_nResourceGeneration = 0u;
+	m_nUploadedGeometryCacheEpoch = 0u;
+    m_nUploadedGeometryMutationRevision = 0u;
 	memset( m_nTerrainStripBucketCounts, 0, sizeof( m_nTerrainStripBucketCounts ) );
 	m_nTerrainStripUsefulVertices = m_nTerrainStripFixedSubmittedVertices = m_nTerrainStripBucketSubmittedVertices = 0u;
 }
@@ -546,6 +697,9 @@ void Terrain3DWorldResources::releaseArenaSpansFinal(
 	m_pContext = NULL;
 	m_nGpuBufferBytes = 0u;
 	m_nUploadedPublicationGeneration = 0u;
+	m_nUploadedGeometryCacheEpoch = 0u;
+    m_nUploadedGeometryMutationRevision = 0u;
+	memset( m_bPublicationUploadCached, 0, sizeof( m_bPublicationUploadCached ) );
 }
 
 bool Terrain3DWorldResources::isInitialized() const {
@@ -594,6 +748,11 @@ Dictionary Terrain3DWorldResources::getArenaDiagnostics() const {
 	}
 	result["mesh_geometry_reserved_bytes"] = ( int64_t ) mesh_capacity;
 	result["mesh_geometry_used_bytes"] = ( int64_t ) mesh_used;
+	result["geometry_delta_upload_bytes"] = ( int64_t ) m_nGeometryDeltaUploadBytes;
+	result["geometry_full_upload_bytes"] = ( int64_t ) m_nGeometryFullUploadBytes;
+	result["geometry_delta_upload_calls"] = ( int64_t ) m_nGeometryDeltaUploadCount;
+	result["geometry_full_upload_calls"] = ( int64_t ) m_nGeometryFullUploadCount;
+	result["geometry_cache_epoch"] = ( int64_t ) m_nUploadedGeometryCacheEpoch;
 	result["terrain_cluster_reserved_bytes"] = ( int64_t ) getCapacityBytes( WORLD_BUFFER_TERRAIN_STRIP_CLUSTERS );
 	result["terrain_cluster_used_bytes"] = ( int64_t ) getUsedBytes( WORLD_BUFFER_TERRAIN_STRIP_CLUSTERS );
 	result["terrain_bounds_reserved_bytes"] = ( int64_t ) getCapacityBytes( WORLD_BUFFER_TERRAIN_STRIP_CLUSTER_BOUNDS );

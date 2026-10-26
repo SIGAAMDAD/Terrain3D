@@ -32,6 +32,8 @@ typedef struct t3dEntry_s : public t3dHLODEntryDescriptor_t
 	bool							 m_bCancelPending = false;
 	bool							 m_bLoadFailed = false;
 	bool							 m_bActive = false;
+	bool                             m_bGpuReady = false;
+	uint64_t                         m_nAwaitedGpuGeneration = 0u;
 	bool							 m_bRetiring = false;
 	uint8_t							 m_nRetireReadyFrames = 0;
 	int								 m_iActiveListPosition = -1;
@@ -120,6 +122,7 @@ class Terrain3DHLODStreamer : public Object
 	void			refreshRetiringFromActive( void );
 	void			selectRecursive( int index, const Vector3 &rLocalTarget );
 	void			selectFallbackChildren( int index, const Vector3 &rLocalTarget );
+	bool            refreshGpuReadiness( void );
 	void			clearDesiredDescendants( int index );
 	bool			hasActiveDescendant( int index ) const;
 	bool			replacementReady( const t3dEntry_t &rEntry ) const;

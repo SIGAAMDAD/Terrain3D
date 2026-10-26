@@ -88,7 +88,7 @@ typedef struct t3dDirectorySaveResult_s
 typedef bool ( *t3dRegionPersistenceEnsureResidentFn_t )( void *pContext, const Vector2i &rLocation );
 
 // Owns Terrain3DRegion resource serialization and staged repository loading.
-// Runtime residency, GPU publication, page cooking, Far-atlas cooking, and
+// Runtime residency, GPU publication, page cooking, FAR V1 source cooking, and
 // terrain notifications are deliberately outside this class.
 class Terrain3DRegionPersistence
 {

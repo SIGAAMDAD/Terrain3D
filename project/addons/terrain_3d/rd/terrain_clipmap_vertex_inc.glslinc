@@ -10,7 +10,7 @@ const uint T3D_FEATURE_DISPLACEMENT = 1u << 6u;
 const uint T3D_FEATURE_DERIVED_MAPS = 1u << 7u;
 const uint T3D_FEATURE_FLAT_TERRAIN_NORMALS_VERTEX = 1u << 16u;
 const uint T3D_FEATURE_MIDDLE_HEIGHT = 1u << 9u;
-const uint T3D_FEATURE_FAR_VT = 1u << 10u;
+const uint T3D_FEATURE_MICRO_VT = 1u << 14u;
 const int T3D_REGION_SIZE = 128;
 const int T3D_REGION_SHIFT = 7;
 const int T3D_REGION_MASK = 127;
@@ -20,11 +20,6 @@ const float T3D_REGION_SIZE_F = 128.0;
 const float T3D_REGION_INV_SIZE_F = 0.0078125;
 const float T3D_WORLD_SIZE_F = 4096.0;
 const float T3D_WORLD_HALF_SIZE_F = 2048.0;
-
-// The stage root defines this V1 implementation after the common vertex helpers.
-// Keep its prototype here so height sampling can call it without requiring
-// region constants before the vertex include has declared them.
-bool t3d_far_height_v1(vec2 world_texel, out float encoded);
 
 struct HeightSamples4
 {
@@ -136,14 +131,48 @@ bool far_vt_world_contains(vec2 world_texel)
 	float half_world_size = T3D_WORLD_HALF_SIZE_F;
 	return all(greaterThanEqual(world_texel, vec2(-half_world_size))) && all(lessThan(world_texel, vec2(half_world_size)));
 }
-// Far height has no standalone image. Valid coarse/tail roots resolve through V1.
+// ST05: same region-generation gate for every geometry distance. Fine pages
+// may be absent; the pinned region root remains valid through eviction.
+bool t3d_st_sample_height_meters(vec2 world_texel, out float heightMeters)
+{
+#ifdef T3D_ST_VHM_BINDINGS
+    ivec2 regionCell = ivec2(floor(world_texel * T3D_REGION_INV_SIZE_F));
+    ivec2 mapPos = regionCell + ivec2(T3D_REGION_MAP_HALF);
+    if (any(lessThan(mapPos, ivec2(0))) ||
+        any(greaterThanEqual(mapPos, ivec2(T3D_REGION_MAP_SIZE))))
+    {
+        return false;
+    }
+    TerrainRegionRecord record = region_map[T3D_CLIPMAP_REGION_BASE + (mapPos.y << 5) + mapPos.x];
+    if (!t3d_st_region_ready(record))
+    {
+        return false;
+    }
+    float encoded = 0.0;
+    vec2 regionLocal = world_texel - vec2(regionCell) * 128.0;
+    if (!t3d_vhm_sample(record.vhm_root_index, regionLocal, 0u,
+                        record.publication_generation, encoded))
+    {
+        return false;
+    }
+    // VMH1 authored range is frozen by ST04's R16 source contract.
+    heightMeters = fma(encoded, 1152.0, -384.0);
+    return true;
+#else
+    return false;
+#endif
+}
+
+// Unified VHM owns all geometry distances; missing authored regions use background heights.
 float sample_far_height(vec2 world_texel)
 {
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) == 0u || !far_vt_world_contains(world_texel))
+    float stHeight = 0.0;
+    if (t3d_st_sample_height_meters(world_texel, stHeight))
+    {
+        return stHeight;
+    }
+	if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) == 0u || !far_vt_world_contains(world_texel))
 	return material_config.ground_level;
-	float encoded;
-	if (t3d_far_height_v1(world_texel, encoded))
-		return decode_height(encoded);
 	return material_config.ground_level;
 }
 
@@ -272,9 +301,11 @@ HeightSamples4 sample_background_height4(vec2 p0, vec2 p1, vec2 p2, vec2 p3, boo
 
 float sample_far_height_or_background(vec2 world_texel, bool normal_sample)
 {
-	float encoded;
-	if (t3d_far_height_v1(world_texel, encoded))
-		return decode_height(encoded);
+    float stHeight = 0.0;
+    if (t3d_st_sample_height_meters(world_texel, stHeight))
+    {
+        return stHeight;
+    }
 	return normal_sample ? sample_background_normal_height(world_texel) : sample_background_height(world_texel);
 }
 
@@ -284,7 +315,7 @@ HeightSamples4 sample_missing_height4(ivec2 t0, ivec2 t1, ivec2 t2, ivec2 t3, bo
 	vec2 p1 = vec2(t1);
 	vec2 p2 = vec2(t2);
 	vec2 p3 = vec2(t3);
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) == 0u)
+	if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) == 0u)
 	return sample_background_height4(p0, p1, p2, p3, normal_sample);
 	return HeightSamples4(
 	far_vt_world_contains(p0) ? sample_far_height_or_background(p0, normal_sample) :
@@ -303,7 +334,7 @@ float sample_primary_height_texel_mode(ivec2 texel, bool normal_sample)
 	ivec2 region_cell = ivec2(floor_region_i(texel.x), floor_region_i(texel.y));
 	int layer = region_layer(region_cell);
 	if (layer < 0)
-	return (material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_vt_world_contains(vec2(texel))
+	return (material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && far_vt_world_contains(vec2(texel))
 	? sample_far_height(vec2(texel))
 	: (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
 	ivec2 local = ivec2(local_region_i(texel.x), local_region_i(texel.y));
@@ -356,7 +387,7 @@ float sample_middle_height_texel_mode(ivec2 texel, bool normal_sample)
 	ivec2 region_cell = ivec2(floor_region_i(texel.x), floor_region_i(texel.y));
 	int layer = middle_height_layer(region_cell);
 	if (layer < 0)
-	return (material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_vt_world_contains(vec2(texel))
+	return (material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && far_vt_world_contains(vec2(texel))
 	? sample_far_height(vec2(texel))
 	: (normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel)));
 	ivec2 local = ivec2(local_region_i(texel.x), local_region_i(texel.y));
@@ -418,12 +449,20 @@ float sample_height_texel_mode(ivec2 texel, bool normal_sample)
 	if (t3d_editor_brush_lookup(texel, 0u, authored_height))
 	return decode_height(float(authored_height) * (1.0 / 65535.0));
 #endif
+#ifdef T3D_ST_VHM_BINDINGS
+    // Committed VHM elevation is common to every clipmap distance class.
+    float stUnifiedHeight = 0.0;
+    if (t3d_st_sample_height_meters(vec2(texel), stUnifiedHeight))
+    {
+        return stUnifiedHeight;
+    }
+#endif
 #ifdef T3D_RUNTIME_TIER
 	if (t3d_runtime_patch_tier == 0u)
 	return sample_primary_height_texel_mode(texel, normal_sample);
 	if (t3d_runtime_patch_tier == 1u)
 	return sample_middle_height_texel_mode(texel, normal_sample);
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_vt_world_contains(vec2(texel)))
+	if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && far_vt_world_contains(vec2(texel)))
 	return sample_far_height(vec2(texel));
 	return normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel));
 #elif T3D_TIER == 0
@@ -431,7 +470,7 @@ float sample_height_texel_mode(ivec2 texel, bool normal_sample)
 #elif T3D_TIER == 1
 	return sample_middle_height_texel_mode(texel, normal_sample);
 #else
-	if ((material_config.feature_flags & T3D_FEATURE_FAR_VT) != 0u && far_vt_world_contains(vec2(texel)))
+	if ((material_config.feature_flags & T3D_FEATURE_MICRO_VT) != 0u && far_vt_world_contains(vec2(texel)))
 	return sample_far_height(vec2(texel));
 	return normal_sample ? sample_background_normal_height(vec2(texel)) : sample_background_height(vec2(texel));
 #endif
@@ -448,6 +487,22 @@ HeightSamples4 sample_height_texels4(ivec2 t0, ivec2 t1, ivec2 t2, ivec2 t3, boo
 	sample_height_texel_mode(t1, normal_sample),
 	sample_height_texel_mode(t2, normal_sample),
 	sample_height_texel_mode(t3, normal_sample));
+#endif
+#ifdef T3D_ST_VHM_BINDINGS
+    // Batched near/middle gathers otherwise bypass the common scalar sampler.
+    float stH0 = 0.0, stH1 = 0.0, stH2 = 0.0, stH3 = 0.0;
+    bool st0 = t3d_st_sample_height_meters(vec2(t0), stH0);
+    bool st1 = t3d_st_sample_height_meters(vec2(t1), stH1);
+    bool st2 = t3d_st_sample_height_meters(vec2(t2), stH2);
+    bool st3 = t3d_st_sample_height_meters(vec2(t3), stH3);
+    if (st0 || st1 || st2 || st3)
+    {
+        return HeightSamples4(
+            st0 ? stH0 : sample_height_texel_mode(t0, normal_sample),
+            st1 ? stH1 : sample_height_texel_mode(t1, normal_sample),
+            st2 ? stH2 : sample_height_texel_mode(t2, normal_sample),
+            st3 ? stH3 : sample_height_texel_mode(t3, normal_sample));
+    }
 #endif
 #ifdef T3D_RUNTIME_TIER
 	if (t3d_runtime_patch_tier == 0u)

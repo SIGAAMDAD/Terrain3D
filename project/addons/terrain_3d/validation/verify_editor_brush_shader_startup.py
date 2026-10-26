@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression checks for editor brush startup and shared V1 vertex shader ordering.
+"""Regression checks for editor brush startup and unified VHM shader ordering.
 
 Preprocesses every authored clipmap/WORLD vertex version; this does not replace
 Godot's glslang/SPIR-V compilation or a live editor DLL smoke test.
@@ -64,24 +64,22 @@ def main():
     for shader in ('terrain_clipmap.glsl', 'terrain_world_raster.glsl'):
         text = (RD / shader).read_text()
         includes = split_sections(text)['vertex']
-        check(includes.index('#include "terrain_clipmap_vertex_inc.glslinc"') <
-              includes.index('#include "terrain_far_height_vertex_v1.glslinc"'),
-              f'{shader}: far V1 function placed before region definitions')
+        check(includes.index('#include "terrain_clipmap_height_vhm.glslinc"') <
+              includes.index('#include "terrain_clipmap_vertex_inc.glslinc"'),
+              f'{shader}: VHM declarations must precede terrain vertex sampling')
         for name, macros in variants(split_sections(text)).items():
             out = expanded_vertex(shader, name, macros, cpp)
             if '#define T3D_WORLD_RASTER_MESH' in macros:
                 continue
-            definitions = ('const int T3D_REGION_MAP_SIZE', 'const int T3D_REGION_MAP_HALF',
-                           'const float T3D_REGION_INV_SIZE_F')
-            fn = re.search(r'bool\s+t3d_far_height_v1\s*\([^)]*\)\s*\{', out)
-            check(fn is not None, f'{shader}/{name}: missing far V1 implementation')
-            for definition in definitions:
-                check(definition in out and out.index(definition) < fn.start(),
-                      f'{shader}/{name}: {definition} declared after far V1 function')
-            check('bool t3d_far_height_v1(vec2 world_texel, out float encoded);' in out,
-                  f'{shader}/{name}: missing forward declaration')
+            sample = re.search(r'bool\s+t3d_st_sample_height_meters\s*\([^)]*\)\s*\{', out)
+            vhm = re.search(r'bool\s+t3d_vhm_sample\s*\([^)]*\)\s*\{', out)
+            check(sample is not None, f'{shader}/{name}: missing common VHM height entrypoint')
+            check(vhm is not None and vhm.start() < sample.start(),
+                  f'{shader}/{name}: VHM sampler must be defined before the terrain height entrypoint')
+            check('t3d_st_region_ready' in out,
+                  f'{shader}/{name}: missing region generation readiness gate')
             total += 1
-    print(f'PASS: editor brush metadata/native contract and {total} V1 vertex variants')
+    print(f'PASS: editor brush metadata/native contract and {total} VHM vertex variants')
 
 
 if __name__ == '__main__':

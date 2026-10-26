@@ -7,12 +7,14 @@
 #include "core/utility/terrain_3d_hash_bytes.h"
 #include "core/utility/terrain_3d_sync.h"
 #include "rendering/rd/core/terrain_3d_render_coordinator.h"
+#include "rendering/rd/superterrain/terrain_3d_st_region_package.h"
 #if defined( T3D_EDITOR_NATIVE )
 #include "authoring/vt/integration/terrain_3d_render_authoring_companion.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_coordinator_hooks.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_editor_cook.h"
 #include "authoring/vt/io/terrain_3d_vt_godot_cooker.h"
 #include "authoring/vt/build/terrain_3d_vt_demand_cooker.h"
+#include "authoring/vt/build/terrain_3d_st_godot_region_cooker.h"
 #include <godot_cpp/core/memory.hpp>
 #endif
 #include "rendering/rd/infrastructure/descriptors/terrain_3d_rd_global_descriptor_cache.h"
@@ -106,6 +108,8 @@ static bool t3dRdPrepareComposedShippingV1Cold(
     PackedByteArray &rDemand,
     String &rV1Path,
     PackedByteArray &rV1,
+    String &rSurfacePath,
+    PackedByteArray &rSurface,
     String &rError ) {
     Terrain3DData *const pData = pTerrain ? pTerrain->dataObject() : NULL;
     if ( pData == NULL || rComposed.is_empty() ) {
@@ -134,6 +138,11 @@ static bool t3dRdPrepareComposedShippingV1Cold(
             rDemand, rDemandPath, rError, &rV1, &rV1Path ) ) {
         return false;
     }
+    if ( !t3d_st_cook_region_package_cold( *pData, rShipping, rSurface, rError ) )
+    {
+        return false;
+    }
+    rSurfacePath = rOutputPath.get_base_dir().path_join( "terrain3d_surface.t3dst" );
     return true;
 }
 
@@ -169,11 +178,11 @@ bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
         stats.m_nEditEvents + stats.m_nSourceInvalidations + stats.m_nRemovedRegions;
     const uint64_t nSourceGeneration = m_nComposedSourceGeneration;
     const uint64_t nTopologyGeneration = m_terrainMegaVT.getTopologyGeneration();
-    String shippingPath, demandPath, v1Path;
-    PackedByteArray shipping, demand, v1;
+    String shippingPath, demandPath, v1Path, surfacePath;
+    PackedByteArray shipping, demand, v1, surface;
     if ( !t3dRdPrepareComposedShippingV1Cold( m_pTerrain, *m_pAuthoring,
             composed, generation, shippingPath, shipping, demandPath,
-            demand, v1Path, v1, error ) ) {
+            demand, v1Path, v1, surfacePath, surface, error ) ) {
         m_pAuthoring->m_approvedComposedV1Fragment.clear();
         m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
         m_pAuthoring->m_approvedComposedStatus = "v1_shipping_prepare_failed: " + error;
@@ -191,8 +200,8 @@ bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
         requestMegaVTPackageRecomposeCold();
         return true;
     }
-    if ( !t3d_vt_demand_publish_triplet_cold( shippingPath, shipping,
-            demandPath, demand, v1Path, v1, error ) ) {
+    if ( !t3d_vt_demand_publish_quartet_cold( shippingPath, shipping,
+            demandPath, demand, v1Path, v1, surfacePath, surface, error ) ) {
         m_pAuthoring->m_approvedComposedV1Fragment.clear();
         m_pAuthoring->m_nApprovedComposedFingerprint = 0u;
         m_pAuthoring->m_approvedComposedStatus = "v1_shipping_publish_failed: " + error;
@@ -364,7 +373,12 @@ void Terrain3DRenderCoordinator::serviceColdCapacity(
 void Terrain3DRenderCoordinator::publishSnapshot(
 	void ) {
 	Terrain3DMemoryAccountScope memory_scope( m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr );
-	m_publicationBuilder.publish( publicationServices() );
+	const uint64_t nGpuSafeGeneration = m_nGpuSafeMeshPublicationGeneration.load( T3D_MEMORY_ORDER_ACQUIRE );
+    if ( nGpuSafeGeneration && m_pTerrain ) {
+        m_publicationBuilder.compactRetiredGlobalMeshesOwner( nGpuSafeGeneration,
+            m_pTerrain->getWorldResourceLimitsInternal() );
+    }
+    m_publicationBuilder.publish( publicationServices() );
 }
 
 const t3dRdFrameSnapshotSlot_t *Terrain3DRenderCoordinator::acquireSnapshotOnRenderThread(
@@ -854,6 +868,126 @@ bool Terrain3DRenderCoordinator::ensurePreviewSharedVt(
 												   snapshotRenderLifecycleStatusOnOwnerThread().m_nRecoveryRevision );
 }
 
+// The render thread publishes the six-resource ST05 descriptor snapshot before
+// the owner may publish region records which reference it. First activation is
+// a cold-only operation; live recooks use the existing FAR path until ST06.
+// Owner-thread cold loader for the three-family ST06 package. This makes
+// current COMPOSED residency the single source of truth for allocation IDs;
+// the package cannot resurrect stale allocation IDs from an earlier VT cook.
+static bool t3dStResolveLoadedComposed( void *pContext, const uint32_t nRegionIndex,
+                                        uint32_t &rAllocation, uint32_t &rGeneration )
+{
+    Terrain3DVirtualTexture *const pVT = ( Terrain3DVirtualTexture * ) pContext;
+    return pVT != NULL && pVT->getComposedRegionAllocationCold(
+        nRegionIndex, rAllocation, rGeneration );
+}
+
+bool Terrain3DRenderCoordinator::prepareSuperTerrainPackageOwnerCold(
+    const PackedByteArray &rPackage, Terrain3DStPublicationImage &rCandidate,
+    const uint32_t nPinnedMaskWords, const uint32_t nFinePageBudget )
+{
+    if ( m_pTerrain == NULL || rPackage.is_empty() ||
+         m_nStActivationState.load( T3D_MEMORY_ORDER_ACQUIRE ) != 0u ) return false;
+    Terrain3DVirtualTexture &vt = m_sharedVtRuntime.virtualTexture();
+    if ( !vt.supportsSparseV1() || vt.getPackageGeneration() == 0u ) return false;
+    Terrain3DStRegionPackage package;
+    if ( !package.openCold( rPackage.ptr(), ( size_t ) rPackage.size(),
+                            vt.getPackageGeneration(), t3dStResolveLoadedComposed, &vt ) )
+    {
+        return false;
+    }
+    Terrain3DData *const pData = m_pTerrain->dataObject();
+    if ( pData == NULL ) return false;
+    const TypedArray<Vector2i> authoredLocations = pData->getRegionLocations();
+    if ( package.regionCount() != ( uint32_t ) authoredLocations.size() ) return false;
+    for ( uint32_t i = 0u; i < package.regionCount(); ++i )
+    {
+        const uint32_t index = package.inputs()[i].m_nRegionIndex;
+        const Vector2i location( ( int ) ( index & T3D_REGION_MAP_MASK ) - T3D_REGION_MAP_HALF,
+                                 ( int ) ( index >> T3D_REGION_MAP_SHIFT ) - T3D_REGION_MAP_HALF );
+        Terrain3DRegion *const pRegion = pData->getRegionPtr( location );
+        if ( pRegion == NULL || pRegion->isDeleted() ) return false;
+    }
+    return package.preparePublicationCold( rCandidate, nPinnedMaskWords, nFinePageBudget );
+}
+
+bool Terrain3DRenderCoordinator::uploadSuperTerrainCandidateOnRenderThread(
+    const Terrain3DStPublicationImage &rCandidate, const uint32_t nFinePageSlots )
+{
+    if ( !Terrain3DRdContext::isOnRenderThread() || !rCandidate.valid() ||
+         m_nStGpuReadySignature.load( T3D_MEMORY_ORDER_ACQUIRE ) != 0u ||
+         m_nStActivationState.load( T3D_MEMORY_ORDER_ACQUIRE ) != 0u ||
+         !m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) )
+    {
+        return false;
+    }
+    Terrain3DColdPhaseScope coldPhase;
+    if ( !m_worldRuntime.uploadSuperTerrainCandidateCold( rCandidate, nFinePageSlots ) )
+    {
+        return false;
+    }
+    const t3dStGpuBindings_t bindings = m_worldRuntime.getRaster().getSuperTerrainBindingsCold();
+    if ( !bindings.valid() || bindings.m_nSignature != rCandidate.signature() )
+    {
+        m_worldRuntime.discardSuperTerrainCandidateCold();
+        return false;
+    }
+    m_renderer.setSuperTerrainBindingsCold( bindings );
+    m_nStGpuReadySignature.store( bindings.m_nSignature, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 1u, T3D_MEMORY_ORDER_RELEASE );
+    return true;
+}
+
+bool Terrain3DRenderCoordinator::discardSuperTerrainUncommittedOnRenderThread(
+    const uint64_t nExpectedSignature )
+{
+    if ( !Terrain3DRdContext::isOnRenderThread() || nExpectedSignature == 0u ||
+         m_nStGpuReadySignature.load( T3D_MEMORY_ORDER_ACQUIRE ) != nExpectedSignature ||
+         m_nStCommittedSignature.load( T3D_MEMORY_ORDER_ACQUIRE ) == nExpectedSignature )
+    {
+        return false;
+    }
+    uint32_t nExpectedState = 1u;
+    if ( !m_nStActivationState.compare_exchange_strong( nExpectedState, 4u,
+          T3D_MEMORY_ORDER_ACQ_REL ) )
+    {
+        return false;
+    }
+    Terrain3DColdPhaseScope coldPhase;
+    // Unbind borrowed resources before WORLD invalidates/reclaims its sets.
+    m_renderer.setSuperTerrainBindingsCold( t3dStGpuBindings_t{} );
+    m_worldRuntime.discardSuperTerrainCandidateCold();
+    m_nStGpuReadySignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStCommittedSignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    return true;
+}
+
+bool Terrain3DRenderCoordinator::commitSuperTerrainCandidateOwnerCold(
+    Terrain3DStPublicationImage &rCandidate, const uint64_t nRegionTopology )
+{
+    if ( !rCandidate.valid() || nRegionTopology == 0u ||
+         rCandidate.signature() != m_nStGpuReadySignature.load( T3D_MEMORY_ORDER_ACQUIRE ) )
+    {
+        return false;
+    }
+    uint32_t nExpectedState = 1u;
+    if ( !m_nStActivationState.compare_exchange_strong( nExpectedState, 2u,
+          T3D_MEMORY_ORDER_ACQ_REL ) )
+    {
+        return false;
+    }
+    const uint64_t nSignature = rCandidate.signature();
+    if ( !m_publicationBuilder.commitSuperTerrainCandidateCold( rCandidate, nRegionTopology ) )
+    {
+        m_nStActivationState.store( 1u, T3D_MEMORY_ORDER_RELEASE );
+        return false;
+    }
+    m_nStCommittedSignature.store( nSignature, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 3u, T3D_MEMORY_ORDER_RELEASE );
+    return true;
+}
+
 bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread(
 	const uint64_t nRenderFrame ) {
 	Terrain3DMemoryAccountScope memory_scope( m_pTerrain ? m_pTerrain->getMemoryAccountInternal() : nullptr );
@@ -917,6 +1051,10 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread(
 	m_bRendererFailed.store( false, T3D_MEMORY_ORDER_RELEASE );
 	if ( !terrain_ready ) {
 		m_environmentField.resetAfterRendererTeardownCold();
+        m_nStGpuReadySignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStCommittedSignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+        m_renderer.setSuperTerrainBindingsCold( t3dStGpuBindings_t{} );
 		m_worldRuntime.shutdownCold();
 		m_oceanRenderer.shutdown();
 		m_renderer.shutdown();
@@ -1150,6 +1288,10 @@ void Terrain3DRenderCoordinator::cancelStartupCold(
 	// callback. forceSync() makes the acknowledgement a cold control-plane drain,
 	// after which render-visible startup bookkeeping can be reset safely.
 	const bool bAcknowledged = queueStartupCancellationAckCold( nCancelledGeneration, true );
+	if ( bAcknowledged ) {
+		Terrain3DStPublicationImage empty;
+		m_stStartupCandidate.swap( empty );
+	}
 	m_bStartupColdBegun.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_bStartupColdPrepared.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_bStartupActivationPrepared = false;
@@ -1593,6 +1735,16 @@ bool Terrain3DRenderCoordinator::prepareStartupActivationCold(
 		return false;
 	}
 
+	if ( m_stStartupCandidate.valid() &&
+		m_nStActivationState.load( T3D_MEMORY_ORDER_ACQUIRE ) != 3u &&
+		!commitSuperTerrainCandidateOwnerCold( m_stStartupCandidate,
+			m_pTerrain->dataObject()->getRegionTopologyGenerationInternal() ) ) {
+		m_bStartupColdFailed = true;
+		++m_nStartupFinalSyncFailureCount;
+		{ Terrain3DScopedLock lock( m_diagnosticsMutex );
+			m_initializationError = "SuperTerrain atomic region/GPU publication commit rejected"; }
+		return false;
+	}
 	if ( m_nStartupActivationSnapshotGeneration == 0u ) {
 		const uint64_t nSnapshotBefore = m_publicationBuilder.getPublishedSnapshotGeneration();
 		publishSnapshot();
@@ -1935,6 +2087,23 @@ bool Terrain3DRenderCoordinator::prepareStartupCold(
 				 vtError );
 			return false;
 		}
+		if ( bHasTerrainVtMaterials ) {
+			const String stPath = m_pTerrain->getDataDirectory().path_join( "terrain3d_surface.t3dst" );
+			if ( FileAccess::file_exists( stPath ) ) {
+				const PackedByteArray stBytes = FileAccess::get_file_as_bytes( stPath );
+				if ( !prepareSuperTerrainPackageOwnerCold( stBytes, m_stStartupCandidate,
+						T3D_ST_MASK_MAX_PINNED_BYTES / 4u, 128u ) ) {
+					const String stError = String( "SuperTerrain sidecar does not match loaded COMPOSED VT: " ) + stPath;
+					m_sharedVtRuntime.virtualTexture().mark_startup_failed( m_nStartupGeneration );
+					{ Terrain3DScopedLock lock( m_diagnosticsMutex ); m_initializationError = stError; }
+					m_bStartupColdFailed = true;
+					LOG( ERROR, "[Terrain3D][Startup][SuperTerrain] ", stError );
+					return false;
+				}
+				LOG( INFO, "[Terrain3D][Startup][SuperTerrain] Prepared committed regions=",
+					m_stStartupCandidate.regionCount(), " signature=", m_stStartupCandidate.signature() );
+			}
+		}
 	}
 #if defined( T3D_EDITOR_NATIVE )
 	else if ( Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
@@ -2063,6 +2232,10 @@ void Terrain3DRenderCoordinator::shutdown(
 
 	// With successful render teardown (or after the engine rendering boundary has
 	// disappeared) queued render work can no longer observe these owner records.
+	if ( bCancellationAcknowledged ) {
+		Terrain3DStPublicationImage empty;
+		m_stStartupCandidate.swap( empty );
+	}
 	m_previewService.resetOwnerCold();
 	m_staticScene.reset();
 	if ( m_effect.is_valid() ) {
@@ -2266,6 +2439,11 @@ bool Terrain3DRenderCoordinator::serviceStartupGpuOnRenderThreadBudgeted(
 	case T3D_STARTUP_GPU_COMPLETE:
 		if ( !isStartupGenerationCurrent( nStartupGeneration ) ) {
 			return true;
+		}
+		if ( m_stStartupCandidate.valid() &&
+			!uploadSuperTerrainCandidateOnRenderThread( m_stStartupCandidate, 128u ) ) {
+			bReady = false;
+			break;
 		}
 		m_shaderLibrary.markStartupGpuReady( nStartupGeneration );
 		setRenderLifecycleReadyBitOnRenderThread( nStartupGeneration, T3D_RENDER_READY_SHADER_GPU );
@@ -2701,6 +2879,14 @@ void Terrain3DRenderCoordinator::recoverRendererLifecycleOnRenderThread(
 		~( T3D_RENDER_READY_TERRAIN | T3D_RENDER_READY_WORLD | T3D_RENDER_READY_INSTANCES | T3D_RENDER_READY_OCEAN );
 	publishRenderLifecycleStatusOnRenderThread( status );
 
+    m_nStGpuReadySignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStCommittedSignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_renderer.setSuperTerrainBindingsCold( t3dStGpuBindings_t{} );
+	m_nPreparedHlodSourceGeneration.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nGpuSafeMeshPublicationGeneration.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nPendingMeshRetirementPublication = 0u;
+    m_nPendingMeshRetirementEpoch = 0u;
 	m_worldRuntime.shutdownCold();
 	m_environmentField.resetAfterRendererTeardownCold();
 	m_oceanRenderer.shutdown();
@@ -3187,6 +3373,14 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread(
     releaseEditorBrushOnRenderThread();
 #endif
 	m_previewService.shutdownRendererOnRenderThread( previewServices() );
+    m_nStGpuReadySignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStCommittedSignature.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nStActivationState.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_renderer.setSuperTerrainBindingsCold( t3dStGpuBindings_t{} );
+	m_nPreparedHlodSourceGeneration.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nGpuSafeMeshPublicationGeneration.store( 0u, T3D_MEMORY_ORDER_RELEASE );
+    m_nPendingMeshRetirementPublication = 0u;
+    m_nPendingMeshRetirementEpoch = 0u;
 	m_worldRuntime.shutdownCold();
 	m_environmentField.resetAfterRendererTeardownCold();
 	// Live VT replacement reuses the large CPU upload buffers. Full lifecycle
@@ -3302,6 +3496,20 @@ void Terrain3DRenderCoordinator::publishStaticWorldReadinessOnRenderThread(
 	const bool bExactReady =
 		bReady && m_worldRuntime.isReady() && m_worldRuntime.getPreparedPublicationGeneration() == rWorld.m_nGeneration;
 	m_staticScene.acknowledge( rWorld, bExactReady );
+    // A prepared replacement alone does not prove the previous draw has ended.
+    // Request an async readback *after* the draw epoch that could use retired spans.
+    if ( bExactReady && rWorld.m_nGeneration > m_nPendingMeshRetirementPublication ) {
+        Terrain3DRdGlobalDescriptorCache *const pCache =
+            Terrain3DRdContext::getShared().tryGetGlobalDescriptorCacheHot();
+        if ( pCache && pCache->hasCompletionCallbackHot() ) {
+            m_nPendingMeshRetirementPublication = rWorld.m_nGeneration;
+            m_nPendingMeshRetirementEpoch = pCache->currentSubmissionEpochHot();
+            pCache->requestCompletionProbeHot();
+        }
+    }
+	if ( bExactReady && rWorld.m_nHlodSourceGeneration != 0u ) {
+		m_nPreparedHlodSourceGeneration.store( rWorld.m_nHlodSourceGeneration, T3D_MEMORY_ORDER_RELEASE );
+	}
 }
 
 void Terrain3DRenderCoordinator::resetForwardLifecycle(
@@ -3316,6 +3524,12 @@ void Terrain3DRenderCoordinator::consumeDescriptorFenceOnRenderThread(
 		Terrain3DRdContext::getShared().tryGetGlobalDescriptorCacheHot();
 	if ( pCache ) {
 		pCache->consumeCompletionReadbackOnRenderThread( rBytes, nEpoch, nDeviceGeneration, nTicket );
+        if ( m_nPendingMeshRetirementEpoch != 0u &&
+             pCache->completedSubmissionEpochHot() >= m_nPendingMeshRetirementEpoch ) {
+            m_nGpuSafeMeshPublicationGeneration.store( m_nPendingMeshRetirementPublication,
+                T3D_MEMORY_ORDER_RELEASE );
+            m_nPendingMeshRetirementEpoch = 0u;
+        }
 	}
 }
 
@@ -3540,6 +3754,7 @@ Dictionary Terrain3DRenderCoordinator::getDiagnostics(
 	Dictionary world;
 	world["ready"] = ( lifecycle.m_nReadyMask & T3D_RENDER_READY_WORLD ) != 0u;
 	result["world_renderer"] = world;
+	result["global_mesh_cache"] = m_publicationBuilder.getGlobalMeshCacheDiagnosticsOwner();
 	result["shared_resource_class"] = ( int64_t ) lifecycle.m_nSharedResourceClass;
 	result["shared_vt_resources_ready"] = ( lifecycle.m_nReadyMask & T3D_RENDER_READY_VT_PUBLISHED ) != 0u;
 	result["shared_vt_cpu_ready"] = ( lifecycle.m_nReadyMask & T3D_RENDER_READY_VT_STORAGE ) != 0u;
