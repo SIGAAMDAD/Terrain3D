@@ -1353,7 +1353,7 @@ func _stage_workbench_region_for_source(workbench_terrain: Terrain3D,
 	var edited: Terrain3DRegion = workbench_terrain.data.get_region(entry.location) if is_instance_valid(workbench_terrain.data) else null
 	if not is_instance_valid(edited):
 		return ERR_DOES_NOT_EXIST
-	var snapshot := edited.duplicate(true) as Terrain3DRegion
+	var snapshot := edited.duplicate_region(true) as Terrain3DRegion
 	if not is_instance_valid(snapshot):
 		return ERR_CANT_CREATE
 	# Lighting is source-owned outside the Workbench. If this cluster was rebaked,
@@ -1862,7 +1862,7 @@ func _remove_file_if_present(path: String) -> Error:
 
 
 func _snapshot_region_to_workbench(source_region: Terrain3DRegion, destination_path: String) -> Error:
-	var snapshot := source_region.duplicate(true) as Terrain3DRegion
+	var snapshot := source_region.duplicate_region(true) as Terrain3DRegion
 	if not is_instance_valid(snapshot):
 		return ERR_CANT_CREATE
 	return ResourceSaver.save(snapshot, destination_path)

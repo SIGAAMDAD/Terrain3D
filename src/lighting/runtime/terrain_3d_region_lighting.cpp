@@ -436,7 +436,7 @@ void Terrain3DRegionLighting::_bind_methods(
 									 "",
 									 PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY ),
 					   "set_has_probe_data",
-					   "has_probe_data" );
+					   "get_has_probe_data" );
 	T3D_BIND_PROPERTY( Terrain3DRegionLighting,
 					   setDiskBytes,
 					   getDiskBytes,

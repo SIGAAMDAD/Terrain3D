@@ -1785,7 +1785,8 @@ void Terrain3DRegion::_bind_methods(
 						  DEFVAL( false ) );
 
 	ClassDB::bind_method( D_METHOD( "get_data" ), &Terrain3DRegion::getData );
-	ClassDB::bind_method( D_METHOD( "duplicate", "deep" ), &Terrain3DRegion::duplicate, DEFVAL( false ) );
+	// Resource already binds duplicate(); expose the region-specific snapshot operation separately.
+	ClassDB::bind_method( D_METHOD( "duplicate_region", "deep" ), &Terrain3DRegion::duplicate, DEFVAL( false ) );
 	ClassDB::bind_method( D_METHOD( "dump", "verbose" ), &Terrain3DRegion::dump, DEFVAL( false ) );
 
 	const int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;

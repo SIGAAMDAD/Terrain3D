@@ -1684,8 +1684,8 @@ void Terrain3DMeshAsset::_bind_methods(
 					   getName,
 					   "name",
 					   PropertyInfo( Variant::STRING, "name", PROPERTY_HINT_NONE ),
-					   "set_name",
-					   "get_name" );
+					   "set_asset_name",
+					   "get_asset_name" );
 	T3D_BIND_PROPERTY( Terrain3DMeshAsset,
 					   setId,
 					   getId,
