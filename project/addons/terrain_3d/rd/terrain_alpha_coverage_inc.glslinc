@@ -3,19 +3,22 @@
 #ifndef T3D_TERRAIN_ALPHA_COVERAGE_INC
 #define T3D_TERRAIN_ALPHA_COVERAGE_INC
 
-float t3d_alpha_coverage_vertex(float opacity, float vertex_opacity) {
-    return opacity * vertex_opacity;
+float t3d_alpha_coverage_vertex(float opacity, float vertex_opacity)
+{
+	return opacity * vertex_opacity;
 }
 
-bool t3d_alpha_coverage_scissor(uint flags, uint packed_scalars0, float opacity) {
-    if ((flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u)
-        return true;
-    float cutoff = float((packed_scalars0 >> T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT) & T3D_VT_MATERIAL_UNORM8_MASK) * (1.0 / 255.0);
-    return opacity >= cutoff;
+bool t3d_alpha_coverage_scissor(uint flags, uint packed_scalars0, float opacity)
+{
+	if ((flags & T3D_VT_MATERIAL_ALPHA_SCISSOR) == 0u)
+	return true;
+	float cutoff = float((packed_scalars0 >> T3D_VT_MATERIAL_ALPHA_SCISSOR_SHIFT) & T3D_VT_MATERIAL_UNORM8_MASK) * (1.0 / 255.0);
+	return opacity >= cutoff;
 }
 
-bool t3d_alpha_coverage_depth_prepass(bool depth_prepass, float opacity) {
-    return !depth_prepass || opacity >= 0.5;
+bool t3d_alpha_coverage_depth_prepass(bool depth_prepass, float opacity)
+{
+	return !depth_prepass || opacity >= 0.5;
 }
 
 #endif // T3D_TERRAIN_ALPHA_COVERAGE_INC

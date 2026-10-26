@@ -11,7 +11,7 @@ AllowShortLoopsOnASingleLine: false
 BinPackArguments: false
 BinPackParameters: false
 BreakBeforeBinaryOperators: NonAssignment
-BreakBeforeBraces: Attach
+BreakBeforeBraces: Allman
 ColumnLimit: 140
 ContinuationIndentWidth: 4
 IndentCaseLabels: true
@@ -24,4 +24,4 @@ SortIncludes: Never
 SpaceBeforeParens: ControlStatements
 SpacesInParentheses: false
 TabWidth: 4
-UseTab: Never
+UseTab: ForIndentation

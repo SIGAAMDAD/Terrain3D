@@ -2,7 +2,6 @@
 // Terrain clipmap fragment pipeline interface.
 // Stage roots include this explicitly so reusable material evaluation cannot silently add descriptors or stage I/O.
 
-
 #ifndef TERRAIN3D_MATERIAL_VT_CONTRACT_GLSLINC
 #error "terrain_clipmap_fragment_interface.glslinc requires terrain_material_vt_contract.glslinc at the shader stage root"
 #endif
@@ -76,13 +75,14 @@ layout(location = 2) out vec2 out_motion;
 #endif
 #endif
 
-
-uint t3d_view_index() {
-    return min(uint(gl_ViewIndex), 1u);
+uint t3d_view_index()
+{
+	return min(uint(gl_ViewIndex), 1u);
 }
 #ifndef T3D_WORLD_RASTER_MESH
-layout(set = 0, binding = 1, std430) readonly buffer RegionMapData {
-    TerrainRegionRecord region_map[];
+layout(set = 0, binding = 1, std430) readonly buffer RegionMapData
+{
+	TerrainRegionRecord region_map[];
 };
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 3) uniform sampler2DArray control_maps;
@@ -99,33 +99,35 @@ layout(set = 0, binding = 20) uniform sampler2DArray far_albedo_maps;
 layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
 layout(set = 0, binding = 22) uniform sampler2D macro_noise_texture;
 
-
 layout(set = 0, binding = 24) uniform sampler2D editor_brush_texture;
 layout(set = 0, binding = 25) uniform sampler2DArray terrain_shadow_masks;
 #endif // !T3D_WORLD_RASTER_MESH
 
-
-struct TerrainVTAllocation {
-    uint base_page;
-    uint page_count;
-    uint packed_mip0_extent;
-    uint packed_mip_count_flags;
-    uint tail_index;
-    uint generation;
-    uint content_id;
-    uint reserved;
+struct TerrainVTAllocation
+{
+	uint base_page;
+	uint page_count;
+	uint packed_mip0_extent;
+	uint packed_mip_count_flags;
+	uint tail_index;
+	uint generation;
+	uint content_id;
+	uint reserved;
 };
-struct TerrainVTPageEntry {
-    uint physical_slot;
-    uint parent_page;
-    uint generation;
-    uint packed_resolved_mip_flags;
+struct TerrainVTPageEntry
+{
+	uint physical_slot;
+	uint parent_page;
+	uint generation;
+	uint packed_resolved_mip_flags;
 };
-layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALLOCATION_BINDING, std430) readonly buffer TerrainVTAllocationBuffer {
-    TerrainVTAllocation terrain_vt_allocations[];
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALLOCATION_BINDING, std430) readonly buffer TerrainVTAllocationBuffer
+{
+	TerrainVTAllocation terrain_vt_allocations[];
 };
-layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_PAGE_TABLE_BINDING, std430) readonly buffer TerrainVTPageTableBuffer {
-    TerrainVTPageEntry terrain_vt_page_table[];
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_PAGE_TABLE_BINDING, std430) readonly buffer TerrainVTPageTableBuffer
+{
+	TerrainVTPageEntry terrain_vt_page_table[];
 };
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALBEDO_BINDING) uniform sampler2DArray terrain_vt_albedo_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_NORMAL_BINDING) uniform sampler2DArray terrain_vt_normal_bank0;
@@ -133,21 +135,24 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_SURFACE_BIN
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT_BINDING) uniform sampler2DArray terrain_vt_height_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT16_BINDING) uniform sampler2DArray terrain_vt_height16_bank0;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET,
-    binding = T3D_TERRAIN_VT_TAIL_METADATA_BINDING,
-    std430) readonly buffer TerrainVTTailMetadataBuffer {
-    T3DVTTailMetadata terrain_vt_tails[];
+binding = T3D_TERRAIN_VT_TAIL_METADATA_BINDING,
+std430) readonly buffer TerrainVTTailMetadataBuffer
+{
+	T3DVTTailMetadata terrain_vt_tails[];
 };
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_ALBEDO_TAIL_BINDING) uniform sampler2D terrain_vt_albedo_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_NORMAL_TAIL_BINDING) uniform sampler2D terrain_vt_normal_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_SURFACE_TAIL_BINDING) uniform sampler2D terrain_vt_surface_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT_TAIL_BINDING) uniform sampler2D terrain_vt_height_tail;
 layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HEIGHT16_TAIL_BINDING) uniform sampler2D terrain_vt_height16_tail;
-layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_MIP_LAYOUT_BINDING, std430) readonly buffer TerrainVTMipLayoutBuffer {
-    T3DVTMipLayout terrain_vt_mip_layouts[];
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_MIP_LAYOUT_BINDING, std430) readonly buffer TerrainVTMipLayoutBuffer
+{
+	T3DVTMipLayout terrain_vt_mip_layouts[];
 };
 #if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
-layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDING, std430) readonly buffer TerrainVTAncestorHints {
-    T3DVTAncestorHint terrain_vt_ancestor_hints[];
+layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDING, std430) readonly buffer TerrainVTAncestorHints
+{
+	T3DVTAncestorHint terrain_vt_ancestor_hints[];
 };
 #endif
 
@@ -155,13 +160,15 @@ layout(set = T3D_TERRAIN_VT_DESCRIPTOR_SET, binding = T3D_TERRAIN_VT_HINT_BINDIN
 // descriptors above. The retired standalone table and textures are not bound.
 
 #ifndef T3D_WORLD_RASTER_MESH
-layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer {
-    MaterialLayer materials[];
+layout(set = 0, binding = 8, std430) readonly buffer MaterialBuffer
+{
+	MaterialLayer materials[];
 };
 layout(set = 0, binding = 11) uniform sampler2DArray displacement_maps;
 
-layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer {
-    MaterialConfig material_configs[];
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer
+{
+	MaterialConfig material_configs[];
 };
 #define material_config material_configs[t3d_hot_records[T3D_HOT_INDEX].terrain_bases.x]
 #endif // !T3D_WORLD_RASTER_MESH

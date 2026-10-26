@@ -78,7 +78,6 @@ editor_color_motion_radiance_array_compact = "#define T3D_UCMP_EDITOR 1\n#define
 color_specular_motion_radiance_array_compact = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
 editor_color_specular_motion_radiance_array_compact = "#define T3D_UCMP_EDITOR 1\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
 
-
 // Optional shader variants, selected explicitly by the host renderer.
 
 color_native_vt_hints = "#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_VT_RESIDENT_ANCESTOR_HINTS 1\n#define T3D_PREPARED_MIP_BIAS 1";
@@ -142,19 +141,19 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #include "terrain_clipmap_editor_brush_overlay.glslinc"
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \
-    T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
-        terrain_vt_allocations[index].page_count,                                                                                          \
-        terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
-        terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
-        terrain_vt_allocations[index].tail_index,                                                                                          \
-        terrain_vt_allocations[index].generation,                                                                                          \
-        terrain_vt_allocations[index].content_id,                                                                                          \
-        terrain_vt_allocations[index].reserved)
+T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
+terrain_vt_allocations[index].page_count,                                                                                          \
+terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
+terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
+terrain_vt_allocations[index].tail_index,                                                                                          \
+terrain_vt_allocations[index].generation,                                                                                          \
+terrain_vt_allocations[index].content_id,                                                                                          \
+terrain_vt_allocations[index].reserved)
 #define T3D_VT_RESOLVE_PAGE_ENTRY(index)                                                                                                   \
-    T3DVTPageEntry(terrain_vt_page_table[index].physical_slot,                                                                             \
-        terrain_vt_page_table[index].parent_page,                                                                                          \
-        terrain_vt_page_table[index].generation,                                                                                           \
-        terrain_vt_page_table[index].packed_resolved_mip_flags)
+T3DVTPageEntry(terrain_vt_page_table[index].physical_slot,                                                                             \
+terrain_vt_page_table[index].parent_page,                                                                                          \
+terrain_vt_page_table[index].generation,                                                                                           \
+terrain_vt_page_table[index].packed_resolved_mip_flags)
 #define T3D_VT_RESOLVE_TAIL_ENTRY(index) terrain_vt_tails[index]
 #if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
 #define T3D_VT_RESOLVE_HINT(index) terrain_vt_ancestor_hints[index]

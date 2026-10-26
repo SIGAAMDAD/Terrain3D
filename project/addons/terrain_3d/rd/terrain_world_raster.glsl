@@ -94,7 +94,6 @@ terrain_strip_color_specular_radiance_array_compact = "#define T3D_TERRAIN_SHADE
 terrain_strip_color_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
 terrain_strip_color_specular_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1";
 
-
 // Consumer-only VT alpha sampling trials; normal shader selection unchanged.
 
 // Environmental WORLD terrain strip versions; all original variants stay unchanged.
@@ -117,7 +116,6 @@ env_terrain_strip_color_native_radiance_array_compact = "#define T3D_TERRAIN_SHA
 env_terrain_strip_color_specular_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1\n#define T3D_ENVIRONMENT_FIELD 1";
 env_terrain_strip_color_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1\n#define T3D_ENVIRONMENT_FIELD 1";
 env_terrain_strip_color_specular_motion_radiance_array_compact = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_FORWARD_SPECULAR\n#define T3D_FORWARD_MOTION\n#define T3D_FORWARD_RADIANCE_ARRAY\n#define T3D_WORLD_RASTER_TERRAIN_STRIP\n#define T3D_FORWARD_COMPACT_CLUSTER_LISTS 1\n#define T3D_ENVIRONMENT_FIELD 1";
-
 
 // ENV-P04: WORLD mesh versions only bend explicitly classified ground-cover.
 env_mesh_color_native = "#define T3D_TERRAIN_SHADER_PATH 0\n#define T3D_TERRAIN_MATERIAL_BACKEND 0\n#define T3D_FORWARD_NATIVE_LIGHTING\n#define T3D_WORLD_RASTER_MESH\n#define T3D_FORWARD_RUNTIME_SHADOW_TOGGLE\n#define T3D_ENVIRONMENT_FIELD 1\n#define T3D_ENVIRONMENT_VERTEX_RECEIVER 1";
@@ -167,41 +165,51 @@ env_mesh_shadow = "#define T3D_WORLD_SHADOW\n#define T3D_FORWARD_DEPTH\n#define 
 #include "terrain_strip_topology_inc.glslinc"
 #endif
 
-struct T3DWorldInstance {
-    uvec4 spanTransform;
-    uvec4 visibilityFlagsKindSource;
-    uvec4 materialCellLod0;
-    uvec4 lod1Reserved;
+struct T3DWorldInstance
+{
+	uvec4 spanTransform;
+	uvec4 visibilityFlagsKindSource;
+	uvec4 materialCellLod0;
+	uvec4 lod1Reserved;
 };
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP
-layout(set = 0, binding = 50, std430) readonly buffer WorldTerrainStripClusterBuffer {
-    T3DWorldTerrainCluster world_terrain_strip_clusters[];
+layout(set = 0, binding = 50, std430) readonly buffer WorldTerrainStripClusterBuffer
+{
+	T3DWorldTerrainCluster world_terrain_strip_clusters[];
 };
 #else
-layout(set = 0, binding = 39, std430) readonly buffer WorldVertexBuffer {
-    uint world_vertex_words[];
+layout(set = 0, binding = 39, std430) readonly buffer WorldVertexBuffer
+{
+	uint world_vertex_words[];
 };
-layout(set = 0, binding = 40, std430) readonly buffer WorldClusterVertexBuffer {
-    uint world_cluster_vertex_indices[];
+layout(set = 0, binding = 40, std430) readonly buffer WorldClusterVertexBuffer
+{
+	uint world_cluster_vertex_indices[];
 };
-layout(set = 0, binding = 41, std430) readonly buffer WorldTriangleBuffer {
-    uint world_triangles[];
+layout(set = 0, binding = 41, std430) readonly buffer WorldTriangleBuffer
+{
+	uint world_triangles[];
 };
-layout(set = 0, binding = 42, std430) readonly buffer WorldClusterBuffer {
-    T3DWorldCluster world_clusters[];
+layout(set = 0, binding = 42, std430) readonly buffer WorldClusterBuffer
+{
+	T3DWorldCluster world_clusters[];
 };
-layout(set = 0, binding = 46, std430) readonly buffer WorldTransformBuffer {
-    T3DWorldTransform world_transforms[];
+layout(set = 0, binding = 46, std430) readonly buffer WorldTransformBuffer
+{
+	T3DWorldTransform world_transforms[];
 };
-layout(set = 0, binding = 47, std430) readonly buffer WorldPreviousTransformBuffer {
-    T3DWorldTransform world_previous_transforms[];
+layout(set = 0, binding = 47, std430) readonly buffer WorldPreviousTransformBuffer
+{
+	T3DWorldTransform world_previous_transforms[];
 };
-layout(set = 0, binding = 48, std430) readonly buffer WorldInstanceBuffer {
-    T3DWorldInstance world_instances[];
+layout(set = 0, binding = 48, std430) readonly buffer WorldInstanceBuffer
+{
+	T3DWorldInstance world_instances[];
 };
 #endif
-layout(set = 0, binding = 49, std430) readonly buffer WorldVisibleBuffer {
-    T3DWorldVisibleItem world_visible_items[];
+layout(set = 0, binding = 49, std430) readonly buffer WorldVisibleBuffer
+{
+	T3DWorldVisibleItem world_visible_items[];
 };
 
 #ifdef T3D_WORLD_RASTER_MESH
@@ -215,154 +223,166 @@ layout(location = 13) flat out uint world_mesh_visibility_layers;
 #endif
 
 #ifndef T3D_WORLD_RASTER_TERRAIN_STRIP
-float t3d_world_unpack_snorm10(uint packed, uint shift) {
-    int value = int((packed >> shift) & 0x3ffu);
-    if (value >= 512)
-        value -= 1024;
-    return clamp(float(value) / 511.0, -1.0, 1.0);
+float t3d_world_unpack_snorm10(uint packed, uint shift)
+{
+	int value = int((packed >> shift) & 0x3ffu);
+	if (value >= 512)
+	value -= 1024;
+	return clamp(float(value) / 511.0, -1.0, 1.0);
 }
-vec3 t3d_world_unpack_vec3_snorm10(uint packed) {
-    return normalize(
-        vec3(t3d_world_unpack_snorm10(packed, 0u), t3d_world_unpack_snorm10(packed, 10u), t3d_world_unpack_snorm10(packed, 20u)));
+vec3 t3d_world_unpack_vec3_snorm10(uint packed)
+{
+	return normalize(
+	vec3(t3d_world_unpack_snorm10(packed, 0u), t3d_world_unpack_snorm10(packed, 10u), t3d_world_unpack_snorm10(packed, 20u)));
 }
-vec3 t3d_world_transform_position(T3DWorldTransform t, vec3 p) {
-    return vec3(dot(t.row0.xyz, p) + t.row0.w, dot(t.row1.xyz, p) + t.row1.w, dot(t.row2.xyz, p) + t.row2.w);
+vec3 t3d_world_transform_position(T3DWorldTransform t, vec3 p)
+{
+	return vec3(dot(t.row0.xyz, p) + t.row0.w, dot(t.row1.xyz, p) + t.row1.w, dot(t.row2.xyz, p) + t.row2.w);
 }
-vec3 t3d_world_transform_normal(T3DWorldTransform t, vec3 n) {
-    vec3 c0 = vec3(t.row0.x, t.row1.x, t.row2.x);
-    vec3 c1 = vec3(t.row0.y, t.row1.y, t.row2.y);
-    vec3 c2 = vec3(t.row0.z, t.row1.z, t.row2.z);
-    return normalize(cross(c1, c2) * n.x + cross(c2, c0) * n.y + cross(c0, c1) * n.z);
+vec3 t3d_world_transform_normal(T3DWorldTransform t, vec3 n)
+{
+	vec3 c0 = vec3(t.row0.x, t.row1.x, t.row2.x);
+	vec3 c1 = vec3(t.row0.y, t.row1.y, t.row2.y);
+	vec3 c2 = vec3(t.row0.z, t.row1.z, t.row2.z);
+	return normalize(cross(c1, c2) * n.x + cross(c2, c0) * n.y + cross(c0, c1) * n.z);
 }
-vec3 t3d_world_transform_direction(T3DWorldTransform t, vec3 v) {
-    return normalize(vec3(dot(t.row0.xyz, v), dot(t.row1.xyz, v), dot(t.row2.xyz, v)));
+vec3 t3d_world_transform_direction(T3DWorldTransform t, vec3 v)
+{
+	return normalize(vec3(dot(t.row0.xyz, v), dot(t.row1.xyz, v), dot(t.row2.xyz, v)));
 }
 #endif
 #ifndef T3D_WORLD_RASTER_TERRAIN_STRIP
 void t3d_world_zero_vertex();
-void t3d_world_mesh_vertex(T3DWorldVisibleItem item, uint tri, uint corner) {
-    T3DWorldCluster cluster = world_clusters[t3d_hot_records[T3D_HOT_INDEX].world_bases[3u] + item.clusterOrTerrainId];
-    // Fixed draw envelopes include degenerate padding. Reject it before pulling
-    // vertex payloads or evaluating transforms, including in depth/motion passes.
-    if (tri >= (cluster.packedCounts >> 16u)) {
-        t3d_world_zero_vertex();
-        return;
-    }
-    T3DWorldInstance instance = world_instances[t3d_hot_records[T3D_HOT_INDEX].world_bases[9u] + item.instanceOrPatchId];
-    uint packed_tri = world_triangles[t3d_hot_records[T3D_HOT_INDEX].world_bases[2u] + cluster.triangleOffset + tri];
-    uint local_index = (packed_tri >> (corner * 6u)) & 63u;
-    uint global_vertex = world_cluster_vertex_indices[t3d_hot_records[T3D_HOT_INDEX].world_bases[1u] + cluster.vertexIndexOffset + local_index];
-    uint base = global_vertex * 8u;
-    vec3 p = vec3(uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base]),
-        uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 1u]),
-        uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 2u]));
-    vec3 n = t3d_world_unpack_vec3_snorm10(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 3u]);
-    uint packed_tangent = world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 4u];
-    vec3 tangent = t3d_world_unpack_vec3_snorm10(packed_tangent);
-    float handedness = (packed_tangent & (1u << 30u)) != 0u ? -1.0 : 1.0;
-    // Both cooked windings rasterize as front faces. gl_FrontFacing cannot identify the companion.
-    if ((packed_tri & T3D_WORLD_TRIANGLE_BACKSIDE) != 0u) {
-        n = -n;
-        handedness = -handedness;
-    }
-    world_mesh_category = instance.visibilityFlagsKindSource.z == T3D_WORLD_GEOMETRY_STATIC_CLUSTER
-        ? 2u : min((instance.visibilityFlagsKindSource.y >> 26u) & 3u, 2u);
-    world_mesh_visibility_layers = instance.visibilityFlagsKindSource.x;
-    T3DWorldTransform current_transform = world_transforms[t3d_hot_records[T3D_HOT_INDEX].world_bases[7u] + instance.spanTransform.z];
+void t3d_world_mesh_vertex(T3DWorldVisibleItem item, uint tri, uint corner)
+{
+	T3DWorldCluster cluster = world_clusters[t3d_hot_records[T3D_HOT_INDEX].world_bases[3u] + item.clusterOrTerrainId];
+	// Fixed draw envelopes include degenerate padding. Reject it before pulling
+	// vertex payloads or evaluating transforms, including in depth/motion passes.
+	if (tri >= (cluster.packedCounts >> 16u))
+	{
+		t3d_world_zero_vertex();
+		return;
+	}
+	T3DWorldInstance instance = world_instances[t3d_hot_records[T3D_HOT_INDEX].world_bases[9u] + item.instanceOrPatchId];
+	uint packed_tri = world_triangles[t3d_hot_records[T3D_HOT_INDEX].world_bases[2u] + cluster.triangleOffset + tri];
+	uint local_index = (packed_tri >> (corner * 6u)) & 63u;
+	uint global_vertex = world_cluster_vertex_indices[t3d_hot_records[T3D_HOT_INDEX].world_bases[1u] + cluster.vertexIndexOffset + local_index];
+	uint base = global_vertex * 8u;
+	vec3 p = vec3(uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base]),
+	uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 1u]),
+	uintBitsToFloat(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 2u]));
+	vec3 n = t3d_world_unpack_vec3_snorm10(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 3u]);
+	uint packed_tangent = world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 4u];
+	vec3 tangent = t3d_world_unpack_vec3_snorm10(packed_tangent);
+	float handedness = (packed_tangent & (1u << 30u)) != 0u ? -1.0 : 1.0;
+	// Both cooked windings rasterize as front faces. gl_FrontFacing cannot identify the companion.
+	if ((packed_tri & T3D_WORLD_TRIANGLE_BACKSIDE) != 0u)
+	{
+		n = -n;
+		handedness = -handedness;
+	}
+	world_mesh_category = instance.visibilityFlagsKindSource.z == T3D_WORLD_GEOMETRY_STATIC_CLUSTER
+	? 2u : min((instance.visibilityFlagsKindSource.y >> 26u) & 3u, 2u);
+	world_mesh_visibility_layers = instance.visibilityFlagsKindSource.x;
+	T3DWorldTransform current_transform = world_transforms[t3d_hot_records[T3D_HOT_INDEX].world_bases[7u] + instance.spanTransform.z];
 #ifdef T3D_FORWARD_MOTION
-    T3DWorldTransform previous_transform = world_previous_transforms[t3d_hot_records[T3D_HOT_INDEX].world_bases[8u] + instance.spanTransform.w];
-    vec3 previous_world = t3d_world_transform_position(previous_transform, p);
+	T3DWorldTransform previous_transform = world_previous_transforms[t3d_hot_records[T3D_HOT_INDEX].world_bases[8u] + instance.spanTransform.w];
+	vec3 previous_world = t3d_world_transform_position(previous_transform, p);
 #endif
-    vec3 world = t3d_world_transform_position(current_transform, p);
+	vec3 world = t3d_world_transform_position(current_transform, p);
 #if defined(T3D_ENVIRONMENT_VERTEX_RECEIVER)
-    if (world_mesh_category == 1u) {
-        world.xz += t3d_environment_ground_cover_offset(p, world, false);
+	if (world_mesh_category == 1u)
+	{
+		world.xz += t3d_environment_ground_cover_offset(p, world, false);
 #ifdef T3D_FORWARD_MOTION
-        previous_world.xz += t3d_environment_ground_cover_offset(p, previous_world, true);
+		previous_world.xz += t3d_environment_ground_cover_offset(p, previous_world, true);
 #endif
-    }
+	}
 #endif
-    world_position = world;
-    world_normal = t3d_world_transform_normal(current_transform, n);
-    vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world, 1.0);
-    gl_Position = current_clip;
+	world_position = world;
+	world_normal = t3d_world_transform_normal(current_transform, n);
+	vec4 current_clip = frame_data.view_projection[t3d_view_index()] * vec4(world, 1.0);
+	gl_Position = current_clip;
 #ifdef T3D_FORWARD_MOTION
-    current_screen_position = current_clip;
-    previous_screen_position =
-        frame_data.motion_params.x > 0.5 ? frame_data.previous_view_projection[t3d_view_index()] * vec4(previous_world, 1.0) : current_clip;
+	current_screen_position = current_clip;
+	previous_screen_position =
+	frame_data.motion_params.x > 0.5 ? frame_data.previous_view_projection[t3d_view_index()] * vec4(previous_world, 1.0) : current_clip;
 #endif
-    world_mesh_uv = unpackHalf2x16(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 5u]);
-    world_mesh_material = instance.materialCellLod0.x != T3D_WORLD_INVALID_ID ? instance.materialCellLod0.x : cluster.materialId;
-    world_mesh_tangent = vec4(t3d_world_transform_direction(current_transform, tangent), handedness);
-    world_mesh_color = unpackUnorm4x8(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 7u]);
+	world_mesh_uv = unpackHalf2x16(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 5u]);
+	world_mesh_material = instance.materialCellLod0.x != T3D_WORLD_INVALID_ID ? instance.materialCellLod0.x : cluster.materialId;
+	world_mesh_tangent = vec4(t3d_world_transform_direction(current_transform, tangent), handedness);
+	world_mesh_color = unpackUnorm4x8(world_vertex_words[t3d_hot_records[T3D_HOT_INDEX].world_bases[0u] + base + 7u]);
 }
 #endif
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP
-void t3d_world_terrain_strip_vertex(T3DWorldVisibleItem item, uint raster_vertex) {
-    T3DWorldTerrainCluster cluster = world_terrain_strip_clusters[t3d_hot_records[T3D_HOT_INDEX].world_bases[5u] + item.clusterOrTerrainId];
-    uint cell_width = t3d_world_terrain_cell_width(cluster.strip0.z);
-    uint actual_vertex_count = t3d_world_terrain_vertex_count(cluster.strip0.w);
-    uint part_code = t3d_world_terrain_part_code(cluster.flags);
-    uint serpentine_rows = (cluster.flags >> T3D_WORLD_TERRAIN_SERPENTINE_ROWS_BIT) & 1u;
-    uint base_row_parity = (cluster.flags >> T3D_WORLD_TERRAIN_SERPENTINE_BASE_ODD_BIT) & 1u;
-    T3DTerrainStripVertex strip_vertex = t3d_terrain_strip_vertex_hot(
-        raster_vertex,
-        cell_width,
-        actual_vertex_count,
-        part_code,
-        serpentine_rows,
-        base_row_parity);
-    ivec2 grid_origin = ivec2(
-        t3d_world_terrain_grid_origin_x(cluster.strip0.y),
-        t3d_world_terrain_grid_origin_z(cluster.strip0.y));
+void t3d_world_terrain_strip_vertex(T3DWorldVisibleItem item, uint raster_vertex)
+{
+	T3DWorldTerrainCluster cluster = world_terrain_strip_clusters[t3d_hot_records[T3D_HOT_INDEX].world_bases[5u] + item.clusterOrTerrainId];
+	uint cell_width = t3d_world_terrain_cell_width(cluster.strip0.z);
+	uint actual_vertex_count = t3d_world_terrain_vertex_count(cluster.strip0.w);
+	uint part_code = t3d_world_terrain_part_code(cluster.flags);
+	uint serpentine_rows = (cluster.flags >> T3D_WORLD_TERRAIN_SERPENTINE_ROWS_BIT) & 1u;
+	uint base_row_parity = (cluster.flags >> T3D_WORLD_TERRAIN_SERPENTINE_BASE_ODD_BIT) & 1u;
+	T3DTerrainStripVertex strip_vertex = t3d_terrain_strip_vertex_hot(
+	raster_vertex,
+	cell_width,
+	actual_vertex_count,
+	part_code,
+	serpentine_rows,
+	base_row_parity);
+	ivec2 grid_origin = ivec2(
+	t3d_world_terrain_grid_origin_x(cluster.strip0.y),
+	t3d_world_terrain_grid_origin_z(cluster.strip0.y));
 
-    // Patch motion/tier/stitch state is dynamic and already lives in the terrain
-    // patch SSBO. Keep world terrain clusters topology-only so camera movement does
-    // not force a retained-world rebuild or duplicate per-vertex patch unpacking.
-    uint patch_index = cluster.strip0.x;
-    t3d_terrain_vertex_evaluate(grid_origin + strip_vertex.grid, strip_vertex.part_code, patches[T3D_CLIPMAP_PATCH_BASE + patch_index]);
+	// Patch motion/tier/stitch state is dynamic and already lives in the terrain
+	// patch SSBO. Keep world terrain clusters topology-only so camera movement does
+	// not force a retained-world rebuild or duplicate per-vertex patch unpacking.
+	uint patch_index = cluster.strip0.x;
+	t3d_terrain_vertex_evaluate(grid_origin + strip_vertex.grid, strip_vertex.part_code, patches[T3D_CLIPMAP_PATCH_BASE + patch_index]);
 }
 #endif
-void t3d_world_zero_vertex() {
-    world_position = vec3(0.0);
-    world_normal = vec3(0.0, 1.0, 0.0);
+void t3d_world_zero_vertex()
+{
+	world_position = vec3(0.0);
+	world_normal = vec3(0.0, 1.0, 0.0);
 #ifndef T3D_WORLD_RASTER_MESH
-    patch_tier = 0u;
-    terrain_region_layer = -1;
-    terrain_world_texel = vec2(0.0);
+	patch_tier = 0u;
+	terrain_region_layer = -1;
+	terrain_world_texel = vec2(0.0);
 #endif
 #ifdef T3D_WORLD_RASTER_MESH
-    world_mesh_uv = vec2(0.0);
-    world_mesh_material = T3D_WORLD_INVALID_ID;
-    world_mesh_tangent = vec4(1.0, 0.0, 0.0, 1.0);
-    world_mesh_color = vec4(1.0);
-    world_mesh_category = 0u;
-    world_mesh_visibility_layers = 0u;
+	world_mesh_uv = vec2(0.0);
+	world_mesh_material = T3D_WORLD_INVALID_ID;
+	world_mesh_tangent = vec4(1.0, 0.0, 0.0, 1.0);
+	world_mesh_color = vec4(1.0);
+	world_mesh_category = 0u;
+	world_mesh_visibility_layers = 0u;
 #endif
-    gl_Position = vec4(0.0);
+	gl_Position = vec4(0.0);
 #ifdef T3D_FORWARD_MOTION
-    current_screen_position = gl_Position;
-    previous_screen_position = gl_Position;
+	current_screen_position = gl_Position;
+	previous_screen_position = gl_Position;
 #endif
 }
-void main() {
-    T3DWorldVisibleItem item = world_visible_items[t3d_hot_records[T3D_HOT_INDEX].world_bases[15] + gl_InstanceIndex];
+void main()
+{
+	T3DWorldVisibleItem item = world_visible_items[t3d_hot_records[T3D_HOT_INDEX].world_bases[15] + gl_InstanceIndex];
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP
-    uint raster_vertex = uint(gl_VertexIndex) % T3D_WORLD_TERRAIN_STRIP_RASTER_VERTEX_COUNT;
-    if (item.geometryKind == T3D_WORLD_GEOMETRY_TERRAIN)
-        t3d_world_terrain_strip_vertex(item, raster_vertex);
-    else
-        t3d_world_zero_vertex();
+	uint raster_vertex = uint(gl_VertexIndex) % T3D_WORLD_TERRAIN_STRIP_RASTER_VERTEX_COUNT;
+	if (item.geometryKind == T3D_WORLD_GEOMETRY_TERRAIN)
+	t3d_world_terrain_strip_vertex(item, raster_vertex);
+	else
+	t3d_world_zero_vertex();
 #elif defined(T3D_WORLD_RASTER_MESH)
-    uint raster_vertex = uint(gl_VertexIndex) % T3D_WORLD_CLUSTER_RASTER_VERTEX_COUNT;
-    uint tri = raster_vertex / 3u;
-    uint corner = raster_vertex % 3u;
-    world_geometry_kind = item.geometryKind;
-    if (item.geometryKind == T3D_WORLD_GEOMETRY_MESH_CLUSTER || item.geometryKind == T3D_WORLD_GEOMETRY_HLOD_CLUSTER
-        || item.geometryKind == T3D_WORLD_GEOMETRY_STATIC_CLUSTER)
-        t3d_world_mesh_vertex(item, tri, corner);
-    else
-        t3d_world_zero_vertex();
+	uint raster_vertex = uint(gl_VertexIndex) % T3D_WORLD_CLUSTER_RASTER_VERTEX_COUNT;
+	uint tri = raster_vertex / 3u;
+	uint corner = raster_vertex % 3u;
+	world_geometry_kind = item.geometryKind;
+	if (item.geometryKind == T3D_WORLD_GEOMETRY_MESH_CLUSTER || item.geometryKind == T3D_WORLD_GEOMETRY_HLOD_CLUSTER
+	|| item.geometryKind == T3D_WORLD_GEOMETRY_STATIC_CLUSTER)
+	t3d_world_mesh_vertex(item, tri, corner);
+	else
+	t3d_world_zero_vertex();
 #endif
 }
 
@@ -400,19 +420,19 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #endif
 #include "terrain_clipmap_fragment_inc.glslinc"
 #define T3D_VT_RESOLVE_ALLOCATION(index)                                                                                                   \
-    T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
-        terrain_vt_allocations[index].page_count,                                                                                          \
-        terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
-        terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
-        terrain_vt_allocations[index].tail_index,                                                                                          \
-        terrain_vt_allocations[index].generation,                                                                                          \
-        terrain_vt_allocations[index].content_id,                                                                                          \
-        terrain_vt_allocations[index].reserved)
+T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
+terrain_vt_allocations[index].page_count,                                                                                          \
+terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
+terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
+terrain_vt_allocations[index].tail_index,                                                                                          \
+terrain_vt_allocations[index].generation,                                                                                          \
+terrain_vt_allocations[index].content_id,                                                                                          \
+terrain_vt_allocations[index].reserved)
 #define T3D_VT_RESOLVE_PAGE_ENTRY(index)                                                                                                   \
-    T3DVTPageEntry(terrain_vt_page_table[index].physical_slot,                                                                             \
-        terrain_vt_page_table[index].parent_page,                                                                                          \
-        terrain_vt_page_table[index].generation,                                                                                           \
-        terrain_vt_page_table[index].packed_resolved_mip_flags)
+T3DVTPageEntry(terrain_vt_page_table[index].physical_slot,                                                                             \
+terrain_vt_page_table[index].parent_page,                                                                                          \
+terrain_vt_page_table[index].generation,                                                                                           \
+terrain_vt_page_table[index].packed_resolved_mip_flags)
 #define T3D_VT_RESOLVE_TAIL_ENTRY(index) terrain_vt_tails[index]
 #if defined(T3D_VT_RESIDENT_ANCESTOR_HINTS) && T3D_VT_RESIDENT_ANCESTOR_HINTS
 #define T3D_VT_RESOLVE_HINT(index) terrain_vt_ancestor_hints[index]
@@ -425,14 +445,14 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #undef T3D_VT_RESOLVE_PAGE_ENTRY
 #undef T3D_VT_RESOLVE_ALLOCATION
 #define T3D_VT_CONSUMER_ALLOCATION(index)                                                                                                  \
-    T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
-        terrain_vt_allocations[index].page_count,                                                                                          \
-        terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
-        terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
-        terrain_vt_allocations[index].tail_index,                                                                                          \
-        terrain_vt_allocations[index].generation,                                                                                          \
-        terrain_vt_allocations[index].content_id,                                                                                          \
-        terrain_vt_allocations[index].reserved)
+T3DVTAllocation(terrain_vt_allocations[index].base_page,                                                                               \
+terrain_vt_allocations[index].page_count,                                                                                          \
+terrain_vt_allocations[index].packed_mip0_extent,                                                                                  \
+terrain_vt_allocations[index].packed_mip_count_flags,                                                                              \
+terrain_vt_allocations[index].tail_index,                                                                                          \
+terrain_vt_allocations[index].generation,                                                                                          \
+terrain_vt_allocations[index].content_id,                                                                                          \
+terrain_vt_allocations[index].reserved)
 #define T3D_VT_CONSUMER_MIP_LAYOUT(index) terrain_vt_mip_layouts[index]
 #define T3D_VT_CONSUMER_TAIL(index) terrain_vt_tails[index]
 #define T3D_VT_CONSUMER_ALBEDO_BANK_GRAD(layer, uv, grad_x, grad_y) textureGrad(terrain_vt_albedo_bank0, vec3((uv), float(layer)), (grad_x), (grad_y))
@@ -468,8 +488,9 @@ vec3 decode_surface_normal(vec2 encoded_xy);
 #include "terrain_world_contract.glslinc"
 #include "terrain_alpha_coverage_inc.glslinc"
 #ifdef T3D_WORLD_RASTER_MESH
-layout(set = 1, binding = 0, std430) readonly buffer WorldMaterialBuffer {
-    T3DRenderingMaterialGpu world_materials[];
+layout(set = 1, binding = 0, std430) readonly buffer WorldMaterialBuffer
+{
+	T3DRenderingMaterialGpu world_materials[];
 };
 layout(location = 7) flat in uint world_geometry_kind;
 layout(location = 8) in vec2 world_mesh_uv;
@@ -479,244 +500,271 @@ layout(location = 11) in vec4 world_mesh_color;
 layout(location = 12) flat in uint world_mesh_category;
 layout(location = 13) flat in uint world_mesh_visibility_layers;
 
-float t3d_world_unpack_unorm8(uint packed, uint shift) {
-    return float((packed >> shift) & 0xffu) * (1.0 / 255.0);
+float t3d_world_unpack_unorm8(uint packed, uint shift)
+{
+	return float((packed >> shift) & 0xffu) * (1.0 / 255.0);
 }
-vec3 t3d_world_unpack_rgbe9995(uint packed) {
-    uvec3 mantissa = uvec3(packed & 0x1ffu, (packed >> 9u) & 0x1ffu, (packed >> 18u) & 0x1ffu);
-    uint exponent = (packed >> 27u) & 0x1fu;
-    return vec3(mantissa) * exp2(float(exponent) - 24.0);
+vec3 t3d_world_unpack_rgbe9995(uint packed)
+{
+	uvec3 mantissa = uvec3(packed & 0x1ffu, (packed >> 9u) & 0x1ffu, (packed >> 18u) & 0x1ffu);
+	uint exponent = (packed >> 27u) & 0x1fu;
+	return vec3(mantissa) * exp2(float(exponent) - 24.0);
 }
-void t3d_world_mesh_fragment_evaluate() {
-    // Publication validation guarantees every non-sentinel material ID is in range.
-    // Do not query an unsized SSBO array length here: Godot 4.7.2 rejects the
-    // resulting SPIR-V OpArrayLength instruction on this RenderingDevice path.
-    if (world_mesh_material == T3D_WORLD_INVALID_ID)
-        discard;
-    T3DRenderingMaterialGpu material = world_materials[t3d_hot_records[T3D_HOT_INDEX].world_bases[12u] + world_mesh_material];
+void t3d_world_mesh_fragment_evaluate()
+{
+	// Publication validation guarantees every non-sentinel material ID is in range.
+	// Do not query an unsized SSBO array length here: Godot 4.7.2 rejects the
+	// resulting SPIR-V OpArrayLength instruction on this RenderingDevice path.
+	if (world_mesh_material == T3D_WORLD_INVALID_ID)
+	discard;
+	T3DRenderingMaterialGpu material = world_materials[t3d_hot_records[T3D_HOT_INDEX].world_bases[12u] + world_mesh_material];
 #ifdef T3D_WORLD_SHADOW
-    if ((material.flags & T3D_VT_MATERIAL_CAST_SHADOWS) == 0u)
-        discard;
+	if ((material.flags & T3D_VT_MATERIAL_CAST_SHADOWS) == 0u)
+	discard;
 #endif
 #ifndef T3D_INSTANCE_GPU_DIAG_CONSTANT
-    vec2 uv = world_mesh_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
-    bool repeat_uv = material.samplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || material.samplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT;
-    uint filter_mode = t3d_vt_instance_filter_mode(
-        (material.packedScalars1 & T3D_VT_MATERIAL_FILTER_MASK) >> T3D_VT_MATERIAL_FILTER_SHIFT,
-        frame_data.instance_texture_mip_bias.w, world_mesh_category);
-    T3DVTConsumerFootprint footprint = t3d_vt_consumer_prepare_footprint(
-        uv, dFdx(uv), dFdy(uv), frame_data.instance_texture_mip_bias[world_mesh_category],
-        repeat_uv, filter_mode, uint(frame_data.terrain_params.x), uint(frame_data.terrain_params.y));
+	vec2 uv = world_mesh_uv * material.uvScaleBias.xy + material.uvScaleBias.zw;
+	bool repeat_uv = material.samplerClass == T3D_VT_SAMPLER_LINEAR_REPEAT || material.samplerClass == T3D_VT_SAMPLER_NEAREST_REPEAT;
+	uint filter_mode = t3d_vt_instance_filter_mode(
+	(material.packedScalars1 & T3D_VT_MATERIAL_FILTER_MASK) >> T3D_VT_MATERIAL_FILTER_SHIFT,
+	frame_data.instance_texture_mip_bias.w, world_mesh_category);
+	T3DVTConsumerFootprint footprint = t3d_vt_consumer_prepare_footprint(
+	uv, dFdx(uv), dFdy(uv), frame_data.instance_texture_mip_bias[world_mesh_category],
+	repeat_uv, filter_mode, uint(frame_data.terrain_params.x), uint(frame_data.terrain_params.y));
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-    // Opacity must stay requestable even when a fallback texel rejects the pixel.
-    if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) {
-        t3d_vt_fragment_request_material_page_set(material.vtAllocation, uv, footprint.ddx_uv, footprint.ddy_uv,
-            footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
-    }
+	// Opacity must stay requestable even when a fallback texel rejects the pixel.
+	if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint))
+	{
+		t3d_vt_fragment_request_material_page_set(material.vtAllocation, uv, footprint.ddx_uv, footprint.ddy_uv,
+		footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+	}
 #endif
-    T3DVTConsumerAddressPlan base_address_plan = t3d_vt_consumer_invalid_plan();
-    T3DVTConsumerAddress albedo_address = t3d_vt_consumer_invalid_address();
-    if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)
-        && t3d_vt_consumer_prepare_address_plan(material.vtAllocation, footprint, base_address_plan)) {
-        albedo_address = t3d_vt_consumer_resolve_plan(
-            base_address_plan, footprint, t3d_vt_consumer_invalid_address());
-    }
+	T3DVTConsumerAddressPlan base_address_plan = t3d_vt_consumer_invalid_plan();
+	T3DVTConsumerAddress albedo_address = t3d_vt_consumer_invalid_address();
+	if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)
+	&& t3d_vt_consumer_prepare_address_plan(material.vtAllocation, footprint, base_address_plan))
+	{
+		albedo_address = t3d_vt_consumer_resolve_plan(
+		base_address_plan, footprint, t3d_vt_consumer_invalid_address());
+	}
 #ifdef T3D_FORWARD_DEPTH
-    vec4 base = material.baseColor;
-    base.a *= t3d_vt_consumer_sample_albedo_alpha(albedo_address);
+	vec4 base = material.baseColor;
+	base.a *= t3d_vt_consumer_sample_albedo_alpha(albedo_address);
 #else
-    vec4 base = material.baseColor * t3d_vt_consumer_sample_albedo(albedo_address);
+	vec4 base = material.baseColor * t3d_vt_consumer_sample_albedo(albedo_address);
 #endif
-    if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u) {
+	if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR) != 0u)
+	{
 #ifdef T3D_FORWARD_DEPTH
-        base.a = t3d_alpha_coverage_vertex(base.a, world_mesh_color.a);
+		base.a = t3d_alpha_coverage_vertex(base.a, world_mesh_color.a);
 #else
-        vec4 mesh_color = world_mesh_color;
-        if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
-            mesh_color.rgb = pow(max(mesh_color.rgb, vec3(0.0)), vec3(2.2));
-        base *= mesh_color;
+		vec4 mesh_color = world_mesh_color;
+		if ((material.flags & T3D_VT_MATERIAL_VERTEX_COLOR_SRGB) != 0u)
+		mesh_color.rgb = pow(max(mesh_color.rgb, vec3(0.0)), vec3(2.2));
+		base *= mesh_color;
 #endif
-    }
-    // P48: only opacity affects coverage. Delay roughness/metallic, AO,
-    // layout and half-float normal unpack until the fragment survives.
-    if (!t3d_alpha_coverage_scissor(material.flags, material.packedScalars0, base.a))
-        discard;
-    float metallic = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_METALLIC_SHIFT);
-    float roughness = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ROUGHNESS_SHIFT);
-    float ao_strength = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);
-    float normal_scale = unpackHalf2x16(material.packedScalars1).x;
-    uint surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
+	}
+	// P48: only opacity affects coverage. Delay roughness/metallic, AO,
+	// layout and half-float normal unpack until the fragment survives.
+	if (!t3d_alpha_coverage_scissor(material.flags, material.packedScalars0, base.a))
+	discard;
+	float metallic = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_METALLIC_SHIFT);
+	float roughness = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_ROUGHNESS_SHIFT);
+	float ao_strength = t3d_world_unpack_unorm8(material.packedScalars0, T3D_VT_MATERIAL_AO_SHIFT);
+	float normal_scale = unpackHalf2x16(material.packedScalars1).x;
+	uint surface_layout = (material.packedScalars1 & T3D_VT_MATERIAL_SURFACE_LAYOUT_MASK) >> T3D_VT_MATERIAL_SURFACE_LAYOUT_SHIFT;
 #else
-    vec4 base = vec4(0.5, 0.5, 0.5, 1.0);
-    float metallic = 0.0, roughness = 1.0;
+	vec4 base = vec4(0.5, 0.5, 0.5, 1.0);
+	float metallic = 0.0, roughness = 1.0;
 #endif
 #if defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_NORMAL_ROUGHNESS)
-    return;
+	return;
 #else
-    float ao = 1.0;
-    // P62: unshaded color pixels consume albedo/emission but never ORM,
-    // tangent-space normals or lighting. DNR/depth still evaluate normally.
-    bool evaluate_surface = true;
+	float ao = 1.0;
+	// P62: unshaded color pixels consume albedo/emission but never ORM,
+	// tangent-space normals or lighting. DNR/depth still evaluate normally.
+	bool evaluate_surface = true;
 #if defined(T3D_UNSHADED_SURFACE_FAST_PATH) && T3D_UNSHADED_SURFACE_FAST_PATH && !defined(T3D_FORWARD_DEPTH) \
-    && !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
-    evaluate_surface = (material.flags & T3D_VT_MATERIAL_UNSHADED) == 0u;
+	&& !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
+	evaluate_surface = (material.flags & T3D_VT_MATERIAL_UNSHADED) == 0u;
 #endif
-    vec3 final_normal = evaluate_surface ? normalize(world_normal) : vec3(0.0, 1.0, 0.0);
+	vec3 final_normal = evaluate_surface ? normalize(world_normal) : vec3(0.0, 1.0, 0.0);
 #if !defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) && !defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
-    // Reuse derivatives captured before alpha rejection. Unused normal channels
-    // and transparent card pixels never contend on the feedback hash.
-    if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint)) {
-        if (t3d_vt_material_has_surface_texture(material.flags)) {
-            t3d_vt_fragment_request_material_page_set(material.vtAllocation + 2u, uv, footprint.ddx_uv, footprint.ddy_uv,
-                footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
-        }
-        if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-            t3d_vt_fragment_request_material_page_set(material.vtAllocation + 1u, uv, footprint.ddx_uv, footprint.ddy_uv,
-                footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
-        }
-    }
+	// Reuse derivatives captured before alpha rejection. Unused normal channels
+	// and transparent card pixels never contend on the feedback hash.
+	if (t3d_vt_consumer_material_page_set_valid(material.vtAllocation, footprint))
+	{
+		if (t3d_vt_material_has_surface_texture(material.flags))
+		{
+			t3d_vt_fragment_request_material_page_set(material.vtAllocation + 2u, uv, footprint.ddx_uv, footprint.ddy_uv,
+			footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+		}
+		if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u)
+		{
+			t3d_vt_fragment_request_material_page_set(material.vtAllocation + 1u, uv, footprint.ddx_uv, footprint.ddy_uv,
+			footprint.mip_bias, T3D_VT_FRAGMENT_PRIORITY_COLOR, repeat_uv, filter_mode);
+		}
+	}
 #endif
-    if (evaluate_surface) {
-        bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
-        vec4 surface = vec4(1.0);
-        if (has_surface) {
-            T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
-                material.vtAllocation, 2u, footprint, base_address_plan, albedo_address);
-            surface = t3d_vt_consumer_sample_orm_v1(surface_address);
-        }
-        if (!has_surface) {
-            roughness = clamp(roughness, 0.02, 1.0);
-            metallic = clamp(metallic, 0.0, 1.0);
-        } else if (surface_layout == 0u) {
-            ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface.r, ao_strength) : 1.0;
-            if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u) {
-                roughness = clamp(surface.g, 0.04, 1.0);
-                metallic = clamp(surface.b, 0.0, 1.0);
-            } else {
-                roughness = clamp(roughness * surface.g, 0.02, 1.0);
-                metallic = clamp(metallic * surface.b, 0.0, 1.0);
-            }
-        } else {
-            ao = 1.0;
-            uint channel = min(surface_layout - 1u, 3u);
-            float surface_scalar = channel == 0u ? surface.r : (channel == 1u ? surface.g : (channel == 2u ? surface.b : surface.a));
-            roughness = clamp(roughness * surface_scalar, 0.02, 1.0);
-            metallic = clamp(metallic, 0.0, 1.0);
-        }
+	if (evaluate_surface)
+	{
+		bool has_surface = t3d_vt_material_has_surface_texture(material.flags);
+		vec4 surface = vec4(1.0);
+		if (has_surface)
+		{
+			T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
+			material.vtAllocation, 2u, footprint, base_address_plan, albedo_address);
+			surface = t3d_vt_consumer_sample_orm_v1(surface_address);
+		}
+		if (!has_surface)
+		{
+			roughness = clamp(roughness, 0.02, 1.0);
+			metallic = clamp(metallic, 0.0, 1.0);
+		}
+		else if (surface_layout == 0u)
+		{
+			ao = (material.flags & T3D_VT_MATERIAL_AO_ENABLED) != 0u ? mix(1.0, surface.r, ao_strength) : 1.0;
+			if ((material.flags & T3D_VT_MATERIAL_DIRECT_ORM) != 0u)
+			{
+				roughness = clamp(surface.g, 0.04, 1.0);
+				metallic = clamp(surface.b, 0.0, 1.0);
+			}
+			else
+			{
+				roughness = clamp(roughness * surface.g, 0.02, 1.0);
+				metallic = clamp(metallic * surface.b, 0.0, 1.0);
+			}
+		}
+		else
+		{
+			ao = 1.0;
+			uint channel = min(surface_layout - 1u, 3u);
+			float surface_scalar = channel == 0u ? surface.r : (channel == 1u ? surface.g : (channel == 2u ? surface.b : surface.a));
+			roughness = clamp(roughness * surface_scalar, 0.02, 1.0);
+			metallic = clamp(metallic, 0.0, 1.0);
+		}
 #ifndef T3D_FORWARD_DEPTH
-        if ((material.flags & T3D_VT_MATERIAL_ALBEDO_SATURATION) != 0u) {
-            float saturation = float(material.reserved & 0xffffu) * (1.5 / 65535.0);
-            float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
-            base.rgb = max(mix(vec3(luma), base.rgb, saturation), vec3(0.0));
-        }
+		if ((material.flags & T3D_VT_MATERIAL_ALBEDO_SATURATION) != 0u)
+		{
+			float saturation = float(material.reserved & 0xffffu) * (1.5 / 65535.0);
+			float luma = dot(base.rgb, vec3(0.299, 0.587, 0.114));
+			base.rgb = max(mix(vec3(luma), base.rgb, saturation), vec3(0.0));
+		}
 #endif
-        if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u) {
-            vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
-            vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
-            T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling_v1(
-                material.vtAllocation, 1u, footprint, base_address_plan, albedo_address);
-            vec2 encoded = t3d_vt_consumer_sample_normal_v1(normal_address).rg * 2.0 - 1.0;
-            encoded *= max(normal_scale, 0.0);
-            final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
-        }
-    } // P62: evaluate_surface
+		if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u)
+		{
+			vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
+			vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
+			T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling_v1(
+			material.vtAllocation, 1u, footprint, base_address_plan, albedo_address);
+			vec2 encoded = t3d_vt_consumer_sample_normal_v1(normal_address).rg * 2.0 - 1.0;
+			encoded *= max(normal_scale, 0.0);
+			final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
+		}
+	}
+	// P62: evaluate_surface
 #endif
 #ifdef T3D_ENVIRONMENT_FIELD
-    // Static rocks/occluders and authored world meshes share the terrain's wetness.
-    // This is material response only: the VT residency and opacity paths are unchanged.
-    if ((material.flags & T3D_VT_MATERIAL_UNSHADED) == 0u) {
-        float environmental_wetness = clamp(t3d_environment_state_at(world_position.xz).r, 0.0, 1.0);
-        float shore_wetness = t3d_environment_params.history_sea.w > 0.5
-            ? 1.0 - smoothstep(-0.25, 0.95, world_position.y - t3d_environment_params.history_sea.y)
-            : 0.0;
-        environmental_wetness = max(environmental_wetness, clamp(shore_wetness * 0.75, 0.0, 1.0));
-        roughness = mix(roughness, min(roughness, 0.24), environmental_wetness);
+	// Static rocks/occluders and authored world meshes share the terrain's wetness.
+	// This is material response only: the VT residency and opacity paths are unchanged.
+	if ((material.flags & T3D_VT_MATERIAL_UNSHADED) == 0u)
+	{
+		float environmental_wetness = clamp(t3d_environment_state_at(world_position.xz).r, 0.0, 1.0);
+		float shore_wetness = t3d_environment_params.history_sea.w > 0.5
+		? 1.0 - smoothstep(-0.25, 0.95, world_position.y - t3d_environment_params.history_sea.y)
+		: 0.0;
+		environmental_wetness = max(environmental_wetness, clamp(shore_wetness * 0.75, 0.0, 1.0));
+		roughness = mix(roughness, min(roughness, 0.24), environmental_wetness);
 #ifndef T3D_FORWARD_DEPTH
-        base.rgb *= mix(1.0, 0.72, environmental_wetness);
+		base.rgb *= mix(1.0, 0.72, environmental_wetness);
 #endif
-    }
+	}
 #endif
 #ifdef T3D_FORWARD_DEPTH
-    out_normal_roughness = vec4(normalize(mat3(frame_data.view_matrix) * final_normal) * 0.5 + 0.5, roughness * (127.0 / 255.0));
+	out_normal_roughness = vec4(normalize(mat3(frame_data.view_matrix) * final_normal) * 0.5 + 0.5, roughness * (127.0 / 255.0));
 #ifdef T3D_FORWARD_VOXEL_GI
-    out_voxel_gi = uvec2(0xffu, 0xffu);
+	out_voxel_gi = uvec2(0xffu, 0xffu);
 #endif
 #else
-    uint surface_mask = world_mesh_visibility_layers;
-    vec3 emission = t3d_world_unpack_rgbe9995(material.packedEmission);
-    bool unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
-    vec3 specular = vec3(0.0);
-    vec3 lit;
+	uint surface_mask = world_mesh_visibility_layers;
+	vec3 emission = t3d_world_unpack_rgbe9995(material.packedEmission);
+	bool unshaded = (material.flags & T3D_VT_MATERIAL_UNSHADED) != 0u;
+	vec3 specular = vec3(0.0);
+	vec3 lit;
 #if defined(T3D_INSTANCE_GPU_DIAG_CONSTANT) || defined(T3D_INSTANCE_GPU_DIAG_OPACITY)
-    unshaded = true;
-    lit = vec3(0.5);
+	unshaded = true;
+	lit = vec3(0.5);
 #else
-    if (unshaded) {
-        lit = base.rgb + emission;
-    } else {
-        vec3 view_position = (frame_data.view_matrix * vec4(world_position, 1.0)).xyz;
-        vec3 view_normal = normalize(mat3(frame_data.view_matrix) * final_normal);
-        T3DForwardShadingContext shading = t3d_forward_make_shading_context(view_position, view_normal);
-        t3d_forward_apply_decals(shading, surface_mask, base.rgb, roughness, metallic, ao, emission);
-        emission *= t3d_forward_light_frame.environment_params0.y;
-        vec3 direct_diffuse;
-        vec3 direct_specular;
-        t3d_forward_direct_lighting(base.rgb,
-            shading,
-            roughness,
-            metallic,
-            1.0 - roughness,
-            surface_mask,
-            3u,
+	if (unshaded)
+	{
+		lit = base.rgb + emission;
+	}
+	else
+	{
+		vec3 view_position = (frame_data.view_matrix * vec4(world_position, 1.0)).xyz;
+		vec3 view_normal = normalize(mat3(frame_data.view_matrix) * final_normal);
+		T3DForwardShadingContext shading = t3d_forward_make_shading_context(view_position, view_normal);
+		t3d_forward_apply_decals(shading, surface_mask, base.rgb, roughness, metallic, ao, emission);
+		emission *= t3d_forward_light_frame.environment_params0.y;
+		vec3 direct_diffuse;
+		vec3 direct_specular;
+		t3d_forward_direct_lighting(base.rgb,
+		shading,
+		roughness,
+		metallic,
+		1.0 - roughness,
+		surface_mask,
+		3u,
 #ifdef T3D_FORWARD_RUNTIME_SHADOW_TOGGLE
-            (material.flags & T3D_VT_MATERIAL_RECEIVE_SHADOWS) != 0u,
+		(material.flags & T3D_VT_MATERIAL_RECEIVE_SHADOWS) != 0u,
 #endif
-            0u,
-            1.0,
-            direct_diffuse,
-            direct_specular);
-        vec3 ambient_diffuse;
-        vec3 environment_specular;
-        t3d_forward_environment_lighting(
-            base.rgb, shading, roughness, metallic, ao, 1.0 - roughness, ambient_diffuse, environment_specular);
-        specular = direct_specular + environment_specular + t3d_forward_reflection(shading, roughness, metallic, base.rgb, surface_mask);
-        lit = ambient_diffuse + direct_diffuse + emission;
+		0u,
+		1.0,
+		direct_diffuse,
+		direct_specular);
+		vec3 ambient_diffuse;
+		vec3 environment_specular;
+		t3d_forward_environment_lighting(
+		base.rgb, shading, roughness, metallic, ao, 1.0 - roughness, ambient_diffuse, environment_specular);
+		specular = direct_specular + environment_specular + t3d_forward_reflection(shading, roughness, metallic, base.rgb, surface_mask);
+		lit = ambient_diffuse + direct_diffuse + emission;
 #ifndef T3D_FORWARD_SPECULAR
-        lit += specular;
+		lit += specular;
 #endif
-    }
+	}
 #endif
-    out_color = vec4(lit, base.a);
+	out_color = vec4(lit, base.a);
 #ifdef T3D_FORWARD_SPECULAR
-    out_specular = unshaded ? vec4(0.0) : vec4(specular, metallic);
+	out_specular = unshaded ? vec4(0.0) : vec4(specular, metallic);
 #endif
 #ifdef T3D_FORWARD_MOTION
-    vec2 current_clip = current_screen_position.xy / max(abs(current_screen_position.w), 1e-6) - frame_data.motion_jitter.xy;
-    vec2 previous_clip = previous_screen_position.xy / max(abs(previous_screen_position.w), 1e-6) - frame_data.motion_jitter.zw;
-    out_motion = (previous_clip - current_clip) * 0.5;
+	vec2 current_clip = current_screen_position.xy / max(abs(current_screen_position.w), 1e-6) - frame_data.motion_jitter.xy;
+	vec2 previous_clip = previous_screen_position.xy / max(abs(previous_screen_position.w), 1e-6) - frame_data.motion_jitter.zw;
+	out_motion = (previous_clip - current_clip) * 0.5;
 #endif
 #endif
 #endif
 }
 
 #endif // T3D_WORLD_RASTER_MESH
-void main() {
+void main()
+{
 #if defined(T3D_FORWARD_NATIVE_LIGHTING) && !defined(T3D_FORWARD_DEPTH) && !defined(T3D_FORWARD_ONE_SUN)
-    // P01: mixed-world dispatch and mesh scissor must not precede explicit derivatives.
-    vec3 world_decal_ddx = dFdx(world_position);
-    vec3 world_decal_ddy = dFdy(world_position);
-    t3d_forward_decal_view_ddx = mat3(frame_data.view_matrix) * world_decal_ddx;
-    t3d_forward_decal_view_ddy = mat3(frame_data.view_matrix) * world_decal_ddy;
+	// P01: mixed-world dispatch and mesh scissor must not precede explicit derivatives.
+	vec3 world_decal_ddx = dFdx(world_position);
+	vec3 world_decal_ddy = dFdy(world_position);
+	t3d_forward_decal_view_ddx = mat3(frame_data.view_matrix) * world_decal_ddx;
+	t3d_forward_decal_view_ddy = mat3(frame_data.view_matrix) * world_decal_ddy;
 #endif
 #ifdef T3D_WORLD_RASTER_TERRAIN_STRIP
-    t3d_terrain_fragment_evaluate();
+	t3d_terrain_fragment_evaluate();
 #elif defined(T3D_WORLD_RASTER_MESH)
-    t3d_world_mesh_fragment_evaluate();
+	t3d_world_mesh_fragment_evaluate();
 #else
-    if (world_geometry_kind == T3D_WORLD_GEOMETRY_TERRAIN)
-        t3d_terrain_fragment_evaluate();
-    else
-        t3d_world_mesh_fragment_evaluate();
+	if (world_geometry_kind == T3D_WORLD_GEOMETRY_TERRAIN)
+	t3d_terrain_fragment_evaluate();
+	else
+	t3d_world_mesh_fragment_evaluate();
 #endif
 }

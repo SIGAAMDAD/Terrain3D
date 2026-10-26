@@ -77,9 +77,9 @@
 // legal resource declarations; material and VT evaluation are shared.
 // SHD-02 will integrate the current control-adaptive and hint/bias trials.
 bool t3d_vt_resolve_page_core(
-    uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount, out T3DVTResolveResult result);
+uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount, out T3DVTResolveResult result);
 bool t3d_vt_resolve_page_core_loaded(
-    uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount,
-    T3DVTAllocation allocation, out T3DVTResolveResult result);
+uint allocationId, uint requestedPage, uint requestedMip, uint allocationCount, uint pageCount,
+T3DVTAllocation allocation, out T3DVTResolveResult result);
 
 #endif

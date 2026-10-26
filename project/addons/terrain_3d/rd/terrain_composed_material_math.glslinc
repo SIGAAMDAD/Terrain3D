@@ -8,143 +8,167 @@
 #define T3D_DIV_255 0.0039215686274509803921568627451
 #endif
 
-struct SampledMaterial {
-    vec3 albedo;
-    vec3 tangent_normal;
-    float roughness;
-    float ao;
-    float metallic;
-    float height;
-    float ao_affect;
+struct SampledMaterial
+{
+	vec3 albedo;
+	vec3 tangent_normal;
+	float roughness;
+	float ao;
+	float metallic;
+	float height;
+	float ao_affect;
 };
-SampledMaterial material_zero() {
-    SampledMaterial r;
-    r.albedo = vec3(0.0);
-    r.tangent_normal = vec3(0.0, 0.0, 0.0);
-    r.roughness = 0.0;
-    r.ao = 0.0;
-    r.metallic = 0.0;
-    r.height = 0.0;
-    r.ao_affect = 0.0;
-    return r;
+SampledMaterial material_zero()
+{
+	SampledMaterial r;
+	r.albedo = vec3(0.0);
+	r.tangent_normal = vec3(0.0, 0.0, 0.0);
+	r.roughness = 0.0;
+	r.ao = 0.0;
+	r.metallic = 0.0;
+	r.height = 0.0;
+	r.ao_affect = 0.0;
+	return r;
 }
-void accumulate_material(inout SampledMaterial dst, SampledMaterial src, float weight) {
-    dst.albedo += src.albedo * weight;
-    dst.tangent_normal += src.tangent_normal * weight;
-    dst.roughness += src.roughness * weight;
-    dst.ao += src.ao * weight;
-    dst.metallic += src.metallic * weight;
-    dst.height += src.height * weight;
-    dst.ao_affect += src.ao_affect * weight;
+void accumulate_material(inout SampledMaterial dst, SampledMaterial src, float weight)
+{
+	dst.albedo += src.albedo * weight;
+	dst.tangent_normal += src.tangent_normal * weight;
+	dst.roughness += src.roughness * weight;
+	dst.ao += src.ao * weight;
+	dst.metallic += src.metallic * weight;
+	dst.height += src.height * weight;
+	dst.ao_affect += src.ao_affect * weight;
 }
 // The height blend used by both raster passes and offline page composition.
-float t3d_cs_height_blend(float blend, float base_height, float overlay_height, float sharpness) {
-    float base_weight = pow(max((1.0 - blend) + base_height, 0.00000001), sharpness);
-    float overlay_weight = pow(max(blend + overlay_height, 0.00000001), sharpness);
-    // Match the reciprocal/multiply used by the original shipping color path.
-    float pair_weight_inv = 1.0 / max(base_weight + overlay_weight, 0.00001);
-    return overlay_weight * pair_weight_inv;
+float t3d_cs_height_blend(float blend, float base_height, float overlay_height, float sharpness)
+{
+	float base_weight = pow(max((1.0 - blend) + base_height, 0.00000001), sharpness);
+	float overlay_weight = pow(max(blend + overlay_height, 0.00000001), sharpness);
+	// Match the reciprocal/multiply used by the original shipping color path.
+	float pair_weight_inv = 1.0 / max(base_weight + overlay_weight, 0.00001);
+	return overlay_weight * pair_weight_inv;
 }
 
-void decode_control(uint control, out int base_id, out int overlay_id, out float blend, out uint angle_index, out float scale) {
-    base_id = int((control >> 27u) & 0x1Fu);
-    overlay_id = int((control >> 22u) & 0x1Fu);
-    blend = float((control >> 14u) & 0xFFu) * T3D_DIV_255;
-    angle_index = (control >> 10u) & 0xFu;
-    uint encoded_scale = (control >> 7u) & 0x7u;
-    scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
+void decode_control(uint control, out int base_id, out int overlay_id, out float blend, out uint angle_index, out float scale)
+{
+	base_id = int((control >> 27u) & 0x1Fu);
+	overlay_id = int((control >> 22u) & 0x1Fu);
+	blend = float((control >> 14u) & 0xFFu) * T3D_DIV_255;
+	angle_index = (control >> 10u) & 0xFu;
+	uint encoded_scale = (control >> 7u) & 0x7u;
+	scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
 }
 const uint T3D_CONTROL_SAMPLE_KEY_MASK =
-    (0x1Fu << 27u) | (0x1Fu << 22u) | (0xFu << 10u) | (0x7u << 7u);
+(0x1Fu << 27u) | (0x1Fu << 22u) | (0xFu << 10u) | (0x7u << 7u);
 
-uint control_sample_key(uint control) {
-    // P08: blend amount and control-only metadata do not alter material source
-    // sampling. Only base/overlay IDs plus rotation/scale identity belong here.
-    return control & T3D_CONTROL_SAMPLE_KEY_MASK;
+uint control_sample_key(uint control)
+{
+	// P08: blend amount and control-only metadata do not alter material source
+	// sampling. Only base/overlay IDs plus rotation/scale identity belong here.
+	return control & T3D_CONTROL_SAMPLE_KEY_MASK;
 }
 
-float control_blend_value(uint control) {
-    return float((control >> 14u) & 0xFFu) * T3D_DIV_255;
+float control_blend_value(uint control)
+{
+	return float((control >> 14u) & 0xFFu) * T3D_DIV_255;
 }
 
-void decode_control_sample_key(uint sample_key, out int base_id, out int overlay_id, out uint angle_index, out float scale) {
-    base_id = int((sample_key >> 27u) & 0x1Fu);
-    overlay_id = int((sample_key >> 22u) & 0x1Fu);
-    angle_index = (sample_key >> 10u) & 0xFu;
-    uint encoded_scale = (sample_key >> 7u) & 0x7u;
-    scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
+void decode_control_sample_key(uint sample_key, out int base_id, out int overlay_id, out uint angle_index, out float scale)
+{
+	base_id = int((sample_key >> 27u) & 0x1Fu);
+	overlay_id = int((sample_key >> 22u) & 0x1Fu);
+	angle_index = (sample_key >> 10u) & 0xFu;
+	uint encoded_scale = (sample_key >> 7u) & 0x7u;
+	scale = 0.9 - float(((encoded_scale + 3u) % 8u) + 1u) * 0.1;
 }
 
-vec4 corner_weights(vec2 world_texel) {
-    vec2 f = fract(world_texel);
-    return vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+vec4 corner_weights(vec2 world_texel)
+{
+	vec2 f = fract(world_texel);
+	return vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
 }
 
-vec4 select_top_two_control_weights(vec4 weights) {
-    // P09: exact fixed-cardinality translation of the previous four-iteration
-    // selection loop. Strict '>' preserves the previous tie ordering.
-    int first = 0;
-    int second = 1;
-    float first_weight = weights.x;
-    float second_weight = weights.y;
-    if (second_weight > first_weight) {
-        int old_first = first;
-        float old_first_weight = first_weight;
-        first = second;
-        first_weight = second_weight;
-        second = old_first;
-        second_weight = old_first_weight;
-    }
-    if (weights.z > first_weight) {
-        second = first;
-        second_weight = first_weight;
-        first = 2;
-        first_weight = weights.z;
-    } else if (weights.z > second_weight) {
-        second = 2;
-        second_weight = weights.z;
-    }
-    if (weights.w > first_weight) {
-        second = first;
-        second_weight = first_weight;
-        first = 3;
-        first_weight = weights.w;
-    } else if (weights.w > second_weight) {
-        second = 3;
-        second_weight = weights.w;
-    }
+vec4 select_top_two_control_weights(vec4 weights)
+{
+	// P09: exact fixed-cardinality translation of the previous four-iteration
+	// selection loop. Strict '>' preserves the previous tie ordering.
+	int first = 0;
+	int second = 1;
+	float first_weight = weights.x;
+	float second_weight = weights.y;
+	if (second_weight > first_weight)
+	{
+		int old_first = first;
+		float old_first_weight = first_weight;
+		first = second;
+		first_weight = second_weight;
+		second = old_first;
+		second_weight = old_first_weight;
+	}
+	if (weights.z > first_weight)
+	{
+		second = first;
+		second_weight = first_weight;
+		first = 2;
+		first_weight = weights.z;
+	}
+	else if (weights.z > second_weight)
+	{
+		second = 2;
+		second_weight = weights.z;
+	}
+	if (weights.w > first_weight)
+	{
+		second = first;
+		second_weight = first_weight;
+		first = 3;
+		first_weight = weights.w;
+	}
+	else if (weights.w > second_weight)
+	{
+		second = 3;
+		second_weight = weights.w;
+	}
 
-    vec4 selected = vec4(0.0);
-    if (first == 0 || second == 0) selected.x = weights.x;
-    if (first == 1 || second == 1) selected.y = weights.y;
-    if (first == 2 || second == 2) selected.z = weights.z;
-    if (first == 3 || second == 3) selected.w = weights.w;
-    return selected / max(dot(selected, vec4(1.0)), 0.00001);
+	vec4 selected = vec4(0.0);
+	if (first == 0 || second == 0)
+		selected.x = weights.x;
+	if (first == 1 || second == 1)
+		selected.y = weights.y;
+	if (first == 2 || second == 2)
+		selected.z = weights.z;
+	if (first == 3 || second == 3)
+		selected.w = weights.w;
+	return selected / max(dot(selected, vec4(1.0)), 0.00001);
 }
 
-vec4 normalize_active_control_weights(vec4 weights) {
-    // Preserve the previous <= 1e-5 corner skip, but normalize the scalar
-    // weights once before material accumulation instead of carrying total_weight.
-    weights.x = weights.x > 0.00001 ? weights.x : 0.0;
-    weights.y = weights.y > 0.00001 ? weights.y : 0.0;
-    weights.z = weights.z > 0.00001 ? weights.z : 0.0;
-    weights.w = weights.w > 0.00001 ? weights.w : 0.0;
-    return weights / max(dot(weights, vec4(1.0)), 0.00001);
+vec4 normalize_active_control_weights(vec4 weights)
+{
+	// Preserve the previous <= 1e-5 corner skip, but normalize the scalar
+	// weights once before material accumulation instead of carrying total_weight.
+	weights.x = weights.x > 0.00001 ? weights.x : 0.0;
+	weights.y = weights.y > 0.00001 ? weights.y : 0.0;
+	weights.z = weights.z > 0.00001 ? weights.z : 0.0;
+	weights.w = weights.w > 0.00001 ? weights.w : 0.0;
+	return weights / max(dot(weights, vec4(1.0)), 0.00001);
 }
 
-struct ControlBlendSet4 {
-    uvec4 sample_keys;
-    vec4 blends;
-    vec4 weights;
+struct ControlBlendSet4
+{
+	uvec4 sample_keys;
+	vec4 blends;
+	vec4 weights;
 };
 
-ControlBlendSet4 make_control_blend_set4(uint c0, uint c1, uint c2, uint c3, vec4 weights) {
-    ControlBlendSet4 set4;
-    set4.sample_keys = uvec4(
-        control_sample_key(c0), control_sample_key(c1), control_sample_key(c2), control_sample_key(c3));
-    set4.blends = vec4(control_blend_value(c0), control_blend_value(c1), control_blend_value(c2), control_blend_value(c3));
-    set4.weights = normalize_active_control_weights(weights);
-    return set4;
+ControlBlendSet4 make_control_blend_set4(uint c0, uint c1, uint c2, uint c3, vec4 weights)
+{
+	ControlBlendSet4 set4;
+	set4.sample_keys = uvec4(
+	control_sample_key(c0), control_sample_key(c1), control_sample_key(c2), control_sample_key(c3));
+	set4.blends = vec4(control_blend_value(c0), control_blend_value(c1), control_blend_value(c2), control_blend_value(c3));
+	set4.weights = normalize_active_control_weights(weights);
+	return set4;
 }
 
 #endif // T3D_COMPOSED_MATERIAL_MATH_GLSLINC

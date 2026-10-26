@@ -28,102 +28,111 @@
 #define T3D_CLIPMAP_STRIP_VERTEX_ID_STRIDE (1u << T3D_CLIPMAP_STRIP_VERTEX_ID_SHIFT)
 #define T3D_CLIPMAP_STRIP_VERTEX_ID_MASK (T3D_CLIPMAP_STRIP_VERTEX_ID_STRIDE - 1u)
 
-struct T3DClipmapStripPart {
-    ivec2 origin;
-    uint cell_width;
-    uint cell_height;
-    uint part_code;
-    uint flags;
+struct T3DClipmapStripPart
+{
+	ivec2 origin;
+	uint cell_width;
+	uint cell_height;
+	uint part_code;
+	uint flags;
 };
 
-T3DClipmapStripPart t3d_clipmap_strip_part_decode(uint word0, uint word1, uint word2) {
-    T3DClipmapStripPart result;
-    result.origin = ivec2(bitfieldExtract(int(word0), 0, 16), bitfieldExtract(int(word0), 16, 16));
-    result.cell_width = word1 & 0xffffu;
-    result.cell_height = word1 >> 16u;
-    result.part_code = word2 & 0xffffu;
-    result.flags = word2 >> 16u;
-    return result;
+T3DClipmapStripPart t3d_clipmap_strip_part_decode(uint word0, uint word1, uint word2)
+{
+	T3DClipmapStripPart result;
+	result.origin = ivec2(bitfieldExtract(int(word0), 0, 16), bitfieldExtract(int(word0), 16, 16));
+	result.cell_width = word1 & 0xffffu;
+	result.cell_height = word1 >> 16u;
+	result.part_code = word2 & 0xffffu;
+	result.flags = word2 >> 16u;
+	return result;
 }
 
 // P01 compatibility spelling. New code uses the canonical clipmap contract name.
 #define T3D_TERRAIN_STRIP_FLAG_SERPENTINE_ROWS T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS
 
-struct T3DTerrainStripVertex {
-    ivec2 grid;
-    uint part_code;
+struct T3DTerrainStripVertex
+{
+	ivec2 grid;
+	uint part_code;
 };
 
-uint t3d_terrain_strip_vertices_per_run(uint cell_width) {
-    return cell_width * 2u + 4u;
+uint t3d_terrain_strip_vertices_per_run(uint cell_width)
+{
+	return cell_width * 2u + 4u;
 }
 
-uint t3d_terrain_strip_actual_vertex_count(uint cell_width, uint row_count) {
-    return t3d_terrain_strip_vertices_per_run(cell_width) * row_count;
+uint t3d_terrain_strip_actual_vertex_count(uint cell_width, uint row_count)
+{
+	return t3d_terrain_strip_vertices_per_run(cell_width) * row_count;
 }
 
 T3DTerrainStripVertex t3d_terrain_strip_vertex_hot(
-        uint vertex_id,
-        uint cell_width,
-        uint actual_vertex_count,
-        uint part_code,
-        uint serpentine_rows,
-        uint base_row_parity) {
-    T3DTerrainStripVertex result;
-    result.part_code = part_code;
+uint vertex_id,
+uint cell_width,
+uint actual_vertex_count,
+uint part_code,
+uint serpentine_rows,
+uint base_row_parity)
+{
+	T3DTerrainStripVertex result;
+	result.part_code = part_code;
 
-    uint vertices_per_run = t3d_terrain_strip_vertices_per_run(cell_width);
-    uint safe_vertex = min(vertex_id, actual_vertex_count - 1u);
-    uint run = safe_vertex / vertices_per_run;
-    uint run_index = safe_vertex - run * vertices_per_run;
+	uint vertices_per_run = t3d_terrain_strip_vertices_per_run(cell_width);
+	uint safe_vertex = min(vertex_id, actual_vertex_count - 1u);
+	uint run = safe_vertex / vertices_per_run;
+	uint run_index = safe_vertex - run * vertices_per_run;
 
-    // P10: published strip clusters guarantee non-zero dimensions, so the
-    // production path can consume the prepacked actual count directly. Keep
-    // row reversal arithmetic scalar/branchless; serpentine_rows and
-    // base_row_parity are canonical 0/1 values.
-    uint reverse_row = serpentine_rows & ((run ^ base_row_parity) & 1u);
-    uint strip_lead = 1u + (serpentine_rows & (1u - reverse_row));
-    uint strip_index_unclamped = run_index - min(run_index, strip_lead);
-    uint strip_index = min(strip_index_unclamped, vertices_per_run - 3u);
+	// P10: published strip clusters guarantee non-zero dimensions, so the
+	// production path can consume the prepacked actual count directly. Keep
+	// row reversal arithmetic scalar/branchless; serpentine_rows and
+	// base_row_parity are canonical 0/1 values.
+	uint reverse_row = serpentine_rows & ((run ^ base_row_parity) & 1u);
+	uint strip_lead = 1u + (serpentine_rows & (1u - reverse_row));
+	uint strip_index_unclamped = run_index - min(run_index, strip_lead);
+	uint strip_index = min(strip_index_unclamped, vertices_per_run - 3u);
 
-    uint x = strip_index >> 1u;
-    uint row_side = (strip_index & 1u) ^ (1u - serpentine_rows);
-    x += reverse_row * (cell_width - (x << 1u));
-    uint z = run + row_side;
+	uint x = strip_index >> 1u;
+	uint row_side = (strip_index & 1u) ^ (1u - serpentine_rows);
+	x += reverse_row * (cell_width - (x << 1u));
+	uint z = run + row_side;
 
-    result.grid = ivec2(int(x), int(z));
-    return result;
+	result.grid = ivec2(int(x), int(z));
+	return result;
 }
 
 T3DTerrainStripVertex t3d_terrain_strip_vertex_with_base_parity(
-        uint vertex_id,
-        uint cell_width,
-        uint row_count,
-        uint part_code,
-        uint flags,
-        bool base_row_odd) {
-    T3DTerrainStripVertex result;
-    result.grid = ivec2(0);
-    result.part_code = part_code;
+uint vertex_id,
+uint cell_width,
+uint row_count,
+uint part_code,
+uint flags,
+bool base_row_odd)
+{
+	T3DTerrainStripVertex result;
+	result.grid = ivec2(0);
+	result.part_code = part_code;
 
-    if (cell_width == 0u || row_count == 0u) {
-        return result;
-    }
+	if (cell_width == 0u || row_count == 0u)
+	{
+		return result;
+	}
 
-    uint actual_vertex_count = t3d_terrain_strip_actual_vertex_count(cell_width, row_count);
-    uint serpentine_rows = flags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS;
-    uint base_row_parity = base_row_odd ? 1u : 0u;
-    return t3d_terrain_strip_vertex_hot(
-        vertex_id, cell_width, actual_vertex_count, part_code, serpentine_rows, base_row_parity);
+	uint actual_vertex_count = t3d_terrain_strip_actual_vertex_count(cell_width, row_count);
+	uint serpentine_rows = flags & T3D_CLIPMAP_STRIP_FLAG_SERPENTINE_ROWS;
+	uint base_row_parity = base_row_odd ? 1u : 0u;
+	return t3d_terrain_strip_vertex_hot(
+	vertex_id, cell_width, actual_vertex_count, part_code, serpentine_rows, base_row_parity);
 }
 
 T3DTerrainStripVertex t3d_terrain_strip_vertex(
-        uint vertex_id,
-        uint cell_width,
-        uint row_count,
-        uint part_code,
-        uint flags) {
-    return t3d_terrain_strip_vertex_with_base_parity(vertex_id, cell_width, row_count, part_code, flags, false);
+uint vertex_id,
+uint cell_width,
+uint row_count,
+uint part_code,
+uint flags)
+{
+	return t3d_terrain_strip_vertex_with_base_parity(vertex_id, cell_width, row_count, part_code, flags, false);
 }
 
 #endif // TERRAIN3D_TERRAIN_STRIP_TOPOLOGY_INC_GLSL

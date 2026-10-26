@@ -2,21 +2,22 @@
 // Terrain clipmap vertex pipeline interface.
 // Stage roots include this explicitly so reusable vertex evaluation code cannot silently add descriptors, push constants, or stage I/O.
 
-
 #ifndef T3D_WORLD_RASTER_EMBEDDED
-layout(set = 0, binding = 38, std430) readonly buffer ClipmapStripPartBuffer {
-    uint clipmap_strip_part_words[];
+layout(set = 0, binding = 38, std430) readonly buffer ClipmapStripPartBuffer
+{
+	uint clipmap_strip_part_words[];
 };
 #endif
 
-
-uint t3d_view_index() {
-    return min(uint(gl_ViewIndex), 1u);
+uint t3d_view_index()
+{
+	return min(uint(gl_ViewIndex), 1u);
 }
 
 #ifndef T3D_WORLD_RASTER_MESH
-layout(set = 0, binding = 1, std430) readonly buffer RegionMapData {
-    TerrainRegionRecord region_map[];
+layout(set = 0, binding = 1, std430) readonly buffer RegionMapData
+{
+	TerrainRegionRecord region_map[];
 };
 layout(set = 0, binding = 2) uniform sampler2DArray height_maps;
 layout(set = 0, binding = 12) uniform sampler2D displacement_buffer;
@@ -25,15 +26,15 @@ layout(set = 0, binding = 16) uniform sampler2DArray middle_height_maps;
 layout(set = 0, binding = 17) uniform sampler2D middle_height_region_map;
 layout(set = 0, binding = 21) uniform sampler2D world_noise_cache;
 
-
-layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer {
-    MaterialConfig material_configs[];
+layout(set = 0, binding = 13, std430) readonly buffer MaterialConfigBuffer
+{
+	MaterialConfig material_configs[];
 };
 #define material_config material_configs[t3d_hot_records[T3D_HOT_INDEX].terrain_bases.x]
 
-
-layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer {
-    uint visible_indices[];
+layout(set = 0, binding = 10, std430) readonly buffer VisibleBuffer
+{
+	uint visible_indices[];
 };
 
 #endif // !T3D_WORLD_RASTER_MESH

@@ -12,197 +12,208 @@
 
 #define T3D_CLIPMAP_STRIP_WORD_BASE t3d_hot_records[T3D_HOT_INDEX].terrain_bases.z
 
-
-
-struct TerrainFrameData {
-    mat4 view_projection[2];
-    mat4 view_matrix;
-    mat4 previous_view_projection[2];
-    vec4 motion_jitter;
-    vec4 motion_params;
-    vec4 light_direction_ambient;
-    vec4 light_color;
-    vec4 terrain_params;
-    vec4 mesh_params;
-    vec4 target_params;
-    vec4 camera_params[2];
-    vec4 fog_params;
-    vec4 fog_depth_params;
-    vec4 displacement_params;
-    vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
+struct TerrainFrameData
+{
+	mat4 view_projection[2];
+	mat4 view_matrix;
+	mat4 previous_view_projection[2];
+	vec4 motion_jitter;
+	vec4 motion_params;
+	vec4 light_direction_ambient;
+	vec4 light_color;
+	vec4 terrain_params;
+	vec4 mesh_params;
+	vec4 target_params;
+	vec4 camera_params[2];
+	vec4 fog_params;
+	vec4 fog_depth_params;
+	vec4 displacement_params;
+	vec4 instance_texture_mip_bias; // xyz: category mip bias; w: packed filter overrides
 };
 
-struct TerrainRegionRecord {
-    uint packed_physical_flags;
-    uint megavt_allocation;
-    uint megavt_generation;
-    uint megavt_flags;
-    vec4 megavt_world_to_uv;
-    uint far_vt_allocation;
-    uint far_vt_generation;
-    uint composed_vt_allocation;
-    uint composed_vt_generation;
+struct TerrainRegionRecord
+{
+	uint packed_physical_flags;
+	uint megavt_allocation;
+	uint megavt_generation;
+	uint megavt_flags;
+	vec4 megavt_world_to_uv;
+	uint far_vt_allocation;
+	uint far_vt_generation;
+	uint composed_vt_allocation;
+	uint composed_vt_generation;
 };
 
-struct TierMaterialConfig {
-    uint sampling_mode;
-    uint normal_mode;
-    uint color_mode;
-    uint surface_response;
-    uint texture_surface_mode;
-    uint lighting_model;
-    uint detiling_mode;
-    uint filtering;
-    float authored_color_contribution;
-    float wetness_contribution;
-    float material_lod_bias;
-    float quality_lod_offset;
+struct TierMaterialConfig
+{
+	uint sampling_mode;
+	uint normal_mode;
+	uint color_mode;
+	uint surface_response;
+	uint texture_surface_mode;
+	uint lighting_model;
+	uint detiling_mode;
+	uint filtering;
+	float authored_color_contribution;
+	float wetness_contribution;
+	float material_lod_bias;
+	float quality_lod_offset;
 };
 
-struct MaterialConfig {
-    uint feature_flags;
-    uint debug_flags;
-    uint output_flags;
-    uint background_mode;
-    uint projection_mode;
-    uint tessellation_material_mode;
-    uint world_noise_mode;
-    uint texture_layer_counts;
-    float displacement_sharpness;
-    float blend_sharpness;
-    float distant_normal_scale;
-    float ground_level;
-    float region_blend;
-    float bias_distance;
-    float mipmap_bias;
-    float depth_blur;
-    float auto_slope;
-    float auto_height_reduction;
-    uint auto_base_texture;
-    uint auto_overlay_texture;
-    uint dual_scale_texture;
-    uint far_albedo_layer_count;
-    float dual_scale_reduction;
-    float tri_scale_reduction;
-    float dual_scale_far;
-    float dual_scale_near;
-    float noise1_scale;
-    float noise2_scale;
-    float noise1_rotation_x;
-    float noise1_rotation_y;
-    float macro_variation1_r;
-    float macro_variation1_g;
-    float macro_variation1_b;
-    float macro_variation_slope;
-    float macro_variation2_r;
-    float macro_variation2_g;
-    float macro_variation2_b;
-    float macro_variation_padding;
-    float noise1_offset_x;
-    float noise1_offset_y;
-    float world_noise_cache_period;
-    float world_noise_lod_distance;
-    float world_noise_scale;
-    float world_noise_height;
-    uint world_noise_max_octaves;
-    uint world_noise_min_octaves;
-    uint world_noise_cache_enabled;
-    uint world_noise_fragment_normals;
-    float world_noise_offset_x;
-    float world_noise_offset_y;
-    float world_noise_offset_z;
-    float world_noise_cache_max_lod;
-    float silhouette_r;
-    float silhouette_g;
-    float silhouette_b;
-    float silhouette_a;
-    float contour_step;
-    float editor_overlay_opacity;
-    float reserved_2;
-    float reserved_3;
-    TierMaterialConfig tier[1];
+struct MaterialConfig
+{
+	uint feature_flags;
+	uint debug_flags;
+	uint output_flags;
+	uint background_mode;
+	uint projection_mode;
+	uint tessellation_material_mode;
+	uint world_noise_mode;
+	uint texture_layer_counts;
+	float displacement_sharpness;
+	float blend_sharpness;
+	float distant_normal_scale;
+	float ground_level;
+	float region_blend;
+	float bias_distance;
+	float mipmap_bias;
+	float depth_blur;
+	float auto_slope;
+	float auto_height_reduction;
+	uint auto_base_texture;
+	uint auto_overlay_texture;
+	uint dual_scale_texture;
+	uint far_albedo_layer_count;
+	float dual_scale_reduction;
+	float tri_scale_reduction;
+	float dual_scale_far;
+	float dual_scale_near;
+	float noise1_scale;
+	float noise2_scale;
+	float noise1_rotation_x;
+	float noise1_rotation_y;
+	float macro_variation1_r;
+	float macro_variation1_g;
+	float macro_variation1_b;
+	float macro_variation_slope;
+	float macro_variation2_r;
+	float macro_variation2_g;
+	float macro_variation2_b;
+	float macro_variation_padding;
+	float noise1_offset_x;
+	float noise1_offset_y;
+	float world_noise_cache_period;
+	float world_noise_lod_distance;
+	float world_noise_scale;
+	float world_noise_height;
+	uint world_noise_max_octaves;
+	uint world_noise_min_octaves;
+	uint world_noise_cache_enabled;
+	uint world_noise_fragment_normals;
+	float world_noise_offset_x;
+	float world_noise_offset_y;
+	float world_noise_offset_z;
+	float world_noise_cache_max_lod;
+	float silhouette_r;
+	float silhouette_g;
+	float silhouette_b;
+	float silhouette_a;
+	float contour_step;
+	float editor_overlay_opacity;
+	float reserved_2;
+	float reserved_3;
+	TierMaterialConfig tier[1];
 };
 
-struct PatchData {
-    vec2 origin;
-    float scale;
-    uint lod;
-    uint tier;
-    uint stitch_x;
-    uint stitch_z;
-    uint flags;
-    float bounds_min_y;
-    float bounds_max_y;
-    float bounds_half_extent;
-    float previous_origin_x;
-    float previous_origin_z;
-    float previous_scale;
-    float padding_0;
-    float padding_1;
+struct PatchData
+{
+	vec2 origin;
+	float scale;
+	uint lod;
+	uint tier;
+	uint stitch_x;
+	uint stitch_z;
+	uint flags;
+	float bounds_min_y;
+	float bounds_max_y;
+	float bounds_half_extent;
+	float previous_origin_x;
+	float previous_origin_z;
+	float previous_scale;
+	float padding_0;
+	float padding_1;
 };
 
-struct EditorDecal {
-    vec4 transform; // world position.xy, size, rotation
-    vec4 color;
-    uvec4 state; // visible, part flags, IEEE-754 rotation cos/sin bit patterns
+struct EditorDecal
+{
+	vec4 transform; // world position.xy, size, rotation
+	vec4 color;
+	uvec4 state; // visible, part flags, IEEE-754 rotation cos/sin bit patterns
 };
 
-struct EditorOverlayConfig {
-    EditorDecal decals[3];
-    vec4 heightmap_contour; // black height, white height, interval, thickness
-    vec4 contour_color;
-    vec4 instancer_grid; // cell size, padding
+struct EditorOverlayConfig
+{
+	EditorDecal decals[3];
+	vec4 heightmap_contour; // black height, white height, interval, thickness
+	vec4 contour_color;
+	vec4 instancer_grid; // cell size, padding
 };
 
-struct MaterialLayer {
-    vec4 color;
-    vec4 pbr0;
-    vec4 pbr1;
-    vec2 displacement;
-    uint physical_layer;
-    uint flags;
-    uint micro_vt_allocation;
-    uint micro_vt_generation;
-    uint micro_vt_flags;
-    uint micro_vt_reserved;
+struct MaterialLayer
+{
+	vec4 color;
+	vec4 pbr0;
+	vec4 pbr1;
+	vec2 displacement;
+	uint physical_layer;
+	uint flags;
+	uint micro_vt_allocation;
+	uint micro_vt_generation;
+	uint micro_vt_flags;
+	uint micro_vt_reserved;
 };
 
-struct T3DHotWorldFrame {
-    mat4 viewProjection;
-    mat4 previousViewProjection;
-    vec4 frustumPlanes[6];
-    vec4 cameraAndMaxDistance;
-    vec4 viewportAndInvSize;
-    vec4 motionJitter;
-    uvec4 counts0;
-    uvec4 counts1;
-    uvec4 generations;
-    uvec4 hizAndFlags;
+struct T3DHotWorldFrame
+{
+	mat4 viewProjection;
+	mat4 previousViewProjection;
+	vec4 frustumPlanes[6];
+	vec4 cameraAndMaxDistance;
+	vec4 viewportAndInvSize;
+	vec4 motionJitter;
+	uvec4 counts0;
+	uvec4 counts1;
+	uvec4 generations;
+	uvec4 hizAndFlags;
 };
-struct T3DHotRecord {
-    TerrainFrameData terrain;
-    T3DHotWorldFrame world;
-    EditorOverlayConfig editor;
-    PatchData patches[16];
-    vec4 bounds[16];
-    uint world_bases[20];
-    uvec4 terrain_bases;
-    uvec4 scratch_bases[2];
-    uint cpu_visible[64];
-    uint cpu_indexed[20];
-    uint cpu_strip[384];
+struct T3DHotRecord
+{
+	TerrainFrameData terrain;
+	T3DHotWorldFrame world;
+	EditorOverlayConfig editor;
+	PatchData patches[16];
+	vec4 bounds[16];
+	uint world_bases[20];
+	uvec4 terrain_bases;
+	uvec4 scratch_bases[2];
+	uint cpu_visible[64];
+	uint cpu_indexed[20];
+	uint cpu_strip[384];
 };
 #ifndef T3D_HOT_EXTERNAL_BINDING
-layout(push_constant, std430) uniform DrawData {
-    uint direct_patch_index;
-    uint direct_mode;
-    uint padding_0;
-    uint padding_1;
-    uint hot_index;
-} draw_data;
+layout(push_constant, std430) uniform DrawData
+{
+	uint direct_patch_index;
+	uint direct_mode;
+	uint padding_0;
+	uint padding_1;
+	uint hot_index;
+}
+draw_data;
 #define T3D_HOT_INDEX draw_data.hot_index
-layout(set = 0, binding = 0, std430) readonly buffer HotPassBuffer {
-    T3DHotRecord t3d_hot_records[];
+layout(set = 0, binding = 0, std430) readonly buffer HotPassBuffer
+{
+	T3DHotRecord t3d_hot_records[];
 };
 #endif
 #define frame_data t3d_hot_records[T3D_HOT_INDEX].terrain

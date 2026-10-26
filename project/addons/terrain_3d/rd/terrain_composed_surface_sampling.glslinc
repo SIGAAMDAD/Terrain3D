@@ -2,18 +2,19 @@
 // table, physical banks, and generation are owned by Terrain3DVirtualTexture.
 // Implementations follow the common VT decoder in terrain_clipmap_fragment_inc.
 #ifdef T3D_CS_ACTIVE
-struct T3DComposedSample {
-    vec3 albedo;
-    vec3 tangent_normal;
-    float roughness;
-    float ao;
-    float metallic;
-    float ao_affect;
+struct T3DComposedSample
+{
+	vec3 albedo;
+	vec3 tangent_normal;
+	float roughness;
+	float ao;
+	float metallic;
+	float ao_affect;
 };
 
 bool t3d_cs_sample(vec2 world_texel, vec2 world_grad_x, vec2 world_grad_y,
-                   out T3DComposedSample result);
+out T3DComposedSample result);
 bool t3d_cs_sample_normal_roughness(vec2 world_texel, vec2 world_grad_x, vec2 world_grad_y,
-                                    bool need_normal, bool need_roughness,
-                                    out vec3 tangent_normal, out float roughness);
+bool need_normal, bool need_roughness,
+out vec3 tangent_normal, out float roughness);
 #endif

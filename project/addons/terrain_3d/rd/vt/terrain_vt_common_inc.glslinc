@@ -114,24 +114,28 @@
 #define T3D_VT_V1_PHYSICAL_FAMILY_MASK 0xe0000000u
 #define T3D_VT_V1_PHYSICAL_SLOT_MASK 0x1fffffffu
 
-uint t3d_vt_v1_physical_family(uint packedAddress) {
-    return (packedAddress & T3D_VT_V1_PHYSICAL_FAMILY_MASK) >> T3D_VT_V1_PHYSICAL_FAMILY_SHIFT;
+uint t3d_vt_v1_physical_family(uint packedAddress)
+{
+	return (packedAddress & T3D_VT_V1_PHYSICAL_FAMILY_MASK) >> T3D_VT_V1_PHYSICAL_FAMILY_SHIFT;
 }
 
-uint t3d_vt_v1_physical_slot(uint packedAddress) {
-    return packedAddress & T3D_VT_V1_PHYSICAL_SLOT_MASK;
+uint t3d_vt_v1_physical_slot(uint packedAddress)
+{
+	return packedAddress & T3D_VT_V1_PHYSICAL_SLOT_MASK;
 }
 
-vec3 t3d_vt_srgb_to_linear_rgb(vec3 value) {
-    bvec3 low = lessThanEqual(value, vec3(0.04045));
-    vec3 lowValue = value / 12.92;
-    vec3 highValue = pow((value + vec3(0.055)) / 1.055, vec3(2.4));
-    return mix(highValue, lowValue, low);
+vec3 t3d_vt_srgb_to_linear_rgb(vec3 value)
+{
+	bvec3 low = lessThanEqual(value, vec3(0.04045));
+	vec3 lowValue = value / 12.92;
+	vec3 highValue = pow((value + vec3(0.055)) / 1.055, vec3(2.4));
+	return mix(highValue, lowValue, low);
 }
 
-vec4 t3d_vt_decode_srgb_albedo(vec4 value) {
-    value.rgb = t3d_vt_srgb_to_linear_rgb(value.rgb);
-    return value;
+vec4 t3d_vt_decode_srgb_albedo(vec4 value)
+{
+	value.rgb = t3d_vt_srgb_to_linear_rgb(value.rgb);
+	return value;
 }
 
 #define T3D_VT_SAMPLER_LINEAR_REPEAT 0u
@@ -189,306 +193,353 @@ vec4 t3d_vt_decode_srgb_albedo(vec4 value) {
 #define T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE (1u << 16u)
 #define T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN (1u << 17u)
 
-bool t3d_vt_material_has_surface_texture(uint flags) {
-    return (flags & T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE) != 0u
-        || (flags & T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN) == 0u;
+bool t3d_vt_material_has_surface_texture(uint flags)
+{
+	return (flags & T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE) != 0u
+	|| (flags & T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN) == 0u;
 }
 #define T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION 3u
 
-struct T3DVTAllocation {
-    uint baseVirtualPage;
-    uint pageCount;
-    uint packedMip0Extent;
-    uint packedMipCountFlags;
-    uint tailIndex;
-    uint generation;
-    uint contentId;
-    uint reserved;
+struct T3DVTAllocation
+{
+	uint baseVirtualPage;
+	uint pageCount;
+	uint packedMip0Extent;
+	uint packedMipCountFlags;
+	uint tailIndex;
+	uint generation;
+	uint contentId;
+	uint reserved;
 };
 
-struct T3DVTPageEntry {
-    uint physicalSlot;
-    uint parentPage;
-    uint generation;
-    uint packedResolvedMipFlags;
+struct T3DVTPageEntry
+{
+	uint physicalSlot;
+	uint parentPage;
+	uint generation;
+	uint packedResolvedMipFlags;
 };
 
 // Optional BR20, 16-byte std430 record. Entry zero is a validity/epoch header.
-struct T3DVTAncestorHint {
-    uint resolvedPage;
-    uint physicalSlot;
-    uint generation;
-    uint packedMipDepthFlags;
+struct T3DVTAncestorHint
+{
+	uint resolvedPage;
+	uint physicalSlot;
+	uint generation;
+	uint packedMipDepthFlags;
 };
 #define T3D_VT_HINT_RECORD_PHYSICAL 1u
 #define T3D_VT_HINT_ENABLED 0x54334831u
 
 // GPU-only P02 table: allocationId * T3D_VT_MAX_MIPS + mip.
 // packedExtent stores width in the low 16 bits and height in the high 16 bits.
-struct T3DVTMipLayout {
-    uint baseVirtualPage;
-    uint packedExtent;
+struct T3DVTMipLayout
+{
+	uint baseVirtualPage;
+	uint packedExtent;
 };
 
-struct T3DVTTailMetadata {
-    uint atlasX;
-    uint atlasY;
-    uint packedExtent;
-    uint packedMipRange;
-    uint generation;
-    uint channelMask;
-    uint contentId;
-    uint flags;
+struct T3DVTTailMetadata
+{
+	uint atlasX;
+	uint atlasY;
+	uint packedExtent;
+	uint packedMipRange;
+	uint generation;
+	uint channelMask;
+	uint contentId;
+	uint flags;
 };
 
-struct T3DVTPhysicalSlot {
-    uint virtualPage;
-    uint generation;
-    uint lastVisibleFrame;
-    uint lastRequestedFrame;
-    uint packedFlagsClockAge;
-    uint packedPinCountRetireFrame;
-    uint payloadId;
-    uint reserved;
+struct T3DVTPhysicalSlot
+{
+	uint virtualPage;
+	uint generation;
+	uint lastVisibleFrame;
+	uint lastRequestedFrame;
+	uint packedFlagsClockAge;
+	uint packedPinCountRetireFrame;
+	uint payloadId;
+	uint reserved;
 };
 
-struct T3DVTRequest {
-    uint virtualPage;
-    uint packedWantedMipPriority;
+struct T3DVTRequest
+{
+	uint virtualPage;
+	uint packedWantedMipPriority;
 };
 
-struct T3DVTResolveResult {
-    uint allocation;
-    uint requestedPage;
-    uint resolvedPage;
-    uint physicalSlot;
-    uint tailIndex;
-    uint packedRequestedResolvedMip;
-    uint packedFallbackDepthFlags;
-    uint reserved;
+struct T3DVTResolveResult
+{
+	uint allocation;
+	uint requestedPage;
+	uint resolvedPage;
+	uint physicalSlot;
+	uint tailIndex;
+	uint packedRequestedResolvedMip;
+	uint packedFallbackDepthFlags;
+	uint reserved;
 };
 
-struct T3DVTRequestHashEntry {
-    uint virtualPage;
-    uint wantedMip;
-    uint priority;
-    uint producerMask;
+struct T3DVTRequestHashEntry
+{
+	uint virtualPage;
+	uint wantedMip;
+	uint priority;
+	uint producerMask;
 };
 
-struct T3DVTPredictionMetadata {
-    vec4 worldSphere;
-    vec4 uvBounds;
-    uvec4 ids;
-    vec2 densityScale;
-    uint packedLodCategoryBias;
-    uint flags;
+struct T3DVTPredictionMetadata
+{
+	vec4 worldSphere;
+	vec4 uvBounds;
+	uvec4 ids;
+	vec2 densityScale;
+	uint packedLodCategoryBias;
+	uint flags;
 };
 
-struct T3DRenderingMaterialGpu {
-    uint vtAllocation;
-    uint overlayVtAllocation;
-    uint flags;
-    uint packedScalars0;
-    vec4 baseColor;
-    vec4 uvScaleBias;
-    uint packedEmission;
-    uint packedScalars1;
-    uint samplerClass;
-    uint reserved;
+struct T3DRenderingMaterialGpu
+{
+	uint vtAllocation;
+	uint overlayVtAllocation;
+	uint flags;
+	uint packedScalars0;
+	vec4 baseColor;
+	vec4 uvScaleBias;
+	uint packedEmission;
+	uint packedScalars1;
+	uint samplerClass;
+	uint reserved;
 };
 
-uint t3d_vt_allocation_mip0_width(T3DVTAllocation allocation) {
-    return allocation.packedMip0Extent & 0xffffu;
+uint t3d_vt_allocation_mip0_width(T3DVTAllocation allocation)
+{
+	return allocation.packedMip0Extent & 0xffffu;
 }
 
-uint t3d_vt_allocation_mip0_height(T3DVTAllocation allocation) {
-    return allocation.packedMip0Extent >> 16u;
+uint t3d_vt_allocation_mip0_height(T3DVTAllocation allocation)
+{
+	return allocation.packedMip0Extent >> 16u;
 }
 
-uint t3d_vt_allocation_mip_count(T3DVTAllocation allocation) {
-    return allocation.packedMipCountFlags & 0xffffu;
+uint t3d_vt_allocation_mip_count(T3DVTAllocation allocation)
+{
+	return allocation.packedMipCountFlags & 0xffffu;
 }
 
-uint t3d_vt_allocation_flags(T3DVTAllocation allocation) {
-    return allocation.packedMipCountFlags >> 16u;
+uint t3d_vt_allocation_flags(T3DVTAllocation allocation)
+{
+	return allocation.packedMipCountFlags >> 16u;
 }
 
-uint t3d_vt_allocation_quality_base_mip(T3DVTAllocation allocation) {
-    return (t3d_vt_allocation_flags(allocation) & T3D_VT_ALLOCATION_QUALITY_BASE_MIP_MASK) >> T3D_VT_ALLOCATION_QUALITY_BASE_MIP_SHIFT;
+uint t3d_vt_allocation_quality_base_mip(T3DVTAllocation allocation)
+{
+	return (t3d_vt_allocation_flags(allocation) & T3D_VT_ALLOCATION_QUALITY_BASE_MIP_MASK) >> T3D_VT_ALLOCATION_QUALITY_BASE_MIP_SHIFT;
 }
 
-bool t3d_vt_allocation_quality_enabled(T3DVTAllocation allocation) {
-    return (t3d_vt_allocation_flags(allocation) & T3D_VT_ALLOCATION_QUALITY_DISABLED) == 0u;
+bool t3d_vt_allocation_quality_enabled(T3DVTAllocation allocation)
+{
+	return (t3d_vt_allocation_flags(allocation) & T3D_VT_ALLOCATION_QUALITY_DISABLED) == 0u;
 }
 
 // WG-F P16: pure prediction/address helpers shared by raster feedback and the
 // production World predictor. This file owns no descriptors and performs
 // no residency mutation.
 
-struct T3DVTPredictionRect {
-    uint mip;
-    uint width;
-    uint height;
-    uint min_x;
-    uint max_x;
-    uint min_y;
-    uint max_y;
-    uint page_span;
-    uint relative_mip_base;
+struct T3DVTPredictionRect
+{
+	uint mip;
+	uint width;
+	uint height;
+	uint min_x;
+	uint max_x;
+	uint min_y;
+	uint max_y;
+	uint page_span;
+	uint relative_mip_base;
 };
 
-uint t3d_vt_request_hash_seed(uint virtual_page) {
-    uint mixed = virtual_page * 2654435761u;
-    mixed ^= mixed >> 16u;
-    mixed *= 2246822519u;
-    mixed ^= mixed >> 13u;
-    return mixed;
+uint t3d_vt_request_hash_seed(uint virtual_page)
+{
+	uint mixed = virtual_page * 2654435761u;
+	mixed ^= mixed >> 16u;
+	mixed *= 2246822519u;
+	mixed ^= mixed >> 13u;
+	return mixed;
 }
 
-uint t3d_vt_request_hash_linear_seed(uint virtual_page) {
-    return virtual_page * 2654435761u;
+uint t3d_vt_request_hash_linear_seed(uint virtual_page)
+{
+	return virtual_page * 2654435761u;
 }
 
-uint t3d_vt_request_hash_slot_from_seed(uint hash_seed, uint probe, uint hash_capacity) {
-    return (hash_seed + probe) % hash_capacity;
+uint t3d_vt_request_hash_slot_from_seed(uint hash_seed, uint probe, uint hash_capacity)
+{
+	return (hash_seed + probe) % hash_capacity;
 }
 
 // The tail atlas stores each mip at max(first_width >> mip, 1) texels
 // along X. Summing the truncated widths by popcount avoids a bounded
 // dynamic loop in both the color and filtering paths. Caller supplies a
 // nonzero width and a delta bounded by T3D_VT_MAX_MIPS - 1.
-uint t3d_vt_tail_mip_offset(uint first_width, uint tail_delta) {
-    uint remaining = first_width >> tail_delta;
-    uint bits = uint(findMSB(first_width)) + 1u;
-    uint excess = tail_delta > bits ? tail_delta - bits : 0u;
-    return 2u * (first_width - remaining) - uint(bitCount(first_width)) + uint(bitCount(remaining)) + excess;
+uint t3d_vt_tail_mip_offset(uint first_width, uint tail_delta)
+{
+	uint remaining = first_width >> tail_delta;
+	uint bits = uint(findMSB(first_width)) + 1u;
+	uint excess = tail_delta > bits ? tail_delta - bits : 0u;
+	return 2u * (first_width - remaining) - uint(bitCount(first_width)) + uint(bitCount(remaining)) + excess;
 }
 
 // Ceil-dividing by two repeatedly, without a per-level integer loop.
 // Prediction callers clamp mip to the allocation's <=16-mip range.
-uint t3d_vt_prediction_mip_extent(uint extent, uint mip) {
-    uint safe_extent = max(extent, 1u);
-    return ((safe_extent - 1u) >> mip) + 1u;
+uint t3d_vt_prediction_mip_extent(uint extent, uint mip)
+{
+	uint safe_extent = max(extent, 1u);
+	return ((safe_extent - 1u) >> mip) + 1u;
 }
 
-uint t3d_vt_prediction_relative_mip_base(T3DVTAllocation allocation, uint mip) {
-    uint page = 0u;
-    uint width = t3d_vt_allocation_mip0_width(allocation);
-    uint height = t3d_vt_allocation_mip0_height(allocation);
-    for (uint level = 0u; level < mip; ++level) {
-        page += width * height;
-        width = width > 1u ? (width + 1u) >> 1u : 1u;
-        height = height > 1u ? (height + 1u) >> 1u : 1u;
-    }
-    return page;
+uint t3d_vt_prediction_relative_mip_base(T3DVTAllocation allocation, uint mip)
+{
+	uint page = 0u;
+	uint width = t3d_vt_allocation_mip0_width(allocation);
+	uint height = t3d_vt_allocation_mip0_height(allocation);
+	for (uint level = 0u; level < mip; ++level)
+	{
+		page += width * height;
+		width = width > 1u ? (width + 1u) >> 1u : 1u;
+		height = height > 1u ? (height + 1u) >> 1u : 1u;
+	}
+	return page;
 }
 
-uint t3d_vt_prediction_mip_base(T3DVTAllocation allocation, uint mip) {
-    return allocation.baseVirtualPage + t3d_vt_prediction_relative_mip_base(allocation, mip);
+uint t3d_vt_prediction_mip_base(T3DVTAllocation allocation, uint mip)
+{
+	return allocation.baseVirtualPage + t3d_vt_prediction_relative_mip_base(allocation, mip);
 }
 
 bool t3d_vt_prediction_page_set_sibling(
-    uint allocation_a_id, T3DVTAllocation a, uint allocation_b_id, T3DVTAllocation b) {
-    // V1 runtime expands each canonical logical allocation into a fixed three-slot
-    // channel group. Integer group identity is collision-free; matching layout
-    // fields prove that one mip/rectangle derivation is valid for both siblings.
-    return allocation_a_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
-            == allocation_b_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
-        && a.pageCount == b.pageCount && a.packedMip0Extent == b.packedMip0Extent
-        && a.packedMipCountFlags == b.packedMipCountFlags && a.generation == b.generation
-        && a.contentId == b.contentId;
+uint allocation_a_id, T3DVTAllocation a, uint allocation_b_id, T3DVTAllocation b)
+{
+	// V1 runtime expands each canonical logical allocation into a fixed three-slot
+	// channel group. Integer group identity is collision-free; matching layout
+	// fields prove that one mip/rectangle derivation is valid for both siblings.
+	return allocation_a_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
+	== allocation_b_id / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION
+	&& a.pageCount == b.pageCount && a.packedMip0Extent == b.packedMip0Extent
+	&& a.packedMipCountFlags == b.packedMipCountFlags && a.generation == b.generation
+	&& a.contentId == b.contentId;
 }
 
-T3DVTPredictionRect t3d_vt_prediction_rect(T3DVTAllocation allocation, uint mip, vec2 uv_min_input, vec2 uv_max_input) {
-    T3DVTPredictionRect rect;
-    rect.mip = mip;
-    rect.width = t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_width(allocation), mip);
-    rect.height = t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_height(allocation), mip);
-    vec2 uv_min = min(uv_min_input, uv_max_input);
-    vec2 uv_max = max(uv_min_input, uv_max_input);
-    bool full_u = uv_min.x < 0.0 || uv_max.x > 1.0 || (uv_max.x - uv_min.x) >= 1.0;
-    bool full_v = uv_min.y < 0.0 || uv_max.y > 1.0 || (uv_max.y - uv_min.y) >= 1.0;
-    vec2 lo = clamp(uv_min, vec2(0.0), vec2(1.0));
-    vec2 hi = clamp(uv_max, vec2(0.0), vec2(1.0));
-    rect.min_x = full_u ? 0u : min(uint(floor(lo.x * float(rect.width))), rect.width - 1u);
-    rect.max_x = full_u ? rect.width - 1u : min(uint(floor(hi.x * float(rect.width))), rect.width - 1u);
-    rect.min_y = full_v ? 0u : min(uint(floor(lo.y * float(rect.height))), rect.height - 1u);
-    rect.max_y = full_v ? rect.height - 1u : min(uint(floor(hi.y * float(rect.height))), rect.height - 1u);
-    rect.page_span = (rect.max_x - rect.min_x + 1u) * (rect.max_y - rect.min_y + 1u);
-    rect.relative_mip_base = t3d_vt_prediction_relative_mip_base(allocation, mip);
-    return rect;
+T3DVTPredictionRect t3d_vt_prediction_rect(T3DVTAllocation allocation, uint mip, vec2 uv_min_input, vec2 uv_max_input)
+{
+	T3DVTPredictionRect rect;
+	rect.mip = mip;
+	rect.width = t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_width(allocation), mip);
+	rect.height = t3d_vt_prediction_mip_extent(t3d_vt_allocation_mip0_height(allocation), mip);
+	vec2 uv_min = min(uv_min_input, uv_max_input);
+	vec2 uv_max = max(uv_min_input, uv_max_input);
+	bool full_u = uv_min.x < 0.0 || uv_max.x > 1.0 || (uv_max.x - uv_min.x) >= 1.0;
+	bool full_v = uv_min.y < 0.0 || uv_max.y > 1.0 || (uv_max.y - uv_min.y) >= 1.0;
+	vec2 lo = clamp(uv_min, vec2(0.0), vec2(1.0));
+	vec2 hi = clamp(uv_max, vec2(0.0), vec2(1.0));
+	rect.min_x = full_u ? 0u : min(uint(floor(lo.x * float(rect.width))), rect.width - 1u);
+	rect.max_x = full_u ? rect.width - 1u : min(uint(floor(hi.x * float(rect.width))), rect.width - 1u);
+	rect.min_y = full_v ? 0u : min(uint(floor(lo.y * float(rect.height))), rect.height - 1u);
+	rect.max_y = full_v ? rect.height - 1u : min(uint(floor(hi.y * float(rect.height))), rect.height - 1u);
+	rect.page_span = (rect.max_x - rect.min_x + 1u) * (rect.max_y - rect.min_y + 1u);
+	rect.relative_mip_base = t3d_vt_prediction_relative_mip_base(allocation, mip);
+	return rect;
 }
 
-uint t3d_vt_page_resolved_mip(T3DVTPageEntry page) {
-    return page.packedResolvedMipFlags & 0xffffu;
+uint t3d_vt_page_resolved_mip(T3DVTPageEntry page)
+{
+	return page.packedResolvedMipFlags & 0xffffu;
 }
 
-uint t3d_vt_page_flags(T3DVTPageEntry page) {
-    return page.packedResolvedMipFlags >> 16u;
+uint t3d_vt_page_flags(T3DVTPageEntry page)
+{
+	return page.packedResolvedMipFlags >> 16u;
 }
 
-uint t3d_vt_mip_layout_width(T3DVTMipLayout mipLayout) {
-    return mipLayout.packedExtent & 0xffffu;
+uint t3d_vt_mip_layout_width(T3DVTMipLayout mipLayout)
+{
+	return mipLayout.packedExtent & 0xffffu;
 }
 
-uint t3d_vt_mip_layout_height(T3DVTMipLayout mipLayout) {
-    return mipLayout.packedExtent >> 16u;
+uint t3d_vt_mip_layout_height(T3DVTMipLayout mipLayout)
+{
+	return mipLayout.packedExtent >> 16u;
 }
 
-uint t3d_vt_mip_layout_index(uint allocationId, uint mip) {
-    return allocationId * T3D_VT_MAX_MIPS + mip;
+uint t3d_vt_mip_layout_index(uint allocationId, uint mip)
+{
+	return allocationId * T3D_VT_MAX_MIPS + mip;
 }
 
-uint t3d_vt_request_wanted_mip(T3DVTRequest request) {
-    return request.packedWantedMipPriority & 0xffffu;
+uint t3d_vt_request_wanted_mip(T3DVTRequest request)
+{
+	return request.packedWantedMipPriority & 0xffffu;
 }
 
-uint t3d_vt_request_priority(T3DVTRequest request) {
-    return request.packedWantedMipPriority >> 16u;
+uint t3d_vt_request_priority(T3DVTRequest request)
+{
+	return request.packedWantedMipPriority >> 16u;
 }
 
-uint t3d_vt_tail_width(T3DVTTailMetadata tail) {
-    return tail.packedExtent & 0xffffu;
+uint t3d_vt_tail_width(T3DVTTailMetadata tail)
+{
+	return tail.packedExtent & 0xffffu;
 }
 
-uint t3d_vt_tail_height(T3DVTTailMetadata tail) {
-    return tail.packedExtent >> 16u;
+uint t3d_vt_tail_height(T3DVTTailMetadata tail)
+{
+	return tail.packedExtent >> 16u;
 }
 
-uint t3d_vt_tail_first_mip(T3DVTTailMetadata tail) {
-    return tail.packedMipRange & 0xffffu;
+uint t3d_vt_tail_first_mip(T3DVTTailMetadata tail)
+{
+	return tail.packedMipRange & 0xffffu;
 }
 
-uint t3d_vt_tail_mip_count(T3DVTTailMetadata tail) {
-    return tail.packedMipRange >> 16u;
+uint t3d_vt_tail_mip_count(T3DVTTailMetadata tail)
+{
+	return tail.packedMipRange >> 16u;
 }
 
-uint t3d_vt_resolve_fallback_depth(T3DVTResolveResult result) {
-    return result.packedFallbackDepthFlags & 0xffffu;
+uint t3d_vt_resolve_fallback_depth(T3DVTResolveResult result)
+{
+	return result.packedFallbackDepthFlags & 0xffffu;
 }
 
-uint t3d_vt_resolve_flags(T3DVTResolveResult result) {
-    return result.packedFallbackDepthFlags >> 16u;
+uint t3d_vt_resolve_flags(T3DVTResolveResult result)
+{
+	return result.packedFallbackDepthFlags >> 16u;
 }
 
-uint t3d_vt_resolve_requested_mip(T3DVTResolveResult result) {
-    return result.packedRequestedResolvedMip & 0xffffu;
+uint t3d_vt_resolve_requested_mip(T3DVTResolveResult result)
+{
+	return result.packedRequestedResolvedMip & 0xffffu;
 }
 
-uint t3d_vt_resolve_resolved_mip(T3DVTResolveResult result) {
-    return result.packedRequestedResolvedMip >> 16u;
+uint t3d_vt_resolve_resolved_mip(T3DVTResolveResult result)
+{
+	return result.packedRequestedResolvedMip >> 16u;
 }
 
-void t3d_vt_resolve_set_requested_mip(inout T3DVTResolveResult result, uint mip) {
-    result.packedRequestedResolvedMip = (result.packedRequestedResolvedMip & 0xffff0000u) | min(mip, 0xffffu);
+void t3d_vt_resolve_set_requested_mip(inout T3DVTResolveResult result, uint mip)
+{
+	result.packedRequestedResolvedMip = (result.packedRequestedResolvedMip & 0xffff0000u) | min(mip, 0xffffu);
 }
 
-void t3d_vt_resolve_set_resolved_mip(inout T3DVTResolveResult result, uint mip) {
-    result.packedRequestedResolvedMip = (result.packedRequestedResolvedMip & 0x0000ffffu) | (min(mip, 0xffffu) << 16u);
+void t3d_vt_resolve_set_resolved_mip(inout T3DVTResolveResult result, uint mip)
+{
+	result.packedRequestedResolvedMip = (result.packedRequestedResolvedMip & 0x0000ffffu) | (min(mip, 0xffffu) << 16u);
 }
 
-void t3d_vt_resolve_set_fallback_flags(inout T3DVTResolveResult result, uint fallbackDepth, uint flags) {
-    result.packedFallbackDepthFlags = min(fallbackDepth, 0xffffu) | (min(flags, 0xffffu) << 16u);
+void t3d_vt_resolve_set_fallback_flags(inout T3DVTResolveResult result, uint fallbackDepth, uint flags)
+{
+	result.packedFallbackDepthFlags = min(fallbackDepth, 0xffffu) | (min(flags, 0xffffu) << 16u);
 }
 
 #endif // TERRAIN3D_VT_COMMON_INC_GLSL
