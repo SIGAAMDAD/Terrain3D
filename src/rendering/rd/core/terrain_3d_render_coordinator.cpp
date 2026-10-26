@@ -178,6 +178,10 @@ void Terrain3DRenderCoordinator::stageAssetVtDemandIndexCold(
 	} else {
 		( void ) vt.stageDemandIndexCold( NULL, 0u, String() );
 	}
+    // The GPU visibility sidecar is a separate sibling of canonical v2.
+    // T04 reads its directory only after the final VT package is loaded;
+    // the on-disk bundle payloads are exclusively owned by its worker.
+    ( void ) vt.stageDemandV3Cold( path.is_empty() ? String() : path + String( ".v3" ), path );
 	Terrain3DScopedLock lock( m_vtDemandIndexMutex );
 	m_vtDemandIndexPath = path;
 	m_vtDemandIndexStatus = status;

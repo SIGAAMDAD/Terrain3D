@@ -120,4 +120,54 @@ private:
 	CachedCell				m_cache[T3D_VT_DEMAND_MRU_SLOTS]{};
 	uint64_t				m_accessClock = 0u;
 };
+// T04: immutable, directory-only T3VD v3 index. Bundle bodies are never
+// resident here; the worker reads/decompresses individual 4x4-cell groups.
+struct t3dVTDemandV3DirectoryCell_t
+{
+    int32_t nX = 0, nZ = 0;
+    uint32_t nBundle = 0u, nByteOffset = 0u, nCount = 0u, nFlags = 0u;
+};
+struct t3dVTDemandV3DirectoryBundle_t
+{
+    int32_t nX = 0, nZ = 0;
+    uint64_t nOffset = 0u, nHash = 0u;
+    uint32_t nEncodedBytes = 0u, nDecodedBytes = 0u, nCodec = 0u, nCount = 0u;
+};
+class Terrain3DVTDemandV3Directory
+{
+public:
+    // Accept only the header and directories, not the bundle payloads.
+    bool loadCold( const uint8_t *pDirectory, uint64_t nDirectoryBytes,
+                   uint64_t nFileBytes, uint64_t nExpectedPackage,
+                   uint64_t nExpectedAsset );
+    void resetCold();
+    bool findCellHot( int32_t nX, int32_t nZ, uint32_t &rCellIndex ) const;
+    bool validFor( uint64_t nPackage ) const;
+    const t3dVTDemandV3CookConfig_t &config() const { return m_config; }
+    const std::vector< t3dVTDemandV3DirectoryCell_t > &cells() const { return m_cells; }
+    const std::vector< t3dVTDemandV3DirectoryBundle_t > &bundles() const { return m_bundles; }
+    uint64_t fileBytes() const { return m_nFileBytes; }
+private:
+    t3dVTDemandV3CookConfig_t m_config{};
+    std::vector< t3dVTDemandV3DirectoryCell_t > m_cells;
+    std::vector< t3dVTDemandV3DirectoryBundle_t > m_bundles;
+    uint64_t m_nFileBytes = 0u;
+};
+
+// Worker-only decode. Each output buffer is preallocated at cold bind; no
+// allocations or Godot resources are touched by the codec.
+bool t3d_vt_demand_decode_v3_bundle(
+    const uint8_t *pEncoded, uint32_t nEncodedBytes,
+    const t3dVTDemandV3DirectoryBundle_t &rBundle,
+    uint8_t *pScratch, uint32_t nScratchBytes,
+    t3dVTDemandV3Record_t *pRecords, uint32_t nRecordCapacity );
+
+// Nominal bake-to-runtime projection scaling. The caller handles per-allocation
+// quality-base mip and physical page budget separately.
+uint16_t t3d_vt_demand_select_v3_mip(
+    const t3dVTDemandV3Record_t &rRecord,
+    const t3dVTDemandV3CookConfig_t &rConfig,
+    uint32_t nRuntimeTextureSize, uint32_t nRuntimeViewHeight,
+    float fRuntimeFovDegrees, uint32_t nRuntimeMipCount );
+
 #endif

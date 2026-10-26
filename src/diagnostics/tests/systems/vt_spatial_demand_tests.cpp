@@ -1,5 +1,10 @@
 #include "diagnostics/tests/systems/test_harness.h"
 #include "rendering/rd/vt/streaming/terrain_3d_vt_spatial_demand.h"
+#include "rendering/rd/vt/streaming/terrain_3d_vt_demand_bundle_store.h"
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/dir_access.hpp>
+#include <thread>
+#include <chrono>
 #include "assets/catalog/terrain_3d_assets.h"
 #include <string.h>
 #include <vector>
@@ -164,6 +169,59 @@ void register_vt_spatial_demand_tests(
 		header->nPayloadHash = t3d_vt_demand_hash( bytes.data() + sizeof( *header ), bytes.size() - sizeof( *header ) );
 		T3D_CHECK( test, !index.loadCold( bytes.data(), bytes.size() ) );
 	} );
+    runner.run( "vt_spatial_demand", "v3_async_bundles_and_reopen", []( TestContext &test ) {
+        t3dVTDemandV3CookConfig_t cfg{};
+        cfg.m_nPackageSignature = 7721u;
+        cfg.m_nAssetIdentityHash = 7722u;
+        cfg.m_nSourceSignature = 7723u;
+        cfg.m_nBakeConfigSignature = 7724u;
+        t3dVTDemandV3Cell_t cells[2]{};
+        cells[0].m_nX = -5; cells[0].m_nZ = -1;
+        cells[0].m_nFirstRecord = 0u; cells[0].m_nRecordCount = 1u;
+        cells[1].m_nX = 5; cells[1].m_nZ = 2;
+        cells[1].m_nFirstRecord = 1u; cells[1].m_nRecordCount = 1u;
+        t3dVTDemandV3Record_t records[2]{};
+        for ( uint32_t i = 0u; i < 2u; ++i ) {
+            records[i].m_nStableMaterialKey = 100u + i;
+            records[i].m_nSourceRevision = 1u;
+            records[i].m_nProbeCount = 6u;
+            records[i].m_nSampleCount = 20u;
+            records[i].m_nCoverageSampleCount = 20u;
+            records[i].m_nCoverageConfidence = 65535u;
+            records[i].m_szMipWeight[5] = 20u;
+        }
+        std::vector< uint8_t > bytes;
+        T3D_REQUIRE( test, t3d_vt_demand_write_v3( cells, 2u, records, 2u, cfg, bytes ) );
+        const String path = "user://t3d_w04_async_vt_test.t3vd";
+        {
+            Ref<godot::FileAccess> file = godot::FileAccess::open( path, godot::FileAccess::WRITE );
+            T3D_REQUIRE( test, file.is_valid() );
+            godot::PackedByteArray data;
+            data.resize( ( int64_t ) bytes.size() );
+            memcpy( data.ptrw(), bytes.data(), bytes.size() );
+            file->store_buffer( data );
+            file->flush();
+        }
+        Terrain3DVTDemandBundleStore store;
+        T3D_CHECK( test, !store.openCold( path, 7721u, 7725u ) );
+        T3D_REQUIRE( test, store.openCold( path, 7721u, 7722u ) );
+        T3D_CHECK( test, store.validFor( 7721u ) && !store.validFor( 7724u ) );
+        uint32_t count = 0u, flags = 0u;
+        T3D_CHECK( test, store.findCellHot( -5, -1, count, flags ) == nullptr );
+        store.requestCellHot( -5, -1, 255u );
+        store.requestCellHot( 5, 2, 128u );
+        for ( uint32_t attempt = 0u; attempt < 200u; ++attempt ) {
+            if ( store.stats().nResident == 2u ) break;
+            std::this_thread::sleep_for( std::chrono::milliseconds( 5 ) );
+        }
+        const auto *r = store.findCellHot( -5, -1, count, flags );
+        T3D_CHECK( test, r != nullptr && count == 1u && r[0].m_nStableMaterialKey == 100u );
+        r = store.findCellHot( 5, 2, count, flags );
+        T3D_CHECK( test, r != nullptr && count == 1u && r[0].m_nStableMaterialKey == 101u );
+        store.resetCold();
+        T3D_CHECK( test, !store.validFor( 7721u ) );
+        ( void ) godot::DirAccess::remove_absolute( path );
+    } );
 	runner.run( "vt_spatial_demand", "v3_histogram_index_roundtrip_and_v2_isolation", []( TestContext &test ) {
 		t3dVTDemandV3CookConfig_t config;
 		config.m_nPackageSignature = 1001u;

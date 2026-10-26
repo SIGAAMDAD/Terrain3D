@@ -711,3 +711,189 @@ bool t3d_vt_demand_read_v3(
 	if ( outConfig ) *outConfig = config;
 	return true;
 }
+
+// T04 directory-only reader: validates every offset, cell, signature and
+// checksum before the first asynchronous file read can be queued.
+void Terrain3DVTDemandV3Directory::resetCold() {
+    m_cells.clear(); m_bundles.clear(); m_nFileBytes = 0u;
+    m_config = t3dVTDemandV3CookConfig_t{};
+}
+
+bool Terrain3DVTDemandV3Directory::loadCold(
+    const uint8_t *const p, const uint64_t directoryBytes,
+    const uint64_t fileBytes, const uint64_t expectedPackage,
+    const uint64_t expectedAsset ) {
+    resetCold();
+    if ( !p || !expectedPackage || !expectedAsset ||
+         fileBytes > T3D_VT_DEMAND_V3_MAX_FILE_BYTES ||
+         directoryBytes < T3D_VT_DEMAND_V3_HEADER_BYTES || directoryBytes > fileBytes ) return false;
+    if ( t3dV3Get32( p ) != T3D_VT_DEMAND_MAGIC ||
+         t3dV3Get32( p + 4 ) != T3D_VT_DEMAND_VERSION_V3 ||
+         t3dV3Get32( p + 8 ) != T3D_VT_DEMAND_V3_ENDIAN_TAG ||
+         t3dV3Get32( p + 12 ) != T3D_VT_DEMAND_V3_HEADER_BYTES ||
+         t3dV3Get32( p + 16 ) != T3D_VT_DEMAND_V3_CELL_METERS ||
+         t3dV3Get32( p + 20 ) != T3D_VT_DEMAND_V3_VIEW_BINS ||
+         t3dV3Get32( p + 24 ) != T3D_VT_DEMAND_V3_MIP_BINS ||
+         t3dV3Get32( p + 28 ) != 0u ||
+         t3dV3Get64( p + 48 ) != expectedPackage ||
+         t3dV3Get64( p + 56 ) != expectedAsset ||
+         t3dV3Get64( p + 112 ) != fileBytes ) return false;
+    t3dVTDemandV3CookConfig_t config{};
+    config.m_nNominalTextureSize = t3dV3Get32( p + 32 );
+    config.m_nNominalRenderSize = t3dV3Get32( p + 36 );
+    config.m_nFovMilliDegrees = t3dV3Get32( p + 40 );
+    config.m_nAlgorithmRevision = t3dV3Get32( p + 44 );
+    config.m_nPackageSignature = t3dV3Get64( p + 48 );
+    config.m_nAssetIdentityHash = t3dV3Get64( p + 56 );
+    config.m_nSourceSignature = t3dV3Get64( p + 64 );
+    config.m_nBakeConfigSignature = t3dV3Get64( p + 72 );
+    if ( !t3dV3ValidConfig( config ) ) return false;
+    const uint32_t cellCount = t3dV3Get32( p + 80 );
+    const uint32_t groupCount = t3dV3Get32( p + 84 );
+    if ( !cellCount || cellCount > T3D_VT_DEMAND_V3_MAX_CELLS ||
+         !groupCount || groupCount > cellCount ) return false;
+    const uint64_t groupDir = T3D_VT_DEMAND_V3_HEADER_BYTES +
+        ( uint64_t ) cellCount * T3D_VT_DEMAND_V3_CELL_BYTES;
+    const uint64_t payloadOffset = groupDir +
+        ( uint64_t ) groupCount * T3D_VT_DEMAND_V3_BUNDLE_BYTES;
+    if ( payloadOffset != directoryBytes || payloadOffset > fileBytes ||
+         t3dV3Get64( p + 88 ) != T3D_VT_DEMAND_V3_HEADER_BYTES ||
+         t3dV3Get64( p + 96 ) != groupDir ||
+         t3dV3Get64( p + 104 ) != payloadOffset ||
+         t3dV3Get64( p + 120 ) != t3dV3DirectoryHash( p, payloadOffset ) ) return false;
+    std::vector< t3dVTDemandV3DirectoryBundle_t > bundles;
+    bundles.reserve( groupCount );
+    uint64_t cursor = payloadOffset, count = 0u;
+    for ( uint32_t i = 0u; i < groupCount; ++i ) {
+        const uint8_t *const g = p + groupDir + ( uint64_t ) i * T3D_VT_DEMAND_V3_BUNDLE_BYTES;
+        t3dVTDemandV3DirectoryBundle_t b{};
+        b.nX = t3dV3GetSigned( g ); b.nZ = t3dV3GetSigned( g + 4 );
+        b.nOffset = t3dV3Get64( g + 8 );
+        b.nEncodedBytes = t3dV3Get32( g + 16 );
+        b.nDecodedBytes = t3dV3Get32( g + 20 );
+        b.nHash = t3dV3Get64( g + 24 );
+        b.nCodec = t3dV3Get32( g + 32 );
+        b.nCount = t3dV3Get32( g + 36 );
+        if ( !b.nCount || b.nCount > T3D_VT_DEMAND_V3_MAX_BUNDLE_BYTES / T3D_VT_DEMAND_V3_RECORD_BYTES ||
+             b.nDecodedBytes != b.nCount * T3D_VT_DEMAND_V3_RECORD_BYTES ||
+             !b.nEncodedBytes || b.nEncodedBytes > T3D_VT_DEMAND_V3_MAX_BUNDLE_BYTES ||
+             b.nCodec > 1u || ( !b.nCodec && b.nEncodedBytes != b.nDecodedBytes ) ||
+             b.nOffset != cursor || b.nEncodedBytes > fileBytes - cursor ||
+             ( i && ( b.nX < bundles.back().nX ||
+               ( b.nX == bundles.back().nX && b.nZ <= bundles.back().nZ ) ) ) ||
+             count + b.nCount > T3D_VT_DEMAND_V3_MAX_RECORDS ) return false;
+        cursor += b.nEncodedBytes;
+        count += b.nCount;
+        bundles.push_back( b );
+    }
+    if ( cursor != fileBytes ) return false;
+    std::vector< t3dVTDemandV3DirectoryCell_t > cells;
+    cells.reserve( cellCount );
+    uint32_t activeGroup = 0u, expectedByte = 0u;
+    for ( uint32_t i = 0u; i < cellCount; ++i ) {
+        const uint8_t *const c = p + T3D_VT_DEMAND_V3_HEADER_BYTES +
+            ( uint64_t ) i * T3D_VT_DEMAND_V3_CELL_BYTES;
+        t3dVTDemandV3DirectoryCell_t cell{};
+        cell.nX = t3dV3GetSigned( c ); cell.nZ = t3dV3GetSigned( c + 4 );
+        cell.nBundle = t3dV3Get32( c + 8 );
+        cell.nByteOffset = t3dV3Get32( c + 12 );
+        cell.nCount = t3dV3Get32( c + 16 );
+        const uint32_t nBytes = t3dV3Get32( c + 20 );
+        cell.nFlags = t3dV3Get32( c + 24 );
+        if ( cell.nBundle >= groupCount || !cell.nCount || cell.nFlags > 1u ||
+             t3dV3Get32( c + 28 ) != 0u ||
+             nBytes != cell.nCount * T3D_VT_DEMAND_V3_RECORD_BYTES ||
+             t3dV3Group( cell.nX ) != bundles[cell.nBundle].nX ||
+             t3dV3Group( cell.nZ ) != bundles[cell.nBundle].nZ ||
+             ( i && ( t3dV3Group( cells.back().nX ) > t3dV3Group( cell.nX ) ||
+               ( t3dV3Group( cells.back().nX ) == t3dV3Group( cell.nX ) &&
+                 ( t3dV3Group( cells.back().nZ ) > t3dV3Group( cell.nZ ) ||
+                   ( t3dV3Group( cells.back().nZ ) == t3dV3Group( cell.nZ ) &&
+                     ( cells.back().nX > cell.nX ||
+                       ( cells.back().nX == cell.nX && cells.back().nZ >= cell.nZ ) ) ) ) ) ) ) ) return false;
+        if ( cell.nBundle != activeGroup ) {
+            if ( cell.nBundle != activeGroup + 1u ||
+                 expectedByte != bundles[activeGroup].nDecodedBytes ) return false;
+            activeGroup = cell.nBundle;
+            expectedByte = 0u;
+        }
+        if ( cell.nByteOffset != expectedByte ||
+             nBytes > bundles[cell.nBundle].nDecodedBytes - expectedByte ) return false;
+        expectedByte += nBytes;
+        cells.push_back( cell );
+    }
+    if ( activeGroup + 1u != groupCount || expectedByte != bundles.back().nDecodedBytes ) return false;
+    m_config = config;
+    m_cells.swap( cells ); m_bundles.swap( bundles ); m_nFileBytes = fileBytes;
+    return true;
+}
+
+bool Terrain3DVTDemandV3Directory::validFor( const uint64_t signature ) const {
+    return m_nFileBytes && signature && m_config.m_nPackageSignature == signature;
+}
+
+bool Terrain3DVTDemandV3Directory::findCellHot(
+    const int32_t x, const int32_t z, uint32_t &index ) const {
+    const int32_t gx = t3dV3Group( x ), gz = t3dV3Group( z );
+    uint32_t lo = 0u, hi = ( uint32_t ) m_cells.size();
+    while ( lo < hi ) {
+        const uint32_t mid = lo + ( hi - lo ) / 2u;
+        const auto &c = m_cells[mid];
+        const int32_t cgx = t3dV3Group( c.nX ), cgz = t3dV3Group( c.nZ );
+        const bool less = cgx != gx ? cgx < gx : cgz != gz ? cgz < gz :
+            c.nX != x ? c.nX < x : c.nZ < z;
+        if ( less ) lo = mid + 1u; else hi = mid;
+    }
+    if ( lo >= m_cells.size() || m_cells[lo].nX != x || m_cells[lo].nZ != z ) return false;
+    index = lo;
+    return true;
+}
+
+bool t3d_vt_demand_decode_v3_bundle(
+    const uint8_t *const encoded, const uint32_t encodedBytes,
+    const t3dVTDemandV3DirectoryBundle_t &bundle,
+    uint8_t *const scratch, const uint32_t scratchBytes,
+    t3dVTDemandV3Record_t *const records, const uint32_t capacity ) {
+    if ( !encoded || !scratch || !records || encodedBytes != bundle.nEncodedBytes ||
+         scratchBytes < bundle.nDecodedBytes || capacity < bundle.nCount ||
+         t3d_vt_demand_hash( encoded, encodedBytes ) != bundle.nHash ) return false;
+    if ( bundle.nCodec == 0u ) {
+        memcpy( scratch, encoded, bundle.nDecodedBytes );
+    } else if ( bundle.nCodec != 1u ||
+                !t3dV3PackBitsDecode( encoded, encodedBytes, scratch, bundle.nDecodedBytes ) ) return false;
+    for ( uint32_t i = 0u; i < bundle.nCount; ++i )
+        if ( !t3dV3DecodeRecord( scratch + ( size_t ) i * T3D_VT_DEMAND_V3_RECORD_BYTES,
+                                  records[i] ) ) return false;
+    return true;
+}
+
+#include <math.h>
+uint16_t t3d_vt_demand_select_v3_mip(
+    const t3dVTDemandV3Record_t &record, const t3dVTDemandV3CookConfig_t &config,
+    const uint32_t textureSize, const uint32_t viewHeight, const float fov,
+    const uint32_t mipCount ) {
+    if ( !textureSize || !viewHeight || !mipCount || !isfinite( fov ) ||
+         fov <= 1.0f || fov >= 179.0f || !config.m_nNominalRenderSize ||
+         !config.m_nNominalTextureSize || !config.m_nFovMilliDegrees ) return UINT16_MAX;
+    uint32_t total = 0u;
+    for ( uint32_t m = 0u; m < 16u; ++m ) total += record.m_szMipWeight[m];
+    if ( !total ) return UINT16_MAX;
+    // Conservative visible fine-mip percentile. This includes small
+    // high-detail objects without letting single outlier pixels dominate.
+    const uint32_t threshold = ( total + 9u ) / 10u;
+    uint32_t seen = 0u, mip = 15u;
+    for ( uint32_t m = 0u; m < 16u; ++m ) {
+        seen += record.m_szMipWeight[m];
+        if ( seen >= threshold ) { mip = m; break; }
+    }
+    const double refTan = tan( ( double ) config.m_nFovMilliDegrees * 3.141592653589793 / 360000.0 );
+    const double nowTan = tan( ( double ) fov * 3.141592653589793 / 360.0 );
+    const double ratio = ( ( double ) textureSize / config.m_nNominalTextureSize ) *
+        ( ( double ) config.m_nNominalRenderSize / viewHeight ) * ( nowTan / refTan );
+    if ( !( ratio > 0.0 ) || !isfinite( ratio ) ) return UINT16_MAX;
+    // Histogram bins are already absolute nominal mip levels.
+    // m_nNominalMipBase records the first occupied bin, not an added offset.
+    const double adjusted = ( double ) mip + log2( ratio );
+    const double clamped = adjusted < 0.0 ? 0.0 : adjusted > mipCount - 1u ? ( double ) ( mipCount - 1u ) : adjusted;
+    return ( uint16_t ) floor( clamped + 0.5 );
+}

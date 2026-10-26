@@ -695,7 +695,10 @@ bool Terrain3DForwardPassPreparer::prepare(
 															 ( float ) rContext.m_cameraTransform.origin.z,
 															 ( float ) forward.x,
 															 ( float ) forward.z,
-															 ( uint32_t ) rContext.m_nRenderFrame );
+															 ( uint32_t ) rContext.m_nRenderFrame,
+                                         rContext.m_szViewProjection[0].is_orthogonal() ? 0.0f :
+                                         ( float ) rContext.m_szViewProjection[0].get_fov(),
+                                         ( uint32_t ) MAX( 0, rContext.m_renderSize.y ) );
 	}
 	if ( shared_vt_ready &&
 		 ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION ) ) {

@@ -1,5 +1,40 @@
 # Terrain3D foliage integration (F08)
 
+## FG00 panel regression baseline
+
+`foliage_panel_integration_test.gd` exercises the actual panel through a test-only
+subclass. It records desired-invariant PASS/FAIL results for FOL-01 through FOL-10
+(including cancel/owner reservation), FOL-19 and FOL-22. Existing F08 assertions
+are unchanged. Expected regressions remain FAIL; they are not counted as passes.
+No runtime tests were executed for FG00: validation was restricted to compilation.
+
+For a future explicit editor run, prepare a disposable scene with exactly two
+Terrain3D nodes marked `terrain3d_foliage_fg00_fixture = true`. Give both regions
+`(-1, 0)` and `(0, 0)`, flat height and material-0 control maps, two registered
+texture assets and one registered mesh asset. Assign presets with distinct stable
+UIDs, one enabled material-0 definition and one enabled mesh-0 rule; use density
+0.001, spacing 0, seed 43721 and instance limits of at least 1000. Give each terrain
+a distinct directory under `user://terrain3d_fg00/`. Ensure these directories exist
+and no pending foliage recovery journal exists. Use disposable resource copies.
+
+Run the integration EditorScript explicitly with File > Run. It restores original
+instance pages, presets, height sample and texture slots, intercepts successful
+publication to avoid registering undo actions, and injects staging/restore errors
+only in its subclass. It refuses to touch a pre-existing pending journal. The JSON
+report at `user://terrain3d_fg00_baseline.json` includes ledger/owner/page hashes,
+raster statistics, synchronous call time and journal bytes. Unavailable full-frame
+timings and total native I/O are null, not invented measurements. This is an editor
+baseline harness, not whole-pipeline acceptance or crash/disk-full coverage.
+
+Compilation only (does not run either EditorScript):
+
+```sh
+python tools/compile_foliage_fg00.py --godot /path/to/matching/custom/godot
+```
+
+Without `--godot`, only the Python runner is compiled; GDScript is reported
+`NOT_RUN`. The initial unmeasured baseline is `qa/foliage_fg00/baseline.json`.
+
 ## Executable editor acceptance fixture
 
 Open a **disposable** Godot 4.7.2 test project with this extension compiled and loaded. Create a scene with a Terrain3D node and two horizontally adjacent 128 m regions; populate representative height/control maps with a terrain hole, slopes, and blended material IDs. Add three registered terrain texture assets and foliage mesh assets, then assign a `Terrain3DFoliagePreset` with three enabled material definitions to the Terrain3D `foliage_profile` property. Give the mesh rules nonzero densities and distinct stable UIDs. Add at least one **manually placed** instance and save the scene. Set Terrain3D node metadata `terrain3d_foliage_f08_fixture = true`. Work only on this disposable fixture, never production terrain.

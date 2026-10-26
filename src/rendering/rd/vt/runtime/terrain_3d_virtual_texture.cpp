@@ -1097,10 +1097,37 @@ bool Terrain3DVirtualTexture::prepare_runtime_package_cpu_cold() {
 		( void ) m_spatialDemand.bindStableKeysCold( keys.data(), ids.data(), nKeys );
 	}
 
+    // T04: on-demand v3 loading is cold and optional; an unreadable or stale
+    // histogram never invalidates the already-published canonical v2 package.
+    m_v3Demand.resetCold();
+    m_v3MaterialKeys.clear(); m_v3MaterialAllocations.clear();
+    if ( !m_v3DemandPath.is_empty() && m_nV3AssetIdentityHash != 0u &&
+         m_v3Demand.openCold( m_v3DemandPath, Database.nPackageContentSignature,
+                               m_nV3AssetIdentityHash ) ) {
+        const auto &view = m_RuntimePack.PackViewV3;
+        {
+            const uint32_t nKeys = view.m_pHeader->m_nAllocationCount;
+            m_v3MaterialKeys.reserve( nKeys );
+            m_v3MaterialAllocations.reserve( nKeys );
+            for ( uint32_t i = 0u; i < nKeys; ++i ) {
+                m_v3MaterialKeys.push_back( view.m_pAllocationKeys[i].m_nStableKey );
+                m_v3MaterialAllocations.push_back(
+                    t3d_vt_v3_runtime_allocation_base( view.m_pAllocationKeys[i].m_nAllocationId ) );
+            }
+        }
+    }
+
 	if ( !apply_quality_profile_state_v3( m_RuntimePack.pRuntimeAllocations, Database.pHeader->nAllocationCount ) ) {
 		return false;
 	}
 
+    // Stable-key lookup is a binary search on the final cooked package keys.
+    for ( uint32_t i = 1u; i < m_v3MaterialKeys.size(); ++i ) {
+        if ( m_v3MaterialKeys[i - 1u] >= m_v3MaterialKeys[i] ) {
+            m_v3MaterialKeys.clear(); m_v3MaterialAllocations.clear();
+            break;
+        }
+    }
 	const uint32_t nDatabaseGeneration = Database.nPackageGeneration != 0u ? Database.nPackageGeneration : 1u;
 	return initialize_runtime_state_cold( Database, nDatabaseGeneration );
 }
@@ -1154,6 +1181,21 @@ bool Terrain3DVirtualTexture::stageDemandIndexCold(
 	return true;
 }
 
+bool Terrain3DVirtualTexture::stageDemandV3Cold(
+    const godot::String &path, const godot::String &sourceIdentity ) {
+    if ( m_bInitialized || m_bHotSealed || m_bCpuPrepared ) return false;
+    m_v3Demand.resetCold();
+    m_v3DemandPath = path;
+    m_v3MaterialKeys.clear();
+    m_v3MaterialAllocations.clear();
+    m_nV3AssetIdentityHash = 0u;
+    if ( path.is_empty() || sourceIdentity.is_empty() ) return true;
+    const godot::CharString utf8 = sourceIdentity.utf8();
+    m_nV3AssetIdentityHash = t3d_vt_demand_hash(
+        ( const uint8_t * ) utf8.get_data(), utf8.length() );
+    return m_nV3AssetIdentityHash != 0u;
+}
+
 bool Terrain3DVirtualTexture::stagedDemandMatchesLoadedPackageCold() const {
 	return m_bRuntimePackLoaded && m_spatialDemand.isValidFor( m_RuntimePack.Database.nPackageContentSignature );
 }
@@ -1167,20 +1209,120 @@ bool Terrain3DVirtualTexture::load_spatial_demand_index_cold(
 	return m_spatialDemand.loadCold( pBytes, nBytes );
 }
 
+uint32_t Terrain3DVirtualTexture::stage_v3_demand_hot(
+    const float cameraX, const float cameraZ, const float forwardX, const float forwardZ,
+    const uint32_t frame, const float fov, const uint32_t viewHeight ) {
+    const t3dVTDatabaseView_t *const db = m_Residency.pDatabase;
+    if ( !m_bInitialized || !m_Streaming.bInitialized || !db || m_bWarmPackagePending ||
+         !m_v3Demand.validFor( db->nPackageContentSignature ) ||
+         m_v3MaterialKeys.empty() || !viewHeight || m_nV3LastStageFrame == frame ) return 0u;
+    m_nV3LastStageFrame = frame;
+    const float cell = ( float ) T3D_VT_DEMAND_V3_CELL_METERS;
+    const int32_t x = ( int32_t ) floorf( cameraX / cell );
+    const int32_t z = ( int32_t ) floorf( cameraZ / cell );
+    const int32_t lx = ( int32_t ) floorf( ( cameraX + forwardX * cell ) / cell );
+    const int32_t lz = ( int32_t ) floorf( ( cameraZ + forwardZ * cell ) / cell );
+    const uint8_t view = ( uint8_t ) ( ( ( int32_t ) floorf(
+        atan2f( forwardZ, forwardX ) * ( 4.0f / 3.14159265358979323846f ) + 0.5f ) ) & 7 );
+    // Request current and look-ahead bundles first; cache miss is always a
+    // nonblocking no-op in this render frame.
+    m_v3Demand.requestCellHot( x, z, 255u );
+    if ( lx != x || lz != z ) m_v3Demand.requestCellHot( lx, lz, 128u );
+    const uint32_t limit = MIN( 8u, m_nFrameRequestBudget / 4u );
+    if ( !limit ) return 0u;
+    const float fullMin[2] = { 0.0f, 0.0f };
+    const float fullMax[2] = { 1.0f, 1.0f };
+    uint32_t staged = 0u;
+    for ( uint32_t sector = 0u; sector < 2u && staged < limit; ++sector ) {
+        if ( sector && lx == x && lz == z ) break;
+        uint32_t count = 0u, flags = 0u;
+        const t3dVTDemandV3Record_t *const entries = m_v3Demand.findCellHot(
+            sector ? lx : x, sector ? lz : z, count, flags );
+        if ( !entries ) continue;
+        // Top eight scores only. A v3 bundle is sorted by stable key, not
+        // priority, and its truncated PARTIAL records need reactive fallback.
+        struct Candidate { uint32_t id, score, allocation; uint16_t mip; };
+        Candidate top[8]{};
+        uint32_t selected = 0u;
+        const uint32_t scanCount = MIN( count, 128u );
+        for ( uint32_t i = 0u; i < scanCount; ++i ) {
+            const auto &r = entries[i];
+            if ( r.m_nViewBin != view ||
+                 ( r.m_nFlags & T3D_VT_VISIBILITY_NO_VISIBLE ) != 0u ) continue;
+            uint32_t low = 0u, high = ( uint32_t ) m_v3MaterialKeys.size();
+            while ( low < high ) {
+                const uint32_t mid = low + ( high - low ) / 2u;
+                if ( m_v3MaterialKeys[mid] < r.m_nStableMaterialKey ) low = mid + 1u;
+                else high = mid;
+            }
+            if ( low >= m_v3MaterialKeys.size() ||
+                 m_v3MaterialKeys[low] != r.m_nStableMaterialKey ) continue;
+            const uint32_t allocationId = m_v3MaterialAllocations[low];
+            if ( allocationId >= m_Residency.nAllocationCount ) continue;
+            const t3dVTAllocation_t &a = m_Residency.Buffers.pAllocations[allocationId];
+            if ( !a.m_nPageCount || !a.m_nMipCount ) continue;
+            const uint32_t sourceWidth = MAX( 1u, ( uint32_t ) a.m_nMip0WidthPages ) * T3D_VT_PAGE_INTERIOR;
+            const uint16_t wanted = t3d_vt_demand_select_v3_mip(
+                r, m_v3Demand.configCold(), sourceWidth, viewHeight, fov, a.m_nMipCount );
+            if ( wanted == UINT16_MAX ) continue;
+            // Ignore single-bin outliers and use confidence as the principal
+            // score. Current-cell demand wins ties over speculative lookahead.
+            const uint32_t score = ( uint32_t ) r.m_nCoverageConfidence +
+                MIN( 16383u, r.m_nSampleCount / 4u );
+            Candidate candidate = { i, score, allocationId, wanted };
+            uint32_t pos = 0u;
+            while ( pos < selected && top[pos].score >= score ) ++pos;
+            if ( pos >= 8u ) continue;
+            if ( selected < 8u ) ++selected;
+            for ( uint32_t j = selected - 1u; j > pos; --j ) top[j] = top[j - 1u];
+            top[pos] = candidate;
+        }
+        for ( uint32_t i = 0u; i < selected && staged < limit; ++i ) {
+            const t3dVTAllocation_t &a = m_Residency.Buffers.pAllocations[top[i].allocation];
+            // Material histogram provides no UV page occupancy. At most a
+            // 2x2 coarse footprint is prefetched, leaving all fine pages to
+            // precise fragment feedback / the T05 occupancy feature.
+            uint32_t coarse = 0u;
+            uint32_t width = a.m_nMip0WidthPages;
+            while ( width > 2u && coarse + 1u < a.m_nMipCount ) {
+                width = ( width + 1u ) >> 1u;
+                ++coarse;
+            }
+            const uint32_t actualMip = MAX( ( uint32_t ) top[i].mip, coarse );
+            const uint32_t qualityBase = t3d_vt_allocation_quality_base_mip( a.m_nFlags );
+            const uint16_t relativeMip = ( uint16_t ) ( actualMip > qualityBase ? actualMip - qualityBase : 0u );
+            const uint16_t priority = ( uint16_t ) MIN( 65535u,
+                ( sector ? T3D_VT_PRIORITY_NORMAL_MIN : T3D_VT_PRIORITY_NEAR_MIN ) +
+                top[i].score / 8u );
+            staged += stage_material_footprint_hot( top[i].allocation, frame,
+                fullMin, fullMax, relativeMip, MIN( 2u, limit - staged ),
+                priority, T3D_VT_REQUEST_PRODUCER_TERRAIN, frame / 3u + sector, NULL );
+        }
+        m_nV3HistogramRecords += selected;
+    }
+    m_nV3PrefetchRequests += staged;
+    return staged;
+}
+
 uint32_t Terrain3DVirtualTexture::stage_spatial_demand_hot(
 	const float	   fCameraX,
 	const float	   fCameraZ,
 	const float	   fForwardX,
 	const float	   fForwardZ,
-	const uint32_t nFrameId ) {
-	T3D_STREAM_PROFILE_SCOPE( T3D_SP_VT_PREDICTION );
+    const uint32_t nFrameId, const float fFovDegrees, const uint32_t nViewportHeight ) {
+    T3D_STREAM_PROFILE_SCOPE( T3D_SP_VT_PREDICTION );
+    // V3 demand and V2 presence are separate bounded producers. V3 cannot
+    // disable normal fragment feedback or V2's periodic correction lane.
+    const uint32_t v3Requests = stage_v3_demand_hot(
+        fCameraX, fCameraZ, fForwardX, fForwardZ, nFrameId,
+        fFovDegrees, nViewportHeight );
 	const t3dVTDatabaseView_t *const db = m_Residency.pDatabase;
-	if ( !m_bInitialized || !m_Streaming.bInitialized || db == NULL ||
-		 !m_spatialDemand.isValidFor( db->nPackageContentSignature ) || m_nSpatialDemandLastStageFrame == nFrameId ) {
-		return 0u;
-	}
+    if ( !m_bInitialized || !m_Streaming.bInitialized || db == NULL ||
+         !m_spatialDemand.isValidFor( db->nPackageContentSignature ) || m_nSpatialDemandLastStageFrame == nFrameId ) {
+        return v3Requests;
+    }
 	if ( m_spatialDemand.getVersion() == T3D_VT_DEMAND_VERSION_V2 && !m_spatialDemand.hasBoundPredictor() ) {
-		return 0u;
+		return v3Requests;
 	}
 	const float	  cell = ( float ) m_spatialDemand.getCellMeters();
 	const int32_t x = ( int32_t ) floorf( fCameraX / cell );
@@ -1191,7 +1333,7 @@ uint32_t Terrain3DVirtualTexture::stage_spatial_demand_hot(
 	// coverage cell/octant. Refresh every fourth frame for residency touches.
 	if ( m_nSpatialDemandLastCellX == x && m_nSpatialDemandLastCellZ == z && m_nSpatialDemandLastOctant == mask &&
 		 ( nFrameId & 3u ) != 0u ) {
-		return 0u;
+		return v3Requests;
 	}
 	m_nSpatialDemandLastCellX = x;
 	m_nSpatialDemandLastCellZ = z;
@@ -1296,7 +1438,7 @@ uint32_t Terrain3DVirtualTexture::stage_spatial_demand_hot(
 		++m_nSpatialDemandIncompleteFallbacks;
 	}
 	m_nSpatialDemandAttempts += attempted;
-	return attempted;
+	return attempted + v3Requests;
 }
 
 bool Terrain3DVirtualTexture::shouldScanTerrainAllocationHot(
@@ -1304,6 +1446,10 @@ bool Terrain3DVirtualTexture::shouldScanTerrainAllocationHot(
 	const float	   z,
 	const uint32_t nAllocation,
 	const uint32_t nFrameId ) {
+    // Histogram material/mip visibility has no virtual-page coverage proof.
+    // Until T05/T07, the reactive VT discovery path must remain authoritative.
+    if ( m_Residency.pDatabase &&
+         m_v3Demand.validFor( m_Residency.pDatabase->nPackageContentSignature ) ) return true;
 	if ( !m_spatialDemand.hasBoundPredictor() || m_nSpatialDemandCoveredAllocationCount == 0u ||
 		 m_Residency.pDatabase == NULL ||
 		 !m_spatialDemand.isValidFor( m_Residency.pDatabase->nPackageContentSignature ) ||
@@ -1567,6 +1713,12 @@ bool Terrain3DVirtualTexture::service_initial_publication_cold(
 
 void Terrain3DVirtualTexture::shutdown_cold(
 	const bool bPreserveTailStaging ) {
+    m_v3Demand.resetCold();
+    m_v3MaterialKeys.clear();
+    m_v3MaterialAllocations.clear();
+    m_v3DemandPath = godot::String();
+    m_nV3AssetIdentityHash = 0u;
+    m_nV3LastStageFrame = UINT32_MAX;
 	m_nSpatialDemandLastStageFrame = UINT32_MAX;
 	m_bSpatialDemandCurrentCellComplete = false;
 	m_nSpatialDemandCoveredAllocationCount = 0u;

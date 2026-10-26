@@ -15,6 +15,7 @@
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi_shadow.h"
 #include "rendering/rd/vt/core/terrain_3d_vt_feedback_multi_parity.h"
 #include "rendering/rd/vt/streaming/terrain_3d_vt_spatial_demand.h"
+#include "rendering/rd/vt/streaming/terrain_3d_vt_demand_bundle_store.h"
 
 #include <godot_cpp/variant/dictionary.hpp>
 
@@ -172,10 +173,14 @@ public:
 																  bool					*pFullyStaged = NULL );
 	// Cold-only source staging; empty bytes disable prediction for missing/unsaved sidecars.
 	bool stageDemandIndexCold( const uint8_t *pBytes, uint64_t nBytes, const godot::String &rSourceIdentity );
+	// T04: v3 is an optional sibling of the canonical v2 presence sidecar.
+	bool stageDemandV3Cold( const godot::String &rPath, const godot::String &rSourceIdentity );
 	bool stagedDemandMatchesLoadedPackageCold() const;
 	bool load_spatial_demand_index_cold( const uint8_t *pBytes, uint64_t nBytes );
 	uint32_t
-	stage_spatial_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ, uint32_t nFrameId );
+	stage_spatial_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
+                                   uint32_t nFrameId, float fFovDegrees = 90.0f,
+                                   uint32_t nViewportHeight = 256u );
 	bool shouldScanTerrainAllocationHot( float fCameraX, float fCameraZ, uint32_t nAllocation, uint32_t nFrameId );
 	bool configure_feedback_policy_cold( const t3dVTFeedbackPolicy_t &rPolicy, uint32_t nPhysicalCapDivisor );
 	bool service_feedback_grid_hot( uint32_t nFrameId, uint64_t nViewportKey, uint32_t nDeviceGeneration );
@@ -199,6 +204,8 @@ public:
 	bool	 service_retired_slots_hot( uint32_t pFrameId );
 
 private:
+	uint32_t stage_v3_demand_hot( float fCameraX, float fCameraZ, float fForwardX, float fForwardZ,
+                                     uint32_t nFrameId, float fFovDegrees, uint32_t nViewportHeight );
 	bool stage_feedback_page_hot( uint32_t nPage, uint16_t nMip, uint16_t nPriority, uint32_t nFrameId );
 	void	 streamWorkerMain( void );
 	void	 stopStreamWorkerCold( void );
@@ -225,6 +232,15 @@ private:
 	Terrain3DMemoryZone		   *m_pRuntimeAllocatorZone;
 	Terrain3DVTGpu				m_Gpu;
 	Terrain3DVTSpatialDemand	m_spatialDemand;
+    Terrain3DVTDemandBundleStore m_v3Demand;
+    godot::String m_v3DemandPath;
+    uint64_t m_nV3AssetIdentityHash = 0u;
+    std::vector< uint64_t > m_v3MaterialKeys;
+    std::vector< uint32_t > m_v3MaterialAllocations;
+    uint32_t m_nV3LastStageFrame = UINT32_MAX;
+    uint64_t m_nV3HistogramRecords = 0u;
+    uint64_t m_nV3PrefetchRequests = 0u;
+
 	godot::String				m_demandIndexSourceIdentity;
 	uint32_t					m_nSpatialDemandLastStageFrame = UINT32_MAX;
 	int32_t						m_nSpatialDemandLastCellX = INT32_MIN;
