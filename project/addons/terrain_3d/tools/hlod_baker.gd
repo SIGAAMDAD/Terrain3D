@@ -3,6 +3,10 @@
 extends RefCounted
 class_name Terrain3DHLODBaker
 
+const TransactionalResourcePublisher = preload("res://addons/terrain_3d/tools/transactional_resource_publisher.gd")
+
+const HLODVisualValidator = preload("res://addons/terrain_3d/tools/hlod_visual_validator.gd")
+
 const NODE_FLAG_HLOD_VISUAL: int = 1 << 2
 const MAX_LEVEL: int = 6
 const REGION_SIZE: int = 128
@@ -358,7 +362,7 @@ func _collect_node_sources(region: Terrain3DRegion, location: Vector2i,
 			root.free()
 			_warnings.append("HLOD visual %d in %s is not Node3D-rooted" % [descriptor.id, location])
 			continue
-		var unsafe_reason: String = _validate_hlod_visual_node(root)
+		var unsafe_reason: String = HLODVisualValidator.validate(root)
 		if not unsafe_reason.is_empty():
 			root.free()
 			_errors.append("HLOD visual %d in %s is unsafe to proxy: %s" % [descriptor.id, location, unsafe_reason])
@@ -665,35 +669,6 @@ func _minimum_legal_level(owner_region: Vector2i, bounds: AABB,
 	return max_level + 1
 
 
-func _validate_hlod_visual_node(node: Node) -> String:
-	if node.get_script() != null:
-		return "scripted nodes are behavioral"
-	if node is CollisionObject3D or node is CollisionShape3D or node is CollisionPolygon3D:
-		return "physics/collision nodes must remain detailed"
-	if node is AnimationPlayer or node is AnimationTree or node is Skeleton3D:
-		return "animated/skeletal content is unsupported"
-	if node is AudioStreamPlayer3D or node is GPUParticles3D or node is CPUParticles3D:
-		return "audio/particle content is not render-only"
-	if node is NavigationRegion3D or node is NavigationLink3D or node is NavigationObstacle3D:
-		return "navigation content must remain detailed"
-	if node is Light3D:
-		return "lights are not HLOD proxy geometry"
-	if node is MultiMeshInstance3D:
-		return "MultiMesh content must use Terrain3D instancer HLOD"
-	if node is MeshInstance3D:
-		var mesh_node := node as MeshInstance3D
-		if not is_instance_valid(mesh_node.mesh):
-			return "MeshInstance3D has no mesh"
-		if mesh_node.mesh is ArrayMesh and (mesh_node.mesh as ArrayMesh).get_blend_shape_count() > 0:
-			return "blend shapes are unsupported"
-		if is_instance_valid(mesh_node.material_overlay):
-			return "material overlays are unsupported"
-	for child: Node in node.get_children():
-		var reason: String = _validate_hlod_visual_node(child)
-		if not reason.is_empty():
-			return reason
-	return ""
-
 
 func _cluster_local_transform(world_transform: Transform3D, cluster_origin: Vector3) -> Transform3D:
 	var local: Transform3D = world_transform
@@ -943,34 +918,12 @@ func _publish_manifest_transactionally(manifest: Terrain3DHLODManifest, manifest
 		extension = "tres"
 	var staging_path: String = directory.path_join(stem + ".staging." + extension)
 	var previous_path: String = directory.path_join(stem + ".previous." + extension)
-	for cleanup_path: String in [staging_path, previous_path]:
-		if FileAccess.file_exists(cleanup_path):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(cleanup_path))
-	var save_error: Error = ResourceSaver.save(manifest, staging_path)
-	if save_error != OK:
-		return save_error
-	var validation := ResourceLoader.load(staging_path, "Terrain3DHLODManifest", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DHLODManifest
-	if not is_instance_valid(validation) or validation.entries.size() != manifest.entries.size() or not validation.validate_runtime_blob():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(staging_path))
-		return ERR_FILE_CORRUPT
-	var absolute_final: String = ProjectSettings.globalize_path(manifest_path)
-	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
-	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
-	var had_previous: bool = FileAccess.file_exists(manifest_path)
-	if had_previous:
-		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
-		if backup_error != OK:
-			DirAccess.remove_absolute(absolute_staging)
-			return backup_error
-	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
-	if publish_error != OK:
-		if had_previous:
-			DirAccess.rename_absolute(absolute_previous, absolute_final)
-		DirAccess.remove_absolute(absolute_staging)
-		return publish_error
-	if had_previous and FileAccess.file_exists(previous_path):
-		DirAccess.remove_absolute(absolute_previous)
-	return OK
+	var expected_entries: int = manifest.entries.size()
+	return TransactionalResourcePublisher.publish(
+		manifest, manifest_path, staging_path, previous_path, "Terrain3DHLODManifest",
+		func(resource: Resource) -> bool:
+			var validation := resource as Terrain3DHLODManifest
+			return is_instance_valid(validation) and validation.entries.size() == expected_entries and validation.validate_runtime_blob())
 
 
 func _garbage_collect_packages(output_dir: String, referenced_packages: PackedStringArray) -> void:

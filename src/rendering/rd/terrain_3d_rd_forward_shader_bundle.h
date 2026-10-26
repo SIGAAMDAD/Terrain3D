@@ -19,7 +19,7 @@ static const uint32_t T3D_RD_TERRAIN_FORWARD_SOURCE_VARIANT_COUNT =
 
 typedef struct t3dRdForwardShaderBundle_s {
 	Ref<RDShaderSPIRV> m_szTerrain[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-	// GPU-P06: terrain-only color family. The shared instance/RenderWorld
+	// GPU-P06: terrain-only color family. The shared instance/World
 	// variant ABI remains unchanged; depth/prepass variants stay common.
 	Ref<RDShaderSPIRV> m_szTerrainOneSun[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
 	Ref<RDShaderSPIRV> m_szInstances[T3D_RD_FORWARD_SHADER_VARIANT_MAX];

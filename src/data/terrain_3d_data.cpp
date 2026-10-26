@@ -13,6 +13,8 @@
 #include "core/logger.h"
 #include "core/terrain_3d_eastl_helpers.h"
 #include "data/terrain_3d_region_codec.h"
+#include "data/terrain_3d_control_map_cooker.h"
+#include "data/terrain_3d_region_image_cooker.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "data/terrain_3d_runtime_page_format.h"
 #include "data/terrain_3d_sampler.h"
@@ -39,69 +41,8 @@
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/memory.hpp>
 
-typedef struct t3dControlCookSource_s {
-	PackedByteArray m_bytes;
-	bool m_bPresent = false;
-	bool m_bImplicit = true;
-} t3dControlCookSource_t;
 
-static bool t3dDataReadCookControl(
-        const eastl::array<t3dControlCookSource_t, 9> &rSources, const int iX, const int iZ, uint32_t &nControl ) {
-	int region_dx = 0;
-	int region_dz = 0;
-	int local_x = iX;
-	int local_z = iZ;
-	if ( local_x < 0 ) {
-		region_dx = -1;
-		local_x += s_nRegionSize;
-	} else if ( local_x >= s_nRegionSize ) {
-		region_dx = 1;
-		local_x -= s_nRegionSize;
-	}
-	if ( local_z < 0 ) {
-		region_dz = -1;
-		local_z += s_nRegionSize;
-	} else if ( local_z >= s_nRegionSize ) {
-		region_dz = 1;
-		local_z -= s_nRegionSize;
-	}
-	const t3dControlCookSource_t &source = rSources[( size_t )( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
-	if ( !source.m_bPresent ) {
-		return false;
-	}
-	if ( source.m_bImplicit ) {
-		nControl = s_nRegionDefaultControl;
-		return true;
-	}
-	const size_t offset = ( size_t )( local_z * s_nRegionSize + local_x ) * sizeof( uint32_t );
-	memcpy( &nControl, source.m_bytes.ptr() + offset, sizeof( uint32_t ) );
-	return true;
-}
 
-static uint32_t t3dDataReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset );
-
-static Color t3dDataSampleMiddleMaterial( const eastl::array<Ref<Image>, s_nMaxTextureAssets> &rMaterialImages,
-        const PackedFloat32Array &rMaterialScales,
-        const int nMaterialId,
-        const Color &rTint,
-        const float fCos,
-        const float fSin,
-        const float fWorldX,
-        const float fWorldY,
-        const float fControlScale ) {
-	if ( nMaterialId < 0 || nMaterialId >= s_nMaxTextureAssets || rMaterialImages[( size_t )nMaterialId].is_null() ) {
-		return rTint;
-	}
-	const Ref<Image> &pImage = rMaterialImages[( size_t )nMaterialId];
-	const float fAssetScale = nMaterialId < rMaterialScales.size() ? rMaterialScales[nMaterialId] : 0.1f;
-	const float fSourceU = ( fCos * fWorldX + fSin * fWorldY ) * fControlScale * fAssetScale;
-	const float fSourceV = ( fCos * fWorldY - fSin * fWorldX ) * fControlScale * fAssetScale;
-	const float fWrappedU = fSourceU - Math::floor( fSourceU );
-	const float fWrappedV = fSourceV - Math::floor( fSourceV );
-	const int nSourceX = CLAMP( ( int )( fWrappedU * pImage->get_width() ), 0, pImage->get_width() - 1 );
-	const int nSourceY = CLAMP( ( int )( fWrappedV * pImage->get_height() ), 0, pImage->get_height() - 1 );
-	return pImage->get_pixel( nSourceX, nSourceY ) * rTint;
-}
 
 static void t3dDataAppendUniquePath( PackedStringArray &rPaths, const String &rPath ) {
 	if ( rPath.is_empty() ) {
@@ -115,24 +56,7 @@ static void t3dDataAppendUniquePath( PackedStringArray &rPaths, const String &rP
 	rPaths.push_back( rPath );
 }
 
-static uint32_t t3dDataMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
-	if ( rControl.is_null() || rControl->is_empty() || rControl->get_format() != Image::FORMAT_RF ) {
-		return 1u;
-	}
-	const PackedByteArray bytes = rControl->get_data();
-	const uint8_t *const pRead = bytes.ptr();
-	if ( !pRead || bytes.size() < 4 ) {
-		return 1u;
-	}
-	uint32_t mask = 0u;
-	const size_t texels = ( size_t )( bytes.size() ) / 4u;
-	for ( size_t index = 0; index < texels; ++index ) {
-		const uint32_t control = t3dDataReadU32Unaligned( pRead, index * 4u );
-		mask |= 1u << ( uint32_t )( t3dGetBase( control ) & 31u );
-		mask |= 1u << ( uint32_t )( t3dGetOverlay( control ) & 31u );
-	}
-	return mask != 0u ? mask : 1u;
-}
+
 
 static void t3dDataFnv1a64Append( uint64_t &nHash, const uint8_t *pData, const size_t nSize ) {
 	for ( size_t index = 0u; index < nSize; ++index ) {
@@ -158,17 +82,9 @@ EA_FORCE_INLINE static void t3dDataFnv1a64AppendF32( uint64_t &nHash, const floa
 
 
 
-static uint32_t t3dDataReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
-	uint32_t value = 0u;
-	if ( pBytes ) {
-		memcpy( &value, pBytes + nOffset, sizeof( value ) );
-	}
-	return value;
-}
 
-EA_FORCE_INLINE static uint8_t t3dDataColorToByte( const float fValue ) {
-	return ( uint8_t )( CLAMP( Math::round( fValue * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) );
-}
+
+
 
 // Returns the half-open region-coordinate bounds touched by a positive-sized
 // area. Computing the exclusive end independently is required for offset and
@@ -274,22 +190,7 @@ void Terrain3DData::ensureDefaultMaps( void ) {
 }
 
 Ref<Image> Terrain3DData::getRegionMapOrDefault( const Terrain3DRegion *pRegion, const t3dMapType_t eMapType ) const {
-	if ( pRegion && !pRegion->isDeleted() ) {
-		Ref<Image> pMap = pRegion->getMap( eMapType );
-		if ( pMap.is_valid() ) {
-			return pMap;
-		}
-	}
-	switch ( eMapType ) {
-		case TYPE_HEIGHT:
-			return m_defaultHeightMap;
-		case TYPE_CONTROL:
-			return m_defaultControlMap;
-		case TYPE_COLOR:
-			return m_defaultColorMap;
-		default:
-			return Ref<Image>();
-	}
+	return t3dRegionImageResolveMap( pRegion, eMapType, m_defaultHeightMap, m_defaultControlMap, m_defaultColorMap );
 }
 
 bool Terrain3DData::hasMaterializedMap( const t3dMapType_t eMapType ) const {
@@ -370,183 +271,72 @@ void Terrain3DData::applyInstanceRegionCacheChanges( const t3dInstanceRegionCach
 	}
 }
 
+void Terrain3DData::residencyPrepareGpuFarSurface( void *const pContext ) {
+	Terrain3DData *const pData = ( Terrain3DData * )( pContext );
+	if ( pData && pData->isFarAtlasRequired() ) {
+		pData->ensureFarAtlases();
+	}
+}
+
+void Terrain3DData::residencyApplyInstanceChanges(
+        void *const pContext, const t3dInstanceRegionCacheChanges_t &rChanges ) {
+	Terrain3DData *const pData = ( Terrain3DData * )( pContext );
+	if ( pData ) {
+		pData->applyInstanceRegionCacheChanges( rChanges );
+	}
+}
+
+void Terrain3DData::residencyGpuPageTableChanged( void *const pContext ) {
+	Terrain3DData *const pData = ( Terrain3DData * )( pContext );
+	if ( pData ) {
+		pData->emitGpuRegionMapChanged();
+	}
+}
+
 Ref<Image> Terrain3DData::makeGpuColorImage( const Ref<Image> &rImage ) const {
-	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultColorMap;
-	if ( pSource.is_null() ) {
-		return Ref<Image>();
-	}
 	const int divisor = m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1;
-	if ( divisor <= 1 && pSource->has_mipmaps() ) {
-		return pSource;
-	}
-	Ref<Image> pGpuImage;
-	pGpuImage.instantiate();
-	pGpuImage->copy_from( pSource );
-	// Resizing an image that already owns a mip chain and then generating mips again
-	// can carry stale lower levels through rehydration. Rebuild from the base level
-	// exactly once so the GPU page always contains the canonical chain for its size.
-	if ( pGpuImage->has_mipmaps() ) {
-		pGpuImage->clear_mipmaps();
-	}
-	if ( divisor > 1 ) {
-		pGpuImage->resize(
-		        MAX( 1, pSource->get_width() / divisor ), MAX( 1, pSource->get_height() / divisor ), Image::INTERPOLATE_BILINEAR );
-	}
-	if ( pGpuImage->generate_mipmaps() != OK ) {
-		return Ref<Image>();
-	}
-	return pGpuImage;
+	return t3dRegionImageCookGpuColor( rImage, m_defaultColorMap, divisor );
 }
 
 Ref<Image> Terrain3DData::makeGpuDerivedImage( const Ref<Image> &rImage ) const {
-	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultDerivedMap;
-	if ( pSource.is_null() ) {
-		return Ref<Image>();
-	}
 	const int divisor = m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1;
-	if ( divisor <= 1 ) {
-		return pSource;
-	}
-	Ref<Image> pGpuImage;
-	pGpuImage.instantiate();
-	pGpuImage->copy_from( pSource );
-	pGpuImage->resize( MAX( 1, pSource->get_width() / divisor ), MAX( 1, pSource->get_height() / divisor ), Image::INTERPOLATE_BILINEAR );
-	return pGpuImage;
+	return t3dRegionImageCookGpuDerived( rImage, m_defaultDerivedMap, divisor );
 }
 
 Ref<Image> Terrain3DData::makeMiddleCompositeImage(
         const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor ) const {
 	if ( rControl.is_null() || rColor.is_null() || rControl->get_format() != Image::FORMAT_RF
-	        || rColor->get_format() != Image::FORMAT_RGBA8 ) {
-		return Ref<Image>();
-	}
-	const int width = rColor->get_width();
-	const int height = rColor->get_height();
-	if ( width <= 0 || height <= 0 ) {
-		return Ref<Image>();
-	}
-	const PackedByteArray control_bytes = rControl->get_data();
-	const PackedByteArray color_bytes = rColor->get_data();
-	if ( control_bytes.size() < ( int64_t )( rControl->get_width() ) * rControl->get_height() * 4
-	        || color_bytes.size() < ( int64_t )( width )*height * 4 ) {
+	        || rColor->get_format() != Image::FORMAT_RGBA8 || rColor->get_width() <= 0 || rColor->get_height() <= 0 ) {
 		return Ref<Image>();
 	}
 	PackedColorArray material_colors;
-	const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
-	if ( pAssets.is_valid() ) {
-		material_colors = pAssets->getTextureColors();
-	}
-	const PackedFloat32Array material_scales = pAssets.is_valid() ? pAssets->getTextureUvScales() : PackedFloat32Array();
+	PackedFloat32Array material_scales;
 	eastl::array<Ref<Image>, s_nMaxTextureAssets> material_images;
-	if ( pAssets.is_valid() ) {
-		for ( int material = 0; material < MIN( pAssets->getTextureCount(), s_nMaxTextureAssets ); ++material ) {
-			const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( material );
-			const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getAlbedoTexture() : Ref<Texture2D>();
-			Ref<Image> pMaterialImage = pTexture.is_valid() ? pTexture->get_image() : Ref<Image>();
-			// Imported DDS/VRAM textures commonly expose compressed Images. get_pixel()
-			// rejects those and logs once per sample, so prepare one private readable
-			// copy per material before entering the composite's texel loops. If the
-			// platform cannot decompress that format, the bake falls back to its tint.
-			if ( pMaterialImage.is_valid() && pMaterialImage->is_compressed() ) {
-				pMaterialImage = pMaterialImage->duplicate();
-				if ( pMaterialImage->decompress() != OK ) {
-					pMaterialImage.unref();
-				}
-			}
-			if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
-				pMaterialImage.unref();
-			}
-			material_images[( size_t )( material )] = pMaterialImage;
-		}
-	}
+	const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
+	t3dRegionImagePrepareMiddleCompositeMaterials(
+	        pAssets, material_colors, material_scales, material_images.data(), material_images.size() );
 	PackedByteArray output;
-	output.resize( width * height * 4 );
-	uint8_t *const pWrite = output.ptrw();
-	const uint8_t *const pControl = control_bytes.ptr();
-	const uint8_t *const pColor = color_bytes.ptr();
-	for ( int y = 0; y < height; ++y ) {
-		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
-		for ( int x = 0; x < width; ++x ) {
-			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
-			const uint32_t control = t3dDataReadU32Unaligned( pControl, ( size_t )( control_y * rControl->get_width() + control_x ) * 4u );
-			const int base = ( int )( t3dGetBase( control ) );
-			const int overlay = ( int )( t3dGetOverlay( control ) );
-			const Color base_color = base < material_colors.size() ? material_colors[base] : s_colorWhite;
-			const Color overlay_color = overlay < material_colors.size() ? material_colors[overlay] : base_color;
-			const float control_scale = 0.9f - ( float )( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
-			const float angle = ( float )( t3dGetUvRotation( control ) )*Math_TAU / 16.0f;
-			const float cs = Math::cos( angle );
-			const float sn = Math::sin( angle );
-			const float local_x = ( ( float )( x ) + 0.5f ) * ( float )( s_nRegionSize ) / ( float )( width );
-			const float local_y = ( ( float )( y ) + 0.5f ) * ( float )( s_nRegionSize ) / ( float )( height );
-			const float world_x = ( ( float )( rLocation.x * s_nRegionSize ) + local_x ) * ( float )( s_fRegionVertexSpacing );
-			const float world_y = ( ( float )( rLocation.y * s_nRegionSize ) + local_y ) * ( float )( s_fRegionVertexSpacing );
-			const Color base_sample = t3dDataSampleMiddleMaterial(
-			        material_images, material_scales, base, base_color, cs, sn, world_x, world_y, control_scale );
-			const Color overlay_sample = t3dDataSampleMiddleMaterial(
-			        material_images, material_scales, overlay, overlay_color, cs, sn, world_x, world_y, control_scale );
-			float blend = ( float )( t3dGetBlend( control ) ) / 255.0f;
-			blend = CLAMP( ( blend - 0.12f ) / 0.76f, 0.0f, 1.0f );
-			blend = blend * blend * ( 3.0f - 2.0f * blend );
-			const Color material_color = base_sample.lerp( overlay_sample, blend );
-			const size_t offset = ( size_t )( y * width + x ) * 4u;
-			const float authored_r = ( float )( pColor[offset] ) / 255.0f;
-			const float authored_g = ( float )( pColor[offset + 1u] ) / 255.0f;
-			const float authored_b = ( float )( pColor[offset + 2u] ) / 255.0f;
-			pWrite[offset] = t3dDataColorToByte( authored_r * material_color.r );
-			pWrite[offset + 1u] = t3dDataColorToByte( authored_g * material_color.g );
-			pWrite[offset + 2u] = t3dDataColorToByte( authored_b * material_color.b );
-			pWrite[offset + 3u] =
-			        t3dIsHole( control ) ? 0u : ( uint8_t )( 0x80u | ( ( uint32_t )( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
-		}
-	}
-	Ref<Image> pComposite = Image::create_from_data( width, height, false, Image::FORMAT_RGBA8, output );
-	if ( pComposite.is_null() || pComposite->generate_mipmaps() != OK ) {
+	const int64_t output_bytes = ( int64_t )( rColor->get_width() )*rColor->get_height() * 4;
+	output.resize( output_bytes );
+	if ( output.size() != output_bytes ) {
 		return Ref<Image>();
 	}
-	return pComposite;
+	return t3dRegionImageCookMiddleComposite( rLocation,
+	        rControl,
+	        rColor,
+	        material_colors,
+	        material_scales,
+	        material_images.data(),
+	        material_images.size(),
+	        output );
 }
 
 Ref<Image> Terrain3DData::makeTerrainShadowMaskImage( const Terrain3DRegion *const pRegion ) const {
-	const int region_size = s_nRegionSize;
-	if ( region_size <= 0 ) {
-		return Ref<Image>();
-	}
-	Ref<Image> image;
-	if ( pRegion && !pRegion->isDeleted() ) {
-		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
-		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-			const String shadow_path = lighting->getTerrainShadowMaskPath();
-			if ( FileAccess::file_exists( shadow_path ) ) {
-				const Ref<Resource> resource = ResourceLoader::get_singleton()->load( shadow_path );
-				image = resource;
-			}
-		}
-	}
-	if ( image.is_null() || image->is_empty() ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	image = image->duplicate();
-	if ( image->is_compressed() && image->decompress() != OK ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	if ( image->has_mipmaps() ) {
-		image->clear_mipmaps();
-	}
-	if ( image->get_format() != Image::FORMAT_L8 ) {
-		image->convert( Image::FORMAT_L8 );
-	}
-	if ( image->get_width() != region_size || image->get_height() != region_size ) {
-		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
-	}
-	if ( image->generate_mipmaps() != OK ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	return image;
+	return t3dRegionImageCookTerrainShadowMask( pRegion, s_nRegionSize );
 }
 
 Ref<Image> Terrain3DData::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
-	eastl::array<t3dControlCookSource_t, 9> sources;
+	t3dControlCookSource_t sources[9];
 	for ( int dz = -1; dz <= 1; ++dz ) {
 		for ( int dx = -1; dx <= 1; ++dx ) {
 			const Vector2i location = vLocation + Vector2i( dx, dz );
@@ -564,100 +354,14 @@ Ref<Image> Terrain3DData::makeGpuRenderControlImage( const Vector2i &vLocation )
 			}
 			source.m_bPresent = true;
 			if ( !pRegion->hasChannel( TYPE_CONTROL ) || pRegion->getControlMap().is_null() ) {
-				source.m_bImplicit = true;
 				continue;
 			}
-			const Ref<Image> pControl = pRegion->getControlMap();
-			if ( pControl->get_width() != s_nRegionSize || pControl->get_height() != s_nRegionSize
-			        || pControl->get_format() != Image::FORMAT_RF || pControl->has_mipmaps() ) {
+			if ( !t3dControlCookSetExplicitSource( source, pRegion->getControlMap() ) ) {
 				return Ref<Image>();
 			}
-			source.m_bytes = pControl->get_data();
-			if ( source.m_bytes.size() != s_nRegionSize * s_nRegionSize * ( int )( sizeof( uint32_t ) ) ) {
-				return Ref<Image>();
-			}
-			source.m_bImplicit = false;
 		}
 	}
-
-	PackedByteArray output;
-	output.resize( s_nRegionSize * s_nRegionSize * ( int )( sizeof( uint32_t ) ) );
-	uint8_t *const pWrite = output.ptrw();
-	for ( int z = 0; z < s_nRegionSize; ++z ) {
-		for ( int x = 0; x < s_nRegionSize; ++x ) {
-			uint32_t center = s_nRegionDefaultControl;
-			if ( !t3dDataReadCookControl( sources, x, z, center ) ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-			if ( t3dIsAuto( center ) || t3dIsHole( center ) ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-
-			uint64_t szMaterialWeights[s_nMaxTextureAssets];
-			memset( szMaterialWeights, 0, sizeof( szMaterialWeights ) );
-			for ( int dz = -s_nRenderControlBlendRadius; dz <= s_nRenderControlBlendRadius; ++dz ) {
-				for ( int dx = -s_nRenderControlBlendRadius; dx <= s_nRenderControlBlendRadius; ++dx ) {
-					uint32_t pControl = s_nRegionDefaultControl;
-					if ( !t3dDataReadCookControl( sources, x + dx, z + dz, pControl ) || t3dIsAuto( pControl ) || t3dIsHole( pControl ) ) {
-						continue;
-					}
-					const uint64_t spatial_weight = ( uint64_t )( s_szRenderControlKernel[dx + s_nRenderControlBlendRadius]
-					        * s_szRenderControlKernel[dz + s_nRenderControlBlendRadius] );
-					const uint8_t base = t3dGetBase( pControl );
-					const uint8_t overlay = t3dGetOverlay( pControl );
-					const uint8_t blend = t3dGetBlend( pControl );
-					if ( base == overlay ) {
-						szMaterialWeights[( size_t )( base )] += spatial_weight * 255u;
-					} else {
-						szMaterialWeights[( size_t )( base )] += spatial_weight * ( uint64_t )( 255u - blend );
-						szMaterialWeights[( size_t )( overlay )] += spatial_weight * ( uint64_t )( blend );
-					}
-				}
-			}
-
-			int strongest = -1;
-			int second = -1;
-			for ( int material = 0; material < s_nMaxTextureAssets; ++material ) {
-				if ( strongest < 0 || szMaterialWeights[( size_t )( material )] > szMaterialWeights[( size_t )( strongest )] ) {
-					second = strongest;
-					strongest = material;
-				} else if ( second < 0 || szMaterialWeights[( size_t )( material )] > szMaterialWeights[( size_t )( second )] ) {
-					second = material;
-				}
-			}
-			if ( strongest < 0 || szMaterialWeights[( size_t )( strongest )] == 0u ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-			if ( second < 0 || szMaterialWeights[( size_t )( second )] == 0u ) {
-				second = strongest;
-			}
-
-			// Runtime controls use a canonical pair order so neighboring fragments that
-			// contain the same two materials address the same texture-array layers in the
-			// same order. This materially improves wave/warp texture-cache coherence.
-			// The runtime blend shader is pair-order symmetric, so no authored semantic
-			// role is lost by sorting the compiled representation.
-			int base = strongest;
-			int overlay = second;
-			if ( base > overlay ) {
-				eastl::swap( base, overlay );
-			}
-			const uint64_t base_weight = szMaterialWeights[( size_t )( base )];
-			const uint64_t overlay_weight = szMaterialWeights[( size_t )( overlay )];
-			const uint64_t pair_weight = base_weight + overlay_weight;
-			uint8_t blend = 0u;
-			if ( base != overlay && pair_weight > 0u ) {
-				blend = ( uint8_t )( CLAMP( ( int )( ( overlay_weight * 255u + pair_weight / 2u ) / pair_weight ), 0, 255 ) );
-			}
-			const uint32_t cooked = ( center & ~s_nRenderControlMaterialMask ) | t3dEncBase( ( uint8_t )( base ) )
-			        | t3dEncOverlay( ( uint8_t )( overlay ) ) | t3dEncBlend( blend );
-			memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &cooked, sizeof( uint32_t ) );
-		}
-	}
-	return Image::create_from_data( s_nRegionSize, s_nRegionSize, false, Image::FORMAT_RF, output );
+	return t3dCookGpuRenderControlImage( sources );
 }
 
 t3dRuntimePageConfig_t Terrain3DData::getRuntimePageConfig( void ) const {
@@ -718,11 +422,6 @@ t3dResidencyFrameState_t Terrain3DData::makeResidencyFrameState( const Vector3 &
 	return frame;
 }
 
-bool Terrain3DData::isRuntimePageWanted( void *const pContext, const Vector2i &rLocation ) {
-	const t3dResidencyFrameState_t *const pFrame = ( const t3dResidencyFrameState_t * )( pContext );
-	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT || pFrame->isPrefetch( rLocation ) );
-}
-
 uint64_t Terrain3DData::computeGpuRuntimePageSourceSignature( const Terrain3DRegion *const pRegion ) const {
 	return m_runtimeArtifacts.computeSourceSignature( pRegion, getRuntimePageConfig() );
 }
@@ -752,7 +451,7 @@ void Terrain3DData::serviceGpuRuntimePagePrepare( const t3dResidencyFrameState_t
 	state.m_config = rFrame.m_runtimePageConfig;
 	state.m_predictedCenter = rFrame.m_predictedCenter;
 	state.m_nStreamingGeneration = rFrame.m_nStreamingGeneration;
-	state.m_isWanted = &Terrain3DData::isRuntimePageWanted;
+	state.m_isWanted = &t3dResidencyFrameWantsRuntimePage;
 	state.m_pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
 	m_runtimeArtifacts.service( state );
 }
@@ -956,7 +655,7 @@ bool Terrain3DData::writeGpuRuntimePage( Terrain3DRegion *const pRegion, String 
 		}
 		payload.m_terrainShadowMask = shadow_mask;
 	}
-	payload.m_nMaterialMask = payload.m_control.is_valid() ? t3dDataMaterialMaskFromControlImage( payload.m_control ) : 1u;
+	payload.m_nMaterialMask = payload.m_control.is_valid() ? t3dControlCookMaterialMaskFromControlImage( payload.m_control ) : 1u;
 
 	// Bake compact logical masks from authored control data, not the render halo.
 	payload.m_holeMask = Terrain3DRuntimeBakeCodec::encodeHoleMask( authored_control );
@@ -1279,15 +978,25 @@ void Terrain3DData::updateGpuRegionResidency( const Vector3 &rWorldPosition, con
 }
 
 void Terrain3DData::updateRegionResidency( const Vector3 &rWorldPosition, const bool bForce ) {
-	m_residency.updateRegionResidency( *this, makeResidencyFrameState( rWorldPosition ), bForce );
+	t3dRegionResidencyUpdateContext_t context;
+	context.m_pCompute = getComputeBackendIfCreated();
+	context.m_middleHeightConfig = getMiddleHeightCacheConfig();
+	context.m_pOwnerContext = this;
+	context.m_prepareGpuFarSurface = &Terrain3DData::residencyPrepareGpuFarSurface;
+	context.m_applyInstanceChanges = &Terrain3DData::residencyApplyInstanceChanges;
+	context.m_gpuPageTableChanged = &Terrain3DData::residencyGpuPageTableChanged;
+	m_residency.updateRegionResidency( makeResidencyFrameState( rWorldPosition ), bForce, context );
 }
 
 void Terrain3DData::resetRuntimeStreamingCaches( void ) {
-	m_residency.resetRuntimeCaches( *this );
+	t3dRegionResidencyUpdateContext_t context;
+	context.m_pOwnerContext = this;
+	context.m_applyInstanceChanges = &Terrain3DData::residencyApplyInstanceChanges;
+	m_residency.resetRuntimeCaches( context );
 }
 
 void Terrain3DData::appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const {
-	m_residency.appendRuntimeProfileSample( *this, rSample );
+	m_residency.appendRuntimeProfileSample( rSample );
 }
 
 Dictionary Terrain3DData::getInstanceRegionCacheStatsFast( void ) const {
@@ -1757,6 +1466,7 @@ Error Terrain3DData::beginStartupCold( Terrain3D *const pTerrain, const uint32_t
 	}
 
 	const uint64_t initialize_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Data][Begin] BEGIN generation=", nStartupGeneration );
 	m_nStartupGenerationLast = nStartupGeneration;
 	t3dStartupDomainRequest( m_startupState, nStartupGeneration, initialize_started_usec, 3u );
 	t3dStartupDomainSetStage( m_startupState, T3D_STARTUP_PREPARING );
@@ -1780,6 +1490,12 @@ Error Terrain3DData::beginStartupCold( Terrain3D *const pTerrain, const uint32_t
 		m_nStartupInitializeUsecLast = initialize_finished_usec - initialize_started_usec;
 		t3dStartupDomainSetCompletedUnits( m_startupState, 3u );
 		t3dStartupDomainFinish( m_startupState, T3D_STARTUP_COMMITTED, initialize_finished_usec );
+		LOG( INFO,
+		        "[Terrain3D][Startup][Data][Begin] END generation=",
+		        nStartupGeneration,
+		        " reused_active_storage=true elapsed=",
+		        m_nStartupInitializeUsecLast,
+		        " us" );
 		return OK;
 	}
 
@@ -1818,18 +1534,23 @@ Error Terrain3DData::beginStartupCold( Terrain3D *const pTerrain, const uint32_t
 	        m_pTerrain->getEffectiveInstanceRegionCacheBudgetMb(),
 	        m_pTerrain->getInstanceRegionLoadBudgetPages(),
 	        m_pTerrain->getInstanceRegionLoadBudgetMb() );
-	configureGpuRegionCache( m_pTerrain->isGpuRegionCacheEffective(),
-	        m_pTerrain->getEffectiveGpuRegionCacheBudgetBytes(),
-	        m_pTerrain->getGpuRegionUploadBudgetLayers(),
-	        m_pTerrain->getGpuRegionUploadBudgetMb(),
-	        m_pTerrain->getGpuRegionSparePages(),
-	        m_pTerrain->getGpuRegionRetireFrames() );
+	m_pTerrain->reconfigureGpuRegionCache();
 
 	t3dStartupDomainSetCompletedUnits( m_startupState, 1u );
+	LOG( INFO,
+	        "[Terrain3D][Startup][Data][Begin] END generation=",
+	        nStartupGeneration,
+	        " initial_directory_load=",
+	        m_bStartupInitialDirectoryLoad,
+	        " elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - initialize_started_usec,
+	        " us" );
 	return OK;
 }
 
 Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
+	const uint64_t prepare_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Data][Prepare] BEGIN generation=", nStartupGeneration );
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
 	if ( startup.m_nGeneration != nStartupGeneration ) {
 		return ERR_INVALID_DATA;
@@ -1843,6 +1564,11 @@ Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
 
 	if ( m_bStartupInitialDirectoryLoad ) {
 		const uint64_t directory_load_started_usec = Time::get_singleton()->get_ticks_usec();
+		LOG( INFO,
+		        "[Terrain3D][Startup][Data][Prepare][DirectoryLoad] BEGIN generation=",
+		        nStartupGeneration,
+		        " path=",
+		        m_startupPreparedDirectory );
 		++m_nStartupDirectoryLoadCount;
 		bool bBoundedCpuLoad = false;
 		bool bCookedRuntimeManifest = false;
@@ -1850,6 +1576,14 @@ Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
 		        m_startupPreparedDirectory, m_startupPreparedRepository, bBoundedCpuLoad, bCookedRuntimeManifest );
 		m_nStartupDirectoryLoadUsecLast = Time::get_singleton()->get_ticks_usec() - directory_load_started_usec;
 		if ( prepare_error != OK && prepare_error != ERR_FILE_NOT_FOUND ) {
+			LOG( ERROR,
+			        "[Terrain3D][Startup][Data][Prepare][DirectoryLoad] FAIL generation=",
+			        nStartupGeneration,
+			        " error=",
+			        prepare_error,
+			        " elapsed=",
+			        m_nStartupDirectoryLoadUsecLast,
+			        " us" );
 			m_bStartupBulkLoad = false;
 			m_bSkipSlotReserveOnce = false;
 			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
@@ -1867,6 +1601,18 @@ Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
 				m_nStartupBytesReadLast = m_regionPersistence.getStartupLoadStats().m_nBytesReadLast;
 			}
 		}
+		LOG( INFO,
+		        "[Terrain3D][Startup][Data][Prepare][DirectoryLoad] END generation=",
+		        nStartupGeneration,
+		        " result=",
+		        prepare_error,
+		        " regions=",
+		        m_nStartupRegionCountLast,
+		        " bytes=",
+		        m_nStartupBytesReadLast,
+		        " elapsed=",
+		        m_nStartupDirectoryLoadUsecLast,
+		        " us" );
 	}
 
 	m_bStartupNeedsRehydrate = !m_bStartupPreparedDirectory
@@ -1874,10 +1620,22 @@ Error Terrain3DData::prepareStartupCold( const uint32_t nStartupGeneration ) {
 	m_bStartupPreparationValid = true;
 	t3dStartupDomainSetCompletedUnits( m_startupState, 2u );
 	t3dStartupDomainSetStage( m_startupState, T3D_STARTUP_CPU_READY );
+	LOG( INFO,
+	        "[Terrain3D][Startup][Data][Prepare] END generation=",
+	        nStartupGeneration,
+	        " prepared_directory=",
+	        m_bStartupPreparedDirectory,
+	        " needs_rehydrate=",
+	        m_bStartupNeedsRehydrate,
+	        " elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - prepare_started_usec,
+	        " us" );
 	return OK;
 }
 
 Error Terrain3DData::commitStartupCold( const uint32_t nStartupGeneration ) {
+	const uint64_t commit_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Data][Commit] BEGIN generation=", nStartupGeneration );
 	const t3dStartupDomainSnapshot_t startup = t3dStartupDomainSnapshot( m_startupState );
 	if ( startup.m_nGeneration != nStartupGeneration || !m_bStartupPreparationValid ) {
 		return ERR_INVALID_DATA;
@@ -1890,31 +1648,53 @@ Error Terrain3DData::commitStartupCold( const uint32_t nStartupGeneration ) {
 	}
 
 	if ( m_bStartupPreparedDirectory ) {
+		LOG( INFO, "[Terrain3D][Startup][Data][Commit][Directory] BEGIN generation=", nStartupGeneration );
 		const Error commit_error = commitDirectoryCandidateCold( m_startupPreparedDirectory,
 		        m_startupPreparedRepository,
 		        m_bStartupPreparedBoundedCpuLoad,
 		        m_bStartupPreparedCookedManifest,
 		        false );
 		if ( commit_error != OK ) {
+			LOG( ERROR,
+			        "[Terrain3D][Startup][Data][Commit][Directory] FAIL generation=",
+			        nStartupGeneration,
+			        " error=",
+			        commit_error );
 			m_bStartupBulkLoad = false;
 			m_bSkipSlotReserveOnce = false;
 			deactivateRuntimeStorage( m_pTerrain );
 			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
 			return commit_error;
 		}
+		LOG( INFO, "[Terrain3D][Startup][Data][Commit][Directory] END generation=", nStartupGeneration );
 		m_startupPreparedRepository.reset();
 		m_startupPreparedWorldManifest.reset();
 		m_bStartupDerivedPending = true;
 	} else if ( m_bStartupNeedsRehydrate ) {
 		const uint64_t rehydrate_started_usec = Time::get_singleton()->get_ticks_usec();
+		LOG( INFO, "[Terrain3D][Startup][Data][Commit][Rehydrate] BEGIN generation=", nStartupGeneration );
 		++m_nStartupRehydrateCount;
 		const Error rehydrate_error = rehydrateActiveStorage();
 		m_nStartupRehydrateUsecLast = Time::get_singleton()->get_ticks_usec() - rehydrate_started_usec;
 		if ( rehydrate_error != OK ) {
+			LOG( ERROR,
+			        "[Terrain3D][Startup][Data][Commit][Rehydrate] FAIL generation=",
+			        nStartupGeneration,
+			        " error=",
+			        rehydrate_error,
+			        " elapsed=",
+			        m_nStartupRehydrateUsecLast,
+			        " us" );
 			deactivateRuntimeStorage( m_pTerrain );
 			t3dStartupDomainFinish( m_startupState, T3D_STARTUP_FAILED, Time::get_singleton()->get_ticks_usec() );
 			return rehydrate_error;
 		}
+		LOG( INFO,
+		        "[Terrain3D][Startup][Data][Commit][Rehydrate] END generation=",
+		        nStartupGeneration,
+		        " elapsed=",
+		        m_nStartupRehydrateUsecLast,
+		        " us" );
 	} else {
 		m_regionRepository.rebuildRegionMapFromSlots();
 		m_samplingStorage.refreshActiveGeneration();
@@ -1929,6 +1709,14 @@ Error Terrain3DData::commitStartupCold( const uint32_t nStartupGeneration ) {
 		m_nStartupInitializeUsecLast = commit_finished_usec - startup.m_nStartUsec;
 	}
 	t3dStartupDomainFinish( m_startupState, T3D_STARTUP_COMMITTED, commit_finished_usec );
+	LOG( INFO,
+	        "[Terrain3D][Startup][Data][Commit] END generation=",
+	        nStartupGeneration,
+	        " elapsed=",
+	        commit_finished_usec - commit_started_usec,
+	        " us total=",
+	        m_nStartupInitializeUsecLast,
+	        " us" );
 	return OK;
 }
 
@@ -1937,6 +1725,8 @@ void Terrain3DData::finalizeStartupDerivedCold( const uint32_t nStartupGeneratio
 	if ( startup.m_nGeneration != nStartupGeneration || startup.m_eStage != T3D_STARTUP_COMMITTED ) {
 		return;
 	}
+	const uint64_t finalize_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Data][Derived] BEGIN generation=", nStartupGeneration );
 	if ( m_bStartupDerivedPending ) {
 		finalizeDirectoryCandidateCold( m_bStartupPreparedCookedManifest );
 		m_bStartupDerivedPending = false;
@@ -1949,6 +1739,12 @@ void Terrain3DData::finalizeStartupDerivedCold( const uint32_t nStartupGeneratio
 	m_bStartupPreparedBoundedCpuLoad = false;
 	m_bStartupNeedsRehydrate = false;
 	m_startupPreparedDirectory = String();
+	LOG( INFO,
+	        "[Terrain3D][Startup][Data][Derived] END generation=",
+	        nStartupGeneration,
+	        " elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - finalize_started_usec,
+	        " us" );
 }
 
 void Terrain3DData::cancelStartupCold( const uint32_t nStartupGeneration ) {

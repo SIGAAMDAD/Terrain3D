@@ -1,7 +1,7 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "rendering/rd/terrain_3d_rd_context.h"
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
 #include "core/terrain_3d_sync.h"
 
 #include <godot_cpp/classes/os.hpp>
@@ -66,7 +66,6 @@ static thread_local uint32_t s_nRecoverableFailureDepth = 0u;
 static const char *const s_pass_names[] = {
 	"none",
 	"terrain_clipmap",
-	"render_world",
 };
 
 static_assert( sizeof( s_memory_keys ) / sizeof( s_memory_keys[0] ) == Terrain3DRdContext::MEMORY_CATEGORY_COUNT );
@@ -125,6 +124,8 @@ void Terrain3DRdContext::shutdownShared( void ) {
 
 Terrain3DRdContext::~Terrain3DRdContext( void ) {
 	shutdown();
+	delete m_pFixedIndirectArena;
+	m_pFixedIndirectArena = NULL;
 }
 
 void Terrain3DRdContext::updatePeak( t3dAtomicU64_t &rPeak, const uint64_t nLiveBytes ) {
@@ -446,48 +447,54 @@ bool Terrain3DRdContext::initialize( void ) {
 }
 
 bool Terrain3DRdContext::acquireFixedIndirect( const FixedIndirectSlot slot,
-        const uint32_t nRequiredBytes, RID &rBuffer, uint32_t &rOffsetBytes ) {
+        const uint32_t nRequiredBytes, Terrain3DRdGpuBuffer *&rBuffer, uint32_t &rOffsetBytes ) {
 	if ( slot >= FIXED_INDIRECT_SLOT_COUNT || nRequiredBytes == 0u || nRequiredBytes > fixedIndirectCapacity( slot )
-	        || rBuffer.is_valid() || fixedIndirectOffset( slot ) + fixedIndirectCapacity( slot ) > FIXED_INDIRECT_ARENA_BYTES ) {
+	        || rBuffer != NULL || fixedIndirectOffset( slot ) + fixedIndirectCapacity( slot ) > FIXED_INDIRECT_ARENA_BYTES
+	        || !getDevice() ) {
 		return false;
 	}
-	RenderingDevice *const rd = getDevice();
-	if ( !rd ) {
-		return false;
-	}
-	if ( !m_hFixedIndirectArena.is_valid() ) {
-		RID created;
-		if ( !Terrain3DRdResourceService( *this, OWNER_UNSPECIFIED ).createIndirectBuffer( created,
-		             "T3D.FixedIndirectArena", FIXED_INDIRECT_ARENA_BYTES,
-		             RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT ) ) {
+	if ( !m_pFixedIndirectArena ) {
+		m_pFixedIndirectArena = new Terrain3DRdGpuBuffer;
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.FixedIndirectArena";
+		spec.m_owner = OWNER_UNSPECIFIED;
+		spec.m_type = RESOURCE_INDIRECT_BUFFER;
+		spec.m_memory = MEMORY_INDIRECT;
+		spec.m_growth = T3D_GPU_FIXED;
+		spec.m_nMinimumCapacityBytes = FIXED_INDIRECT_ARENA_BYTES;
+		if ( !m_pFixedIndirectArena->configure( spec ) ) {
+			delete m_pFixedIndirectArena;
+			m_pFixedIndirectArena = NULL;
 			return false;
 		}
-		m_hFixedIndirectArena = created;
+	}
+	if ( !m_pFixedIndirectArena->isValid() && !m_pFixedIndirectArena->createTracked( *this, FIXED_INDIRECT_ARENA_BYTES ) ) {
+		return false;
 	}
 	++m_nFixedIndirectReferences[slot];
 	const ResourceOwner owner = slot == FIXED_INDIRECT_WORLD ? OWNER_WORLD : slot == FIXED_INDIRECT_OCEAN ? OWNER_OCEAN : OWNER_TERRAIN;
 	recordRenderCapacity( owner, T3D_GPU_INDIRECT, fixedIndirectCapacity( slot ) );
-	rBuffer = m_hFixedIndirectArena;
+	rBuffer = m_pFixedIndirectArena;
 	rOffsetBytes = fixedIndirectOffset( slot );
 	return true;
 }
 
-void Terrain3DRdContext::releaseFixedIndirect( const FixedIndirectSlot slot, RID &rBuffer ) {
-	if ( slot >= FIXED_INDIRECT_SLOT_COUNT || !rBuffer.is_valid() ) {
-		rBuffer = RID();
+void Terrain3DRdContext::releaseFixedIndirect( const FixedIndirectSlot slot, Terrain3DRdGpuBuffer *&rBuffer ) {
+	if ( slot >= FIXED_INDIRECT_SLOT_COUNT || !rBuffer ) {
+		rBuffer = NULL;
 		return;
 	}
-	if ( rBuffer == m_hFixedIndirectArena && m_nFixedIndirectReferences[slot] > 0u ) {
+	if ( rBuffer == m_pFixedIndirectArena && m_nFixedIndirectReferences[slot] > 0u ) {
 		--m_nFixedIndirectReferences[slot];
 	}
-	rBuffer = RID();
+	rBuffer = NULL;
 	for ( uint32_t i = 0u; i < FIXED_INDIRECT_SLOT_COUNT; ++i ) {
 		if ( m_nFixedIndirectReferences[i] != 0u ) {
 			return;
 		}
 	}
-	if ( m_hFixedIndirectArena.is_valid() ) {
-		freeResource( m_hFixedIndirectArena, FIXED_INDIRECT_ARENA_BYTES );
+	if ( m_pFixedIndirectArena && m_pFixedIndirectArena->isValid() ) {
+		m_pFixedIndirectArena->releaseTracked( *this );
 	}
 }
 
@@ -526,7 +533,9 @@ void Terrain3DRdContext::shutdown( void ) {
 			}
 		}
 		m_resources.clear();
-		m_hFixedIndirectArena = RID();
+		if ( m_pFixedIndirectArena ) {
+			m_pFixedIndirectArena->abandon();
+		}
 		memset( m_nFixedIndirectReferences, 0, sizeof( m_nFixedIndirectReferences ) );
 		m_vertexFormats.clear();
 		resetLiveAccounting();
@@ -544,7 +553,9 @@ void Terrain3DRdContext::invalidateDevice( const String &rReason ) {
 		m_nAbandonedResources.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	}
 	m_resources.clear();
-	m_hFixedIndirectArena = RID();
+	if ( m_pFixedIndirectArena ) {
+		m_pFixedIndirectArena->abandon();
+	}
 	memset( m_nFixedIndirectReferences, 0, sizeof( m_nFixedIndirectReferences ) );
 	m_vertexFormats.clear();
 	resetLiveAccounting();
@@ -702,10 +713,6 @@ bool Terrain3DRdContext::registerResource( const RID &rRid,
 	return registerResourceInternal( rRid, rName, type, memoryCategory, nBytes, owner );
 }
 
-void Terrain3DRdContext::registerTextureResource( const RID &rRid, const String &rName, const uint64_t nTextureBytes ) {
-	registerResourceInternal( rRid, rName, RESOURCE_TEXTURE, MEMORY_TERRAIN_TEXTURE, nTextureBytes, inferResourceOwner( rName ) );
-}
-
 bool Terrain3DRdContext::registerVertexFormat( const int64_t nFormat, const String &rName ) {
 	if ( !getDevice() || nFormat == RenderingDevice::INVALID_FORMAT_ID ) {
 		recordResourceCreationFailure( rName, RESOURCE_VERTEX_ARRAY, "Invalid Terrain3D RD vertex format" );
@@ -806,10 +813,6 @@ void Terrain3DRdContext::freeResource( RID &rRid, const uint64_t nBufferBytes ) 
 		m_nAbandonedResources.fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED );
 	}
 	rRid = RID();
-}
-
-void Terrain3DRdContext::freeTextureResource( RID &rRid, const uint64_t nTextureBytes ) {
-	freeResource( rRid, nTextureBytes );
 }
 
 bool Terrain3DRdContext::ownsResource( const RID &rRid ) const {

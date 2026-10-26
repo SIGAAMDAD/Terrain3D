@@ -1,7 +1,9 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "instances/terrain_3d_instancer.h"
+#include "rendering/rd/terrain_3d_rd_instance_record.h"
 #include "instances/terrain_3d_instancer_bringup.h"
+#include "instances/terrain_3d_instance_traversal.h"
 
 #include <EASTL/numeric_limits.h>
 #include <EASTL/sort.h>
@@ -14,7 +16,6 @@
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_runtime_bake_codec.h"
 #include "data/terrain_3d_sampler.h"
-#include "data/terrain_3d_half_buffer.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 #include "memory/terrain_3d_memory.h"
@@ -42,6 +43,41 @@ static size_t t3dInstancerSaturatingMul( const size_t nA, const size_t nB ) {
 	return nA > eastl::numeric_limits<size_t>::max() / nB ? eastl::numeric_limits<size_t>::max() : nA * nB;
 }
 
+static Basis t3dInstancerTerrainAlignedBasis( const Basis &rBasis, const Vector3 &rTerrainNormal ) {
+	Vector3 target_up = rTerrainNormal;
+	if ( !target_up.is_finite() || target_up.length_squared() < 0.000001f ) {
+		target_up = s_v3Up;
+	} else {
+		target_up.normalize();
+	}
+
+	Vector3 current_up = rBasis.get_column( 1 );
+	if ( !current_up.is_finite() || current_up.length_squared() < 0.000001f ) {
+		current_up = s_v3Up;
+	} else {
+		current_up.normalize();
+	}
+
+	const real_t fAlignment = CLAMP( current_up.dot( target_up ), -1.0f, 1.0f );
+	if ( fAlignment >= 0.999999f ) {
+		return rBasis;
+	}
+
+	Vector3 rotation_axis = current_up.cross( target_up );
+	if ( !rotation_axis.is_finite() || rotation_axis.length_squared() < 0.000001f ) {
+		rotation_axis = rBasis.get_column( 0 );
+		rotation_axis -= current_up * rotation_axis.dot( current_up );
+		if ( !rotation_axis.is_finite() || rotation_axis.length_squared() < 0.000001f ) {
+			rotation_axis = current_up.cross( Vector3( 0.0f, 0.0f, 1.0f ) );
+			if ( rotation_axis.length_squared() < 0.000001f ) {
+				rotation_axis = current_up.cross( Vector3( 1.0f, 0.0f, 0.0f ) );
+			}
+		}
+	}
+	rotation_axis.normalize();
+	return rBasis.rotated( rotation_axis, Math::acos( fAlignment ) );
+}
+
 static bool t3dInstancerListWalkGuard( const char *const pListName, const uint32_t nNode, const size_t nNodeCount, size_t &nVisited ) {
 	if ( nNode >= nNodeCount || nVisited >= nNodeCount ) {
 		UtilityFunctions::push_error( "Terrain3DInstancer: corrupted linked list detected: ", pListName );
@@ -64,60 +100,6 @@ static void t3dInstancerInsertLargestCount( uint32_t *const pCounts, const size_
 }
 
 
-static uint32_t t3dPackInstanceSnormPair( const float x, const float y ) {
-	const int16_t px = ( int16_t )( lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
-	const int16_t py = ( int16_t )( lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
-	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
-}
-
-static uint32_t t3dRdInstanceCategoryFlags( const t3dInstanceCategory_t eCategory ) {
-	const uint32_t category =
-	        ( uint32_t )( CLAMP( ( int )( eCategory ), ( int )( INSTANCE_CATEGORY_CLUTTER ), ( int )( INSTANCE_CATEGORY_OCCLUDER ) ) );
-	return ( category << T3D_RD_INSTANCE_CATEGORY_SHIFT ) & T3D_RD_INSTANCE_CATEGORY_MASK;
-}
-
-static Basis t3dInstancerTerrainAlignedBasis( const Basis &rSource, const Vector3 &rTerrainNormal ) {
-	Vector3 up = rTerrainNormal;
-	if ( !up.is_finite() || up.length_squared() < 0.000001f ) {
-		up = s_v3Up;
-	} else {
-		up.normalize();
-	}
-
-	Vector3 forward = rSource.get_column( 2 );
-	forward -= up * forward.dot( up );
-	if ( !forward.is_finite() || forward.length_squared() < 0.000001f ) {
-		const Vector3 fallback = abs( up.z ) < 0.95f ? Vector3( 0.f, 0.f, 1.f ) : Vector3( 1.f, 0.f, 0.f );
-		forward = fallback - up * fallback.dot( up );
-	}
-	forward.normalize();
-	Vector3 right = up.cross( forward );
-	if ( !right.is_finite() || right.length_squared() < 0.000001f ) {
-		right = Vector3( 1.f, 0.f, 0.f );
-	} else {
-		right.normalize();
-	}
-	forward = right.cross( up ).normalized();
-
-	const Vector3 scale = rSource.get_scale();
-	return Basis( right * scale.x, up * scale.y, forward * scale.z );
-}
-
-static t3dRdInstanceRecord_t t3dPackRdInstanceRecord( const Transform3D &rTransform, const uint32_t nColor ) {
-	t3dRdInstanceRecord_t record;
-	record.m_szPosition[0] = ( float )( rTransform.origin.x );
-	record.m_szPosition[1] = ( float )( rTransform.origin.y );
-	record.m_szPosition[2] = ( float )( rTransform.origin.z );
-	const Vector3 scale = rTransform.basis.get_scale();
-	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
-	record.m_nQuaternion01 = t3dPackInstanceSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
-	record.m_nQuaternion23 = t3dPackInstanceSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
-	record.m_nScale01 =
-	        ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) | ( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
-	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
-	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( nColor );
-	return record;
-}
 
 static bool t3dBeginInstancePageAccess(
         Terrain3DInstancer *pInstancer, Terrain3DData *pData, const Vector2i &rLocation, bool &bTemporary ) {
@@ -2307,26 +2289,7 @@ void Terrain3DInstancer::updateMmiCell(
 }
 
 void Terrain3DInstancer::ensureCellAabb( t3dInstanceCell_t &rCell, const AABB &rSourceMeshAabb ) {
-	bool initialized = false;
-	AABB bounds;
-	if ( rSourceMeshAabb.has_surface() ) {
-		for ( size_t i = 0u; i < rCell.m_transforms.size(); ++i ) {
-			const AABB transformed = rCell.getTransform( i ).xform( rSourceMeshAabb );
-			if ( !initialized ) {
-				bounds = transformed;
-				initialized = true;
-			} else {
-				bounds.merge_with( transformed );
-			}
-		}
-	}
-	rCell.m_cachedAabb = initialized ? bounds : AABB();
-	rCell.m_cachedSourceMeshAabb = rSourceMeshAabb;
-	rCell.m_nCachedAabbRevision = rCell.m_nRevision;
-	if ( ++rCell.m_nCachedAabbGeneration == 0u ) {
-		rCell.m_nCachedAabbGeneration = 1u;
-	}
-	rCell.m_bCachedAabbValid = true;
+	t3dRefreshInstanceCellBounds( rCell, rSourceMeshAabb );
 }
 
 void Terrain3DInstancer::destroyMmisByRegion( const Vector2i &rRegionLoc ) {
@@ -2648,7 +2611,7 @@ bool Terrain3DInstancer::buildMinimalRdInstanceSnapshot( t3dRdInstanceSceneSnaps
 				cell.m_nRevision = sourceCell.m_nRevision;
 				cell.m_nSettingsRevision = 0u;
 				cell.m_nVisibilityLayers = UINT32_MAX;
-				cell.m_nFlags = t3dRdInstanceCategoryFlags( asset->getInstanceCategory() );
+				cell.m_nFlags = t3dRdInstanceCategoryFlags( ( int32_t )( asset->getInstanceCategory() ) );
 				cell.m_fLodBegin = 0.0f;
 				cell.m_fLodEnd = 0.0f;
 				cell.m_fFadeMargin = 0.0f;
@@ -2658,7 +2621,7 @@ bool Terrain3DInstancer::buildMinimalRdInstanceSnapshot( t3dRdInstanceSceneSnaps
 					Transform3D transform = sourceCell.getTransform( iInstance );
 					transform.origin += regionOffset;
 					const uint32_t color = iInstance < sourceCell.m_colors.size() ? sourceCell.m_colors[iInstance] : s_nInstanceWhiteRgba8;
-					if ( !rSnapshot.m_instances.pushBack( t3dPackRdInstanceRecord( transform, color ) ) ) {
+					if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform, color ) ) ) {
 						LOG( ERROR, "RD minimal instance record publication exceeded fixed capacity" );
 						return false;
 					}
@@ -2742,7 +2705,7 @@ bool Terrain3DInstancer::buildLegacyRdInstanceSnapshot( t3dRdInstanceSceneSnapsh
 				Transform3D transform = source_cell->getTransform( ( size_t )( i ) );
 				transform.origin += region_offset;
 				const uint32_t color = source_cell->m_colors.empty() ? s_nInstanceWhiteRgba8 : source_cell->m_colors[( size_t )( i )];
-				if ( !rSnapshot.m_instances.pushBack( t3dPackRdInstanceRecord( transform, color ) ) ) {
+				if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform, color ) ) ) {
 					LOG( ERROR, "RD instance snapshot capacity exceeded during publication" );
 					return false;
 				}
@@ -2773,7 +2736,7 @@ bool Terrain3DInstancer::buildLegacyRdInstanceSnapshot( t3dRdInstanceSceneSnapsh
 		cell.m_nSettingsRevision = render.m_nSettingsRevision;
 		cell.m_nVisibilityLayers = asset->getVisibilityLayers();
 		cell.m_fFadeMargin = ( float )( asset->getFadeMargin() );
-		cell.m_nFlags |= t3dRdInstanceCategoryFlags( asset->getInstanceCategory() );
+		cell.m_nFlags |= t3dRdInstanceCategoryFlags( ( int32_t )( asset->getInstanceCategory() ) );
 
 		const ShadowCasting cast = asset->getLodCastShadows( render.m_nLod );
 		if ( cast != s_shadowCastingOff ) {
@@ -3670,7 +3633,7 @@ void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dic
 
 		// Get random XZ position and height in a circle
 		const real_t fRadius = radius * sqrt( UtilityFunctions::randf() );
-		const real_t fTheta = UtilityFunctions::randf() * Math_TAU;
+		const real_t fTheta = UtilityFunctions::randf() * Math::TAU;
 		const Vector3 rand_vec = Vector3( fRadius * cos( fTheta ), 0.f, fRadius * sin( fTheta ) );
 		Vector3 position = rGlobalPosition + rand_vec;
 
@@ -3693,11 +3656,11 @@ void Terrain3DInstancer::addInstances( const Vector3 &rGlobalPosition, const Dic
 			}
 			t.basis = t3dInstancerTerrainAlignedBasis( t.basis, normal );
 		}
-		const real_t fSpin = ( fFixedSpin + fRandomSpin * UtilityFunctions::randf() ) * Math_PI / 180.f;
+		const real_t fSpin = ( fFixedSpin + fRandomSpin * UtilityFunctions::randf() ) * Math::PI / 180.f;
 		if ( abs( fSpin ) > 0.001f ) {
 			t.basis = t.basis.rotated( normal, fSpin );
 		}
-		const real_t fTilt = ( fFixedTilt + fRandomTilt * ( 2.f * UtilityFunctions::randf() - 1.f ) ) * Math_PI / 180.f;
+		const real_t fTilt = ( fFixedTilt + fRandomTilt * ( 2.f * UtilityFunctions::randf() - 1.f ) ) * Math::PI / 180.f;
 		if ( abs( fTilt ) > 0.001f ) {
 			t.basis = t.basis.rotated( t.basis.get_column( 0 ), fTilt ); // Rotate pitch, X-axis
 		}

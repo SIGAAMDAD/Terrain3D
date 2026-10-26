@@ -64,8 +64,6 @@ private:
 	bool m_bValid = true;
 	bool m_bSealed = false;
 
-	static bool isPowerOfTwo( size_t nValue );
-	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rAligned );
 };
 
 class Terrain3DMemoryArena {

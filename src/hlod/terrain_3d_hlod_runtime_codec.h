@@ -12,12 +12,13 @@
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
+#include <godot_cpp/variant/variant.hpp>
 
 #if defined( GDEXTENSION ) && !defined( GODOT_MODULE )
 using namespace godot;
 #endif
 
-typedef struct t3dHlodRuntimeEntryRecord_s {
+typedef struct t3dHlodEntryDescriptor_s {
 	int m_nLevel = 1;
 	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
 	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
@@ -48,7 +49,9 @@ typedef struct t3dHlodRuntimeEntryRecord_s {
 	int64_t m_nEstimatedGpuBytes = 0;
 	int m_nParent = -1;
 	int m_szChildren[4] = { -1, -1, -1, -1 };
-} t3dHlodRuntimeEntryRecord_t;
+} t3dHlodEntryDescriptor_t;
+
+typedef t3dHlodEntryDescriptor_t t3dHlodRuntimeEntryRecord_t;
 
 typedef struct t3dHlodRuntimeNodePolicyRecord_s {
 	int64_t m_nSpawnId = 0;
@@ -65,6 +68,8 @@ typedef struct t3dHlodRuntimeData_s {
 
 class Terrain3DHLODRuntimeCodec {
 public:
+	static bool decodeEntryDictionary(
+	        const Variant &rValue, t3dHlodEntryDescriptor_t &rEntry, bool bRequireNonEmptyPackagePath = true );
 	static PackedByteArray encode( const Array &rEntries,
 	        const PackedByteArray &rInstancerMinLevels,
 	        const PackedInt32Array &rNodeRegionIndices,

@@ -5,6 +5,7 @@
 
 #include "core/terrain_3d_compiler.h"
 #include "memory/terrain_3d_memory.h"
+#include "memory/terrain_3d_memory_math.h"
 #include "memory/terrain_3d_memory_constants.h"
 
 #include <EASTL/type_traits.h>
@@ -27,7 +28,7 @@ public:
 			return true;
 		}
 		size_t aligned_offset = 0u;
-		if ( !alignUp( m_nSize, nAlignment, aligned_offset ) || nBytes > eastl::numeric_limits<size_t>::max() - aligned_offset ) {
+		if ( !t3dMemoryAlignUp( m_nSize, nAlignment, aligned_offset ) || nBytes > eastl::numeric_limits<size_t>::max() - aligned_offset ) {
 			m_bValid = false;
 			return false;
 		}
@@ -63,18 +64,6 @@ private:
 	size_t m_nSize = 0u;
 	bool m_bValid = true;
 
-	static bool alignUp( const size_t nValue, const size_t nAlignment, size_t& nAligned )
-	{
-		if ( nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
-			return false;
-		}
-		const size_t mask = nAlignment - 1u;
-		if ( nValue > eastl::numeric_limits<size_t>::max() - mask ) {
-			return false;
-		}
-		nAligned = ( nValue + mask ) & ~mask;
-		return true;
-	}
 };
 
 class Terrain3DLinearArena

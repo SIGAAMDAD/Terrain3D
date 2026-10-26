@@ -168,17 +168,10 @@ func _make_tab_body(p_tabs: TabContainer, p_name: String) -> VBoxContainer:
 
 
 func _add_descriptor_groups(p_root: VBoxContainer, p_class_name: String, p_prefixes: Array = []) -> void:
-	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class(p_class_name, p_prefixes)
-	for group: Dictionary in SettingMetadata.group_descriptors(descriptors):
-		var supported: Array[Dictionary] = []
-		for descriptor: Dictionary in group.get("settings", []):
-			if SettingControlFactory.is_supported(descriptor):
-				supported.append(descriptor)
-		if supported.is_empty():
-			continue
+	for group: Dictionary in SettingControlFactory.supported_groups(p_class_name, p_prefixes):
 		var group_path: String = str(group.get("group_path", "General"))
 		var grid: GridContainer = _add_group(p_root, group_path)
-		for descriptor: Dictionary in supported:
+		for descriptor: Dictionary in group.get("settings", []):
 			_add_descriptor_row(grid, descriptor)
 
 

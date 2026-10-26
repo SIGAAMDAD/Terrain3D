@@ -1,4 +1,5 @@
 #include "memory/terrain_3d_resident_pool.h"
+#include "memory/terrain_3d_memory_math.h"
 #include "core/terrain_3d_sync.h"
 
 #include "Terrain3DConstants.h"
@@ -54,18 +55,6 @@ void Terrain3DResidentMapLease::reset( void )
 	m_view = {};
 }
 
-bool Terrain3DResidentRegionPool::alignUp( const size_t nValue, const size_t nAlignment, size_t& nAligned )
-{
-	if ( nAlignment == 0u || ( nAlignment & ( nAlignment - 1u ) ) != 0u ) {
-		return false;
-	}
-	const size_t mask = nAlignment - 1u;
-	if ( nValue > eastl::numeric_limits<size_t>::max() - mask ) {
-		return false;
-	}
-	nAligned = ( nValue + mask ) & ~mask;
-	return true;
-}
 
 bool Terrain3DResidentRegionPool::buildSlotLayout( const uint32_t nChannels, t3dSlotLayout_t& rLayout, size_t& nTexelCount )
 {
@@ -80,27 +69,27 @@ bool Terrain3DResidentRegionPool::buildSlotLayout( const uint32_t nChannels, t3d
 	}
 	const size_t height_bytes = texels * sizeof( uint16_t );
 	size_t padded = 0u;
-	if ( !alignUp( height_bytes, s_nResidentCacheAlignment, padded ) ) {
+	if ( !t3dMemoryAlignUp( height_bytes, s_nResidentCacheAlignment, padded ) ) {
 		return false;
 	}
 	rLayout.m_nHeightSlotBytes = padded;
 	rLayout.m_nStride = padded;
 	if ( ( nChannels & RESIDENT_CHANNEL_CONTROL ) != 0u ) {
-		if ( !alignUp( texels * sizeof( uint32_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dMemoryAlignUp( texels * sizeof( uint32_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nControlSlotBytes = padded;
 		rLayout.m_nStride += padded;
 	}
 	if ( ( nChannels & RESIDENT_CHANNEL_COLOR ) != 0u ) {
-		if ( !alignUp( texels * sizeof( uint32_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dMemoryAlignUp( texels * sizeof( uint32_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nColorSlotBytes = padded;
 		rLayout.m_nStride += padded;
 	}
 	if ( ( nChannels & RESIDENT_CHANNEL_DERIVED ) != 0u ) {
-		if ( !alignUp( texels * sizeof( uint16_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
+		if ( !t3dMemoryAlignUp( texels * sizeof( uint16_t ), s_nResidentCacheAlignment, padded ) || rLayout.m_nStride > eastl::numeric_limits<size_t>::max() - padded ) {
 			return false;
 		}
 		rLayout.m_nDerivedSlotBytes = padded;
@@ -120,7 +109,7 @@ bool Terrain3DResidentRegionPool::addEstimatedOptionalBytes(
 		return false;
 	}
 	size_t padded = 0u;
-	if ( !alignUp( nTexelCount * nBytesPerTexel, s_nResidentCacheAlignment, padded ) || nTotal > eastl::numeric_limits<size_t>::max() - padded ) {
+	if ( !t3dMemoryAlignUp( nTexelCount * nBytesPerTexel, s_nResidentCacheAlignment, padded ) || nTotal > eastl::numeric_limits<size_t>::max() - padded ) {
 		return false;
 	}
 	nTotal += padded;

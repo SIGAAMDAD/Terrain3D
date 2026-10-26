@@ -414,13 +414,9 @@ private:
 	Ref<Image> makeTerrainShadowMaskImage( const Terrain3DRegion *pRegion ) const;
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	bool refreshMiddleCompositeSources( uint64_t nMaterialSignature, int nWidth, int nHeight );
-	Color sampleMiddleCompositeMaterial(
-	        int nMaterialId, const Color &rTint, float fCosAngle, float fSinAngle, float fWorldX, float fWorldY, float fControlScale )
-	        const;
 	Ref<Image> makeMiddleCompositeImage(
 	        const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor, int nScratchSlot );
 	bool serviceRuntimePages( const t3dResidencyFrameState_t &rFrame );
-	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	bool validatePublishedMappings( void ) const;
 	void notePageTableChanged( void );
 };

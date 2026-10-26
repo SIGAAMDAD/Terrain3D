@@ -5,6 +5,8 @@ class_name Terrain3DErosionTextureProfiles
 extends VBoxContainer
 
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
+const PanelParts = preload("res://addons/terrain_3d/src/editor_panel_parts.gd")
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 const SettingMetadata = preload("res://addons/terrain_3d/src/setting_metadata.gd")
 
 signal profiles_changed
@@ -131,26 +133,6 @@ class CopiedProfile extends RefCounted:
 	var varnished: int = -1
 
 
-class PanelParts:
-	var panel: PanelContainer
-	var body: VBoxContainer
-
-	func _init(p_title: String) -> void:
-		panel = PanelContainer.new()
-		panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		var margin: MarginContainer = MarginContainer.new()
-		margin.add_theme_constant_override("margin_left", 10)
-		margin.add_theme_constant_override("margin_top", 8)
-		margin.add_theme_constant_override("margin_right", 10)
-		margin.add_theme_constant_override("margin_bottom", 8)
-		panel.add_child(margin)
-		body = VBoxContainer.new()
-		body.add_theme_constant_override("separation", 6)
-		margin.add_child(body)
-		var title: Label = Label.new()
-		title.text = p_title
-		title.add_theme_font_size_override("font_size", 15)
-		body.add_child(title)
 
 
 var plugin: Terrain3DEditorPluginBase
@@ -170,13 +152,7 @@ var _asset_inspector: EditorInspector
 
 
 func _get_terrain() -> Terrain3D:
-	if is_instance_valid(terrain):
-		return terrain
-	if is_instance_valid(plugin):
-		var plugin_terrain: Terrain3D = plugin.terrain
-		if is_instance_valid(plugin_terrain):
-			return plugin_terrain
-	return null
+	return EditorUtil.select_terrain(terrain, plugin.terrain if is_instance_valid(plugin) else null)
 
 
 func _enter_tree() -> void:
@@ -479,7 +455,7 @@ func _apply_accessible_control_layout(p_root: Node) -> void:
 
 
 func _make_panel(p_title: String) -> PanelParts:
-	return PanelParts.new(p_title)
+	return PanelParts.new(p_title, 15)
 
 
 func _add_physical_control(

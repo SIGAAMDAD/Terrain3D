@@ -74,7 +74,7 @@ Terrain3DVirtualTexture::Terrain3DVirtualTexture() {
 	m_nStagedRequestFrame = UINT32_MAX;
 	m_pStreamScratch = NULL;
 	m_pScratchLaneOwner = NULL;
-	for ( uint32_t i = 0u; i < T3D_RW_MAX_STREAM_SCRATCH_LANES; ++i ) {
+	for ( uint32_t i = 0u; i < T3D_VT_MAX_STREAM_SCRATCH_LANES; ++i ) {
 		m_ScratchLaneCompletion[i].store( T3D_VT_STREAM_COMPLETION_IDLE, T3D_MEMORY_ORDER_RELAXED );
 	}
 	memset( &m_Stats, 0, sizeof( m_Stats ) );
@@ -316,7 +316,7 @@ bool Terrain3DVirtualTexture::findMaterialAllocationCold( const uint64_t nStable
 }
 
 bool Terrain3DVirtualTexture::allocate_cpu_image_cold() {
-	if ( m_pCpuImage != NULL || m_pRuntimeAllocatorZone == NULL || m_Limits.nStreamScratchLaneCount > T3D_RW_MAX_STREAM_SCRATCH_LANES ) {
+	if ( m_pCpuImage != NULL || m_pRuntimeAllocatorZone == NULL || m_Limits.nStreamScratchLaneCount > T3D_VT_MAX_STREAM_SCRATCH_LANES ) {
 		return false;
 	}
 	if ( m_Limits.nMaxMaterials > UINT32_MAX / 4u ) {
@@ -431,18 +431,18 @@ void Terrain3DVirtualTexture::release_cpu_image_cold() {
 
 bool Terrain3DVirtualTexture::prepare_neutral_legacy_cpu_cold() {
 	memset( &m_NeutralHeader, 0, sizeof( m_NeutralHeader ) );
-	m_NeutralHeader.nMagic = T3D_RW_VT_FILE_MAGIC;
-	m_NeutralHeader.nVersion = T3D_RW_VT_FILE_VERSION;
+	m_NeutralHeader.nMagic = T3D_VT_LEGACY_FILE_MAGIC;
+	m_NeutralHeader.nVersion = T3D_VT_LEGACY_FILE_VERSION;
 	m_NeutralHeader.nHeaderBytes = sizeof( T3DVTFileHeader );
-	m_NeutralHeader.nAllocationCount = T3D_RW_VT_CHANNELS;
-	m_NeutralHeader.nPageCount = T3D_RW_VT_CHANNELS;
-	m_NeutralHeader.nPayloadCount = T3D_RW_VT_CHANNELS;
-	m_NeutralHeader.nChannelCount = T3D_RW_VT_CHANNELS;
+	m_NeutralHeader.nAllocationCount = T3D_VT_CHANNEL_COUNT;
+	m_NeutralHeader.nPageCount = T3D_VT_CHANNEL_COUNT;
+	m_NeutralHeader.nPayloadCount = T3D_VT_CHANNEL_COUNT;
+	m_NeutralHeader.nChannelCount = T3D_VT_CHANNEL_COUNT;
 	m_NeutralHeader.nPayloadDataBytes = sizeof( m_NeutralPayloadBytes );
-	m_NeutralHeader.nInteriorTexels = T3D_RW_VT_PAGE_INTERIOR;
-	m_NeutralHeader.nGutterTexels = T3D_RW_VT_PAGE_GUTTER;
-	m_NeutralHeader.nPhysicalTexels = T3D_RW_VT_PHYSICAL_TILE;
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+	m_NeutralHeader.nInteriorTexels = T3D_VT_PAGE_INTERIOR;
+	m_NeutralHeader.nGutterTexels = T3D_VT_PAGE_GUTTER;
+	m_NeutralHeader.nPhysicalTexels = T3D_VT_PHYSICAL_TILE;
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
 		T3DVTAllocationRecordV1 &allocation = m_NeutralAllocations[c];
 		memset( &allocation, 0, sizeof( allocation ) );
 		allocation.nBaseVirtualPage = c;
@@ -456,7 +456,7 @@ bool Terrain3DVirtualTexture::prepare_neutral_legacy_cpu_cold() {
 		T3DVTPageFileRecord &page = m_NeutralPages[c];
 		memset( &page, 0, sizeof( page ) );
 		page.nVirtualPage = c;
-		page.nParentPage = T3D_RW_VT_INVALID_PAGE;
+		page.nParentPage = T3D_VT_INVALID_PAGE;
 		page.nAllocationId = c;
 		page.nPayloadId = c;
 		page.nMip = 0u;
@@ -476,6 +476,12 @@ bool Terrain3DVirtualTexture::prepare_neutral_legacy_cpu_cold() {
 	m_NeutralDatabase.nFileBytes = sizeof( m_NeutralHeader ) + sizeof( m_NeutralAllocations ) + sizeof( m_NeutralPages )
 	        + sizeof( m_NeutralPayloads ) + sizeof( m_NeutralPayloadBytes );
 
+	return initialize_runtime_state_cold( m_NeutralDatabase, 1u );
+}
+
+
+bool Terrain3DVirtualTexture::initialize_runtime_state_cold(
+        const T3DVTDatabaseView &rDatabase, const uint32_t nDatabaseGeneration ) {
 	T3DVTResidencyBuffers ResidencyBuffers = {};
 	ResidencyBuffers.pAllocations = m_pAllocations;
 	ResidencyBuffers.nAllocationCapacity = m_Limits.nMaxMaterials * 4u;
@@ -488,7 +494,8 @@ bool Terrain3DVirtualTexture::prepare_neutral_legacy_cpu_cold() {
 	ResidencyBuffers.pFreeSlots = m_pFreePhysicalSlots;
 	ResidencyBuffers.pRetiredPageSets = m_pRetiredPageSets;
 	ResidencyBuffers.pLastEvictedFrame = m_pLastEvictedFrame;
-	if ( !t3d_vt_initialize_residency_cold( m_NeutralDatabase, ResidencyBuffers, 1u, m_ResidencyPolicy.nRetireDelayFrames, m_Residency ) ) {
+	if ( !t3d_vt_initialize_residency_cold(
+	             rDatabase, ResidencyBuffers, nDatabaseGeneration, m_ResidencyPolicy.nRetireDelayFrames, m_Residency ) ) {
 		return false;
 	}
 	m_Residency.Policy = m_ResidencyPolicy;
@@ -544,46 +551,8 @@ bool Terrain3DVirtualTexture::prepare_runtime_package_cpu_cold() {
 		return false;
 	}
 
-	T3DVTResidencyBuffers ResidencyBuffers = {};
-	ResidencyBuffers.pAllocations = m_pAllocations;
-	ResidencyBuffers.nAllocationCapacity = m_Limits.nMaxMaterials * 4u;
-	ResidencyBuffers.pPageTable = m_pPageTable;
-	ResidencyBuffers.nPageTableCapacity = m_Limits.nMaxVtVirtualPages;
-	ResidencyBuffers.pTailMetadata = m_pTailMetadata;
-	ResidencyBuffers.nTailMetadataCapacity = m_Limits.nMaxMaterials * 4u;
-	ResidencyBuffers.pPhysicalPageSets = m_pPhysicalPageSets;
-	ResidencyBuffers.nPhysicalPageSetCapacity = m_Limits.nMaxVtPhysicalPageSets;
-	ResidencyBuffers.pFreeSlots = m_pFreePhysicalSlots;
-	ResidencyBuffers.pRetiredPageSets = m_pRetiredPageSets;
-	ResidencyBuffers.pLastEvictedFrame = m_pLastEvictedFrame;
 	const uint32_t nDatabaseGeneration = Database.nPackageGeneration != 0u ? Database.nPackageGeneration : 1u;
-	if ( !t3d_vt_initialize_residency_cold(
-	             Database, ResidencyBuffers, nDatabaseGeneration, m_ResidencyPolicy.nRetireDelayFrames, m_Residency ) ) {
-		return false;
-	}
-	m_Residency.Policy = m_ResidencyPolicy;
-	m_Residency.nRetirementDelayFrames = m_ResidencyPolicy.nRetireDelayFrames;
-
-	T3DVTStreamingBuffers StreamBuffers = {};
-	StreamBuffers.pJobs = m_pStreamJobs;
-	StreamBuffers.nJobCapacity = m_Limits.nMaxStreamJobs;
-	StreamBuffers.pScratchBytes = m_pStreamScratch;
-	StreamBuffers.nScratchLaneCount = m_Limits.nStreamScratchLaneCount;
-	StreamBuffers.nScratchLaneBytes = ( uint32_t )m_Limits.nStreamScratchBytesPerLane;
-	StreamBuffers.pScratchLaneOwner = m_pScratchLaneOwner;
-	StreamBuffers.pScratchLaneCompletion = m_ScratchLaneCompletion;
-	StreamBuffers.pPageToJob = m_pStreamPageToJob;
-	StreamBuffers.nPageToJobCapacity = m_Limits.nMaxVtVirtualPages;
-	StreamBuffers.pFreeJobs = m_pStreamFreeJobs;
-	StreamBuffers.pQueuedJobs = m_pStreamQueuedJobs;
-	StreamBuffers.pJobQueuePosition = m_pStreamJobQueuePosition;
-	StreamBuffers.pReadyJobs = m_pStreamReadyJobs;
-	StreamBuffers.pMergedWantedMip = m_pStreamMergedWantedMip;
-	StreamBuffers.pMergedPriority = m_pStreamMergedPriority;
-	for ( uint32_t i = 0u; i < m_Limits.nStreamScratchLaneCount; ++i ) {
-		m_ScratchLaneCompletion[i].store( T3D_VT_STREAM_COMPLETION_IDLE, T3D_MEMORY_ORDER_RELAXED );
-	}
-	return t3d_vt_streaming_initialize_cold( m_Residency, StreamBuffers, m_StreamingLimits, m_Streaming );
+	return initialize_runtime_state_cold( Database, nDatabaseGeneration );
 }
 
 bool Terrain3DVirtualTexture::publish_runtime_package_warm() {
@@ -596,16 +565,16 @@ uint32_t Terrain3DVirtualTexture::count_physical_banks() const {
 		return 0u;
 	}
 	uint32_t nCount = 0u;
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
 		nCount += m_pResources->get_vt_bank_count( ( T3DVtChannel )c );
 	}
 	return nCount;
 }
 
-bool Terrain3DVirtualTexture::prepare_cpu_cold( const T3DRenderWorldLimits &pLimits,
+bool Terrain3DVirtualTexture::prepare_cpu_cold( const T3DWorldLimits &pLimits,
         const T3DVtGpuResourcePlan &pPlan,
         const uint32_t nStartupGeneration ) {
-	if ( m_bInitialized || m_bCpuPrepared || m_pRuntimeAllocatorZone == NULL || !t3d_render_world_validate_limits( pLimits ) ) {
+	if ( m_bInitialized || m_bCpuPrepared || m_pRuntimeAllocatorZone == NULL || !t3d_world_validate_limits( pLimits ) ) {
 		return false;
 	}
 	if ( nStartupGeneration != 0u ) {
@@ -1053,7 +1022,7 @@ T3DVTFinalTelemetry Terrain3DVirtualTexture::get_final_telemetry_reference_debug
 	Result.nPhysicalCapacity = m_Residency.Buffers.nPhysicalPageSetCapacity;
 	for ( uint32_t iSlot = 0u; iSlot < m_Residency.Buffers.nPhysicalPageSetCapacity; ++iSlot ) {
 		const t3dVTPhysicalSlot_t &Slot = m_Residency.Buffers.pPhysicalPageSets[iSlot];
-		const bool bResident = Slot.m_nVirtualPage != T3D_RW_VT_INVALID_PAGE;
+		const bool bResident = Slot.m_nVirtualPage != T3D_VT_INVALID_PAGE;
 		const bool bPending = ( Slot.m_nFlags & T3D_VT_SLOT_PENDING ) != 0u;
 		const bool bRetiring = ( Slot.m_nFlags & T3D_VT_SLOT_RETIRED ) != 0u;
 		Result.nPhysicalResident += bResident ? 1u : 0u;
@@ -1156,7 +1125,7 @@ uint32_t Terrain3DVirtualTexture::stage_material_footprint_hot( const uint32_t n
 	uint32_t nAttempted = 0u;
 	for ( uint32_t y = rect.nMinPageY; y <= rect.nMaxPageY && nAttempted < nRequestLimit; ++y ) {
 		for ( uint32_t x = rect.nMinPageX; x <= rect.nMaxPageX && nAttempted < nRequestLimit; ++x ) {
-			uint32_t nVirtualPage = T3D_RW_VT_INVALID_PAGE;
+			uint32_t nVirtualPage = T3D_VT_INVALID_PAGE;
 			if ( !t3d_vt_allocation_page_id( allocation, rect.nMip, x, y, nVirtualPage ) ) {
 				continue;
 			}

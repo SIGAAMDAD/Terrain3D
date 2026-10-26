@@ -50,4 +50,9 @@ typedef struct t3dResidencyFrameState_s {
 	}
 } t3dResidencyFrameState_t;
 
+inline bool t3dResidencyFrameWantsRuntimePage( void *const pContext, const Vector2i &rLocation ) {
+	const t3dResidencyFrameState_t *const pFrame = ( const t3dResidencyFrameState_t * )( pContext );
+	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT || pFrame->isPrefetch( rLocation ) );
+}
+
 #endif // TERRAIN3D_RESIDENCY_STATE_H

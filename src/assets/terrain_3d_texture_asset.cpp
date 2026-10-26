@@ -185,7 +185,7 @@ void Terrain3DTextureAsset::setAlbedoTexture( const Ref<Texture2D> &rTexture ) {
 			if ( pImg->get_width() != pImg->get_height() ) {
 				LOG( WARN, "Albedo texture '", filename, "' is not square. Mipmaps might have artifacts." );
 			}
-			if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
+			if ( !Math::is_power_of_2( pImg->get_width() ) || !Math::is_power_of_2( pImg->get_height() ) ) {
 				LOG( WARN, "Albedo texture '", filename, "' size is not power of 2. This is sub-optimal." );
 			}
 			if ( IS_EDITOR ) {
@@ -216,7 +216,7 @@ void Terrain3DTextureAsset::setNormalTexture( const Ref<Texture2D> &rTexture ) {
 			if ( pImg->get_width() != pImg->get_height() ) {
 				LOG( WARN, "Normal texture '", filename, "' is not square. Not recommended. Mipmaps might have artifacts." );
 			}
-			if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
+			if ( !Math::is_power_of_2( pImg->get_width() ) || !Math::is_power_of_2( pImg->get_height() ) ) {
 				LOG( WARN, "Normal texture '", filename, "' dimensions are not power of 2. This is sub-optimal." );
 			}
 		}
@@ -241,7 +241,7 @@ void Terrain3DTextureAsset::setSurfaceTexture( const Ref<Texture2D> &rTexture ) 
 		if ( !pImg->has_mipmaps() ) {
 			LOG( WARN, "Packed PBR texture '", filename, "' has no mipmaps." );
 		}
-		if ( !is_power_of_2( pImg->get_width() ) || !is_power_of_2( pImg->get_height() ) ) {
+		if ( !Math::is_power_of_2( pImg->get_width() ) || !Math::is_power_of_2( pImg->get_height() ) ) {
 			LOG( WARN, "Packed PBR texture '", filename, "' dimensions are not powers of two." );
 		}
 	}
@@ -284,7 +284,7 @@ void Terrain3DTextureAsset::setDisplacementTexture( const Ref<Texture2D> &rTextu
 			        filename,
 			        "' has no mipmaps. Tessellation LOD sampling remains valid but may alias at distance." );
 		}
-		if ( !is_power_of_2( pImage->get_width() ) || !is_power_of_2( pImage->get_height() ) ) {
+		if ( !Math::is_power_of_2( pImage->get_width() ) || !Math::is_power_of_2( pImage->get_height() ) ) {
 			LOG( WARN, "Displacement texture '", filename, "' dimensions are not powers of two." );
 		}
 	}

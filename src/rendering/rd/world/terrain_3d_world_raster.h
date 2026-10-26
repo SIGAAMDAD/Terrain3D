@@ -4,8 +4,10 @@
 
 #include "rendering/rd/terrain_3d_rd_clipmap_renderer.h"
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
+#include "rendering/rd/terrain_3d_rd_forward_pipeline_base.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_pipeline_cache.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
 #include "rendering/rd/world/terrain_3d_world_resources.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
@@ -20,20 +22,11 @@ private:
 	static const uint32_t s_nWorldPipelineCapacity = 32u;
 	static const uint32_t s_nWorldDescriptorLayoutCount = T3D_RD_FORWARD_SHADER_VARIANT_MAX + 1u;
 	static const uint32_t s_nWorldShadowDescriptorSlot = T3D_RD_FORWARD_SHADER_VARIANT_MAX;
-	typedef struct t3dPipelineKey_s {
-		int64_t m_nFramebufferFormat = godot::RenderingDevice::INVALID_ID;
-		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
-		godot::RenderingDevice::TextureSamples m_samples = godot::RenderingDevice::TEXTURE_SAMPLES_1;
-		uint32_t m_nViewCount = 1u;
+	typedef struct t3dPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
 		uint32_t m_nPrimitiveClass = T3D_PRIMITIVE_TERRAIN_STRIP;
-		bool m_bReverseCull = false;
-		bool m_bDepthPrepassActive = false;
-		bool m_bShadow = false;
 		bool operator==( const t3dPipelineKey_s &rOther ) const {
-			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant && m_samples == rOther.m_samples
-			        && m_nViewCount == rOther.m_nViewCount && m_nPrimitiveClass == rOther.m_nPrimitiveClass
-			        && m_bReverseCull == rOther.m_bReverseCull && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive
-			        && m_bShadow == rOther.m_bShadow;
+			return static_cast<const t3dRdForwardPipelineBaseKey_t &>( *this ) == static_cast<const t3dRdForwardPipelineBaseKey_t &>( rOther )
+			        && m_nPrimitiveClass == rOther.m_nPrimitiveClass;
 		}
 	} t3dPipelineKey_t;
 	typedef Terrain3DRdPipelineCache<t3dPipelineKey_t, s_nWorldPipelineCapacity> t3dPipelineCache_t;
@@ -51,8 +44,8 @@ private:
 	Terrain3DRdForwardLighting m_forwardLighting;
 	godot::Ref<godot::RDShaderSPIRV> m_source[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	godot::Ref<godot::RDShaderSPIRV> m_shadowSource[T3D_PRIMITIVE_CLASS_COUNT];
-	godot::RID m_hShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-	godot::RID m_hShadowShader[T3D_PRIMITIVE_CLASS_COUNT];
+	Terrain3DRdShader m_hShader[T3D_PRIMITIVE_CLASS_COUNT][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	Terrain3DRdShader m_hShadowShader[T3D_PRIMITIVE_CLASS_COUNT];
 	godot::RID m_hSet0[T3D_PRIMITIVE_CLASS_COUNT][s_nWorldDescriptorLayoutCount];
 	godot::RID m_hSet1[T3D_PRIMITIVE_CLASS_COUNT][s_nWorldDescriptorLayoutCount];
 	godot::RID m_hCurrentSet0[T3D_PRIMITIVE_CLASS_COUNT];
@@ -69,7 +62,6 @@ private:
 	bool m_bCurrentValid = false;
 	bool m_bInitialized = false;
 
-	bool selectVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const;
 	bool ensureSetsCold( Terrain3DWorldResources &rResources,
 	        const t3dRdWorldTerrainRasterBindings_t &rTerrain,
 	        const T3DTerrainStageASharedVTBindings &rVT,

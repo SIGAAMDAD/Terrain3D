@@ -28,11 +28,11 @@ uint16_t t3d_vt_scheduler_priority_bucket_reference_debug( const uint16_t pPrior
 
 static uint32_t t3d_vt_stream_find_free_lane( const T3DVTStreamingState &pState ) {
 	for ( uint32_t iLane = 0u; iLane < pState.Buffers.nScratchLaneCount; ++iLane ) {
-		if ( pState.Buffers.pScratchLaneOwner[iLane] == T3D_RW_INVALID_ID ) {
+		if ( pState.Buffers.pScratchLaneOwner[iLane] == T3D_VT_INVALID_ID ) {
 			return iLane;
 		}
 	}
-	return T3D_RW_INVALID_ID;
+	return T3D_VT_INVALID_ID;
 }
 
 static bool t3d_vt_stream_queue_insert( T3DVTStreamingState &rState, const uint32_t pJobIndex ) {
@@ -97,22 +97,22 @@ static void t3d_vt_stream_queue_remove( T3DVTStreamingState &rState, const uint3
 
 static uint32_t t3d_vt_stream_find_existing( const T3DVTStreamingState &pState, const uint32_t pVirtualPage ) {
 	if ( pVirtualPage >= pState.Buffers.nPageToJobCapacity ) {
-		return T3D_RW_INVALID_ID;
+		return T3D_VT_INVALID_ID;
 	}
 	const uint16_t nJob = pState.Buffers.pPageToJob[pVirtualPage];
-	return nJob == s_nInvalidJob16 ? T3D_RW_INVALID_ID : ( uint32_t )nJob;
+	return nJob == s_nInvalidJob16 ? T3D_VT_INVALID_ID : ( uint32_t )nJob;
 }
 
 static uint32_t t3d_vt_stream_pop_free_job( T3DVTStreamingState &rState ) {
 	if ( rState.nFreeJobCount == 0u ) {
-		return T3D_RW_INVALID_ID;
+		return T3D_VT_INVALID_ID;
 	}
 	return rState.Buffers.pFreeJobs[--rState.nFreeJobCount];
 }
 
 static uint32_t t3d_vt_stream_find_replaceable( const T3DVTStreamingState &pState, const uint16_t pPriority ) {
 	if ( pState.nQueuedJobCount == 0u ) {
-		return T3D_RW_INVALID_ID;
+		return T3D_VT_INVALID_ID;
 	}
 	const uint16_t nIncomingBucket = t3d_vt_scheduler_priority_bucket_reference_debug( pPriority );
 	for ( int32_t nBucket = ( int32_t )T3D_VT_PRIORITY_BACKGROUND; nBucket > ( int32_t )nIncomingBucket; --nBucket ) {
@@ -121,7 +121,7 @@ static uint32_t t3d_vt_stream_find_replaceable( const T3DVTStreamingState &pStat
 			return nJob;
 		}
 	}
-	return T3D_RW_INVALID_ID;
+	return T3D_VT_INVALID_ID;
 }
 
 static void t3d_vt_stream_ready_remove( T3DVTStreamingState &rState, const uint32_t pReadyIndex ) {
@@ -147,11 +147,11 @@ static void t3d_vt_stream_free_job( T3DVTStreamingState &rState, const uint32_t 
 	if ( Job.nVirtualPage < rState.Buffers.nPageToJobCapacity && rState.Buffers.pPageToJob[Job.nVirtualPage] == pJobIndex ) {
 		rState.Buffers.pPageToJob[Job.nVirtualPage] = s_nInvalidJob16;
 	}
-	if ( Job.nScratchLane != T3D_RW_INVALID_ID && Job.nScratchLane < rState.Buffers.nScratchLaneCount ) {
-		rState.Buffers.pScratchLaneOwner[Job.nScratchLane] = T3D_RW_INVALID_ID;
+	if ( Job.nScratchLane != T3D_VT_INVALID_ID && Job.nScratchLane < rState.Buffers.nScratchLaneCount ) {
+		rState.Buffers.pScratchLaneOwner[Job.nScratchLane] = T3D_VT_INVALID_ID;
 	}
 	memset( &Job, 0, sizeof( Job ) );
-	Job.nScratchLane = T3D_RW_INVALID_ID;
+	Job.nScratchLane = T3D_VT_INVALID_ID;
 	Job.nPriorityBucket = T3D_VT_PRIORITY_BACKGROUND;
 	Job.nState = T3D_VT_STREAM_FREE;
 	rState.Buffers.pQueuedJobs[pJobIndex] = s_nInvalidJob16;
@@ -173,7 +173,7 @@ static bool t3d_vt_stream_has_required_storage( const T3DVTResidencyState &rResi
 	        && pBuffers.nPageToJobCapacity >= rResidency.pDatabase->pHeader->nPageCount && pBuffers.pFreeJobs != NULL
 	        && pBuffers.pQueuedJobs != NULL && pBuffers.pJobQueuePosition != NULL && pBuffers.pReadyJobs != NULL
 	        && pBuffers.pMergedWantedMip != NULL && pBuffers.pMergedPriority != NULL && pBuffers.nScratchLaneCount != 0u
-	        && pBuffers.nScratchLaneCount <= T3D_RW_MAX_STREAM_SCRATCH_LANES && pBuffers.nScratchLaneBytes != 0u;
+	        && pBuffers.nScratchLaneCount <= T3D_VT_MAX_STREAM_SCRATCH_LANES && pBuffers.nScratchLaneBytes != 0u;
 }
 
 static bool t3d_vt_stream_has_valid_limits( const T3DVTStreamingBuffers &pBuffers, const T3DVTStreamingLimits &pLimits ) {
@@ -196,8 +196,8 @@ bool t3d_vt_streaming_initialize_cold( T3DVTResidencyState &rResidency,
 	rState.pResidency = &rResidency;
 	rState.Buffers = pBuffers;
 	rState.Limits = pLimits;
-	rState.nAdmissionFrame = T3D_RW_INVALID_ID;
-	rState.nUploadFrame = T3D_RW_INVALID_ID;
+	rState.nAdmissionFrame = T3D_VT_INVALID_ID;
+	rState.nUploadFrame = T3D_VT_INVALID_ID;
 	for ( uint32_t nBucket = 0u; nBucket < T3D_VT_PRIORITY_BUCKET_COUNT; ++nBucket ) {
 		rState.nPriorityBucketHead[nBucket] = s_nInvalidJob16;
 		rState.nPriorityBucketTail[nBucket] = s_nInvalidJob16;
@@ -207,7 +207,7 @@ bool t3d_vt_streaming_initialize_cold( T3DVTResidencyState &rResidency,
 	}
 	for ( uint32_t iJob = 0u; iJob < pBuffers.nJobCapacity; ++iJob ) {
 		memset( &pBuffers.pJobs[iJob], 0, sizeof( T3DVTStreamJob ) );
-		pBuffers.pJobs[iJob].nScratchLane = T3D_RW_INVALID_ID;
+		pBuffers.pJobs[iJob].nScratchLane = T3D_VT_INVALID_ID;
 		pBuffers.pJobs[iJob].nPriorityBucket = T3D_VT_PRIORITY_BACKGROUND;
 		pBuffers.pQueuedJobs[iJob] = s_nInvalidJob16;
 		pBuffers.pJobQueuePosition[iJob] = s_nInvalidJob16;
@@ -217,7 +217,7 @@ bool t3d_vt_streaming_initialize_cold( T3DVTResidencyState &rResidency,
 	}
 	rState.nFreeJobCount = pBuffers.nJobCapacity;
 	for ( uint32_t iLane = 0u; iLane < pBuffers.nScratchLaneCount; ++iLane ) {
-		pBuffers.pScratchLaneOwner[iLane] = T3D_RW_INVALID_ID;
+		pBuffers.pScratchLaneOwner[iLane] = T3D_VT_INVALID_ID;
 		pBuffers.pScratchLaneCompletion[iLane].store( T3D_VT_STREAM_COMPLETION_IDLE, T3D_MEMORY_ORDER_RELAXED );
 	}
 	rState.bInitialized = true;
@@ -274,7 +274,7 @@ static bool t3d_vt_stream_prepare_job_identity(
 		rJob.nAllocationGeneration = Page.nGeneration;
 	rJob.nDatabaseGeneration = rState.pResidency->nDatabaseGeneration;
 	rJob.nRequestFrame = pFrameId;
-	rJob.nScratchLane = T3D_RW_INVALID_ID;
+	rJob.nScratchLane = T3D_VT_INVALID_ID;
 	rJob.nWantedMip = pRequest.nWantedMip;
 	rJob.nPriority = pRequest.nPriority;
 	rJob.nPriorityBucket = t3d_vt_scheduler_priority_bucket_reference_debug( pRequest.nPriority );
@@ -311,7 +311,7 @@ T3DVTAdmissionStatus t3d_vt_streaming_admit_request_hot(
 	++rState.Stats.nPageMissCount;
 
 	uint32_t nJob = t3d_vt_stream_find_existing( rState, pRequest.nVirtualPage );
-	if ( nJob != T3D_RW_INVALID_ID ) {
+	if ( nJob != T3D_VT_INVALID_ID ) {
 		T3DVTStreamJob &Job = rState.Buffers.pJobs[nJob];
 		const uint16_t nOldPriority = rState.Buffers.pMergedPriority[nJob];
 		const uint16_t nOldWantedMip = rState.Buffers.pMergedWantedMip[nJob];
@@ -349,9 +349,9 @@ T3DVTAdmissionStatus t3d_vt_streaming_admit_request_hot(
 		return T3D_VT_ADMISSION_DEFERRED_FRAME_BUDGET;
 	}
 	nJob = t3d_vt_stream_pop_free_job( rState );
-	if ( nJob == T3D_RW_INVALID_ID ) {
+	if ( nJob == T3D_VT_INVALID_ID ) {
 		nJob = t3d_vt_stream_find_replaceable( rState, pRequest.nPriority );
-		if ( nJob == T3D_RW_INVALID_ID ) {
+		if ( nJob == T3D_VT_INVALID_ID ) {
 			++rState.Stats.nDroppedRequestCount;
 			t3d_vt_stream_record_admission_status( rState, T3D_VT_ADMISSION_DROPPED_QUEUE_FULL );
 			return T3D_VT_ADMISSION_DROPPED_QUEUE_FULL;
@@ -363,7 +363,7 @@ T3DVTAdmissionStatus t3d_vt_streaming_admit_request_hot(
 	T3DVTStreamJob &Job = rState.Buffers.pJobs[nJob];
 	if ( !t3d_vt_stream_prepare_job_identity( rState, pRequest, pFrameId, Job ) ) {
 		memset( &Job, 0, sizeof( Job ) );
-		Job.nScratchLane = T3D_RW_INVALID_ID;
+		Job.nScratchLane = T3D_VT_INVALID_ID;
 		Job.nPriorityBucket = T3D_VT_PRIORITY_BACKGROUND;
 		Job.nState = T3D_VT_STREAM_FREE;
 		rState.Buffers.pFreeJobs[rState.nFreeJobCount++] = ( uint16_t )nJob;
@@ -460,13 +460,13 @@ uint32_t t3d_vt_streaming_invalidate_queued_demand_hot( T3DVTStreamingState &rSt
 		t3d_vt_stream_free_job( rState, iJob );
 		++nCancelled;
 	}
-	rState.nAdmissionFrame = T3D_RW_INVALID_ID;
+	rState.nAdmissionFrame = T3D_VT_INVALID_ID;
 	rState.nAdmittedRequestCountThisFrame = 0u;
 	return nCancelled;
 }
 
 bool t3d_vt_streaming_claim_job_owner_hot( T3DVTStreamingState &rState, uint32_t &rJobIndex ) {
-	rJobIndex = T3D_RW_INVALID_ID;
+	rJobIndex = T3D_VT_INVALID_ID;
 	if ( !rState.bInitialized || rState.nQueuedJobCount == 0u ) {
 		return false;
 	}
@@ -476,10 +476,10 @@ bool t3d_vt_streaming_claim_job_owner_hot( T3DVTStreamingState &rState, uint32_t
 		return false;
 	}
 	const uint32_t nLane = t3d_vt_stream_find_free_lane( rState );
-	if ( nLane == T3D_RW_INVALID_ID ) {
+	if ( nLane == T3D_VT_INVALID_ID ) {
 		return false;
 	}
-	uint32_t nJob = T3D_RW_INVALID_ID;
+	uint32_t nJob = T3D_VT_INVALID_ID;
 	uint16_t nBucket = T3D_VT_PRIORITY_BACKGROUND;
 	for ( uint16_t iBucket = 0u; iBucket < T3D_VT_PRIORITY_BUCKET_COUNT; ++iBucket ) {
 		if ( rState.nPriorityBucketHead[iBucket] != s_nInvalidJob16 ) {
@@ -488,7 +488,7 @@ bool t3d_vt_streaming_claim_job_owner_hot( T3DVTStreamingState &rState, uint32_t
 			break;
 		}
 	}
-	if ( nJob == T3D_RW_INVALID_ID ) {
+	if ( nJob == T3D_VT_INVALID_ID ) {
 		return false;
 	}
 	t3d_vt_stream_queue_remove( rState, nJob );
@@ -516,12 +516,12 @@ bool t3d_vt_streaming_cancel_claim_owner_hot( T3DVTStreamingState &rState, const
 	        || rState.Buffers.pScratchLaneOwner[Job.nScratchLane] != pJobIndex ) {
 		return false;
 	}
-	rState.Buffers.pScratchLaneOwner[Job.nScratchLane] = T3D_RW_INVALID_ID;
+	rState.Buffers.pScratchLaneOwner[Job.nScratchLane] = T3D_VT_INVALID_ID;
 	rState.Buffers.pScratchLaneCompletion[Job.nScratchLane].store( T3D_VT_STREAM_COMPLETION_IDLE, T3D_MEMORY_ORDER_RELAXED );
 	if ( rState.nInFlightIoJobCount != 0u ) {
 		--rState.nInFlightIoJobCount;
 	}
-	Job.nScratchLane = T3D_RW_INVALID_ID;
+	Job.nScratchLane = T3D_VT_INVALID_ID;
 	Job.nPriority = rState.Buffers.pMergedPriority[pJobIndex];
 	Job.nWantedMip = rState.Buffers.pMergedWantedMip[pJobIndex];
 	Job.nState = T3D_VT_STREAM_QUEUED;
@@ -563,7 +563,7 @@ bool t3d_vt_streaming_execute_job_async(
 static void t3d_vt_stream_collect_completions_owner_hot( T3DVTStreamingState &rState ) {
 	for ( uint32_t iLane = 0u; iLane < rState.Buffers.nScratchLaneCount; ++iLane ) {
 		const uint32_t nJob = rState.Buffers.pScratchLaneOwner[iLane];
-		if ( nJob == T3D_RW_INVALID_ID || nJob >= rState.Buffers.nJobCapacity ) {
+		if ( nJob == T3D_VT_INVALID_ID || nJob >= rState.Buffers.nJobCapacity ) {
 			continue;
 		}
 		T3DVTStreamJob &Job = rState.Buffers.pJobs[nJob];

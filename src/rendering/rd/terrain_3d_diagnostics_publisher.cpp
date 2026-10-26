@@ -27,13 +27,13 @@ static size_t t3dDiagnosticsMeshSnapshotBytes( const t3dRdMeshSourceSnapshot_t& 
 size_t Terrain3DDiagnosticsPublisher::getRetainedCpuBytes( const Terrain3DRenderCoordinator& rCoordinator ) const
 {
 	size_t nBytes = rCoordinator.m_publicationBuilder.getRetainedCpuBytes() + rCoordinator.m_forwardPassPreparer.getRetainedCpuBytes();
-	nBytes += t3dDiagnosticsMeshSnapshotBytes( rCoordinator.m_cachedPreviewMeshes );
-	nBytes += t3dDiagnosticsMeshSnapshotBytes( rCoordinator.m_pendingPreviewMeshes );
-	nBytes += rCoordinator.m_instanceRenderer.getRetainedCpuBytes() + rCoordinator.m_previewRenderer.getRetainedCpuBytes();
+	nBytes += t3dDiagnosticsMeshSnapshotBytes( rCoordinator.m_previewService.m_cachedPreviewMeshes );
+	nBytes += t3dDiagnosticsMeshSnapshotBytes( rCoordinator.m_previewService.m_pendingPreviewMeshes );
+	nBytes += rCoordinator.m_instanceRenderer.getRetainedCpuBytes() + rCoordinator.m_previewService.m_previewRenderer.getRetainedCpuBytes();
 	nBytes += rCoordinator.m_worldRuntime.getRetainedCpuBytes();
 	nBytes += (size_t)( rCoordinator.m_virtualTexture.get_cpu_image_bytes() );
-	nBytes += (size_t)( rCoordinator.m_previewVtPackageBytes.size() );
-	nBytes += (size_t)( rCoordinator.m_previewVtPublishedPackageBytes.size() );
+	nBytes += (size_t)( rCoordinator.m_previewService.m_previewVtPackageBytes.size() );
+	nBytes += (size_t)( rCoordinator.m_previewService.m_previewVtPublishedPackageBytes.size() );
 	return nBytes;
 }
 
@@ -279,58 +279,58 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const Terrain3DRenderC
 	}
 	result[ "vt_allocations_by_highest_profile" ] = vtHighestProfiles;
 	result[ "vt_allocations_by_resolved_profile" ] = vtResolvedProfiles;
-	const Dictionary previewDiagnostics = rCoordinator.m_previewRenderer.getDiagnostics();
+	const Dictionary previewDiagnostics = rCoordinator.m_previewService.m_previewRenderer.getDiagnostics();
 	result[ "preview_virtual_texture_attached" ] = previewDiagnostics.get( "virtual_texture_attached", false );
 	result[ "preview_virtual_texture_initialized" ] = previewDiagnostics.get( "virtual_texture_initialized", false );
 	{
-		t3dScopedLock_t preview_vt_lock( rCoordinator.m_previewVtMutex );
-		result[ "preview_vt_authoring_package_valid" ] = rCoordinator.m_bPreviewVtPackageValid;
-		result[ "preview_vt_authoring_fingerprint" ] = String::num_uint64( rCoordinator.m_nPreviewVtFingerprint, 16 );
-		result[ "preview_vt_authoring_package_generation" ] = (int64_t)( rCoordinator.m_nPreviewVtPackageGeneration );
-		result[ "preview_vt_authoring_published_fingerprint" ] = String::num_uint64( rCoordinator.m_nPreviewVtPublishedFingerprint, 16 );
-		result[ "preview_vt_authoring_published_package_generation" ] = (int64_t)( rCoordinator.m_nPreviewVtPublishedPackageGeneration );
-		result[ "preview_vt_republish_pending" ] = rCoordinator.m_bPreviewVtRepublishPending;
-		result[ "preview_vt_republish_queued" ] = rCoordinator.m_bPreviewVtRepublishQueued;
-		result[ "preview_vt_republish_in_progress" ] = rCoordinator.m_bPreviewVtRepublishInProgress;
-		result[ "preview_vt_republish_retry_count" ] = (int64_t)( rCoordinator.m_nPreviewVtRepublishRetryCount );
-		result[ "preview_vt_republish_retry_after_usec" ] = (int64_t)( rCoordinator.m_nPreviewVtRepublishRetryAfterUsec );
-		result[ "preview_vt_authoring_stage_neutral" ] = rCoordinator.m_bPreviewVtStageNeutral;
-		result[ "preview_vt_authoring_published_neutral" ] = rCoordinator.m_bPreviewVtPublishedNeutral;
-		result[ "preview_vt_material_source_generation" ] = (int64_t)( rCoordinator.m_nPreviewVtObservedMaterialSourceGeneration );
-		result[ "preview_vt_staged_material_source_generation" ] = (int64_t)( rCoordinator.m_nPreviewVtStagedMaterialSourceGeneration );
-		result[ "preview_vt_failed_material_source_generation" ] = (int64_t)( rCoordinator.m_nPreviewVtFailedMaterialSourceGeneration );
-		result[ "preview_vt_authoring_recooks" ] = (int64_t)( rCoordinator.m_nPreviewVtRecookCount );
-		result[ "preview_vt_authoring_publications" ] = (int64_t)( rCoordinator.m_nPreviewVtPublishCount );
-		result[ "preview_vt_republish_successes" ] = (int64_t)( rCoordinator.m_nPreviewVtRepublishSuccessCount );
-		result[ "preview_vt_republish_failures" ] = (int64_t)( rCoordinator.m_nPreviewVtRepublishFailureCount );
-		result[ "preview_vt_republish_last_error" ] = rCoordinator.m_previewVtLastRepublishError;
-		result[ "preview_vt_authoring_cook_failures" ] = (int64_t)( rCoordinator.m_nPreviewVtCookFailureCount );
-		result[ "preview_vt_authoring_failed_fingerprint" ] = String::num_uint64( rCoordinator.m_nPreviewVtFailedFingerprint, 16 );
-		result[ "preview_vt_authoring_last_cook_error" ] = rCoordinator.m_previewVtLastCookError;
-		result[ "preview_vt_authoring_package_bytes" ] = (int64_t)( rCoordinator.m_previewVtPackageBytes.size() );
-		result[ "vt_editor_dirty_allocations" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nDirtyAllocations );
-		result[ "vt_editor_cache_hits" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nAllocationCacheHits + rCoordinator.m_previewVtEditorTelemetry.m_nChannelCacheHits );
-		result[ "vt_editor_cache_misses" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nAllocationCacheMisses + rCoordinator.m_previewVtEditorTelemetry.m_nChannelCacheMisses );
-		result[ "vt_editor_allocation_cache_hits" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nAllocationCacheHits );
-		result[ "vt_editor_allocation_cache_misses" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nAllocationCacheMisses );
-		result[ "vt_editor_channel_cache_hits" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nChannelCacheHits );
-		result[ "vt_editor_channel_cache_misses" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nChannelCacheMisses );
-		result[ "vt_editor_cook_stage" ] = (int64_t)( rCoordinator.m_previewVtEditorTelemetry.m_nStage );
-		result[ "vt_editor_cook_ms_extract" ] = (double)rCoordinator.m_previewVtEditorTelemetry.m_nExtractUsec / 1000.0;
-		result[ "vt_editor_cook_ms_filter" ] = (double)rCoordinator.m_previewVtEditorTelemetry.m_nFilterUsec / 1000.0;
-		result[ "vt_editor_cook_ms_page" ] = (double)rCoordinator.m_previewVtEditorTelemetry.m_nPageUsec / 1000.0;
-		result[ "vt_editor_cook_ms_encode" ] = (double)rCoordinator.m_previewVtEditorTelemetry.m_nEncodeUsec / 1000.0;
-		result[ "vt_editor_cook_ms_pack" ] = (double)rCoordinator.m_previewVtEditorTelemetry.m_nPackUsec / 1000.0;
-		result[ "shared_resource_class_transitions" ] = (int64_t)( rCoordinator.m_nSharedResourceClassTransitionCount );
+		t3dScopedLock_t preview_vt_lock( rCoordinator.m_previewService.m_previewVtMutex );
+		result[ "preview_vt_authoring_package_valid" ] = rCoordinator.m_previewService.m_bPreviewVtPackageValid;
+		result[ "preview_vt_authoring_fingerprint" ] = String::num_uint64( rCoordinator.m_previewService.m_nPreviewVtFingerprint, 16 );
+		result[ "preview_vt_authoring_package_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtPackageGeneration );
+		result[ "preview_vt_authoring_published_fingerprint" ] = String::num_uint64( rCoordinator.m_previewService.m_nPreviewVtPublishedFingerprint, 16 );
+		result[ "preview_vt_authoring_published_package_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtPublishedPackageGeneration );
+		result[ "preview_vt_republish_pending" ] = rCoordinator.m_previewService.m_bPreviewVtRepublishPending;
+		result[ "preview_vt_republish_queued" ] = rCoordinator.m_previewService.m_bPreviewVtRepublishQueued;
+		result[ "preview_vt_republish_in_progress" ] = rCoordinator.m_previewService.m_bPreviewVtRepublishInProgress;
+		result[ "preview_vt_republish_retry_count" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtRepublishRetryCount );
+		result[ "preview_vt_republish_retry_after_usec" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtRepublishRetryAfterUsec );
+		result[ "preview_vt_authoring_stage_neutral" ] = rCoordinator.m_previewService.m_bPreviewVtStageNeutral;
+		result[ "preview_vt_authoring_published_neutral" ] = rCoordinator.m_previewService.m_bPreviewVtPublishedNeutral;
+		result[ "preview_vt_material_source_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtObservedMaterialSourceGeneration );
+		result[ "preview_vt_staged_material_source_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtStagedMaterialSourceGeneration );
+		result[ "preview_vt_failed_material_source_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtFailedMaterialSourceGeneration );
+		result[ "preview_vt_authoring_recooks" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtRecookCount );
+		result[ "preview_vt_authoring_publications" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtPublishCount );
+		result[ "preview_vt_republish_successes" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtRepublishSuccessCount );
+		result[ "preview_vt_republish_failures" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtRepublishFailureCount );
+		result[ "preview_vt_republish_last_error" ] = rCoordinator.m_previewService.m_previewVtLastRepublishError;
+		result[ "preview_vt_authoring_cook_failures" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewVtCookFailureCount );
+		result[ "preview_vt_authoring_failed_fingerprint" ] = String::num_uint64( rCoordinator.m_previewService.m_nPreviewVtFailedFingerprint, 16 );
+		result[ "preview_vt_authoring_last_cook_error" ] = rCoordinator.m_previewService.m_previewVtLastCookError;
+		result[ "preview_vt_authoring_package_bytes" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtPackageBytes.size() );
+		result[ "vt_editor_dirty_allocations" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nDirtyAllocations );
+		result[ "vt_editor_cache_hits" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nAllocationCacheHits + rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nChannelCacheHits );
+		result[ "vt_editor_cache_misses" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nAllocationCacheMisses + rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nChannelCacheMisses );
+		result[ "vt_editor_allocation_cache_hits" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nAllocationCacheHits );
+		result[ "vt_editor_allocation_cache_misses" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nAllocationCacheMisses );
+		result[ "vt_editor_channel_cache_hits" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nChannelCacheHits );
+		result[ "vt_editor_channel_cache_misses" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nChannelCacheMisses );
+		result[ "vt_editor_cook_stage" ] = (int64_t)( rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nStage );
+		result[ "vt_editor_cook_ms_extract" ] = (double)rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nExtractUsec / 1000.0;
+		result[ "vt_editor_cook_ms_filter" ] = (double)rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nFilterUsec / 1000.0;
+		result[ "vt_editor_cook_ms_page" ] = (double)rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nPageUsec / 1000.0;
+		result[ "vt_editor_cook_ms_encode" ] = (double)rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nEncodeUsec / 1000.0;
+		result[ "vt_editor_cook_ms_pack" ] = (double)rCoordinator.m_previewService.m_previewVtEditorTelemetry.m_nPackUsec / 1000.0;
+		result[ "shared_resource_class_transitions" ] = (int64_t)( rCoordinator.m_previewService.m_nSharedResourceClassTransitionCount );
 	}
 	result[ "shared_resource_class" ] = (int64_t)( rCoordinator.m_sharedVtRuntime.get_shared_resource_class() );
 	{
-		t3dScopedLock_t preview_state_lock( rCoordinator.m_previewStateMutex );
-		result[ "preview_async_scheduled" ] = (int64_t)( rCoordinator.m_nPreviewAsyncScheduledCount );
-		result[ "preview_async_completed" ] = (int64_t)( rCoordinator.m_nPreviewAsyncCompletedCount );
-		result[ "preview_async_late_callbacks" ] = (int64_t)( rCoordinator.m_nPreviewAsyncLateCallbackCount );
-		result[ "preview_async_timeouts" ] = (int64_t)( rCoordinator.m_nPreviewAsyncTimeoutCount );
-		result[ "preview_async_lifecycle_generation" ] = (int64_t)( rCoordinator.m_nPreviewAsyncLifecycleGeneration );
+		t3dScopedLock_t preview_state_lock( rCoordinator.m_previewService.m_previewStateMutex );
+		result[ "preview_async_scheduled" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewAsyncScheduledCount );
+		result[ "preview_async_completed" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewAsyncCompletedCount );
+		result[ "preview_async_late_callbacks" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewAsyncLateCallbackCount );
+		result[ "preview_async_timeouts" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewAsyncTimeoutCount );
+		result[ "preview_async_lifecycle_generation" ] = (int64_t)( rCoordinator.m_previewService.m_nPreviewAsyncLifecycleGeneration );
 	}
 	result[ "virtual_texture_cpu_image_bytes" ] = (int64_t)( rCoordinator.m_virtualTexture.get_cpu_image_bytes() );
 	result[ "virtual_texture_physical_page_set_capacity" ] =
@@ -553,9 +553,9 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics( const Terrain3DRenderC
 	{
 		t3dScopedLock_t lock( rCoordinator.m_diagnosticsMutex );
 		result[ "initialization_error" ] = rCoordinator.m_initializationError;
-		result[ "preview_last_error" ] = rCoordinator.m_previewLastError;
-		result[ "preview_failure_class" ] = (int64_t)rCoordinator.m_lastPreviewFailure;
-		result[ "preview_failure_count" ] = (int64_t)rCoordinator.m_nPreviewFailureCount;
+		result[ "preview_last_error" ] = rCoordinator.m_previewService.m_previewLastError;
+		result[ "preview_failure_class" ] = (int64_t)rCoordinator.m_previewService.m_lastPreviewFailure;
+		result[ "preview_failure_count" ] = (int64_t)rCoordinator.m_previewService.m_nPreviewFailureCount;
 	}
 	result[ "native_shadow_proxy_available" ] = false;
 	result[ "multiview_supported" ] = true;

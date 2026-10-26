@@ -1,9 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/terrain_3d_world_visibility_gpu.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_binding_builder.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_service.h"
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
-#include "rendering/rd/terrain_3d_rd_shader_compile_status.h"
 
 #include <godot_cpp/classes/rd_uniform.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -22,21 +19,18 @@ Terrain3DWorldVisibilityGpu::~Terrain3DWorldVisibilityGpu( void ) {
 }
 
 bool Terrain3DWorldVisibilityGpu::createPipelineCold( const t3dPipeline_t ePipeline ) {
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd || ePipeline >= PIPELINE_COUNT || m_source[ePipeline].is_null() ) {
+	if ( !m_context.getDevice() || ePipeline >= PIPELINE_COUNT || m_source[ePipeline].is_null() ) {
 		return false;
 	}
-	m_hShader[ePipeline] = t3dRdCreateShaderWithStatus(
-	        rd, m_source[ePipeline], String( "T3D.World.Visibility." ) + String::num_uint64( ePipeline ) );
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_WORLD )
-	                    .adopt( rd, m_hShader[ePipeline],
-	                            String( "T3D.World.Visibility.Shader." ) + String::num_uint64( ePipeline ),
-	                            Terrain3DRdContext::RESOURCE_SHADER ) ) {
+	const String shader_name = String( "T3D.World.Visibility." ) + String::num_uint64( ePipeline );
+	const String registry_name = String( "T3D.World.Visibility.Shader." ) + String::num_uint64( ePipeline );
+	if ( !m_hShader[ePipeline].createTracked(
+	             m_context, Terrain3DRdContext::OWNER_WORLD, shader_name, m_source[ePipeline], registry_name ) ) {
 		return false;
 	}
-	m_hPipeline[ePipeline] = m_pipelineCache.getOrCreateCompute( m_hShader[ePipeline],
+	m_hPipeline[ePipeline] = m_pipelineCache.getOrCreateCompute( m_hShader[ePipeline].rid(),
 	        String( "T3D.World.Visibility.Pipeline." ) + String::num_uint64( ePipeline ),
-	        m_hShader[ePipeline] );
+	        m_hShader[ePipeline].rid() );
 	return m_hPipeline[ePipeline].is_valid();
 }
 
@@ -54,11 +48,12 @@ bool Terrain3DWorldVisibilityGpu::initializeCold(
 		return false;
 	}
 	const uint32_t patch_bytes = sizeof( t3dWorldTerrainClusterBounds_t ) * s_nMaxClipmapLevels;
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_WORLD )
-	                        .createStorageBuffer( m_hPatchBoundsBuffer,
-	                                "T3D.World.Visibility.PatchBounds",
-	                                patch_bytes,
-	                                Terrain3DRdContext::MEMORY_PATCH ) ) {
+	t3dRdGpuBufferSpec_t patch_spec;
+	patch_spec.m_pName = "T3D.World.Visibility.PatchBounds";
+	patch_spec.m_owner = Terrain3DRdContext::OWNER_WORLD;
+	patch_spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+	patch_spec.m_memory = Terrain3DRdContext::MEMORY_PATCH;
+	if ( !m_hPatchBoundsBuffer.configure( patch_spec ) || !m_hPatchBoundsBuffer.createTracked( m_context, patch_bytes ) ) {
 		shutdownCold();
 		return false;
 	}
@@ -87,8 +82,8 @@ bool Terrain3DWorldVisibilityGpu::createSetsCold( Terrain3DWorldResources &rReso
 	reset.push_back( Terrain3DRdBindingBuilder::storage( 0, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_VISIBILITY_COUNTERS ) ) );
 	reset.push_back( Terrain3DRdBindingBuilder::storage( 1, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_INDIRECT ) ) );
 	reset.push_back( Terrain3DRdBindingBuilder::storage( 2, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_FRAME ) ) );
-	m_hSet[PIPELINE_RESET] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_RESET], signature },
-	        "T3D.World.Visibility.Set.Reset", reset, m_hShader[PIPELINE_RESET], 0u );
+	m_hSet[PIPELINE_RESET] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_RESET].rid(), signature },
+	        "T3D.World.Visibility.Set.Reset", reset, m_hShader[PIPELINE_RESET].rid(), 0u );
 
 	TypedArray<Ref<RDUniform>> cull;
 	cull.push_back( Terrain3DRdBindingBuilder::storage( 0, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_FRAME ) ) );
@@ -104,15 +99,15 @@ bool Terrain3DWorldVisibilityGpu::createSetsCold( Terrain3DWorldResources &rReso
 	cull.push_back( Terrain3DRdBindingBuilder::storage( 10, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_MATERIALS ) ) );
 	cull.push_back( Terrain3DRdBindingBuilder::storage( 11, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_TERRAIN_STRIP_CLUSTERS ) ) );
 	cull.push_back( Terrain3DRdBindingBuilder::storage( 12, m_hPatchBoundsBuffer ) );
-	m_hSet[PIPELINE_CULL] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_CULL], signature },
-	        "T3D.World.Visibility.Set.Cull", cull, m_hShader[PIPELINE_CULL], 0u );
+	m_hSet[PIPELINE_CULL] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_CULL].rid(), signature },
+	        "T3D.World.Visibility.Set.Cull", cull, m_hShader[PIPELINE_CULL].rid(), 0u );
 
 	TypedArray<Ref<RDUniform>> finalize;
 	finalize.push_back( Terrain3DRdBindingBuilder::storage( 0, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_VISIBILITY_COUNTERS ) ) );
 	finalize.push_back( Terrain3DRdBindingBuilder::storage( 1, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_INDIRECT ) ) );
 	finalize.push_back( Terrain3DRdBindingBuilder::storage( 2, rResources.getBuffer( Terrain3DWorldResources::WORLD_BUFFER_FRAME ) ) );
-	m_hSet[PIPELINE_FINALIZE] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_FINALIZE], signature },
-	        "T3D.World.Visibility.Set.Finalize", finalize, m_hShader[PIPELINE_FINALIZE], 0u );
+	m_hSet[PIPELINE_FINALIZE] = m_descriptorCache.getOrCreate( { m_hShader[PIPELINE_FINALIZE].rid(), signature },
+	        "T3D.World.Visibility.Set.Finalize", finalize, m_hShader[PIPELINE_FINALIZE].rid(), 0u );
 	for ( uint32_t i = 0u; i < PIPELINE_COUNT; ++i ) {
 		if ( !m_hSet[i].is_valid() ) {
 			freeSetsCold();
@@ -161,12 +156,8 @@ bool Terrain3DWorldVisibilityGpu::dispatchHot( Terrain3DWorldResources &rResourc
 		}
 		const uint32_t patch_bytes = rSnapshot.m_nPatchCount * sizeof( t3dWorldTerrainClusterBounds_t );
 		if ( patch_bytes > 0u ) {
-			if ( !Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_WORLD, T3D_GPU_PUBLICATION )
-			                        .writeWhole( m_hPatchBoundsBuffer,
-			                                ( uint32_t )( m_patchBoundsBytes.size() ),
-			                                patch_bounds,
-			                                patch_bytes,
-			                                m_patchBoundsBytes ) ) {
+			if ( !m_hPatchBoundsBuffer.writeTracked( m_context, 0u, patch_bounds, patch_bytes,
+			        m_patchBoundsBytes, T3D_GPU_PUBLICATION ) ) {
 				++m_nFailureCount;
 				return false;
 			}
@@ -221,11 +212,10 @@ void Terrain3DWorldVisibilityGpu::shutdownCold( void ) {
 	m_pipelineCache.clear();
 	for ( uint32_t i = 0u; i < PIPELINE_COUNT; ++i ) {
 		m_hPipeline[i] = RID();
-		m_context.freeResource( m_hShader[i] );
+		m_hShader[i].releaseTracked( m_context );
 		m_source[i].unref();
 	}
-	m_context.freeResource( m_hPatchBoundsBuffer, sizeof( t3dWorldTerrainClusterBounds_t ) * s_nMaxClipmapLevels );
-	m_hPatchBoundsBuffer = RID();
+	m_hPatchBoundsBuffer.releaseTracked( m_context );
 	m_patchBoundsBytes.clear();
 	m_pushBytes.clear();
 	m_nPatchBoundsGeneration = 0u;

@@ -474,7 +474,7 @@ bool Terrain3DForwardPassPreparer::render( Terrain3DRenderCoordinator &rCoordina
 		}
 
 		// Terrain and instance/HLOD resources are independent. Snapshot shared VT
-		// bindings after companion RenderWorld PREPARE so a companion teardown cannot
+		// bindings after companion World PREPARE so a companion teardown cannot
 		// mutate descriptor state underneath the terrain lane in this transaction.
 		T3DSharedVTBindings shared_vt_bindings = {};
 		const bool world_raster_bindings_needed = has_terrain || unified_world_pass;

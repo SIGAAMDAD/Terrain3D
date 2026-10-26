@@ -639,30 +639,6 @@ static bool t3d_vt_cooker_finalize_sparse_payloads_v3( const t3dVTCookerSettings
 	return true;
 }
 
-static bool t3d_vt_cooker_quality_base_mip_v3( const t3dVTFixedProfile_t HighestProfile,
-        const t3dVTFixedProfile_t ViewProfile,
-        const t3dVTLogicalChannel_t Channel,
-        const uint32_t nMipCount,
-        uint8_t &rBaseMip ) {
-	rBaseMip = T3D_VT_PACK_INVALID_MIP;
-	const uint32_t nTopExtent = t3d_vt_fixed_profile_channel_extent( HighestProfile, Channel );
-	const uint32_t nTargetExtent = t3d_vt_fixed_profile_channel_extent( ViewProfile, Channel );
-	if ( nTopExtent == 0u || nTargetExtent == 0u || nTargetExtent > nTopExtent || nMipCount == 0u ) {
-		return false;
-	}
-	uint32_t nExtent = nTopExtent;
-	uint32_t nMip = 0u;
-	while ( nExtent > nTargetExtent && nMip + 1u < nMipCount ) {
-		nExtent = nExtent > 1u ? nExtent >> 1u : 1u;
-		++nMip;
-	}
-	if ( nExtent != nTargetExtent || nMip >= nMipCount || nMip > 0xffu ) {
-		return false;
-	}
-	rBaseMip = ( uint8_t )nMip;
-	return true;
-}
-
 static bool t3d_vt_cooker_build_quality_views_v3( const t3dVTCookSparseSourceV3_t *pSources,
         const uint32_t *pOrder,
         const t3dVTFixedProfile_t *pProfiles,
@@ -713,7 +689,7 @@ static bool t3d_vt_cooker_build_quality_views_v3( const t3dVTCookSparseSourceV3_
 				const t3dVTChannelAllocation_t &rChannelAllocation =
 				        rPackage.m_pChannelAllocations[iAllocation * T3D_VT_LOGICAL_CHANNEL_COUNT + iChannel];
 				uint8_t nBaseMip = T3D_VT_PACK_INVALID_MIP;
-				if ( !t3d_vt_cooker_quality_base_mip_v3( HighestProfile,
+				if ( !t3d_vt_fixed_profile_quality_base_mip( HighestProfile,
 				             ViewProfile,
 				             ( t3dVTLogicalChannel_t )iChannel,
 				             rChannelAllocation.m_nMipCount,
@@ -770,7 +746,7 @@ static bool t3d_vt_cooker_validate_quality_views_v3( const t3dVTCookedSparsePack
 					const t3dVTChannelAllocation_t &rChannelAllocation =
 					        rPackage.m_pChannelAllocations[iAllocation * T3D_VT_LOGICAL_CHANNEL_COUNT + iChannel];
 					uint8_t nExpectedBaseMip = T3D_VT_PACK_INVALID_MIP;
-					if ( !t3d_vt_cooker_quality_base_mip_v3( HighestProfile,
+					if ( !t3d_vt_fixed_profile_quality_base_mip( HighestProfile,
 					             ViewProfile,
 					             ( t3dVTLogicalChannel_t )iChannel,
 					             rChannelAllocation.m_nMipCount,

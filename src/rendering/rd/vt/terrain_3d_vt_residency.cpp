@@ -62,7 +62,7 @@ uint16_t t3d_vt_residency_category_reference_debug( const T3DVTDatabaseView &pDa
 
 uint16_t t3d_vt_residency_temperature_reference_debug(
         const T3DVTResidencyState &pState, const t3dVTPhysicalSlot_t &pSlot, const uint32_t pFrameId ) {
-	if ( pState.pDatabase == NULL || pSlot.m_nVirtualPage == T3D_RW_VT_INVALID_PAGE ) {
+	if ( pState.pDatabase == NULL || pSlot.m_nVirtualPage == T3D_VT_INVALID_PAGE ) {
 		return T3D_VT_RESIDENCY_COLD;
 	}
 	const uint16_t nCategory = t3d_vt_residency_category_reference_debug( *pState.pDatabase, pSlot.m_nVirtualPage );
@@ -80,7 +80,8 @@ uint16_t t3d_vt_residency_temperature_reference_debug(
 
 bool t3d_vt_retirement_ready_reference_debug(
         const T3DVTResidencyState &pState, const T3DVTRetiredPageSet &pRetired, const uint32_t pFrameId ) {
-	if ( pRetired.nPhysicalSlot == T3D_RW_VT_INVALID_SLOT ) {
+	( void )pState;
+	if ( pRetired.nPhysicalSlot == T3D_VT_INVALID_SLOT ) {
 		return false;
 	}
 	return ( int32_t )( pFrameId - pRetired.nReleaseFrame ) >= 0;
@@ -137,16 +138,16 @@ bool t3d_vt_write_pack_cold( const T3DVTPackSource &pSource, void *pDestination,
 	uint8_t *pOut = ( uint8_t * )pDestination;
 	memset( pOut, 0, ( size_t )nRequired );
 	T3DVTFileHeader *pHeader = ( T3DVTFileHeader * )pOut;
-	pHeader->nMagic = T3D_RW_VT_FILE_MAGIC;
-	pHeader->nVersion = T3D_RW_VT_FILE_VERSION;
+	pHeader->nMagic = T3D_VT_LEGACY_FILE_MAGIC;
+	pHeader->nVersion = T3D_VT_LEGACY_FILE_VERSION;
 	pHeader->nHeaderBytes = sizeof( T3DVTFileHeader );
 	pHeader->nAllocationCount = pSource.nAllocationCount;
 	pHeader->nPageCount = pSource.nPageCount;
 	pHeader->nPayloadCount = pSource.nPayloadCount;
-	pHeader->nChannelCount = T3D_RW_VT_CHANNELS;
-	pHeader->nInteriorTexels = T3D_RW_VT_PAGE_INTERIOR;
-	pHeader->nGutterTexels = T3D_RW_VT_PAGE_GUTTER;
-	pHeader->nPhysicalTexels = T3D_RW_VT_PHYSICAL_TILE;
+	pHeader->nChannelCount = T3D_VT_CHANNEL_COUNT;
+	pHeader->nInteriorTexels = T3D_VT_PAGE_INTERIOR;
+	pHeader->nGutterTexels = T3D_VT_PAGE_GUTTER;
+	pHeader->nPhysicalTexels = T3D_VT_PHYSICAL_TILE;
 
 	uint64_t nOffset = sizeof( T3DVTFileHeader );
 	pHeader->nAllocationOffset = nOffset;
@@ -172,12 +173,12 @@ bool t3d_vt_open_pack_cold( const void *pBytes, uint64_t pByteCount, T3DVTDataba
 	}
 	const uint8_t *pData = ( const uint8_t * )pBytes;
 	const T3DVTFileHeader *pHeader = ( const T3DVTFileHeader * )pData;
-	if ( pHeader->nMagic != T3D_RW_VT_FILE_MAGIC || pHeader->nVersion != T3D_RW_VT_FILE_VERSION
+	if ( pHeader->nMagic != T3D_VT_LEGACY_FILE_MAGIC || pHeader->nVersion != T3D_VT_LEGACY_FILE_VERSION
 	        || pHeader->nHeaderBytes != sizeof( T3DVTFileHeader ) ) {
 		return false;
 	}
-	if ( pHeader->nChannelCount != T3D_RW_VT_CHANNELS || pHeader->nInteriorTexels != T3D_RW_VT_PAGE_INTERIOR
-	        || pHeader->nGutterTexels != T3D_RW_VT_PAGE_GUTTER || pHeader->nPhysicalTexels != T3D_RW_VT_PHYSICAL_TILE ) {
+	if ( pHeader->nChannelCount != T3D_VT_CHANNEL_COUNT || pHeader->nInteriorTexels != T3D_VT_PAGE_INTERIOR
+	        || pHeader->nGutterTexels != T3D_VT_PAGE_GUTTER || pHeader->nPhysicalTexels != T3D_VT_PHYSICAL_TILE ) {
 		return false;
 	}
 	if ( pHeader->nAllocationCount == 0u || pHeader->nPageCount == 0u || pHeader->nPayloadCount == 0u
@@ -212,10 +213,10 @@ bool t3d_vt_open_pack_cold( const void *pBytes, uint64_t pByteCount, T3DVTDataba
 
 	for ( uint32_t i = 0u; i < pHeader->nPageCount; ++i ) {
 		const T3DVTPageFileRecord &Page = rView.pPages[i];
-		if ( Page.nVirtualPage != i || Page.nChannel >= T3D_RW_VT_CHANNELS || Page.nPayloadId >= pHeader->nPayloadCount ) {
+		if ( Page.nVirtualPage != i || Page.nChannel >= T3D_VT_CHANNEL_COUNT || Page.nPayloadId >= pHeader->nPayloadCount ) {
 			return false;
 		}
-		if ( Page.nParentPage != T3D_RW_VT_INVALID_PAGE && Page.nParentPage >= pHeader->nPageCount ) {
+		if ( Page.nParentPage != T3D_VT_INVALID_PAGE && Page.nParentPage >= pHeader->nPageCount ) {
 			return false;
 		}
 	}
@@ -295,7 +296,9 @@ static bool t3d_vt_build_runtime_tables_cold( const T3DVTDatabaseView &pDatabase
 		Allocation.m_nTailIndex = iAllocation;
 		Allocation.m_nGeneration = nGeneration;
 		Allocation.m_nContentId = iAllocation;
-		Allocation.m_nReserved = Legacy.nReserved0 < T3D_VT_RESIDENCY_CATEGORY_COUNT ? Legacy.nReserved0 : T3D_VT_RESIDENCY_TERRAIN;
+		Allocation.m_nReserved = Legacy.nReserved0 < T3D_VT_RESIDENCY_CATEGORY_COUNT
+		        ? Legacy.nReserved0
+		        : ( uint32_t )( T3D_VT_RESIDENCY_TERRAIN );
 
 		t3dVTTailMetadata_t &Tail = pBuffers.pTailMetadata[iAllocation];
 		memset( &Tail, 0, sizeof( Tail ) );
@@ -306,7 +309,7 @@ static bool t3d_vt_build_runtime_tables_cold( const T3DVTDatabaseView &pDatabase
 		Tail.m_nFirstMip = Legacy.nMipCount - 1u;
 		Tail.m_nMipCount = 1u;
 		Tail.m_nGeneration = nGeneration;
-		Tail.m_nChannelMask = Legacy.nChannel < T3D_RW_VT_CHANNELS ? 1u << Legacy.nChannel : T3D_VT_CHANNEL_MASK_ALL;
+		Tail.m_nChannelMask = Legacy.nChannel < T3D_VT_CHANNEL_COUNT ? 1u << Legacy.nChannel : T3D_VT_CHANNEL_MASK_ALL;
 		Tail.m_nContentId = iAllocation;
 	}
 
@@ -344,8 +347,8 @@ bool t3d_vt_initialize_residency_cold( const T3DVTDatabaseView &pDatabase,
 	t3d_vt_default_residency_policy( rState.Policy );
 	rState.Policy.nRetireDelayFrames = pRetirementDelayFrames;
 	rState.nRetirementDelayFrames = pRetirementDelayFrames;
-	for ( uint32_t iChannel = 0u; iChannel < T3D_RW_VT_CHANNELS; ++iChannel ) {
-		rState.nNeutralRootPage[iChannel] = T3D_RW_VT_INVALID_PAGE;
+	for ( uint32_t iChannel = 0u; iChannel < T3D_VT_CHANNEL_COUNT; ++iChannel ) {
+		rState.nNeutralRootPage[iChannel] = T3D_VT_INVALID_PAGE;
 	}
 	if ( !t3d_vt_build_runtime_tables_cold( pDatabase, pBuffers, pDatabaseGeneration, rState ) ) {
 		return false;
@@ -353,7 +356,7 @@ bool t3d_vt_initialize_residency_cold( const T3DVTDatabaseView &pDatabase,
 
 	for ( uint32_t iPage = 0u; iPage < pDatabase.pHeader->nPageCount; ++iPage ) {
 		const T3DVTPageFileRecord &Page = pDatabase.pPages[iPage];
-		if ( Page.nVirtualPage != iPage || Page.nChannel >= T3D_RW_VT_CHANNELS || Page.nAllocationId >= rState.nAllocationCount ) {
+		if ( Page.nVirtualPage != iPage || Page.nChannel >= T3D_VT_CHANNEL_COUNT || Page.nAllocationId >= rState.nAllocationCount ) {
 			return false;
 		}
 		const t3dVTAllocation_t &Allocation = pBuffers.pAllocations[Page.nAllocationId];
@@ -361,37 +364,37 @@ bool t3d_vt_initialize_residency_cold( const T3DVTDatabaseView &pDatabase,
 		if ( iPage < Allocation.m_nBaseVirtualPage || iPage >= nAllocationEnd ) {
 			return false;
 		}
-		if ( Page.nParentPage != T3D_RW_VT_INVALID_PAGE
+		if ( Page.nParentPage != T3D_VT_INVALID_PAGE
 		        && ( Page.nParentPage < Allocation.m_nBaseVirtualPage || Page.nParentPage >= nAllocationEnd
 		                || Page.nParentPage == iPage ) ) {
 			return false;
 		}
 
 		T3DVTPageTableEntry &Entry = pBuffers.pPageTable[iPage];
-		Entry.nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
+		Entry.nPhysicalSlot = T3D_VT_INVALID_SLOT;
 		Entry.nParentPage = Page.nParentPage;
 		Entry.nGeneration = pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V3 ? Page.nGeneration : Allocation.m_nGeneration;
 		Entry.nResolvedMip = Page.nMip;
 		Entry.nFlags = T3D_VT_PAGE_VALID;
-		if ( Page.nParentPage == T3D_RW_VT_INVALID_PAGE ) {
+		if ( Page.nParentPage == T3D_VT_INVALID_PAGE ) {
 			Entry.nFlags |= T3D_VT_PAGE_ROOT | T3D_VT_PAGE_TAIL_FALLBACK;
 		}
 		if ( ( Page.nFlags & T3D_VT_PAGE_NEUTRAL ) != 0u ) {
 			rState.nNeutralRootPage[Page.nChannel] = iPage;
 			Entry.nFlags |= T3D_VT_PAGE_NEUTRAL;
 		}
-		pBuffers.pLastEvictedFrame[iPage] = T3D_RW_VT_INVALID_PAGE;
+		pBuffers.pLastEvictedFrame[iPage] = T3D_VT_INVALID_PAGE;
 	}
 
 	for ( uint32_t iSlot = 0u; iSlot < pBuffers.nPhysicalPageSetCapacity; ++iSlot ) {
 		t3dVTPhysicalSlot_t &Slot = pBuffers.pPhysicalPageSets[iSlot];
 		memset( &Slot, 0, sizeof( Slot ) );
-		Slot.m_nVirtualPage = T3D_RW_VT_INVALID_PAGE;
-		Slot.m_nPayloadId = T3D_RW_VT_INVALID_PAGE;
+		Slot.m_nVirtualPage = T3D_VT_INVALID_PAGE;
+		Slot.m_nPayloadId = T3D_VT_INVALID_PAGE;
 		pBuffers.pFreeSlots[iSlot] = pBuffers.nPhysicalPageSetCapacity - iSlot - 1u;
 		memset( &pBuffers.pRetiredPageSets[iSlot], 0, sizeof( pBuffers.pRetiredPageSets[iSlot] ) );
-		pBuffers.pRetiredPageSets[iSlot].nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
-		pBuffers.pRetiredPageSets[iSlot].nVirtualPage = T3D_RW_VT_INVALID_PAGE;
+		pBuffers.pRetiredPageSets[iSlot].nPhysicalSlot = T3D_VT_INVALID_SLOT;
+		pBuffers.pRetiredPageSets[iSlot].nVirtualPage = T3D_VT_INVALID_PAGE;
 	}
 	rState.Stats.nFreeSlotCount = pBuffers.nPhysicalPageSetCapacity;
 	rState.bInitialized = true;
@@ -420,7 +423,7 @@ static bool t3d_vt_push_free_slot_hot( T3DVTResidencyState &rState, uint32_t pPh
 
 static uint32_t t3d_vt_pop_free_slot_hot( T3DVTResidencyState &rState ) {
 	if ( rState.Stats.nFreeSlotCount == 0u ) {
-		return T3D_RW_VT_INVALID_SLOT;
+		return T3D_VT_INVALID_SLOT;
 	}
 	return rState.Buffers.pFreeSlots[--rState.Stats.nFreeSlotCount];
 }
@@ -429,13 +432,13 @@ bool t3d_vt_commit_neutral_backing_warm( T3DVTResidencyState &rState, uint32_t p
 	if ( !rState.bInitialized || rState.bNeutralPublished || pPhysicalSlot >= rState.Buffers.nPhysicalPageSetCapacity ) {
 		return false;
 	}
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
-		if ( rState.nNeutralRootPage[c] == T3D_RW_VT_INVALID_PAGE || rState.nNeutralRootPage[c] >= rState.pDatabase->pHeader->nPageCount ) {
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
+		if ( rState.nNeutralRootPage[c] == T3D_VT_INVALID_PAGE || rState.nNeutralRootPage[c] >= rState.pDatabase->pHeader->nPageCount ) {
 			return false;
 		}
 	}
 	t3dVTPhysicalSlot_t &Slot = rState.Buffers.pPhysicalPageSets[pPhysicalSlot];
-	if ( Slot.m_nVirtualPage != T3D_RW_VT_INVALID_PAGE || !t3d_vt_remove_free_slot_warm( rState, pPhysicalSlot ) ) {
+	if ( Slot.m_nVirtualPage != T3D_VT_INVALID_PAGE || !t3d_vt_remove_free_slot_warm( rState, pPhysicalSlot ) ) {
 		return false;
 	}
 	const uint32_t nPrimaryRoot = rState.nNeutralRootPage[T3D_VT_CHANNEL_ALBEDO];
@@ -444,8 +447,8 @@ bool t3d_vt_commit_neutral_backing_warm( T3DVTResidencyState &rState, uint32_t p
 	Slot.m_nFlags = T3D_VT_SLOT_PINNED | T3D_VT_SLOT_REFERENCED | T3D_VT_SLOT_HOT;
 	Slot.m_nClockAge = 0xffffu;
 	Slot.m_nPinCount = 1u;
-	Slot.m_nPayloadId = T3D_RW_VT_INVALID_PAGE;
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+	Slot.m_nPayloadId = T3D_VT_INVALID_PAGE;
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
 		T3DVTPageTableEntry &Entry = rState.Buffers.pPageTable[rState.nNeutralRootPage[c]];
 		Entry.nPhysicalSlot = pPhysicalSlot;
 		Entry.nFlags |= T3D_VT_PAGE_RESIDENT | T3D_VT_PAGE_PINNED | T3D_VT_PAGE_NEUTRAL | T3D_VT_PAGE_ROOT;
@@ -459,17 +462,17 @@ bool t3d_vt_finalize_neutral_publication_warm( T3DVTResidencyState &rState ) {
 	if ( !rState.bInitialized || rState.Stats.nFreeSlotCount == 0u || rState.Stats.nResidentCount == 0u ) {
 		return false;
 	}
-	uint32_t nSlot = T3D_RW_VT_INVALID_SLOT;
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
+	uint32_t nSlot = T3D_VT_INVALID_SLOT;
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
 		const uint32_t nRoot = rState.nNeutralRootPage[c];
-		if ( nRoot == T3D_RW_VT_INVALID_PAGE || nRoot >= rState.pDatabase->pHeader->nPageCount ) {
+		if ( nRoot == T3D_VT_INVALID_PAGE || nRoot >= rState.pDatabase->pHeader->nPageCount ) {
 			return false;
 		}
 		const T3DVTPageTableEntry &Entry = rState.Buffers.pPageTable[nRoot];
-		if ( ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) == 0u || Entry.nPhysicalSlot == T3D_RW_VT_INVALID_SLOT ) {
+		if ( ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) == 0u || Entry.nPhysicalSlot == T3D_VT_INVALID_SLOT ) {
 			return false;
 		}
-		if ( nSlot == T3D_RW_VT_INVALID_SLOT ) {
+		if ( nSlot == T3D_VT_INVALID_SLOT ) {
 			nSlot = Entry.nPhysicalSlot;
 		} else if ( Entry.nPhysicalSlot != nSlot ) {
 			return false;
@@ -493,30 +496,30 @@ bool t3d_vt_finalize_package_publication_warm( T3DVTResidencyState &rState ) {
 uint32_t t3d_vt_resolve_page_hot( T3DVTResidencyState &rState, uint32_t pVirtualPage, uint16_t &rResolvedMip ) {
 	rResolvedMip = 0u;
 	if ( !rState.bNeutralPublished || pVirtualPage >= rState.pDatabase->pHeader->nPageCount ) {
-		return T3D_RW_VT_INVALID_SLOT;
+		return T3D_VT_INVALID_SLOT;
 	}
 	uint32_t nPage = pVirtualPage;
 	for ( uint32_t i = 0u; i < T3D_VT_ANCESTOR_PROBE_CAP; ++i ) {
 		T3DVTPageTableEntry &Entry = rState.Buffers.pPageTable[nPage];
-		if ( ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) != 0u && Entry.nPhysicalSlot != T3D_RW_VT_INVALID_SLOT ) {
+		if ( ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) != 0u && Entry.nPhysicalSlot != T3D_VT_INVALID_SLOT ) {
 			rResolvedMip = Entry.nResolvedMip;
 			if ( nPage != pVirtualPage ) {
 				++rState.Stats.nFallbackCount;
 			}
 			return Entry.nPhysicalSlot;
 		}
-		if ( Entry.nParentPage == T3D_RW_VT_INVALID_PAGE || Entry.nParentPage >= rState.pDatabase->pHeader->nPageCount ) {
+		if ( Entry.nParentPage == T3D_VT_INVALID_PAGE || Entry.nParentPage >= rState.pDatabase->pHeader->nPageCount ) {
 			break;
 		}
 		nPage = Entry.nParentPage;
 	}
 	const T3DVTPageFileRecord *pPage = t3d_vt_legacy_find_page( *rState.pDatabase, pVirtualPage );
 	if ( pPage == NULL ) {
-		return T3D_RW_VT_INVALID_SLOT;
+		return T3D_VT_INVALID_SLOT;
 	}
 	const uint32_t nRoot = rState.nNeutralRootPage[pPage->nChannel];
-	if ( nRoot == T3D_RW_VT_INVALID_PAGE || nRoot >= rState.pDatabase->pHeader->nPageCount ) {
-		return T3D_RW_VT_INVALID_SLOT;
+	if ( nRoot == T3D_VT_INVALID_PAGE || nRoot >= rState.pDatabase->pHeader->nPageCount ) {
+		return T3D_VT_INVALID_SLOT;
 	}
 	++rState.Stats.nFallbackCount;
 	rResolvedMip = rState.Buffers.pPageTable[nRoot].nResolvedMip;
@@ -608,7 +611,9 @@ bool t3d_vt_resolve_allocation_page_reference_debug( const T3DVTResidencyState &
 			const t3dVTPhysicalSlot_t &Slot = rState.Buffers.pPhysicalPageSets[Entry.nPhysicalSlot];
 			if ( Slot.m_nVirtualPage == nPage && Slot.m_nGeneration == Entry.nGeneration && ( Slot.m_nFlags & T3D_VT_SLOT_RETIRED ) == 0u ) {
 				rResult.m_nResolvedPage = nPage; rResult.m_nPhysicalSlot = Entry.nPhysicalSlot; rResult.m_nResolvedMip = Entry.nResolvedMip;
-				rResult.m_nFallbackDepth = nFallbackDepth; rResult.m_nFlags = T3D_VT_RESOLVE_PHYSICAL | ( nFallbackDepth ? T3D_VT_RESOLVE_ANCESTOR : 0u );
+				rResult.m_nFallbackDepth = nFallbackDepth;
+				rResult.m_nFlags = ( uint16_t )( T3D_VT_RESOLVE_PHYSICAL
+				        | ( nFallbackDepth ? ( uint16_t )( T3D_VT_RESOLVE_ANCESTOR ) : 0u ) );
 				return true;
 			}
 		}
@@ -670,7 +675,7 @@ static uint32_t t3d_vt_choose_victim_hot( T3DVTResidencyState &rState, uint32_t 
 	memset( residentByCategory, 0, sizeof( residentByCategory ) );
 	for ( uint32_t i = 0u; i < nCapacity; ++i ) {
 		const t3dVTPhysicalSlot_t &Slot = rState.Buffers.pPhysicalPageSets[i];
-		if ( Slot.m_nVirtualPage == T3D_RW_VT_INVALID_PAGE || ( Slot.m_nFlags & T3D_VT_SLOT_RETIRED ) != 0u ) {
+		if ( Slot.m_nVirtualPage == T3D_VT_INVALID_PAGE || ( Slot.m_nFlags & T3D_VT_SLOT_RETIRED ) != 0u ) {
 			continue;
 		}
 		const uint16_t nCategory = t3d_vt_residency_category_reference_debug( *rState.pDatabase, Slot.m_nVirtualPage );
@@ -680,7 +685,7 @@ static uint32_t t3d_vt_choose_victim_hot( T3DVTResidencyState &rState, uint32_t 
 		const uint32_t nSlot = rState.nClockHand++ % nCapacity;
 		t3dVTPhysicalSlot_t &Slot = rState.Buffers.pPhysicalPageSets[nSlot];
 		++rState.Stats.nClockScanCount;
-		if ( Slot.m_nVirtualPage == T3D_RW_VT_INVALID_PAGE ) {
+		if ( Slot.m_nVirtualPage == T3D_VT_INVALID_PAGE ) {
 			continue;
 		}
 		if ( ( Slot.m_nFlags & ( T3D_VT_SLOT_PINNED | T3D_VT_SLOT_PENDING | T3D_VT_SLOT_RETIRED ) ) != 0u ) {
@@ -714,15 +719,15 @@ static uint32_t t3d_vt_choose_victim_hot( T3DVTResidencyState &rState, uint32_t 
 		}
 		return nSlot;
 	}
-	return T3D_RW_VT_INVALID_SLOT;
+	return T3D_VT_INVALID_SLOT;
 }
 
 bool t3d_vt_reserve_upload_hot(
         T3DVTResidencyState &rState, uint32_t pVirtualPage, uint16_t pWantedMip, uint32_t pFrameId, T3DVTUploadReservation &rReservation ) {
 	memset( &rReservation, 0, sizeof( rReservation ) );
-	rReservation.nVirtualPage = T3D_RW_VT_INVALID_PAGE;
-	rReservation.nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
-	rReservation.nVictimPage = T3D_RW_VT_INVALID_PAGE;
+	rReservation.nVirtualPage = T3D_VT_INVALID_PAGE;
+	rReservation.nPhysicalSlot = T3D_VT_INVALID_SLOT;
+	rReservation.nVictimPage = T3D_VT_INVALID_PAGE;
 	if ( !rState.bInitialized || pVirtualPage >= rState.pDatabase->pHeader->nPageCount || rState.Stats.nFreeSlotCount == 0u ) {
 		++rState.Stats.nReservationFailureCount;
 		return false;
@@ -731,18 +736,18 @@ bool t3d_vt_reserve_upload_hot(
 	if ( ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) != 0u ) {
 		return false;
 	}
-	if ( rState.Buffers.pLastEvictedFrame[pVirtualPage] != T3D_RW_VT_INVALID_PAGE ) {
+	if ( rState.Buffers.pLastEvictedFrame[pVirtualPage] != T3D_VT_INVALID_PAGE ) {
 		const uint32_t nSinceEviction = pFrameId - rState.Buffers.pLastEvictedFrame[pVirtualPage];
 		if ( nSinceEviction <= rState.Policy.nThrashWindowFrames ) {
 			++rState.Stats.nThrashCount;
 		}
-		rState.Buffers.pLastEvictedFrame[pVirtualPage] = T3D_RW_VT_INVALID_PAGE;
+		rState.Buffers.pLastEvictedFrame[pVirtualPage] = T3D_VT_INVALID_PAGE;
 	}
 
-	uint32_t nVictimPage = T3D_RW_VT_INVALID_PAGE;
+	uint32_t nVictimPage = T3D_VT_INVALID_PAGE;
 	if ( rState.Stats.nFreeSlotCount <= 1u ) {
 		const uint32_t nVictimSlot = t3d_vt_choose_victim_hot( rState, pFrameId );
-		if ( nVictimSlot == T3D_RW_VT_INVALID_SLOT ) {
+		if ( nVictimSlot == T3D_VT_INVALID_SLOT ) {
 			++rState.Stats.nReservationFailureCount;
 			return false;
 		}
@@ -750,12 +755,12 @@ bool t3d_vt_reserve_upload_hot(
 	}
 
 	const uint32_t nFree = t3d_vt_pop_free_slot_hot( rState );
-	if ( nFree == T3D_RW_VT_INVALID_SLOT ) {
+	if ( nFree == T3D_VT_INVALID_SLOT ) {
 		++rState.Stats.nReservationFailureCount;
 		return false;
 	}
 	t3dVTPhysicalSlot_t &FreeSlot = rState.Buffers.pPhysicalPageSets[nFree];
-	if ( FreeSlot.m_nVirtualPage != T3D_RW_VT_INVALID_PAGE || FreeSlot.m_nFlags != 0u ) {
+	if ( FreeSlot.m_nVirtualPage != T3D_VT_INVALID_PAGE || FreeSlot.m_nFlags != 0u ) {
 		t3d_vt_push_free_slot_hot( rState, nFree );
 		++rState.Stats.nReservationFailureCount;
 		return false;
@@ -782,12 +787,12 @@ bool t3d_vt_can_commit_upload_hot( const T3DVTResidencyState &pState, const T3DV
 	}
 	const T3DVTPageTableEntry &NewEntry = pState.Buffers.pPageTable[pReservation.nVirtualPage];
 	const t3dVTPhysicalSlot_t &NewSlot = pState.Buffers.pPhysicalPageSets[pReservation.nPhysicalSlot];
-	if ( ( NewEntry.nFlags & T3D_VT_PAGE_RESIDENT ) != 0u || NewEntry.nPhysicalSlot != T3D_RW_VT_INVALID_SLOT
-	        || NewEntry.nGeneration != pReservation.nExpectedGeneration || NewSlot.m_nVirtualPage != T3D_RW_VT_INVALID_PAGE
+	if ( ( NewEntry.nFlags & T3D_VT_PAGE_RESIDENT ) != 0u || NewEntry.nPhysicalSlot != T3D_VT_INVALID_SLOT
+	        || NewEntry.nGeneration != pReservation.nExpectedGeneration || NewSlot.m_nVirtualPage != T3D_VT_INVALID_PAGE
 	        || ( NewSlot.m_nFlags & T3D_VT_SLOT_PENDING ) == 0u ) {
 		return false;
 	}
-	if ( pReservation.nVictimPage != T3D_RW_VT_INVALID_PAGE ) {
+	if ( pReservation.nVictimPage != T3D_VT_INVALID_PAGE ) {
 		if ( pReservation.nVictimPage >= pState.pDatabase->pHeader->nPageCount
 		        || pState.Stats.nRetiredSlotCount >= pState.Buffers.nPhysicalPageSetCapacity ) {
 			return false;
@@ -842,7 +847,7 @@ bool t3d_vt_commit_upload_hot(
 	++rState.Stats.nUploadCommitCount;
 	++rState.nPageTableGeneration;
 
-	if ( pReservation.nVictimPage != T3D_RW_VT_INVALID_PAGE ) {
+	if ( pReservation.nVictimPage != T3D_VT_INVALID_PAGE ) {
 		T3DVTPageTableEntry &VictimEntry = rState.Buffers.pPageTable[pReservation.nVictimPage];
 		if ( !t3d_vt_begin_eviction_hot( rState, VictimEntry.nPhysicalSlot, pReservation.nVictimPage, pFrameId ) ) {
 			return false;
@@ -891,12 +896,12 @@ bool t3d_vt_finalize_eviction_hot( T3DVTResidencyState &rState, uint32_t pPhysic
 	        || ( Entry.nFlags & T3D_VT_PAGE_RESIDENT ) == 0u || Entry.nPhysicalSlot != pPhysicalSlot ) {
 		return false;
 	}
-	Entry.nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
+	Entry.nPhysicalSlot = T3D_VT_INVALID_SLOT;
 	Entry.nFlags &= ( uint16_t )~T3D_VT_PAGE_RESIDENT;
 	rState.Buffers.pLastEvictedFrame[pVictimPage] = pFrameId;
 	memset( &Slot, 0, sizeof( Slot ) );
-	Slot.m_nVirtualPage = T3D_RW_VT_INVALID_PAGE;
-	Slot.m_nPayloadId = T3D_RW_VT_INVALID_PAGE;
+	Slot.m_nVirtualPage = T3D_VT_INVALID_PAGE;
+	Slot.m_nPayloadId = T3D_VT_INVALID_PAGE;
 	--rState.Stats.nRetiredSlotCount;
 	if ( !t3d_vt_push_free_slot_hot( rState, pPhysicalSlot ) ) {
 		return false;
@@ -905,10 +910,6 @@ bool t3d_vt_finalize_eviction_hot( T3DVTResidencyState &rState, uint32_t pPhysic
 	++rState.Stats.nRetireFinalizeCount;
 	++rState.nPageTableGeneration;
 	return true;
-}
-
-static bool t3d_vt_frame_reached( uint32_t pFrameId, uint32_t pTargetFrame ) {
-	return ( int32_t )( pFrameId - pTargetFrame ) >= 0;
 }
 
 bool t3d_vt_service_retired_slots_hot( T3DVTResidencyState &rState, uint32_t pFrameId ) {
@@ -930,8 +931,8 @@ bool t3d_vt_service_retired_slots_hot( T3DVTResidencyState &rState, uint32_t pFr
 		if ( Slot.m_nGeneration != Retired.nGeneration || !t3d_vt_finalize_eviction_hot( rState, nPhysicalSlot, nVirtualPage, pFrameId ) ) {
 			return false;
 		}
-		Retired.nPhysicalSlot = T3D_RW_VT_INVALID_SLOT;
-		Retired.nVirtualPage = T3D_RW_VT_INVALID_PAGE;
+		Retired.nPhysicalSlot = T3D_VT_INVALID_SLOT;
+		Retired.nVirtualPage = T3D_VT_INVALID_PAGE;
 		Retired.nGeneration = 0u;
 		Retired.nReleaseFrame = 0u;
 		rState.nRetireHead = ( rState.nRetireHead + 1u ) % rState.Buffers.nPhysicalPageSetCapacity;
@@ -944,10 +945,10 @@ void t3d_vt_abort_upload_hot( T3DVTResidencyState &rState, const T3DVTUploadRese
 		return;
 	}
 	t3dVTPhysicalSlot_t &Slot = rState.Buffers.pPhysicalPageSets[pReservation.nPhysicalSlot];
-	if ( Slot.m_nVirtualPage == T3D_RW_VT_INVALID_PAGE && ( Slot.m_nFlags & T3D_VT_SLOT_PENDING ) != 0u ) {
+	if ( Slot.m_nVirtualPage == T3D_VT_INVALID_PAGE && ( Slot.m_nFlags & T3D_VT_SLOT_PENDING ) != 0u ) {
 		memset( &Slot, 0, sizeof( Slot ) );
-		Slot.m_nVirtualPage = T3D_RW_VT_INVALID_PAGE;
-		Slot.m_nPayloadId = T3D_RW_VT_INVALID_PAGE;
+		Slot.m_nVirtualPage = T3D_VT_INVALID_PAGE;
+		Slot.m_nPayloadId = T3D_VT_INVALID_PAGE;
 		if ( rState.Stats.nPendingSlotCount != 0u ) {
 			--rState.Stats.nPendingSlotCount;
 		}
@@ -1003,7 +1004,7 @@ bool t3d_vt_validate_residency_reference_debug( const T3DVTResidencyState &pStat
 	uint32_t nRetired = 0u;
 	for ( uint32_t s = 0u; s < pState.Buffers.nPhysicalPageSetCapacity; ++s ) {
 		const t3dVTPhysicalSlot_t &Slot = pState.Buffers.pPhysicalPageSets[s];
-		if ( Slot.m_nVirtualPage == T3D_RW_VT_INVALID_PAGE ) {
+		if ( Slot.m_nVirtualPage == T3D_VT_INVALID_PAGE ) {
 			if ( ( Slot.m_nFlags & T3D_VT_SLOT_PENDING ) != 0u ) {
 				++nPending;
 			} else if ( Slot.m_nFlags == 0u ) {
@@ -1037,7 +1038,7 @@ bool t3d_vt_validate_residency_reference_debug( const T3DVTResidencyState &pStat
 	for ( uint32_t i = 0u; i < pState.Stats.nFreeSlotCount; ++i ) {
 		const uint32_t nSlot = pState.Buffers.pFreeSlots[i];
 		if ( nSlot >= pState.Buffers.nPhysicalPageSetCapacity
-		        || pState.Buffers.pPhysicalPageSets[nSlot].m_nVirtualPage != T3D_RW_VT_INVALID_PAGE
+		        || pState.Buffers.pPhysicalPageSets[nSlot].m_nVirtualPage != T3D_VT_INVALID_PAGE
 		        || pState.Buffers.pPhysicalPageSets[nSlot].m_nFlags != 0u ) {
 			return false;
 		}
@@ -1048,9 +1049,9 @@ bool t3d_vt_validate_residency_reference_debug( const T3DVTResidencyState &pStat
 		}
 	}
 	if ( pState.bNeutralPublished ) {
-		uint32_t nNeutralSlot = T3D_RW_VT_INVALID_SLOT;
-		for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) {
-			if ( pState.nNeutralRootPage[c] == T3D_RW_VT_INVALID_PAGE
+		uint32_t nNeutralSlot = T3D_VT_INVALID_SLOT;
+		for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
+			if ( pState.nNeutralRootPage[c] == T3D_VT_INVALID_PAGE
 			        || pState.nNeutralRootPage[c] >= pState.pDatabase->pHeader->nPageCount ) {
 				return false;
 			}
@@ -1059,7 +1060,7 @@ bool t3d_vt_validate_residency_reference_debug( const T3DVTResidencyState &pStat
 			        != ( T3D_VT_PAGE_RESIDENT | T3D_VT_PAGE_NEUTRAL | T3D_VT_PAGE_PINNED ) ) {
 				return false;
 			}
-			if ( nNeutralSlot == T3D_RW_VT_INVALID_SLOT ) {
+			if ( nNeutralSlot == T3D_VT_INVALID_SLOT ) {
 				nNeutralSlot = Entry.nPhysicalSlot;
 			} else if ( Entry.nPhysicalSlot != nNeutralSlot ) {
 				return false;

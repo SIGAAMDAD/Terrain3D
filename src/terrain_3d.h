@@ -6,13 +6,13 @@
 #include "core/terrain_3d_eastl_helpers.h"
 #include "core/terrain_3d_sync.h"
 #include "core/terrain_3d_startup_state.h"
-#include "core/terrain_3d_runtime_frame_scheduler.h"
+#include "integration/terrain_3d_runtime_frame_scheduler.h"
 #include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_preview_result.h"
 #include "rendering/rd/world/terrain_3d_world_contract.h"
 #include "assets/terrain_3d_assets.h"
 #include "core/target_node_3d.h"
-#include "core/terrain_3d_diagnostics.h"
+#include "diagnostics/terrain_3d_diagnostics.h"
 #include "data/terrain_3d_data.h"
 #include "eastl_config.h"
 #include "instances/terrain_3d_instance_mutation.h"
@@ -268,6 +268,7 @@ class Terrain3D : public Node3D
 	CLASS_NAME();
 	friend class Terrain3DRuntimeFrameScheduler;
 	friend class Terrain3DData;
+	friend class Terrain3DMaterial;
 
 public: // Constants
 private:
@@ -610,6 +611,8 @@ private:
 	void deactivateRuntime( bool bStartupFailure = false );
 	bool isEditorAuthoringModeInternal( void ) const;
 	bool effectiveGpuRegionCacheEnabled( void ) const;
+	void reconfigureGpuRegionCache( void );
+	void reconfigureGpuRegionCache( bool bEnabled );
 	bool effectiveCpuRegionCacheEnabled( void ) const;
 	bool effectiveInstanceRegionCacheEnabled( void ) const;
 	bool effectiveInstancerCellStreamingEnabled( void ) const;

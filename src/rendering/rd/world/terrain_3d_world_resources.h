@@ -3,6 +3,7 @@
 #define TERRAIN3D_WORLD_RESOURCES_H
 
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
 #include "rendering/rd/world/terrain_3d_world_publication.h"
 
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -34,9 +35,9 @@ public:
 
 private:
 	Terrain3DRdContext *m_pContext = NULL;
-	godot::RID m_hBuffers[WORLD_BUFFER_COUNT];
-	uint32_t m_nCapacityBytes[WORLD_BUFFER_COUNT]{};
-	uint32_t m_nUsedBytes[WORLD_BUFFER_COUNT]{};
+	Terrain3DRdGpuBuffer m_buffers[WORLD_BUFFER_COUNT];
+	Terrain3DRdGpuBuffer *m_pFixedIndirectBuffer = NULL;
+	t3dRdGpuBufferSlice_t m_fixedIndirectSlice;
 	uint64_t m_nResourceGeneration = 0u;
 	uint64_t m_nUploadedPublicationGeneration = 0u;
 	uint64_t m_nGpuBufferBytes = 0u;

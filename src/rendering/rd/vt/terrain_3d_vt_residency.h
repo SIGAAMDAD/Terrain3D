@@ -3,22 +3,15 @@
 #ifndef TERRAIN3D_VT_RESIDENCY_H
 #define TERRAIN3D_VT_RESIDENCY_H
 
-#include "rendering/rd/render_world/terrain_3d_render_world_contract.h"
 #include "rendering/rd/vt/terrain_3d_vt_contract.h"
+#include "rendering/rd/vt/terrain_3d_vt_runtime_contract.h"
 
 #include <stdint.h>
 
 // Sparse V3 residency uses the runtime-normalized allocation/page tables;
 // physical storage remains format-family based and shared across logical channels.
-static const uint32_t T3D_RW_VT_FILE_MAGIC = 0x56543354u; // T3TV
-static const uint32_t T3D_RW_VT_FILE_VERSION = 1u;
-static const uint32_t T3D_RW_VT_PAGE_INTERIOR = 128u;
-static const uint32_t T3D_RW_VT_PAGE_GUTTER = 4u;
-static const uint32_t T3D_RW_VT_PHYSICAL_TILE = 136u;
-static const uint32_t T3D_RW_VT_INVALID_PAGE = 0xffffffffu;
-static const uint32_t T3D_RW_VT_INVALID_SLOT = 0xffffffffu;
-static const uint32_t T3D_RW_VT_MAX_MIPS = 16u;
-static const uint32_t T3D_RW_VT_CHANNELS = 4u;
+static const uint32_t T3D_VT_LEGACY_FILE_MAGIC = 0x56543354u; // T3TV
+static const uint32_t T3D_VT_LEGACY_FILE_VERSION = 1u;
 static const uint32_t T3D_VT_PAGE_SET_CHANNEL_MASK = T3D_VT_CHANNEL_MASK_ALL;
 static const uint32_t T3D_VT_RESIDENCY_CATEGORY_COUNT = 5u;
 
@@ -108,7 +101,7 @@ struct T3DVTRuntimePayloadRecord {
 // Runtime source metadata for the authored compact mip chain stored in a sparse
 // V3 tail payload. The chain remains in its cooked horizontal layout.
 struct T3DVTRuntimeTailSourceRecord {
-	uint32_t nPayloadId[T3D_RW_VT_CHANNELS];
+	uint32_t nPayloadId[T3D_VT_CHANNEL_COUNT];
 	uint16_t nAtlasInteriorWidth;
 	uint16_t nAtlasInteriorHeight;
 };
@@ -162,8 +155,8 @@ struct T3DVTRetiredPageSet {
 };
 
 struct T3DVTPageSetPayloadView {
-	const uint8_t *pChannelBytes[T3D_RW_VT_CHANNELS];
-	uint32_t nChannelBytes[T3D_RW_VT_CHANNELS];
+	const uint8_t *pChannelBytes[T3D_VT_CHANNEL_COUNT];
+	uint32_t nChannelBytes[T3D_VT_CHANNEL_COUNT];
 	uint32_t nPresentMask;
 };
 
@@ -219,7 +212,7 @@ struct T3DVTResidencyState {
 	T3DVTResidencyBuffers Buffers;
 	T3DVTResidencyStats Stats;
 	T3DVTResidencyPolicy Policy;
-	uint32_t nNeutralRootPage[T3D_RW_VT_CHANNELS];
+	uint32_t nNeutralRootPage[T3D_VT_CHANNEL_COUNT];
 	uint32_t nClockHand;
 	uint32_t nRetireHead;
 	uint32_t nRetireTail;

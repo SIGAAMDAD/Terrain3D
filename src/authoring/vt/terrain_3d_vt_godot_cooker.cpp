@@ -6,7 +6,6 @@
 #include "assets/terrain_3d_mesh_asset.h"
 #include "assets/terrain_3d_texture_asset.h"
 #include "memory/terrain_3d_memory.h"
-#include "rendering/rd/render_world/terrain_3d_render_world_contract.h"
 
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
@@ -282,7 +281,7 @@ bool t3d_vt_godot_extract_instance_source_v3(
 	if ( rMaterial->isAlphaScissor() || rMaterial->getBaseColor().a < 1.0f ) {
 		rSource.m_nSourceFlags |= T3D_VT_GODOT_SOURCE_V3_HAS_ALPHA;
 	}
-	const bool bClamp = rMaterial->getSamplerClass() == ( int32_t )T3D_RW_SAMPLER_CLAMP;
+	const bool bClamp = rMaterial->getSamplerClass() == ( int32_t )T3D_VT_SAMPLER_LINEAR_CLAMP;
 	const uint32_t nWrapMode = bClamp ? T3D_VT_COOK_WRAP_CLAMP : T3D_VT_COOK_WRAP_REPEAT;
 	t3d_vt_godot_finalize_source_channel_v3(
 	        rSource, T3D_VT_LOGICAL_CHANNEL_ALBEDO, T3D_VT_CONSUMER_INSTANCE, nWrapMode, rMaterial->isAlphaScissor() );
@@ -1237,31 +1236,6 @@ bool t3d_vt_godot_cook_editor_package_incremental_v3( const Ref<Terrain3DAssets>
 	return true;
 }
 
-
-static bool t3d_vt_godot_shipping_quality_base_mip_v3( const t3dVTFixedProfile_t HighestProfile,
-        const t3dVTFixedProfile_t ViewProfile,
-        const t3dVTLogicalChannel_t Channel,
-        const uint32_t nMipCount,
-        uint8_t &rBaseMip ) {
-	rBaseMip = T3D_VT_PACK_INVALID_MIP;
-	const uint32_t nTopExtent = t3d_vt_fixed_profile_channel_extent( HighestProfile, Channel );
-	const uint32_t nTargetExtent = t3d_vt_fixed_profile_channel_extent( ViewProfile, Channel );
-	if ( nTopExtent == 0u || nTargetExtent == 0u || nTargetExtent > nTopExtent || nMipCount == 0u ) {
-		return false;
-	}
-	uint32_t nExtent = nTopExtent;
-	uint32_t nMip = 0u;
-	while ( nExtent > nTargetExtent && nMip + 1u < nMipCount ) {
-		nExtent = nExtent > 1u ? nExtent >> 1u : 1u;
-		++nMip;
-	}
-	if ( nExtent != nTargetExtent || nMip >= nMipCount || nMip > 0xffu ) {
-		return false;
-	}
-	rBaseMip = ( uint8_t )nMip;
-	return true;
-}
-
 static bool t3d_vt_godot_validate_shipping_package_v3( const Ref<Terrain3DAssets> &rAssets,
         const PackedByteArray &rPackageBytes,
         const uint32_t nExpectedAllocationCount,
@@ -1346,7 +1320,7 @@ static bool t3d_vt_godot_validate_shipping_package_v3( const Ref<Terrain3DAssets
 				const t3dVTChannelAllocation_t &channel =
 				        view.m_pChannelAllocations[iAllocation * T3D_VT_LOGICAL_CHANNEL_COUNT + iChannel];
 				uint8_t nExpectedBaseMip = T3D_VT_PACK_INVALID_MIP;
-				if ( !t3d_vt_godot_shipping_quality_base_mip_v3( source.m_eHighestAvailableProfile,
+				if ( !t3d_vt_fixed_profile_quality_base_mip( source.m_eHighestAvailableProfile,
 				             Profile,
 				             ( t3dVTLogicalChannel_t )iChannel,
 				             channel.m_nMipCount,

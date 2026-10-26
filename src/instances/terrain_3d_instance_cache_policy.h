@@ -5,23 +5,8 @@
 #include "core/terrain_3d_compiler.h"
 #include "instances/terrain_3d_instance_cache_constants.h"
 
-#include <EASTL/numeric_limits.h>
 #include <stddef.h>
 #include <stdint.h>
-
-typedef struct t3dInstanceCacheCoord_s {
-	int m_nX;
-	int m_nY;
-} t3dInstanceCacheCoord_t;
-
-inline int t3dInstanceCacheDistance( const t3dInstanceCacheCoord_t a, const t3dInstanceCacheCoord_t b ) {
-	const int64_t dx = ( int64_t )( a.m_nX ) - ( int64_t )( b.m_nX );
-	const int64_t dy = ( int64_t )( a.m_nY ) - ( int64_t )( b.m_nY );
-	const uint64_t abs_x = dx < 0 ? ( uint64_t )( -dx ) : ( uint64_t )( dx );
-	const uint64_t abs_y = dy < 0 ? ( uint64_t )( -dy ) : ( uint64_t )( dy );
-	const uint64_t distance = abs_x > abs_y ? abs_x : abs_y;
-	return distance > ( uint64_t )( eastl::numeric_limits<int>::max() ) ? eastl::numeric_limits<int>::max() : ( int )( distance );
-}
 
 inline bool t3dInstanceCacheCanStream(
         const size_t nResidentBytes, const size_t nIncomingBytes, const size_t nBudgetBytes, const int nResidentPages ) {

@@ -307,7 +307,7 @@ bool Terrain3DRenderingMaterial::importBaseMaterialCold( const Ref<Material> &rM
 	setUnshaded( pBase->get_shading_mode() == BaseMaterial3D::SHADING_MODE_UNSHADED );
 	setVertexColor( pBase->get_flag( BaseMaterial3D::FLAG_ALBEDO_FROM_VERTEX_COLOR ) );
 	setVertexColorSrgb( pBase->get_flag( BaseMaterial3D::FLAG_SRGB_VERTEX_COLOR ) );
-	setSamplerClass( pBase->get_flag( BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT ) ? T3D_RW_SAMPLER_REPEAT : T3D_RW_SAMPLER_CLAMP );
+	setSamplerClass( pBase->get_flag( BaseMaterial3D::FLAG_USE_TEXTURE_REPEAT ) ? T3D_VT_SAMPLER_LINEAR_REPEAT : T3D_VT_SAMPLER_LINEAR_CLAMP );
 	setTextureFilter( ( int32_t )( CLAMP( ( int )( pBase->get_texture_filter() ), 0, 5 ) ) );
 	setNormalScale( ( float )( pBase->get_normal_scale() ) );
 	setAlbedoTexture( pBase->get_texture( BaseMaterial3D::TEXTURE_ALBEDO ) );
@@ -353,7 +353,7 @@ bool Terrain3DRenderingMaterial::compileInstanceRecordCold( t3dRdInstanceMateria
 	if ( isTwoSided() ) {
 		rRecord.m_nFlags |= T3D_RD_INSTANCE_MATERIAL_DOUBLE_SIDED;
 	}
-	if ( getSamplerClass() == ( int32_t )( T3D_RW_SAMPLER_REPEAT ) ) {
+	if ( getSamplerClass() == ( int32_t )( T3D_VT_SAMPLER_LINEAR_REPEAT ) ) {
 		rRecord.m_nFlags |= T3D_RD_INSTANCE_MATERIAL_TEXTURE_REPEAT;
 	}
 	if ( m_bUnshaded ) {
@@ -398,7 +398,7 @@ bool Terrain3DRenderingMaterial::compileInstanceRecordCold( t3dRdInstanceMateria
 
 bool Terrain3DRenderingMaterial::compileVtRecordCold(
         const t3dRenderingMaterialVtBindings_t &rVt, t3dRenderingMaterialGpu_t &rRecord ) const {
-	if ( !Terrain3DRenderWorldMaterial::compileVtRecordCold( rVt, rRecord ) ) {
+	if ( !Terrain3DWorldMaterial::compileVtRecordCold( rVt, rRecord ) ) {
 		return false;
 	}
 	rRecord.m_nPackedScalars0 =

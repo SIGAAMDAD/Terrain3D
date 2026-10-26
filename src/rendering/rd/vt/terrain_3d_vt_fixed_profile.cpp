@@ -73,6 +73,30 @@ uint32_t t3d_vt_fixed_profile_mip0_pages( const t3dVTFixedProfile_t Profile, con
 	return ( nExtent + T3D_VT_PAGE_INTERIOR - 1u ) / T3D_VT_PAGE_INTERIOR;
 }
 
+bool t3d_vt_fixed_profile_quality_base_mip( const t3dVTFixedProfile_t HighestProfile,
+        const t3dVTFixedProfile_t ViewProfile,
+        const t3dVTLogicalChannel_t Channel,
+        const uint32_t nMipCount,
+        uint8_t &rBaseMip ) {
+	rBaseMip = T3D_VT_PACK_INVALID_MIP;
+	const uint32_t nTopExtent = t3d_vt_fixed_profile_channel_extent( HighestProfile, Channel );
+	const uint32_t nTargetExtent = t3d_vt_fixed_profile_channel_extent( ViewProfile, Channel );
+	if ( nTopExtent == 0u || nTargetExtent == 0u || nTargetExtent > nTopExtent || nMipCount == 0u ) {
+		return false;
+	}
+	uint32_t nExtent = nTopExtent;
+	uint32_t nMip = 0u;
+	while ( nExtent > nTargetExtent && nMip + 1u < nMipCount ) {
+		nExtent = nExtent > 1u ? nExtent >> 1u : 1u;
+		++nMip;
+	}
+	if ( nExtent != nTargetExtent || nMip >= nMipCount || nMip > 0xffu ) {
+		return false;
+	}
+	rBaseMip = ( uint8_t )nMip;
+	return true;
+}
+
 bool t3d_vt_fixed_profile_validate_extent(
         const t3dVTFixedProfile_t Profile, const t3dVTLogicalChannel_t Channel, const uint32_t nWidth, const uint32_t nHeight ) {
 	const uint32_t nExtent = t3d_vt_fixed_profile_channel_extent( Profile, Channel );

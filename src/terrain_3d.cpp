@@ -225,6 +225,20 @@ bool Terrain3D::prepareStartupOwnerCold( void ) {
 		return false;
 	}
 	const uint64_t owner_prepare_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][OwnerPrepare] BEGIN generation=", m_nStartupGeneration );
+	auto run_owner_stage = [this]( const char *const pszStage, auto &&rStage ) {
+		const uint64_t nStageStartedUsec = Time::get_singleton()->get_ticks_usec();
+		LOG( INFO, "[Terrain3D][Startup][OwnerPrepare][", pszStage, "] BEGIN generation=", m_nStartupGeneration );
+		rStage();
+		LOG( INFO,
+		        "[Terrain3D][Startup][OwnerPrepare][",
+		        pszStage,
+		        "] END generation=",
+		        m_nStartupGeneration,
+		        " elapsed=",
+		        Time::get_singleton()->get_ticks_usec() - nStageStartedUsec,
+		        " us" );
+	};
 	t3dStartupDomainSetStartUsecIfZero( m_startupFinalizationState, owner_prepare_started_usec );
 	t3dStartupDomainSetStage( m_startupFinalizationState, T3D_STARTUP_PREPARING );
 	// Finalize the aggregate owner-controlled memory grants after the terrain
@@ -236,78 +250,91 @@ bool Terrain3D::prepareStartupOwnerCold( void ) {
 	// signature includes owner-dependent Terrain3D settings. Bind/initialize the
 	// asset owner before the first cooked-page residency pass so startup never
 	// validates a freshly cooked page against a provisional ownerless signature.
-	m_assets->initialize( this );
+	run_owner_stage( "Assets", [this]() { m_assets->initialize( this ); } );
 
-	serviceMemoryBudgetPolicy( true );
-	applyRuntimeAdaptiveWorkBudgets();
-	normalizeRuntimeTierLayout( true );
+	run_owner_stage( "MemoryPolicy", [this]() {
+		serviceMemoryBudgetPolicy( true );
+		applyRuntimeAdaptiveWorkBudgets();
+		normalizeRuntimeTierLayout( true );
+	} );
 
 	// Establish the authoritative residency map before the tier materials take
 	// their initial sampler bindings. Physical GPU publication remains bounded
 	// in authoring as well as runtime; CPU data and the far atlas remain the
 	// whole-world authority. Force the first reconciliation even when the actual
 	// center/generation equals the zero/default cached state.
-	updateRegionStreamingPolicy( m_startupInitialTarget, 0.0, true );
-	m_pData->serviceColdInstanceResidency( m_startupInitialTarget, true );
-	m_pData->updateRegionResidency( m_startupInitialTarget, true );
+	run_owner_stage( "Residency", [this]() {
+		updateRegionStreamingPolicy( m_startupInitialTarget, 0.0, true );
+		m_pData->serviceColdInstanceResidency( m_startupInitialTarget, true );
+		m_pData->updateRegionResidency( m_startupInitialTarget, true );
+	} );
 
 	// Asset arrays are already initialized above so cooked-page source signatures
 	// are authoritative before residency. Build the whole-world far atlases before
 	// tier materials take their initial sampler bindings.
-	m_pData->ensureFarAtlases();
-	m_material->initialize( this );
+	run_owner_stage( "FarAtlases", [this]() { m_pData->ensureFarAtlases(); } );
+	run_owner_stage( "Material", [this]() { m_material->initialize( this ); } );
 	if ( !m_material->isRenderShaderReady() ) {
 		m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
 		LOG( ERROR,
-		        "[lifecycle] Terrain material failed to produce a valid render shader; "
-		        "aborting terrain activation before render meshes are created." );
+		        "[Terrain3D][Startup][OwnerPrepare][Material] FAIL generation=",
+		        m_nStartupGeneration,
+		        " reason=invalid_render_shader elapsed=",
+		        m_nStartupOwnerPrepareUsecLast,
+		        " us" );
 		return false;
 	}
-	m_pCollision->initialize( this );
+	run_owner_stage( "Collision", [this]() { m_pCollision->initialize( this ); } );
 	m_pInstancer->m_runtimePolicy.m_nCellSize = m_nInstancerCellSize;
 	m_pInstancer->m_runtimePolicy.m_bCellStreamingEnabled = effectiveInstancerCellStreamingEnabled();
 	m_pInstancer->m_runtimePolicy.m_bSingleLodInstanceBuffers = m_bInstancerSingleLodBuffers;
 	m_pInstancer->m_runtimePolicy.m_fCellStreamingMargin = m_fInstancerCellStreamingMargin;
 	m_pInstancer->m_runtimePolicy.m_fCellStreamingStep = m_fInstancerCellStreamingUpdateDistance;
 	m_pInstancer->m_runtimePolicy.m_nUpdateCellBudget = ( uint32_t )( MAX( m_nInstancerUpdateCellBudget, 0 ) );
-	m_pInstancer->initialize( this );
-	m_pInstanceOcclusion->initialize( this );
-	m_pInstancePhysics->initialize( this );
-	m_pNodeStreamer->initialize( this );
-	m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
-	m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
-	m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
-	m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
-	m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
-	m_pLightmapStreamer->initialize( this );
-	m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
-	m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
-	m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
-	m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
-	m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
+	run_owner_stage( "Instancer", [this]() { m_pInstancer->initialize( this ); } );
+	run_owner_stage( "InstanceOcclusion", [this]() { m_pInstanceOcclusion->initialize( this ); } );
+	run_owner_stage( "InstancePhysics", [this]() { m_pInstancePhysics->initialize( this ); } );
+	run_owner_stage( "NodeStreamer", [this]() {
+		m_pNodeStreamer->initialize( this );
+		m_pNodeStreamer->setEnabled( effectiveDynamicNodeStreamingEnabled() );
+		m_pNodeStreamer->setRadiusRegions( m_nDynamicNodeStreamRadius );
+		m_pNodeStreamer->setLoadRegionBudget( m_nDynamicNodeLoadRegionBudget );
+		m_pNodeStreamer->setLoadNodeBudget( m_nDynamicNodeLoadNodeBudget );
+		m_pNodeStreamer->setUnloadRegionBudget( m_nDynamicNodeUnloadRegionBudget );
+	} );
+	run_owner_stage( "LightmapStreamer", [this]() {
+		m_pLightmapStreamer->initialize( this );
+		m_pLightmapStreamer->setResidencyBudgetMb( m_nEffectiveLightmapResidencyBudgetMb );
+		m_pLightmapStreamer->setEnabled( m_bLightmapStreamingEnabled );
+		m_pLightmapStreamer->setRadiusRegions( m_nLightmapStreamRadius );
+		m_pLightmapStreamer->setLoadBudget( m_nLightmapLoadBudget );
+		m_pLightmapStreamer->setUnloadBudget( m_nLightmapUnloadBudget );
+	} );
 	if ( m_hlodManifestPath.is_empty() && !m_dataDirectory.is_empty() ) {
 		m_hlodManifestPath = m_dataDirectory.path_join( "terrain3d_hlod_manifest.tres" );
 	}
-	m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
-	m_pHlodStreamer->setEnabled( m_bHlodEnabled );
-	m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
-	m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
-	m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
-	m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
-	m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
-	m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
-	m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
-	m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
-	m_pHlodStreamer->initialize( this );
+	run_owner_stage( "HLODStreamer", [this]() {
+		m_pHlodStreamer->setManifestPath( m_hlodManifestPath );
+		m_pHlodStreamer->setEnabled( m_bHlodEnabled );
+		m_pHlodStreamer->setTargetErrorPixels( m_fHlodTargetErrorPixels );
+		m_pHlodStreamer->setHysteresis( m_fHlodHysteresis );
+		m_pHlodStreamer->setMaxLevel( m_nHlodMaxLevel );
+		m_pHlodStreamer->setLoadBudget( m_nHlodLoadBudget );
+		m_pHlodStreamer->setUnloadBudget( m_nHlodUnloadBudget );
+		m_pHlodStreamer->setMemoryBudgetMb( m_nEffectiveHlodMemoryBudgetMb );
+		m_pHlodStreamer->setMaxShadowLevel( m_nHlodMaxShadowLevel );
+		m_pHlodStreamer->setForcedDebugLevel( m_nHlodForcedDebugLevel );
+		m_pHlodStreamer->initialize( this );
+	} );
 	// Construct all CPU clipmaps against the same target used for residency, then
 	// let the coordinator publish. This prevents its first snapshot from racing
 	// an origin-centered/default mesher state. Ocean topology is also ready before
 	// initializeOcean() runs.
-	setupTerrainMesher( m_startupInitialTarget );
-	setupOceanMesher( m_startupInitialTarget );
+	run_owner_stage( "TerrainMesher", [this]() { setupTerrainMesher( m_startupInitialTarget ); } );
+	run_owner_stage( "OceanMesher", [this]() { setupOceanMesher( m_startupInitialTarget ); } );
 	m_nStartupOwnerPrepareUsecLast = Time::get_singleton()->get_ticks_usec() - owner_prepare_started_usec;
 	LOG( INFO,
-	        "[Terrain3D][Startup][OwnerPrepare] COMPLETE generation=",
+	        "[Terrain3D][Startup][OwnerPrepare] END generation=",
 	        m_nStartupGeneration,
 	        " elapsed=",
 	        m_nStartupOwnerPrepareUsecLast,

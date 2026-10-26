@@ -5,6 +5,9 @@
 class_name Terrain3DRegionLightmapBaker
 extends Node
 
+const TransactionalResourcePublisher = preload("res://addons/terrain_3d/tools/transactional_resource_publisher.gd")
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
+
 const BAKE_WORLD_NAME: StringName = &"Terrain3DLightmapBakeWorld"
 const LIGHTMAP_NAME: StringName = &"Terrain3DRegionalLightmapGI"
 const STREAM_HOST_NAME: StringName = &"Terrain3DNodeStreamHost"
@@ -53,7 +56,7 @@ func get_data_directory_regions(terrain: Terrain3D = null) -> Array[Vector2i]:
 		if location == Vector2i(2147483647, 2147483647):
 			continue
 		locations.append(location)
-	locations.sort_custom(_region_location_less)
+	locations.sort_custom(EditorUtil.region_location_less)
 	return locations
 
 
@@ -493,7 +496,7 @@ func _get_active_terrain() -> Terrain3D:
 	if is_instance_valid(plugin) and is_instance_valid(plugin.terrain):
 		return plugin.terrain
 	var root: Node = EditorInterface.get_edited_scene_root()
-	return _find_terrain(root) if is_instance_valid(root) else null
+	return EditorUtil.find_terrain(root) if is_instance_valid(root) else null
 
 
 func _ensure_region_loaded(terrain: Terrain3D, location: Vector2i) -> bool:
@@ -522,10 +525,6 @@ func _find_editor_lightmap_plugin(node: Node) -> Node:
 		if is_instance_valid(found):
 			return found
 	return null
-
-
-func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
-	return a.y < b.y or (a.y == b.y and a.x < b.x)
 
 
 func _region_output_paths(terrain: Terrain3D, location: Vector2i) -> Dictionary:
@@ -922,35 +921,14 @@ func _remove_existing_bake_world(root: Node) -> void:
 func _publish_light_data_transactionally(light_data: LightmapGIData, final_path: String) -> Error:
 	var directory: String = final_path.get_base_dir()
 	var base_name: String = final_path.get_file().get_basename()
-	var staging_path: String = directory.path_join(base_name + ".publishing.lmbake")
-	var previous_path: String = directory.path_join(base_name + ".previous.lmbake")
-	for cleanup_path: String in [staging_path, previous_path]:
-		_remove_file_if_present(cleanup_path)
-	var save_error: Error = ResourceSaver.save(light_data, staging_path)
-	if save_error != OK:
-		return save_error
-	var validation := ResourceLoader.load(staging_path, "LightmapGIData", ResourceLoader.CACHE_MODE_IGNORE) as LightmapGIData
-	if not is_instance_valid(validation) or validation.lightmap_textures.is_empty():
-		_remove_file_if_present(staging_path)
-		return ERR_FILE_CORRUPT
-	var absolute_final: String = ProjectSettings.globalize_path(final_path)
-	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
-	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
-	var had_previous: bool = FileAccess.file_exists(final_path)
-	if had_previous:
-		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
-		if backup_error != OK:
-			_remove_file_if_present(staging_path)
-			return backup_error
-	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
-	if publish_error != OK:
-		if had_previous:
-			DirAccess.rename_absolute(absolute_previous, absolute_final)
-		_remove_file_if_present(staging_path)
-		return publish_error
-	if had_previous:
-		_remove_file_if_present(previous_path)
-	return OK
+	return TransactionalResourcePublisher.publish(
+		light_data, final_path,
+		directory.path_join(base_name + ".publishing.lmbake"),
+		directory.path_join(base_name + ".previous.lmbake"),
+		"LightmapGIData",
+		func(resource: Resource) -> bool:
+			var validation := resource as LightmapGIData
+			return is_instance_valid(validation) and not validation.lightmap_textures.is_empty())
 
 
 func _publish_image_transactionally(image: Image, final_path: String) -> Error:
@@ -958,70 +936,27 @@ func _publish_image_transactionally(image: Image, final_path: String) -> Error:
 		return ERR_INVALID_DATA
 	var directory: String = final_path.get_base_dir()
 	var base_name: String = final_path.get_file().get_basename()
-	var staging_path: String = directory.path_join(base_name + ".publishing.res")
-	var previous_path: String = directory.path_join(base_name + ".previous.res")
-	for cleanup_path: String in [staging_path, previous_path]:
-		_remove_file_if_present(cleanup_path)
-	var save_error: Error = ResourceSaver.save(image, staging_path)
-	if save_error != OK:
-		return save_error
-	var validation := ResourceLoader.load(staging_path, "Image", ResourceLoader.CACHE_MODE_IGNORE) as Image
-	if validation == null or validation.is_empty() or validation.get_format() != Image.FORMAT_L8 or not validation.has_mipmaps():
-		_remove_file_if_present(staging_path)
-		return ERR_FILE_CORRUPT
-	var absolute_final: String = ProjectSettings.globalize_path(final_path)
-	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
-	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
-	var had_previous: bool = FileAccess.file_exists(final_path)
-	if had_previous:
-		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
-		if backup_error != OK:
-			_remove_file_if_present(staging_path)
-			return backup_error
-	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
-	if publish_error != OK:
-		if had_previous:
-			DirAccess.rename_absolute(absolute_previous, absolute_final)
-		_remove_file_if_present(staging_path)
-		return publish_error
-	if had_previous:
-		_remove_file_if_present(previous_path)
-	return OK
+	return TransactionalResourcePublisher.publish(
+		image, final_path,
+		directory.path_join(base_name + ".publishing.res"),
+		directory.path_join(base_name + ".previous.res"),
+		"Image",
+		func(resource: Resource) -> bool:
+			var validation := resource as Image
+			return validation != null and not validation.is_empty() and validation.get_format() == Image.FORMAT_L8 and validation.has_mipmaps())
 
 
 func _publish_package_transactionally(package: Terrain3DRegionLighting, final_path: String) -> Error:
 	var directory: String = final_path.get_base_dir()
 	var base_name: String = final_path.get_file().trim_suffix(".t3dlight.tres")
-	var staging_path: String = directory.path_join(base_name + ".publishing.t3dlight.tres")
-	var previous_path: String = directory.path_join(base_name + ".previous.t3dlight.tres")
-	for cleanup_path: String in [staging_path, previous_path]:
-		_remove_file_if_present(cleanup_path)
-	var save_error: Error = ResourceSaver.save(package, staging_path)
-	if save_error != OK:
-		return save_error
-	var validation := ResourceLoader.load(
-		staging_path, "Terrain3DRegionLighting", ResourceLoader.CACHE_MODE_IGNORE) as Terrain3DRegionLighting
-	if not is_instance_valid(validation) or validation.light_data_path.is_empty():
-		_remove_file_if_present(staging_path)
-		return ERR_FILE_CORRUPT
-	var absolute_final: String = ProjectSettings.globalize_path(final_path)
-	var absolute_staging: String = ProjectSettings.globalize_path(staging_path)
-	var absolute_previous: String = ProjectSettings.globalize_path(previous_path)
-	var had_previous: bool = FileAccess.file_exists(final_path)
-	if had_previous:
-		var backup_error: Error = DirAccess.rename_absolute(absolute_final, absolute_previous)
-		if backup_error != OK:
-			_remove_file_if_present(staging_path)
-			return backup_error
-	var publish_error: Error = DirAccess.rename_absolute(absolute_staging, absolute_final)
-	if publish_error != OK:
-		if had_previous:
-			DirAccess.rename_absolute(absolute_previous, absolute_final)
-		_remove_file_if_present(staging_path)
-		return publish_error
-	if had_previous:
-		_remove_file_if_present(previous_path)
-	return OK
+	return TransactionalResourcePublisher.publish(
+		package, final_path,
+		directory.path_join(base_name + ".publishing.t3dlight.tres"),
+		directory.path_join(base_name + ".previous.t3dlight.tres"),
+		"Terrain3DRegionLighting",
+		func(resource: Resource) -> bool:
+			var validation := resource as Terrain3DRegionLighting
+			return is_instance_valid(validation) and not validation.light_data_path.is_empty())
 
 
 func _remove_file_if_present(path: String) -> Error:
@@ -1058,11 +993,3 @@ func _clear_children(node: Node) -> void:
 		child.free()
 
 
-func _find_terrain(node: Node) -> Terrain3D:
-	if node is Terrain3D:
-		return node as Terrain3D
-	for child: Node in node.get_children():
-		var found: Terrain3D = _find_terrain(child)
-		if is_instance_valid(found):
-			return found
-	return null

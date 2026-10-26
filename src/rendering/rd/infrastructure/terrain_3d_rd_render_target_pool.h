@@ -1,7 +1,8 @@
 #ifndef TERRAIN3D_RD_RENDER_TARGET_POOL_H
 #define TERRAIN3D_RD_RENDER_TARGET_POOL_H
 
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_framebuffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_texture.h"
 #include <godot_cpp/classes/rd_texture_format.hpp>
 #include <godot_cpp/classes/rd_texture_view.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -29,8 +30,8 @@ public:
 private:
 	typedef struct Entry_s {
 		Key key;
-		RID texture;
-		RID framebuffer;
+		Terrain3DRdTexture texture;
+		Terrain3DRdFramebuffer framebuffer;
 		bool inUse = false;
 	} Entry;
 	static_assert( Capacity > 0u, "Render target pool needs at least one slot" );
@@ -45,9 +46,10 @@ private:
 		return ( uint64_t )rKey.width * rKey.height * rKey.bytesPerPixel;
 	}
 	void freeEntry( Entry &rEntry ) {
-		m_context.freeResource( rEntry.framebuffer );
-		m_context.freeResource( rEntry.texture, bytes( rEntry.key ) );
-		rEntry = Entry{};
+		rEntry.framebuffer.releaseTracked( m_context );
+		rEntry.texture.releaseTracked( m_context );
+		rEntry.key = Key{};
+		rEntry.inUse = false;
 	}
 	void synchronizeDevice() {
 		const uint64_t generation = m_context.getDeviceGeneration();
@@ -75,17 +77,17 @@ public:
 			return false;
 		}
 		for ( Entry &entry : m_entries ) {
-			if ( !entry.inUse && entry.texture.is_valid() && entry.key == rKey ) {
+			if ( !entry.inUse && entry.texture.isValid() && entry.key == rKey ) {
 				entry.inUse = true;
 				m_context.recordRenderEvent( m_owner, Terrain3DRdContext::RenderTelemetry::EVENT_TARGET_REUSE );
-				rTexture = entry.texture;
-				rFramebuffer = entry.framebuffer;
+				rTexture = entry.texture.rid();
+				rFramebuffer = entry.framebuffer.rid();
 				return true;
 			}
 		}
 		Entry *slot = nullptr;
 		for ( Entry &entry : m_entries ) {
-			if ( !entry.texture.is_valid() ) {
+			if ( !entry.texture.isValid() ) {
 				slot = &entry;
 				break;
 			}
@@ -103,49 +105,48 @@ public:
 		if ( !slot ) {
 			return false;
 		}
-		if ( slot->texture.is_valid() ) {
+		if ( slot->texture.isValid() ) {
 			freeEntry( *slot );
 		}
-		Ref<RDTextureFormat> format;
-		format.instantiate();
-		format->set_width( rKey.width );
-		format->set_height( rKey.height );
-		format->set_depth( 1u );
-		format->set_array_layers( 1u );
-		format->set_mipmaps( 1u );
-		format->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
-		format->set_format( rKey.format );
-		format->set_usage_bits( BitField<RenderingDevice::TextureUsageBits>( rKey.usage ) );
-		Ref<RDTextureView> view;
-		view.instantiate();
-		RID texture;
-		if ( !Terrain3DRdResourceService( m_context, m_owner )
-		                    .create( texture, rName + String( ".Texture" ), Terrain3DRdContext::RESOURCE_TEXTURE, m_memory,
-		                            bytes( rKey ), [&]( RenderingDevice *pRd ) { return pRd->texture_create( format, view ); } ) ) {
-			return false;
-		}
-		RID framebuffer;
+		Terrain3DRdTexture texture;
+		t3dRdTextureSpec_t spec;
+		spec.m_name = rName + String( ".Texture" ); spec.m_owner = m_owner; spec.m_memory = m_memory;
+		spec.m_layout.m_format = rKey.format; spec.m_layout.m_nWidth = rKey.width; spec.m_layout.m_nHeight = rKey.height;
+		spec.m_layout.m_nLayers = 1u; spec.m_layout.m_nMipmaps = 1u; spec.m_layout.m_nUsageBits = rKey.usage; spec.m_layout.m_nBytes = bytes( rKey );
+		if ( !texture.createTracked( m_context, spec ) ) return false;
+		Terrain3DRdFramebuffer framebuffer;
 		if ( rKey.framebuffer ) {
-			TypedArray<RID> attachments;
-			attachments.push_back( texture );
-			if ( !Terrain3DRdResourceService( m_context, m_owner )
-			                    .create( framebuffer, rName + String( ".Framebuffer" ), Terrain3DRdContext::RESOURCE_FRAMEBUFFER,
-		                            Terrain3DRdContext::MEMORY_NONE, 0u,
-		                            [&]( RenderingDevice *pRd ) { return pRd->framebuffer_create( attachments, -1, 1u ); } ) ) {
-				m_context.freeResource( texture, bytes( rKey ) );
-				return false;
+			TypedArray<RID> attachments; attachments.push_back( texture.rid() );
+			if ( !framebuffer.createTracked( m_context, m_owner, rName + String( ".Framebuffer" ), attachments ) ) {
+				texture.releaseTracked( m_context ); return false;
 			}
 		}
-		*slot = { rKey, texture, framebuffer, true };
+		slot->key = rKey; slot->inUse = true; slot->texture.swap( texture );
+		if ( framebuffer.isValid() ) slot->framebuffer.swap( framebuffer );
 		m_context.recordRenderEvent( m_owner, Terrain3DRdContext::RenderTelemetry::EVENT_TARGET_CREATE );
-		rTexture = texture;
-		rFramebuffer = framebuffer;
+		rTexture = slot->texture.rid();
+		rFramebuffer = slot->framebuffer.rid();
 		return true;
 	}
 
+	int64_t framebufferFormat( const RID &rFramebuffer ) const {
+		for ( const Entry &entry : m_entries ) {
+			if ( entry.framebuffer.rid() == rFramebuffer ) return entry.framebuffer.format( m_context.getDevice() );
+		}
+		return RenderingDevice::INVALID_ID;
+	}
+
+	PackedByteArray readback( const RID &rTexture, uint32_t nLayer = 0u ) {
+		for ( Entry &entry : m_entries ) if ( entry.texture.rid() == rTexture ) return entry.texture.readbackTracked( m_context, nLayer );
+		return PackedByteArray();
+	}
+	Error readbackAsync( const RID &rTexture, uint32_t nLayer, const Callable &rCallback ) {
+		for ( Entry &entry : m_entries ) if ( entry.texture.rid() == rTexture ) return entry.texture.readbackAsyncTracked( m_context, nLayer, rCallback );
+		return ERR_INVALID_PARAMETER;
+	}
 	void release( RID &rTexture, RID &rFramebuffer ) {
 		for ( Entry &entry : m_entries ) {
-			if ( entry.inUse && entry.texture == rTexture ) {
+			if ( entry.inUse && entry.texture.rid() == rTexture ) {
 				entry.inUse = false;
 				break;
 			}
@@ -159,7 +160,7 @@ public:
 	}
 	void abandon() {
 		for ( Entry &entry : m_entries ) {
-			entry = Entry{};
+			entry.texture.abandon(); entry.framebuffer.abandon(); entry.key = Key{}; entry.inUse = false;
 		}
 		m_nEvictCursor = 0u;
 	}

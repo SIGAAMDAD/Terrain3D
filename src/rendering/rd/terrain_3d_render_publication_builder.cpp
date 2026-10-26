@@ -15,7 +15,7 @@
 #include "memory/terrain_3d_memory.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/terrain_3d_rd_mesh_cache.h"
-#include "rendering/rd/render_world/terrain_3d_render_world_geometry.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_ocean_material_params.h"
 #include "rendering/terrain_3d_mesher.h"
 #include "terrain_3d.h"
 
@@ -40,9 +40,6 @@ static Terrain3DHLODStreamer *t3dRdGetInstanceHlodStreamer( Terrain3D *const pTe
 #endif
 }
 
-static Variant t3dRdOceanParam( const ShaderMaterial *const pMaterial, const char *const pszName ) {
-	return pMaterial ? pMaterial->get_shader_parameter( StringName( pszName ) ) : Variant();
-}
 
 static size_t t3dRdPublicationGrowthTarget( const size_t nRequired, const size_t nCurrentCapacity ) {
 	if ( nRequired == 0u ) {
@@ -229,21 +226,6 @@ static bool t3dWorldAppendTerrainStripClusters( Terrain3DWorldPublication &rWorl
 	return true;
 }
 
-static float t3dRdOceanFloatParam( const ShaderMaterial *const pMaterial, const char *const pszName, const float fDefault ) {
-	const Variant value = t3dRdOceanParam( pMaterial, pszName );
-	return value.get_type() == Variant::FLOAT || value.get_type() == Variant::INT ? ( float )( value ) : fDefault;
-}
-static Color t3dRdOceanColorParam( const ShaderMaterial *const pMaterial, const char *const pszName, const Color &rDefault ) {
-	const Variant value = t3dRdOceanParam( pMaterial, pszName );
-	if ( value.get_type() == Variant::COLOR ) {
-		return ( Color )( value );
-	}
-	if ( value.get_type() == Variant::VECTOR3 ) {
-		const Vector3 v = value;
-		return Color( v.x, v.y, v.z, 1.0f );
-	}
-	return rDefault;
-}
 
 uint32_t Terrain3DRenderPublicationBuilder::selectWritablePublicationBank( const uint32_t nReaderBank, const uint32_t nPendingBank ) const {
 	for ( uint32_t bank = 0u; bank < s_nRdFrameSnapshotSlotCount; ++bank ) {
@@ -1172,9 +1154,9 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState( Terrain3DRenderCoordi
 		return false;
 	}
 
-	t3dScopedLock_t render_world_lock( rCoordinator.m_staticScenePublicationMutex );
+	t3dScopedLock_t world_lock( rCoordinator.m_staticScenePublicationMutex );
 	const Terrain3DRenderCoordinator::t3dStaticScenePublication_t &static_pub = rCoordinator.m_staticScenePublication;
-	const T3DGeometryDatabase *const pStaticGeometry = static_pub.bValid ? static_pub.pGeometry : NULL;
+	const Terrain3DWorldPublication *const pStaticWorld = static_pub.bValid ? static_pub.pWorld : NULL;
 
 	// Fast retained-publication rejection before any capacity walk or instance scan.
 	// Dynamic patch motion is intentionally absent from this signature.
@@ -1183,7 +1165,7 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState( Terrain3DRenderCoordi
 		const t3dMeshType_t type = rSnapshot.m_szPatches[iPatch].m_nLod == 0u ? LOD0_MESH : OUTER_RING_MESH;
 		t3dWorldAccumulateCapacity( terrain_strip_cluster_count, t3dWorldTerrainStripClusterCountForMesh( *pMesher, type ) );
 	}
-	const uint64_t static_parts[5] = { pStaticGeometry ? pStaticGeometry->nContentSignature : 0u,
+	const uint64_t static_parts[5] = { pStaticWorld ? pStaticWorld->m_nSourceSignature : 0u,
 		static_pub.nGeneration,
 		static_pub.nCellCount,
 		static_pub.nInstanceCount,
@@ -1230,23 +1212,22 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState( Terrain3DRenderCoordi
 			        ( size_t )m_cachedInstanceScene.m_cells[i].m_nInstanceCount * ( size_t )cluster_count );
 		}
 	}
-	if ( pStaticGeometry ) {
-		t3dWorldAccumulateCapacity( required.m_nVertices, pStaticGeometry->nVertexCount );
-		t3dWorldAccumulateCapacity( required.m_nClusterVertexIndices, pStaticGeometry->nClusterVertexIndexCount );
-		t3dWorldAccumulateCapacity( required.m_nTriangleWords, pStaticGeometry->nTriangleCount );
-		t3dWorldAccumulateCapacity( required.m_nClusters, pStaticGeometry->nClusterCount );
-		t3dWorldAccumulateCapacity( required.m_nClusterVtMetadata, pStaticGeometry->nClusterCount );
-		t3dWorldAccumulateCapacity( required.m_nMaterials, static_pub.nMaterialCount );
-		t3dWorldAccumulateCapacity( required.m_nInstances, static_pub.nInstanceCount );
-		t3dWorldAccumulateCapacity( required.m_nTransforms, static_pub.nInstanceCount );
-		t3dWorldAccumulateCapacity( required.m_nCells, static_pub.nCellCount );
-		for ( uint32_t i = 0u; i < static_pub.nInstanceCount; ++i ) {
-			const T3DInstanceRecord &src = static_pub.pInstances[i];
-			if ( src.nMeshId < pStaticGeometry->nMeshCount ) {
-				t3dWorldAccumulateCapacity( required.m_nVisibilityCandidates, pStaticGeometry->Buffers.pMeshRecords[src.nMeshId].nClusterCount );
-			}
+	if ( pStaticWorld ) {
+		t3dWorldAccumulateCapacity( required.m_nVertices, pStaticWorld->m_vertices.size() );
+		t3dWorldAccumulateCapacity( required.m_nClusterVertexIndices, pStaticWorld->m_clusterVertexIndices.size() );
+		t3dWorldAccumulateCapacity( required.m_nTriangleWords, pStaticWorld->m_triangleWords.size() );
+		t3dWorldAccumulateCapacity( required.m_nClusters, pStaticWorld->m_clusters.size() );
+		t3dWorldAccumulateCapacity( required.m_nClusterVtMetadata, pStaticWorld->m_clusterVtMetadata.size() );
+		t3dWorldAccumulateCapacity( required.m_nMaterials, pStaticWorld->m_materials.size() );
+		t3dWorldAccumulateCapacity( required.m_nTransforms, pStaticWorld->m_transforms.size() );
+		t3dWorldAccumulateCapacity( required.m_nInstances, pStaticWorld->m_instances.size() );
+		t3dWorldAccumulateCapacity( required.m_nCells, pStaticWorld->m_cells.size() );
+		t3dWorldAccumulateCapacity( required.m_nHlodRecords, pStaticWorld->m_hlodRecords.size() );
+		for ( size_t i = 0u; i < pStaticWorld->m_instances.size(); ++i ) {
+			t3dWorldAccumulateCapacity( required.m_nVisibilityCandidates, pStaticWorld->m_instances[i].m_nClusterCount );
 		}
 	}
+
 	if ( !hasWorldPublicationCapacity( required ) ) {
 		requestWorldPublicationCapacity( required );
 		return false;
@@ -1361,77 +1342,57 @@ bool Terrain3DRenderPublicationBuilder::publishWorldState( Terrain3DRenderCoordi
 		}
 	}
 
-	if ( pStaticGeometry ) {
-		const uint32_t vertex_base = ( uint32_t )world.m_vertices.size(), index_base = ( uint32_t )world.m_clusterVertexIndices.size();
-		const uint32_t triangle_base = ( uint32_t )world.m_triangleWords.size(), cluster_base = ( uint32_t )world.m_clusters.size();
-		const uint32_t material_base = ( uint32_t )world.m_materials.size(), instance_base = ( uint32_t )world.m_instances.size(),
-		               cell_base = ( uint32_t )world.m_cells.size();
-		for ( uint32_t i = 0u; i < pStaticGeometry->nVertexCount; ++i ) {
-			world.m_vertices.push_back( pStaticGeometry->Buffers.pVertexHeap[i] );
+	if ( pStaticWorld ) {
+		const uint32_t vertex_base = ( uint32_t )world.m_vertices.size();
+		const uint32_t index_base = ( uint32_t )world.m_clusterVertexIndices.size();
+		const uint32_t triangle_base = ( uint32_t )world.m_triangleWords.size();
+		const uint32_t cluster_base = ( uint32_t )world.m_clusters.size();
+		const uint32_t material_base = ( uint32_t )world.m_materials.size();
+		const uint32_t transform_base = ( uint32_t )world.m_transforms.size();
+		const uint32_t instance_base = ( uint32_t )world.m_instances.size();
+		const uint32_t cell_base = ( uint32_t )world.m_cells.size();
+
+		world.m_vertices.insert( world.m_vertices.end(), pStaticWorld->m_vertices.begin(), pStaticWorld->m_vertices.end() );
+		for ( size_t i = 0u; i < pStaticWorld->m_clusterVertexIndices.size(); ++i ) {
+			world.m_clusterVertexIndices.push_back( vertex_base + pStaticWorld->m_clusterVertexIndices[i] );
 		}
-		for ( uint32_t i = 0u; i < pStaticGeometry->nClusterVertexIndexCount; ++i ) {
-			world.m_clusterVertexIndices.push_back( vertex_base + pStaticGeometry->Buffers.pClusterVertexIndexHeap[i] );
-		}
-		for ( uint32_t i = 0u; i < pStaticGeometry->nTriangleCount; ++i ) {
-			world.m_triangleWords.push_back( pStaticGeometry->Buffers.pTriangleHeap[i].nLocalIndices );
-		}
-		for ( uint32_t i = 0u; i < static_pub.nMaterialCount; ++i ) {
-			world.m_materials.push_back( static_pub.pMaterials[i] );
-		}
-		for ( uint32_t i = 0u; i < pStaticGeometry->nClusterCount; ++i ) {
-			t3dWorldCluster_t cluster = pStaticGeometry->Buffers.pWorldClusterRecords[i];
+		world.m_triangleWords.insert( world.m_triangleWords.end(), pStaticWorld->m_triangleWords.begin(), pStaticWorld->m_triangleWords.end() );
+		world.m_materials.insert( world.m_materials.end(), pStaticWorld->m_materials.begin(), pStaticWorld->m_materials.end() );
+		for ( size_t i = 0u; i < pStaticWorld->m_clusters.size(); ++i ) {
+			t3dWorldCluster_t cluster = pStaticWorld->m_clusters[i];
 			cluster.m_nVertexIndexOffset += index_base;
 			cluster.m_nTriangleOffset += triangle_base;
-			cluster.m_nPackedLodGeometryKind =
-			        ( cluster.m_nPackedLodGeometryKind & 0xffffu ) | ( T3D_WORLD_GEOMETRY_STATIC_CLUSTER << 16u );
-			if ( cluster.m_nMaterial != T3D_WORLD_INVALID_ID ) {
-				cluster.m_nMaterial += material_base;
-			}
+			if ( cluster.m_nMaterial != T3D_WORLD_INVALID_ID ) cluster.m_nMaterial += material_base;
 			world.m_clusters.push_back( cluster );
-			world.m_clusterVtMetadata.push_back( pStaticGeometry->Buffers.pWorldClusterVtMetadata
-			                ? pStaticGeometry->Buffers.pWorldClusterVtMetadata[i]
-			                : t3dWorldClusterVtMetadata_t{} );
-			++world.m_nStaticClusterCount;
 		}
-		for ( uint32_t i = 0u; i < static_pub.nInstanceCount; ++i ) {
-			const T3DInstanceRecord &src = static_pub.pInstances[i];
-			if ( src.nMeshId >= pStaticGeometry->nMeshCount ) {
-				continue;
-			}
-			const T3DMeshRecord &mesh = pStaticGeometry->Buffers.pMeshRecords[src.nMeshId];
-			t3dWorldTransform_t transform{};
-			memcpy( &transform, src.mTransform3x4, sizeof( transform ) );
-			const uint32_t transform_index = ( uint32_t )world.m_transforms.size();
-			world.m_transforms.push_back( transform );
-			world.m_previousTransforms.push_back( transform );
-			t3dWorldInstance_t instance{};
-			instance.m_nClusterOffset = cluster_base + mesh.nClusterOffset;
-			instance.m_nClusterCount = mesh.nClusterCount;
-			instance.m_nTransformIndex = transform_index;
-			instance.m_nPreviousTransformIndex = transform_index;
-			instance.m_nVisibilityLayers = UINT32_MAX;
-			instance.m_nFlags = src.nFlags;
-			instance.m_nGeometryKind = T3D_WORLD_GEOMETRY_STATIC_CLUSTER;
-			instance.m_nSourceId = src.nMeshId;
-			instance.m_nMaterialOverride =
-			        src.nMaterialOverride == T3D_WORLD_INVALID_ID ? T3D_WORLD_INVALID_ID : material_base + src.nMaterialOverride;
-			instance.m_nCellId = cell_base + src.nCellId;
+		world.m_clusterVtMetadata.insert( world.m_clusterVtMetadata.end(),
+		        pStaticWorld->m_clusterVtMetadata.begin(), pStaticWorld->m_clusterVtMetadata.end() );
+		world.m_transforms.insert( world.m_transforms.end(), pStaticWorld->m_transforms.begin(), pStaticWorld->m_transforms.end() );
+		world.m_previousTransforms.insert( world.m_previousTransforms.end(),
+		        pStaticWorld->m_previousTransforms.begin(), pStaticWorld->m_previousTransforms.end() );
+		for ( size_t i = 0u; i < pStaticWorld->m_instances.size(); ++i ) {
+			t3dWorldInstance_t instance = pStaticWorld->m_instances[i];
+			instance.m_nClusterOffset += cluster_base;
+			instance.m_nTransformIndex += transform_base;
+			instance.m_nPreviousTransformIndex += transform_base;
+			if ( instance.m_nMaterialOverride != T3D_WORLD_INVALID_ID ) instance.m_nMaterialOverride += material_base;
+			if ( instance.m_nCellId != T3D_WORLD_INVALID_ID ) instance.m_nCellId += cell_base;
 			world.m_instances.push_back( instance );
 		}
-		for ( uint32_t i = 0u; i < static_pub.nCellCount; ++i ) {
-			const T3DSceneCell &src = static_pub.pCells[i];
-			t3dWorldCell_t cell{};
-			cell.m_fCenter[0] = src.vCenter[0];
-			cell.m_fCenter[1] = src.vCenter[1];
-			cell.m_fCenter[2] = src.vCenter[2];
-			cell.m_fRadius = src.fRadius;
-			cell.m_nFirstInstance = instance_base + src.nInstanceOffset;
-			cell.m_nInstanceCount = src.nInstanceCount;
-			cell.m_nVisibilityLayers = UINT32_MAX;
-			cell.m_nFlags = src.nFlags;
+		for ( size_t i = 0u; i < pStaticWorld->m_cells.size(); ++i ) {
+			t3dWorldCell_t cell = pStaticWorld->m_cells[i];
+			cell.m_nFirstInstance += instance_base;
 			world.m_cells.push_back( cell );
 		}
+		for ( size_t i = 0u; i < pStaticWorld->m_hlodRecords.size(); ++i ) {
+			t3dWorldHlodRecord_t hlod = pStaticWorld->m_hlodRecords[i];
+			hlod.m_nFirstInstance += instance_base;
+			hlod.m_nClusterOffset += cluster_base;
+			world.m_hlodRecords.push_back( hlod );
+		}
+		world.m_nStaticClusterCount += pStaticWorld->m_nStaticClusterCount;
 	}
+
 
 	for ( uint32_t iPatch = 0u; iPatch < rSnapshot.m_nPatchCount; ++iPatch ) {
 		const t3dRdPatch_t &patch = rSnapshot.m_szPatches[iPatch];

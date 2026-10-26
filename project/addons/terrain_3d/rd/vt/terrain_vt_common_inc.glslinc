@@ -302,7 +302,7 @@ bool t3d_vt_allocation_quality_enabled(T3DVTAllocation allocation) {
 }
 
 // WG-F P16: pure prediction/address helpers shared by raster feedback and the
-// production RenderWorld predictor. This file owns no descriptors and performs
+// production World predictor. This file owns no descriptors and performs
 // no residency mutation.
 
 struct T3DVTPredictionRect {

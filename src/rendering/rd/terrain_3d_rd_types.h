@@ -584,6 +584,14 @@ typedef enum t3dRdInstanceFlags_e : uint32_t {
 	T3D_RD_INSTANCE_DEPTH_PREPASS_PASS = 1u << 31u,
 } t3dRdInstanceFlags_t;
 
+EA_FORCE_INLINE uint32_t t3dRdInstanceCategoryIndex( const int32_t nCategory ) {
+	return nCategory < 0 ? 0u : ( nCategory > 2 ? 2u : ( uint32_t )( nCategory ) );
+}
+
+EA_FORCE_INLINE uint32_t t3dRdInstanceCategoryFlags( const int32_t nCategory ) {
+	return ( t3dRdInstanceCategoryIndex( nCategory ) << T3D_RD_INSTANCE_CATEGORY_SHIFT ) & T3D_RD_INSTANCE_CATEGORY_MASK;
+}
+
 // CPU publication descriptor for one logical resident cell/LOD. The renderer
 // uses the AABB for coarse rejection, then writes visible-instance indices into
 // a single persistent indirection buffer grouped by mesh surface/material.

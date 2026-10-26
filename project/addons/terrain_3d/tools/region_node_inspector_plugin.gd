@@ -3,18 +3,9 @@
 @tool
 extends EditorInspectorPlugin
 
-const REGION_NODES_NAME: StringName = &"RegionNodes"
-const REGION_CONTAINER_META: StringName = &"terrain3d_workbench_region_container"
-const NODE_META_BOUNDARY_POLICY: StringName = &"terrain3d_boundary_policy"
-const NODE_META_LIGHTING_CLASS: StringName = &"terrain3d_lighting_class"
-const NODE_META_BAKED_LIGHTING_MODE: StringName = &"terrain3d_baked_lighting_mode"
-const NODE_META_CONTRIBUTE_BAKED_GI: StringName = &"terrain3d_contribute_baked_gi"
-const NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL: StringName = &"terrain3d_receive_dynamic_directional"
-const NODE_META_DYNAMIC_SHADOW_ELIGIBLE: StringName = &"terrain3d_dynamic_shadow_eligible"
-const NODE_META_SHADOW_PROXY_SCENE_PATH: StringName = &"terrain3d_shadow_proxy_scene_path"
+const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
 
-const BOUNDARY_POLICY_ANCHOR: int = 0
-const BOUNDARY_POLICY_BOUNDS: int = 1
+
 const LIGHTING_TERRAIN: int = 0
 const LIGHTING_FOLIAGE: int = 1
 const LIGHTING_MEDIUM: int = 2
@@ -39,13 +30,13 @@ func _parse_begin(object: Object) -> void:
 	add_custom_control(_make_lighting_class_row(region_node))
 	add_custom_control(_make_baked_mode_row(region_node))
 	add_custom_control(_make_bool_row(
-		"Contribute to baked GI", NODE_META_CONTRIBUTE_BAKED_GI, true, region_node,
+		"Contribute to baked GI", WorkbenchMetadata.NODE_META_CONTRIBUTE_BAKED_GI, true, region_node,
 		"Includes this object as static bounce/occlusion geometry during regional lightmap baking, independently of whether it receives a lightmap."))
 	add_custom_control(_make_bool_row(
-		"Receive directional", NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, true, region_node,
+		"Receive directional", WorkbenchMetadata.NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, true, region_node,
 		"Whether this receiver is eligible for the project's runtime sun/moon lighting path. The semantic value is serialized independently of its lightmap."))
 	add_custom_control(_make_bool_row(
-		"Dynamic shadow eligible", NODE_META_DYNAMIC_SHADOW_ELIGIBLE, true, region_node,
+		"Dynamic shadow eligible", WorkbenchMetadata.NODE_META_DYNAMIC_SHADOW_ELIGIBLE, true, region_node,
 		"Whether this object may enter the directional shadow map when its semantic class is enabled by the quality preset."))
 	add_custom_control(_make_shadow_proxy_row(region_node))
 
@@ -57,12 +48,12 @@ func _make_boundary_row(region_node: Node3D) -> Control:
 		"Single ownership stays with this root. Bounds Coverage keeps the owner region resident when the node extends into neighboring regions.")
 	row.add_child(label)
 	var options := OptionButton.new()
-	options.add_item("Bounds Coverage", BOUNDARY_POLICY_BOUNDS)
-	options.add_item("Anchor Only", BOUNDARY_POLICY_ANCHOR)
+	options.add_item("Bounds Coverage", WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS)
+	options.add_item("Anchor Only", WorkbenchMetadata.BOUNDARY_POLICY_ANCHOR)
 	options.tooltip_text = "Bounds Coverage avoids boundary popping without duplicating the node. Anchor Only streams strictly from the root region."
-	var policy: int = int(region_node.get_meta(NODE_META_BOUNDARY_POLICY, BOUNDARY_POLICY_BOUNDS))
+	var policy: int = int(region_node.get_meta(WorkbenchMetadata.NODE_META_BOUNDARY_POLICY, WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS))
 	_select_id(options, policy)
-	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, NODE_META_BOUNDARY_POLICY))
+	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_BOUNDARY_POLICY))
 	row.add_child(options)
 	return row
 
@@ -79,8 +70,8 @@ func _make_lighting_class_row(region_node: Node3D) -> Control:
 	options.add_item("Large Occluder", LIGHTING_LARGE)
 	options.add_item("Regional Occluder", LIGHTING_REGIONAL)
 	options.tooltip_text = "Semantic lighting/shadow class for this streamed object. The class selects the quality-policy shadow treatment independently of baked-lighting participation."
-	_select_id(options, int(region_node.get_meta(NODE_META_LIGHTING_CLASS, LIGHTING_MEDIUM)))
-	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, NODE_META_LIGHTING_CLASS))
+	_select_id(options, int(region_node.get_meta(WorkbenchMetadata.NODE_META_LIGHTING_CLASS, LIGHTING_MEDIUM)))
+	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_LIGHTING_CLASS))
 	row.add_child(options)
 	return row
 
@@ -96,8 +87,8 @@ func _make_baked_mode_row(region_node: Node3D) -> Control:
 	options.add_item("Probe / Dynamic", BAKED_PROBE)
 	options.add_item("Material Only", BAKED_MATERIAL_ONLY)
 	options.tooltip_text = "Baked-lighting participation for this streamed object: disabled, lightmap, probe/dynamic, or material-only contribution."
-	_select_id(options, int(region_node.get_meta(NODE_META_BAKED_LIGHTING_MODE, BAKED_LIGHTMAP)))
-	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, NODE_META_BAKED_LIGHTING_MODE))
+	_select_id(options, int(region_node.get_meta(WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE, BAKED_LIGHTMAP)))
+	options.item_selected.connect(_on_int_meta_selected.bind(weakref(region_node), options, WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE))
 	row.add_child(options)
 	return row
 
@@ -124,7 +115,7 @@ func _make_shadow_proxy_row(region_node: Node3D) -> Control:
 	picker.base_type = "PackedScene"
 	picker.tooltip_text = "Optional low-detail PackedScene used as a shadow-only proxy while this streamed object is resident."
 	picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var path: String = String(region_node.get_meta(NODE_META_SHADOW_PROXY_SCENE_PATH, ""))
+	var path: String = String(region_node.get_meta(WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, ""))
 	if not path.is_empty() and ResourceLoader.exists(path, "PackedScene"):
 		picker.edited_resource = load(path)
 	picker.resource_changed.connect(_on_shadow_proxy_changed.bind(weakref(region_node)))
@@ -169,7 +160,7 @@ func _on_shadow_proxy_changed(resource: Resource, node_ref: WeakRef) -> void:
 	if not is_instance_valid(region_node):
 		return
 	var path: String = resource.resource_path if is_instance_valid(resource) else ""
-	region_node.set_meta(NODE_META_SHADOW_PROXY_SCENE_PATH, path)
+	region_node.set_meta(WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, path)
 	EditorInterface.mark_scene_as_unsaved()
 
 
@@ -179,10 +170,10 @@ func _find_region_node_root(node: Node) -> Node3D:
 		var parent: Node = current.get_parent()
 		# Multi-region workbenches place streamed roots one level below a region
 		# ownership container. Version-2 workbenches remain supported directly.
-		if bool(parent.get_meta(REGION_CONTAINER_META, false)):
+		if bool(parent.get_meta(WorkbenchMetadata.REGION_CONTAINER_META, false)):
 			return current as Node3D
-		if parent.name == REGION_NODES_NAME and parent is Node3D and \
-			not bool(current.get_meta(REGION_CONTAINER_META, false)):
+		if parent.name == WorkbenchMetadata.REGION_NODES_NAME and parent is Node3D and \
+			not bool(current.get_meta(WorkbenchMetadata.REGION_CONTAINER_META, false)):
 			return current as Node3D
 		current = parent
 	return null

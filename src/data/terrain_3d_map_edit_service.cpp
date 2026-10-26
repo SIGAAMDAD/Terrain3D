@@ -32,6 +32,40 @@ typedef struct t3dDerivedMapBuildContext_s {
 	float m_fVertexSpacing = 1.0f;
 } t3dDerivedMapBuildContext_t;
 
+static bool t3dMapEditServicePrepareDerivedHeightHalo( Terrain3DSampler &rSampler, const t3dDerivedMapTask_t &rTask,
+        float *const pHalo, const size_t nHaloCapacity, int &rHaloStride, size_t &rHaloElements ) {
+	const int width = rTask.m_dirtyRect.size.x;
+	const int height = rTask.m_dirtyRect.size.y;
+	if ( !rTask.m_bAvailable || width <= 0 || height <= 0 || pHalo == NULL ) {
+		return false;
+	}
+	rHaloStride = width + 2;
+	rHaloElements = ( size_t )rHaloStride * ( size_t )( height + 2 );
+	if ( rHaloElements > nHaloCapacity ) {
+		return false;
+	}
+	const int64_t regionBaseX = ( int64_t )( rTask.m_location.x ) * s_nRegionSize;
+	const int64_t regionBaseZ = ( int64_t )( rTask.m_location.y ) * s_nRegionSize;
+	const int64_t haloGridX = regionBaseX + rTask.m_dirtyRect.position.x - 1;
+	const int64_t haloGridZ = regionBaseZ + rTask.m_dirtyRect.position.y - 1;
+	rSampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, rHaloStride, false );
+	for ( int y = -1; y <= height; ++y ) {
+		for ( int x = -1; x <= width; ++x ) {
+			float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )rHaloStride + ( size_t )( x + 1 )];
+			if ( isfinite( sample ) ) {
+				continue;
+			}
+			const int localX = rTask.m_dirtyRect.position.x + x;
+			const int localY = rTask.m_dirtyRect.position.y + y;
+			const int clampedX = CLAMP( localX, 0, s_nRegionSize - 1 );
+			const int clampedY = CLAMP( localY, 0, s_nRegionSize - 1 );
+			sample = rSampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
+			sample = isfinite( sample ) ? sample : 0.0f;
+		}
+	}
+	return true;
+}
+
 static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t nBegin, const size_t nEnd, const int32_t nWorkerIndex ) {
 	t3dDerivedMapBuildContext_t *const pBuildContext = ( t3dDerivedMapBuildContext_t * )( pContext );
 	Terrain3DSampler sampler( pBuildContext->m_samplingSource );
@@ -46,32 +80,17 @@ static void t3dMapEditServiceBuildDerivedMapRange( void *pContext, const size_t 
 			continue;
 		}
 
-		const int haloStride = width + 2;
-		const size_t halo_elements = ( size_t )haloStride * ( size_t )( height + 2 );
-		if ( pBuildContext->m_pWorkerHaloScratch == NULL || pBuildContext->m_pOutputScratch == NULL
-		        || halo_elements > pBuildContext->m_nWorkerHaloElements ) {
+		if ( pBuildContext->m_pWorkerHaloScratch == NULL || pBuildContext->m_pOutputScratch == NULL ) {
 			continue;
 		}
 		float *const pHalo = pBuildContext->m_pWorkerHaloScratch + ( size_t )MAX( 0, nWorkerIndex ) * pBuildContext->m_nWorkerHaloElements;
-		const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * s_nRegionSize;
-		const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * s_nRegionSize;
-		const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
-		const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
-		sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, haloStride, false );
-		for ( int y = -1; y <= height; ++y ) {
-			for ( int x = -1; x <= width; ++x ) {
-				float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )haloStride + ( size_t )( x + 1 )];
-				if ( isfinite( sample ) ) {
-					continue;
-				}
-				const int localX = task.m_dirtyRect.position.x + x;
-				const int localY = task.m_dirtyRect.position.y + y;
-				const int clampedX = CLAMP( localX, 0, s_nRegionSize - 1 );
-				const int clampedY = CLAMP( localY, 0, s_nRegionSize - 1 );
-				sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
-				sample = isfinite( sample ) ? sample : 0.0f;
-			}
+		int haloStride = 0;
+		size_t halo_elements = 0u;
+		if ( !t3dMapEditServicePrepareDerivedHeightHalo(
+		             sampler, task, pHalo, pBuildContext->m_nWorkerHaloElements, haloStride, halo_elements ) ) {
+			continue;
 		}
+		( void )halo_elements;
 
 		if ( task.m_nOutputBytes != ( size_t )width * ( size_t )height * 2u ) {
 			continue;
@@ -251,28 +270,12 @@ const eastl::vector<t3dDerivedMapUpdate_t, Terrain3DEastlAllocator> &Terrain3DMa
 					continue;
 				}
 				const size_t job_index = jobs.size();
-				const int haloStride = width + 2;
-				const size_t haloElements = ( size_t )haloStride * ( size_t )( height + 2 );
 				const size_t rgbaBytes = ( size_t )width * ( size_t )height * sizeof( uint32_t );
 				float *const pHalo = m_fDerivedHaloScratch.data() + job_index * maxHaloElements;
-				const int64_t regionBaseX = ( int64_t )( task.m_location.x ) * s_nRegionSize;
-				const int64_t regionBaseZ = ( int64_t )( task.m_location.y ) * s_nRegionSize;
-				const int64_t haloGridX = regionBaseX + task.m_dirtyRect.position.x - 1;
-				const int64_t haloGridZ = regionBaseZ + task.m_dirtyRect.position.y - 1;
-				sampler.copyHeightRect( haloGridX, haloGridZ, width + 2, height + 2, pHalo, haloStride, false );
-				for ( int y = -1; y <= height; ++y ) {
-					for ( int x = -1; x <= width; ++x ) {
-						float &sample = pHalo[( size_t )( y + 1 ) * ( size_t )haloStride + ( size_t )( x + 1 )];
-						if ( isfinite( sample ) ) {
-							continue;
-						}
-						const int localX = task.m_dirtyRect.position.x + x;
-						const int localY = task.m_dirtyRect.position.y + y;
-						const int clampedX = CLAMP( localX, 0, s_nRegionSize - 1 );
-						const int clampedY = CLAMP( localY, 0, s_nRegionSize - 1 );
-						sample = sampler.sampleHeightGrid( regionBaseX + clampedX, regionBaseZ + clampedY, false );
-						sample = isfinite( sample ) ? sample : 0.0f;
-					}
+				int haloStride = 0;
+				size_t haloElements = 0u;
+				if ( !t3dMapEditServicePrepareDerivedHeightHalo( sampler, task, pHalo, maxHaloElements, haloStride, haloElements ) ) {
+					continue;
 				}
 				jobs.push_back( t3dDerivedMapComputeJob_t{} );
 				t3dDerivedMapComputeJob_t &job = jobs.back();

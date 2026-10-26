@@ -5,18 +5,18 @@
 #endif
 
 #include "assets/terrain_3d_packed_pbr_texture.h"
-#include "assets/terrain_3d_render_world_import_profile.h"
-#include "assets/terrain_3d_render_world_material_resource.h"
+#include "assets/terrain_3d_world_import_profile.h"
+#include "assets/terrain_3d_world_material_resource.h"
 #include "assets/terrain_3d_rendering_material.h"
-#include "authoring/render_world/terrain_3d_render_world_controller.h"
-#include "instances/terrain_3d_render_world_instance_3d.h"
+#include "authoring/world/terrain_3d_world_controller.h"
+#include "instances/terrain_3d_world_instance_3d.h"
 #include "authoring/terrain_3d_autoshader_baker.h"
 #include "authoring/terrain_3d_editor.h"
 #include "authoring/terrain_3d_erosion_job.h"
 #include "authoring/terrain_3d_erosion_settings.h"
 #include "authoring/terrain_3d_landform_baker.h"
-#include "core/terrain_3d_diagnostics.h"
-#include "core/unit_testing.h"
+#include "diagnostics/terrain_3d_diagnostics.h"
+#include "diagnostics/unit_testing.h"
 #include "hlod/terrain_3d_hlod_builder.h"
 #include "hlod/terrain_3d_hlod_manifest.h"
 #include "hlod/terrain_3d_hlod_package.h"
@@ -41,11 +41,11 @@ void t3dInitializeTerrain3DModule( ModuleInitializationLevel level ) {
 		return;
 	}
 	ClassDB::register_class<Terrain3D>();
-	ClassDB::register_class<Terrain3DRenderWorldMaterial>();
+	ClassDB::register_class<Terrain3DWorldMaterial>();
 	ClassDB::register_class<Terrain3DRenderingMaterial>();
-	ClassDB::register_class<Terrain3DRenderWorldImportProfile>();
-	ClassDB::register_class<Terrain3DRenderWorldInstance3D>();
-	ClassDB::register_class<Terrain3DRenderWorldController>();
+	ClassDB::register_class<Terrain3DWorldImportProfile>();
+	ClassDB::register_class<Terrain3DWorldInstance3D>();
+	ClassDB::register_class<Terrain3DWorldController>();
 	ClassDB::register_class<Terrain3DRdCompositorEffect>();
 	ClassDB::register_internal_class<Terrain3DRdTextureManager>();
 	Terrain3DRdTextureManager::initializeSingleton();

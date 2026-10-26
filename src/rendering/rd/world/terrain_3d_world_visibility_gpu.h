@@ -7,6 +7,7 @@
 #include "rendering/rd/world/terrain_3d_world_resources.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_pipeline_cache.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
 
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 
@@ -43,12 +44,12 @@ private:
 
 	Terrain3DRdContext &m_context;
 	godot::Ref<godot::RDShaderSPIRV> m_source[PIPELINE_COUNT];
-	godot::RID m_hShader[PIPELINE_COUNT];
+	Terrain3DRdShader m_hShader[PIPELINE_COUNT];
 	godot::RID m_hPipeline[PIPELINE_COUNT];
 	Terrain3DRdPipelineCache<godot::RID, PIPELINE_COUNT> m_pipelineCache;
 	Terrain3DRdDescriptorCache<t3dDescriptorKey_t, PIPELINE_COUNT> m_descriptorCache;
 	godot::RID m_hSet[PIPELINE_COUNT];
-	godot::RID m_hPatchBoundsBuffer;
+	Terrain3DRdGpuBuffer m_hPatchBoundsBuffer;
 	godot::PackedByteArray m_pushBytes;
 	godot::PackedByteArray m_patchBoundsBytes;
 	t3dDescriptorKey_t::Signature m_boundSignature;

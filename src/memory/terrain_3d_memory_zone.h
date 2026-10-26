@@ -147,10 +147,6 @@ private:
 	t3dMemoryZoneState_t m_state = T3D_MEMORY_ZONE_UNINITIALIZED;
 	mutable t3dMutex_t m_mutex;
 
-	EA_FORCE_INLINE static bool isPowerOfTwo( size_t nValue ) {
-		return nValue && ( nValue & ( nValue - 1u ) ) == 0u;
-	}
-	static bool alignUp( size_t nValue, size_t nAlignment, size_t &rValue );
 	int classIndexFor( size_t nBytes, size_t nAlignment ) const;
 	bool insertFreeExtentUnlocked( size_t nOffset, size_t nBytes );
 	bool canTakeExtentUnlocked( size_t nBytes, size_t nAlignment, size_t nPrefixBytes ) const;

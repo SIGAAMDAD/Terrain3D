@@ -1,7 +1,8 @@
 @tool
 extends EditorInspectorPlugin
 
-const WORKBENCH_META: StringName = &"terrain3d_region_workbench"
+const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
+
 
 
 func _can_handle(object: Object) -> bool:
@@ -23,4 +24,4 @@ func _parse_property(_object: Object, _type: Variant.Type, _name: String, _hint_
 
 func _in_workbench() -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root()
-	return is_instance_valid(root) and bool(root.get_meta(WORKBENCH_META, false))
+	return is_instance_valid(root) and bool(root.get_meta(WorkbenchMetadata.WORKBENCH_META, false))

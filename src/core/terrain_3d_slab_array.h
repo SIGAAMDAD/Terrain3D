@@ -4,8 +4,7 @@
 #define TERRAIN3D_SLAB_ARRAY_H
 
 #include "core/terrain_3d_compiler.h"
-#include "core/terrain_3d_allocation_domain.h"
-#include "eastl_config.h"
+#include "core/terrain_3d_native_backing.h"
 
 #include <EASTL/type_traits.h>
 #include <EASTL/numeric_limits.h>
@@ -15,194 +14,73 @@
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
-// High-water contiguous storage shared by many small logical arrays. The slab
-// owns its default backing through Terrain3DEastlAllocator; bind() remains for
-// explicit parent-carved layouts. Ordinary logical arrays hold only
-// offset/count/capacity tuples and never allocate individually.
+// High-water contiguous storage shared by many small logical arrays. Backing
+// ownership/allocation is centralized in Terrain3DNativeBacking; this type owns
+// only the high-water suballocation cursor and logical slab policy.
 template <typename T>
 class Terrain3DHighWaterSlab {
 	static_assert( eastl::is_trivially_copyable_v<T>, "Runtime slab storage requires trivially copyable values." );
 
-	Terrain3DEastlAllocator m_allocator;
-	t3dNativeAllocationDomain_t m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_PERSISTENT_RESOURCE;
-	T *m_pData = NULL;
-	size_t m_nCapacity = 0u;
+	Terrain3DNativeBacking<T> m_backing;
 	size_t m_nUsed = 0u;
-	size_t m_nGrowCount = 0u;
-	bool m_bSealed = false;
-	bool m_bOwnsData = false;
-	uint64_t m_nGrowthRequests = 0u;
-	uint64_t m_nGrowthDenied = 0u;
-	uint64_t m_nCapacityMisses = 0u;
-
-	bool reallocateCold( const size_t nCapacity ) {
-		if ( nCapacity <= m_nCapacity ) {
-			return true;
-		}
-		++m_nGrowthRequests;
-		if ( m_bSealed || nCapacity > SIZE_MAX / sizeof( T ) ) {
-			++m_nGrowthDenied;
-			return false;
-		}
-		if ( m_eAllocationDomain == TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED && m_allocator.zone() == NULL ) {
-			++m_nGrowthDenied;
-			return false;
-		}
-		// External parent storage has an explicit fixed extent. Growing it here
-		// would silently change ownership, so fail closed instead.
-		if ( m_pData && !m_bOwnsData ) {
-			return false;
-		}
-		if ( !m_allocator.canAllocate( nCapacity * sizeof( T ), alignof( T ), 0u ) ) {
-			return false;
-		}
-		T *const pReplacement = ( T * )m_allocator.allocate( nCapacity * sizeof( T ), alignof( T ), 0u );
-		if ( !pReplacement ) {
-			return false;
-		}
-		if ( m_nUsed > 0u && m_pData ) {
-			memcpy( pReplacement, m_pData, m_nUsed * sizeof( T ) );
-		}
-		if ( m_pData && m_bOwnsData ) {
-			m_allocator.deallocate( m_pData );
-		}
-		m_pData = pReplacement;
-		m_nCapacity = nCapacity;
-		m_bOwnsData = true;
-		++m_nGrowCount;
-		return true;
-	}
 
 public:
 	Terrain3DHighWaterSlab( void ) = default;
-	explicit Terrain3DHighWaterSlab( const Terrain3DEastlAllocator &rAllocator ) : m_allocator( rAllocator ) {
+	explicit Terrain3DHighWaterSlab( const Terrain3DEastlAllocator &rAllocator ) : m_backing( rAllocator ) {
 	}
-	~Terrain3DHighWaterSlab( void ) {
-		release();
-	}
+	~Terrain3DHighWaterSlab( void ) = default;
 	Terrain3DHighWaterSlab( const Terrain3DHighWaterSlab & ) = delete;
 	Terrain3DHighWaterSlab &operator=( const Terrain3DHighWaterSlab & ) = delete;
 	Terrain3DHighWaterSlab( Terrain3DHighWaterSlab &&rOther ) noexcept :
-	        m_allocator( eastl::move( rOther.m_allocator ) ),
-	        m_eAllocationDomain( rOther.m_eAllocationDomain ),
-	        m_pData( rOther.m_pData ),
-	        m_nCapacity( rOther.m_nCapacity ),
-	        m_nUsed( rOther.m_nUsed ),
-	        m_nGrowCount( rOther.m_nGrowCount ),
-	        m_bSealed( rOther.m_bSealed ),
-	        m_bOwnsData( rOther.m_bOwnsData ),
-	        m_nGrowthRequests( rOther.m_nGrowthRequests ),
-	        m_nGrowthDenied( rOther.m_nGrowthDenied ),
-	        m_nCapacityMisses( rOther.m_nCapacityMisses ) {
-		rOther.m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_PERSISTENT_RESOURCE;
-		rOther.m_pData = NULL;
-		rOther.m_nCapacity = 0u;
+	        m_backing( eastl::move( rOther.m_backing ) ), m_nUsed( rOther.m_nUsed ) {
 		rOther.m_nUsed = 0u;
-		rOther.m_nGrowCount = 0u;
-		rOther.m_bSealed = false;
-		rOther.m_bOwnsData = false;
-		rOther.m_nGrowthRequests = 0u;
-		rOther.m_nGrowthDenied = 0u;
-		rOther.m_nCapacityMisses = 0u;
 	}
 	Terrain3DHighWaterSlab &operator=( Terrain3DHighWaterSlab &&rOther ) noexcept {
 		if ( this != &rOther ) {
-			release();
-			m_allocator = eastl::move( rOther.m_allocator );
-			m_eAllocationDomain = rOther.m_eAllocationDomain;
-			m_pData = rOther.m_pData;
-			m_nCapacity = rOther.m_nCapacity;
+			m_backing = eastl::move( rOther.m_backing );
 			m_nUsed = rOther.m_nUsed;
-			m_nGrowCount = rOther.m_nGrowCount;
-			m_bSealed = rOther.m_bSealed;
-			m_bOwnsData = rOther.m_bOwnsData;
-			m_nGrowthRequests = rOther.m_nGrowthRequests;
-			m_nGrowthDenied = rOther.m_nGrowthDenied;
-			m_nCapacityMisses = rOther.m_nCapacityMisses;
-			rOther.m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_PERSISTENT_RESOURCE;
-			rOther.m_pData = NULL;
-			rOther.m_nCapacity = 0u;
 			rOther.m_nUsed = 0u;
-			rOther.m_nGrowCount = 0u;
-			rOther.m_bSealed = false;
-			rOther.m_bOwnsData = false;
-			rOther.m_nGrowthRequests = 0u;
-			rOther.m_nGrowthDenied = 0u;
-			rOther.m_nCapacityMisses = 0u;
 		}
 		return *this;
 	}
 
-
 	EA_FORCE_INLINE bool requireRuntimeZone( void ) {
-		if ( m_pData || m_nCapacity != 0u ) {
-			return m_eAllocationDomain == TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED && m_allocator.zone() != NULL;
-		}
-		m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED;
-		return true;
+		return m_backing.requireRuntimeZone();
 	}
 	EA_FORCE_INLINE bool canBindAllocatorZone( Terrain3DMemoryZone *const pZone ) const {
-		if ( !pZone ) {
-			return false;
-		}
-		if ( !m_pData && m_nCapacity == 0u ) {
-			return true;
-		}
-		return m_eAllocationDomain == TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED && m_allocator.zone() == pZone;
+		return m_backing.canBindAllocatorZone( pZone );
 	}
 	EA_FORCE_INLINE bool bindAllocatorZone(
 	        Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t eOverflowPolicy = TERRAIN3D_ALLOCATOR_OVERFLOW_STRICT ) {
-		if ( m_pData || m_nCapacity != 0u ) {
-			return m_allocator.zone() == pZone;
-		}
-		if ( !pZone ) {
-			return false;
-		}
-		m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED;
-		m_allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, eOverflowPolicy );
-		return true;
+		return m_backing.bindAllocatorZone( pZone, eOverflowPolicy );
 	}
 	EA_FORCE_INLINE bool bind( T *const pData, const size_t nCapacity, const size_t nUsed = 0u ) {
 		if ( nUsed > nCapacity || ( nCapacity > 0u && !pData ) ) {
 			return false;
 		}
-		release();
-		m_eAllocationDomain = TERRAIN3D_NATIVE_ALLOCATION_PARENT_BOUND;
-		m_pData = pData;
-		m_nCapacity = nCapacity;
+		m_nUsed = 0u;
+		if ( !m_backing.bindExternal( pData, nCapacity, false ) ) {
+			return false;
+		}
 		m_nUsed = nUsed;
-		m_nGrowCount = 0u;
-		m_bSealed = false;
-		m_bOwnsData = false;
 		return true;
 	}
 
 	EA_FORCE_INLINE bool reserveCold( const size_t nCount ) {
-		return nCount <= m_nCapacity ? true : reallocateCold( nCount );
+		return nCount <= m_backing.capacity() ? true : m_backing.growCold( nCount, m_nUsed, true );
 	}
-
-	// Backing growth is owner-controlled. Logical suballocation may use existing
-	// capacity while sealed, but it never implicitly unseals the backing store.
 	EA_FORCE_INLINE bool reserve( const size_t nCount ) {
-		return nCount <= m_nCapacity ? true : reserveCold( nCount );
+		return nCount <= m_backing.capacity() ? true : reserveCold( nCount );
 	}
-
 	EA_FORCE_INLINE bool seal( void ) {
-		if ( m_eAllocationDomain == TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED && m_allocator.zone() == NULL && m_pData == NULL ) {
-			++m_nGrowthDenied;
-			return false;
-		}
-		m_bSealed = true;
-		return true;
+		return m_backing.seal();
 	}
-
 	EA_FORCE_INLINE void beginColdRebuild( void ) {
-		m_bSealed = false;
+		m_backing.unsealCold();
 		m_nUsed = 0u;
 	}
-
 	EA_FORCE_INLINE bool sealed( void ) const {
-		return m_bSealed;
+		return m_backing.sealed();
 	}
 
 	EA_FORCE_INLINE size_t allocate( const size_t nCount ) {
@@ -211,8 +89,8 @@ public:
 		}
 		const size_t offset = m_nUsed;
 		const size_t required = offset + nCount;
-		if ( required > m_nCapacity && !reserve( required ) ) {
-			++m_nCapacityMisses;
+		if ( required > m_backing.capacity() && !reserve( required ) ) {
+			m_backing.recordCapacityMiss();
 			return SIZE_MAX;
 		}
 		m_nUsed = required;
@@ -223,75 +101,55 @@ public:
 		m_nUsed = 0u;
 	}
 	EA_FORCE_INLINE void release( void ) {
-		if ( m_pData && m_bOwnsData ) {
-			m_allocator.deallocate( m_pData );
-		}
-		m_pData = NULL;
-		m_nCapacity = 0u;
 		m_nUsed = 0u;
-		m_nGrowCount = 0u;
-		m_bSealed = false;
-		m_bOwnsData = false;
-		m_nGrowthRequests = 0u;
-		m_nGrowthDenied = 0u;
-		m_nCapacityMisses = 0u;
+		m_backing.release();
 	}
 	EA_FORCE_INLINE bool compactBacking( void ) {
-		return m_nUsed == m_nCapacity;
+		return m_nUsed == m_backing.capacity();
 	}
 	EA_FORCE_INLINE T *data( void ) {
-		return m_pData;
+		return m_backing.data();
 	}
 	EA_FORCE_INLINE const T *data( void ) const {
-		return m_pData;
+		return m_backing.data();
 	}
 	EA_FORCE_INLINE size_t used( void ) const {
 		return m_nUsed;
 	}
 	EA_FORCE_INLINE size_t size( void ) const {
-		return m_nCapacity;
+		return m_backing.capacity();
 	}
 	EA_FORCE_INLINE size_t capacity( void ) const {
-		return m_nCapacity;
+		return m_backing.capacity();
 	}
 	EA_FORCE_INLINE size_t growCount( void ) const {
-		return m_nGrowCount;
+		return m_backing.growCount();
 	}
 	EA_FORCE_INLINE t3dNativeAllocationDomain_t allocationDomain( void ) const {
-		return m_eAllocationDomain;
+		return m_backing.allocationDomain();
 	}
 	EA_FORCE_INLINE bool runtimeBindingSatisfied( void ) const {
-		return m_eAllocationDomain != TERRAIN3D_NATIVE_ALLOCATION_RUNTIME_ZONE_REQUIRED || m_allocator.zone() != NULL
-		        || ( m_pData != NULL && !m_bOwnsData );
+		return m_backing.runtimeBindingSatisfied();
 	}
 	EA_FORCE_INLINE bool ownsBacking( void ) const {
-		return m_bOwnsData;
+		return m_backing.ownsBacking();
 	}
 	EA_FORCE_INLINE size_t residentBytes( void ) const {
-		return m_nCapacity * sizeof( T );
+		return m_backing.residentBytes();
 	}
 	EA_FORCE_INLINE uint64_t growthRequests( void ) const {
-		return m_nGrowthRequests;
+		return m_backing.growthRequests();
 	}
 	EA_FORCE_INLINE uint64_t growthDenied( void ) const {
-		return m_nGrowthDenied;
+		return m_backing.growthDenied();
 	}
 	EA_FORCE_INLINE uint64_t capacityMisses( void ) const {
-		return m_nCapacityMisses;
+		return m_backing.capacityMisses();
 	}
 	EA_FORCE_INLINE void swap( Terrain3DHighWaterSlab<T> &rOther ) {
+		m_backing.swap( rOther.m_backing );
 		using eastl::swap;
-		swap( m_allocator, rOther.m_allocator );
-		swap( m_eAllocationDomain, rOther.m_eAllocationDomain );
-		swap( m_pData, rOther.m_pData );
-		swap( m_nCapacity, rOther.m_nCapacity );
 		swap( m_nUsed, rOther.m_nUsed );
-		swap( m_nGrowCount, rOther.m_nGrowCount );
-		swap( m_bSealed, rOther.m_bSealed );
-		swap( m_bOwnsData, rOther.m_bOwnsData );
-		swap( m_nGrowthRequests, rOther.m_nGrowthRequests );
-		swap( m_nGrowthDenied, rOther.m_nGrowthDenied );
-		swap( m_nCapacityMisses, rOther.m_nCapacityMisses );
 	}
 };
 
@@ -531,3 +389,4 @@ public:
 };
 
 #endif // TERRAIN3D_SLAB_ARRAY_H
+

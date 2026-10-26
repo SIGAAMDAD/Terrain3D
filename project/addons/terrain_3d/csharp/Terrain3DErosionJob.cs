@@ -11,36 +11,6 @@ namespace TokisanGames;
 [Tool]
 public partial class Terrain3DErosionJob : RefCounted
 {
-    private new static readonly StringName NativeName = new StringName("Terrain3DErosionJob");
-
-    [Obsolete("Wrapper types cannot be constructed with constructors; use Instantiate() instead.")]
-    protected Terrain3DErosionJob() { }
-
-    private static CSharpScript _wrapperScriptAsset;
-
-    public new static Terrain3DErosionJob Bind(GodotObject godotObject)
-    {
-        if (!IsInstanceValid(godotObject))
-            return null;
-        if (godotObject is Terrain3DErosionJob wrapperScriptInstance)
-            return wrapperScriptInstance;
-#if DEBUG
-        var currentObjectClassName = godotObject.GetClass();
-        if (!ClassDB.IsParentClass(nameof(Terrain3DErosionJob), currentObjectClassName))
-            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not Terrain3DErosionJob.");
-#endif
-        if (_wrapperScriptAsset is null)
-        {
-            var scriptPathAttribute = typeof(Terrain3DErosionJob).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
-            if (scriptPathAttribute is null) throw new UnreachableException();
-            _wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
-        }
-        var instanceId = godotObject.GetInstanceId();
-        godotObject.SetScript(_wrapperScriptAsset);
-        return (Terrain3DErosionJob)InstanceFromId(instanceId);
-    }
-
-    public new static Terrain3DErosionJob Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
     public enum JobState
     {

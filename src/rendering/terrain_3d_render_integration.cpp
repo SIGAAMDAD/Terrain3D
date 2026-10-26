@@ -537,7 +537,7 @@ void Terrain3D::updateRegionLabels( void ) {
 		for ( size_t iRegion = 0u; iRegion < ( size_t )( ( region_locations ).size() ); iRegion++ ) {
 			const Vector2i region_loc = ( region_locations )[iRegion];
 			Label3D *const pLabel = memnew( Label3D );
-			const String text = region_loc;
+			const String text = UtilityFunctions::str( region_loc );
 			pLabel->set_name( String( "Label3D" ) + text.replace( " ", "" ) );
 			pLabel->set_pixel_size( .001f );
 			pLabel->set_billboard_mode( BaseMaterial3D::BILLBOARD_ENABLED );
@@ -921,12 +921,7 @@ void Terrain3D::setMeshLods( const int nCount ) {
 		setupTerrainMesher();
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
-		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -948,12 +943,7 @@ void Terrain3D::setTessellationLevel( const int nLevel ) {
 		updateDisplacementBuffer();
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
-		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 	notify_property_list_changed();
 }
@@ -969,12 +959,7 @@ void Terrain3D::setMeshSize( const int nSize ) {
 		updateDisplacementBuffer();
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
-		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -1429,16 +1414,31 @@ Vector3 Terrain3D::getIntersection( const Vector3 &rSrcPos, const Vector3 &rDire
 }
 
 void Terrain3D::setupRenderCoordinator( void ) {
+	const uint64_t nStartedUsec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][CoordinatorSetup] BEGIN generation=", m_nStartupGeneration );
 	if ( !m_pRenderCoordinator ) {
 		m_pRenderCoordinator = memnew( Terrain3DRenderCoordinator );
 		if ( !m_pRenderCoordinator->bindRuntimeAllocator( getRuntimeMemoryZoneInternal(), getRuntimeAllocatorOverflowPolicyInternal() ) ) {
-			LOG( ERROR, "Failed binding render coordinator runtime allocator ownership" );
+			LOG( ERROR,
+			        "[Terrain3D][Startup][CoordinatorSetup] FAIL generation=",
+			        m_nStartupGeneration,
+			        " reason=allocator_bind" );
 			return;
 		}
 	}
 	if ( !m_pRenderCoordinator->prepareStartupCold( m_nStartupGeneration ) ) {
-		LOG( ERROR, "Failed preparing render coordinator startup generation ", m_nStartupGeneration );
+		LOG( ERROR,
+		        "[Terrain3D][Startup][CoordinatorSetup] FAIL generation=",
+		        m_nStartupGeneration,
+		        " reason=prepare" );
+		return;
 	}
+	LOG( INFO,
+	        "[Terrain3D][Startup][CoordinatorSetup] END generation=",
+	        m_nStartupGeneration,
+	        " elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - nStartedUsec,
+	        " us" );
 }
 
 void Terrain3D::destroyRenderCoordinator( const bool bFinal ) {

@@ -377,12 +377,7 @@ void Terrain3D::applyMemoryBudgetResult( const t3dMemoryBudgetResult_t &rResult,
 		m_nEffectiveGpuRegionCacheBudgetBytes = managed_gpu_page_budget_bytes;
 		m_nEffectiveGpuRegionCacheBudgetMb = gpu_mb;
 		if ( m_pData ) {
-			m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-			        m_nEffectiveGpuRegionCacheBudgetBytes,
-			        m_nGpuRegionUploadBudgetLayers,
-			        m_nGpuRegionUploadBudgetMb,
-			        m_nGpuRegionSparePages,
-			        m_nGpuRegionRetireFrames );
+			reconfigureGpuRegionCache();
 		}
 	}
 	if ( bCpuChanged ) {

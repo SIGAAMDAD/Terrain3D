@@ -10,34 +10,6 @@ namespace TokisanGames;
 [Tool]
 public partial class Terrain3DPackedPBRTexture : Resource
 {
-	private new static readonly StringName NativeName = new("Terrain3DPackedPBRTexture");
-
-	[Obsolete("Wrapper types cannot be constructed directly; use Instantiate().")]
-	protected Terrain3DPackedPBRTexture() { }
-
-	private static CSharpScript _wrapperScriptAsset;
-
-	public new static Terrain3DPackedPBRTexture Bind(GodotObject godotObject)
-	{
-		if (!IsInstanceValid(godotObject)) return null;
-		if (godotObject is Terrain3DPackedPBRTexture wrapper) return wrapper;
-#if DEBUG
-		var currentObjectClassName = godotObject.GetClass();
-		if (!ClassDB.IsParentClass(nameof(Terrain3DPackedPBRTexture), currentObjectClassName))
-			throw new InvalidOperationException($"The supplied object ({currentObjectClassName}) is not Terrain3DPackedPBRTexture.");
-#endif
-		if (_wrapperScriptAsset is null)
-		{
-			var path = typeof(Terrain3DPackedPBRTexture).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
-			if (path is null) throw new UnreachableException();
-			_wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(path.Path);
-		}
-		var instanceId = godotObject.GetInstanceId();
-		godotObject.SetScript(_wrapperScriptAsset);
-		return (Terrain3DPackedPBRTexture)InstanceFromId(instanceId);
-	}
-
-	public new static Terrain3DPackedPBRTexture Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
 	public enum SourceChannel : long { Red = 0, Green = 1, Blue = 2, Alpha = 3 }
 

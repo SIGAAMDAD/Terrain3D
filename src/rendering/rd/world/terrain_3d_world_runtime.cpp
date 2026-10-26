@@ -1,15 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/terrain_3d_world_runtime.h"
+#include "rendering/rd/terrain_3d_rd_frustum.h"
 
 #include <math.h>
 #include <string.h>
 
 using namespace godot;
-
-static Vector4 t3dWorldNormalizePlane( const Vector4 &rPlane ) {
-	const double length_sq = rPlane.x * rPlane.x + rPlane.y * rPlane.y + rPlane.z * rPlane.z;
-	return length_sq > 1.0e-20 ? rPlane * ( 1.0 / sqrt( length_sq ) ) : rPlane;
-}
 
 static void t3dWorldCopyProjection( const Projection &rProjection, float *pDestination ) {
 	for ( uint32_t column = 0u; column < 4u; ++column ) {
@@ -18,24 +14,6 @@ static void t3dWorldCopyProjection( const Projection &rProjection, float *pDesti
 		pDestination[column * 4u + 1u] = ( float )v.y;
 		pDestination[column * 4u + 2u] = ( float )v.z;
 		pDestination[column * 4u + 3u] = ( float )v.w;
-	}
-}
-
-static void t3dWorldExtractFrustum( const Projection &rProjection, float pPlanes[24] ) {
-	const Vector4 c0 = rProjection[0], c1 = rProjection[1], c2 = rProjection[2], c3 = rProjection[3];
-	const Vector4 row0( c0.x, c1.x, c2.x, c3.x ), row1( c0.y, c1.y, c2.y, c3.y );
-	const Vector4 row2( c0.z, c1.z, c2.z, c3.z ), row3( c0.w, c1.w, c2.w, c3.w );
-	const Vector4 planes[6] = { t3dWorldNormalizePlane( row3 + row0 ),
-		t3dWorldNormalizePlane( row3 - row0 ),
-		t3dWorldNormalizePlane( row3 + row1 ),
-		t3dWorldNormalizePlane( row3 - row1 ),
-		t3dWorldNormalizePlane( row3 - row2 ),
-		t3dWorldNormalizePlane( row2 ) };
-	for ( uint32_t i = 0u; i < 6u; ++i ) {
-		pPlanes[i * 4u + 0u] = ( float )planes[i].x;
-		pPlanes[i * 4u + 1u] = ( float )planes[i].y;
-		pPlanes[i * 4u + 2u] = ( float )planes[i].z;
-		pPlanes[i * 4u + 3u] = ( float )planes[i].w;
 	}
 }
 
@@ -209,7 +187,7 @@ void Terrain3DWorldRuntime::buildFrame( const t3dRdForwardPassContext_t &rContex
 	t3dWorldCopyProjection( rContext.m_szViewProjection[0], rFrame.m_fViewProjection );
 	t3dWorldCopyProjection( rContext.m_bTemporalHistoryValid ? rContext.m_szPreviousViewProjection[0] : rContext.m_szViewProjection[0],
 	        rFrame.m_fPreviousViewProjection );
-	t3dWorldExtractFrustum( rContext.m_szViewProjection[0], rFrame.m_fFrustumPlanes );
+	t3dRdStoreFrustumPlanes( t3dRdExtractFrustum( rContext.m_szViewProjection[0] ), rFrame.m_fFrustumPlanes );
 	const Vector3 camera = rContext.m_cameraTransform.origin;
 	rFrame.m_fCameraAndMaxDistance[0] = ( float )camera.x;
 	rFrame.m_fCameraAndMaxDistance[1] = ( float )camera.y;

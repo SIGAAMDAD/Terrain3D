@@ -184,7 +184,7 @@ Ref<ArrayMesh> Terrain3DMeshAsset::createGeneratedMesh( const t3dGenType_t type 
 	const Vector3 normal( 0.f, 0.f, 1.f );
 
 	for ( int face = 0; face < m_nGeneratedFaces; ++face ) {
-		const real_t fAngle = face == 0 ? 0.f : ( real_t )( face )*Math_PI / ( real_t )( m_nGeneratedFaces );
+		const real_t fAngle = face == 0 ? 0.f : ( real_t )( face )*Math::PI / ( real_t )( m_nGeneratedFaces );
 		const int vertex_base = face * 4;
 		for ( int j = 0; j < 2; ++j ) {
 			for ( int i = 0; i < 2; ++i ) {

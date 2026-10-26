@@ -1,8 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "hlod/terrain_3d_hlod_streamer.h"
+#include "rendering/rd/terrain_3d_rd_instance_record.h"
 
 #include "data/terrain_3d_data.h"
-#include "data/terrain_3d_half_buffer.h"
 #include "eastl_config.h"
 #include "terrain_3d.h"
 
@@ -59,27 +59,6 @@ uint64_t Terrain3DHLODStreamer::rdMeshSourceKey( const int nEntryIndex ) {
 	return t3dRdHlodMeshSourceKey( ( uint32_t )( nEntryIndex ) );
 }
 
-static uint32_t t3dPackHlodSnormPair( const float x, const float y ) {
-	const int16_t px = ( int16_t )( lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
-	const int16_t py = ( int16_t )( lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
-	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
-}
-
-static t3dRdInstanceRecord_t t3dPackHlodInstanceRecord( const Transform3D &rTransform ) {
-	t3dRdInstanceRecord_t record;
-	record.m_szPosition[0] = ( float )( rTransform.origin.x );
-	record.m_szPosition[1] = ( float )( rTransform.origin.y );
-	record.m_szPosition[2] = ( float )( rTransform.origin.z );
-	const Vector3 scale = rTransform.basis.get_scale();
-	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
-	record.m_nQuaternion01 = t3dPackHlodSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
-	record.m_nQuaternion23 = t3dPackHlodSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
-	record.m_nScale01 =
-	        ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) | ( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
-	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
-	record.m_nColorRgba8 = 0xFFFFFFFFu;
-	return record;
-}
 
 static AABB t3dTransformHlodBounds( const Transform3D &rTransform, const AABB &rBounds ) {
 	const Vector3 minimum = rBounds.position;
@@ -281,18 +260,7 @@ bool Terrain3DHLODStreamer::compilePackedManifest( const Ref<Terrain3DHLODManife
 	for ( size_t iEntry = 0u; iEntry < ( size_t )( ( runtime.m_entries ).size() ); iEntry++ ) {
 		const t3dHlodRuntimeEntryRecord_t &source = ( runtime.m_entries )[iEntry];
 		t3dEntry_t entry;
-		entry.m_nLevel = source.m_nLevel;
-		entry.m_cluster = source.m_cluster;
-		entry.m_regionMin = source.m_regionMin;
-		entry.m_regionMax = source.m_regionMax;
-		entry.m_localBounds = source.m_localBounds;
-		entry.m_packagePath = source.m_packagePath;
-		entry.m_fGeometricError = source.m_fGeometricError;
-		entry.m_nSourceSignature = source.m_nSourceSignature;
-		entry.m_nBuildSignature = source.m_nBuildSignature;
-		entry.m_nEstimatedGpuBytes = source.m_nEstimatedGpuBytes;
-		entry.m_nParent = source.m_nParent;
-		memcpy( entry.m_szChildren, source.m_szChildren, sizeof( entry.m_szChildren ) );
+		static_cast<t3dHlodEntryDescriptor_t &>( entry ) = source;
 		if ( !t3dVectorPushBackWithinCapacity( m_entries, entry ) ) {
 			return false;
 		}
@@ -345,25 +313,10 @@ bool Terrain3DHLODStreamer::compileManifest( const Ref<Terrain3DHLODManifest> &r
 		return false;
 	}
 	for ( int i = 0; i < entries.size(); ++i ) {
-		if ( Variant( entries[i] ).get_type() != Variant::DICTIONARY ) {
-			continue;
-		}
-		const Dictionary data = entries[i];
-		if ( !data.has( "level" ) || !data.has( "cluster" ) || !data.has( "region_min" ) || !data.has( "region_max" )
-		        || !data.has( "package_path" ) ) {
-			continue;
-		}
 		t3dEntry_t entry;
-		entry.m_nLevel = CLAMP( ( int )data["level"], 1, 6 );
-		entry.setCluster( data["cluster"] );
-		entry.setRegionMin( data["region_min"] );
-		entry.setRegionMax( data["region_max"] );
-		entry.m_localBounds = data.get( "local_bounds", AABB() );
-		entry.m_packagePath = String( data["package_path"] );
-		entry.m_fGeometricError = MAX( ( real_t )data.get( "geometric_error", 1.0 ), 0.001f );
-		entry.m_nSourceSignature = ( int64_t )data.get( "source_signature", 0 );
-		entry.m_nBuildSignature = ( int64_t )data.get( "build_signature", 0 );
-		entry.m_nEstimatedGpuBytes = MAX<int64_t>( ( int64_t )data.get( "estimated_gpu_bytes", 0 ), 0 );
+		if ( !Terrain3DHLODRuntimeCodec::decodeEntryDictionary( entries[i], entry, false ) ) {
+			continue;
+		}
 		if ( !t3dVectorPushBackWithinCapacity( m_entries, entry ) ) {
 			return false;
 		}
@@ -997,7 +950,7 @@ bool Terrain3DHLODStreamer::buildRdInstanceSnapshot( t3dRdInstanceSceneSnapshot_
 		local.origin = Vector3( entry.getRegionMin().x * regionWorld, 0.0f, entry.getRegionMin().y * regionWorld );
 		const Transform3D transform = terrainTransform * local;
 		const uint32_t firstInstance = ( uint32_t )( rSnapshot.m_instances.size() );
-		if ( !rSnapshot.m_instances.pushBack( t3dPackHlodInstanceRecord( transform ) ) ) {
+		if ( !rSnapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform ) ) ) {
 			return false;
 		}
 

@@ -261,7 +261,7 @@ bool Terrain3DCollision::copyBakedTile(
 	t3dCollisionShapeData_t &data = rRecord.m_data;
 	data.m_nWidth = width;
 	data.m_nDepth = width;
-	data.m_transform = Transform3D( Basis( s_v3Up, Math_PI * 0.5f ), t3dVector2iToVector3( rPosition + V2I( nSize / 2 ) ) );
+	data.m_transform = Transform3D( Basis( s_v3Up, Math::PI * 0.5f ), t3dVector2iToVector3( rPosition + V2I( nSize / 2 ) ) );
 	data.m_fMinHeight = min_height;
 	data.m_fMaxHeight = max_height;
 	data.m_bValid = true;
@@ -301,7 +301,7 @@ bool Terrain3DCollision::getShapeData(
 	const int width = nSize + 1;
 	rRecord.m_data.m_nWidth = width;
 	rRecord.m_data.m_nDepth = width;
-	rRecord.m_data.m_transform = Transform3D( Basis( s_v3Up, Math_PI * 0.5f ), t3dVector2iToVector3( rPosition + V2I( nSize / 2 ) ) );
+	rRecord.m_data.m_transform = Transform3D( Basis( s_v3Up, Math::PI * 0.5f ), t3dVector2iToVector3( rPosition + V2I( nSize / 2 ) ) );
 	rRecord.m_data.m_fMinHeight = min_height;
 	rRecord.m_data.m_fMaxHeight = max_height;
 	rRecord.m_data.m_bValid = true;
@@ -468,7 +468,7 @@ void Terrain3DCollision::updateFullShape( const int nShapeId, const Vector2i &rR
 				record.m_data.m_nWidth = baked_width;
 				record.m_data.m_nDepth = baked_width;
 				record.m_data.m_transform =
-				        Transform3D( Basis( s_v3Up, Math_PI * 0.5f ), t3dVector2iToVector3( shape_position + V2I( region_size / 2 ) ) );
+				        Transform3D( Basis( s_v3Up, Math::PI * 0.5f ), t3dVector2iToVector3( shape_position + V2I( region_size / 2 ) ) );
 				record.m_data.m_fMinHeight = min_height;
 				record.m_data.m_fMaxHeight = max_height;
 				record.m_data.m_bValid = true;

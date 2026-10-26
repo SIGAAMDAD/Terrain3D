@@ -3,6 +3,7 @@
 #include "memory/terrain_3d_memory_arena.h"
 
 #include "memory/terrain_3d_memory.h"
+#include "memory/terrain_3d_memory_math.h"
 
 #include <EASTL/numeric_limits.h>
 #include <string.h>
@@ -14,23 +15,7 @@ Terrain3DMemoryArenaLayout::Terrain3DMemoryArenaLayout( const size_t nCapacityBy
 	configure( nCapacityBytes );
 }
 
-bool Terrain3DMemoryArenaLayout::isPowerOfTwo( const size_t nValue )
-{
-	return nValue != 0u && ( nValue & ( nValue - 1u ) ) == 0u;
-}
 
-bool Terrain3DMemoryArenaLayout::alignUp( const size_t nValue, const size_t nAlignment, size_t& rAligned )
-{
-	if ( !isPowerOfTwo( nAlignment ) ) {
-		return false;
-	}
-	const size_t mask = nAlignment - 1u;
-	if ( nValue > eastl::numeric_limits<size_t>::max() - mask ) {
-		return false;
-	}
-	rAligned = ( nValue + mask ) & ~mask;
-	return true;
-}
 
 bool Terrain3DMemoryArenaLayout::configure( const size_t nCapacityBytes )
 {
@@ -47,14 +32,14 @@ bool Terrain3DMemoryArenaLayout::reserveLow( const size_t nBytes, const size_t n
 	if ( m_bSealed || !m_bValid ) {
 		return false;
 	}
-	if ( !isPowerOfTwo( nAlignment ) ) {
+	if ( !t3dMemoryIsPowerOfTwo( nAlignment ) ) {
 		m_bValid = false;
 		return false;
 	}
 	m_nMaxAlignment = MAX( m_nMaxAlignment, nAlignment );
 
 	size_t aligned = 0u;
-	if ( !alignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nCapacity || nBytes > m_nCapacity - aligned ) {
+	if ( !t3dMemoryAlignUp( m_nLowCursor, nAlignment, aligned ) || aligned > m_nCapacity || nBytes > m_nCapacity - aligned ) {
 		m_bValid = false;
 		return false;
 	}

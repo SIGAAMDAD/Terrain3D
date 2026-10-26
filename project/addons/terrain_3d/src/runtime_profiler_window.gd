@@ -287,13 +287,13 @@ func _update_memory_budget_product(p_memory: Terrain3DRuntimeValueMap) -> void:
 	_diagnostics_memory_tree.clear()
 	var root: TreeItem = _diagnostics_memory_tree.create_item()
 	var rows: Array[Array] = [
-		["Configured total", _format_bytes(p_memory.float_value("configured_budget_bytes")), p_memory.string_value("pressure_state", "normal")],
-		["Current known", _format_bytes(p_memory.float_value("current_known_bytes")), "tracked"],
-		["Peak known", _format_bytes(p_memory.float_value("peak_known_bytes")), "tracked peak"],
-		["Fixed / unavoidable", _format_bytes(p_memory.float_value("fixed_bytes")), "committed"],
-		["Managed resident", _format_bytes(p_memory.float_value("managed_resident_bytes")), "budget coordinated"],
-		["Transient / staging", _format_bytes(p_memory.float_value("transient_bytes")), "observed"],
-		["Known headroom", _format_bytes(p_memory.float_value("known_headroom_bytes")), "overcommit" if p_memory.bool_value("overcommitted") else "available"],
+		["Configured total", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("configured_budget_bytes")), p_memory.string_value("pressure_state", "normal")],
+		["Current known", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("current_known_bytes")), "tracked"],
+		["Peak known", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("peak_known_bytes")), "tracked peak"],
+		["Fixed / unavoidable", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("fixed_bytes")), "committed"],
+		["Managed resident", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("managed_resident_bytes")), "budget coordinated"],
+		["Transient / staging", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("transient_bytes")), "observed"],
+		["Known headroom", Terrain3DRuntimeValueMap.format_bytes(p_memory.float_value("known_headroom_bytes")), "overcommit" if p_memory.bool_value("overcommitted") else "available"],
 		["External / untracked", p_memory.string_value("external_untracked", "unavailable"), "unavailable"],
 	]
 	for row: Array in rows:
@@ -321,7 +321,7 @@ func _update_render_pipeline_product(p_tiers: Array[Terrain3DRuntimeValueMap]) -
 		item.set_text(9, tier.string_value("lighting_model_name"))
 		item.set_text(10, "%d / %d" % [tier.int_value("render_batch_count"), tier.int_value("shadow_batch_count")])
 		item.set_text(11, str(tier.int_value("modeled_major_texture_fetches")))
-		item.set_text(12, _format_bytes(tier.float_value("shader_source_bytes")))
+		item.set_text(12, Terrain3DRuntimeValueMap.format_bytes(tier.float_value("shader_source_bytes")))
 
 
 func _update_cache_inventory_product(p_caches: Array[Terrain3DRuntimeValueMap]) -> void:
@@ -331,15 +331,15 @@ func _update_cache_inventory_product(p_caches: Array[Terrain3DRuntimeValueMap]) 
 		var item: TreeItem = _diagnostics_cache_tree.create_item(root)
 		item.set_text(0, _humanize_name(cache.string_value("cache_name")))
 		item.set_text(1, "%d / %d" % [cache.int_value("resident"), cache.int_value("effective_capacity")])
-		item.set_text(2, "%s / %s" % [_format_bytes(cache.float_value("current_bytes")), _format_bytes(cache.float_value("peak_bytes"))])
+		item.set_text(2, "%s / %s" % [Terrain3DRuntimeValueMap.format_bytes(cache.float_value("current_bytes")), Terrain3DRuntimeValueMap.format_bytes(cache.float_value("peak_bytes"))])
 		item.set_text(3, "unavailable" if cache.int_value("hits", -1) < 0 else "%d / %d" % [cache.int_value("hits"), cache.int_value("misses")])
 		item.set_text(4, "unavailable" if cache.float_value("hit_rate", -1.0) < 0.0 else "%.1f%%" % (cache.float_value("hit_rate") * 100.0))
 		item.set_text(5, str(cache.int_value("evictions")))
 		item.set_text(6, str(cache.int_value("queued")))
 		item.set_text(7, str(cache.int_value("preparing")))
 		item.set_text(8, str(cache.int_value("uploading")))
-		item.set_text(9, _format_bytes(cache.float_value("requested_budget_bytes")))
-		item.set_text(10, _format_bytes(cache.float_value("effective_budget_bytes")))
+		item.set_text(9, Terrain3DRuntimeValueMap.format_bytes(cache.float_value("requested_budget_bytes")))
+		item.set_text(10, Terrain3DRuntimeValueMap.format_bytes(cache.float_value("effective_budget_bytes")))
 		item.set_text(11, cache.string_value("limiting_constraint", "none"))
 
 
@@ -419,13 +419,13 @@ func _update_rd_renderer_product() -> void:
 		["Indirect draws", str(int(diagnostics.get("indirect_draws", 0))), "Indexed indirect draw commands submitted"],
 		["Cull dispatches", str(int(diagnostics.get("cull_dispatches", 0))), "GPU clipmap culling compute dispatches"],
 		["GPU culling", "yes" if bool(diagnostics.get("gpu_culling", false)) else "CPU fallback", "Active clipmap visible-list generation path"],
-		["Topology", _format_bytes(float(diagnostics.get("topology_bytes", 0))), "Persistent RD clipmap vertex/index memory"],
+		["Topology", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("topology_bytes", 0))), "Persistent RD clipmap vertex/index memory"],
 		["Index formats", "%d / %d bit" % [int(diagnostics.get("lod0_index_bits", 0)), int(diagnostics.get("outer_index_bits", 0))], "LOD0 / outer-ring index width selected at upload"],
-		["Live RD buffers", _format_bytes(float(diagnostics.get("live_buffer_bytes", 0))), "Terrain3D-owned RenderingDevice buffer memory"],
-		["Peak RD buffers", _format_bytes(float(diagnostics.get("peak_buffer_bytes", 0))), "High-water Terrain3D-owned RD buffer memory"],
-		["Live RD textures", _format_bytes(float(diagnostics.get("live_texture_bytes", 0))), "Terrain3D-owned RD texture memory; borrowed native renderer textures excluded"],
+		["Live RD buffers", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("live_buffer_bytes", 0))), "Terrain3D-owned RenderingDevice buffer memory"],
+		["Peak RD buffers", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("peak_buffer_bytes", 0))), "High-water Terrain3D-owned RD buffer memory"],
+		["Live RD textures", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("live_texture_bytes", 0))), "Terrain3D-owned RD texture memory; borrowed native renderer textures excluded"],
 		["Buffer updates", str(int(diagnostics.get("buffer_updates", 0))), "Explicit RD buffer update calls"],
-		["Bytes uploaded", _format_bytes(float(diagnostics.get("bytes_uploaded", 0))), "Total explicit RD buffer upload traffic"],
+		["Bytes uploaded", Terrain3DRuntimeValueMap.format_bytes(float(diagnostics.get("bytes_uploaded", 0))), "Total explicit RD buffer upload traffic"],
 		["Consecutive failures", str(int(diagnostics.get("consecutive_render_failures", 0))), "RD failures since the most recent successful render"],
 		["Near height binding", "READY" if bool(diagnostics.get("published_height_texture_valid", false)) else "PENDING", "Published Near height-array RID; PENDING uses Middle/Far/background fallback without latching the renderer"],
 		["Renderer recoveries", str(int(diagnostics.get("renderer_recoveries", 0))), "Automatic retries after a latched failure when terrain/material resource generations advance"],
@@ -615,18 +615,13 @@ func _build_settings_tab() -> void:
 
 
 func _add_metadata_control_groups(p_root: VBoxContainer) -> void:
-	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class("Terrain3D", CONTROL_GROUP_PREFIXES)
-	for group: Dictionary in SettingMetadata.group_descriptors(descriptors):
+	for group: Dictionary in SettingControlFactory.supported_groups("Terrain3D", CONTROL_GROUP_PREFIXES):
 		var supported: Array[Dictionary] = []
-		for descriptor: Dictionary in group.get("settings", []):
-			if SettingControlFactory.is_supported(descriptor):
-				supported.append(descriptor)
-		if supported.is_empty():
-			continue
+		supported.assign(group.get("settings", []))
 		var group_path: String = str(group.get("group_path", "General"))
 		var foldable: FoldableContainer = FoldableContainer.new()
 		foldable.title = group_path
-		foldable.folded = _group_is_advanced(supported)
+		foldable.folded = SettingControlFactory.group_is_advanced(supported)
 		foldable.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		p_root.add_child(foldable)
 		var margin: MarginContainer = MarginContainer.new()
@@ -643,12 +638,6 @@ func _add_metadata_control_groups(p_root: VBoxContainer) -> void:
 			_add_metadata_control_row(grid, descriptor)
 
 
-func _group_is_advanced(p_descriptors: Array[Dictionary]) -> bool:
-	var advanced_count: int = 0
-	for descriptor: Dictionary in p_descriptors:
-		if str(descriptor.get("visibility", "basic")) == "advanced":
-			advanced_count += 1
-	return advanced_count > 0 and advanced_count * 2 >= p_descriptors.size()
 
 
 func _add_metadata_control_row(p_grid: GridContainer, p_descriptor: Dictionary) -> void:
@@ -1005,23 +994,23 @@ func _update_efficiency(p_snapshot: Terrain3DRuntimeValueMap) -> void:
 		"%.1f ticks" % gpu.float_value("average_resident_ticks") if departed_pages > 0 else "No departures",
 		"%d departed pages since cache reset" % departed_pages)
 	var distance_m: float = aggregate.float_value("distance_travelled_m")
-	_add_efficiency_row(root, "Upload traffic", _format_bytes(aggregate.float_value("upload_bytes_per_m")) + "/m"
+	_add_efficiency_row(root, "Upload traffic", Terrain3DRuntimeValueMap.format_bytes(aggregate.float_value("upload_bytes_per_m")) + "/m"
 		if distance_m > 0.0 else "No movement", "%.1f m sampled" % distance_m)
 	_add_efficiency_row(root, "Eviction rate", "%.2f / km" % aggregate.float_value("evictions_per_km")
 		if distance_m > 0.0 else "No movement", "%d total evictions" % aggregate.int_value("evictions"))
 	var fixed_memory: Terrain3DRuntimeValueMap = memory.map_value("fixed_unavoidable")
 	var managed_memory: Terrain3DRuntimeValueMap = memory.map_value("managed_resident")
-	_add_efficiency_row(root, "Terrain3D tracked memory", _format_bytes(memory.float_value("tracked_current_residency_bytes")),
+	_add_efficiency_row(root, "Terrain3D tracked memory", Terrain3DRuntimeValueMap.format_bytes(memory.float_value("tracked_current_residency_bytes")),
 		"Tracked current Terrain3D-owned memory; unavailable renderer/driver allocations remain explicit")
 	_add_efficiency_row(root, "Terrain map CPU memory",
-		_format_bytes(managed_memory.float_value("cpu_terrain_page_cache_bytes") +
+		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("cpu_terrain_page_cache_bytes") +
 			fixed_memory.float_value("repository_and_authoritative_storage_bytes")),
 		"CPU page cache + authoritative repository/storage")
 	_add_efficiency_row(root, "Terrain texture GPU memory",
-		_format_bytes(managed_memory.float_value("gpu_terrain_page_pool_bytes") + fixed_memory.float_value("far_atlas_bytes") +
+		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("gpu_terrain_page_pool_bytes") + fixed_memory.float_value("far_atlas_bytes") +
 			fixed_memory.float_value("material_texture_arrays_bytes")), "managed terrain pages + fixed far atlas/material arrays")
 	_add_efficiency_row(root, "Instance resident memory",
-		_format_bytes(managed_memory.float_value("instance_region_page_bytes") +
+		Terrain3DRuntimeValueMap.format_bytes(managed_memory.float_value("instance_region_page_bytes") +
 			fixed_memory.float_value("active_multimesh_bytes") + fixed_memory.float_value("instancer_retained_bytes")),
 		"instance pages + active RD instance data + retained instancer containers")
 
@@ -1047,8 +1036,8 @@ func _set_pressure(p_key: String, p_label: String, p_current: float, p_limit: fl
 		_pressure_items[p_key] = item
 	item.set_text(0, p_label)
 	if p_bytes:
-		item.set_text(1, _format_bytes(p_current))
-		item.set_text(2, _format_bytes(p_limit) if p_limit > 0.0 else "—")
+		item.set_text(1, Terrain3DRuntimeValueMap.format_bytes(p_current))
+		item.set_text(2, Terrain3DRuntimeValueMap.format_bytes(p_limit) if p_limit > 0.0 else "—")
 	else:
 		item.set_text(1, str(int(p_current)))
 		item.set_text(2, str(int(p_limit)) if p_limit > 0.0 else "—")
@@ -1552,14 +1541,6 @@ func _format_usec(p_usec: float) -> String:
 	return "%.3f ms" % (p_usec / 1000.0)
 
 
-func _format_bytes(p_bytes: float) -> String:
-	if p_bytes >= 1073741824.0:
-		return "%.2f GiB" % (p_bytes / 1073741824.0)
-	if p_bytes >= 1048576.0:
-		return "%.2f MiB" % (p_bytes / 1048576.0)
-	if p_bytes >= 1024.0:
-		return "%.2f KiB" % (p_bytes / 1024.0)
-	return "%.0f B" % p_bytes
 
 
 func _humanize_name(p_name: String) -> String:

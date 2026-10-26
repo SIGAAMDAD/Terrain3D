@@ -62,7 +62,8 @@ EA_FORCE_INLINE static bool t3dHlodRuntimeCodecHasBytes( const size_t nOffset, c
 	return nOffset <= nTotalBytes && nBytes <= nTotalBytes - nOffset;
 }
 
-static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, t3dHlodRuntimeEntryRecord_t &rEntry ) {
+bool Terrain3DHLODRuntimeCodec::decodeEntryDictionary(
+        const Variant &rValue, t3dHlodEntryDescriptor_t &rEntry, const bool bRequireNonEmptyPackagePath ) {
 	if ( rValue.get_type() != Variant::DICTIONARY ) {
 		return false;
 	}
@@ -80,7 +81,7 @@ static bool t3dHlodRuntimeCodecParseEntry( const Variant &rValue, t3dHlodRuntime
 	rEntry.m_nSourceSignature = ( int64_t )d.get( "source_signature", 0 );
 	rEntry.m_nBuildSignature = ( int64_t )d.get( "build_signature", 0 );
 	rEntry.m_nEstimatedGpuBytes = MAX<int64_t>( ( int64_t )d.get( "estimated_gpu_bytes", 0 ), 0 );
-	return !rEntry.m_packagePath.is_empty();
+	return !bRequireNonEmptyPackagePath || !rEntry.m_packagePath.is_empty();
 }
 
 PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
@@ -93,7 +94,7 @@ PackedByteArray Terrain3DHLODRuntimeCodec::encode( const Array &rEntries,
 	entries.reserve( ( size_t )rEntries.size() );
 	for ( int i = 0; i < rEntries.size(); ++i ) {
 		t3dHlodRuntimeEntryRecord_t entry;
-		if ( !t3dHlodRuntimeCodecParseEntry( rEntries[i], entry ) ) {
+		if ( !decodeEntryDictionary( rEntries[i], entry ) ) {
 			return PackedByteArray();
 		}
 		entries.push_back( entry );

@@ -2,7 +2,6 @@
 
 #include "streaming/terrain_3d_region_residency.h"
 
-#include "data/terrain_3d_data.h"
 #include "rendering/terrain_3d_far_surface_atlas_cache.h"
 #include "streaming/terrain_3d_active_height_residency.h"
 #include "streaming/terrain_3d_cpu_region_cache.h"
@@ -37,43 +36,80 @@ void Terrain3DRegionResidency::reset( void ) {
 	}
 }
 
-void Terrain3DRegionResidency::update( Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
+void Terrain3DRegionResidency::update( const t3dResidencyFrameState_t &rFrame, const bool bForce,
+        const t3dRegionResidencyUpdateContext_t &rContext ) {
 	if ( !m_pRepository || !m_pSamplingStorage || !m_pRuntimePageStore || !m_pActiveHeightResidency || !m_pCpuRegionCache
 	        || !m_pInstanceRegionCache || !m_pMiddleHeightRegionCache || !m_pGpuRegionCache ) {
 		return;
 	}
 
+	auto service_runtime_pages = [this, &rFrame]() {
+		t3dRuntimePageServiceState_t state;
+		state.m_config = rFrame.m_runtimePageConfig;
+		state.m_predictedCenter = rFrame.m_predictedCenter;
+		state.m_nStreamingGeneration = rFrame.m_nStreamingGeneration;
+		state.m_isWanted = &t3dResidencyFrameWantsRuntimePage;
+		state.m_pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
+		m_pRuntimePageStore->service( state );
+	};
+
 	// Complete the previous union batch before consumers inspect prepared pages.
-	rData.serviceGpuRuntimePagePrepare( rFrame );
-	rData.updateCpuRegionResidencyInternal( rFrame, bForce );
+	service_runtime_pages();
+	m_pCpuRegionCache->update( rFrame, bForce, effectiveCpuLoadLayers( m_pCpuRegionCache->getLoadBudgetLayers() ) );
 
 	const t3dActiveHeightResidencyResult_t activeResult = m_pActiveHeightResidency->update( rFrame, bForce );
 	for ( int index = 0; index < activeResult.m_nCpuSourceRequestCount; ++index ) {
-		rData.requestCpuRegionSourceAsync( t3dUnpackRegionCoord( activeResult.m_szCpuSourceRequests[( size_t )( index )] ) );
+		m_pCpuRegionCache->requestSourceAsync( t3dUnpackRegionCoord( activeResult.m_szCpuSourceRequests[( size_t )( index )] ) );
 	}
 
-	rData.updateInstanceRegionResidencyInternal( rFrame, bForce );
+	t3dInstanceRegionCacheChanges_t instance_changes;
+	m_pInstanceRegionCache->update(
+	        rFrame, bForce, effectiveInstanceLoadPages( m_pInstanceRegionCache->getLoadBudgetPages() ), instance_changes );
+	if ( rContext.m_applyInstanceChanges ) {
+		rContext.m_applyInstanceChanges( rContext.m_pOwnerContext, instance_changes );
+	}
 
 	if ( m_pRepository->getRegionMapSize() > 0 && !rFrame.m_bAuthoring && rFrame.m_nMiddleLods > 0 ) {
-		rData.updateMiddleHeightResidencyInternal( rFrame, bForce );
+		m_pMiddleHeightRegionCache->update(
+		        rFrame, bForce, effectiveGpuUploadLayers( m_pGpuRegionCache->getUploadBudgetLayers() ), rContext.m_middleHeightConfig );
 	} else if ( m_pMiddleHeightRegionCache->isReady() ) {
-		rData.resetMiddleHeightCache();
+		m_pMiddleHeightRegionCache->reset();
 	}
 
-	rData.updateGpuRegionResidencyInternal( rFrame, bForce );
+	if ( m_pFarSurfaceAtlasCache ) {
+		m_pFarSurfaceAtlasCache->resetFrameStats();
+	}
+	if ( rContext.m_prepareGpuFarSurface ) {
+		rContext.m_prepareGpuFarSurface( rContext.m_pOwnerContext );
+	}
+	const t3dGpuRegionCacheUpdateResult_t gpuResult = m_pGpuRegionCache->update(
+	        rFrame, bForce, effectiveGpuUploadLayers( m_pGpuRegionCache->getUploadBudgetLayers() ), rContext.m_pCompute );
+	if ( gpuResult.m_bPageTableChanged && rContext.m_gpuPageTableChanged ) {
+		rContext.m_gpuPageTableChanged( rContext.m_pOwnerContext );
+	}
 
 	// Requests emitted by Active/Middle/GPU/instances form the next union batch.
-	rData.serviceGpuRuntimePagePrepare( rFrame );
+	service_runtime_pages();
 }
 
-void Terrain3DRegionResidency::resetRuntimeCaches( Terrain3DData &rData ) {
-	rData.resetCpuRegionCache( true );
+void Terrain3DRegionResidency::resetRuntimeCaches( const t3dRegionResidencyUpdateContext_t &rContext ) {
 	if ( m_pCpuRegionCache ) {
+		m_pCpuRegionCache->reset( true );
 		m_pCpuRegionCache->refreshCapacity();
 	}
-	rData.resetInstanceRegionCache( false );
-	rData.resetMiddleHeightCache();
-	rData.resetGpuRegionCache( true );
+	if ( m_pInstanceRegionCache ) {
+		t3dInstanceRegionCacheChanges_t instance_changes;
+		m_pInstanceRegionCache->reset( false, &instance_changes );
+		if ( rContext.m_applyInstanceChanges ) {
+			rContext.m_applyInstanceChanges( rContext.m_pOwnerContext, instance_changes );
+		}
+	}
+	if ( m_pMiddleHeightRegionCache ) {
+		m_pMiddleHeightRegionCache->reset();
+	}
+	if ( m_pGpuRegionCache ) {
+		m_pGpuRegionCache->reset( true );
+	}
 	if ( m_pRuntimePageStore ) {
 		m_pRuntimePageStore->reset();
 	}
@@ -82,7 +118,8 @@ void Terrain3DRegionResidency::resetRuntimeCaches( Terrain3DData &rData ) {
 	}
 }
 
-void Terrain3DRegionResidency::appendRuntimeProfileSample( const Terrain3DData &, t3dRuntimeProfileSample_t &rSample ) const {
+void Terrain3DRegionResidency::appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const {
+
 	const t3dRuntimePageStats_t runtimePageStats = m_pRuntimePageStore ? m_pRuntimePageStore->getStats() : t3dRuntimePageStats_t{};
 	const t3dGpuRegionCacheStats_t gpu = m_pGpuRegionCache ? m_pGpuRegionCache->getStats() : t3dGpuRegionCacheStats_t{};
 	const t3dCpuRegionCacheStats_t cpu = m_pCpuRegionCache ? m_pCpuRegionCache->getStats() : t3dCpuRegionCacheStats_t{};

@@ -13,8 +13,7 @@
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_binding_builder.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_service.h"
-#include "rendering/rd/terrain_3d_rd_persistent.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
 #include "terrain_3d.h"
 
 #include <EASTL/numeric_limits.h>
@@ -170,18 +169,17 @@ bool Terrain3DCompute::ensureRenderPipeline( t3dPipeline_t &rPipeline, const Ref
 		return false;
 	}
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
-	const Terrain3DRdResourceService resources( context, Terrain3DRdContext::OWNER_TERRAIN );
-	if ( !resources.create( rPipeline.m_hShader, "T3D.Compute.Displacement.Shader", Terrain3DRdContext::RESOURCE_SHADER,
-	                    Terrain3DRdContext::MEMORY_NONE, 0u,
-	                    [&]( RenderingDevice *pRd ) { return pRd->shader_create_from_spirv( rSpirv, rName ); } ) ) {
+	Terrain3DRdResourceService resources( context, Terrain3DRdContext::OWNER_TERRAIN );
+	if ( !rPipeline.m_hShader.createTracked( context, Terrain3DRdContext::OWNER_TERRAIN,
+	             rName, rSpirv, "T3D.Compute.Displacement.Shader" ) ) {
 		setError( "Failed to create displacement compute shader" );
 		return false;
 	}
 	if ( !resources.create( rPipeline.m_hPipeline, "T3D.Compute.Displacement.Pipeline",
 	                    Terrain3DRdContext::RESOURCE_COMPUTE_PIPELINE, Terrain3DRdContext::MEMORY_NONE, 0u,
-	                    [&]( RenderingDevice *pRd ) { return pRd->compute_pipeline_create( rPipeline.m_hShader ); } ) ) {
+	                    [&]( RenderingDevice *pRd ) { return pRd->compute_pipeline_create( rPipeline.m_hShader.rid() ); } ) ) {
 		setError( "Failed to create displacement compute pipeline" );
-		context.freeResource( rPipeline.m_hShader );
+		rPipeline.m_hShader.releaseTracked( context );
 		return false;
 	}
 	return true;
@@ -198,13 +196,13 @@ void Terrain3DCompute::freeRenderRid( RID &rRid ) {
 void Terrain3DCompute::freeRenderPipeline( t3dPipeline_t &rPipeline ) {
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
 	context.freeResource( rPipeline.m_hPipeline );
-	context.freeResource( rPipeline.m_hShader );
-	rPipeline = t3dPipeline_t{};
+	rPipeline.m_hShader.releaseTracked( context );
+	rPipeline.m_bAttempted = false;
 }
 
 bool Terrain3DCompute::ensureBrushCapacity( const uint32_t nBytes ) {
 	if ( !m_localBuffers.ensureStorageSet(
-	             m_brushStorage, nBytes, m_brushPipeline.m_hShader ) ) {
+	             m_brushStorage, nBytes, m_brushPipeline.m_hShader.rid() ) ) {
 		setError( "Failed to rebuild brush compute buffer and uniform set" );
 		return false;
 	}
@@ -216,7 +214,7 @@ bool Terrain3DCompute::ensureDerivedCapacity( const uint32_t nSlot, const uint32
 		return false;
 	}
 	if ( !m_localBuffers.ensureStoragePairSet( m_derivedStorage[nSlot], nInputBytes,
-	             nOutputBytes, m_derivedPipeline.m_hShader ) ) {
+	             nOutputBytes, m_derivedPipeline.m_hShader.rid() ) ) {
 		setError( "Failed to rebuild derived-map compute buffers and uniform set" );
 		return false;
 	}
@@ -228,9 +226,10 @@ void Terrain3DCompute::freeDisplacementTexture( void ) {
 	m_hDisplacementBoundHeight = RID();
 	m_hDisplacementBoundControl = RID();
 	m_hDisplacementBoundDisplacement = RID();
-	freeRenderRid( m_hDisplacementRegionBuffer );
-	freeRenderRid( m_hDisplacementMaterialBuffer );
-	freeRenderRid( m_hDisplacementOutputTexture );
+	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
+	m_hDisplacementRegionBuffer.releaseTracked( context );
+	m_hDisplacementMaterialBuffer.releaseTracked( context );
+	m_hDisplacementOutputTexture.releaseTracked( Terrain3DRdContext::getShared() );
 	m_nDisplacementRegionHash = 0u;
 	m_nDisplacementMaterialHash = 0u;
 	m_bDisplacementRegionUploaded = false;
@@ -241,7 +240,7 @@ void Terrain3DCompute::freeDisplacementTexture( void ) {
 
 bool Terrain3DCompute::ensureDisplacementResources( const uint32_t nWidth, const uint32_t nHeight, const Ref<RDShaderSPIRV> &rSpirv ) {
 	if ( !m_displacementPipeline.m_hPipeline.is_valid() ) {
-		m_bPersistentDisplacementBuffers = ensureRenderDevice() && t3dRdPersistentMappingAvailable( m_pRenderRd ) && rSpirv.is_valid()
+		m_bPersistentDisplacementBuffers = ensureRenderDevice() && Terrain3DRdGpuBuffer::supportsPersistentMapping( m_pRenderRd ) && rSpirv.is_valid()
 		        && rSpirv->has_method( StringName( "set_dynamic_buffers" ) );
 		if ( m_bPersistentDisplacementBuffers ) {
 			PackedInt64Array dynamic_buffers;
@@ -253,7 +252,7 @@ bool Terrain3DCompute::ensureDisplacementResources( const uint32_t nWidth, const
 	if ( !ensureRenderPipeline( m_displacementPipeline, rSpirv, "Terrain3D displacement compute" ) ) {
 		return false;
 	}
-	if ( !m_hNearestSampler.is_valid() ) {
+	if ( !m_hNearestSampler.isValid() ) {
 		Ref<RDSamplerState> pState;
 		pState.instantiate();
 		pState->set_mag_filter( RenderingDevice::SAMPLER_FILTER_NEAREST );
@@ -262,12 +261,10 @@ bool Terrain3DCompute::ensureDisplacementResources( const uint32_t nWidth, const
 		pState->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		pState->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 		pState->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-		Terrain3DRdResourceService( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN )
-		        .create( m_hNearestSampler, "T3D.Compute.Displacement.NearestSampler", Terrain3DRdContext::RESOURCE_SAMPLER,
-		                Terrain3DRdContext::MEMORY_NONE, 0u,
-		                [&]( RenderingDevice *pRd ) { return pRd->sampler_create( pState ); } );
+		m_hNearestSampler.createTracked( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN,
+		        "T3D.Compute.Displacement.NearestSampler", pState );
 	}
-	if ( !m_hLinearRepeatSampler.is_valid() ) {
+	if ( !m_hLinearRepeatSampler.isValid() ) {
 		Ref<RDSamplerState> pState;
 		pState.instantiate();
 		pState->set_mag_filter( RenderingDevice::SAMPLER_FILTER_LINEAR );
@@ -276,63 +273,67 @@ bool Terrain3DCompute::ensureDisplacementResources( const uint32_t nWidth, const
 		pState->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_REPEAT );
 		pState->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_REPEAT );
 		pState->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-		Terrain3DRdResourceService( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN )
-		        .create( m_hLinearRepeatSampler, "T3D.Compute.Displacement.LinearRepeatSampler", Terrain3DRdContext::RESOURCE_SAMPLER,
-		                Terrain3DRdContext::MEMORY_NONE, 0u,
-		                [&]( RenderingDevice *pRd ) { return pRd->sampler_create( pState ); } );
+		m_hLinearRepeatSampler.createTracked( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN,
+		        "T3D.Compute.Displacement.LinearRepeatSampler", pState );
 	}
-	if ( !m_hNearestSampler.is_valid() || !m_hLinearRepeatSampler.is_valid() ) {
+	if ( !m_hNearestSampler.isValid() || !m_hLinearRepeatSampler.isValid() ) {
 		setError( "Failed to create displacement samplers" );
 		return false;
 	}
 	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
-	const Terrain3DRdResourceService resources( context, Terrain3DRdContext::OWNER_TERRAIN );
-	if ( !m_hDisplacementRegionBuffer.is_valid() ) {
+	if ( !m_hDisplacementRegionBuffer.isValid() ) {
 		const uint32_t region_bytes = 4096u * sizeof( int32_t );
-		resources.createStorageBuffer( m_hDisplacementRegionBuffer, "T3D.Compute.Displacement.RegionBuffer", region_bytes,
-		        Terrain3DRdContext::MEMORY_STORAGE, BitField<RenderingDevice::StorageBufferUsage>( 0 ),
-		        m_bPersistentDisplacementBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Compute.Displacement.RegionBuffer";
+		spec.m_owner = Terrain3DRdContext::OWNER_TERRAIN;
+		spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_STORAGE;
+		spec.m_creationBits = m_bPersistentDisplacementBuffers ? Terrain3DRdGpuBuffer::persistentCreationBits()
+		        : BitField<RenderingDevice::BufferCreationBits>( 0 );
+		m_hDisplacementRegionBuffer.configure( spec );
+		m_hDisplacementRegionBuffer.createTracked( context, region_bytes );
 		m_bDisplacementRegionUploaded = false;
 	}
-	if ( !m_hDisplacementMaterialBuffer.is_valid() ) {
+	if ( !m_hDisplacementMaterialBuffer.isValid() ) {
 		const uint32_t material_bytes = 32u * 4u * sizeof( float );
-		resources.createStorageBuffer( m_hDisplacementMaterialBuffer, "T3D.Compute.Displacement.MaterialBuffer", material_bytes,
-		        Terrain3DRdContext::MEMORY_MATERIAL_TABLE, BitField<RenderingDevice::StorageBufferUsage>( 0 ),
-		        m_bPersistentDisplacementBuffers ? t3dRdPersistentCreationBits() : BitField<RenderingDevice::BufferCreationBits>( 0 ) );
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Compute.Displacement.MaterialBuffer";
+		spec.m_owner = Terrain3DRdContext::OWNER_TERRAIN;
+		spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_MATERIAL_TABLE;
+		spec.m_creationBits = m_bPersistentDisplacementBuffers ? Terrain3DRdGpuBuffer::persistentCreationBits()
+		        : BitField<RenderingDevice::BufferCreationBits>( 0 );
+		m_hDisplacementMaterialBuffer.configure( spec );
+		m_hDisplacementMaterialBuffer.createTracked( context, material_bytes );
 		m_bDisplacementMaterialUploaded = false;
 	}
-	if ( !m_hDisplacementRegionBuffer.is_valid() || !m_hDisplacementMaterialBuffer.is_valid() ) {
+	if ( !m_hDisplacementRegionBuffer.isValid() || !m_hDisplacementMaterialBuffer.isValid() ) {
 		setError( "Failed to allocate displacement parameter buffers" );
 		return false;
 	}
-	if ( m_hDisplacementOutputTexture.is_valid() && m_nDisplacementWidth == nWidth && m_nDisplacementHeight == nHeight ) {
+	if ( m_hDisplacementOutputTexture.isValid() && m_nDisplacementWidth == nWidth && m_nDisplacementHeight == nHeight ) {
 		return true;
 	}
 
-	Ref<RDTextureFormat> pFormat;
-	pFormat.instantiate();
-	pFormat->set_width( nWidth );
-	pFormat->set_height( nHeight );
-	pFormat->set_depth( 1u );
-	pFormat->set_array_layers( 1u );
-	pFormat->set_mipmaps( 1u );
-	pFormat->set_texture_type( RenderingDevice::TEXTURE_TYPE_2D );
-	pFormat->set_format( RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT );
-	pFormat->set_usage_bits( RenderingDevice::TEXTURE_USAGE_STORAGE_BIT | RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT
-	        | RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT );
-	Ref<RDTextureView> pView;
-	pView.instantiate();
 	const uint64_t output_bytes = ( uint64_t )( nWidth ) * ( uint64_t )( nHeight ) * 8u;
-	RID replacement;
-	if ( !resources.create( replacement, "T3D.Compute.Displacement.OutputTexture",
-	                    Terrain3DRdContext::RESOURCE_TEXTURE, Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE, output_bytes,
-	                    [&]( RenderingDevice *pRd ) { return pRd->texture_create( pFormat, pView ); } ) ) {
+	Terrain3DRdTexture replacement;
+	t3dRdTextureSpec_t textureSpec;
+	textureSpec.m_name = "T3D.Compute.Displacement.OutputTexture";
+	textureSpec.m_owner = Terrain3DRdContext::OWNER_TERRAIN;
+	textureSpec.m_memory = Terrain3DRdContext::MEMORY_TERRAIN_TEXTURE;
+	textureSpec.m_layout.m_format = RenderingDevice::DATA_FORMAT_R16G16B16A16_SFLOAT;
+	textureSpec.m_layout.m_nWidth = nWidth; textureSpec.m_layout.m_nHeight = nHeight;
+	textureSpec.m_layout.m_nLayers = 1u; textureSpec.m_layout.m_nMipmaps = 1u;
+	textureSpec.m_layout.m_nUsageBits = RenderingDevice::TEXTURE_USAGE_STORAGE_BIT | RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT
+	        | RenderingDevice::TEXTURE_USAGE_CAN_COPY_FROM_BIT | RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT;
+	textureSpec.m_layout.m_nBytes = output_bytes;
+	if ( !replacement.createTracked( context, textureSpec ) ) {
 		setError( "Failed to allocate displacement storage texture" );
 		return false;
 	}
 	freeRenderUniformSet( m_hDisplacementUniformSet );
-	freeRenderRid( m_hDisplacementOutputTexture );
-	m_hDisplacementOutputTexture = replacement;
+	m_hDisplacementOutputTexture.releaseTracked( context );
+	m_hDisplacementOutputTexture.swap( replacement );
 	m_nDisplacementWidth = nWidth;
 	m_nDisplacementHeight = nHeight;
 	return true;
@@ -462,19 +463,20 @@ bool Terrain3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest
 		return false;
 	}
 	if ( !m_bDisplacementRegionUploaded || m_nDisplacementRegionHash != rRequest.m_nRegionMapHash ) {
-		Terrain3DGpuUploadService uploads( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN, T3D_GPU_DIRTY_UPLOAD );
 		const uint64_t nRegionBytes64 = ( uint64_t )( rRequest.m_regionMap.size() ) * sizeof( int32_t );
 		const bool bSizeValid = nRegionBytes64 <= 4096u * sizeof( int32_t ) && nRegionBytes64 <= eastl::numeric_limits<uint32_t>::max();
 		const uint32_t nRegionBytes = bSizeValid ? ( uint32_t )( nRegionBytes64 ) : 0u;
 		bool bUploaded = false;
 		if ( bSizeValid ) {
-			if ( m_bPersistentDisplacementBuffers ) {
-				bUploaded = uploads.writePersistentRaw( m_hDisplacementRegionBuffer, 4096u * sizeof( int32_t ), 0u,
-				        rRequest.m_regionMap.ptr(), nRegionBytes );
+			if ( m_hDisplacementRegionBuffer.isPersistent() ) {
+				PackedByteArray unused_scratch;
+				bUploaded = m_hDisplacementRegionBuffer.writeTracked( Terrain3DRdContext::getShared(), 0u,
+				        rRequest.m_regionMap.ptr(), nRegionBytes, unused_scratch, T3D_GPU_DIRTY_UPLOAD );
 			} else {
 				const PackedByteArray region_bytes = copyToBytes( rRequest.m_regionMap.ptr(), nRegionBytes );
 				bUploaded = region_bytes.size() == nRegionBytes
-				        && uploads.updatePacked( m_hDisplacementRegionBuffer, 0u, nRegionBytes, region_bytes ) == OK;
+				        && m_hDisplacementRegionBuffer.writePackedTracked( Terrain3DRdContext::getShared(), 0u,
+				                region_bytes, nRegionBytes, T3D_GPU_DIRTY_UPLOAD );
 			}
 		}
 		if ( !bUploaded ) {
@@ -486,14 +488,11 @@ bool Terrain3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest
 		m_bDisplacementRegionUploaded = true;
 	}
 	if ( !m_bDisplacementMaterialUploaded || m_nDisplacementMaterialHash != rRequest.m_nMaterialDataHash ) {
-		Terrain3DGpuUploadService uploads( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN, T3D_GPU_PUBLICATION );
 		const uint32_t nMaterialBytes = ( uint32_t )( rRequest.m_materialData.size() );
 		const bool bSizeValid = rRequest.m_materialData.size() == 32 * 4 * ( int64_t )( sizeof( float ) );
 		const bool bUploaded = bSizeValid
-		        && ( m_bPersistentDisplacementBuffers
-		                        ? uploads.writePersistentRaw( m_hDisplacementMaterialBuffer, 32u * 4u * sizeof( float ), 0u,
-		                                  rRequest.m_materialData.ptr(), nMaterialBytes )
-		                        : uploads.updatePacked( m_hDisplacementMaterialBuffer, 0u, nMaterialBytes, rRequest.m_materialData ) == OK );
+		        && m_hDisplacementMaterialBuffer.writePackedTracked( Terrain3DRdContext::getShared(), 0u,
+		                rRequest.m_materialData, nMaterialBytes, T3D_GPU_PUBLICATION );
 		if ( !bUploaded ) {
 			setError( "Failed to upload displacement material data" );
 			m_bDisplacementMaterialUploaded = false;
@@ -515,19 +514,19 @@ bool Terrain3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest
 	        || m_hDisplacementBoundControl != control_texture || m_hDisplacementBoundDisplacement != displacement_texture;
 	if ( bBindingsChanged ) {
 		TypedArray<Ref<RDUniform>> pUniforms;
-		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 0, m_hNearestSampler, height_texture ) );
-		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 1, m_hNearestSampler, control_texture ) );
-		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 2, m_hLinearRepeatSampler, displacement_texture ) );
-		pUniforms.push_back( Terrain3DRdBindingBuilder::image( 3, m_hDisplacementOutputTexture ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 0, m_hNearestSampler.rid(), height_texture ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 1, m_hNearestSampler.rid(), control_texture ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 2, m_hLinearRepeatSampler.rid(), displacement_texture ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::image( 3, m_hDisplacementOutputTexture.rid() ) );
 		const RenderingDevice::UniformType displacement_storage_type = m_bPersistentDisplacementBuffers
 		        ? RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER_DYNAMIC
 		        : RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER;
-		pUniforms.push_back( Terrain3DRdBindingBuilder::single( 4, displacement_storage_type, m_hDisplacementRegionBuffer ) );
-		pUniforms.push_back( Terrain3DRdBindingBuilder::single( 5, displacement_storage_type, m_hDisplacementMaterialBuffer ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::single( 4, displacement_storage_type, m_hDisplacementRegionBuffer.rid() ) );
+		pUniforms.push_back( Terrain3DRdBindingBuilder::single( 5, displacement_storage_type, m_hDisplacementMaterialBuffer.rid() ) );
 		RID replacement;
 		if ( !Terrain3DRdResourceService( Terrain3DRdContext::getShared(), Terrain3DRdContext::OWNER_TERRAIN )
 		                    .createUniformSet( replacement, "T3D.Compute.Displacement.UniformSet",
-		                            pUniforms, m_displacementPipeline.m_hShader, 0u ) ) {
+		                            pUniforms, m_displacementPipeline.m_hShader.rid(), 0u ) ) {
 			setError( "Failed to bind displacement compute resources" );
 			return false;
 		}
@@ -545,15 +544,15 @@ bool Terrain3DCompute::dispatchDisplacementRequest( const t3dDisplacementRequest
 	m_pRenderRd->compute_list_dispatch( list, ( rRequest.m_nWidth + 7u ) / 8u, ( rRequest.m_nHeight + 7u ) / 8u, 1u );
 	m_pRenderRd->compute_list_end();
 	// Godot 4.7.2 automatically synchronizes the completed compute list before later raster consumers.
-	rTexture = m_hDisplacementOutputTexture;
+	rTexture = m_hDisplacementOutputTexture.rid();
 	return rTexture.is_valid();
 }
 
 void Terrain3DCompute::shutdownDisplacementResources( void ) {
 	freeDisplacementTexture();
 	freeRenderPipeline( m_displacementPipeline );
-	freeRenderRid( m_hNearestSampler );
-	freeRenderRid( m_hLinearRepeatSampler );
+	m_hNearestSampler.releaseTracked( Terrain3DRdContext::getShared() );
+	m_hLinearRepeatSampler.releaseTracked( Terrain3DRdContext::getShared() );
 	m_pRenderRd = NULL;
 	m_bRenderDeviceAttempted = false;
 }
@@ -831,8 +830,8 @@ void Terrain3DCompute::shutdown( void ) {
 	}
 	m_localBuffers.releasePipeline( m_brushPipeline.m_hPipeline, m_brushPipeline.m_hShader );
 	m_localBuffers.releasePipeline( m_derivedPipeline.m_hPipeline, m_derivedPipeline.m_hShader );
-	m_brushPipeline = t3dPipeline_t{};
-	m_derivedPipeline = t3dPipeline_t{};
+	m_brushPipeline.m_bAttempted = false;
+	m_derivedPipeline.m_bAttempted = false;
 	memdelete( m_pRd );
 	m_pRd = NULL;
 	m_localBuffers.setDevice( nullptr );

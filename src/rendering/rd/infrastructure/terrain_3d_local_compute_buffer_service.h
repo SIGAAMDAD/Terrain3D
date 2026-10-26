@@ -2,6 +2,8 @@
 #define TERRAIN3D_LOCAL_COMPUTE_BUFFER_SERVICE_H
 
 #include "core/terrain_3d_sync.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
@@ -10,8 +12,9 @@
 #include <godot_cpp/variant/typed_array.hpp>
 #include <stdint.h>
 
-// Buffers made by a local RenderingDevice stay on that device. They cannot be
-// registered with, or suballocated from, the global render-RD context.
+// Local compute owns pipeline/uniform-set policy and statistics; Terrain3DRdShader
+// owns physical shaders and Terrain3DRdGpuBuffer owns storage-buffer identity, capacity, growth, I/O and release.
+// Local buffers are never registered with the global Terrain3DRdContext.
 class Terrain3DLocalComputeBufferService
 {
 	RenderingDevice *m_device;
@@ -31,55 +34,67 @@ public:
 private:
 	mutable Stats m_stats;
 	mutable t3dMutex_t m_statsMutex;
+
 	void recordFailure( void ) const {
 		t3dScopedLock_t lock( m_statsMutex );
 		++m_stats.resourceFailures;
 	}
-	bool createBuffer( uint32_t nRequired, RID &rBuffer, uint32_t &rCapacity ) const {
-		rCapacity = grownCapacity( nRequired );
-		if ( !m_device || rCapacity == 0u ) {
+
+	void recordBufferCreate( void ) const {
+		t3dScopedLock_t lock( m_statsMutex );
+		++m_stats.bufferCreates;
+	}
+
+	static t3dRdGpuBufferSpec_t storageSpec( void ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_STORAGE;
+		spec.m_growth = T3D_GPU_HIGH_WATER_1_5X;
+		spec.m_nMinimumCapacityBytes = 4096u;
+		return spec;
+	}
+
+	bool createReplacement( const uint32_t nRequired, Terrain3DRdGpuBuffer &rReplacement ) const {
+		if ( !m_device || nRequired == 0u ) {
 			recordFailure();
 			return false;
 		}
-		rBuffer = m_device->storage_buffer_create( rCapacity );
-		if ( rBuffer.is_valid() ) {
-			t3dScopedLock_t lock( m_statsMutex );
-			++m_stats.bufferCreates;
-		} else {
+		const t3dRdGpuBufferSpec_t spec = storageSpec();
+		if ( !rReplacement.configure( spec ) || !rReplacement.ensureLocal( m_device, nRequired ) ) {
 			recordFailure();
+			return false;
 		}
-		return rBuffer.is_valid();
+		recordBufferCreate();
+		return true;
 	}
 
-	static godot::Ref<godot::RDUniform> storageUniform( uint32_t nBinding, const RID &rBuffer ) {
+	static godot::Ref<godot::RDUniform> storageUniform( uint32_t nBinding, const Terrain3DRdGpuBuffer &rBuffer ) {
 		godot::Ref<godot::RDUniform> uniform;
 		uniform.instantiate();
-		if ( uniform.is_valid() ) {
+		if ( uniform.is_valid() && rBuffer.isValid() ) {
 			uniform->set_uniform_type( RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER );
 			uniform->set_binding( nBinding );
-			uniform->add_id( rBuffer );
+			uniform->add_id( rBuffer.rid() );
 		}
 		return uniform;
 	}
 
 public:
 	struct StorageSet {
-		RID buffer;
+		Terrain3DRdGpuBuffer buffer;
 		RID uniformSet;
-		uint32_t capacity = 0u;
 
-		uint64_t retainedBytes( void ) const { return buffer.is_valid() ? capacity : 0u; }
+		uint64_t retainedBytes( void ) const { return buffer.isValid() ? buffer.capacityBytes() : 0u; }
 	};
 
 	struct StoragePairSet {
-		RID input;
-		RID output;
+		Terrain3DRdGpuBuffer input;
+		Terrain3DRdGpuBuffer output;
 		RID uniformSet;
-		uint32_t inputCapacity = 0u;
-		uint32_t outputCapacity = 0u;
 
 		uint64_t retainedBytes( void ) const {
-			return ( uint64_t )( input.is_valid() ? inputCapacity : 0u ) + ( output.is_valid() ? outputCapacity : 0u );
+			return ( uint64_t )( input.isValid() ? input.capacityBytes() : 0u )
+			        + ( uint64_t )( output.isValid() ? output.capacityBytes() : 0u );
 		}
 	};
 
@@ -92,19 +107,18 @@ public:
 	}
 
 	bool createPipeline( const godot::Ref<godot::RDShaderSPIRV> &rSpirv,
-	        const godot::String &rName, RID &rShader, RID &rPipeline ) const {
-		if ( !m_device || rSpirv.is_null() ) {
+	        const godot::String &rName, Terrain3DRdShader &rShader, RID &rPipeline ) const {
+		if ( !m_device || rSpirv.is_null() || rShader.isValid() || rPipeline.is_valid() ) {
 			return false;
 		}
-		rShader = m_device->shader_create_from_spirv( rSpirv, rName );
-		if ( !rShader.is_valid() ) {
+		if ( !rShader.createLocal( m_device, rName, rSpirv ) ) {
 			recordFailure();
 			return false;
 		}
-		rPipeline = m_device->compute_pipeline_create( rShader );
+		rPipeline = m_device->compute_pipeline_create( rShader.rid() );
 		if ( !rPipeline.is_valid() ) {
 			recordFailure();
-			release( rShader );
+			rShader.releaseLocal( m_device );
 			return false;
 		}
 		{
@@ -130,145 +144,121 @@ public:
 		if ( nRequired == 0u ) {
 			return 0u;
 		}
-		uint64_t capacity = 4096u;
-		while ( capacity < nRequired ) {
-			capacity += capacity / 2u;
-			if ( capacity > UINT32_MAX ) {
-				return nRequired;
-			}
-		}
-		return ( uint32_t )capacity;
+		uint32_t capacity = 0u;
+		return t3dRdGpuBufferGrownCapacity( 4096u, nRequired, T3D_GPU_HIGH_WATER_1_5X, capacity )
+		        ? capacity
+		        : 0u;
 	}
 
-	void release( RID &rBuffer ) const {
-		if ( m_device && rBuffer.is_valid() ) {
-			m_device->free_rid( rBuffer );
+	void release( RID &rRid ) const {
+		if ( m_device && rRid.is_valid() ) {
+			m_device->free_rid( rRid );
 		}
-		rBuffer = RID();
+		rRid = RID();
 	}
 
-	void releasePipeline( RID &rPipeline, RID &rShader ) const {
+	void releasePipeline( RID &rPipeline, Terrain3DRdShader &rShader ) const {
 		release( rPipeline );
-		release( rShader );
+		rShader.releaseLocal( m_device );
 	}
 
 	void release( StorageSet &rSet ) const {
 		release( rSet.uniformSet );
-		release( rSet.buffer );
-		rSet.capacity = 0u;
+		rSet.buffer.releaseLocal( m_device );
 	}
 
 	void release( StoragePairSet &rSet ) const {
 		release( rSet.uniformSet );
-		release( rSet.input );
-		release( rSet.output );
-		rSet.inputCapacity = 0u;
-		rSet.outputCapacity = 0u;
+		rSet.input.releaseLocal( m_device );
+		rSet.output.releaseLocal( m_device );
 	}
 
 	bool ensureStorageSet( StorageSet &rSet, uint32_t nRequired, const RID &rShader ) const {
-		return ensureStorageSet( rSet.buffer, rSet.capacity, nRequired, rSet.uniformSet, rShader );
-	}
-
-	bool ensureStoragePairSet( StoragePairSet &rSet, uint32_t nInputRequired,
-	        uint32_t nOutputRequired, const RID &rShader ) const {
-		return ensureStoragePairSet( rSet.input, rSet.inputCapacity, nInputRequired,
-		        rSet.output, rSet.outputCapacity, nOutputRequired, rSet.uniformSet, rShader );
-	}
-
-private:
-	bool ensureStorageSet( RID &rBuffer, uint32_t &rCapacity, uint32_t nRequired,
-	        RID &rUniformSet, const RID &rShader ) const {
-		if ( rBuffer.is_valid() && rCapacity >= nRequired && rUniformSet.is_valid() ) {
+		if ( rSet.buffer.isValid() && !rSet.buffer.needsCapacity( nRequired ) && rSet.uniformSet.is_valid() ) {
 			return true;
 		}
-		if ( !m_device || !rShader.is_valid() ) {
+		if ( !m_device || !rShader.is_valid() || nRequired == 0u ) {
 			return false;
 		}
-		const bool replace = !rBuffer.is_valid() || rCapacity < nRequired;
-		RID replacement;
-		uint32_t capacity = rCapacity;
-		if ( replace && !createBuffer( nRequired, replacement, capacity ) ) {
+		const bool replace = rSet.buffer.needsCapacity( nRequired );
+		Terrain3DRdGpuBuffer replacement;
+		if ( replace && !createReplacement( nRequired, replacement ) ) {
 			return false;
 		}
+		const Terrain3DRdGpuBuffer &binding_buffer = replace ? replacement : rSet.buffer;
 		godot::TypedArray<godot::Ref<godot::RDUniform>> uniforms;
-		const godot::Ref<godot::RDUniform> uniform = storageUniform( 0u, replace ? replacement : rBuffer );
+		const godot::Ref<godot::RDUniform> uniform = storageUniform( 0u, binding_buffer );
 		if ( uniform.is_null() ) {
-			release( replacement );
+			replacement.releaseLocal( m_device );
 			return false;
 		}
 		uniforms.push_back( uniform );
 		RID new_set = createUniformSet( uniforms, rShader, 0u );
 		if ( !new_set.is_valid() ) {
-			release( replacement );
+			replacement.releaseLocal( m_device );
 			return false;
 		}
-		release( rUniformSet );
+		release( rSet.uniformSet );
 		if ( replace ) {
-			release( rBuffer );
-			rBuffer = replacement;
-			rCapacity = capacity;
+			rSet.buffer.swap( replacement );
+			replacement.releaseLocal( m_device );
 		}
-		rUniformSet = new_set;
+		rSet.uniformSet = new_set;
 		return true;
 	}
 
-	bool ensureStoragePairSet( RID &rInput, uint32_t &rInputCapacity, uint32_t nInputRequired,
-	        RID &rOutput, uint32_t &rOutputCapacity, uint32_t nOutputRequired,
-	        RID &rUniformSet, const RID &rShader ) const {
-		if ( rInput.is_valid() && rInputCapacity >= nInputRequired && rOutput.is_valid()
-		        && rOutputCapacity >= nOutputRequired && rUniformSet.is_valid() ) {
+	bool ensureStoragePairSet( StoragePairSet &rSet, uint32_t nInputRequired,
+	        uint32_t nOutputRequired, const RID &rShader ) const {
+		if ( rSet.input.isValid() && !rSet.input.needsCapacity( nInputRequired )
+		        && rSet.output.isValid() && !rSet.output.needsCapacity( nOutputRequired ) && rSet.uniformSet.is_valid() ) {
 			return true;
 		}
-		if ( !m_device || !rShader.is_valid() ) {
+		if ( !m_device || !rShader.is_valid() || nInputRequired == 0u || nOutputRequired == 0u ) {
 			return false;
 		}
-		const bool replace_input = !rInput.is_valid() || rInputCapacity < nInputRequired;
-		const bool replace_output = !rOutput.is_valid() || rOutputCapacity < nOutputRequired;
-		RID new_input;
-		RID new_output;
-		uint32_t input_capacity = rInputCapacity;
-		uint32_t output_capacity = rOutputCapacity;
-		if ( ( replace_input && !createBuffer( nInputRequired, new_input, input_capacity ) )
-		        || ( replace_output && !createBuffer( nOutputRequired, new_output, output_capacity ) ) ) {
-			release( new_input );
-			release( new_output );
+		const bool replace_input = rSet.input.needsCapacity( nInputRequired );
+		const bool replace_output = rSet.output.needsCapacity( nOutputRequired );
+		Terrain3DRdGpuBuffer new_input;
+		Terrain3DRdGpuBuffer new_output;
+		if ( ( replace_input && !createReplacement( nInputRequired, new_input ) )
+		        || ( replace_output && !createReplacement( nOutputRequired, new_output ) ) ) {
+			new_input.releaseLocal( m_device );
+			new_output.releaseLocal( m_device );
 			return false;
 		}
+		const Terrain3DRdGpuBuffer &input_buffer = replace_input ? new_input : rSet.input;
+		const Terrain3DRdGpuBuffer &output_buffer = replace_output ? new_output : rSet.output;
 		godot::TypedArray<godot::Ref<godot::RDUniform>> uniforms;
-		const godot::Ref<godot::RDUniform> input_uniform = storageUniform( 0u, replace_input ? new_input : rInput );
-		const godot::Ref<godot::RDUniform> output_uniform = storageUniform( 1u, replace_output ? new_output : rOutput );
+		const godot::Ref<godot::RDUniform> input_uniform = storageUniform( 0u, input_buffer );
+		const godot::Ref<godot::RDUniform> output_uniform = storageUniform( 1u, output_buffer );
 		if ( input_uniform.is_null() || output_uniform.is_null() ) {
-			release( new_input );
-			release( new_output );
+			new_input.releaseLocal( m_device );
+			new_output.releaseLocal( m_device );
 			return false;
 		}
 		uniforms.push_back( input_uniform );
 		uniforms.push_back( output_uniform );
 		RID new_set = createUniformSet( uniforms, rShader, 0u );
 		if ( !new_set.is_valid() ) {
-			release( new_input );
-			release( new_output );
+			new_input.releaseLocal( m_device );
+			new_output.releaseLocal( m_device );
 			return false;
 		}
-		release( rUniformSet );
+		release( rSet.uniformSet );
 		if ( replace_input ) {
-			release( rInput );
-			rInput = new_input;
-			rInputCapacity = input_capacity;
+			rSet.input.swap( new_input );
+			new_input.releaseLocal( m_device );
 		}
 		if ( replace_output ) {
-			release( rOutput );
-			rOutput = new_output;
-			rOutputCapacity = output_capacity;
+			rSet.output.swap( new_output );
+			new_output.releaseLocal( m_device );
 		}
-		rUniformSet = new_set;
+		rSet.uniformSet = new_set;
 		return true;
 	}
 
-	bool upload( const RID &rBuffer, uint32_t nCapacity, const PackedByteArray &rBytes, uint32_t nBytes ) const {
-		const bool success = m_device && rBuffer.is_valid() && nBytes <= nCapacity && rBytes.size() >= nBytes
-		        && m_device->buffer_update( rBuffer, 0u, nBytes, rBytes ) == godot::OK;
+	bool upload( const StorageSet &rSet, const PackedByteArray &rBytes, uint32_t nBytes ) const {
+		const bool success = rSet.buffer.writePackedLocal( m_device, 0u, rBytes, nBytes );
 		if ( success ) {
 			t3dScopedLock_t lock( m_statsMutex );
 			++m_stats.uploadCalls;
@@ -277,21 +267,18 @@ private:
 		return success;
 	}
 
-public:
-	bool upload( const StorageSet &rSet, const PackedByteArray &rBytes, uint32_t nBytes ) const {
-		return upload( rSet.buffer, rSet.capacity, rBytes, nBytes );
-	}
-
 	bool uploadInput( const StoragePairSet &rSet, const PackedByteArray &rBytes, uint32_t nBytes ) const {
-		return upload( rSet.input, rSet.inputCapacity, rBytes, nBytes );
+		const bool success = rSet.input.writePackedLocal( m_device, 0u, rBytes, nBytes );
+		if ( success ) {
+			t3dScopedLock_t lock( m_statsMutex );
+			++m_stats.uploadCalls;
+			m_stats.bytesUploaded += nBytes;
+		}
+		return success;
 	}
 
-private:
-	PackedByteArray readback( const RID &rBuffer, uint32_t nCapacity, uint32_t nBytes ) const {
-		if ( !m_device || !rBuffer.is_valid() || nBytes > nCapacity ) {
-			return PackedByteArray();
-		}
-		PackedByteArray bytes = m_device->buffer_get_data( rBuffer, 0u, nBytes );
+	PackedByteArray readback( const StorageSet &rSet, uint32_t nBytes ) const {
+		PackedByteArray bytes = rSet.buffer.readbackLocal( m_device, 0u, nBytes );
 		if ( bytes.size() == nBytes ) {
 			t3dScopedLock_t lock( m_statsMutex );
 			++m_stats.readbackCalls;
@@ -300,13 +287,14 @@ private:
 		return bytes;
 	}
 
-public:
-	PackedByteArray readback( const StorageSet &rSet, uint32_t nBytes ) const {
-		return readback( rSet.buffer, rSet.capacity, nBytes );
-	}
-
 	PackedByteArray readbackOutput( const StoragePairSet &rSet, uint32_t nBytes ) const {
-		return readback( rSet.output, rSet.outputCapacity, nBytes );
+		PackedByteArray bytes = rSet.output.readbackLocal( m_device, 0u, nBytes );
+		if ( bytes.size() == nBytes ) {
+			t3dScopedLock_t lock( m_statsMutex );
+			++m_stats.readbackCalls;
+			m_stats.bytesReadBack += nBytes;
+		}
+		return bytes;
 	}
 };
 

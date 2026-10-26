@@ -10,8 +10,13 @@
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/rd/terrain_3d_rd_forward_lighting.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
+#include "rendering/rd/terrain_3d_rd_forward_pipeline_base.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_pipeline_cache.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_framebuffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_sampler.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_render_target_pool.h"
 
 #include "eastl_config.h"
@@ -217,24 +222,15 @@ typedef struct t3dRdPacketBuildEntry_s {
 class Terrain3DRdInstanceRenderer {
 private:
 	typedef struct t3dRdInstanceViewState_s {
-		RID m_hFramebuffer;
+		Terrain3DRdFramebuffer m_hFramebuffer;
 		RID m_szPipeline[9];
 		RID m_hColor;
 		RID m_hDepth;
 		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
 	} t3dRdInstanceViewState_t;
-	typedef struct t3dRdInstanceForwardPipelineKey_s {
-		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
-		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
-		t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
-		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
-		uint32_t m_nViewCount = 1u;
-		bool m_bReverseCull = false;
-		bool m_bDepthPrepassActive = false;
+	typedef struct t3dRdInstanceForwardPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
 		bool operator==( const t3dRdInstanceForwardPipelineKey_s &rOther ) const {
-			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant && m_passKind == rOther.m_passKind
-			        && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount && m_bReverseCull == rOther.m_bReverseCull
-			        && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive;
+			return static_cast<const t3dRdForwardPipelineBaseKey_t &>( *this ) == static_cast<const t3dRdForwardPipelineBaseKey_t &>( rOther );
 		}
 	} t3dRdInstanceForwardPipelineKey_t;
 	typedef struct t3dRdInstanceForwardPipelineEntry_s {
@@ -285,8 +281,8 @@ private:
 	Terrain3DRdForwardLighting m_forwardLighting;
 	t3dRdForwardShaderBundle_t m_forwardShaderBundle{};
 	t3dRdInstanceViewState_t m_szViewStates[s_nMaxViews]{};
-	RID m_hShader;
-	RID m_hszForwardShaders[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	Terrain3DRdShader m_hShader;
+	Terrain3DRdShader m_hszForwardShaders[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	RID m_hPreviewColorTexture;
 	RID m_hPreviewDepthTexture;
 	Vector2i m_previewSize;
@@ -335,14 +331,12 @@ private:
 	bool rasterOccluderDepth( const t3dRdForwardPassContext_t &rContext, const t3dRdInstanceSceneSnapshot_t &rScene );
 	bool ensureInstanceCullShader( const Ref<RDShaderSPIRV> &rShader );
 	void freeForwardPipelines( void );
-	bool selectForwardVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const;
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant );
 	const t3dRdInstanceForwardPipelineEntry_t *findForwardPipeline( const t3dRdInstanceForwardPipelineKey_t &rKey ) const;
 	bool ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader );
-	bool ensureBuffer( RID &rRid,
-	        uint32_t &rCapacity,
+	bool ensureOwnedBuffer( Terrain3DRdGpuBuffer &rBuffer,
 	        uint32_t nRequired,
-	        const String &rName,
+	        const char *pName,
 	        Terrain3DRdContext::ResourceType type,
 	        Terrain3DRdContext::MemoryCategory memory,
 	        Terrain3DRdContext::ResourceOwner owner = Terrain3DRdContext::OWNER_INSTANCES );

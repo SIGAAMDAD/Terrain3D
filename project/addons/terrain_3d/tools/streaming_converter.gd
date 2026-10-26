@@ -3,6 +3,8 @@
 extends Node
 class_name Terrain3DStreamingConverter
 
+const HLODVisualValidator = preload("res://addons/terrain_3d/tools/hlod_visual_validator.gd")
+
 const MODE_META: StringName = &"terrain3d_stream_mode"
 const MODE_STATIC: StringName = &"static"
 const MODE_DYNAMIC: StringName = &"dynamic"
@@ -90,7 +92,7 @@ func _convert_selected_with_root_mode(root_mode: StringName, hlod_min_level: int
 			continue
 		record.roots.push_back(SourceRecord.new(root, parent, root.get_index()))
 		if root_mode == MODE_HLOD_VISUAL:
-			var reason: String = _validate_hlod_visual(root)
+			var reason: String = HLODVisualValidator.validate(root)
 			if not reason.is_empty():
 				record.unsupported.push_back(str(root.get_path()) + " [HLOD visual: " + reason + "]")
 			elif _append_dynamic(root, record.dynamic_nodes):
@@ -146,7 +148,7 @@ func _scan_node(
 			unsupported.push_back(str(node.get_path()) + " [dynamic scene packing failed]")
 			return false
 		if explicit_mode == MODE_HLOD_VISUAL and node is Node3D:
-			var reason: String = _validate_hlod_visual(node)
+			var reason: String = HLODVisualValidator.validate(node)
 			if not reason.is_empty():
 				unsupported.push_back(str(node.get_path()) + " [HLOD visual: " + reason + "]")
 				return false
@@ -283,35 +285,6 @@ func _append_static_record(
 	group.transforms.push_back(transform)
 	group.colors.push_back(color)
 
-
-func _validate_hlod_visual(node: Node) -> String:
-	if node.get_script() != null:
-		return "scripted nodes are behavioral"
-	if node is CollisionObject3D or node is CollisionShape3D or node is CollisionPolygon3D:
-		return "physics/collision nodes must remain detailed"
-	if node is AnimationPlayer or node is AnimationTree or node is Skeleton3D:
-		return "animated/skeletal content is unsupported"
-	if node is AudioStreamPlayer3D or node is GPUParticles3D or node is CPUParticles3D:
-		return "audio/particle content is not render-only"
-	if node is NavigationRegion3D or node is NavigationLink3D or node is NavigationObstacle3D:
-		return "navigation content must remain detailed"
-	if node is Light3D:
-		return "lights are not HLOD proxy geometry"
-	if node is MultiMeshInstance3D:
-		return "MultiMesh content should use Terrain3D instancer HLOD"
-	if node is MeshInstance3D:
-		var mesh_node := node as MeshInstance3D
-		if not is_instance_valid(mesh_node.mesh):
-			return "MeshInstance3D has no mesh"
-		if mesh_node.mesh.get_blend_shape_count() > 0:
-			return "blend shapes are unsupported"
-		if is_instance_valid(mesh_node.material_overlay):
-			return "material overlays are unsupported by HLOD proxy baking"
-	for child: Node in node.get_children():
-		var reason: String = _validate_hlod_visual(child)
-		if not reason.is_empty():
-			return reason
-	return ""
 
 
 func _append_dynamic(node: Node3D, dynamic_nodes: Array[DynamicDescriptor]) -> bool:

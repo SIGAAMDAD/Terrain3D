@@ -1,10 +1,11 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
 #include "instances/terrain_3d_instance_publication_builder.h"
+#include "rendering/rd/terrain_3d_rd_instance_record.h"
+#include "instances/terrain_3d_instance_traversal.h"
 
 #include "Terrain3DConstants.h"
 #include "assets/terrain_3d_mesh_asset.h"
-#include "data/terrain_3d_half_buffer.h"
 #include "data/terrain_3d_region.h"
 #include "hlod/terrain_3d_hlod_streamer.h"
 #include "instances/terrain_3d_instance_store.h"
@@ -16,36 +17,6 @@
 #include <stdint.h>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-static int t3dInstancePublicationCategoryIndex( const t3dInstanceCategory_t eCategory ) {
-	return CLAMP( ( int )( eCategory ), ( int )( INSTANCE_CATEGORY_CLUTTER ), ( int )( INSTANCE_CATEGORY_OCCLUDER ) );
-}
-
-static uint32_t t3dInstancePublicationCategoryFlags( const t3dInstanceCategory_t eCategory ) {
-	const uint32_t category = ( uint32_t )( t3dInstancePublicationCategoryIndex( eCategory ) );
-	return ( category << T3D_RD_INSTANCE_CATEGORY_SHIFT ) & T3D_RD_INSTANCE_CATEGORY_MASK;
-}
-
-static uint32_t t3dInstancePublicationPackSnormPair( const float x, const float y ) {
-	const int16_t px = ( int16_t )( lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
-	const int16_t py = ( int16_t )( lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
-	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
-}
-
-static t3dRdInstanceRecord_t t3dInstancePublicationPackRecord( const Transform3D &rTransform, const uint32_t nColor ) {
-	t3dRdInstanceRecord_t record;
-	record.m_szPosition[0] = ( float )( rTransform.origin.x );
-	record.m_szPosition[1] = ( float )( rTransform.origin.y );
-	record.m_szPosition[2] = ( float )( rTransform.origin.z );
-	const Vector3 scale = rTransform.basis.get_scale();
-	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
-	record.m_nQuaternion01 = t3dInstancePublicationPackSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
-	record.m_nQuaternion23 = t3dInstancePublicationPackSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
-	record.m_nScale01 =
-	        ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) | ( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
-	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
-	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( nColor );
-	return record;
-}
 
 static float t3dInstancePublicationPointRectMinDistanceSquared(
         const Vector3 &rPoint, const float fMinX, const float fMinZ, const float fMaxX, const float fMaxZ ) {
@@ -126,32 +97,11 @@ static bool t3dInstancePublicationBuildConservativeSourceAabb( const Terrain3DMe
 
 static bool t3dInstancePublicationEnsureCellBounds(
         t3dInstanceCell_t &rCell, const AABB &rConservativeSourceAabb, t3dInstancePublicationDiagnostics_t &rDiagnostics ) {
-	const bool source_changed = !rCell.m_bCachedAabbValid || !rCell.m_cachedSourceMeshAabb.is_equal_approx( rConservativeSourceAabb );
-	if ( rCell.m_bCachedAabbValid && rCell.m_nCachedAabbRevision == rCell.m_nRevision && !source_changed ) {
+	if ( t3dInstanceCellBoundsCurrent( rCell, rConservativeSourceAabb ) ) {
 		++rDiagnostics.m_nBoundsReused;
 		return rCell.m_cachedAabb.has_surface();
 	}
-
-	bool initialized = false;
-	AABB bounds;
-	if ( rConservativeSourceAabb.has_surface() ) {
-		for ( size_t iInstance = 0u; iInstance < rCell.m_transforms.size(); ++iInstance ) {
-			const AABB transformed = rCell.getTransform( iInstance ).xform( rConservativeSourceAabb );
-			if ( !initialized ) {
-				bounds = transformed;
-				initialized = true;
-			} else {
-				bounds.merge_with( transformed );
-			}
-		}
-	}
-	rCell.m_cachedAabb = initialized ? bounds : AABB();
-	rCell.m_cachedSourceMeshAabb = rConservativeSourceAabb;
-	rCell.m_nCachedAabbRevision = rCell.m_nRevision;
-	if ( ++rCell.m_nCachedAabbGeneration == 0u ) {
-		rCell.m_nCachedAabbGeneration = 1u;
-	}
-	rCell.m_bCachedAabbValid = true;
+	const bool initialized = t3dRefreshInstanceCellBounds( rCell, rConservativeSourceAabb );
 	++rDiagnostics.m_nBoundsRebuilt;
 	return initialized;
 }
@@ -354,7 +304,7 @@ static void t3dInstancePublicationPopulateCell( t3dInstancePublicationBuildState
 	rCell.m_nRevision = rSourceCell.m_nRevision;
 	rCell.m_nSettingsRevision = rState.m_pContext->m_pMeshSettingsRevision ? rState.m_pContext->m_pMeshSettingsRevision[rMesh.m_nId] : 0u;
 	rCell.m_nVisibilityLayers = rAsset->getVisibilityLayers();
-	rCell.m_nFlags = t3dInstancePublicationCategoryFlags( rAsset->getInstanceCategory() ) | T3D_RD_INSTANCE_LOD_PRESELECTED;
+	rCell.m_nFlags = t3dRdInstanceCategoryFlags( ( int32_t )( rAsset->getInstanceCategory() ) ) | T3D_RD_INSTANCE_LOD_PRESELECTED;
 	rCell.m_fLodBegin = ( float )( rAsset->getLodRangeBegin( nDesiredLod ) );
 	rCell.m_fLodEnd = ( float )( rAsset->getLodRangeEnd( nDesiredLod ) );
 	rCell.m_fFadeMargin = ( float )( rAsset->getFadeMargin() );
@@ -427,7 +377,7 @@ static bool t3dInstancePublicationCommitCell( t3dInstancePublicationBuildState_t
 			Transform3D transform = rSourceCell.getTransform( iInstance );
 			transform.origin += rRegionOffset;
 			const uint32_t color = iInstance < rSourceCell.m_colors.size() ? rSourceCell.m_colors[iInstance] : s_nInstanceWhiteRgba8;
-			if ( !snapshot.m_instances.pushBack( t3dInstancePublicationPackRecord( transform, color ) ) ) {
+			if ( !snapshot.m_instances.pushBack( t3dRdPackInstanceRecord( transform, color ) ) ) {
 				UtilityFunctions::push_error( "Terrain3DInstancePublicationBuilder: record storage exceeded fixed capacity" );
 				return false;
 			}
@@ -481,7 +431,7 @@ static bool t3dInstancePublicationBuildMesh( t3dInstancePublicationBuildState_t 
 	const Ref<Terrain3DMeshAsset> asset = asset_id_valid ? rState.m_assets->getMeshAsset( rMesh.m_nId ) : Ref<Terrain3DMeshAsset>();
 	const bool asset_enabled = asset.is_valid() && asset->isEnabled();
 	const bool asset_valid = asset_enabled && asset->getLodCount() > 0;
-	const int category_index = asset_valid ? t3dInstancePublicationCategoryIndex( asset->getInstanceCategory() ) : 0;
+	const uint32_t category_index = asset_valid ? t3dRdInstanceCategoryIndex( ( int32_t )( asset->getInstanceCategory() ) ) : 0u;
 	t3dInstancePublicationCategoryDiagnostics_t &category = rState.m_pDiagnostics->m_categories[category_index];
 	t3dHlodInstancerRepresentationState_t hlod_state;
 	if ( asset_valid && rState.m_pContext->m_pHlodStreamer && asset->getInstanceCategory() != INSTANCE_CATEGORY_CLUTTER ) {

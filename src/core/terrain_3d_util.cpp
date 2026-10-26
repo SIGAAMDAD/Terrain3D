@@ -758,7 +758,7 @@ Ref<Image> Terrain3DUtil::packPbrRgba16ui( const Ref<Image> &rNormal,
 		LOG( ERROR, "All packed PBR source images must have identical dimensions." );
 		return Ref<Image>();
 	}
-	if ( !is_power_of_2( size.x ) || !is_power_of_2( size.y ) ) {
+	if ( !Math::is_power_of_2( size.x ) || !Math::is_power_of_2( size.y ) ) {
 		LOG( WARN, "Packed PBR image dimensions are not powers of two: ", size, ". Mipmaps remain valid but may be less efficient." );
 	}
 

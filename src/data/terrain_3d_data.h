@@ -156,7 +156,6 @@ private:
 	Ref<Image> makeGpuRenderControlImage( const Vector2i &vLocation ) const;
 	Ref<Image> makeMiddleCompositeImage( const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor ) const;
 	t3dRuntimePageConfig_t getRuntimePageConfig( void ) const;
-	static bool isRuntimePageWanted( void *pContext, const Vector2i &rLocation );
 	uint64_t computeGpuRuntimePageSourceSignature( const Terrain3DRegion *pRegion ) const;
 	bool readGpuRuntimePageSourceSignature( const String &rPagePath, uint64_t &nSignature ) const;
 	String getGpuRuntimePagePath( const Terrain3DRegion *pRegion ) const;
@@ -189,6 +188,9 @@ private:
 	t3dFarSurfaceAtlasConfig_t getFarSurfaceAtlasConfig( void ) const;
 	t3dMiddleHeightRegionCacheConfig_t getMiddleHeightCacheConfig( void ) const;
 	void applyInstanceRegionCacheChanges( const t3dInstanceRegionCacheChanges_t &rChanges );
+	static void residencyPrepareGpuFarSurface( void *pContext );
+	static void residencyApplyInstanceChanges( void *pContext, const t3dInstanceRegionCacheChanges_t &rChanges );
+	static void residencyGpuPageTableChanged( void *pContext );
 	void resetGpuRegionCache( bool bClearTextures );
 	void armPendingGpuRegionRetirements( void );
 	void invalidateGpuRegionLocation( const Vector2i &vLocation );

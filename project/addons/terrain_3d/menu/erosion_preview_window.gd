@@ -4,6 +4,7 @@
 extends Window
 
 const EditorUI = preload("res://addons/terrain_3d/src/editor_ui_util.gd")
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 const DETAIL_VERTEX_BUDGETS: Array[int] = [75000, 150000, 300000]
 
 var _job: Terrain3DErosionJob
@@ -655,7 +656,7 @@ func _update_controls() -> void:
 		elif state == Terrain3DErosionJob.STATE_RUNNING and not _job.is_live_preview_enabled():
 			_status_label.text = "Live snapshots are disabled. The final simulated terrain will remain viewable after completion."
 		else:
-			_status_label.text = "%s vertices in the disposable preview mesh." % _format_integer(_last_vertex_count)
+			_status_label.text = "%s vertices in the disposable preview mesh." % EditorUtil.format_integer(_last_vertex_count)
 	else:
 		_pause_button.text = "Pause"
 		_stage_label.text = "No active simulation"
@@ -664,10 +665,3 @@ func _update_controls() -> void:
 		_status_label.text = "No erosion job is attached to this temporary preview scene."
 
 
-func _format_integer(p_value: int) -> String:
-	var text: String = str(p_value)
-	var result: String = ""
-	while text.length() > 3:
-		result = "," + text.right(3) + result
-		text = text.left(text.length() - 3)
-	return text + result

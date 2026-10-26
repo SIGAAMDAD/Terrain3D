@@ -23,37 +23,7 @@ using namespace godot;
 #endif
 class Terrain3D;
 
-typedef struct t3dEntry_s {
-	int m_nLevel = 1;
-	t3dRegionCoord_t m_cluster = t3dPackRegionCoord( s_v2iZero );
-	t3dRegionCoord_t m_regionMin = t3dPackRegionCoord( s_v2iZero );
-	t3dRegionCoord_t m_regionMax = t3dPackRegionCoord( s_v2iZero );
-	EA_FORCE_INLINE Vector2i getCluster( void ) const {
-		return t3dUnpackRegionCoord( m_cluster );
-	}
-	EA_FORCE_INLINE Vector2i getRegionMin( void ) const {
-		return t3dUnpackRegionCoord( m_regionMin );
-	}
-	EA_FORCE_INLINE Vector2i getRegionMax( void ) const {
-		return t3dUnpackRegionCoord( m_regionMax );
-	}
-	EA_FORCE_INLINE void setCluster( const Vector2i &rValue ) {
-		m_cluster = t3dPackRegionCoord( rValue );
-	}
-	EA_FORCE_INLINE void setRegionMin( const Vector2i &rValue ) {
-		m_regionMin = t3dPackRegionCoord( rValue );
-	}
-	EA_FORCE_INLINE void setRegionMax( const Vector2i &rValue ) {
-		m_regionMax = t3dPackRegionCoord( rValue );
-	}
-	AABB m_localBounds;
-	String m_packagePath;
-	real_t m_fGeometricError = 1.0f;
-	int64_t m_nSourceSignature = 0;
-	int64_t m_nBuildSignature = 0;
-	int64_t m_nEstimatedGpuBytes = 0;
-	int m_nParent = -1;
-	int m_szChildren[4] = { -1, -1, -1, -1 };
+typedef struct t3dEntry_s : public t3dHlodEntryDescriptor_t {
 	uint32_t m_nDesiredGeneration = 0u;
 	bool m_bRequestStarted = false;
 	bool m_bLoadFailed = false;

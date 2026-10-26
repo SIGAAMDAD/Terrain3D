@@ -91,190 +91,190 @@ Terrain3DErosionSettings::Terrain3DErosionSettings( void ) {
 		notify_property_list_changed();                                                                                                    \
 	}
 
-SET_CLAMPED( simulation_years, setSimulationYears, m_fSimulationYears, double, 0.000001, 1000000000.0 )
-SET_CLAMPED( simulation_steps, setSimulationSteps, m_nSimulationSteps, int32_t, 1, 4096 )
+SET_CLAMPED( simulation_years, setSimulationYears, m_config.m_fSimulationYears, double, 0.000001, 1000000000.0 )
+SET_CLAMPED( simulation_steps, setSimulationSteps, m_config.m_nSimulationSteps, int32_t, 1, 4096 )
 void Terrain3DErosionSettings::setResolutionScale( const int32_t nValue ) {
 	const int32_t value = t3dErosionSettingsSanitizeResolutionScale( nValue );
-	if ( m_nResolutionScale != value ) {
-		m_nResolutionScale = value;
+	if ( m_config.m_nResolutionScale != value ) {
+		m_config.m_nResolutionScale = value;
 		emit_changed();
 	}
 }
-SET_VALUE( auto_adjust_resolution, setAutoAdjustResolution, m_bAutoAdjustResolution, bool )
-SET_CLAMPED( memory_budget_mb, setMemoryBudgetMb, m_nMemoryBudgetMb, int32_t, 128, 32768 )
-SET_VALUE( live_preview_enabled, setLivePreviewEnabled, m_bLivePreviewEnabled, bool )
-SET_CLAMPED( live_preview_interval_steps, setLivePreviewIntervalSteps, m_nLivePreviewIntervalSteps, int32_t, 1, 256 )
-SET_VALUE( live_preview_start_paused, setLivePreviewStartPaused, m_bLivePreviewStartPaused, bool )
-SET_CLAMPED( thread_count, setThreadCount, m_nThreadCount, int32_t, 0, 64 )
-SET_VALUE( seed, setSeed, m_nSeed, int64_t )
+SET_VALUE( auto_adjust_resolution, setAutoAdjustResolution, m_config.m_bAutoAdjustResolution, bool )
+SET_CLAMPED( memory_budget_mb, setMemoryBudgetMb, m_config.m_nMemoryBudgetMb, int32_t, 128, 32768 )
+SET_VALUE( live_preview_enabled, setLivePreviewEnabled, m_config.m_bLivePreviewEnabled, bool )
+SET_CLAMPED( live_preview_interval_steps, setLivePreviewIntervalSteps, m_config.m_nLivePreviewIntervalSteps, int32_t, 1, 256 )
+SET_VALUE( live_preview_start_paused, setLivePreviewStartPaused, m_config.m_bLivePreviewStartPaused, bool )
+SET_CLAMPED( thread_count, setThreadCount, m_config.m_nThreadCount, int32_t, 0, 64 )
+SET_VALUE( seed, setSeed, m_config.m_nSeed, int64_t )
 void Terrain3DErosionSettings::setBoundaryMode( const t3dBoundaryMode_t eValue ) {
 	const t3dBoundaryMode_t value =
 	        ( t3dBoundaryMode_t )( CLAMP( ( int32_t )( eValue ), ( int32_t )( BOUNDARY_CLOSED ), ( int32_t )( BOUNDARY_OPEN ) ) );
-	if ( m_boundaryMode != value ) {
-		m_boundaryMode = value;
+	if ( m_config.m_boundaryMode != value ) {
+		m_config.m_boundaryMode = value;
 		emit_changed();
 	}
 }
-SET_CLAMPED( max_height_change_per_step, setMaxHeightChangePerStep, m_fMaxHeightChangePerStep, float, 0.000001f, 10000.0f )
-SET_VALUE( preserve_holes, setPreserveHoles, m_bPreserveHoles, bool )
-SET_INSPECTOR_TOGGLE( apply_height, setApplyHeight, m_bApplyHeight )
-SET_CLAMPED( height_output_strength, setHeightOutputStrength, m_fHeightOutputStrength, float, 0.0f, 10.0f )
-SET_CLAMPED( global_intensity, setGlobalIntensity, m_fGlobalIntensity, float, 0.0f, 10.0f )
+SET_CLAMPED( max_height_change_per_step, setMaxHeightChangePerStep, m_config.m_fMaxHeightChangePerStep, float, 0.000001f, 10000.0f )
+SET_VALUE( preserve_holes, setPreserveHoles, m_config.m_bPreserveHoles, bool )
+SET_INSPECTOR_TOGGLE( apply_height, setApplyHeight, m_config.m_bApplyHeight )
+SET_CLAMPED( height_output_strength, setHeightOutputStrength, m_config.m_fHeightOutputStrength, float, 0.0f, 10.0f )
+SET_CLAMPED( global_intensity, setGlobalIntensity, m_config.m_fGlobalIntensity, float, 0.0f, 10.0f )
 SET_REF_VALUE( simulation_mask, setSimulationMask, m_simulationMask, Ref<Image> )
-SET_REF_VALUE( simulation_mask_world_rect, setSimulationMaskWorldRect, m_simulationMaskWorldRect, Rect2 )
-SET_VALUE( invert_simulation_mask, setInvertSimulationMask, m_bInvertSimulationMask, bool )
-SET_CLAMPED( edge_fade_distance_m, setEdgeFadeDistanceM, m_fEdgeFadeDistanceM, float, 0.0f, 10000000.0f )
-SET_INSPECTOR_TOGGLE( height_range_enabled, setHeightRangeEnabled, m_bHeightRangeEnabled )
-SET_CLAMPED( minimum_height_m, setMinimumHeightM, m_fMinimumHeightM, float, -1000000.0f, 1000000.0f )
-SET_CLAMPED( maximum_height_m, setMaximumHeightM, m_fMaximumHeightM, float, -1000000.0f, 1000000.0f )
-SET_CLAMPED( height_range_falloff_m, setHeightRangeFalloffM, m_fHeightRangeFalloffM, float, 0.0f, 1000000.0f )
+SET_REF_VALUE( simulation_mask_world_rect, setSimulationMaskWorldRect, m_config.m_simulationMaskWorldRect, Rect2 )
+SET_VALUE( invert_simulation_mask, setInvertSimulationMask, m_config.m_bInvertSimulationMask, bool )
+SET_CLAMPED( edge_fade_distance_m, setEdgeFadeDistanceM, m_config.m_fEdgeFadeDistanceM, float, 0.0f, 10000000.0f )
+SET_INSPECTOR_TOGGLE( height_range_enabled, setHeightRangeEnabled, m_config.m_bHeightRangeEnabled )
+SET_CLAMPED( minimum_height_m, setMinimumHeightM, m_config.m_fMinimumHeightM, float, -1000000.0f, 1000000.0f )
+SET_CLAMPED( maximum_height_m, setMaximumHeightM, m_config.m_fMaximumHeightM, float, -1000000.0f, 1000000.0f )
+SET_CLAMPED( height_range_falloff_m, setHeightRangeFalloffM, m_config.m_fHeightRangeFalloffM, float, 0.0f, 1000000.0f )
 
-SET_INSPECTOR_TOGGLE( hydraulic_enabled, setHydraulicEnabled, m_bHydraulicEnabled )
-SET_CLAMPED( rainfall_m_per_year, setRainfallMPerYear, m_fRainfallMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( rainfall_variation, setRainfallVariation, m_fRainfallVariation, float, 0.0f, 1.0f )
-SET_CLAMPED( evaporation_fraction, setEvaporationFraction, m_fEvaporationFraction, float, 0.0f, 1.0f )
-SET_CLAMPED( infiltration_fraction, setInfiltrationFraction, m_fInfiltrationFraction, float, 0.0f, 1.0f )
-SET_CLAMPED( flow_rate, setFlowRate, m_fFlowRate, float, 0.0f, 10.0f )
-SET_CLAMPED( sediment_capacity, setSedimentCapacity, m_fSedimentCapacity, float, 0.0f, 1000.0f )
-SET_CLAMPED( hydraulic_erosion_m_per_year, setHydraulicErosionMPerYear, m_fHydraulicErosionMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( hydraulic_deposition_rate, setHydraulicDepositionRate, m_fHydraulicDepositionRate, float, 0.0f, 1.0f )
-SET_CLAMPED( minimum_slope, setMinimumSlope, m_fMinimumSlope, float, 0.0f, 10.0f )
-SET_CLAMPED( storm_frequency, setStormFrequency, m_fStormFrequency, float, 0.0f, 1.0f )
-SET_CLAMPED( storm_intensity, setStormIntensity, m_fStormIntensity, float, 0.0f, 100.0f )
-SET_CLAMPED( channel_incision_strength, setChannelIncisionStrength, m_fChannelIncisionStrength, float, 0.0f, 16.0f )
-SET_CLAMPED( standing_water_deposition_rate, setStandingWaterDepositionRate, m_fStandingWaterDepositionRate, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( sediment_sorting_enabled, setSedimentSortingEnabled, m_bSedimentSortingEnabled )
-SET_CLAMPED( coarse_transport_multiplier, setCoarseTransportMultiplier, m_fCoarseTransportMultiplier, float, 0.0f, 8.0f )
-SET_CLAMPED( sand_transport_multiplier, setSandTransportMultiplier, m_fSandTransportMultiplier, float, 0.0f, 8.0f )
-SET_CLAMPED( fine_transport_multiplier, setFineTransportMultiplier, m_fFineTransportMultiplier, float, 0.0f, 8.0f )
-SET_CLAMPED( coarse_settling_rate, setCoarseSettlingRate, m_fCoarseSettlingRate, float, 0.0f, 1.0f )
-SET_CLAMPED( sand_settling_rate, setSandSettlingRate, m_fSandSettlingRate, float, 0.0f, 1.0f )
-SET_CLAMPED( fine_settling_rate, setFineSettlingRate, m_fFineSettlingRate, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( alluvial_fan_enabled, setAlluvialFanEnabled, m_bAlluvialFanEnabled )
-SET_CLAMPED( alluvial_fan_strength, setAlluvialFanStrength, m_fAlluvialFanStrength, float, 0.0f, 8.0f )
-SET_CLAMPED( alluvial_fan_slope_drop, setAlluvialFanSlopeDrop, m_fAlluvialFanSlopeDrop, float, 0.0f, 10.0f )
-SET_CLAMPED( alluvial_fan_spread, setAlluvialFanSpread, m_fAlluvialFanSpread, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( debris_flow_enabled, setDebrisFlowEnabled, m_bDebrisFlowEnabled )
+SET_INSPECTOR_TOGGLE( hydraulic_enabled, setHydraulicEnabled, m_config.m_bHydraulicEnabled )
+SET_CLAMPED( rainfall_m_per_year, setRainfallMPerYear, m_config.m_fRainfallMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( rainfall_variation, setRainfallVariation, m_config.m_fRainfallVariation, float, 0.0f, 1.0f )
+SET_CLAMPED( evaporation_fraction, setEvaporationFraction, m_config.m_fEvaporationFraction, float, 0.0f, 1.0f )
+SET_CLAMPED( infiltration_fraction, setInfiltrationFraction, m_config.m_fInfiltrationFraction, float, 0.0f, 1.0f )
+SET_CLAMPED( flow_rate, setFlowRate, m_config.m_fFlowRate, float, 0.0f, 10.0f )
+SET_CLAMPED( sediment_capacity, setSedimentCapacity, m_config.m_fSedimentCapacity, float, 0.0f, 1000.0f )
+SET_CLAMPED( hydraulic_erosion_m_per_year, setHydraulicErosionMPerYear, m_config.m_fHydraulicErosionMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( hydraulic_deposition_rate, setHydraulicDepositionRate, m_config.m_fHydraulicDepositionRate, float, 0.0f, 1.0f )
+SET_CLAMPED( minimum_slope, setMinimumSlope, m_config.m_fMinimumSlope, float, 0.0f, 10.0f )
+SET_CLAMPED( storm_frequency, setStormFrequency, m_config.m_fStormFrequency, float, 0.0f, 1.0f )
+SET_CLAMPED( storm_intensity, setStormIntensity, m_config.m_fStormIntensity, float, 0.0f, 100.0f )
+SET_CLAMPED( channel_incision_strength, setChannelIncisionStrength, m_config.m_fChannelIncisionStrength, float, 0.0f, 16.0f )
+SET_CLAMPED( standing_water_deposition_rate, setStandingWaterDepositionRate, m_config.m_fStandingWaterDepositionRate, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( sediment_sorting_enabled, setSedimentSortingEnabled, m_config.m_bSedimentSortingEnabled )
+SET_CLAMPED( coarse_transport_multiplier, setCoarseTransportMultiplier, m_config.m_fCoarseTransportMultiplier, float, 0.0f, 8.0f )
+SET_CLAMPED( sand_transport_multiplier, setSandTransportMultiplier, m_config.m_fSandTransportMultiplier, float, 0.0f, 8.0f )
+SET_CLAMPED( fine_transport_multiplier, setFineTransportMultiplier, m_config.m_fFineTransportMultiplier, float, 0.0f, 8.0f )
+SET_CLAMPED( coarse_settling_rate, setCoarseSettlingRate, m_config.m_fCoarseSettlingRate, float, 0.0f, 1.0f )
+SET_CLAMPED( sand_settling_rate, setSandSettlingRate, m_config.m_fSandSettlingRate, float, 0.0f, 1.0f )
+SET_CLAMPED( fine_settling_rate, setFineSettlingRate, m_config.m_fFineSettlingRate, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( alluvial_fan_enabled, setAlluvialFanEnabled, m_config.m_bAlluvialFanEnabled )
+SET_CLAMPED( alluvial_fan_strength, setAlluvialFanStrength, m_config.m_fAlluvialFanStrength, float, 0.0f, 8.0f )
+SET_CLAMPED( alluvial_fan_slope_drop, setAlluvialFanSlopeDrop, m_config.m_fAlluvialFanSlopeDrop, float, 0.0f, 10.0f )
+SET_CLAMPED( alluvial_fan_spread, setAlluvialFanSpread, m_config.m_fAlluvialFanSpread, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( debris_flow_enabled, setDebrisFlowEnabled, m_config.m_bDebrisFlowEnabled )
 SET_CLAMPED(
-        debris_flow_concentration_threshold, setDebrisFlowConcentrationThreshold, m_fDebrisFlowConcentrationThreshold, float, 0.0f, 1.0f )
-SET_CLAMPED( debris_flow_slope_threshold, setDebrisFlowSlopeThreshold, m_fDebrisFlowSlopeThreshold, float, 0.0f, 10.0f )
-SET_CLAMPED( debris_flow_rate, setDebrisFlowRate, m_fDebrisFlowRate, float, 0.0f, 1.0f )
-SET_CLAMPED( debris_flow_deposition_rate, setDebrisFlowDepositionRate, m_fDebrisFlowDepositionRate, float, 0.0f, 1.0f )
-SET_CLAMPED( debris_flow_runout_cells, setDebrisFlowRunoutCells, m_nDebrisFlowRunoutCells, int32_t, 1, 64 )
+        debris_flow_concentration_threshold, setDebrisFlowConcentrationThreshold, m_config.m_fDebrisFlowConcentrationThreshold, float, 0.0f, 1.0f )
+SET_CLAMPED( debris_flow_slope_threshold, setDebrisFlowSlopeThreshold, m_config.m_fDebrisFlowSlopeThreshold, float, 0.0f, 10.0f )
+SET_CLAMPED( debris_flow_rate, setDebrisFlowRate, m_config.m_fDebrisFlowRate, float, 0.0f, 1.0f )
+SET_CLAMPED( debris_flow_deposition_rate, setDebrisFlowDepositionRate, m_config.m_fDebrisFlowDepositionRate, float, 0.0f, 1.0f )
+SET_CLAMPED( debris_flow_runout_cells, setDebrisFlowRunoutCells, m_config.m_nDebrisFlowRunoutCells, int32_t, 1, 64 )
 
-SET_INSPECTOR_TOGGLE( weathering_enabled, setWeatheringEnabled, m_bWeatheringEnabled )
-SET_CLAMPED( physical_weathering_m_per_year, setPhysicalWeatheringMPerYear, m_fPhysicalWeatheringMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( chemical_weathering_m_per_year, setChemicalWeatheringMPerYear, m_fChemicalWeatheringMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( freeze_thaw_strength, setFreezeThawStrength, m_fFreezeThawStrength, float, 0.0f, 10.0f )
-SET_CLAMPED( talus_angle_degrees, setTalusAngleDegrees, m_fTalusAngleDegrees, float, 0.0f, 89.9f )
-SET_CLAMPED( thermal_creep_rate, setThermalCreepRate, m_fThermalCreepRate, float, 0.0f, 1.0f )
-SET_CLAMPED( base_hardness, setBaseHardness, m_fBaseHardness, float, 0.0f, 1.0f )
-SET_CLAMPED( hardness_variation, setHardnessVariation, m_fHardnessVariation, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( oxidation_enabled, setOxidationEnabled, m_bOxidationEnabled )
-SET_CLAMPED( oxidation_rate_per_year, setOxidationRatePerYear, m_fOxidationRatePerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( oxidation_weakening, setOxidationWeakening, m_fOxidationWeakening, float, 0.0f, 1.0f )
-SET_CLAMPED( weathering_slope_bias, setWeatheringSlopeBias, m_fWeatheringSlopeBias, float, 0.0f, 8.0f )
-SET_CLAMPED( chemical_moisture_exponent, setChemicalMoistureExponent, m_fChemicalMoistureExponent, float, 0.1f, 8.0f )
-SET_CLAMPED( freeze_point, setFreezePoint, m_fFreezePoint, float, -1.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( wet_dry_enabled, setWetDryEnabled, m_bWetDryEnabled )
-SET_CLAMPED( wet_dry_weathering_m_per_cycle, setWetDryWeatheringMPerCycle, m_fWetDryWeatheringMPerCycle, float, 0.0f, 1000.0f )
-SET_CLAMPED( wet_threshold, setWetThreshold, m_fWetThreshold, float, 0.0f, 1.0f )
-SET_CLAMPED( dry_threshold, setDryThreshold, m_fDryThreshold, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( salt_weathering_enabled, setSaltWeatheringEnabled, m_bSaltWeatheringEnabled )
+SET_INSPECTOR_TOGGLE( weathering_enabled, setWeatheringEnabled, m_config.m_bWeatheringEnabled )
+SET_CLAMPED( physical_weathering_m_per_year, setPhysicalWeatheringMPerYear, m_config.m_fPhysicalWeatheringMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( chemical_weathering_m_per_year, setChemicalWeatheringMPerYear, m_config.m_fChemicalWeatheringMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( freeze_thaw_strength, setFreezeThawStrength, m_config.m_fFreezeThawStrength, float, 0.0f, 10.0f )
+SET_CLAMPED( talus_angle_degrees, setTalusAngleDegrees, m_config.m_fTalusAngleDegrees, float, 0.0f, 89.9f )
+SET_CLAMPED( thermal_creep_rate, setThermalCreepRate, m_config.m_fThermalCreepRate, float, 0.0f, 1.0f )
+SET_CLAMPED( base_hardness, setBaseHardness, m_config.m_fBaseHardness, float, 0.0f, 1.0f )
+SET_CLAMPED( hardness_variation, setHardnessVariation, m_config.m_fHardnessVariation, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( oxidation_enabled, setOxidationEnabled, m_config.m_bOxidationEnabled )
+SET_CLAMPED( oxidation_rate_per_year, setOxidationRatePerYear, m_config.m_fOxidationRatePerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( oxidation_weakening, setOxidationWeakening, m_config.m_fOxidationWeakening, float, 0.0f, 1.0f )
+SET_CLAMPED( weathering_slope_bias, setWeatheringSlopeBias, m_config.m_fWeatheringSlopeBias, float, 0.0f, 8.0f )
+SET_CLAMPED( chemical_moisture_exponent, setChemicalMoistureExponent, m_config.m_fChemicalMoistureExponent, float, 0.1f, 8.0f )
+SET_CLAMPED( freeze_point, setFreezePoint, m_config.m_fFreezePoint, float, -1.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( wet_dry_enabled, setWetDryEnabled, m_config.m_bWetDryEnabled )
+SET_CLAMPED( wet_dry_weathering_m_per_cycle, setWetDryWeatheringMPerCycle, m_config.m_fWetDryWeatheringMPerCycle, float, 0.0f, 1000.0f )
+SET_CLAMPED( wet_threshold, setWetThreshold, m_config.m_fWetThreshold, float, 0.0f, 1.0f )
+SET_CLAMPED( dry_threshold, setDryThreshold, m_config.m_fDryThreshold, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( salt_weathering_enabled, setSaltWeatheringEnabled, m_config.m_bSaltWeatheringEnabled )
 SET_REF_VALUE( salinity_mask, setSalinityMask, m_salinityMask, Ref<Image> )
-SET_REF_VALUE( salinity_world_rect, setSalinityWorldRect, m_salinityWorldRect, Rect2 )
-SET_CLAMPED( background_salinity, setBackgroundSalinity, m_fBackgroundSalinity, float, 0.0f, 1.0f )
-SET_CLAMPED( salt_weathering_m_per_year, setSaltWeatheringMPerYear, m_fSaltWeatheringMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( salt_crystallization_strength, setSaltCrystallizationStrength, m_fSaltCrystallizationStrength, float, 0.0f, 8.0f )
-SET_CLAMPED( salt_evaporation_bias, setSaltEvaporationBias, m_fSaltEvaporationBias, float, 0.0f, 8.0f )
-SET_CLAMPED( salt_cohesion_loss, setSaltCohesionLoss, m_fSaltCohesionLoss, float, 0.0f, 1.0f )
-SET_INSPECTOR_TOGGLE( exposure_age_enabled, setExposureAgeEnabled, m_bExposureAgeEnabled )
-SET_CLAMPED( varnish_maturation_years, setVarnishMaturationYears, m_fVarnishMaturationYears, float, 1.0f, 1000000000.0f )
-SET_CLAMPED( exposure_reset_depth_m, setExposureResetDepthM, m_fExposureResetDepthM, float, 0.000001f, 10000.0f )
-SET_CLAMPED( varnish_stability_slope, setVarnishStabilitySlope, m_fVarnishStabilitySlope, float, 0.0f, 10.0f )
-SET_CLAMPED( varnish_oxidation_multiplier, setVarnishOxidationMultiplier, m_fVarnishOxidationMultiplier, float, 0.0f, 8.0f )
-SET_INSPECTOR_TOGGLE( snowmelt_enabled, setSnowmeltEnabled, m_bSnowmeltEnabled )
-SET_CLAMPED( snowfall_fraction, setSnowfallFraction, m_fSnowfallFraction, float, 0.0f, 1.0f )
-SET_CLAMPED( snow_accumulation_temperature, setSnowAccumulationTemperature, m_fSnowAccumulationTemperature, float, -1.0f, 1.0f )
-SET_CLAMPED( snow_melt_temperature, setSnowMeltTemperature, m_fSnowMeltTemperature, float, -1.0f, 1.0f )
-SET_CLAMPED( snow_melt_fraction_per_step, setSnowMeltFractionPerStep, m_fSnowMeltFractionPerStep, float, 0.0f, 1.0f )
-SET_CLAMPED( snow_sublimation_fraction, setSnowSublimationFraction, m_fSnowSublimationFraction, float, 0.0f, 1.0f )
+SET_REF_VALUE( salinity_world_rect, setSalinityWorldRect, m_config.m_salinityWorldRect, Rect2 )
+SET_CLAMPED( background_salinity, setBackgroundSalinity, m_config.m_fBackgroundSalinity, float, 0.0f, 1.0f )
+SET_CLAMPED( salt_weathering_m_per_year, setSaltWeatheringMPerYear, m_config.m_fSaltWeatheringMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( salt_crystallization_strength, setSaltCrystallizationStrength, m_config.m_fSaltCrystallizationStrength, float, 0.0f, 8.0f )
+SET_CLAMPED( salt_evaporation_bias, setSaltEvaporationBias, m_config.m_fSaltEvaporationBias, float, 0.0f, 8.0f )
+SET_CLAMPED( salt_cohesion_loss, setSaltCohesionLoss, m_config.m_fSaltCohesionLoss, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( exposure_age_enabled, setExposureAgeEnabled, m_config.m_bExposureAgeEnabled )
+SET_CLAMPED( varnish_maturation_years, setVarnishMaturationYears, m_config.m_fVarnishMaturationYears, float, 1.0f, 1000000000.0f )
+SET_CLAMPED( exposure_reset_depth_m, setExposureResetDepthM, m_config.m_fExposureResetDepthM, float, 0.000001f, 10000.0f )
+SET_CLAMPED( varnish_stability_slope, setVarnishStabilitySlope, m_config.m_fVarnishStabilitySlope, float, 0.0f, 10.0f )
+SET_CLAMPED( varnish_oxidation_multiplier, setVarnishOxidationMultiplier, m_config.m_fVarnishOxidationMultiplier, float, 0.0f, 8.0f )
+SET_INSPECTOR_TOGGLE( snowmelt_enabled, setSnowmeltEnabled, m_config.m_bSnowmeltEnabled )
+SET_CLAMPED( snowfall_fraction, setSnowfallFraction, m_config.m_fSnowfallFraction, float, 0.0f, 1.0f )
+SET_CLAMPED( snow_accumulation_temperature, setSnowAccumulationTemperature, m_config.m_fSnowAccumulationTemperature, float, -1.0f, 1.0f )
+SET_CLAMPED( snow_melt_temperature, setSnowMeltTemperature, m_config.m_fSnowMeltTemperature, float, -1.0f, 1.0f )
+SET_CLAMPED( snow_melt_fraction_per_step, setSnowMeltFractionPerStep, m_config.m_fSnowMeltFractionPerStep, float, 0.0f, 1.0f )
+SET_CLAMPED( snow_sublimation_fraction, setSnowSublimationFraction, m_config.m_fSnowSublimationFraction, float, 0.0f, 1.0f )
 
-SET_INSPECTOR_TOGGLE( wind_enabled, setWindEnabled, m_bWindEnabled )
+SET_INSPECTOR_TOGGLE( wind_enabled, setWindEnabled, m_config.m_bWindEnabled )
 void Terrain3DErosionSettings::setWindDirection( const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
-	if ( !m_windDirection.is_equal_approx( value ) ) {
-		m_windDirection = value;
+	if ( !m_config.m_windDirection.is_equal_approx( value ) ) {
+		m_config.m_windDirection = value;
 		emit_changed();
 	}
 }
-SET_CLAMPED( wind_strength, setWindStrength, m_fWindStrength, float, 0.0f, 1000.0f )
-SET_CLAMPED( wind_variation, setWindVariation, m_fWindVariation, float, 0.0f, 1.0f )
-SET_CLAMPED( wind_erosion_m_per_year, setWindErosionMPerYear, m_fWindErosionMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( wind_transport_rate, setWindTransportRate, m_fWindTransportRate, float, 0.0f, 1.0f )
-SET_CLAMPED( wind_deposition_rate, setWindDepositionRate, m_fWindDepositionRate, float, 0.0f, 1.0f )
-SET_CLAMPED( wind_shelter_strength, setWindShelterStrength, m_fWindShelterStrength, float, 0.0f, 1.0f )
-SET_CLAMPED( wind_threshold, setWindThreshold, m_fWindThreshold, float, 0.0f, 1000.0f )
-SET_CLAMPED( wind_transport_distance_cells, setWindTransportDistanceCells, m_nWindTransportDistanceCells, int32_t, 1, 32 )
-SET_CLAMPED( wind_deposition_slope_bias, setWindDepositionSlopeBias, m_fWindDepositionSlopeBias, float, 0.0f, 8.0f )
-SET_INSPECTOR_TOGGLE( dune_enabled, setDuneEnabled, m_bDuneEnabled )
-SET_CLAMPED( sand_repose_angle_degrees, setSandReposeAngleDegrees, m_fSandReposeAngleDegrees, float, 1.0f, 89.9f )
-SET_CLAMPED( dune_avalanche_rate, setDuneAvalancheRate, m_fDuneAvalancheRate, float, 0.0f, 1.0f )
-SET_CLAMPED( dune_relaxation_iterations, setDuneRelaxationIterations, m_nDuneRelaxationIterations, int32_t, 1, 32 )
-SET_CLAMPED( dune_min_sand_depth_m, setDuneMinSandDepthM, m_fDuneMinSandDepthM, float, 0.0f, 1000.0f )
-SET_INSPECTOR_TOGGLE( desert_pavement_enabled, setDesertPavementEnabled, m_bDesertPavementEnabled )
-SET_CLAMPED( pavement_formation_rate, setPavementFormationRate, m_fPavementFormationRate, float, 0.0f, 1.0f )
-SET_CLAMPED( pavement_fine_removal_threshold, setPavementFineRemovalThreshold, m_fPavementFineRemovalThreshold, float, 0.001f, 1.0f )
-SET_CLAMPED( pavement_armor_strength, setPavementArmorStrength, m_fPavementArmorStrength, float, 0.0f, 1.0f )
-SET_CLAMPED( pavement_infiltration_reduction, setPavementInfiltrationReduction, m_fPavementInfiltrationReduction, float, 0.0f, 1.0f )
+SET_CLAMPED( wind_strength, setWindStrength, m_config.m_fWindStrength, float, 0.0f, 1000.0f )
+SET_CLAMPED( wind_variation, setWindVariation, m_config.m_fWindVariation, float, 0.0f, 1.0f )
+SET_CLAMPED( wind_erosion_m_per_year, setWindErosionMPerYear, m_config.m_fWindErosionMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( wind_transport_rate, setWindTransportRate, m_config.m_fWindTransportRate, float, 0.0f, 1.0f )
+SET_CLAMPED( wind_deposition_rate, setWindDepositionRate, m_config.m_fWindDepositionRate, float, 0.0f, 1.0f )
+SET_CLAMPED( wind_shelter_strength, setWindShelterStrength, m_config.m_fWindShelterStrength, float, 0.0f, 1.0f )
+SET_CLAMPED( wind_threshold, setWindThreshold, m_config.m_fWindThreshold, float, 0.0f, 1000.0f )
+SET_CLAMPED( wind_transport_distance_cells, setWindTransportDistanceCells, m_config.m_nWindTransportDistanceCells, int32_t, 1, 32 )
+SET_CLAMPED( wind_deposition_slope_bias, setWindDepositionSlopeBias, m_config.m_fWindDepositionSlopeBias, float, 0.0f, 8.0f )
+SET_INSPECTOR_TOGGLE( dune_enabled, setDuneEnabled, m_config.m_bDuneEnabled )
+SET_CLAMPED( sand_repose_angle_degrees, setSandReposeAngleDegrees, m_config.m_fSandReposeAngleDegrees, float, 1.0f, 89.9f )
+SET_CLAMPED( dune_avalanche_rate, setDuneAvalancheRate, m_config.m_fDuneAvalancheRate, float, 0.0f, 1.0f )
+SET_CLAMPED( dune_relaxation_iterations, setDuneRelaxationIterations, m_config.m_nDuneRelaxationIterations, int32_t, 1, 32 )
+SET_CLAMPED( dune_min_sand_depth_m, setDuneMinSandDepthM, m_config.m_fDuneMinSandDepthM, float, 0.0f, 1000.0f )
+SET_INSPECTOR_TOGGLE( desert_pavement_enabled, setDesertPavementEnabled, m_config.m_bDesertPavementEnabled )
+SET_CLAMPED( pavement_formation_rate, setPavementFormationRate, m_config.m_fPavementFormationRate, float, 0.0f, 1.0f )
+SET_CLAMPED( pavement_fine_removal_threshold, setPavementFineRemovalThreshold, m_config.m_fPavementFineRemovalThreshold, float, 0.001f, 1.0f )
+SET_CLAMPED( pavement_armor_strength, setPavementArmorStrength, m_config.m_fPavementArmorStrength, float, 0.0f, 1.0f )
+SET_CLAMPED( pavement_infiltration_reduction, setPavementInfiltrationReduction, m_config.m_fPavementInfiltrationReduction, float, 0.0f, 1.0f )
 
-SET_INSPECTOR_TOGGLE( wave_enabled, setWaveEnabled, m_bWaveEnabled )
-SET_CLAMPED( sea_level, setSeaLevel, m_fSeaLevel, float, -1000000.0f, 1000000.0f )
-SET_CLAMPED( tidal_range, setTidalRange, m_fTidalRange, float, 0.0f, 100000.0f )
+SET_INSPECTOR_TOGGLE( wave_enabled, setWaveEnabled, m_config.m_bWaveEnabled )
+SET_CLAMPED( sea_level, setSeaLevel, m_config.m_fSeaLevel, float, -1000000.0f, 1000000.0f )
+SET_CLAMPED( tidal_range, setTidalRange, m_config.m_fTidalRange, float, 0.0f, 100000.0f )
 void Terrain3DErosionSettings::setWaveDirection( const Vector2 &vValue ) {
 	const Vector2 value = vValue.length_squared() > CMP_EPSILON ? vValue.normalized() : Vector2( 1.0f, 0.0f );
-	if ( !m_waveDirection.is_equal_approx( value ) ) {
-		m_waveDirection = value;
+	if ( !m_config.m_waveDirection.is_equal_approx( value ) ) {
+		m_config.m_waveDirection = value;
 		emit_changed();
 	}
 }
-SET_CLAMPED( wave_strength, setWaveStrength, m_fWaveStrength, float, 0.0f, 1000.0f )
-SET_CLAMPED( wave_erosion_m_per_year, setWaveErosionMPerYear, m_fWaveErosionMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( wave_deposition_rate, setWaveDepositionRate, m_fWaveDepositionRate, float, 0.0f, 1.0f )
-SET_CLAMPED( coastline_band_m, setCoastlineBandM, m_fCoastlineBandM, float, 0.001f, 100000.0f )
-SET_CLAMPED( wave_fetch_distance_m, setWaveFetchDistanceM, m_fWaveFetchDistanceM, float, 0.0f, 10000000.0f )
-SET_CLAMPED( wave_undercut_bias, setWaveUndercutBias, m_fWaveUndercutBias, float, 0.0f, 10.0f )
-SET_CLAMPED( beach_smoothing, setBeachSmoothing, m_fBeachSmoothing, float, 0.0f, 1.0f )
+SET_CLAMPED( wave_strength, setWaveStrength, m_config.m_fWaveStrength, float, 0.0f, 1000.0f )
+SET_CLAMPED( wave_erosion_m_per_year, setWaveErosionMPerYear, m_config.m_fWaveErosionMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( wave_deposition_rate, setWaveDepositionRate, m_config.m_fWaveDepositionRate, float, 0.0f, 1.0f )
+SET_CLAMPED( coastline_band_m, setCoastlineBandM, m_config.m_fCoastlineBandM, float, 0.001f, 100000.0f )
+SET_CLAMPED( wave_fetch_distance_m, setWaveFetchDistanceM, m_config.m_fWaveFetchDistanceM, float, 0.0f, 10000000.0f )
+SET_CLAMPED( wave_undercut_bias, setWaveUndercutBias, m_config.m_fWaveUndercutBias, float, 0.0f, 10.0f )
+SET_CLAMPED( beach_smoothing, setBeachSmoothing, m_config.m_fBeachSmoothing, float, 0.0f, 1.0f )
 
-SET_INSPECTOR_TOGGLE( traffic_enabled, setTrafficEnabled, m_bTrafficEnabled )
+SET_INSPECTOR_TOGGLE( traffic_enabled, setTrafficEnabled, m_config.m_bTrafficEnabled )
 SET_REF_VALUE( traffic_mask, setTrafficMask, m_trafficMask, Ref<Image> )
-SET_REF_VALUE( traffic_world_rect, setTrafficWorldRect, m_trafficWorldRect, Rect2 )
-SET_CLAMPED( traffic_erosion_m_per_year, setTrafficErosionMPerYear, m_fTrafficErosionMPerYear, float, 0.0f, 1000.0f )
-SET_CLAMPED( traffic_compaction, setTrafficCompaction, m_fTrafficCompaction, float, 0.0f, 1.0f )
-SET_CLAMPED( traffic_smoothing, setTrafficSmoothing, m_fTrafficSmoothing, float, 0.0f, 1.0f )
-SET_CLAMPED( traffic_runoff_multiplier, setTrafficRunoffMultiplier, m_fTrafficRunoffMultiplier, float, 0.0f, 100.0f )
-SET_CLAMPED( traffic_threshold, setTrafficThreshold, m_fTrafficThreshold, float, 0.0f, 0.999f )
-SET_CLAMPED( traffic_widening_cells, setTrafficWideningCells, m_nTrafficWideningCells, int32_t, 0, 32 )
+SET_REF_VALUE( traffic_world_rect, setTrafficWorldRect, m_config.m_trafficWorldRect, Rect2 )
+SET_CLAMPED( traffic_erosion_m_per_year, setTrafficErosionMPerYear, m_config.m_fTrafficErosionMPerYear, float, 0.0f, 1000.0f )
+SET_CLAMPED( traffic_compaction, setTrafficCompaction, m_config.m_fTrafficCompaction, float, 0.0f, 1.0f )
+SET_CLAMPED( traffic_smoothing, setTrafficSmoothing, m_config.m_fTrafficSmoothing, float, 0.0f, 1.0f )
+SET_CLAMPED( traffic_runoff_multiplier, setTrafficRunoffMultiplier, m_config.m_fTrafficRunoffMultiplier, float, 0.0f, 100.0f )
+SET_CLAMPED( traffic_threshold, setTrafficThreshold, m_config.m_fTrafficThreshold, float, 0.0f, 0.999f )
+SET_CLAMPED( traffic_widening_cells, setTrafficWideningCells, m_config.m_nTrafficWideningCells, int32_t, 0, 32 )
 
-SET_INSPECTOR_TOGGLE( stratigraphy_enabled, setStratigraphyEnabled, m_bStratigraphyEnabled )
-SET_CLAMPED( surface_layer_depth_m, setSurfaceLayerDepthM, m_fSurfaceLayerDepthM, float, 0.0f, 100000.0f )
+SET_INSPECTOR_TOGGLE( stratigraphy_enabled, setStratigraphyEnabled, m_config.m_bStratigraphyEnabled )
+SET_CLAMPED( surface_layer_depth_m, setSurfaceLayerDepthM, m_config.m_fSurfaceLayerDepthM, float, 0.0f, 100000.0f )
 SET_REF_VALUE( surface_layer_depth_map, setSurfaceLayerDepthMap, m_surfaceLayerDepthMap, Ref<Image> )
-SET_REF_VALUE( surface_layer_depth_world_rect, setSurfaceLayerDepthWorldRect, m_surfaceLayerDepthWorldRect, Rect2 )
-SET_CLAMPED( bedrock_hardness, setBedrockHardness, m_fBedrockHardness, float, 0.0f, 1.0f )
+SET_REF_VALUE( surface_layer_depth_world_rect, setSurfaceLayerDepthWorldRect, m_config.m_surfaceLayerDepthWorldRect, Rect2 )
+SET_CLAMPED( bedrock_hardness, setBedrockHardness, m_config.m_fBedrockHardness, float, 0.0f, 1.0f )
 SET_REF_VALUE( bedrock_hardness_map, setBedrockHardnessMap, m_bedrockHardnessMap, Ref<Image> )
-SET_REF_VALUE( bedrock_hardness_world_rect, setBedrockHardnessWorldRect, m_bedrockHardnessWorldRect, Rect2 )
+SET_REF_VALUE( bedrock_hardness_world_rect, setBedrockHardnessWorldRect, m_config.m_bedrockHardnessWorldRect, Rect2 )
 SET_CLAMPED(
-        stratigraphy_transition_width_m, setStratigraphyTransitionWidthM, m_fStratigraphyTransitionWidthM, float, 0.000001f, 100000.0f )
+        stratigraphy_transition_width_m, setStratigraphyTransitionWidthM, m_config.m_fStratigraphyTransitionWidthM, float, 0.000001f, 100000.0f )
 
-SET_INSPECTOR_TOGGLE( material_output_enabled, setMaterialOutputEnabled, m_bMaterialOutputEnabled )
-SET_VALUE( preserve_control_flags, setPreserveControlFlags, m_bPreserveControlFlags, bool )
-SET_VALUE( resolve_auto_materials, setResolveAutoMaterials, m_bResolveAutoMaterials, bool )
-SET_CLAMPED( material_transition_strength, setMaterialTransitionStrength, m_fMaterialTransitionStrength, float, 0.0f, 8.0f )
-SET_CLAMPED( material_transition_threshold, setMaterialTransitionThreshold, m_fMaterialTransitionThreshold, float, 0.0f, 1.0f )
-SET_CLAMPED( material_transition_depth_m, setMaterialTransitionDepthM, m_fMaterialTransitionDepthM, float, 0.001f, 10000.0f )
-SET_INSPECTOR_TOGGLE( oxidation_color_enabled, setOxidationColorEnabled, m_bOxidationColorEnabled )
-SET_REF_VALUE( oxidation_tint, setOxidationTint, m_oxidationTint, Color )
-SET_CLAMPED( oxidation_tint_strength, setOxidationTintStrength, m_fOxidationTintStrength, float, 0.0f, 1.0f )
+SET_INSPECTOR_TOGGLE( material_output_enabled, setMaterialOutputEnabled, m_config.m_bMaterialOutputEnabled )
+SET_VALUE( preserve_control_flags, setPreserveControlFlags, m_config.m_bPreserveControlFlags, bool )
+SET_VALUE( resolve_auto_materials, setResolveAutoMaterials, m_config.m_bResolveAutoMaterials, bool )
+SET_CLAMPED( material_transition_strength, setMaterialTransitionStrength, m_config.m_fMaterialTransitionStrength, float, 0.0f, 8.0f )
+SET_CLAMPED( material_transition_threshold, setMaterialTransitionThreshold, m_config.m_fMaterialTransitionThreshold, float, 0.0f, 1.0f )
+SET_CLAMPED( material_transition_depth_m, setMaterialTransitionDepthM, m_config.m_fMaterialTransitionDepthM, float, 0.001f, 10000.0f )
+SET_INSPECTOR_TOGGLE( oxidation_color_enabled, setOxidationColorEnabled, m_config.m_bOxidationColorEnabled )
+SET_REF_VALUE( oxidation_tint, setOxidationTint, m_config.m_oxidationTint, Color )
+SET_CLAMPED( oxidation_tint_strength, setOxidationTintStrength, m_config.m_fOxidationTintStrength, float, 0.0f, 1.0f )
 
 void Terrain3DErosionSettings::setMasterIntensityCurve( const Ref<Curve> &rValue ) {
 	setCurve( m_masterIntensityCurve, rValue );
@@ -320,13 +320,13 @@ void Terrain3DErosionSettings::setDebrisFlowCurve( const Ref<Curve> &rValue ) {
 
 void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) const {
 	const StringName name = rProperty.name;
-	if ( !m_bApplyHeight && name == StringName( "height_output_strength" ) ) {
+	if ( !m_config.m_bApplyHeight && name == StringName( "height_output_strength" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bHeightRangeEnabled
+	} else if ( !m_config.m_bHeightRangeEnabled
 	        && ( name == StringName( "minimum_height_m" ) || name == StringName( "maximum_height_m" )
 	                || name == StringName( "height_range_falloff_m" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bHydraulicEnabled && name != StringName( "hydraulic_enabled" )
+	} else if ( !m_config.m_bHydraulicEnabled && name != StringName( "hydraulic_enabled" )
 	        && ( name == StringName( "rainfall_m_per_year" ) || name == StringName( "rainfall_variation" )
 	                || name == StringName( "evaporation_fraction" ) || name == StringName( "infiltration_fraction" )
 	                || name == StringName( "flow_rate" ) || name == StringName( "sediment_capacity" )
@@ -346,88 +346,88 @@ void Terrain3DErosionSettings::_validate_property( PropertyInfo &rProperty ) con
 	                || name == StringName( "snow_accumulation_temperature" ) || name == StringName( "snow_melt_temperature" )
 	                || name == StringName( "snow_melt_fraction_per_step" ) || name == StringName( "snow_sublimation_fraction" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bSedimentSortingEnabled
+	} else if ( !m_config.m_bSedimentSortingEnabled
 	        && ( name == StringName( "coarse_transport_multiplier" ) || name == StringName( "sand_transport_multiplier" )
 	                || name == StringName( "fine_transport_multiplier" ) || name == StringName( "coarse_settling_rate" )
 	                || name == StringName( "sand_settling_rate" ) || name == StringName( "fine_settling_rate" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bAlluvialFanEnabled
+	} else if ( !m_config.m_bAlluvialFanEnabled
 	        && ( name == StringName( "alluvial_fan_strength" ) || name == StringName( "alluvial_fan_slope_drop" )
 	                || name == StringName( "alluvial_fan_spread" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bDebrisFlowEnabled
+	} else if ( !m_config.m_bDebrisFlowEnabled
 	        && ( name == StringName( "debris_flow_concentration_threshold" ) || name == StringName( "debris_flow_slope_threshold" )
 	                || name == StringName( "debris_flow_rate" ) || name == StringName( "debris_flow_deposition_rate" )
 	                || name == StringName( "debris_flow_runout_cells" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bSnowmeltEnabled
+	} else if ( !m_config.m_bSnowmeltEnabled
 	        && ( name == StringName( "snowfall_fraction" ) || name == StringName( "snow_accumulation_temperature" )
 	                || name == StringName( "snow_melt_temperature" ) || name == StringName( "snow_melt_fraction_per_step" )
 	                || name == StringName( "snow_sublimation_fraction" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bWeatheringEnabled && name != StringName( "weathering_enabled" )
+	} else if ( !m_config.m_bWeatheringEnabled && name != StringName( "weathering_enabled" )
 	        && ( name == StringName( "physical_weathering_m_per_year" ) || name == StringName( "chemical_weathering_m_per_year" )
 	                || name == StringName( "freeze_thaw_strength" ) || name == StringName( "talus_angle_degrees" )
 	                || name == StringName( "thermal_creep_rate" ) || name == StringName( "weathering_slope_bias" )
 	                || name == StringName( "chemical_moisture_exponent" ) || name == StringName( "freeze_point" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bWetDryEnabled
+	} else if ( !m_config.m_bWetDryEnabled
 	        && ( name == StringName( "wet_dry_weathering_m_per_cycle" ) || name == StringName( "wet_threshold" )
 	                || name == StringName( "dry_threshold" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bSaltWeatheringEnabled
+	} else if ( !m_config.m_bSaltWeatheringEnabled
 	        && ( name == StringName( "salinity_mask" ) || name == StringName( "salinity_world_rect" )
 	                || name == StringName( "background_salinity" ) || name == StringName( "salt_weathering_m_per_year" )
 	                || name == StringName( "salt_crystallization_strength" ) || name == StringName( "salt_evaporation_bias" )
 	                || name == StringName( "salt_cohesion_loss" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bExposureAgeEnabled
+	} else if ( !m_config.m_bExposureAgeEnabled
 	        && ( name == StringName( "varnish_maturation_years" ) || name == StringName( "exposure_reset_depth_m" )
 	                || name == StringName( "varnish_stability_slope" ) || name == StringName( "varnish_oxidation_multiplier" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bOxidationEnabled
+	} else if ( !m_config.m_bOxidationEnabled
 	        && ( name == StringName( "oxidation_rate_per_year" ) || name == StringName( "oxidation_weakening" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bWindEnabled && name != StringName( "wind_enabled" ) && name.begins_with( "wind_" ) ) {
+	} else if ( !m_config.m_bWindEnabled && name != StringName( "wind_enabled" ) && name.begins_with( "wind_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bDuneEnabled
+	} else if ( !m_config.m_bDuneEnabled
 	        && ( name == StringName( "sand_repose_angle_degrees" ) || name == StringName( "dune_avalanche_rate" )
 	                || name == StringName( "dune_relaxation_iterations" ) || name == StringName( "dune_min_sand_depth_m" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bDesertPavementEnabled && name.begins_with( "pavement_" ) ) {
+	} else if ( !m_config.m_bDesertPavementEnabled && name.begins_with( "pavement_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bWaveEnabled && name != StringName( "wave_enabled" )
+	} else if ( !m_config.m_bWaveEnabled && name != StringName( "wave_enabled" )
 	        && ( name == StringName( "sea_level" ) || name == StringName( "tidal_range" ) || name == StringName( "wave_direction" )
 	                || name == StringName( "wave_strength" ) || name == StringName( "wave_erosion_m_per_year" )
 	                || name == StringName( "wave_deposition_rate" ) || name == StringName( "coastline_band_m" )
 	                || name == StringName( "wave_fetch_distance_m" ) || name == StringName( "wave_undercut_bias" )
 	                || name == StringName( "beach_smoothing" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bTrafficEnabled && name != StringName( "traffic_enabled" ) && name.begins_with( "traffic_" ) ) {
+	} else if ( !m_config.m_bTrafficEnabled && name != StringName( "traffic_enabled" ) && name.begins_with( "traffic_" ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bStratigraphyEnabled
+	} else if ( !m_config.m_bStratigraphyEnabled
 	        && ( name == StringName( "surface_layer_depth_m" ) || name == StringName( "surface_layer_depth_map" )
 	                || name == StringName( "surface_layer_depth_world_rect" ) || name == StringName( "bedrock_hardness" )
 	                || name == StringName( "bedrock_hardness_map" ) || name == StringName( "bedrock_hardness_world_rect" )
 	                || name == StringName( "stratigraphy_transition_width_m" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bMaterialOutputEnabled
+	} else if ( !m_config.m_bMaterialOutputEnabled
 	        && ( name == StringName( "preserve_control_flags" ) || name == StringName( "resolve_auto_materials" )
 	                || name == StringName( "material_transition_strength" ) || name == StringName( "material_transition_threshold" )
 	                || name == StringName( "material_transition_depth_m" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( !m_bOxidationColorEnabled
+	} else if ( !m_config.m_bOxidationColorEnabled
 	        && ( name == StringName( "oxidation_tint" ) || name == StringName( "oxidation_tint_strength" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
-	} else if ( ( !m_bHydraulicEnabled && name == StringName( "rainfall_curve" ) )
-	        || ( !m_bWeatheringEnabled && name == StringName( "weathering_curve" ) )
-	        || ( !m_bOxidationEnabled && name == StringName( "oxidation_curve" ) )
-	        || ( !m_bWindEnabled && name == StringName( "wind_curve" ) )
-	        || ( !m_bWaveEnabled && ( name == StringName( "wave_curve" ) || name == StringName( "sea_level_curve" ) ) )
-	        || ( !m_bTrafficEnabled && name == StringName( "traffic_curve" ) )
-	        || ( !m_bSnowmeltEnabled && name == StringName( "snowmelt_curve" ) )
-	        || ( !m_bSaltWeatheringEnabled && name == StringName( "salt_weathering_curve" ) )
-	        || ( !m_bDebrisFlowEnabled && name == StringName( "debris_flow_curve" ) ) ) {
+	} else if ( ( !m_config.m_bHydraulicEnabled && name == StringName( "rainfall_curve" ) )
+	        || ( !m_config.m_bWeatheringEnabled && name == StringName( "weathering_curve" ) )
+	        || ( !m_config.m_bOxidationEnabled && name == StringName( "oxidation_curve" ) )
+	        || ( !m_config.m_bWindEnabled && name == StringName( "wind_curve" ) )
+	        || ( !m_config.m_bWaveEnabled && ( name == StringName( "wave_curve" ) || name == StringName( "sea_level_curve" ) ) )
+	        || ( !m_config.m_bTrafficEnabled && name == StringName( "traffic_curve" ) )
+	        || ( !m_config.m_bSnowmeltEnabled && name == StringName( "snowmelt_curve" ) )
+	        || ( !m_config.m_bSaltWeatheringEnabled && name == StringName( "salt_weathering_curve" ) )
+	        || ( !m_config.m_bDebrisFlowEnabled && name == StringName( "debris_flow_curve" ) ) ) {
 		rProperty.usage = PROPERTY_USAGE_NO_EDITOR;
 	}
 }

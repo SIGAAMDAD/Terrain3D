@@ -3,13 +3,13 @@
 #include "rendering/rd/infrastructure/terrain_3d_rd_binding_builder.h"
 #include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_instance_renderer.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_service.h"
+#include "rendering/rd/terrain_3d_rd_instance_record.h"
+#include "rendering/rd/terrain_3d_rd_forward_variant.h"
+#include "rendering/rd/terrain_3d_rd_frustum.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
 #include "rendering/rd/vt/terrain_3d_virtual_texture.h"
-#include "rendering/rd/terrain_3d_rd_shader_compile_status.h"
 #include "instances/terrain_3d_instancer_bringup.h"
 
-#include "data/terrain_3d_half_buffer.h"
 #include "memory/terrain_3d_memory.h"
 
 #include <EASTL/vector.h>
@@ -140,37 +140,7 @@ static uint64_t t3dRdInstanceViewKey( const t3dRdForwardPassContext_t &rContext 
 	return hash;
 }
 
-typedef struct t3dRdInstanceFrustum_s {
-	Vector4 m_szPlanes[6];
-} t3dRdInstanceFrustum_t;
-
-static Vector4 t3dRdInstanceNormalizePlane( const Vector4 &rPlane ) {
-	const double length_sq = rPlane.x * rPlane.x + rPlane.y * rPlane.y + rPlane.z * rPlane.z;
-	if ( length_sq <= 1e-20 ) {
-		return rPlane;
-	}
-	const double inverse_length = 1.0 / sqrt( length_sq );
-	return rPlane * inverse_length;
-}
-
-static t3dRdInstanceFrustum_t t3dRdInstanceExtractFrustum( const Projection &rProjection ) {
-	const Vector4 c0 = rProjection[0];
-	const Vector4 c1 = rProjection[1];
-	const Vector4 c2 = rProjection[2];
-	const Vector4 c3 = rProjection[3];
-	const Vector4 row0( c0.x, c1.x, c2.x, c3.x );
-	const Vector4 row1( c0.y, c1.y, c2.y, c3.y );
-	const Vector4 row2( c0.z, c1.z, c2.z, c3.z );
-	const Vector4 row3( c0.w, c1.w, c2.w, c3.w );
-	t3dRdInstanceFrustum_t result;
-	result.m_szPlanes[0] = t3dRdInstanceNormalizePlane( row3 + row0 );
-	result.m_szPlanes[1] = t3dRdInstanceNormalizePlane( row3 - row0 );
-	result.m_szPlanes[2] = t3dRdInstanceNormalizePlane( row3 + row1 );
-	result.m_szPlanes[3] = t3dRdInstanceNormalizePlane( row3 - row1 );
-	result.m_szPlanes[4] = t3dRdInstanceNormalizePlane( row3 - row2 );
-	result.m_szPlanes[5] = t3dRdInstanceNormalizePlane( row2 );
-	return result;
-}
+typedef t3dRdFrustum_t t3dRdInstanceFrustum_t;
 
 static bool t3dRdInstanceAabbVisible( const AABB &rBounds, const t3dRdInstanceFrustum_t &rFrustum ) {
 	const Vector3 center = rBounds.position + rBounds.size * 0.5f;
@@ -184,6 +154,30 @@ static bool t3dRdInstanceAabbVisible( const AABB &rBounds, const t3dRdInstanceFr
 		}
 	}
 	return true;
+}
+
+EA_FORCE_INLINE static void t3dRdFillInstanceCullDescriptorCellState(
+        t3dRdInstanceCullDescriptor_t &rDescriptor, const t3dRdInstanceCell_t &rCell, const bool bShadowPass ) {
+	const Vector3 center = rCell.m_bounds.get_center();
+	const Vector3 extent = rCell.m_bounds.size * 0.5f;
+	rDescriptor.m_szBoundsCenter[0] = ( float )center.x;
+	rDescriptor.m_szBoundsCenter[1] = ( float )center.y;
+	rDescriptor.m_szBoundsCenter[2] = ( float )center.z;
+	rDescriptor.m_szBoundsExtent[0] = ( float )extent.x;
+	rDescriptor.m_szBoundsExtent[1] = ( float )extent.y;
+	rDescriptor.m_szBoundsExtent[2] = ( float )extent.z;
+	const Vector3 occlusion_center = rCell.m_occlusionBounds.get_center();
+	const Vector3 occlusion_extent = rCell.m_occlusionBounds.size * 0.5f;
+	rDescriptor.m_szOcclusionCenter[0] = ( float )occlusion_center.x;
+	rDescriptor.m_szOcclusionCenter[1] = ( float )occlusion_center.y;
+	rDescriptor.m_szOcclusionCenter[2] = ( float )occlusion_center.z;
+	rDescriptor.m_szOcclusionExtent[0] = ( float )occlusion_extent.x;
+	rDescriptor.m_szOcclusionExtent[1] = ( float )occlusion_extent.y;
+	rDescriptor.m_szOcclusionExtent[2] = ( float )occlusion_extent.z;
+	rDescriptor.m_nVisibilityLayers = rCell.m_nVisibilityLayers;
+	rDescriptor.m_nFlags = rCell.m_nFlags;
+	rDescriptor.m_fLodBegin = bShadowPass ? 0.0f : rCell.m_fLodBegin;
+	rDescriptor.m_fLodEnd = bShadowPass ? 0.0f : rCell.m_fLodEnd;
 }
 
 static bool t3dRdMotionCellsMatch( const t3dRdInstanceCell_t &rCurrent, const t3dRdInstanceCell_t &rPrevious ) {
@@ -309,27 +303,6 @@ static void t3dRdStableSortAlphaPackets( eastl::vector<t3dRdInstanceDrawPacket_t
 	}
 }
 
-static uint32_t t3dRdPreviewPackSnormPair( const float x, const float y ) {
-	const int16_t px = ( int16_t )( lround( CLAMP( x, -1.0f, 1.0f ) * 32767.0f ) );
-	const int16_t py = ( int16_t )( lround( CLAMP( y, -1.0f, 1.0f ) * 32767.0f ) );
-	return ( uint32_t )( ( uint16_t )( px ) ) | ( ( uint32_t )( ( uint16_t )( py ) ) << 16u );
-}
-
-static t3dRdInstanceRecord_t t3dRdPreviewInstanceRecord( const Transform3D &rTransform ) {
-	t3dRdInstanceRecord_t record;
-	record.m_szPosition[0] = ( float )( rTransform.origin.x );
-	record.m_szPosition[1] = ( float )( rTransform.origin.y );
-	record.m_szPosition[2] = ( float )( rTransform.origin.z );
-	const Vector3 scale = rTransform.basis.get_scale();
-	const Quaternion rotation = rTransform.basis.orthonormalized().get_rotation_quaternion().normalized();
-	record.m_nQuaternion01 = t3dRdPreviewPackSnormPair( ( float )( rotation.x ), ( float )( rotation.y ) );
-	record.m_nQuaternion23 = t3dRdPreviewPackSnormPair( ( float )( rotation.z ), ( float )( rotation.w ) );
-	record.m_nScale01 =
-	        ( uint32_t )( t3dHalfEncode( ( float )( scale.x ) ) ) | ( ( uint32_t )( t3dHalfEncode( ( float )( scale.y ) ) ) << 16u );
-	record.m_nScale2Flags = ( uint32_t )( t3dHalfEncode( ( float )( scale.z ) ) );
-	record.m_nColorRgba8 = t3dRdPackGodotRgba32ForGpu( 0xffffffffu );
-	return record;
-}
 
 bool Terrain3DRdInstanceRenderer::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
 	if ( !pZone || !m_geometryArena.m_meshCache.bindRuntimeAllocator( pZone, ePolicy ) ) {
@@ -435,53 +408,39 @@ bool Terrain3DRdInstanceRenderer::ensureDevice( void ) {
 }
 
 bool Terrain3DRdInstanceRenderer::ensureShader( const Ref<RDShaderSPIRV> &rShader ) {
-	if ( m_hShader.is_valid() ) {
+	if ( m_hShader.isValid() ) {
 		return true;
 	}
 	if ( rShader.is_null() ) {
 		setError( "Terrain3D instance shader source is null" );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError( "Terrain3D instance shader creation lost the RenderingDevice" );
 		return false;
 	}
-	m_hShader = t3dRdCreateShaderWithStatus( rd, rShader, "T3D.InstanceShader" );
-	if ( !m_hShader.is_valid() ) {
-		setError( "Failed to create Terrain3D instance shader RID" );
-		return false;
-	}
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .adopt( rd, m_hShader, "T3D.Instance.Shader", Terrain3DRdContext::RESOURCE_SHADER ) ) {
-		setError( "Failed to register Terrain3D instance shader RID" );
+	if ( !m_hShader.createTracked( m_context, Terrain3DRdContext::OWNER_INSTANCES, "T3D.InstanceShader", rShader, "T3D.Instance.Shader" ) ) {
+		setError( "Failed to create/register Terrain3D instance shader RID" );
 		return false;
 	}
 	return true;
 }
 
 bool Terrain3DRdInstanceRenderer::ensureOccluderDepthShader( void ) {
-	if ( m_occluderDepth.m_hShader.is_valid() ) {
+	if ( m_occluderDepth.m_hShader.isValid() ) {
 		return true;
 	}
 	if ( m_occluderDepth.m_sourceShader.is_null() ) {
 		setError( "Terrain3D occluder-depth shader source is null" );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError( "Terrain3D occluder-depth shader creation lost the RenderingDevice" );
 		return false;
 	}
-	m_occluderDepth.m_hShader = t3dRdCreateShaderWithStatus( rd, m_occluderDepth.m_sourceShader, "T3D.InstanceOccluderDepth" );
-	if ( !m_occluderDepth.m_hShader.is_valid() ) {
-		setError( "Failed to create Terrain3D occluder-depth shader RID" );
-		return false;
-	}
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .adopt( rd, m_occluderDepth.m_hShader, "T3D.Instance.OccluderDepth.Shader",
-	                            Terrain3DRdContext::RESOURCE_SHADER ) ) {
-		setError( "Failed to register Terrain3D occluder-depth shader RID" );
+	if ( !m_occluderDepth.m_hShader.createTracked( m_context, Terrain3DRdContext::OWNER_INSTANCES,
+	             "T3D.InstanceOccluderDepth", m_occluderDepth.m_sourceShader, "T3D.Instance.OccluderDepth.Shader" ) ) {
+		setError( "Failed to create/register Terrain3D occluder-depth shader RID" );
 		return false;
 	}
 	return true;
@@ -513,10 +472,9 @@ void Terrain3DRdInstanceRenderer::freeOccluderDepthTarget( void ) {
 void Terrain3DRdInstanceRenderer::freeOccluderDepthResources( void ) {
 	freeOccluderDepthUniformSet();
 	freeOccluderDepthTarget();
-	m_context.freeResource( m_occluderDepth.m_hVisibleIndexBuffer, m_occluderDepth.m_nVisibleCapacityBytes );
-	m_context.freeResource( m_occluderDepth.m_hShader );
+	m_occluderDepth.m_hVisibleIndexBuffer.releaseTracked( m_context );
+	m_occluderDepth.m_hShader.releaseTracked( m_context );
 	m_occluderDepth.m_sourceShader.unref();
-	m_occluderDepth.m_nVisibleCapacityBytes = 0u;
 	m_occluderDepth.m_nPacketCapacity = 0u;
 	m_occluderDepth.m_nVisibleIndexCapacity = 0u;
 	m_occluderDepth.m_nVisibleIndexCount = 0u;
@@ -575,9 +533,9 @@ bool Terrain3DRdInstanceRenderer::ensureOccluderDepthTarget( const Vector2i &rRe
 	depth->set_depth_compare_operator( RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
 	Ref<RDPipelineColorBlendState> blend;
 	blend.instantiate();
-	m_occluderDepth.m_hPipeline = m_occluderPipelines.getOrCreateRaster( m_occluderDepth.m_hShader,
-	        "T3D.Instance.OccluderDepth.Pipeline", m_occluderDepth.m_hShader,
-	        rd->framebuffer_get_format( m_occluderDepth.m_hszFramebuffers[0] ),
+	m_occluderDepth.m_hPipeline = m_occluderPipelines.getOrCreateRaster( m_occluderDepth.m_hShader.rid(),
+	        "T3D.Instance.OccluderDepth.Pipeline", m_occluderDepth.m_hShader.rid(),
+	        m_targetPool.framebufferFormat( m_occluderDepth.m_hszFramebuffers[0] ),
 	        m_geometryArena.m_meshCache.getVertexFormat(),
 	        RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
 	        raster,
@@ -600,7 +558,7 @@ bool Terrain3DRdInstanceRenderer::ensureOccluderDepthUniformSet( void ) {
 	if ( m_occluderDepth.m_hUniformSet.is_valid() ) {
 		return true;
 	}
-	if ( !m_occluderDepth.m_hShader.is_valid() || !m_uploadState.m_hFrameBuffer.is_valid() || !m_uploadState.m_hInstanceBuffer.is_valid()
+	if ( !m_occluderDepth.m_hShader.isValid() || !m_uploadState.m_hFrameBuffer.is_valid() || !m_uploadState.m_hInstanceBuffer.is_valid()
 	        || !m_occluderDepth.m_hVisibleIndexBuffer.is_valid() ) {
 		setError( "Terrain3D occluder-depth set-0 prerequisites are unavailable" );
 		return false;
@@ -610,8 +568,8 @@ bool Terrain3DRdInstanceRenderer::ensureOccluderDepthUniformSet( void ) {
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_uploadState.m_hInstanceBuffer ) );
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_occluderDepth.m_hVisibleIndexBuffer ) );
-	m_occluderDepth.m_hUniformSet = m_occluderDescriptors.getOrCreate( m_occluderDepth.m_hShader,
-	        "T3D.Instance.OccluderDepth.UniformSet", uniforms, m_occluderDepth.m_hShader, 0u );
+	m_occluderDepth.m_hUniformSet = m_occluderDescriptors.getOrCreate( m_occluderDepth.m_hShader.rid(),
+	        "T3D.Instance.OccluderDepth.UniformSet", uniforms, m_occluderDepth.m_hShader.rid(), 0u );
 	if ( !m_occluderDepth.m_hUniformSet.is_valid() ) {
 		setError( "Failed to create Terrain3D private occluder-depth uniform set" );
 		return false;
@@ -659,24 +617,22 @@ bool Terrain3DRdInstanceRenderer::ensureOccluderDepthStorage( const t3dRdInstanc
 		return true;
 	}
 	const uint32_t visible_bytes = MAX( m_occluderDepth.m_nVisibleIndexCapacity * ( uint32_t )sizeof( uint32_t ), 4u );
-	const bool replace_visible =
-	        !m_occluderDepth.m_hVisibleIndexBuffer.is_valid() || m_occluderDepth.m_nVisibleCapacityBytes < visible_bytes;
+	const bool replace_visible = m_occluderDepth.m_hVisibleIndexBuffer.needsCapacity( visible_bytes );
 	if ( cpu_capacity_grew || replace_visible ) {
 		++m_occluderDepth.m_nCapacityGrowths;
 	}
 	if ( replace_visible ) {
 		freeOccluderDepthUniformSet();
 	}
-	if ( !ensureBuffer( m_occluderDepth.m_hVisibleIndexBuffer,
-	             m_occluderDepth.m_nVisibleCapacityBytes,
+	if ( !ensureOwnedBuffer( m_occluderDepth.m_hVisibleIndexBuffer,
 	             visible_bytes,
 	             "T3D.Instance.OccluderDepth.VisibleIndices",
 	             Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 	             Terrain3DRdContext::MEMORY_INSTANCE ) ) {
 		return false;
 	}
-	if ( m_occluderDepth.m_visibleBytes.size() < ( int64_t )m_occluderDepth.m_nVisibleCapacityBytes ) {
-		m_occluderDepth.m_visibleBytes.resize( m_occluderDepth.m_nVisibleCapacityBytes );
+	if ( m_occluderDepth.m_visibleBytes.size() < ( int64_t )m_occluderDepth.m_hVisibleIndexBuffer.capacityBytes() ) {
+		m_occluderDepth.m_visibleBytes.resize( m_occluderDepth.m_hVisibleIndexBuffer.capacityBytes() );
 	}
 	return ensureOccluderDepthTarget( rRenderSize ) && ensureOccluderDepthUniformSet();
 }
@@ -690,7 +646,7 @@ bool Terrain3DRdInstanceRenderer::buildOccluderDepthPackets(
 	if ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_nViewCount != 1u || m_occluderDepth.m_nPacketCapacity == 0u ) {
 		return true;
 	}
-	const t3dRdInstanceFrustum_t frustum = t3dRdInstanceExtractFrustum( rContext.m_szViewProjection[0] );
+	const t3dRdInstanceFrustum_t frustum = t3dRdExtractFrustum( rContext.m_szViewProjection[0] );
 	const Vector3 camera = rContext.m_cameraTransform.origin;
 	for ( size_t iCell = 0u; iCell < rScene.m_cells.size(); ++iCell ) {
 		const t3dRdInstanceCell_t &cell = rScene.m_cells[iCell];
@@ -746,12 +702,12 @@ bool Terrain3DRdInstanceRenderer::uploadOccluderDepthVisibility( void ) {
 	if ( bytes == 0u ) {
 		return true;
 	}
-	if ( bytes > m_occluderDepth.m_nVisibleCapacityBytes || m_occluderDepth.m_visibleBytes.size() < bytes ) {
+	if ( bytes > m_occluderDepth.m_hVisibleIndexBuffer.capacityBytes() || m_occluderDepth.m_visibleBytes.size() < bytes ) {
 		setError( "Terrain3D occluder-depth visibility upload exceeded fixed backing" );
 		return false;
 	}
 	memcpy( m_occluderDepth.m_visibleBytes.ptrw(), m_occluderDepth.m_visibleIndices.data(), bytes );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_SCRATCH ).updatePacked( m_occluderDepth.m_hVisibleIndexBuffer, 0u, bytes, m_occluderDepth.m_visibleBytes ) != OK ) {
+	if ( !m_occluderDepth.m_hVisibleIndexBuffer.writePackedTracked( m_context, 0u, m_occluderDepth.m_visibleBytes, bytes, T3D_GPU_SCRATCH ) ) {
 		setError( "Terrain3D occluder-depth visibility upload failed" );
 		return false;
 	}
@@ -821,7 +777,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardShaderVariant( const t3dRdForward
 		setError( "Invalid Terrain3D Forward+ instance shader variant" );
 		return false;
 	}
-	if ( m_hszForwardShaders[variant].is_valid() ) {
+	Terrain3DRdShader &shader = m_hszForwardShaders[variant];
+	if ( shader.isValid() ) {
 		return true;
 	}
 	const Ref<RDShaderSPIRV> spirv = m_forwardShaderBundle.m_szInstances[variant];
@@ -829,23 +786,19 @@ bool Terrain3DRdInstanceRenderer::ensureForwardShaderVariant( const t3dRdForward
 		setError( String( "Missing Terrain3D Forward+ instance shader variant " ) + String::num_int64( variant ) );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError(
 		        String( "Terrain3D Forward+ instance shader creation lost the RenderingDevice; variant=" ) + String::num_int64( variant ) );
 		return false;
 	}
 	m_context.beginResourceRebuild();
 	const String name = String( "T3D.Forward.Shader.Instance." ) + String::num_int64( variant );
-	RID shader = t3dRdCreateShaderWithStatus( rd, spirv, name );
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .adopt( rd, shader, name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
-		m_context.endResourceRebuild();
+	const bool created = shader.createTracked( m_context, Terrain3DRdContext::OWNER_INSTANCES, name, spirv );
+	m_context.endResourceRebuild();
+	if ( !created ) {
 		setError( String( "Failed to create Terrain3D Forward+ instance shader variant " ) + String::num_int64( variant ) );
 		return false;
 	}
-	m_hszForwardShaders[variant] = shader;
-	m_context.endResourceRebuild();
 	return true;
 }
 
@@ -855,50 +808,7 @@ void Terrain3DRdInstanceRenderer::freeForwardPipelines( void ) {
 	m_bLastForwardPipelineKeyValid = false;
 }
 
-bool Terrain3DRdInstanceRenderer::selectForwardVariant(
-        const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const {
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
-		if ( rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_SHADOW ) {
-			return false;
-		}
-		rVariant = T3D_RD_FORWARD_SHADER_DEPTH;
-		return true;
-	}
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
-		switch ( rContext.m_nativePassMode ) {
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH;
-				return true;
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS;
-				return true;
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI;
-				return true;
-			default:
-				return false;
-		}
-	}
-	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION
-	             && rContext.m_passKind != T3D_RD_FORWARD_PASS_TRANSPARENT )
-	        || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) {
-		return false;
-	}
-	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
-	const bool specular = !transparent_pass && ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
-	const bool motion = !transparent_pass
-	        && ( rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u );
-	const bool radiance_array = ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
-	if ( radiance_array ) {
-		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY
-		                               : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_RADIANCE_ARRAY )
-		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION_RADIANCE_ARRAY : T3D_RD_FORWARD_SHADER_COLOR_RADIANCE_ARRAY );
-	} else {
-		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR )
-		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
-	}
-	return true;
-}
+
 
 const Terrain3DRdInstanceRenderer::t3dRdInstanceForwardPipelineEntry_t *Terrain3DRdInstanceRenderer::findForwardPipeline(
         const t3dRdInstanceForwardPipelineKey_t &rKey ) const {
@@ -920,72 +830,35 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines(
 		return false;
 	}
 	t3dRdInstanceForwardPipelineKey_t key;
-	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
-	key.m_variant = variant;
-	key.m_passKind = rContext.m_passKind;
-	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
-	if ( ( 1u << ( uint32_t )( key.m_samples ) ) != rContext.m_nSampleCount ) {
+	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, true, key ) ) {
 		setError( "Terrain3D Forward+ sample-count metadata does not match native framebuffer format" );
 		return false;
 	}
-	key.m_nViewCount = rContext.m_nViewCount;
-	key.m_bReverseCull = rContext.m_bReverseCull;
-	key.m_bDepthPrepassActive = ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION )
-	        && rContext.m_bDepthPrepassActive;
 	if ( findForwardPipeline( key ) ) {
 		m_lastForwardPipelineKey = key;
 		m_bLastForwardPipelineKeyValid = true;
 		return true;
 	}
-	Ref<RDPipelineMultisampleState> multisample;
-	multisample.instantiate();
-	multisample->set_sample_count( key.m_samples );
-	Ref<RDPipelineDepthStencilState> depth;
-	depth.instantiate();
 	const bool transparent_pass = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+	t3dRdForwardPipelineStateOptions_t state_options;
+	state_options.m_frontFace = RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE;
+	state_options.m_nBlendAttachmentCount = t3dRdForwardBlendAttachmentCount( variant, transparent_pass );
+	state_options.m_bBlendFirstAttachment = transparent_pass;
 #if T3D_INSTANCER_MINIMAL_RENDER_PATH
-	depth->set_enable_depth_test( false );
-	depth->set_enable_depth_write( false );
-	depth->set_depth_compare_operator( RenderingDevice::COMPARE_OP_ALWAYS );
+	state_options.m_bEnableDepthTest = false;
+	state_options.m_bEnableDepthWrite = false;
+	state_options.m_depthCompare = RenderingDevice::COMPARE_OP_ALWAYS;
 #else
-	depth->set_enable_depth_test( true );
-	depth->set_enable_depth_write( !transparent_pass && !key.m_bDepthPrepassActive );
-	depth->set_depth_compare_operator(
-	        key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
+	state_options.m_bEnableDepthWrite = !transparent_pass && !key.m_bDepthPrepassActive;
+	state_options.m_depthCompare =
+	        key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL;
 #endif
+	Ref<RDPipelineMultisampleState> multisample;
+	Ref<RDPipelineDepthStencilState> depth;
 	Ref<RDPipelineColorBlendState> blend;
-	blend.instantiate();
-	uint32_t blend_count = 0u;
-	if ( transparent_pass ) {
-		// Forward+ color framebuffers retain three logical color slots
-		// (color, separate specular, motion) even when transparent rendering
-		// marks the latter two ATTACHMENT_UNUSED. RenderingDevice validates
-		// the blend-state array against that logical slot count before it
-		// checks which attachments are unused.
-		blend_count = 3u;
-	} else if ( variant <= T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY ) {
-		blend_count = 3u;
-	} else if ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS ) {
-		blend_count = 1u;
-	} else if ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI ) {
-		blend_count = 2u;
-	}
-	if ( blend_count > 0u ) {
-		TypedArray<Ref<RDPipelineColorBlendStateAttachment>> attachments;
-		for ( uint32_t i = 0u; i < blend_count; ++i ) {
-			Ref<RDPipelineColorBlendStateAttachment> a;
-			a.instantiate();
-			const bool blend_color = transparent_pass && i == 0u;
-			a->set_enable_blend( blend_color );
-			if ( blend_color ) {
-				a->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
-				a->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-				a->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
-				a->set_dst_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-			}
-			attachments.push_back( a );
-		}
-		blend->set_attachments( attachments );
+	if ( !t3dRdBuildForwardSharedPipelineStates( key, state_options, multisample, depth, blend ) ) {
+		setError( "Failed to allocate Terrain3D Forward+ instance pipeline state" );
+		return false;
 	}
 #if T3D_INSTANCER_MINIMAL_RENDER_PATH
 	const RenderingDevice::PolygonCullMode cull_modes[3] = {
@@ -1003,11 +876,15 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines(
 	m_context.beginResourceRebuild();
 	for ( uint32_t cull = 0u; cull < 3u; ++cull ) {
 		Ref<RDPipelineRasterizationState> raster;
-		raster.instantiate();
-		raster->set_cull_mode( cull_modes[cull] );
-		raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE );
+		state_options.m_cullMode = cull_modes[cull];
+		if ( !t3dRdBuildForwardRasterState( state_options, raster ) ) {
+			m_forwardPipelines.clear();
+			m_context.endResourceRebuild();
+			setError( "Failed to allocate Terrain3D Forward+ instance raster state" );
+			return false;
+		}
 		const String name = String( "T3D.Forward.Pipeline.Instance." ) + String::num_int64( variant ) + "." + String::num_int64( cull );
-		const RID pipeline = m_forwardPipelines.getOrCreateRaster( { key, cull }, name, m_hszForwardShaders[variant],
+		const RID pipeline = m_forwardPipelines.getOrCreateRaster( { key, cull }, name, m_hszForwardShaders[variant].rid(),
 		        rContext.m_nFramebufferFormat,
 		        m_geometryArena.m_meshCache.getVertexFormat(),
 		        RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
@@ -1031,34 +908,27 @@ bool Terrain3DRdInstanceRenderer::ensureForwardPipelines(
 }
 
 bool Terrain3DRdInstanceRenderer::ensureHlodCullShader( const Ref<RDShaderSPIRV> &rShader ) {
-	if ( m_visibility.m_hHlodCullShader.is_valid() && m_visibility.m_hHlodCullPipeline.is_valid() ) {
+	if ( m_visibility.m_hHlodCullShader.isValid() && m_visibility.m_hHlodCullPipeline.is_valid() ) {
 		return true;
 	}
 	if ( rShader.is_null() ) {
 		setError( "Missing Terrain3D HLOD cull shader" );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError( "Terrain3D HLOD cull resource creation lost the RenderingDevice" );
 		return false;
 	}
-	if ( !m_visibility.m_hHlodCullShader.is_valid() ) {
-		m_visibility.m_hHlodCullShader = t3dRdCreateShaderWithStatus( rd, rShader, "T3D.HlodCullShader" );
-		if ( !m_visibility.m_hHlodCullShader.is_valid() ) {
-			setError( "Failed to create Terrain3D HLOD cull shader" );
-			return false;
-		}
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_HLOD )
-		                    .adopt( rd, m_visibility.m_hHlodCullShader, "T3D.HLOD.CullShader",
-		                            Terrain3DRdContext::RESOURCE_SHADER ) ) {
-			setError( "Failed to register Terrain3D HLOD cull shader" );
+	if ( !m_visibility.m_hHlodCullShader.isValid() ) {
+		if ( !m_visibility.m_hHlodCullShader.createTracked(
+		             m_context, Terrain3DRdContext::OWNER_HLOD, "T3D.HlodCullShader", rShader, "T3D.HLOD.CullShader" ) ) {
+			setError( "Failed to create/register Terrain3D HLOD cull shader" );
 			return false;
 		}
 	}
 	if ( !m_visibility.m_hHlodCullPipeline.is_valid() ) {
 		m_visibility.m_hHlodCullPipeline = m_hlodCullPipelines.getOrCreateCompute(
-		        m_visibility.m_hHlodCullShader, "T3D.HLOD.CullPipeline", m_visibility.m_hHlodCullShader );
+		        m_visibility.m_hHlodCullShader.rid(), "T3D.HLOD.CullPipeline", m_visibility.m_hHlodCullShader.rid() );
 		if ( !m_visibility.m_hHlodCullPipeline.is_valid() ) {
 			setError( "Failed to create Terrain3D HLOD cull pipeline" );
 			return false;
@@ -1068,34 +938,27 @@ bool Terrain3DRdInstanceRenderer::ensureHlodCullShader( const Ref<RDShaderSPIRV>
 }
 
 bool Terrain3DRdInstanceRenderer::ensureInstanceCullShader( const Ref<RDShaderSPIRV> &rShader ) {
-	if ( m_visibility.m_hInstanceCullShader.is_valid() && m_visibility.m_hInstanceCullPipeline.is_valid() ) {
+	if ( m_visibility.m_hInstanceCullShader.isValid() && m_visibility.m_hInstanceCullPipeline.is_valid() ) {
 		return true;
 	}
 	if ( rShader.is_null() ) {
 		setError( "Missing Terrain3D instance cull shader" );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError( "Terrain3D instance cull resource creation lost the RenderingDevice" );
 		return false;
 	}
-	if ( !m_visibility.m_hInstanceCullShader.is_valid() ) {
-		m_visibility.m_hInstanceCullShader = t3dRdCreateShaderWithStatus( rd, rShader, "T3D.InstanceCullShader" );
-		if ( !m_visibility.m_hInstanceCullShader.is_valid() ) {
-			setError( "Failed to create Terrain3D instance cull shader" );
-			return false;
-		}
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-		                    .adopt( rd, m_visibility.m_hInstanceCullShader, "T3D.Instance.CullShader",
-		                            Terrain3DRdContext::RESOURCE_SHADER ) ) {
-			setError( "Failed to register Terrain3D instance cull shader" );
+	if ( !m_visibility.m_hInstanceCullShader.isValid() ) {
+		if ( !m_visibility.m_hInstanceCullShader.createTracked(
+		             m_context, Terrain3DRdContext::OWNER_INSTANCES, "T3D.InstanceCullShader", rShader, "T3D.Instance.CullShader" ) ) {
+			setError( "Failed to create/register Terrain3D instance cull shader" );
 			return false;
 		}
 	}
 	if ( !m_visibility.m_hInstanceCullPipeline.is_valid() ) {
 		m_visibility.m_hInstanceCullPipeline = m_instanceCullPipelines.getOrCreateCompute(
-		        m_visibility.m_hInstanceCullShader, "T3D.Instance.CullPipeline", m_visibility.m_hInstanceCullShader );
+		        m_visibility.m_hInstanceCullShader.rid(), "T3D.Instance.CullPipeline", m_visibility.m_hInstanceCullShader.rid() );
 		if ( !m_visibility.m_hInstanceCullPipeline.is_valid() ) {
 			setError( "Failed to create Terrain3D instance cull pipeline" );
 			return false;
@@ -1104,35 +967,47 @@ bool Terrain3DRdInstanceRenderer::ensureInstanceCullShader( const Ref<RDShaderSP
 	return true;
 }
 
-bool Terrain3DRdInstanceRenderer::ensureBuffer( RID &rRid,
-        uint32_t &rCapacity,
+bool Terrain3DRdInstanceRenderer::ensureOwnedBuffer( Terrain3DRdGpuBuffer &rBuffer,
         const uint32_t nRequired,
-        const String &rName,
+        const char *const pName,
         const Terrain3DRdContext::ResourceType type,
         const Terrain3DRdContext::MemoryCategory memory,
         const Terrain3DRdContext::ResourceOwner owner ) {
-	if ( rRid.is_valid() && rCapacity >= nRequired ) {
+	if ( !rBuffer.isConfigured() ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = pName;
+		spec.m_owner = owner;
+		spec.m_type = type;
+		spec.m_memory = memory;
+		spec.m_growth = T3D_GPU_POWER_OF_TWO;
+		spec.m_nMinimumCapacityBytes = type == Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER ? 256u : 4096u;
+		if ( !rBuffer.configure( spec ) ) {
+			return false;
+		}
+	}
+	if ( !rBuffer.needsCapacity( nRequired ) ) {
 		return true;
 	}
 	++m_uploadState.m_nBufferCapacityMissCount;
-	const uint32_t minimum = type == Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER ? 256u : 4096u;
-	const Terrain3DRdResourceService resources( m_context, owner );
-	if ( !resources.ensureGrowingBuffer( rRid, rCapacity, rName, type, memory, nRequired, minimum ) ) {
+	if ( !rBuffer.ensureTracked( m_context, nRequired ) ) {
 		++m_uploadState.m_nBufferRebuildFailureCount;
-		setError( String( "RD instance buffer growth failed: " ) + rName + String( ", required bytes=" ) + String::num_int64( nRequired ) );
+		setError( String( "RD instance buffer growth failed: " ) + String::utf8( pName ) + String( ", required bytes=" )
+		        + String::num_int64( nRequired ) );
 		return false;
 	}
 	return true;
 }
 
 bool Terrain3DRdInstanceRenderer::ensureIndirectArena( const uint32_t nRequiredSliceBytes ) {
-	if ( m_commandTable.m_hIndirectBuffer.is_valid() && m_commandTable.m_nIndirectCapacityBytes >= nRequiredSliceBytes ) {
+	if ( m_commandTable.m_hIndirectBuffer.isValid()
+	        && m_commandTable.m_mainIndirectSlice.m_nCapacityBytes >= nRequiredSliceBytes
+	        && m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes >= nRequiredSliceBytes ) {
 		return true;
 	}
 	++m_uploadState.m_nBufferCapacityMissCount;
 	uint32_t grown = 0u;
 	const uint64_t stride = sizeof( t3dRdIndexedIndirectCommand_t );
-	if ( !Terrain3DGpuBufferLayout::grownCapacity( 4096u, nRequiredSliceBytes, T3D_GPU_POWER_OF_TWO, grown ) ) {
+	if ( !t3dRdGpuBufferGrownCapacity( 4096u, nRequiredSliceBytes, T3D_GPU_POWER_OF_TWO, grown ) ) {
 		++m_uploadState.m_nBufferRebuildFailureCount;
 		setError( "RD instance indirect arena capacity overflow" );
 		return false;
@@ -1144,27 +1019,34 @@ bool Terrain3DRdInstanceRenderer::ensureIndirectArena( const uint32_t nRequiredS
 		return false;
 	}
 	const uint32_t total = ( uint32_t )( aligned * 2u );
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .replaceBuffer( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nIndirectArenaCapacityBytes,
-	                            "T3D.Instance.IndirectArena", Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER,
-	                            Terrain3DRdContext::MEMORY_INDIRECT, total,
-	                            RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT ) ) {
+	t3dRdGpuBufferSpec_t spec;
+	spec.m_pName = "T3D.Instance.IndirectArena";
+	spec.m_owner = Terrain3DRdContext::OWNER_INSTANCES;
+	spec.m_type = Terrain3DRdContext::RESOURCE_INDIRECT_BUFFER;
+	spec.m_memory = Terrain3DRdContext::MEMORY_INDIRECT;
+	spec.m_usage = RenderingDevice::STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT;
+	if ( ( !m_commandTable.m_hIndirectBuffer.isConfigured() && !m_commandTable.m_hIndirectBuffer.configure( spec ) )
+	        || !m_commandTable.m_hIndirectBuffer.replaceTracked( m_context, total ) ) {
 		++m_uploadState.m_nBufferRebuildFailureCount;
 		setError( "RD instance indirect arena creation or registration failed" );
 		return false;
 	}
-	m_commandTable.m_hShadowIndirectBuffer = m_commandTable.m_hIndirectBuffer;
-	m_commandTable.m_nIndirectCapacityBytes = ( uint32_t )aligned;
-	m_commandTable.m_nShadowIndirectCapacityBytes = ( uint32_t )aligned;
-	m_commandTable.m_nMainIndirectOffsetBytes = 0u;
-	m_commandTable.m_nShadowIndirectOffsetBytes = ( uint32_t )aligned;
+	// Indexed indirect commands are 20-byte records. The arena split stays command-stride aligned,
+	// while the RD byte-address alignment carried by the slice remains the 4-byte uint32_t boundary.
+	if ( !m_commandTable.m_hIndirectBuffer.slice( 0u, ( uint32_t )aligned, sizeof( uint32_t ), m_commandTable.m_mainIndirectSlice )
+	        || !m_commandTable.m_hIndirectBuffer.slice( ( uint32_t )aligned, ( uint32_t )aligned, sizeof( uint32_t ),
+	                m_commandTable.m_shadowIndirectSlice ) ) {
+		++m_uploadState.m_nBufferRebuildFailureCount;
+		setError( "RD instance indirect arena slice layout failed" );
+		return false;
+	}
 	return true;
 }
 
 bool Terrain3DRdInstanceRenderer::ensureBuffers(
         const uint32_t nInstanceBytes, const uint32_t nVisibleBytes, const uint32_t nMaterialBytes, const uint32_t nIndirectBytes ) {
-	const bool replace_instance = !m_uploadState.m_hInstanceBuffer.is_valid() || m_uploadState.m_nInstanceCapacityBytes < nInstanceBytes;
-	const bool replace_visible = !m_visibility.m_hVisibleIndexBuffer.is_valid() || m_visibility.m_nVisibleCapacityBytes < nVisibleBytes;
+	const bool replace_instance = m_uploadState.m_hInstanceBuffer.needsCapacity( nInstanceBytes );
+	const bool replace_visible = m_visibility.m_hVisibleIndexBuffer.needsCapacity( nVisibleBytes );
 #if T3D_INSTANCER_MINIMAL_RENDER_PATH
 	const bool replace_previous_instance = false;
 	const bool replace_material = false;
@@ -1179,16 +1061,13 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers(
 		return false;
 	}
 	const uint32_t draw_metadata_bytes = ( uint32_t )( draw_metadata_bytes64 );
-	const bool replace_previous_instance =
-	        !m_uploadState.m_hPreviousInstanceBuffer.is_valid() || m_uploadState.m_nPreviousInstanceCapacityBytes < nInstanceBytes;
-	const bool replace_visible_draw_slot =
-	        !m_visibility.m_hVisibleDrawSlotBuffer.is_valid() || m_visibility.m_nVisibleDrawSlotCapacityBytes < nVisibleBytes;
-	const bool replace_visible_layer =
-	        !m_visibility.m_hVisibleLayerBuffer.is_valid() || m_visibility.m_nVisibleLayerCapacityBytes < nVisibleBytes;
-	const bool replace_draw_metadata =
-	        !m_commandTable.m_hDrawMetadataBuffer.is_valid() || m_commandTable.m_nDrawMetadataCapacityBytes < draw_metadata_bytes;
-	const bool replace_material = !m_uploadState.m_hMaterialBuffer.is_valid() || m_uploadState.m_nMaterialCapacityBytes < nMaterialBytes;
-	const bool replace_indirect = !m_commandTable.m_hIndirectBuffer.is_valid() || m_commandTable.m_nIndirectCapacityBytes < nIndirectBytes;
+	const bool replace_previous_instance = m_uploadState.m_hPreviousInstanceBuffer.needsCapacity( nInstanceBytes );
+	const bool replace_visible_draw_slot = m_visibility.m_hVisibleDrawSlotBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_visible_layer = m_visibility.m_hVisibleLayerBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_draw_metadata = m_commandTable.m_hDrawMetadataBuffer.needsCapacity( draw_metadata_bytes );
+	const bool replace_material = m_uploadState.m_hMaterialBuffer.needsCapacity( nMaterialBytes );
+	const bool replace_indirect = !m_commandTable.m_hIndirectBuffer.isValid()
+	        || m_commandTable.m_mainIndirectSlice.m_nCapacityBytes < nIndirectBytes;
 #endif
 	if ( ( replace_instance || replace_previous_instance || replace_visible ) && m_descriptorState.m_hUniformSet.is_valid() ) {
 		m_instanceSet0Descriptors.erase( m_descriptorState.m_hUniformSet );
@@ -1220,8 +1099,6 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers(
 	if ( replace_material ) {
 		freeMaterialVtUniformSets( m_descriptorState.m_bMaterialVtSetBuiltOnce );
 	}
-#endif
-#if !T3D_INSTANCER_MINIMAL_RENDER_PATH
 	if ( replace_indirect && m_visibility.m_hHlodCullUniformSet.is_valid() ) {
 		m_hlodCullDescriptors.erase( m_visibility.m_hHlodCullUniformSet );
 		m_visibility.m_hHlodCullUniformSet = RID();
@@ -1232,94 +1109,68 @@ bool Terrain3DRdInstanceRenderer::ensureBuffers(
 		m_visibility.m_hInstanceCullUniformSet = RID();
 	}
 #endif
-	if ( !m_uploadState.m_hFrameBuffer.is_valid() ) {
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-		                    .createUniformBuffer( m_uploadState.m_hFrameBuffer, "T3D.Instance.FrameUBO", sizeof( t3dRdInstanceFrame_t ) ) ) {
+	if ( !m_uploadState.m_hFrameBuffer.isValid() ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Instance.FrameUBO";
+		spec.m_owner = Terrain3DRdContext::OWNER_INSTANCES;
+		spec.m_type = Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_UNIFORM;
+		if ( !m_uploadState.m_hFrameBuffer.configure( spec ) || !m_uploadState.m_hFrameBuffer.createTracked( m_context, sizeof( t3dRdInstanceFrame_t ) ) ) {
 			setError( "RD instance frame buffer creation or registration failed" );
 			return false;
 		}
 	}
 #if T3D_INSTANCER_MINIMAL_RENDER_PATH
-	return ensureBuffer( m_uploadState.m_hInstanceBuffer,
-	               m_uploadState.m_nInstanceCapacityBytes,
+	return ensureOwnedBuffer( m_uploadState.m_hInstanceBuffer,
 	               MAX( nInstanceBytes, ( uint32_t )( sizeof( t3dRdInstanceRecord_t ) ) ),
-	               "T3D.Instance.Records",
-	               Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	               Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_visibility.m_hVisibleIndexBuffer,
-	                m_visibility.m_nVisibleCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.VisibleIndices",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE );
+	               "T3D.Instance.Records", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hVisibleIndexBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleIndices",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE );
 #else
-	const bool base_buffers_ok = ensureBuffer( m_uploadState.m_hInstanceBuffer,
-	                                     m_uploadState.m_nInstanceCapacityBytes,
+	const bool base_buffers_ok = ensureOwnedBuffer( m_uploadState.m_hInstanceBuffer,
 	                                     MAX( nInstanceBytes, ( uint32_t )( sizeof( t3dRdInstanceRecord_t ) ) ),
-	                                     "T3D.Instance.Records",
-	                                     Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+	                                     "T3D.Instance.Records", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 	                                     Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_uploadState.m_hPreviousInstanceBuffer,
-	                m_uploadState.m_nPreviousInstanceCapacityBytes,
+	        && ensureOwnedBuffer( m_uploadState.m_hPreviousInstanceBuffer,
 	                MAX( nInstanceBytes, ( uint32_t )( sizeof( t3dRdInstanceRecord_t ) ) ),
-	                "T3D.Instance.PreviousRecords",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+	                "T3D.Instance.PreviousRecords", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 	                Terrain3DRdContext::MEMORY_HISTORY )
-	        && ensureBuffer( m_visibility.m_hVisibleIndexBuffer,
-	                m_visibility.m_nVisibleCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.VisibleIndices",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_visibility.m_hVisibleDrawSlotBuffer,
-	                m_visibility.m_nVisibleDrawSlotCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.VisibleDrawSlots",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_visibility.m_hVisibleLayerBuffer,
-	                m_visibility.m_nVisibleLayerCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.VisibleLayers",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_commandTable.m_hDrawMetadataBuffer,
-	                m_commandTable.m_nDrawMetadataCapacityBytes,
-	                draw_metadata_bytes,
-	                "T3D.Instance.DrawMetadata",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_uploadState.m_hMaterialBuffer,
-	                m_uploadState.m_nMaterialCapacityBytes,
+	        && ensureOwnedBuffer( m_visibility.m_hVisibleIndexBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleIndices",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hVisibleDrawSlotBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleDrawSlots",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hVisibleLayerBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.VisibleLayers",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_commandTable.m_hDrawMetadataBuffer,
+	                draw_metadata_bytes, "T3D.Instance.DrawMetadata",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_uploadState.m_hMaterialBuffer,
 	                MAX( nMaterialBytes, ( uint32_t )( sizeof( t3dRenderingMaterialGpu_t ) ) ),
-	                "T3D.Instance.VtMaterialTable",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
+	                "T3D.Instance.VtMaterialTable", Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 	                Terrain3DRdContext::MEMORY_MATERIAL_TABLE );
 	return base_buffers_ok && ensureIndirectArena( MAX( nIndirectBytes, ( uint32_t )( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) );
 #endif
 }
 
 bool Terrain3DRdInstanceRenderer::ensureShadowBuffers( const uint32_t nVisibleBytes, const uint32_t nIndirectBytes ) {
-	const bool replace_visible =
-	        !m_visibility.m_hShadowVisibleIndexBuffer.is_valid() || m_visibility.m_nShadowVisibleCapacityBytes < nVisibleBytes;
+	const bool replace_visible = m_visibility.m_hShadowVisibleIndexBuffer.needsCapacity( nVisibleBytes );
 	if ( replace_visible ) {
 		freeForwardUniformSets();
 	}
 #if T3D_INSTANCER_MINIMAL_RENDER_PATH
 	( void )nIndirectBytes;
-	return ensureBuffer( m_visibility.m_hShadowVisibleIndexBuffer,
-	        m_visibility.m_nShadowVisibleCapacityBytes,
-	        MAX( nVisibleBytes, 4u ),
-	        "T3D.Instance.ShadowVisibleIndices",
-	        Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	        Terrain3DRdContext::MEMORY_INSTANCE );
+	return ensureOwnedBuffer( m_visibility.m_hShadowVisibleIndexBuffer,
+	        MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleIndices",
+	        Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE );
 #else
-	const bool replace_visible_draw_slot =
-	        !m_visibility.m_hShadowVisibleDrawSlotBuffer.is_valid() || m_visibility.m_nShadowVisibleDrawSlotCapacityBytes < nVisibleBytes;
-	const bool replace_visible_layer =
-	        !m_visibility.m_hShadowVisibleLayerBuffer.is_valid() || m_visibility.m_nShadowVisibleLayerCapacityBytes < nVisibleBytes;
-	const bool replace_indirect =
-	        !m_commandTable.m_hShadowIndirectBuffer.is_valid() || m_commandTable.m_nShadowIndirectCapacityBytes < nIndirectBytes;
+	const bool replace_visible_draw_slot = m_visibility.m_hShadowVisibleDrawSlotBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_visible_layer = m_visibility.m_hShadowVisibleLayerBuffer.needsCapacity( nVisibleBytes );
+	const bool replace_indirect = !m_commandTable.m_hIndirectBuffer.isValid()
+	        || m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes < nIndirectBytes;
 	if ( replace_visible_draw_slot || replace_visible_layer ) {
 		freeForwardUniformSets();
 	}
@@ -1328,27 +1179,17 @@ bool Terrain3DRdInstanceRenderer::ensureShadowBuffers( const uint32_t nVisibleBy
 		m_instanceCullDescriptors.erase( m_visibility.m_hInstanceCullUniformSet );
 		m_visibility.m_hInstanceCullUniformSet = RID();
 	}
-	return ensureBuffer( m_visibility.m_hShadowVisibleIndexBuffer,
-	               m_visibility.m_nShadowVisibleCapacityBytes,
-	               MAX( nVisibleBytes, 4u ),
-	               "T3D.Instance.ShadowVisibleIndices",
-	               Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	               Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_visibility.m_hShadowVisibleDrawSlotBuffer,
-	                m_visibility.m_nShadowVisibleDrawSlotCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.ShadowVisibleDrawSlots",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && ensureBuffer( m_visibility.m_hShadowVisibleLayerBuffer,
-	                m_visibility.m_nShadowVisibleLayerCapacityBytes,
-	                MAX( nVisibleBytes, 4u ),
-	                "T3D.Instance.ShadowVisibleLayers",
-	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	                Terrain3DRdContext::MEMORY_INSTANCE )
-	        && m_commandTable.m_hShadowIndirectBuffer.is_valid()
-	        && m_commandTable.m_hShadowIndirectBuffer == m_commandTable.m_hIndirectBuffer
-	        && m_commandTable.m_nShadowIndirectCapacityBytes >= nIndirectBytes;
+	return ensureOwnedBuffer( m_visibility.m_hShadowVisibleIndexBuffer,
+	               MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleIndices",
+	               Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hShadowVisibleDrawSlotBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleDrawSlots",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && ensureOwnedBuffer( m_visibility.m_hShadowVisibleLayerBuffer,
+	                MAX( nVisibleBytes, 4u ), "T3D.Instance.ShadowVisibleLayers",
+	                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER, Terrain3DRdContext::MEMORY_INSTANCE )
+	        && m_commandTable.m_hIndirectBuffer.isValid()
+	        && m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes >= nIndirectBytes;
 #endif
 }
 
@@ -1370,7 +1211,7 @@ bool Terrain3DRdInstanceRenderer::ensureUniformSet( void ) {
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 6, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleLayerBuffer ) );
 #endif
 	m_descriptorState.m_hUniformSet = m_instanceSet0Descriptors.getOrCreate(
-	        m_hShader, "T3D.Instance.UniformSet", uniforms, m_hShader, 0u );
+	        m_hShader.rid(), "T3D.Instance.UniformSet", uniforms, m_hShader.rid(), 0u );
 	if ( !m_descriptorState.m_hUniformSet.is_valid() ) {
 		setError( "RD instance set-0 uniform creation failed" );
 		return false;
@@ -1387,7 +1228,7 @@ void Terrain3DRdInstanceRenderer::freeForwardUniformSets( void ) {
 }
 
 bool Terrain3DRdInstanceRenderer::ensureForwardUniformSet( const t3dRdForwardShaderVariant_t variant, const bool bShadow ) {
-	if ( variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX || !m_hszForwardShaders[variant].is_valid() ) {
+	if ( variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX || !m_hszForwardShaders[variant].isValid() ) {
 		setError( String( "RD Forward+ instance set-0 requested an invalid shader variant; variant=" ) + String::num_int64( variant ) );
 		return false;
 	}
@@ -1425,8 +1266,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardUniformSet( const t3dRdForwardSha
 #endif
 	const String name = String( bShadow ? "T3D.Forward.Instance.ShadowUniformSet." : "T3D.Forward.Instance.UniformSet." )
 	        + String::num_int64( variant );
-	uniform_set = m_forwardDescriptors.getOrCreate( { m_hszForwardShaders[variant], bShadow }, name,
-	        uniforms, m_hszForwardShaders[variant], 0u );
+	uniform_set = m_forwardDescriptors.getOrCreate( { m_hszForwardShaders[variant].rid(), bShadow }, name,
+	        uniforms, m_hszForwardShaders[variant].rid(), 0u );
 	if ( !uniform_set.is_valid() ) {
 		setError( String( "RD Forward+ instance set-0 creation failed; variant=" ) + String::num_int64( variant ) + String( ", shadow=" )
 		        + String::num_int64( bShadow ? 1 : 0 ) );
@@ -1436,11 +1277,8 @@ bool Terrain3DRdInstanceRenderer::ensureForwardUniformSet( const t3dRdForwardSha
 }
 
 bool Terrain3DRdInstanceRenderer::ensureVtSampler( void ) {
-	if ( m_descriptorState.m_hVtSampler.is_valid() ) {
-		return true;
-	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( m_descriptorState.m_hVtSampler.isValid() ) return true;
+	if ( !m_context.getDevice() ) {
 		setError( "RD instance VT sampler creation lost the RenderingDevice" );
 		return false;
 	}
@@ -1458,15 +1296,9 @@ bool Terrain3DRdInstanceRenderer::ensureVtSampler( void ) {
 	state->set_repeat_u( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 	state->set_repeat_v( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
 	state->set_repeat_w( RenderingDevice::SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE );
-	m_descriptorState.m_hVtSampler = rd->sampler_create( state );
-	if ( !m_descriptorState.m_hVtSampler.is_valid() ) {
+	if ( !m_descriptorState.m_hVtSampler.createTracked( m_context, Terrain3DRdContext::OWNER_INSTANCES,
+	             "T3D.Instance.VTSampler", state ) ) {
 		setError( "RD instance VT sampler creation failed" );
-		return false;
-	}
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .adopt( rd, m_descriptorState.m_hVtSampler, "T3D.Instance.VTSampler",
-	                            Terrain3DRdContext::RESOURCE_SAMPLER ) ) {
-		setError( "RD instance VT sampler registration failed" );
 		return false;
 	}
 	return true;
@@ -1502,21 +1334,21 @@ bool Terrain3DRdInstanceRenderer::buildMaterialVtUniformSet( const RID &rShader,
 		setError( String( "RD instance invariant VT set lost shared VT resources: " ) + rName );
 		return false;
 	}
-	const RID &allocation_table = pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_VT_ALLOCATION_TABLE );
-	const RID &page_table = pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_VT_PAGE_TABLE );
-	const RID &mip_layout = pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_VT_MIP_LAYOUT_TABLE );
-	const RID &tail_metadata = pResources->get_buffer_rid( T3D_RW_GPU_BUFFER_VT_TAIL_METADATA );
-	const RID &albedo_tail = pResources->get_vt_tail_rid( T3D_RW_VT_ALBEDO );
-	const RID &normal_tail = pResources->get_vt_tail_rid( T3D_RW_VT_NORMAL );
-	const RID &surface_tail = pResources->get_vt_tail_rid( T3D_RW_VT_SURFACE );
+	const RID &allocation_table = pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_ALLOCATION_TABLE );
+	const RID &page_table = pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_PAGE_TABLE );
+	const RID &mip_layout = pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE );
+	const RID &tail_metadata = pResources->get_buffer_rid( T3D_VT_GPU_BUFFER_TAIL_METADATA );
+	const RID &albedo_tail = pResources->get_vt_tail_rid( T3D_VT_RESOURCE_ALBEDO );
+	const RID &normal_tail = pResources->get_vt_tail_rid( T3D_VT_RESOURCE_NORMAL );
+	const RID &surface_tail = pResources->get_vt_tail_rid( T3D_VT_RESOURCE_SURFACE );
 	if ( !allocation_table.is_valid() || !page_table.is_valid() || !mip_layout.is_valid() || !tail_metadata.is_valid()
 	        || !albedo_tail.is_valid() || !normal_tail.is_valid() || !surface_tail.is_valid() ) {
 		setError( String( "RD instance invariant VT set has invalid allocation/page/tail resources: " ) + rName );
 		return false;
 	}
 	uint64_t resource_signature = 1469598103934665603ull;
-	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( m_uploadState.m_hMaterialBuffer.get_id() ) );
-	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( m_descriptorState.m_hVtSampler.get_id() ) );
+	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( m_uploadState.m_hMaterialBuffer.rid().get_id() ) );
+	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( m_descriptorState.m_hVtSampler.rid().get_id() ) );
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( allocation_table.get_id() ) );
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( page_table.get_id() ) );
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( mip_layout.get_id() ) );
@@ -1524,7 +1356,7 @@ bool Terrain3DRdInstanceRenderer::buildMaterialVtUniformSet( const RID &rShader,
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( albedo_tail.get_id() ) );
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( normal_tail.get_id() ) );
 	resource_signature = t3dRdInstanceHashU64( resource_signature, ( uint64_t )( surface_tail.get_id() ) );
-	const T3DVtChannel signature_channels[3] = { T3D_RW_VT_ALBEDO, T3D_RW_VT_NORMAL, T3D_RW_VT_SURFACE };
+	const T3DVtChannel signature_channels[3] = { T3D_VT_RESOURCE_ALBEDO, T3D_VT_RESOURCE_NORMAL, T3D_VT_RESOURCE_SURFACE };
 	for ( uint32_t channel = 0u; channel < 3u; ++channel ) {
 		const uint32_t bank_count = pResources->get_vt_bank_count( signature_channels[channel] );
 		resource_signature = t3dRdInstanceHashU32( resource_signature, bank_count );
@@ -1551,7 +1383,7 @@ bool Terrain3DRdInstanceRenderer::buildMaterialVtUniformSet( const RID &rShader,
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 0, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_uploadState.m_hMaterialBuffer ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, allocation_table ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, page_table ) );
-	const T3DVtChannel channels[3] = { T3D_RW_VT_ALBEDO, T3D_RW_VT_NORMAL, T3D_RW_VT_SURFACE };
+	const T3DVtChannel channels[3] = { T3D_VT_RESOURCE_ALBEDO, T3D_VT_RESOURCE_NORMAL, T3D_VT_RESOURCE_SURFACE };
 	const uint32_t binding_base[3] = { 3u, 4u, 5u };
 	for ( uint32_t channel = 0u; channel < 3u; ++channel ) {
 		const uint32_t bank_count = pResources->get_vt_bank_count( channels[channel] );
@@ -1565,12 +1397,12 @@ bool Terrain3DRdInstanceRenderer::buildMaterialVtUniformSet( const RID &rShader,
 			setError( String( "RD instance invariant VT fallback bank is invalid; channel=" ) + String::num_int64( channel ) );
 			return false;
 		}
-		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( ( int )binding_base[channel], m_descriptorState.m_hVtSampler, fallback ) );
+		uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( ( int )binding_base[channel], m_descriptorState.m_hVtSampler.rid(), fallback ) );
 	}
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 6, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, tail_metadata ) );
-	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 7, m_descriptorState.m_hVtSampler, albedo_tail ) );
-	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 8, m_descriptorState.m_hVtSampler, normal_tail ) );
-	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 9, m_descriptorState.m_hVtSampler, surface_tail ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 7, m_descriptorState.m_hVtSampler.rid(), albedo_tail ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 8, m_descriptorState.m_hVtSampler.rid(), normal_tail ) );
+	uniforms.push_back( Terrain3DRdBindingBuilder::samplerTexture( 9, m_descriptorState.m_hVtSampler.rid(), surface_tail ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 10, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, mip_layout ) );
 	rUniformSet = m_vtDescriptors.getOrCreate( { rShader, resource_signature }, rName, uniforms, rShader, 1u );
 	if ( !rUniformSet.is_valid() ) {
@@ -1583,15 +1415,15 @@ bool Terrain3DRdInstanceRenderer::buildMaterialVtUniformSet( const RID &rShader,
 }
 
 bool Terrain3DRdInstanceRenderer::ensureMaterialVtUniformSet( void ) {
-	return buildMaterialVtUniformSet( m_hShader, m_descriptorState.m_hMaterialVtUniformSet, "T3D.Instance.MaterialVTSet" );
+	return buildMaterialVtUniformSet( m_hShader.rid(), m_descriptorState.m_hMaterialVtUniformSet, "T3D.Instance.MaterialVTSet" );
 }
 
 bool Terrain3DRdInstanceRenderer::ensureForwardMaterialVtUniformSet( const t3dRdForwardShaderVariant_t variant ) {
-	if ( variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX || !m_hszForwardShaders[variant].is_valid() ) {
+	if ( variant >= T3D_RD_FORWARD_SHADER_VARIANT_MAX || !m_hszForwardShaders[variant].isValid() ) {
 		setError( String( "RD Forward+ invariant VT set requested an invalid shader variant; variant=" ) + String::num_int64( variant ) );
 		return false;
 	}
-	return buildMaterialVtUniformSet( m_hszForwardShaders[variant],
+	return buildMaterialVtUniformSet( m_hszForwardShaders[variant].rid(),
 	        m_descriptorState.m_hszForwardMaterialVtUniformSets[variant],
 	        String( "T3D.Forward.Instance.MaterialVTSet." ) + String::num_int64( variant ) );
 }
@@ -1646,7 +1478,7 @@ bool Terrain3DRdInstanceRenderer::prepareSceneUploadPlan( const t3dRdInstanceSce
 	indirect_bytes = m_commandTable.m_nPacketCapacity * sizeof( t3dRdIndexedIndirectCommand_t );
 	const uint32_t required_instance_capacity = MAX( instance_bytes, ( uint32_t )( sizeof( t3dRdInstanceRecord_t ) ) );
 	full_instance_upload = pScene->m_bInstanceLayoutChanged || !m_uploadState.m_hInstanceBuffer.is_valid()
-	        || m_uploadState.m_nInstanceCapacityBytes < required_instance_capacity || m_uploadState.m_nInstanceUsedBytes != instance_bytes;
+	        || m_uploadState.m_hInstanceBuffer.capacityBytes() < required_instance_capacity || m_uploadState.m_hInstanceBuffer.usedBytes() != instance_bytes;
 
 	return true;
 }
@@ -1905,22 +1737,19 @@ bool Terrain3DRdInstanceRenderer::ensureSceneGpuStorage(
 		const uint32_t hiz_region_descriptor_bytes = MAX( ( uint32_t )( s_nRegionSlots * sizeof( t3dRdInstanceHiZRegionDescriptor_t ) ),
 		        ( uint32_t )( sizeof( t3dRdInstanceHiZRegionDescriptor_t ) ) );
 		const uint32_t hiz_region_visibility_bytes = MAX( ( uint32_t )( s_nRegionSlots * sizeof( uint32_t ) ), 4u );
-		if ( ( !m_visibility.m_hInstanceCullDescriptorBuffer.is_valid()
-		             || m_visibility.m_nInstanceCullDescriptorCapacityBytes < instance_cull_descriptor_bytes
-		             || !m_visibility.m_hInstanceHiZRegionDescriptorBuffer.is_valid()
-		             || m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes < hiz_region_descriptor_bytes
-		             || !m_visibility.m_hInstanceHiZRegionVisibilityBuffer.is_valid()
-		             || m_visibility.m_nInstanceHiZRegionVisibilityCapacityBytes < hiz_region_visibility_bytes )
+		if ( ( m_visibility.m_hInstanceCullDescriptorBuffer.needsCapacity( instance_cull_descriptor_bytes )
+		             || m_visibility.m_hInstanceHiZRegionDescriptorBuffer.needsCapacity( hiz_region_descriptor_bytes )
+		             || m_visibility.m_hInstanceHiZRegionVisibilityBuffer.needsCapacity( hiz_region_visibility_bytes ) )
 		        && m_visibility.m_hInstanceCullUniformSet.is_valid() ) {
 			m_instanceCullDescriptors.erase( m_visibility.m_hInstanceCullUniformSet );
 			m_visibility.m_hInstanceCullUniformSet = RID();
 		}
-		if ( ( !m_visibility.m_hHlodCullDescriptorBuffer.is_valid() || m_visibility.m_nHlodDescriptorCapacityBytes < hlod_descriptor_bytes )
+		if ( m_visibility.m_hHlodCullDescriptorBuffer.needsCapacity( hlod_descriptor_bytes )
 		        && m_visibility.m_hHlodCullUniformSet.is_valid() ) {
 			m_hlodCullDescriptors.erase( m_visibility.m_hHlodCullUniformSet );
 			m_visibility.m_hHlodCullUniformSet = RID();
 		}
-		if ( !m_visibility.m_hInstanceCullShader.is_valid() ) {
+		if ( !m_visibility.m_hInstanceCullShader.isValid() ) {
 			m_context.beginResourceRebuild();
 			const bool shader_ok = ensureInstanceCullShader( m_visibility.m_instanceCullSourceShader );
 			m_context.endResourceRebuild();
@@ -1935,29 +1764,25 @@ bool Terrain3DRdInstanceRenderer::ensureSceneGpuStorage(
 		                                    MAX( indirect_bytes, ( uint32_t )( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) )
 		        && ensureShadowBuffers(
 		                MAX( visible_bytes, 4u ), MAX( indirect_bytes, ( uint32_t )( sizeof( t3dRdIndexedIndirectCommand_t ) ) ) )
-		        && ensureBuffer( m_visibility.m_hHlodCullDescriptorBuffer,
-		                m_visibility.m_nHlodDescriptorCapacityBytes,
+		        && ensureOwnedBuffer( m_visibility.m_hHlodCullDescriptorBuffer,
 		                hlod_descriptor_bytes,
 		                "T3D.HLOD.CullDescriptors",
 		                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 		                Terrain3DRdContext::MEMORY_INSTANCE,
 		                Terrain3DRdContext::OWNER_HLOD )
-		        && ensureBuffer( m_visibility.m_hInstanceCullDescriptorBuffer,
-		                m_visibility.m_nInstanceCullDescriptorCapacityBytes,
+		        && ensureOwnedBuffer( m_visibility.m_hInstanceCullDescriptorBuffer,
 		                instance_cull_descriptor_bytes,
 		                "T3D.Instance.CullDescriptors",
 		                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 		                Terrain3DRdContext::MEMORY_INSTANCE,
 		                Terrain3DRdContext::OWNER_INSTANCES )
-		        && ensureBuffer( m_visibility.m_hInstanceHiZRegionDescriptorBuffer,
-		                m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes,
+		        && ensureOwnedBuffer( m_visibility.m_hInstanceHiZRegionDescriptorBuffer,
 		                hiz_region_descriptor_bytes,
 		                "T3D.Instance.HiZ.RegionDescriptors",
 		                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
 		                Terrain3DRdContext::MEMORY_INSTANCE,
 		                Terrain3DRdContext::OWNER_INSTANCES )
-		        && ensureBuffer( m_visibility.m_hInstanceHiZRegionVisibilityBuffer,
-		                m_visibility.m_nInstanceHiZRegionVisibilityCapacityBytes,
+		        && ensureOwnedBuffer( m_visibility.m_hInstanceHiZRegionVisibilityBuffer,
 		                hiz_region_visibility_bytes,
 		                "T3D.Instance.HiZ.RegionVisibility",
 		                Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
@@ -1979,48 +1804,48 @@ bool Terrain3DRdInstanceRenderer::ensureSceneGpuStorage(
 }
 
 void Terrain3DRdInstanceRenderer::ensureSceneUploadByteStorage( void ) {
-	if ( m_uploadState.m_instanceBytes.size() < ( int64_t )( m_uploadState.m_nInstanceCapacityBytes ) ) {
-		m_uploadState.m_instanceBytes.resize( m_uploadState.m_nInstanceCapacityBytes );
+	if ( m_uploadState.m_instanceBytes.size() < ( int64_t )( m_uploadState.m_hInstanceBuffer.capacityBytes() ) ) {
+		m_uploadState.m_instanceBytes.resize( m_uploadState.m_hInstanceBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_previousInstanceBytes.size() < ( int64_t )( m_uploadState.m_nPreviousInstanceCapacityBytes ) ) {
-		m_uploadState.m_previousInstanceBytes.resize( m_uploadState.m_nPreviousInstanceCapacityBytes );
+	if ( m_uploadState.m_previousInstanceBytes.size() < ( int64_t )( m_uploadState.m_hPreviousInstanceBuffer.capacityBytes() ) ) {
+		m_uploadState.m_previousInstanceBytes.resize( m_uploadState.m_hPreviousInstanceBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_visibleBytes.size() < ( int64_t )( m_visibility.m_nVisibleCapacityBytes ) ) {
-		m_uploadState.m_visibleBytes.resize( m_visibility.m_nVisibleCapacityBytes );
+	if ( m_uploadState.m_visibleBytes.size() < ( int64_t )( m_visibility.m_hVisibleIndexBuffer.capacityBytes() ) ) {
+		m_uploadState.m_visibleBytes.resize( m_visibility.m_hVisibleIndexBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_shadowVisibleBytes.size() < ( int64_t )( m_visibility.m_nShadowVisibleCapacityBytes ) ) {
-		m_uploadState.m_shadowVisibleBytes.resize( m_visibility.m_nShadowVisibleCapacityBytes );
+	if ( m_uploadState.m_shadowVisibleBytes.size() < ( int64_t )( m_visibility.m_hShadowVisibleIndexBuffer.capacityBytes() ) ) {
+		m_uploadState.m_shadowVisibleBytes.resize( m_visibility.m_hShadowVisibleIndexBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_visibleDrawSlotBytes.size() < ( int64_t )( m_visibility.m_nVisibleDrawSlotCapacityBytes ) ) {
-		m_uploadState.m_visibleDrawSlotBytes.resize( m_visibility.m_nVisibleDrawSlotCapacityBytes );
+	if ( m_uploadState.m_visibleDrawSlotBytes.size() < ( int64_t )( m_visibility.m_hVisibleDrawSlotBuffer.capacityBytes() ) ) {
+		m_uploadState.m_visibleDrawSlotBytes.resize( m_visibility.m_hVisibleDrawSlotBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_shadowVisibleDrawSlotBytes.size() < ( int64_t )( m_visibility.m_nShadowVisibleDrawSlotCapacityBytes ) ) {
-		m_uploadState.m_shadowVisibleDrawSlotBytes.resize( m_visibility.m_nShadowVisibleDrawSlotCapacityBytes );
+	if ( m_uploadState.m_shadowVisibleDrawSlotBytes.size() < ( int64_t )( m_visibility.m_hShadowVisibleDrawSlotBuffer.capacityBytes() ) ) {
+		m_uploadState.m_shadowVisibleDrawSlotBytes.resize( m_visibility.m_hShadowVisibleDrawSlotBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_visibleLayerBytes.size() < ( int64_t )( m_visibility.m_nVisibleLayerCapacityBytes ) ) {
-		m_uploadState.m_visibleLayerBytes.resize( m_visibility.m_nVisibleLayerCapacityBytes );
+	if ( m_uploadState.m_visibleLayerBytes.size() < ( int64_t )( m_visibility.m_hVisibleLayerBuffer.capacityBytes() ) ) {
+		m_uploadState.m_visibleLayerBytes.resize( m_visibility.m_hVisibleLayerBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_shadowVisibleLayerBytes.size() < ( int64_t )( m_visibility.m_nShadowVisibleLayerCapacityBytes ) ) {
-		m_uploadState.m_shadowVisibleLayerBytes.resize( m_visibility.m_nShadowVisibleLayerCapacityBytes );
+	if ( m_uploadState.m_shadowVisibleLayerBytes.size() < ( int64_t )( m_visibility.m_hShadowVisibleLayerBuffer.capacityBytes() ) ) {
+		m_uploadState.m_shadowVisibleLayerBytes.resize( m_visibility.m_hShadowVisibleLayerBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_indirectBytes.size() < ( int64_t )( m_commandTable.m_nIndirectCapacityBytes ) ) {
-		m_uploadState.m_indirectBytes.resize( m_commandTable.m_nIndirectCapacityBytes );
+	if ( m_uploadState.m_indirectBytes.size() < ( int64_t )( m_commandTable.m_mainIndirectSlice.m_nCapacityBytes ) ) {
+		m_uploadState.m_indirectBytes.resize( m_commandTable.m_mainIndirectSlice.m_nCapacityBytes );
 	}
-	if ( m_uploadState.m_shadowIndirectBytes.size() < ( int64_t )( m_commandTable.m_nShadowIndirectCapacityBytes ) ) {
-		m_uploadState.m_shadowIndirectBytes.resize( m_commandTable.m_nShadowIndirectCapacityBytes );
+	if ( m_uploadState.m_shadowIndirectBytes.size() < ( int64_t )( m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes ) ) {
+		m_uploadState.m_shadowIndirectBytes.resize( m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes );
 	}
-	if ( m_uploadState.m_drawMetadataBytes.size() < ( int64_t )( m_commandTable.m_nDrawMetadataCapacityBytes ) ) {
-		m_uploadState.m_drawMetadataBytes.resize( m_commandTable.m_nDrawMetadataCapacityBytes );
+	if ( m_uploadState.m_drawMetadataBytes.size() < ( int64_t )( m_commandTable.m_hDrawMetadataBuffer.capacityBytes() ) ) {
+		m_uploadState.m_drawMetadataBytes.resize( m_commandTable.m_hDrawMetadataBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_hlodDescriptorBytes.size() < ( int64_t )( m_visibility.m_nHlodDescriptorCapacityBytes ) ) {
-		m_uploadState.m_hlodDescriptorBytes.resize( m_visibility.m_nHlodDescriptorCapacityBytes );
+	if ( m_uploadState.m_hlodDescriptorBytes.size() < ( int64_t )( m_visibility.m_hHlodCullDescriptorBuffer.capacityBytes() ) ) {
+		m_uploadState.m_hlodDescriptorBytes.resize( m_visibility.m_hHlodCullDescriptorBuffer.capacityBytes() );
 	}
-	if ( m_uploadState.m_instanceCullDescriptorBytes.size() < ( int64_t )( m_visibility.m_nInstanceCullDescriptorCapacityBytes ) ) {
-		m_uploadState.m_instanceCullDescriptorBytes.resize( m_visibility.m_nInstanceCullDescriptorCapacityBytes );
+	if ( m_uploadState.m_instanceCullDescriptorBytes.size() < ( int64_t )( m_visibility.m_hInstanceCullDescriptorBuffer.capacityBytes() ) ) {
+		m_uploadState.m_instanceCullDescriptorBytes.resize( m_visibility.m_hInstanceCullDescriptorBuffer.capacityBytes() );
 	}
 	if ( m_uploadState.m_instanceHiZRegionDescriptorBytes.size()
-	        < ( int64_t )( m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes ) ) {
-		m_uploadState.m_instanceHiZRegionDescriptorBytes.resize( m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes );
+	        < ( int64_t )( m_visibility.m_hInstanceHiZRegionDescriptorBuffer.capacityBytes() ) ) {
+		m_uploadState.m_instanceHiZRegionDescriptorBytes.resize( m_visibility.m_hInstanceHiZRegionDescriptorBuffer.capacityBytes() );
 	}
 
 	const uint32_t dirty_chunk_bytes = s_nDirtyChunkRecords * sizeof( t3dRdInstanceRecord_t );
@@ -2037,7 +1862,7 @@ bool Terrain3DRdInstanceRenderer::uploadSceneInstanceRecords( const t3dRdInstanc
 		const uint8_t *const pSource = ( const uint8_t * )( pScene->m_instances.data() );
 		if ( full_instance_upload ) {
 			memcpy( m_uploadState.m_instanceBytes.ptrw(), pSource, instance_bytes );
-			if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked( m_uploadState.m_hInstanceBuffer, 0u, instance_bytes, m_uploadState.m_instanceBytes ) != OK ) {
+			if ( !m_uploadState.m_hInstanceBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_instanceBytes, instance_bytes, T3D_GPU_PUBLICATION ) ) {
 				return false;
 			}
 		} else {
@@ -2057,8 +1882,7 @@ bool Terrain3DRdInstanceRenderer::uploadSceneInstanceRecords( const t3dRdInstanc
 					const uint32_t first_byte = first_record * sizeof( t3dRdInstanceRecord_t );
 					const uint32_t chunk_bytes = record_count * sizeof( t3dRdInstanceRecord_t );
 					memcpy( m_uploadState.m_dirtyInstanceBytes.ptrw(), pSource + first_byte, chunk_bytes );
-					if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_DIRTY_UPLOAD ).updatePacked( m_uploadState.m_hInstanceBuffer, first_byte, chunk_bytes, m_uploadState.m_dirtyInstanceBytes )
-					        != OK ) {
+					if ( !m_uploadState.m_hInstanceBuffer.writePackedTracked( m_context, first_byte, m_uploadState.m_dirtyInstanceBytes, chunk_bytes, T3D_GPU_DIRTY_UPLOAD ) ) {
 						return false;
 					}
 					first_record += record_count;
@@ -2093,7 +1917,9 @@ bool Terrain3DRdInstanceRenderer::uploadScene( const t3dRdInstanceSceneSnapshot_
 	if ( !uploadSceneInstanceRecords( *pScene, instance_bytes, full_instance_upload ) ) {
 		return false;
 	}
-	m_uploadState.m_nInstanceUsedBytes = instance_bytes;
+	if ( !m_uploadState.m_hInstanceBuffer.setUsedBytes( instance_bytes ) ) {
+		return false;
+	}
 	++m_uploadState.m_nSceneUploads;
 	m_uploadState.m_nUploadedSceneGeneration = pScene->m_nGeneration;
 	m_geometryArena.m_nSceneCapacityMeshGeneration = m_geometryArena.m_meshCache.getSourceGeneration();
@@ -2123,8 +1949,7 @@ bool Terrain3DRdInstanceRenderer::uploadPreviousMotionRanges(
 			const uint32_t byte_offset = first_record * sizeof( t3dRdInstanceRecord_t );
 			const uint32_t byte_count = record_count * sizeof( t3dRdInstanceRecord_t );
 			memcpy( m_uploadState.m_dirtyInstanceBytes.ptrw(), pRecords + first_record, byte_count );
-			if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_HISTORY ).updatePacked( m_uploadState.m_hPreviousInstanceBuffer, byte_offset, byte_count, m_uploadState.m_dirtyInstanceBytes )
-			        != OK ) {
+			if ( !m_uploadState.m_hPreviousInstanceBuffer.writePackedTracked( m_context, byte_offset, m_uploadState.m_dirtyInstanceBytes, byte_count, T3D_GPU_HISTORY ) ) {
 				return false;
 			}
 			first_record += record_count;
@@ -2283,12 +2108,12 @@ bool Terrain3DRdInstanceRenderer::prepareMotionHistory( const t3dRdInstanceScene
 	if ( upload_previous ) {
 		RenderingDevice *const rd = m_context.getDevice();
 		const uint32_t bytes = m_uploadState.m_nMotionPreviousRecordCount * sizeof( t3dRdInstanceRecord_t );
-		if ( bytes > m_uploadState.m_nPreviousInstanceCapacityBytes || m_uploadState.m_previousInstanceBytes.size() < bytes ) {
+		if ( bytes > m_uploadState.m_hPreviousInstanceBuffer.capacityBytes() || m_uploadState.m_previousInstanceBytes.size() < bytes ) {
 			setError( "RD motion history exceeded publication-time capacity" );
 			return false;
 		}
 		memcpy( m_uploadState.m_previousInstanceBytes.ptrw(), m_uploadState.m_motionPreviousRecords.data(), bytes );
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_HISTORY ).updatePacked( m_uploadState.m_hPreviousInstanceBuffer, 0u, bytes, m_uploadState.m_previousInstanceBytes ) != OK ) {
+		if ( !m_uploadState.m_hPreviousInstanceBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_previousInstanceBytes, bytes, T3D_GPU_HISTORY ) ) {
 			return false;
 		}
 	}
@@ -2331,10 +2156,10 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void ) {
 	}
 	const uint32_t bytes = ( uint32_t )( nMaterialCount * sizeof( t3dRenderingMaterialGpu_t ) );
 	m_context.beginResourceRebuild();
-	const bool buffers_ok = ensureBuffers( m_uploadState.m_nInstanceCapacityBytes,
-	                                m_visibility.m_nVisibleCapacityBytes,
+	const bool buffers_ok = ensureBuffers( m_uploadState.m_hInstanceBuffer.capacityBytes(),
+	                                m_visibility.m_hVisibleIndexBuffer.capacityBytes(),
 	                                MAX( bytes, ( uint32_t )( sizeof( t3dRenderingMaterialGpu_t ) ) ),
-	                                m_commandTable.m_nIndirectCapacityBytes )
+	                                m_commandTable.m_mainIndirectSlice.m_nCapacityBytes )
 	        && ensureUniformSet() && ensureMaterialVtUniformSet();
 	m_context.endResourceRebuild();
 	if ( !buffers_ok ) {
@@ -2347,8 +2172,8 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void ) {
 	m_nVtInvalidAllocationReferenceCount = 0u;
 	m_nVtOutOfRangePageReferenceCount = 0u;
 	if ( bytes > 0u ) {
-		if ( m_uploadState.m_materialBytes.size() < ( int64_t )( m_uploadState.m_nMaterialCapacityBytes ) ) {
-			m_uploadState.m_materialBytes.resize( m_uploadState.m_nMaterialCapacityBytes );
+		if ( m_uploadState.m_materialBytes.size() < ( int64_t )( m_uploadState.m_hMaterialBuffer.capacityBytes() ) ) {
+			m_uploadState.m_materialBytes.resize( m_uploadState.m_hMaterialBuffer.capacityBytes() );
 		}
 		if ( m_uploadState.m_materialBytes.size() < ( int64_t )( bytes ) ) {
 			setError( "RD instance VT material upload scratch capacity is smaller than the published material table" );
@@ -2391,7 +2216,7 @@ bool Terrain3DRdInstanceRenderer::uploadMaterials( void ) {
 			setError( "RD instance VT material upload lost the RenderingDevice before buffer_update" );
 			return false;
 		}
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked( m_uploadState.m_hMaterialBuffer, 0u, bytes, m_uploadState.m_materialBytes ) != OK ) {
+		if ( !m_uploadState.m_hMaterialBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_materialBytes, bytes, T3D_GPU_PUBLICATION ) ) {
 			setError( String( "RD instance VT material buffer_update failed; bytes=" ) + String::num_int64( bytes ) );
 			return false;
 		}
@@ -2510,7 +2335,7 @@ bool Terrain3DRdInstanceRenderer::collectPacketEntriesForPass( const t3dRdInstan
 	t3dRdInstanceFrustum_t frustums[s_nRdForwardMaxViews];
 	if ( !bSkipFrustum ) {
 		for ( uint32_t view = 0u; view < nViewCount; ++view ) {
-			frustums[view] = t3dRdInstanceExtractFrustum( pViewProjections[view] );
+			frustums[view] = t3dRdExtractFrustum( pViewProjections[view] );
 		}
 	}
 
@@ -2852,30 +2677,11 @@ bool Terrain3DRdInstanceRenderer::buildCullDescriptorsForPass(
 				const t3dRdPacketBuildSlot_t &slot = m_commandTable.m_packetBuildSlots[entry.m_nPacketIndex];
 				const t3dRdInstanceCell_t &cell = rScene.m_cells[entry.m_nCellIndex];
 				t3dRdInstanceCullDescriptor_t descriptor;
-				const Vector3 center = cell.m_bounds.get_center();
-				const Vector3 extent = cell.m_bounds.size * 0.5f;
-				descriptor.m_szBoundsCenter[0] = ( float )center.x;
-				descriptor.m_szBoundsCenter[1] = ( float )center.y;
-				descriptor.m_szBoundsCenter[2] = ( float )center.z;
-				descriptor.m_szBoundsExtent[0] = ( float )extent.x;
-				descriptor.m_szBoundsExtent[1] = ( float )extent.y;
-				descriptor.m_szBoundsExtent[2] = ( float )extent.z;
-				const Vector3 occlusion_center = cell.m_occlusionBounds.get_center();
-				const Vector3 occlusion_extent = cell.m_occlusionBounds.size * 0.5f;
-				descriptor.m_szOcclusionCenter[0] = ( float )occlusion_center.x;
-				descriptor.m_szOcclusionCenter[1] = ( float )occlusion_center.y;
-				descriptor.m_szOcclusionCenter[2] = ( float )occlusion_center.z;
-				descriptor.m_szOcclusionExtent[0] = ( float )occlusion_extent.x;
-				descriptor.m_szOcclusionExtent[1] = ( float )occlusion_extent.y;
-				descriptor.m_szOcclusionExtent[2] = ( float )occlusion_extent.z;
+				t3dRdFillInstanceCullDescriptorCellState( descriptor, cell, false );
 				descriptor.m_nCommandIndex = slot.m_nCommandIndex;
 				descriptor.m_nFirstInstance = entry.m_nFirstInstance;
 				descriptor.m_nInstanceCount = entry.m_nInstanceCount;
 				descriptor.m_nFirstVisible = slot.m_packet.m_nFirstVisible;
-				descriptor.m_nVisibilityLayers = cell.m_nVisibilityLayers;
-				descriptor.m_nFlags = cell.m_nFlags;
-				descriptor.m_fLodBegin = cell.m_fLodBegin;
-				descriptor.m_fLodEnd = cell.m_fLodEnd;
 				t3dRdInstanceDescriptorSpan_t &span = m_visibility.m_instanceCullCellSpans[entry.m_nCellIndex];
 				if ( span.m_nCount == 0u ) {
 					span.m_nFirst = ( uint32_t )m_visibility.m_instanceCullDescriptors.size();
@@ -2917,30 +2723,11 @@ bool Terrain3DRdInstanceRenderer::buildCullDescriptorsForPass(
 				const t3dRdPacketBuildSlot_t &slot = m_commandTable.m_packetBuildSlots[entry.m_nPacketIndex];
 				const t3dRdInstanceCell_t &cell = rScene.m_cells[entry.m_nCellIndex];
 				t3dRdInstanceCullDescriptor_t descriptor;
-				const Vector3 center = cell.m_bounds.get_center();
-				const Vector3 extent = cell.m_bounds.size * 0.5f;
-				descriptor.m_szBoundsCenter[0] = ( float )center.x;
-				descriptor.m_szBoundsCenter[1] = ( float )center.y;
-				descriptor.m_szBoundsCenter[2] = ( float )center.z;
-				descriptor.m_szBoundsExtent[0] = ( float )extent.x;
-				descriptor.m_szBoundsExtent[1] = ( float )extent.y;
-				descriptor.m_szBoundsExtent[2] = ( float )extent.z;
-				const Vector3 occlusion_center = cell.m_occlusionBounds.get_center();
-				const Vector3 occlusion_extent = cell.m_occlusionBounds.size * 0.5f;
-				descriptor.m_szOcclusionCenter[0] = ( float )occlusion_center.x;
-				descriptor.m_szOcclusionCenter[1] = ( float )occlusion_center.y;
-				descriptor.m_szOcclusionCenter[2] = ( float )occlusion_center.z;
-				descriptor.m_szOcclusionExtent[0] = ( float )occlusion_extent.x;
-				descriptor.m_szOcclusionExtent[1] = ( float )occlusion_extent.y;
-				descriptor.m_szOcclusionExtent[2] = ( float )occlusion_extent.z;
+				t3dRdFillInstanceCullDescriptorCellState( descriptor, cell, true );
 				descriptor.m_nCommandIndex = slot.m_nCommandIndex;
 				descriptor.m_nFirstInstance = entry.m_nFirstInstance;
 				descriptor.m_nInstanceCount = entry.m_nInstanceCount;
 				descriptor.m_nFirstVisible = slot.m_packet.m_nFirstVisible;
-				descriptor.m_nVisibilityLayers = cell.m_nVisibilityLayers;
-				descriptor.m_nFlags = cell.m_nFlags;
-				descriptor.m_fLodBegin = 0.0f;
-				descriptor.m_fLodEnd = 0.0f;
 				t3dRdInstanceDescriptorSpan_t &span = m_visibility.m_shadowInstanceCullCellSpans[entry.m_nCellIndex];
 				if ( span.m_nCount == 0u ) {
 					span.m_nFirst = ( uint32_t )m_visibility.m_shadowInstanceCullDescriptors.size();
@@ -3008,12 +2795,12 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void ) {
 	const uint64_t visible_bytes64 = ( uint64_t )( m_visibility.m_nVisibleIndexCount ) * sizeof( uint32_t );
 #if !T3D_INSTANCER_RD_PORT && !T3D_INSTANCER_MINIMAL_RENDER_PATH
 	const uint64_t indirect_bytes64 = m_commandTable.m_drawPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
-	if ( visible_bytes64 > m_visibility.m_nVisibleCapacityBytes || indirect_bytes64 > m_commandTable.m_nIndirectCapacityBytes ) {
+	if ( visible_bytes64 > m_visibility.m_hVisibleIndexBuffer.capacityBytes() || indirect_bytes64 > m_commandTable.m_mainIndirectSlice.m_nCapacityBytes ) {
 		setError( "RD instance visibility output exceeded publication-time capacity" );
 		return false;
 	}
 #else
-	if ( visible_bytes64 > m_visibility.m_nVisibleCapacityBytes ) {
+	if ( visible_bytes64 > m_visibility.m_hVisibleIndexBuffer.capacityBytes() ) {
 		setError( "RD direct-surface visible-index output exceeded publication-time capacity" );
 		return false;
 	}
@@ -3029,7 +2816,7 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void ) {
 	}
 	if ( visible_bytes > 0u ) {
 		memcpy( m_uploadState.m_visibleBytes.ptrw(), m_visibility.m_visibleIndices.data(), visible_bytes );
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_SCRATCH ).updatePacked( m_visibility.m_hVisibleIndexBuffer, 0u, visible_bytes, m_uploadState.m_visibleBytes ) != OK ) {
+		if ( !m_visibility.m_hVisibleIndexBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_visibleBytes, visible_bytes, T3D_GPU_SCRATCH ) ) {
 			setError( String( "RD instance visible-index buffer_update failed; bytes=" ) + String::num_int64( visible_bytes ) );
 			return false;
 		}
@@ -3044,7 +2831,7 @@ bool Terrain3DRdInstanceRenderer::uploadVisibility( void ) {
 			        &m_commandTable.m_drawPackets[i].m_command,
 			        sizeof( t3dRdIndexedIndirectCommand_t ) );
 		}
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_INDIRECT ).updatePacked( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nMainIndirectOffsetBytes, indirect_bytes, m_uploadState.m_indirectBytes ) != OK ) {
+		if ( !m_commandTable.m_hIndirectBuffer.writePackedSliceTracked( m_context, m_commandTable.m_mainIndirectSlice, 0u, m_uploadState.m_indirectBytes, indirect_bytes, T3D_GPU_INDIRECT ) ) {
 			setError( String( "RD instance indirect-command buffer_update failed; bytes=" ) + String::num_int64( indirect_bytes ) );
 			return false;
 		}
@@ -3058,13 +2845,13 @@ bool Terrain3DRdInstanceRenderer::uploadShadowVisibility( void ) {
 	const uint64_t visible_bytes64 = ( uint64_t )( m_visibility.m_nShadowVisibleIndexCount ) * sizeof( uint32_t );
 #if !T3D_INSTANCER_RD_PORT && !T3D_INSTANCER_MINIMAL_RENDER_PATH
 	const uint64_t indirect_bytes64 = m_commandTable.m_shadowPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
-	if ( visible_bytes64 > m_visibility.m_nShadowVisibleCapacityBytes
-	        || indirect_bytes64 > m_commandTable.m_nShadowIndirectCapacityBytes ) {
+	if ( visible_bytes64 > m_visibility.m_hShadowVisibleIndexBuffer.capacityBytes()
+	        || indirect_bytes64 > m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes ) {
 		setError( "RD shadow instance visibility output exceeded publication-time capacity" );
 		return false;
 	}
 #else
-	if ( visible_bytes64 > m_visibility.m_nShadowVisibleCapacityBytes ) {
+	if ( visible_bytes64 > m_visibility.m_hShadowVisibleIndexBuffer.capacityBytes() ) {
 		setError( "RD direct-surface shadow visible-index output exceeded publication-time capacity" );
 		return false;
 	}
@@ -3077,7 +2864,7 @@ bool Terrain3DRdInstanceRenderer::uploadShadowVisibility( void ) {
 	}
 	if ( visible_bytes > 0u ) {
 		memcpy( m_uploadState.m_shadowVisibleBytes.ptrw(), m_visibility.m_shadowVisibleIndices.data(), visible_bytes );
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_SCRATCH ).updatePacked( m_visibility.m_hShadowVisibleIndexBuffer, 0u, visible_bytes, m_uploadState.m_shadowVisibleBytes ) != OK ) {
+		if ( !m_visibility.m_hShadowVisibleIndexBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_shadowVisibleBytes, visible_bytes, T3D_GPU_SCRATCH ) ) {
 			setError( String( "RD shadow instance visible-index buffer_update failed; bytes=" ) + String::num_int64( visible_bytes ) );
 			return false;
 		}
@@ -3092,7 +2879,7 @@ bool Terrain3DRdInstanceRenderer::uploadShadowVisibility( void ) {
 			        &m_commandTable.m_shadowPackets[i].m_command,
 			        sizeof( t3dRdIndexedIndirectCommand_t ) );
 		}
-		if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_INDIRECT ).updatePacked( m_commandTable.m_hShadowIndirectBuffer, m_commandTable.m_nShadowIndirectOffsetBytes, indirect_bytes, m_uploadState.m_shadowIndirectBytes ) != OK ) {
+		if ( !m_commandTable.m_hIndirectBuffer.writePackedSliceTracked( m_context, m_commandTable.m_shadowIndirectSlice, 0u, m_uploadState.m_shadowIndirectBytes, indirect_bytes, T3D_GPU_INDIRECT ) ) {
 			setError( String( "RD shadow instance indirect-command buffer_update failed; bytes=" ) + String::num_int64( indirect_bytes ) );
 			return false;
 		}
@@ -3112,15 +2899,14 @@ bool Terrain3DRdInstanceRenderer::uploadHlodDescriptors( void ) {
 		return false;
 	}
 	const uint64_t bytes64 = m_visibility.m_hlodDescriptors.size() * sizeof( t3dRdHlodCullDescriptor_t );
-	if ( bytes64 > m_visibility.m_nHlodDescriptorCapacityBytes || !m_visibility.m_hHlodCullDescriptorBuffer.is_valid()
+	if ( bytes64 > m_visibility.m_hHlodCullDescriptorBuffer.capacityBytes() || !m_visibility.m_hHlodCullDescriptorBuffer.is_valid()
 	        || m_uploadState.m_hlodDescriptorBytes.size() < ( int64_t )( bytes64 ) ) {
 		setError( "RD HLOD descriptor output exceeded publication-time capacity" );
 		return false;
 	}
 	const uint32_t bytes = ( uint32_t )( bytes64 );
 	memcpy( m_uploadState.m_hlodDescriptorBytes.ptrw(), m_visibility.m_hlodDescriptors.data(), bytes );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked( m_visibility.m_hHlodCullDescriptorBuffer, 0u, bytes, m_uploadState.m_hlodDescriptorBytes )
-	        != OK ) {
+	if ( !m_visibility.m_hHlodCullDescriptorBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_hlodDescriptorBytes, bytes, T3D_GPU_PUBLICATION ) ) {
 		return false;
 	}
 	if ( !m_visibility.m_hHlodCullUniformSet.is_valid() ) {
@@ -3130,8 +2916,8 @@ bool Terrain3DRdInstanceRenderer::uploadHlodDescriptors( void ) {
 		        Terrain3DRdBindingBuilder::single( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hHlodCullDescriptorBuffer ) );
 		uniforms.push_back(
 		        Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_commandTable.m_hIndirectBuffer ) );
-		m_visibility.m_hHlodCullUniformSet = m_hlodCullDescriptors.getOrCreate( m_visibility.m_hHlodCullShader,
-		        "T3D.HLOD.CullUniformSet", uniforms, m_visibility.m_hHlodCullShader, 0u );
+		m_visibility.m_hHlodCullUniformSet = m_hlodCullDescriptors.getOrCreate( m_visibility.m_hHlodCullShader.rid(),
+		        "T3D.HLOD.CullUniformSet", uniforms, m_visibility.m_hHlodCullShader.rid(), 0u );
 		if ( !m_visibility.m_hHlodCullUniformSet.is_valid() ) {
 			setError( "Failed to create Terrain3D HLOD cull uniform set" );
 			return false;
@@ -3152,7 +2938,7 @@ bool Terrain3DRdInstanceRenderer::dispatchHlodCull( const uint32_t nVisibilityMa
 	push.m_nDescriptorCount = ( uint32_t )( m_visibility.m_hlodDescriptors.size() );
 	push.m_nVisibilityMask = nVisibilityMask;
 	push.m_nCommandCount = ( uint32_t )( m_commandTable.m_drawPackets.size() );
-	push.m_nMainCommandBase = m_commandTable.m_nMainIndirectOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
+	push.m_nMainCommandBase = m_commandTable.m_mainIndirectSlice.m_nOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
 	memcpy( m_uploadState.m_hlodCullPushBytes.ptrw(), &push, sizeof( push ) );
 	const int64_t list = rd->compute_list_begin();
 	if ( list == RenderingDevice::INVALID_ID ) {
@@ -3432,31 +3218,12 @@ bool Terrain3DRdInstanceRenderer::buildGpuCommandTableForPass( const t3dRdInstan
 			}
 
 			t3dRdInstanceCullDescriptor_t descriptor;
-			const Vector3 center = cell.m_bounds.get_center();
-			const Vector3 extent = cell.m_bounds.size * 0.5f;
-			descriptor.m_szBoundsCenter[0] = ( float )( center.x );
-			descriptor.m_szBoundsCenter[1] = ( float )( center.y );
-			descriptor.m_szBoundsCenter[2] = ( float )( center.z );
-			descriptor.m_szBoundsExtent[0] = ( float )( extent.x );
-			descriptor.m_szBoundsExtent[1] = ( float )( extent.y );
-			descriptor.m_szBoundsExtent[2] = ( float )( extent.z );
-			const Vector3 occlusion_center = cell.m_occlusionBounds.get_center();
-			const Vector3 occlusion_extent = cell.m_occlusionBounds.size * 0.5f;
-			descriptor.m_szOcclusionCenter[0] = ( float )( occlusion_center.x );
-			descriptor.m_szOcclusionCenter[1] = ( float )( occlusion_center.y );
-			descriptor.m_szOcclusionCenter[2] = ( float )( occlusion_center.z );
-			descriptor.m_szOcclusionExtent[0] = ( float )( occlusion_extent.x );
-			descriptor.m_szOcclusionExtent[1] = ( float )( occlusion_extent.y );
-			descriptor.m_szOcclusionExtent[2] = ( float )( occlusion_extent.z );
+			t3dRdFillInstanceCullDescriptorCellState( descriptor, cell, t_bShadowPass );
 			descriptor.m_nDrawSlot = handle.m_nSlot;
 			descriptor.m_nCommandIndex = command_index;
 			descriptor.m_nFirstInstance = cell.m_nFirstInstance;
 			descriptor.m_nInstanceCount = cell.m_nInstanceCount;
 			descriptor.m_nFirstVisible = first_visible;
-			descriptor.m_nVisibilityLayers = cell.m_nVisibilityLayers;
-			descriptor.m_nFlags = cell.m_nFlags;
-			descriptor.m_fLodBegin = t_bShadowPass ? 0.0f : cell.m_fLodBegin;
-			descriptor.m_fLodEnd = t_bShadowPass ? 0.0f : cell.m_fLodEnd;
 			t3dRdInstanceDescriptorSpan_t &span = spans[iCell];
 			if ( span.m_nCount == 0u ) {
 				span.m_nFirst = ( uint32_t )( descriptors.size() );
@@ -3498,7 +3265,7 @@ bool Terrain3DRdInstanceRenderer::uploadFixedDrawMetadata( void ) {
 	}
 	const uint32_t draw_count = ( uint32_t )( m_geometryArena.m_meshCache.getSurfaceCount() );
 	const uint64_t bytes64 = ( uint64_t )( draw_count ) * sizeof( t3dInstanceDrawMeta_t );
-	if ( bytes64 > m_commandTable.m_nDrawMetadataCapacityBytes || m_uploadState.m_drawMetadataBytes.size() < ( int64_t )( bytes64 ) ) {
+	if ( bytes64 > m_commandTable.m_hDrawMetadataBuffer.capacityBytes() || m_uploadState.m_drawMetadataBytes.size() < ( int64_t )( bytes64 ) ) {
 		setError( "RD P32 fixed draw metadata exceeded publication-time capacity" );
 		return false;
 	}
@@ -3522,8 +3289,7 @@ bool Terrain3DRdInstanceRenderer::uploadFixedDrawMetadata( void ) {
 		memcpy( pBytes + draw_slot * sizeof( metadata ), &metadata, sizeof( metadata ) );
 	}
 	const uint32_t bytes = ( uint32_t )( bytes64 );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked( m_commandTable.m_hDrawMetadataBuffer, 0u, bytes, m_uploadState.m_drawMetadataBytes )
-	        != OK ) {
+	if ( !m_commandTable.m_hDrawMetadataBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_drawMetadataBytes, bytes, T3D_GPU_PUBLICATION ) ) {
 		setError( "RD P32 fixed draw metadata buffer_update failed" );
 		return false;
 	}
@@ -3551,12 +3317,11 @@ bool Terrain3DRdInstanceRenderer::buildGpuPacketTopology( const t3dRdInstanceSce
 	}
 	const uint64_t main_indirect_bytes64 = m_commandTable.m_drawPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
 	const uint64_t shadow_indirect_bytes64 = m_commandTable.m_shadowPackets.size() * sizeof( t3dRdIndexedIndirectCommand_t );
-	if ( main_indirect_bytes64 > m_commandTable.m_nIndirectCapacityBytes
-	        || shadow_indirect_bytes64 > m_commandTable.m_nShadowIndirectCapacityBytes ) {
+	if ( main_indirect_bytes64 > m_commandTable.m_mainIndirectSlice.m_nCapacityBytes
+	        || shadow_indirect_bytes64 > m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes ) {
 		setError( "RD GPU instance packet topology exceeded indirect capacity" );
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
 	const uint32_t main_indirect_bytes = ( uint32_t )main_indirect_bytes64;
 	const uint32_t shadow_indirect_bytes = ( uint32_t )shadow_indirect_bytes64;
 	for ( uint32_t i = 0u; i < ( uint32_t )m_commandTable.m_drawPackets.size(); ++i ) {
@@ -3570,12 +3335,11 @@ bool Terrain3DRdInstanceRenderer::buildGpuPacketTopology( const t3dRdInstanceSce
 		        sizeof( t3dRdIndexedIndirectCommand_t ) );
 	}
 	if ( main_indirect_bytes > 0u
-	        && Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_INDIRECT ).updatePacked( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nMainIndirectOffsetBytes, main_indirect_bytes, m_uploadState.m_indirectBytes ) != OK ) {
+	        && !m_commandTable.m_hIndirectBuffer.writePackedSliceTracked( m_context, m_commandTable.m_mainIndirectSlice, 0u, m_uploadState.m_indirectBytes, main_indirect_bytes, T3D_GPU_INDIRECT ) ) {
 		return false;
 	}
 	if ( shadow_indirect_bytes > 0u
-	        && Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_INDIRECT ).updatePacked( m_commandTable.m_hShadowIndirectBuffer, m_commandTable.m_nShadowIndirectOffsetBytes, shadow_indirect_bytes, m_uploadState.m_shadowIndirectBytes )
-	                != OK ) {
+	        && !m_commandTable.m_hIndirectBuffer.writePackedSliceTracked( m_context, m_commandTable.m_shadowIndirectSlice, 0u, m_uploadState.m_shadowIndirectBytes, shadow_indirect_bytes, T3D_GPU_INDIRECT ) ) {
 		return false;
 	}
 	if ( !rebuildHiZRegionTopology( rScene ) || !uploadGpuCullDescriptors() ) {
@@ -3611,35 +3375,14 @@ bool Terrain3DRdInstanceRenderer::updateGpuCullDescriptorSpanDirty( const t3dRdI
 		return false;
 	}
 	const t3dRdInstanceCell_t &cell = rScene.m_cells[nCellIndex];
-	const Vector3 center = cell.m_bounds.get_center();
-	const Vector3 extent = cell.m_bounds.size * 0.5f;
 	for ( uint32_t i = 0u; i < span.m_nCount; ++i ) {
 		t3dRdInstanceCullDescriptor_t &descriptor = rDescriptors[span.m_nFirst + i];
-		descriptor.m_szBoundsCenter[0] = ( float )center.x;
-		descriptor.m_szBoundsCenter[1] = ( float )center.y;
-		descriptor.m_szBoundsCenter[2] = ( float )center.z;
-		descriptor.m_szBoundsExtent[0] = ( float )extent.x;
-		descriptor.m_szBoundsExtent[1] = ( float )extent.y;
-		descriptor.m_szBoundsExtent[2] = ( float )extent.z;
-		const Vector3 occlusion_center = cell.m_occlusionBounds.get_center();
-		const Vector3 occlusion_extent = cell.m_occlusionBounds.size * 0.5f;
-		descriptor.m_szOcclusionCenter[0] = ( float )occlusion_center.x;
-		descriptor.m_szOcclusionCenter[1] = ( float )occlusion_center.y;
-		descriptor.m_szOcclusionCenter[2] = ( float )occlusion_center.z;
-		descriptor.m_szOcclusionExtent[0] = ( float )occlusion_extent.x;
-		descriptor.m_szOcclusionExtent[1] = ( float )occlusion_extent.y;
-		descriptor.m_szOcclusionExtent[2] = ( float )occlusion_extent.z;
-		descriptor.m_nVisibilityLayers = cell.m_nVisibilityLayers;
-		descriptor.m_nFlags = cell.m_nFlags;
-		descriptor.m_fLodBegin = bShadow ? 0.0f : cell.m_fLodBegin;
-		descriptor.m_fLodEnd = bShadow ? 0.0f : cell.m_fLodEnd;
+		t3dRdFillInstanceCullDescriptorCellState( descriptor, cell, bShadow );
 	}
 	const uint32_t bytes = span.m_nCount * sizeof( t3dRdInstanceCullDescriptor_t );
 	memcpy( m_uploadState.m_instanceCullDescriptorBytes.ptrw(), rDescriptors.data() + span.m_nFirst, bytes );
 	const uint32_t byte_offset = ( nDescriptorBase + span.m_nFirst ) * sizeof( t3dRdInstanceCullDescriptor_t );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_DIRTY_UPLOAD ).updatePacked(
-	             m_visibility.m_hInstanceCullDescriptorBuffer, byte_offset, bytes, m_uploadState.m_instanceCullDescriptorBytes )
-	        != OK ) {
+	if ( !m_visibility.m_hInstanceCullDescriptorBuffer.writePackedTracked( m_context, byte_offset, m_uploadState.m_instanceCullDescriptorBytes, bytes, T3D_GPU_DIRTY_UPLOAD ) ) {
 		return false;
 	}
 	rUploadedBytes += bytes;
@@ -3717,7 +3460,7 @@ bool Terrain3DRdInstanceRenderer::rebuildHiZRegionTopology( const t3dRdInstanceS
 
 bool Terrain3DRdInstanceRenderer::uploadHiZRegionDescriptors( void ) {
 	const uint64_t bytes64 = m_visibility.m_instanceHiZRegionDescriptors.size() * sizeof( t3dRdInstanceHiZRegionDescriptor_t );
-	if ( bytes64 > m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes ) {
+	if ( bytes64 > m_visibility.m_hInstanceHiZRegionDescriptorBuffer.capacityBytes() ) {
 		setError( "RD instance Hi-Z region descriptors exceeded fixed GPU capacity" );
 		return false;
 	}
@@ -3726,9 +3469,7 @@ bool Terrain3DRdInstanceRenderer::uploadHiZRegionDescriptors( void ) {
 		return true;
 	}
 	memcpy( m_uploadState.m_instanceHiZRegionDescriptorBytes.ptrw(), m_visibility.m_instanceHiZRegionDescriptors.data(), bytes );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked(
-	             m_visibility.m_hInstanceHiZRegionDescriptorBuffer, 0u, bytes, m_uploadState.m_instanceHiZRegionDescriptorBytes )
-	        != OK ) {
+	if ( !m_visibility.m_hInstanceHiZRegionDescriptorBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_instanceHiZRegionDescriptorBytes, bytes, T3D_GPU_PUBLICATION ) ) {
 		return false;
 	}
 	return true;
@@ -3814,7 +3555,7 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	const uint32_t main_count = ( uint32_t )m_visibility.m_instanceCullDescriptors.size();
 	const uint32_t shadow_count = ( uint32_t )m_visibility.m_shadowInstanceCullDescriptors.size();
 	const uint64_t total_bytes64 = ( uint64_t )( main_count + shadow_count ) * sizeof( t3dRdInstanceCullDescriptor_t );
-	if ( total_bytes64 > m_visibility.m_nInstanceCullDescriptorCapacityBytes ) {
+	if ( total_bytes64 > m_visibility.m_hInstanceCullDescriptorBuffer.capacityBytes() ) {
 		setError( "RD instance cull descriptors exceeded publication-time capacity" );
 		return false;
 	}
@@ -3831,9 +3572,7 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	}
 	RenderingDevice *const rd = m_context.getDevice();
 	if ( total_bytes > 0u
-	        && Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_PUBLICATION ).updatePacked(
-	                   m_visibility.m_hInstanceCullDescriptorBuffer, 0u, total_bytes, m_uploadState.m_instanceCullDescriptorBytes )
-	                != OK ) {
+	        && !m_visibility.m_hInstanceCullDescriptorBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_instanceCullDescriptorBytes, total_bytes, T3D_GPU_PUBLICATION ) ) {
 		return false;
 	}
 	if ( !uploadHiZRegionDescriptors() ) {
@@ -3851,7 +3590,7 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 4, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hShadowVisibleIndexBuffer ) );
 	uniforms.push_back(
-	        Terrain3DRdBindingBuilder::single( 5, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_commandTable.m_hShadowIndirectBuffer ) );
+	        Terrain3DRdBindingBuilder::single( 5, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_commandTable.m_hIndirectBuffer ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 6, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_uploadState.m_hInstanceBuffer ) );
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::samplerTexture( 7, m_visibility.m_instanceHiZ.getSampler(), m_visibility.m_instanceHiZ.getTexture() ) );
@@ -3867,8 +3606,8 @@ bool Terrain3DRdInstanceRenderer::uploadGpuCullDescriptors( void ) {
 	        Terrain3DRdBindingBuilder::single( 12, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hVisibleLayerBuffer ) );
 	uniforms.push_back(
 	        Terrain3DRdBindingBuilder::single( 13, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_visibility.m_hShadowVisibleLayerBuffer ) );
-	m_visibility.m_hInstanceCullUniformSet = m_instanceCullDescriptors.getOrCreate( m_visibility.m_hInstanceCullShader,
-	        "T3D.Instance.CullUniformSet", uniforms, m_visibility.m_hInstanceCullShader, 0u );
+	m_visibility.m_hInstanceCullUniformSet = m_instanceCullDescriptors.getOrCreate( m_visibility.m_hInstanceCullShader.rid(),
+	        "T3D.Instance.CullUniformSet", uniforms, m_visibility.m_hInstanceCullShader.rid(), 0u );
 	if ( !m_visibility.m_hInstanceCullUniformSet.is_valid() ) {
 		setError( "Failed to create Terrain3D instance cull uniform set" );
 		return false;
@@ -3896,8 +3635,8 @@ bool Terrain3DRdInstanceRenderer::dispatchInstanceCull(
 	push.m_nVisibilityMask = nVisibilityMask;
 	push.m_nViewCount = CLAMP( nViewCount, 1u, s_nRdForwardMaxViews );
 	push.m_nShadowPass = bShadowPass ? 1u : 0u;
-	push.m_nMainCommandBase = m_commandTable.m_nMainIndirectOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
-	push.m_nShadowCommandBase = m_commandTable.m_nShadowIndirectOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
+	push.m_nMainCommandBase = m_commandTable.m_mainIndirectSlice.m_nOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
+	push.m_nShadowCommandBase = m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes / sizeof( t3dRdIndexedIndirectCommand_t );
 #if T3D_INSTANCER_HIZ_OCCLUSION
 	push.m_nHiZEnabled = bAllowHiZ && !bShadowPass && push.m_nViewCount == 1u && m_visibility.m_bHiZReadyForFrame ? 1u : 0u;
 	push.m_nHiZWidth = push.m_nHiZEnabled ? m_visibility.m_instanceHiZ.getWidth() : 0u;
@@ -3992,10 +3731,12 @@ bool Terrain3DRdInstanceRenderer::compareGpuCpuInstanceCulling( const t3dRdInsta
 	        bShadowPass ? m_visibility.m_shadowInstanceCullCellSpans : m_visibility.m_instanceCullCellSpans;
 	const eastl::vector<t3dRdInstanceDrawPacket_t, Terrain3DEastlAllocator> &packets =
 	        bShadowPass ? m_commandTable.m_shadowPackets : m_commandTable.m_drawPackets;
-	const RID visible_buffer = bShadowPass ? m_visibility.m_hShadowVisibleIndexBuffer : m_visibility.m_hVisibleIndexBuffer;
-	const RID indirect_buffer = bShadowPass ? m_commandTable.m_hShadowIndirectBuffer : m_commandTable.m_hIndirectBuffer;
-	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews || !visible_buffer.is_valid()
-	        || !indirect_buffer.is_valid() || rScene.m_cells.size() > spans.size()
+	const Terrain3DRdGpuBuffer &visible_buffer =
+	        bShadowPass ? m_visibility.m_hShadowVisibleIndexBuffer : m_visibility.m_hVisibleIndexBuffer;
+	const t3dRdGpuBufferSlice_t &indirect_slice =
+	        bShadowPass ? m_commandTable.m_shadowIndirectSlice : m_commandTable.m_mainIndirectSlice;
+	if ( !pViewProjections || nViewCount == 0u || nViewCount > s_nRdForwardMaxViews || !visible_buffer.isValid()
+	        || !indirect_slice.m_hBuffer.is_valid() || rScene.m_cells.size() > spans.size()
 	        || packets.size() > m_visibility.m_cullParityCommandCounts.size()
 	        || packets.size() > m_visibility.m_cullParityCommandWriteOffsets.size() ) {
 		++m_visibility.m_nCullParityMismatches;
@@ -4080,7 +3821,7 @@ bool Terrain3DRdInstanceRenderer::compareGpuCpuInstanceCulling( const t3dRdInsta
 
 	t3dRdInstanceFrustum_t frustums[s_nRdForwardMaxViews];
 	for ( uint32_t view = 0u; view < nViewCount; ++view ) {
-		frustums[view] = t3dRdInstanceExtractFrustum( pViewProjections[view] );
+		frustums[view] = t3dRdExtractFrustum( pViewProjections[view] );
 	}
 	for ( size_t iPacket = 0u; iPacket < packets.size(); ++iPacket ) {
 		m_visibility.m_cullParityCommandCounts[iPacket] = 0u;
@@ -4152,10 +3893,8 @@ bool Terrain3DRdInstanceRenderer::compareGpuCpuInstanceCulling( const t3dRdInsta
 		}
 	}
 
-	RenderingDevice *const rd = m_context.getDevice();
 	const uint32_t indirect_bytes = ( uint32_t )( packets.size() * sizeof( t3dRdIndexedIndirectCommand_t ) );
-	const PackedByteArray gpu_indirect = rd->buffer_get_data( indirect_buffer,
-	        bShadowPass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes, indirect_bytes );
+	const PackedByteArray gpu_indirect = m_commandTable.m_hIndirectBuffer.readbackSliceTracked( m_context, indirect_slice, 0u, indirect_bytes );
 	m_visibility.m_nCullParityReadbackBytes += indirect_bytes;
 	if ( gpu_indirect.size() != ( int64_t )indirect_bytes ) {
 		++m_visibility.m_nCullParityMismatches;
@@ -4182,7 +3921,7 @@ bool Terrain3DRdInstanceRenderer::compareGpuCpuInstanceCulling( const t3dRdInsta
 	}
 	const uint32_t visible_bytes = visible_read_count * sizeof( uint32_t );
 	if ( visible_bytes > 0u ) {
-		const PackedByteArray gpu_visible = rd->buffer_get_data( visible_buffer, 0u, visible_bytes );
+		const PackedByteArray gpu_visible = visible_buffer.readbackTracked( m_context, 0u, visible_bytes );
 		m_visibility.m_nCullParityReadbackBytes += visible_bytes;
 		if ( gpu_visible.size() != ( int64_t )visible_bytes || visible_read_count > m_visibility.m_cullParityActualIndices.size() ) {
 			++m_visibility.m_nCullParityMismatches;
@@ -4232,8 +3971,10 @@ void Terrain3DRdInstanceRenderer::freeViewState( t3dRdInstanceViewState_t &rStat
 		m_viewPipelines.erase( pipeline );
 		pipeline = RID();
 	}
-	m_context.freeResource( rState.m_hFramebuffer );
-	rState = t3dRdInstanceViewState_t{};
+	rState.m_hFramebuffer.releaseTracked( m_context );
+	rState.m_hColor = RID();
+	rState.m_hDepth = RID();
+	rState.m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
 }
 
 bool Terrain3DRdInstanceRenderer::ensureViewState(
@@ -4247,7 +3988,7 @@ bool Terrain3DRdInstanceRenderer::ensureViewState(
 		const RID &pipeline = ( state.m_szPipeline )[iPipeline];
 		pipelines_valid = pipelines_valid && pipeline.is_valid();
 	}
-	if ( state.m_hFramebuffer.is_valid() && pipelines_valid && state.m_hColor == rColor && state.m_hDepth == rDepth
+	if ( state.m_hFramebuffer.isValid() && pipelines_valid && state.m_hColor == rColor && state.m_hDepth == rDepth
 	        && state.m_samples == samples ) {
 		return true;
 	}
@@ -4268,10 +4009,7 @@ bool Terrain3DRdInstanceRenderer::ensureViewState(
 	attachments.push_back( rColor );
 	attachments.push_back( rDepth );
 	const String framebuffer_name = String( "T3D.Instance.Framebuffer." ) + String::num_int64( nView );
-	if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_INSTANCES )
-	                    .create( state.m_hFramebuffer, framebuffer_name, Terrain3DRdContext::RESOURCE_FRAMEBUFFER,
-	                            Terrain3DRdContext::MEMORY_NONE, 0u,
-	                            [&]( RenderingDevice *pRd ) { return pRd->framebuffer_create( attachments, -1, 1u ); } ) ) {
+	if ( !state.m_hFramebuffer.createTracked( m_context, Terrain3DRdContext::OWNER_INSTANCES, framebuffer_name, attachments ) ) {
 		m_context.endResourceRebuild();
 		setError( String( "RD instance framebuffer creation or registration failed; view=" ) + String::num_int64( nView ) );
 		return false;
@@ -4339,8 +4077,8 @@ bool Terrain3DRdInstanceRenderer::ensureViewState(
 		const String pipeline_name =
 		        String( "T3D.Instance.Pipeline." ) + String::num_int64( nView ) + "." + String::num_int64( pipeline_index );
 		state.m_szPipeline[pipeline_index] = m_viewPipelines.getOrCreateRaster( nView * 9u + pipeline_index,
-		        pipeline_name, m_hShader,
-		        rd->framebuffer_get_format( state.m_hFramebuffer ),
+		        pipeline_name, m_hShader.rid(),
+		        state.m_hFramebuffer.format( rd ),
 		        m_geometryArena.m_meshCache.getVertexFormat(),
 		        RenderingDevice::RENDER_PRIMITIVE_TRIANGLES,
 		        raster,
@@ -4438,7 +4176,7 @@ bool Terrain3DRdInstanceRenderer::drawPacket( const int64_t nDrawList,
 	pRd->draw_list_draw_indirect( nDrawList,
 	        true,
 	        m_commandTable.m_hIndirectBuffer,
-	        m_commandTable.m_nMainIndirectOffsetBytes + nPacket * sizeof( t3dRdIndexedIndirectCommand_t ),
+	        m_commandTable.m_mainIndirectSlice.m_nOffsetBytes + nPacket * sizeof( t3dRdIndexedIndirectCommand_t ),
 	        1u,
 	        sizeof( t3dRdIndexedIndirectCommand_t ) );
 	m_context.recordRenderIndirectCommandsSubmitted( Terrain3DRdContext::OWNER_INSTANCES, 1u );
@@ -4474,7 +4212,7 @@ bool Terrain3DRdInstanceRenderer::drawView(
 		setError( "RD instance draw lost the RenderingDevice" );
 		return false;
 	}
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_HOT_FRAME ).updatePacked( m_uploadState.m_hFrameBuffer, 0u, sizeof( frame ), m_uploadState.m_frameBytes ) != OK ) {
+	if ( !m_uploadState.m_hFrameBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_frameBytes, sizeof( frame ), T3D_GPU_HOT_FRAME ) ) {
 		setError( "RD instance frame buffer_update failed" );
 		return false;
 	}
@@ -4490,8 +4228,8 @@ bool Terrain3DRdInstanceRenderer::drawView(
 		clear_colors.push_back( Color( 0.0f, 0.0f, 0.0f, 0.0f ) );
 	}
 	const int64_t list = m_bPreviewClear
-	        ? rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL, clear_colors, 1.0f )
-	        : rd->draw_list_begin( state.m_hFramebuffer, RenderingDevice::DRAW_DEFAULT_ALL );
+	        ? rd->draw_list_begin( state.m_hFramebuffer.rid(), RenderingDevice::DRAW_DEFAULT_ALL, clear_colors, 1.0f )
+	        : rd->draw_list_begin( state.m_hFramebuffer.rid(), RenderingDevice::DRAW_DEFAULT_ALL );
 	if ( list == RenderingDevice::INVALID_ID ) {
 		setError( "RD instance draw-list creation failed" );
 		return false;
@@ -4643,64 +4381,50 @@ void Terrain3DRdInstanceRenderer::shutdown( void ) {
 	m_forwardLighting.shutdown();
 	freeForwardPipelines();
 	freeMaterialVtUniformSets( false );
-	m_context.freeResource( m_descriptorState.m_hVtSampler );
+	m_descriptorState.m_hVtSampler.releaseTracked( m_context );
 	freeOccluderDepthResources();
 	m_targetPool.clear();
 	m_geometryArena.m_meshCache.shutdown();
 	m_instanceSet0Descriptors.erase( m_descriptorState.m_hUniformSet );
 	m_descriptorState.m_hUniformSet = RID();
 	freeForwardUniformSets();
-	m_context.freeResource( m_uploadState.m_hFrameBuffer, sizeof( t3dRdInstanceFrame_t ) );
-	m_context.freeResource( m_uploadState.m_hInstanceBuffer, m_uploadState.m_nInstanceCapacityBytes );
-	m_context.freeResource( m_uploadState.m_hPreviousInstanceBuffer, m_uploadState.m_nPreviousInstanceCapacityBytes );
-	m_context.freeResource( m_visibility.m_hVisibleIndexBuffer, m_visibility.m_nVisibleCapacityBytes );
-	m_context.freeResource( m_visibility.m_hShadowVisibleIndexBuffer, m_visibility.m_nShadowVisibleCapacityBytes );
-	m_context.freeResource( m_visibility.m_hVisibleDrawSlotBuffer, m_visibility.m_nVisibleDrawSlotCapacityBytes );
-	m_context.freeResource( m_visibility.m_hShadowVisibleDrawSlotBuffer, m_visibility.m_nShadowVisibleDrawSlotCapacityBytes );
-	m_context.freeResource( m_visibility.m_hVisibleLayerBuffer, m_visibility.m_nVisibleLayerCapacityBytes );
-	m_context.freeResource( m_visibility.m_hShadowVisibleLayerBuffer, m_visibility.m_nShadowVisibleLayerCapacityBytes );
-	m_context.freeResource( m_commandTable.m_hDrawMetadataBuffer, m_commandTable.m_nDrawMetadataCapacityBytes );
-	m_context.freeResource( m_uploadState.m_hMaterialBuffer, m_uploadState.m_nMaterialCapacityBytes );
-	m_context.freeResource( m_commandTable.m_hIndirectBuffer, m_commandTable.m_nIndirectArenaCapacityBytes );
-	m_commandTable.m_hShadowIndirectBuffer = RID();
+	m_uploadState.m_hFrameBuffer.releaseTracked( m_context );
+	m_uploadState.m_hInstanceBuffer.releaseTracked( m_context );
+	m_uploadState.m_hPreviousInstanceBuffer.releaseTracked( m_context );
+	m_visibility.m_hVisibleIndexBuffer.releaseTracked( m_context );
+	m_visibility.m_hShadowVisibleIndexBuffer.releaseTracked( m_context );
+	m_visibility.m_hVisibleDrawSlotBuffer.releaseTracked( m_context );
+	m_visibility.m_hShadowVisibleDrawSlotBuffer.releaseTracked( m_context );
+	m_visibility.m_hVisibleLayerBuffer.releaseTracked( m_context );
+	m_visibility.m_hShadowVisibleLayerBuffer.releaseTracked( m_context );
+	m_commandTable.m_hDrawMetadataBuffer.releaseTracked( m_context );
+	m_uploadState.m_hMaterialBuffer.releaseTracked( m_context );
+	m_commandTable.m_hIndirectBuffer.releaseTracked( m_context );
+	m_commandTable.m_mainIndirectSlice = {};
+	m_commandTable.m_shadowIndirectSlice = {};
 	m_instanceCullDescriptors.erase( m_visibility.m_hInstanceCullUniformSet );
 	m_visibility.m_hInstanceCullUniformSet = RID();
 	m_visibility.m_instanceHiZ.shutdown();
-	m_context.freeResource( m_visibility.m_hInstanceCullDescriptorBuffer, m_visibility.m_nInstanceCullDescriptorCapacityBytes );
-	m_context.freeResource( m_visibility.m_hInstanceHiZRegionDescriptorBuffer, m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes );
-	m_context.freeResource( m_visibility.m_hInstanceHiZRegionVisibilityBuffer, m_visibility.m_nInstanceHiZRegionVisibilityCapacityBytes );
+	m_visibility.m_hInstanceCullDescriptorBuffer.releaseTracked( m_context );
+	m_visibility.m_hInstanceHiZRegionDescriptorBuffer.releaseTracked( m_context );
+	m_visibility.m_hInstanceHiZRegionVisibilityBuffer.releaseTracked( m_context );
 	m_instanceCullPipelines.clear();
 	m_visibility.m_hInstanceCullPipeline = RID();
-	m_context.freeResource( m_visibility.m_hInstanceCullShader );
+	m_visibility.m_hInstanceCullShader.releaseTracked( m_context );
 	m_hlodCullDescriptors.erase( m_visibility.m_hHlodCullUniformSet );
 	m_visibility.m_hHlodCullUniformSet = RID();
-	m_context.freeResource( m_visibility.m_hHlodCullDescriptorBuffer, m_visibility.m_nHlodDescriptorCapacityBytes );
+	m_visibility.m_hHlodCullDescriptorBuffer.releaseTracked( m_context );
 	m_hlodCullPipelines.clear();
 	m_visibility.m_hHlodCullPipeline = RID();
-	m_context.freeResource( m_visibility.m_hHlodCullShader );
+	m_visibility.m_hHlodCullShader.releaseTracked( m_context );
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++variant ) {
-		m_context.freeResource( m_hszForwardShaders[variant] );
+		m_hszForwardShaders[variant].releaseTracked( m_context );
 	}
-	m_context.freeResource( m_hShader );
-	for ( size_t iShader = 0u; iShader < T3D_ARRAY_COUNT( m_hszForwardShaders ); iShader++ ) {
-		RID &shader = ( m_hszForwardShaders )[iShader];
-		shader = RID();
-	}
+	m_hShader.releaseTracked( m_context );
 	m_forwardShaderBundle = t3dRdForwardShaderBundle_t{};
 	m_visibility.m_hlodCullSourceShader.unref();
 	m_visibility.m_instanceCullSourceShader.unref();
 	m_visibility.m_instanceHiZReduceSourceShader.unref();
-	m_uploadState.m_nInstanceCapacityBytes = m_uploadState.m_nPreviousInstanceCapacityBytes = m_visibility.m_nVisibleCapacityBytes =
-	        m_visibility.m_nShadowVisibleCapacityBytes = 0u;
-	m_visibility.m_nVisibleDrawSlotCapacityBytes = m_visibility.m_nShadowVisibleDrawSlotCapacityBytes = 0u;
-	m_visibility.m_nVisibleLayerCapacityBytes = m_visibility.m_nShadowVisibleLayerCapacityBytes =
-	        m_commandTable.m_nDrawMetadataCapacityBytes = 0u;
-	m_uploadState.m_nMaterialCapacityBytes = m_commandTable.m_nIndirectCapacityBytes = m_commandTable.m_nShadowIndirectCapacityBytes = 0u;
-	m_commandTable.m_nIndirectArenaCapacityBytes = m_commandTable.m_nMainIndirectOffsetBytes = m_commandTable.m_nShadowIndirectOffsetBytes = 0u;
-	m_visibility.m_nHlodDescriptorCapacityBytes = 0u;
-	m_visibility.m_nInstanceCullDescriptorCapacityBytes = 0u;
-	m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes = 0u;
-	m_visibility.m_nInstanceHiZRegionVisibilityCapacityBytes = 0u;
 	m_visibility.m_nHiZBuildRenderFrame = UINT64_MAX;
 	m_visibility.m_nHiZBuildViewportKey = 0u;
 	m_visibility.m_bHiZReadyForFrame = false;
@@ -4940,8 +4664,8 @@ bool Terrain3DRdInstanceRenderer::renderPreviewToTarget(
 	AABB centered = source_bounds;
 	centered.position -= center;
 	Transform3D xform;
-	xform.basis = Basis().rotated( Vector3( 0.0f, 1.0f, 0.0f ), -Math_PI * 0.125f );
-	xform.basis = Basis().rotated( Vector3( 1.0f, 0.0f, 0.0f ), Math_PI * 0.125f ) * xform.basis;
+	xform.basis = Basis().rotated( Vector3( 0.0f, 1.0f, 0.0f ), -Math::PI * 0.125f );
+	xform.basis = Basis().rotated( Vector3( 1.0f, 0.0f, 0.0f ), Math::PI * 0.125f ) * xform.basis;
 	const AABB rotated = xform.xform( centered );
 	float extent = ( float )( MAX( rotated.size.x, rotated.size.y ) );
 	if ( extent <= 0.0001f ) {
@@ -4960,7 +4684,7 @@ bool Terrain3DRdInstanceRenderer::renderPreviewToTarget(
 		setError( "RD editor preview instance scratch allocation failed" );
 		return false;
 	}
-	scene.m_instances[0] = t3dRdPreviewInstanceRecord( xform );
+	scene.m_instances[0] = t3dRdPackInstanceRecord( xform );
 	t3dRdInstanceCell_t cell;
 	cell.m_nMeshSourceKey = t3dRdRegularMeshSourceKey( nAssetId, 0 );
 	cell.m_nMeshAssetId = nAssetId;
@@ -5021,12 +4745,11 @@ bool Terrain3DRdInstanceRenderer::renderPreviewToTarget(
 }
 
 bool Terrain3DRdInstanceRenderer::schedulePreviewReadback( const Callable &rCallback ) {
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd || !m_hPreviewColorTexture.is_valid() || !rCallback.is_valid() ) {
+	if ( !m_context.getDevice() || !m_hPreviewColorTexture.is_valid() || !rCallback.is_valid() ) {
 		setError( "RD editor preview async readback prerequisites are unavailable" );
 		return false;
 	}
-	const Error error = rd->texture_get_data_async( m_hPreviewColorTexture, 0u, rCallback );
+	const Error error = m_targetPool.readbackAsync( m_hPreviewColorTexture, 0u, rCallback );
 	if ( error != OK ) {
 		setError( String( "RD editor preview async readback scheduling failed: " ) + String::num_int64( ( int64_t )error ) );
 		return false;
@@ -5040,12 +4763,11 @@ bool Terrain3DRdInstanceRenderer::renderPreview(
 	if ( !renderPreviewToTarget( pMeshes, nAssetId, rSize ) ) {
 		return false;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd ) {
+	if ( !m_context.getDevice() ) {
 		setError( "RD editor preview readback lost the RenderingDevice" );
 		return false;
 	}
-	const PackedByteArray bytes = rd->texture_get_data( m_hPreviewColorTexture, 0u );
+	const PackedByteArray bytes = m_targetPool.readback( m_hPreviewColorTexture, 0u );
 	if ( bytes.size() != ( int64_t )( rSize.x ) * ( int64_t )( rSize.y ) * 4 ) {
 		setError( "RD editor preview readback size is invalid" );
 		return false;
@@ -5284,7 +5006,7 @@ bool Terrain3DRdInstanceRenderer::updateForwardFrameBuffer( const t3dRdForwardPa
 	frame.m_szMotionParams[2] = ( float )( rContext.m_nViewCount );
 	copyStylizedSunGlobals( frame.m_szNomadSunShape, frame.m_szNomadSunDiffuse, frame.m_szNomadSunSpecular, frame.m_szNomadSunRim );
 	memcpy( m_uploadState.m_frameBytes.ptrw(), &frame, sizeof( frame ) );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_HOT_FRAME ).updatePacked( m_uploadState.m_hFrameBuffer, 0u, sizeof( frame ), m_uploadState.m_frameBytes ) != OK ) {
+	if ( !m_uploadState.m_hFrameBuffer.writePackedTracked( m_context, 0u, m_uploadState.m_frameBytes, sizeof( frame ), T3D_GPU_HOT_FRAME ) ) {
 		setError( "Failed to update Terrain3D native Forward+ instance frame buffer" );
 		return false;
 	}
@@ -5421,7 +5143,7 @@ bool Terrain3DRdInstanceRenderer::prepareForwardLighting( const t3dRdForwardPass
 			m_forwardLighting.invalidateBorrowedState();
 		}
 		if ( !m_forwardLighting.prepare( rContext, nVisibilityMask )
-		        || !m_forwardLighting.ensureSet( m_hszForwardShaders[variant] ).is_valid() ) {
+		        || !m_forwardLighting.ensureSet( m_hszForwardShaders[variant].rid() ).is_valid() ) {
 			setError( "Failed to prepare Terrain3D Forward+ instance/HLOD native lighting" );
 			return false;
 		}
@@ -5467,7 +5189,7 @@ bool Terrain3DRdInstanceRenderer::prepareForwardPass( const t3dRdForwardPassCont
 		return false;
 	}
 	t3dRdForwardShaderVariant_t variant;
-	if ( !selectForwardVariant( rContext, variant ) ) {
+	if ( !t3dRdSelectForwardVariant( rContext, T3D_RD_FORWARD_VARIANT_ALLOW_TRANSPARENT, variant ) ) {
 		setError( String( "Terrain3D instance renderer does not support Forward+ pass/mode: pass=" )
 		        + String::num_int64( rContext.m_passKind ) + String( ", mode=" ) + String::num_int64( rContext.m_nativePassMode ) );
 		return false;
@@ -5558,7 +5280,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		return false;
 	}
 	t3dRdForwardShaderVariant_t variant;
-	if ( !selectForwardVariant( rContext, variant ) || variant != m_lastForwardPipelineKey.m_variant
+	if ( !t3dRdSelectForwardVariant( rContext, T3D_RD_FORWARD_VARIANT_ALLOW_TRANSPARENT, variant ) || variant != m_lastForwardPipelineKey.m_variant
 	        || rContext.m_nFramebufferFormat != m_lastForwardPipelineKey.m_nFramebufferFormat
 	        || rContext.m_nViewCount != m_lastForwardPipelineKey.m_nViewCount || rContext.m_passKind != m_lastForwardPipelineKey.m_passKind
 	        || rContext.m_bReverseCull != m_lastForwardPipelineKey.m_bReverseCull
@@ -5592,7 +5314,7 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 	rd->draw_list_bind_uniform_set( draw_list, material_vt_set, 1u );
 	++m_descriptorState.m_nVtDescriptorBindsInstancerPass;
 	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE || rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || transparent_pass ) {
-		const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[variant] );
+		const RID lighting_set = m_forwardLighting.getSet( m_hszForwardShaders[variant].rid() );
 		if ( !lighting_set.is_valid() ) {
 			return false;
 		}
@@ -5625,8 +5347,8 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		rd->draw_list_set_push_constant( draw_list, m_uploadState.m_pushBytes, sizeof( push ) );
 		rd->draw_list_draw_indirect( draw_list,
 		        true,
-		        shadow_pass ? m_commandTable.m_hShadowIndirectBuffer : m_commandTable.m_hIndirectBuffer,
-		        shadow_pass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes,
+		        shadow_pass ? m_commandTable.m_hIndirectBuffer : m_commandTable.m_hIndirectBuffer,
+		        shadow_pass ? m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes : m_commandTable.m_mainIndirectSlice.m_nOffsetBytes,
 		        compatible_command_count,
 		        sizeof( t3dRdIndexedIndirectCommand_t ) );
 		m_context.recordRenderIndirectCommandsSubmitted( Terrain3DRdContext::OWNER_INSTANCES, compatible_command_count );
@@ -5778,8 +5500,8 @@ bool Terrain3DRdInstanceRenderer::drawForwardView( const t3dRdForwardPassContext
 		if ( gpu_visibility ) {
 			rd->draw_list_draw_indirect( draw_list,
 			        true,
-			        shadow_pass ? m_commandTable.m_hShadowIndirectBuffer : m_commandTable.m_hIndirectBuffer,
-			        ( shadow_pass ? m_commandTable.m_nShadowIndirectOffsetBytes : m_commandTable.m_nMainIndirectOffsetBytes ) + i * sizeof( t3dRdIndexedIndirectCommand_t ),
+			        shadow_pass ? m_commandTable.m_hIndirectBuffer : m_commandTable.m_hIndirectBuffer,
+			        ( shadow_pass ? m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes : m_commandTable.m_mainIndirectSlice.m_nOffsetBytes ) + i * sizeof( t3dRdIndexedIndirectCommand_t ),
 			        1u,
 			        sizeof( t3dRdIndexedIndirectCommand_t ) );
 			m_context.recordRenderIndirectCommandsSubmitted( Terrain3DRdContext::OWNER_INSTANCES, 1u );
@@ -5942,8 +5664,8 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_dirty_upload_bytes"] = ( int64_t )m_context.getRenderUploadBytes(
 	        Terrain3DRdContext::OWNER_INSTANCES, T3D_GPU_DIRTY_UPLOAD );
 	result["instance_dirty_upload_ranges"] = ( int64_t )m_context.getRenderDirtyRangesUploaded( Terrain3DRdContext::OWNER_INSTANCES );
-	result["instance_buffer_capacity_bytes"] = ( int64_t )( m_uploadState.m_nInstanceCapacityBytes );
-	result["previous_instance_buffer_capacity_bytes"] = ( int64_t )( m_uploadState.m_nPreviousInstanceCapacityBytes );
+	result["instance_buffer_capacity_bytes"] = ( int64_t )( m_uploadState.m_hInstanceBuffer.capacityBytes() );
+	result["previous_instance_buffer_capacity_bytes"] = ( int64_t )( m_uploadState.m_hPreviousInstanceBuffer.capacityBytes() );
 	result["motion_history_resets"] = ( int64_t )( m_uploadState.m_nMotionHistoryResets );
 	result["motion_history_matches"] = ( int64_t )( m_uploadState.m_nMotionHistoryMatches );
 	result["owner_buffer_capacity_misses"] = ( int64_t )( m_uploadState.m_nBufferCapacityMissCount );
@@ -5965,13 +5687,13 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["mesh_index32_used_bytes"] = ( int64_t )( m_geometryArena.m_meshCache.getIndex32UsedBytes() );
 	result["mesh_index32_capacity_bytes"] = ( int64_t )( m_geometryArena.m_meshCache.getIndex32CapacityBytes() );
 	result["motion_debug_enabled"] = m_bMotionDebug;
-	result["visible_index_capacity_bytes"] = ( int64_t )( m_visibility.m_nVisibleCapacityBytes );
-	result["shadow_visible_index_capacity_bytes"] = ( int64_t )( m_visibility.m_nShadowVisibleCapacityBytes );
-	result["indirect_capacity_bytes"] = ( int64_t )( m_commandTable.m_nIndirectCapacityBytes );
-	result["shadow_indirect_capacity_bytes"] = ( int64_t )( m_commandTable.m_nShadowIndirectCapacityBytes );
-	result["indirect_arena_capacity_bytes"] = ( int64_t )( m_commandTable.m_nIndirectArenaCapacityBytes );
-	result["main_indirect_offset_bytes"] = ( int64_t )( m_commandTable.m_nMainIndirectOffsetBytes );
-	result["shadow_indirect_offset_bytes"] = ( int64_t )( m_commandTable.m_nShadowIndirectOffsetBytes );
+	result["visible_index_capacity_bytes"] = ( int64_t )( m_visibility.m_hVisibleIndexBuffer.capacityBytes() );
+	result["shadow_visible_index_capacity_bytes"] = ( int64_t )( m_visibility.m_hShadowVisibleIndexBuffer.capacityBytes() );
+	result["indirect_capacity_bytes"] = ( int64_t )( m_commandTable.m_mainIndirectSlice.m_nCapacityBytes );
+	result["shadow_indirect_capacity_bytes"] = ( int64_t )( m_commandTable.m_shadowIndirectSlice.m_nCapacityBytes );
+	result["indirect_arena_capacity_bytes"] = ( int64_t )( m_commandTable.m_hIndirectBuffer.capacityBytes() );
+	result["main_indirect_offset_bytes"] = ( int64_t )( m_commandTable.m_mainIndirectSlice.m_nOffsetBytes );
+	result["shadow_indirect_offset_bytes"] = ( int64_t )( m_commandTable.m_shadowIndirectSlice.m_nOffsetBytes );
 	result["instance_mesh_arena_bytes"] = ( int64_t )( m_geometryArena.m_meshCache.getGpuBytes() );
 	result["instance_material_textures"] = ( int64_t )( 0 );
 	result["instance_material_bindings"] = 0;
@@ -5994,9 +5716,9 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	                        ? m_commandTable.m_shadowPackets.size() - m_commandTable.m_nShadowCompatibleCommandCount
 	                        : 0u );
 	result["instance_one_submit_fixed_visible_capacity"] = ( int64_t )( m_visibility.m_nFixedVisibleCapacity );
-	result["instance_draw_metadata_capacity_bytes"] = ( int64_t )( m_commandTable.m_nDrawMetadataCapacityBytes );
-	result["instance_visible_draw_slot_capacity_bytes"] = ( int64_t )( m_visibility.m_nVisibleDrawSlotCapacityBytes );
-	result["instance_shadow_visible_draw_slot_capacity_bytes"] = ( int64_t )( m_visibility.m_nShadowVisibleDrawSlotCapacityBytes );
+	result["instance_draw_metadata_capacity_bytes"] = ( int64_t )( m_commandTable.m_hDrawMetadataBuffer.capacityBytes() );
+	result["instance_visible_draw_slot_capacity_bytes"] = ( int64_t )( m_visibility.m_hVisibleDrawSlotBuffer.capacityBytes() );
+	result["instance_shadow_visible_draw_slot_capacity_bytes"] = ( int64_t )( m_visibility.m_hShadowVisibleDrawSlotBuffer.capacityBytes() );
 	result["instance_mesh_lods"] = ( int64_t )( m_geometryArena.m_meshCache.getLodCount() );
 	result["instance_mesh_surfaces"] = ( int64_t )( m_geometryArena.m_meshCache.getSurfaceCount() );
 	result["instance_mesh_materials"] = ( int64_t )( m_geometryArena.m_meshCache.getMaterialCount() );
@@ -6034,7 +5756,7 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_transparent_submitted_draws"] = ( int64_t )( m_commandTable.m_nTransparentSubmittedDraws );
 	result["hlod_gpu_cull_descriptors"] = ( int64_t )( m_visibility.m_nHlodCullDescriptors );
 	result["hlod_gpu_cull_dispatches"] = ( int64_t )( m_visibility.m_nHlodCullDispatches );
-	result["hlod_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_nHlodDescriptorCapacityBytes );
+	result["hlod_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_hHlodCullDescriptorBuffer.capacityBytes() );
 	result["instance_gpu_cull_dispatches"] = ( int64_t )( m_visibility.m_nInstanceCullDispatches );
 	result["instance_gpu_topology_builds"] = ( int64_t )( m_visibility.m_nGpuTopologyBuilds );
 	result["instance_gpu_cull_reuses"] = ( int64_t )( m_visibility.m_nGpuCullReuses );
@@ -6048,8 +5770,8 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_hiz_cell_descriptors"] = ( int64_t )( m_visibility.m_nHiZCellDescriptors );
 	result["instance_hiz_per_instance_descriptors"] = ( int64_t )( m_visibility.m_nHiZInstanceDescriptors );
 	result["instance_hiz_region_descriptors"] = ( int64_t )( m_visibility.m_instanceHiZRegionDescriptors.size() );
-	result["instance_hiz_region_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_nInstanceHiZRegionDescriptorCapacityBytes );
-	result["instance_hiz_region_visibility_capacity_bytes"] = ( int64_t )( m_visibility.m_nInstanceHiZRegionVisibilityCapacityBytes );
+	result["instance_hiz_region_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_hInstanceHiZRegionDescriptorBuffer.capacityBytes() );
+	result["instance_hiz_region_visibility_capacity_bytes"] = ( int64_t )( m_visibility.m_hInstanceHiZRegionVisibilityBuffer.capacityBytes() );
 	result["instance_hiz_width"] = ( int64_t )( m_visibility.m_instanceHiZ.getWidth() );
 	result["instance_hiz_height"] = ( int64_t )( m_visibility.m_instanceHiZ.getHeight() );
 	result["instance_hiz_mip_count"] = ( int64_t )( m_visibility.m_instanceHiZ.getMipCount() );
@@ -6063,7 +5785,7 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_cpu_reference_direct_submissions"] = ( int64_t )( m_commandTable.m_nCpuReferenceDirectSubmissions );
 	result["instance_gpu_cull_descriptors"] = ( int64_t )( m_visibility.m_instanceCullDescriptors.size() );
 	result["instance_gpu_shadow_cull_descriptors"] = ( int64_t )( m_visibility.m_shadowInstanceCullDescriptors.size() );
-	result["instance_gpu_cull_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_nInstanceCullDescriptorCapacityBytes );
+	result["instance_gpu_cull_descriptor_capacity_bytes"] = ( int64_t )( m_visibility.m_hInstanceCullDescriptorBuffer.capacityBytes() );
 	result["instance_cull_parity_enabled"] = m_visibility.m_bCullingComparisonEnabled;
 	result["instance_cull_parity_gpu_drives_draws"] = T3D_INSTANCER_GPU_CULL_PRODUCTION != 0 && !m_bDirectDrawDebug;
 	result["instance_cull_parity_comparisons"] = ( int64_t )( m_visibility.m_nCullParityComparisons );
@@ -6075,7 +5797,7 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_cull_parity_visible_instances"] = ( int64_t )( m_visibility.m_nCullParityVisibleInstances );
 	result["instance_cull_parity_shadow_visible_cells"] = ( int64_t )( m_visibility.m_nCullParityShadowVisibleCells );
 	result["instance_cull_parity_shadow_visible_instances"] = ( int64_t )( m_visibility.m_nCullParityShadowVisibleInstances );
-	result["instance_cull_parity_shader_instantiated"] = m_visibility.m_hInstanceCullShader.is_valid();
+	result["instance_cull_parity_shader_instantiated"] = m_visibility.m_hInstanceCullShader.isValid();
 	result["instance_cull_parity_validated_once"] = m_visibility.m_bCullParityValidatedOnce;
 	result["direct_draw_debug"] = m_bDirectDrawDebug;
 	result["instance_forward_prepared_has_draws"] = m_bForwardPreparedHasDraws;
@@ -6084,12 +5806,12 @@ Dictionary Terrain3DRdInstanceRenderer::getDiagnostics( void ) const {
 	result["instance_forward_pipeline_key_valid"] = m_bLastForwardPipelineKeyValid;
 	uint32_t forward_shader_mask = 0u;
 	for ( uint32_t variant = 0u; variant < T3D_RD_FORWARD_SHADER_VARIANT_MAX && variant < 32u; ++variant ) {
-		if ( m_hszForwardShaders[variant].is_valid() ) {
+		if ( m_hszForwardShaders[variant].isValid() ) {
 			forward_shader_mask |= 1u << variant;
 		}
 	}
 	result["instance_forward_shader_ready_mask"] = ( int64_t )forward_shader_mask;
-	result["hlod_cull_shader_instantiated"] = m_visibility.m_hHlodCullShader.is_valid();
+	result["hlod_cull_shader_instantiated"] = m_visibility.m_hHlodCullShader.isValid();
 	result["forward_lighting"] = m_forwardLighting.getDiagnostics();
 	result["last_error"] = m_lastError;
 	return result;

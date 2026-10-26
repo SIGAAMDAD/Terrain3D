@@ -69,6 +69,22 @@ bool Terrain3D::effectiveGpuRegionCacheEnabled( void ) const {
 	return t3dIsGpuPagingEffectivelyEnabled( m_bGpuRegionCacheEnabled );
 }
 
+void Terrain3D::reconfigureGpuRegionCache( void ) {
+	reconfigureGpuRegionCache( effectiveGpuRegionCacheEnabled() );
+}
+
+void Terrain3D::reconfigureGpuRegionCache( const bool bEnabled ) {
+	if ( !m_pData ) {
+		return;
+	}
+	m_pData->configureGpuRegionCache( bEnabled,
+	        m_nEffectiveGpuRegionCacheBudgetBytes,
+	        m_nGpuRegionUploadBudgetLayers,
+	        m_nGpuRegionUploadBudgetMb,
+	        m_nGpuRegionSparePages,
+	        m_nGpuRegionRetireFrames );
+}
+
 bool Terrain3D::effectiveCpuRegionCacheEnabled( void ) const {
 	return t3dIsStreamingEffectivelyEnabled( m_bCpuRegionCacheEnabled, IS_EDITOR, ( int )( m_editorExecutionMode ) );
 }
@@ -398,12 +414,7 @@ void Terrain3D::applyStreamingPolicy( const bool bForceResidency ) {
 		        m_nEffectiveInstanceRegionCacheBudgetMb,
 		        m_nInstanceRegionLoadBudgetPages,
 		        m_nInstanceRegionLoadBudgetMb );
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 		if ( m_bInitialized && bForceResidency ) {
 			const Vector3 target = getClipmapTargetPosition();
 			updateRegionStreamingPolicy( target, 0.0, true );
@@ -502,12 +513,7 @@ void Terrain3D::applyRuntimeTierLayout( const bool bForceFullSnap ) {
 		        m_nRuntimeNearShaderLods, m_nRuntimeMiddleShaderLods, m_nRuntimeClipmapUpdateBudget, bForceFullSnap );
 	}
 	if ( m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
-		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -599,12 +605,7 @@ void Terrain3D::setGpuRegionCacheEnabled( const bool bEnabled ) {
 		return;
 	}
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 		if ( m_bInitialized && effectiveGpuRegionCacheEnabled() ) {
 			m_pData->updateGpuRegionResidency( getClipmapTargetPosition(), false );
 		}
@@ -636,12 +637,7 @@ void Terrain3D::setGpuRegionCachePageLimit( const int nPages ) {
 	markMemoryBudgetDirty();
 	refreshPerformanceProfileConformity();
 	if ( m_bInitialized && m_pData && effectiveGpuRegionCacheEnabled() && !m_bDeferGpuRegionCacheReconfigure ) {
-		m_pData->configureGpuRegionCache( true,
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 		if ( m_bInitialized ) {
 			m_pData->updateGpuRegionResidency( getClipmapTargetPosition(), true );
 		}
@@ -656,12 +652,7 @@ void Terrain3D::setGpuRegionUploadBudgetLayers( const int nLayers ) {
 	m_nGpuRegionUploadBudgetLayers = layers;
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -673,12 +664,7 @@ void Terrain3D::setGpuRegionUploadBudgetMb( const int nBudgetMb ) {
 	m_nGpuRegionUploadBudgetMb = budget_mb;
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -690,12 +676,7 @@ void Terrain3D::setGpuRegionSparePages( const int nPages ) {
 	m_nGpuRegionSparePages = pages;
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -707,12 +688,7 @@ void Terrain3D::setGpuRegionRetireFrames( const int nFrames ) {
 	m_nGpuRegionRetireFrames = frames;
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -807,12 +783,7 @@ void Terrain3D::setGpuRegionColorResolutionDivisor( const int nDivisor ) {
 	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -825,12 +796,7 @@ void Terrain3D::setGpuRegionDerivedResolutionDivisor( const int nDivisor ) {
 	compileRuntimePageNumericConfig();
 	refreshPerformanceProfileConformity();
 	if ( m_pData ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -857,12 +823,7 @@ void Terrain3D::setEditorGpuRegionCachePages( const int nPages ) {
 	refreshPerformanceProfileConformity();
 	markMemoryBudgetDirty();
 	if ( m_pData && m_bInitialized && isEditorAuthoringMode() ) {
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 }
 
@@ -878,12 +839,7 @@ void Terrain3D::setGpuFarQualityDivisor( const int nDivisor ) {
 		// Far quality is a surface-quality control. Geometry follows the first Far
 		// mesh lattice and must remain stable while surface quality changes.
 		m_pData->invalidateGpuFarSurface();
-		m_pData->configureGpuRegionCache( effectiveGpuRegionCacheEnabled(),
-		        m_nEffectiveGpuRegionCacheBudgetBytes,
-		        m_nGpuRegionUploadBudgetLayers,
-		        m_nGpuRegionUploadBudgetMb,
-		        m_nGpuRegionSparePages,
-		        m_nGpuRegionRetireFrames );
+		reconfigureGpuRegionCache();
 	}
 	if ( m_material.is_valid() && m_material->isInitializedFor( this ) ) {
 		m_material->update( UNIFORMS_ONLY );

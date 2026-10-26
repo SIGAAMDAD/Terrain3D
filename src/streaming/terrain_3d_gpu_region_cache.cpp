@@ -1,11 +1,14 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "streaming/terrain_3d_region_residency_primitives.h"
 #include "streaming/terrain_3d_gpu_region_cache.h"
 #include "streaming/terrain_3d_scope_timer.h"
 
 #include "assets/terrain_3d_assets.h"
 #include "core/logger.h"
 #include "data/terrain_3d_map_edit_service.h"
+#include "data/terrain_3d_control_map_cooker.h"
+#include "data/terrain_3d_region_image_cooker.h"
 #include "data/terrain_3d_region.h"
 #include "data/terrain_3d_region_repository.h"
 #include "data/terrain_3d_sampling_storage.h"
@@ -16,6 +19,7 @@
 #include "rendering/terrain_3d_material.h"
 #include "streaming/terrain_3d_cpu_region_cache.h"
 #include "streaming/terrain_3d_runtime_page_store.h"
+#include "streaming/terrain_3d_region_candidate_collector.h"
 #include "terrain_3d.h"
 
 #include <EASTL/numeric_limits.h>
@@ -31,100 +35,13 @@
 static_assert( s_nGpuCacheMaxLayers <= ( int )( s_nTrackedBatchSlotCount ) );
 static_assert( s_nTrackedBatchUpdateCount >= 6u );
 
-typedef bool ( *t3dGpuRegionRingFn )( void *pContext, const Vector2i &rLocation );
 
-static bool t3dGpuRegionCacheForEachSquareRing(
-        const Vector2i &rCenter, const int nMaxRadius, t3dGpuRegionRingFn pCallback, void *const pContext ) {
-	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
-		if ( radius == 0 ) {
-			if ( !pCallback( pContext, rCenter ) ) {
-				return false;
-			}
-			continue;
-		}
-		for ( int x = -radius; x <= radius; ++x ) {
-			if ( !pCallback( pContext, rCenter + Vector2i( x, -radius ) ) || !pCallback( pContext, rCenter + Vector2i( x, radius ) ) ) {
-				return false;
-			}
-		}
-		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
-			if ( !pCallback( pContext, rCenter + Vector2i( -radius, y ) ) || !pCallback( pContext, rCenter + Vector2i( radius, y ) ) ) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
 
-typedef struct t3dControlCookSource_s {
-	PackedByteArray m_bytes;
-	bool m_bPresent = false;
-	bool m_bImplicit = true;
-} t3dControlCookSource_t;
 
-static bool t3dGpuRegionCacheReadCookControl(
-        const t3dControlCookSource_t ( &rSources )[9], const int iX, const int iZ, uint32_t &nControl ) {
-	int region_dx = 0;
-	int region_dz = 0;
-	int local_x = iX;
-	int local_z = iZ;
-	if ( local_x < 0 ) {
-		region_dx = -1;
-		local_x += s_nRegionSize;
-	} else if ( local_x >= s_nRegionSize ) {
-		region_dx = 1;
-		local_x -= s_nRegionSize;
-	}
-	if ( local_z < 0 ) {
-		region_dz = -1;
-		local_z += s_nRegionSize;
-	} else if ( local_z >= s_nRegionSize ) {
-		region_dz = 1;
-		local_z -= s_nRegionSize;
-	}
-	const t3dControlCookSource_t &source = rSources[( size_t )( ( region_dz + 1 ) * 3 + ( region_dx + 1 ) )];
-	if ( !source.m_bPresent ) {
-		return false;
-	}
-	if ( source.m_bImplicit ) {
-		nControl = s_nRegionDefaultControl;
-		return true;
-	}
-	const size_t offset = ( size_t )( local_z * s_nRegionSize + local_x ) * sizeof( uint32_t );
-	memcpy( &nControl, source.m_bytes.ptr() + offset, sizeof( uint32_t ) );
-	return true;
-}
 
-static uint32_t t3dGpuRegionCacheReadU32Unaligned( const uint8_t *pBytes, const size_t nOffset ) {
-	uint32_t value = 0u;
-	if ( pBytes ) {
-		memcpy( &value, pBytes + nOffset, sizeof( value ) );
-	}
-	return value;
-}
 
-static uint32_t t3dGpuRegionCacheMaterialMaskFromControlImage( const Ref<Image> &rControl ) {
-	if ( rControl.is_null() || rControl->is_empty() || rControl->get_format() != Image::FORMAT_RF ) {
-		return 1u;
-	}
-	const PackedByteArray bytes = rControl->get_data();
-	const uint8_t *const pRead = bytes.ptr();
-	if ( !pRead || bytes.size() < 4 ) {
-		return 1u;
-	}
-	uint32_t mask = 0u;
-	const size_t texels = ( size_t )( bytes.size() ) / 4u;
-	for ( size_t index = 0; index < texels; ++index ) {
-		const uint32_t control = t3dGpuRegionCacheReadU32Unaligned( pRead, index * 4u );
-		mask |= 1u << ( uint32_t )( t3dGetBase( control ) & 31u );
-		mask |= 1u << ( uint32_t )( t3dGetOverlay( control ) & 31u );
-	}
-	return mask != 0u ? mask : 1u;
-}
 
-EA_FORCE_INLINE static uint8_t t3dGpuRegionCacheColorToByte( const float fValue ) {
-	return ( uint8_t )( CLAMP( Math::round( fValue * s_fByteMaxFloat ), 0.0f, s_fByteMaxFloat ) );
-}
+
 
 static int t3dGpuRegionCacheMaterialIntParam( Terrain3DMaterial *pMaterial, const char *pszName, const int nDefault ) {
 	if ( !pMaterial ) {
@@ -183,66 +100,17 @@ void Terrain3DGpuRegionCache::setDefaultMaps( const Ref<Image> &rHeight,
 }
 
 Ref<Image> Terrain3DGpuRegionCache::getRegionMapOrDefault( const Terrain3DRegion *pRegion, const t3dMapType_t eMapType ) const {
-	if ( pRegion && !pRegion->isDeleted() ) {
-		Ref<Image> pMap = pRegion->getMap( eMapType );
-		if ( pMap.is_valid() ) {
-			return pMap;
-		}
-	}
-	switch ( eMapType ) {
-		case TYPE_HEIGHT:
-			return m_defaultHeightMap;
-		case TYPE_CONTROL:
-			return m_defaultControlMap;
-		case TYPE_COLOR:
-			return m_defaultColorMap;
-		default:
-			return Ref<Image>();
-	}
+	return t3dRegionImageResolveMap( pRegion, eMapType, m_defaultHeightMap, m_defaultControlMap, m_defaultColorMap );
 }
 
 Ref<Image> Terrain3DGpuRegionCache::makeGpuColorImage( const Ref<Image> &rImage ) const {
-	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultColorMap;
-	if ( pSource.is_null() ) {
-		return Ref<Image>();
-	}
 	const int divisor = m_pTerrain ? m_pTerrain->getGpuRegionColorResolutionDivisor() : 1;
-	if ( divisor <= 1 && pSource->has_mipmaps() ) {
-		return pSource;
-	}
-	Ref<Image> pGpuImage;
-	pGpuImage.instantiate();
-	pGpuImage->copy_from( pSource );
-	// Resizing an image that already owns a mip chain and then generating mips again
-	// can carry stale lower levels through rehydration. Rebuild from the base level
-	// exactly once so the GPU page always contains the canonical chain for its size.
-	if ( pGpuImage->has_mipmaps() ) {
-		pGpuImage->clear_mipmaps();
-	}
-	if ( divisor > 1 ) {
-		pGpuImage->resize(
-		        MAX( 1, pSource->get_width() / divisor ), MAX( 1, pSource->get_height() / divisor ), Image::INTERPOLATE_BILINEAR );
-	}
-	if ( pGpuImage->generate_mipmaps() != OK ) {
-		return Ref<Image>();
-	}
-	return pGpuImage;
+	return t3dRegionImageCookGpuColor( rImage, m_defaultColorMap, divisor );
 }
 
 Ref<Image> Terrain3DGpuRegionCache::makeGpuDerivedImage( const Ref<Image> &rImage ) const {
-	Ref<Image> pSource = rImage.is_valid() ? rImage : m_defaultDerivedMap;
-	if ( pSource.is_null() ) {
-		return Ref<Image>();
-	}
 	const int divisor = m_pTerrain ? m_pTerrain->getGpuRegionDerivedResolutionDivisor() : 1;
-	if ( divisor <= 1 ) {
-		return pSource;
-	}
-	Ref<Image> pGpuImage;
-	pGpuImage.instantiate();
-	pGpuImage->copy_from( pSource );
-	pGpuImage->resize( MAX( 1, pSource->get_width() / divisor ), MAX( 1, pSource->get_height() / divisor ), Image::INTERPOLATE_BILINEAR );
-	return pGpuImage;
+	return t3dRegionImageCookGpuDerived( rImage, m_defaultDerivedMap, divisor );
 }
 
 bool Terrain3DGpuRegionCache::refreshMiddleCompositeSources( const uint64_t nMaterialSignature, const int nWidth, const int nHeight ) {
@@ -254,38 +122,14 @@ bool Terrain3DGpuRegionCache::refreshMiddleCompositeSources( const uint64_t nMat
 		return false;
 	}
 	const int scratch_bytes = ( int )( scratch_bytes_64 );
-	// Middle-composite generation is owner-thread serialized. Scratch capacity
-	// tracks concurrent builders, not physical GPU residency layers.
 	const int scratch_layers = 1;
-	const bool source_changed = nMaterialSignature != m_nMiddleCompositeMaterialSignature;
-	if ( source_changed ) {
-		m_middleCompositeMaterialColors.clear();
-		m_middleCompositeMaterialScales.clear();
-		for ( size_t iMaterial = 0u; iMaterial < T3D_ARRAY_COUNT( m_middleCompositeMaterialImages ); iMaterial++ ) {
-			Ref<Image> &pImage = ( m_middleCompositeMaterialImages )[iMaterial];
-			pImage.unref();
-		}
+	if ( nMaterialSignature != m_nMiddleCompositeMaterialSignature ) {
 		const Ref<Terrain3DAssets> pAssets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
-		if ( pAssets.is_valid() ) {
-			m_middleCompositeMaterialColors = pAssets->getTextureColors();
-			m_middleCompositeMaterialScales = pAssets->getTextureUvScales();
-			const int texture_count = MIN( pAssets->getTextureCount(), s_nMaxTextureAssets );
-			for ( int material = 0; material < texture_count; ++material ) {
-				const Ref<Terrain3DTextureAsset> pAsset = pAssets->getTextureAsset( material );
-				const Ref<Texture2D> pTexture = pAsset.is_valid() ? pAsset->getAlbedoTexture() : Ref<Texture2D>();
-				Ref<Image> pMaterialImage = pTexture.is_valid() ? pTexture->get_image() : Ref<Image>();
-				if ( pMaterialImage.is_valid() && pMaterialImage->is_compressed() ) {
-					pMaterialImage = pMaterialImage->duplicate();
-					if ( pMaterialImage->decompress() != OK ) {
-						pMaterialImage.unref();
-					}
-				}
-				if ( pMaterialImage.is_valid() && pMaterialImage->is_empty() ) {
-					pMaterialImage.unref();
-				}
-				m_middleCompositeMaterialImages[( size_t )( material )] = pMaterialImage;
-			}
-		}
+		t3dRegionImagePrepareMiddleCompositeMaterials( pAssets,
+		        m_middleCompositeMaterialColors,
+		        m_middleCompositeMaterialScales,
+		        m_middleCompositeMaterialImages,
+		        T3D_ARRAY_COUNT( m_middleCompositeMaterialImages ) );
 		m_nMiddleCompositeMaterialSignature = nMaterialSignature;
 	}
 	if ( scratch_bytes != m_nMiddleCompositeScratchBytes || scratch_layers != m_nMiddleCompositeScratchLayerCount ) {
@@ -304,134 +148,27 @@ bool Terrain3DGpuRegionCache::refreshMiddleCompositeSources( const uint64_t nMat
 	return true;
 }
 
-Color Terrain3DGpuRegionCache::sampleMiddleCompositeMaterial( const int nMaterialId,
-        const Color &rTint,
-        const float fCosAngle,
-        const float fSinAngle,
-        const float fWorldX,
-        const float fWorldY,
-        const float fControlScale ) const {
-	if ( nMaterialId < 0 || nMaterialId >= s_nMaxTextureAssets || m_middleCompositeMaterialImages[( size_t )( nMaterialId )].is_null() ) {
-		return rTint;
-	}
-	const Ref<Image> &pImage = m_middleCompositeMaterialImages[( size_t )( nMaterialId )];
-	const float fAssetScale = nMaterialId < m_middleCompositeMaterialScales.size() ? m_middleCompositeMaterialScales[nMaterialId] : 0.1f;
-	const float fSourceU = ( fCosAngle * fWorldX + fSinAngle * fWorldY ) * fControlScale * fAssetScale;
-	const float fSourceV = ( fCosAngle * fWorldY - fSinAngle * fWorldX ) * fControlScale * fAssetScale;
-	const float fWrappedU = fSourceU - Math::floor( fSourceU );
-	const float fWrappedV = fSourceV - Math::floor( fSourceV );
-	const int nSourceX = CLAMP( ( int )( fWrappedU * pImage->get_width() ), 0, pImage->get_width() - 1 );
-	const int nSourceY = CLAMP( ( int )( fWrappedV * pImage->get_height() ), 0, pImage->get_height() - 1 );
-	return pImage->get_pixel( nSourceX, nSourceY ) * rTint;
-}
+
 
 Ref<Image> Terrain3DGpuRegionCache::makeMiddleCompositeImage(
         const Vector2i &rLocation, const Ref<Image> &rControl, const Ref<Image> &rColor, const int nScratchSlot ) {
-	if ( rControl.is_null() || rColor.is_null() || rControl->get_format() != Image::FORMAT_RF
-	        || rColor->get_format() != Image::FORMAT_RGBA8 ) {
-		return Ref<Image>();
-	}
-	const int width = rColor->get_width();
-	const int height = rColor->get_height();
-	if ( width <= 0 || height <= 0 ) {
-		return Ref<Image>();
-	}
-	const PackedByteArray control_bytes = rControl->get_data();
-	const PackedByteArray color_bytes = rColor->get_data();
-	if ( control_bytes.size() < ( int64_t )( rControl->get_width() ) * rControl->get_height() * 4
-	        || color_bytes.size() < ( int64_t )( width )*height * 4 ) {
-		return Ref<Image>();
-	}
 	const int scratch_slot = CLAMP( nScratchSlot, 0, MAX( 0, m_nMiddleCompositeScratchLayerCount - 1 ) );
 	if ( scratch_slot >= m_nMiddleCompositeScratchLayerCount ) {
 		return Ref<Image>();
 	}
 	PackedByteArray &output = m_middleCompositeScratch[( size_t )( scratch_slot )];
-	if ( output.size() != ( int64_t )( width )*height * 4 ) {
-		return Ref<Image>();
-	}
-	uint8_t *const pWrite = output.ptrw();
-	const uint8_t *const pControl = control_bytes.ptr();
-	const uint8_t *const pColor = color_bytes.ptr();
-	for ( int y = 0; y < height; ++y ) {
-		const int control_y = MIN( rControl->get_height() - 1, y * rControl->get_height() / height );
-		for ( int x = 0; x < width; ++x ) {
-			const int control_x = MIN( rControl->get_width() - 1, x * rControl->get_width() / width );
-			const uint32_t control =
-			        t3dGpuRegionCacheReadU32Unaligned( pControl, ( size_t )( control_y * rControl->get_width() + control_x ) * 4u );
-			const int base = ( int )( t3dGetBase( control ) );
-			const int overlay = ( int )( t3dGetOverlay( control ) );
-			const Color base_color = base < m_middleCompositeMaterialColors.size() ? m_middleCompositeMaterialColors[base] : s_colorWhite;
-			const Color overlay_color =
-			        overlay < m_middleCompositeMaterialColors.size() ? m_middleCompositeMaterialColors[overlay] : base_color;
-			const float control_scale = 0.9f - ( float )( ( ( t3dGetUvScale( control ) + 3u ) % 8u ) + 1u ) * 0.1f;
-			const float angle = ( float )( t3dGetUvRotation( control ) )*Math_TAU / 16.0f;
-			const float cs = Math::cos( angle );
-			const float sn = Math::sin( angle );
-			const float local_x = ( ( float )( x ) + 0.5f ) * ( float )( s_nRegionSize ) / ( float )( width );
-			const float local_y = ( ( float )( y ) + 0.5f ) * ( float )( s_nRegionSize ) / ( float )( height );
-			const float world_x = ( ( float )( rLocation.x * s_nRegionSize ) + local_x ) * ( float )( s_fRegionVertexSpacing );
-			const float world_y = ( ( float )( rLocation.y * s_nRegionSize ) + local_y ) * ( float )( s_fRegionVertexSpacing );
-			const Color base_sample = sampleMiddleCompositeMaterial( base, base_color, cs, sn, world_x, world_y, control_scale );
-			const Color overlay_sample = sampleMiddleCompositeMaterial( overlay, overlay_color, cs, sn, world_x, world_y, control_scale );
-			float blend = ( float )( t3dGetBlend( control ) ) / 255.0f;
-			blend = CLAMP( ( blend - 0.12f ) / 0.76f, 0.0f, 1.0f );
-			blend = blend * blend * ( 3.0f - 2.0f * blend );
-			const Color material_color = base_sample.lerp( overlay_sample, blend );
-			const size_t offset = ( size_t )( y * width + x ) * 4u;
-			const float authored_r = ( float )( pColor[offset] ) / 255.0f;
-			const float authored_g = ( float )( pColor[offset + 1u] ) / 255.0f;
-			const float authored_b = ( float )( pColor[offset + 2u] ) / 255.0f;
-			pWrite[offset] = t3dGpuRegionCacheColorToByte( authored_r * material_color.r );
-			pWrite[offset + 1u] = t3dGpuRegionCacheColorToByte( authored_g * material_color.g );
-			pWrite[offset + 2u] = t3dGpuRegionCacheColorToByte( authored_b * material_color.b );
-			pWrite[offset + 3u] =
-			        t3dIsHole( control ) ? 0u : ( uint8_t )( 0x80u | ( ( uint32_t )( pColor[offset + 3u] ) * 127u + 127u ) / 255u );
-		}
-	}
-	Ref<Image> pComposite = Image::create_from_data( width, height, false, Image::FORMAT_RGBA8, output );
-	if ( pComposite.is_null() || pComposite->generate_mipmaps() != OK ) {
-		return Ref<Image>();
-	}
-	return pComposite;
+	return t3dRegionImageCookMiddleComposite( rLocation,
+	        rControl,
+	        rColor,
+	        m_middleCompositeMaterialColors,
+	        m_middleCompositeMaterialScales,
+	        m_middleCompositeMaterialImages,
+	        T3D_ARRAY_COUNT( m_middleCompositeMaterialImages ),
+	        output );
 }
 
 Ref<Image> Terrain3DGpuRegionCache::makeTerrainShadowMaskImage( const Terrain3DRegion *const pRegion ) const {
-	const int region_size = s_nRegionSize;
-	if ( region_size <= 0 ) {
-		return Ref<Image>();
-	}
-	Ref<Image> image;
-	if ( pRegion && !pRegion->isDeleted() ) {
-		const Ref<Terrain3DRegionLighting> lighting = pRegion->getLighting();
-		if ( lighting.is_valid() && lighting->hasTerrainShadowMask() ) {
-			const String shadow_path = lighting->getTerrainShadowMaskPath();
-			if ( FileAccess::file_exists( shadow_path ) ) {
-				const Ref<Resource> resource = ResourceLoader::get_singleton()->load( shadow_path );
-				image = resource;
-			}
-		}
-	}
-	if ( image.is_null() || image->is_empty() ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	image = image->duplicate();
-	if ( image->is_compressed() && image->decompress() != OK ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	if ( image->has_mipmaps() ) {
-		image->clear_mipmaps();
-	}
-	if ( image->get_format() != Image::FORMAT_L8 ) {
-		image->convert( Image::FORMAT_L8 );
-	}
-	if ( image->get_width() != region_size || image->get_height() != region_size ) {
-		image->resize( region_size, region_size, Image::INTERPOLATE_BILINEAR );
-	}
-	if ( image->generate_mipmaps() != OK ) {
-		return Terrain3DUtil::getFilledImage( V2I( region_size ), Color( 1.0, 1.0, 1.0, 1.0 ), true, Image::FORMAT_L8 );
-	}
-	return image;
+	return t3dRegionImageCookTerrainShadowMask( pRegion, s_nRegionSize );
 }
 
 Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &vLocation ) const {
@@ -453,101 +190,14 @@ Ref<Image> Terrain3DGpuRegionCache::makeGpuRenderControlImage( const Vector2i &v
 			}
 			source.m_bPresent = true;
 			if ( !pRegion->hasChannel( TYPE_CONTROL ) || pRegion->getControlMap().is_null() ) {
-				source.m_bImplicit = true;
 				continue;
 			}
-			const Ref<Image> pControl = pRegion->getControlMap();
-			if ( pControl->get_width() != s_nRegionSize || pControl->get_height() != s_nRegionSize
-			        || pControl->get_format() != Image::FORMAT_RF || pControl->has_mipmaps() ) {
+			if ( !t3dControlCookSetExplicitSource( source, pRegion->getControlMap() ) ) {
 				return Ref<Image>();
 			}
-			source.m_bytes = pControl->get_data();
-			if ( source.m_bytes.size() != s_nRegionSize * s_nRegionSize * ( int )( sizeof( uint32_t ) ) ) {
-				return Ref<Image>();
-			}
-			source.m_bImplicit = false;
 		}
 	}
-
-	PackedByteArray output;
-	output.resize( s_nRegionSize * s_nRegionSize * ( int )( sizeof( uint32_t ) ) );
-	uint8_t *const pWrite = output.ptrw();
-	for ( int z = 0; z < s_nRegionSize; ++z ) {
-		for ( int x = 0; x < s_nRegionSize; ++x ) {
-			uint32_t center = s_nRegionDefaultControl;
-			if ( !t3dGpuRegionCacheReadCookControl( sources, x, z, center ) ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-			if ( t3dIsAuto( center ) || t3dIsHole( center ) ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-
-			uint64_t material_weights[s_nMaxTextureAssets];
-			memset( material_weights, 0, sizeof( material_weights ) );
-			for ( int dz = -s_nRenderControlBlendRadius; dz <= s_nRenderControlBlendRadius; ++dz ) {
-				for ( int dx = -s_nRenderControlBlendRadius; dx <= s_nRenderControlBlendRadius; ++dx ) {
-					uint32_t pControl = s_nRegionDefaultControl;
-					if ( !t3dGpuRegionCacheReadCookControl( sources, x + dx, z + dz, pControl ) || t3dIsAuto( pControl )
-					        || t3dIsHole( pControl ) ) {
-						continue;
-					}
-					const uint64_t spatial_weight = ( uint64_t )( s_szRenderControlKernel[dx + s_nRenderControlBlendRadius]
-					        * s_szRenderControlKernel[dz + s_nRenderControlBlendRadius] );
-					const uint8_t base = t3dGetBase( pControl );
-					const uint8_t overlay = t3dGetOverlay( pControl );
-					const uint8_t blend = t3dGetBlend( pControl );
-					if ( base == overlay ) {
-						material_weights[( size_t )( base )] += spatial_weight * 255u;
-					} else {
-						material_weights[( size_t )( base )] += spatial_weight * ( uint64_t )( 255u - blend );
-						material_weights[( size_t )( overlay )] += spatial_weight * ( uint64_t )( blend );
-					}
-				}
-			}
-
-			int strongest = -1;
-			int second = -1;
-			for ( int material = 0; material < s_nMaxTextureAssets; ++material ) {
-				if ( strongest < 0 || material_weights[( size_t )( material )] > material_weights[( size_t )( strongest )] ) {
-					second = strongest;
-					strongest = material;
-				} else if ( second < 0 || material_weights[( size_t )( material )] > material_weights[( size_t )( second )] ) {
-					second = material;
-				}
-			}
-			if ( strongest < 0 || material_weights[( size_t )( strongest )] == 0u ) {
-				memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &center, sizeof( uint32_t ) );
-				continue;
-			}
-			if ( second < 0 || material_weights[( size_t )( second )] == 0u ) {
-				second = strongest;
-			}
-
-			// Runtime controls use a canonical pair order so neighboring fragments that
-			// contain the same two materials address the same texture-array layers in the
-			// same order. This materially improves wave/warp texture-cache coherence.
-			// The runtime blend shader is pair-order symmetric, so no authored semantic
-			// role is lost by sorting the compiled representation.
-			int base = strongest;
-			int overlay = second;
-			if ( base > overlay ) {
-				eastl::swap( base, overlay );
-			}
-			const uint64_t base_weight = material_weights[( size_t )( base )];
-			const uint64_t overlay_weight = material_weights[( size_t )( overlay )];
-			const uint64_t pair_weight = base_weight + overlay_weight;
-			uint8_t blend = 0u;
-			if ( base != overlay && pair_weight > 0u ) {
-				blend = ( uint8_t )( CLAMP( ( int )( ( overlay_weight * 255u + pair_weight / 2u ) / pair_weight ), 0, 255 ) );
-			}
-			const uint32_t cooked = ( center & ~s_nRenderControlMaterialMask ) | t3dEncBase( ( uint8_t )( base ) )
-			        | t3dEncOverlay( ( uint8_t )( overlay ) ) | t3dEncBlend( blend );
-			memcpy( pWrite + ( size_t )( z * s_nRegionSize + x ) * sizeof( uint32_t ), &cooked, sizeof( uint32_t ) );
-		}
-	}
-	return Image::create_from_data( s_nRegionSize, s_nRegionSize, false, Image::FORMAT_RF, output );
+	return t3dCookGpuRenderControlImage( sources );
 }
 
 int Terrain3DGpuRegionCache::calculateRequiredCorePagesForLods( const int nDetailLods ) const {
@@ -1085,16 +735,8 @@ bool Terrain3DGpuRegionCache::rebuildTextures( void ) {
 }
 
 int Terrain3DGpuRegionCache::findGpuRegionSlot( const Vector2i &vLocation ) const {
-	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
-	if ( map_index < 0 ) {
-		return -1;
-	}
-	const int layer = ( int )( m_szGpuRegionMap[map_index] ) - 1;
-	if ( layer < 0 || layer >= m_nGpuRegionPhysicalLayerCount || m_szGpuRegionSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED
-	        || !t3dRegionCoordEquals( m_szGpuRegionLocations[layer], vLocation ) ) {
-		return -1;
-	}
-	return layer;
+	return t3dRegionResidencyFindMappedSlot( vLocation, m_szGpuRegionMap, m_szGpuRegionLocations, m_nGpuRegionPhysicalLayerCount,
+	        [&]( const int layer ) { return m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED; } );
 }
 
 int Terrain3DGpuRegionCache::findPendingGpuRegionUpload( const Vector2i &vLocation ) const {
@@ -1108,13 +750,10 @@ int Terrain3DGpuRegionCache::findPendingGpuRegionUpload( const Vector2i &vLocati
 }
 
 int Terrain3DGpuRegionCache::findFreeGpuRegionSlot( void ) const {
-	for ( int layer = 0; layer < m_nGpuRegionPhysicalLayerCount; ++layer ) {
-		if ( !t3dRegionCoordValid( m_szGpuRegionLocations[layer] ) && m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE
-		        && m_szGpuRegionVictimReserved[layer] == 0u ) {
-			return layer;
-		}
-	}
-	return -1;
+	return t3dRegionResidencyFindFirstSlot( m_nGpuRegionPhysicalLayerCount, [&]( const int layer ) {
+		return !t3dRegionCoordValid( m_szGpuRegionLocations[layer] ) && m_szGpuRegionSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE
+		        && m_szGpuRegionVictimReserved[layer] == 0u;
+	} );
 }
 
 void Terrain3DGpuRegionCache::clearPendingGpuRegionUpload( const int nLayer ) {
@@ -1437,34 +1076,6 @@ int Terrain3DGpuRegionCache::processPendingGpuRegionRepublishes( const int nLimi
 	return published;
 }
 
-typedef struct t3dGpuCollectDesiredContext_s {
-	Terrain3DRegionRepository *m_pRepository;
-	const t3dResidencyFrameState_t *m_pFrame;
-	Vector2i *m_pLocations;
-	uint8_t *m_pSelectedMap;
-	t3dRegionStreamingState_t m_eWanted;
-	int m_nCapacity;
-	int *m_pOutputCount;
-} t3dGpuCollectDesiredContext_t;
-
-static bool t3dGpuCollectDesiredLocation( void *const pContext, const Vector2i &rLocation ) {
-	t3dGpuCollectDesiredContext_t *const pState = ( t3dGpuCollectDesiredContext_t * )( pContext );
-	if ( *pState->m_pOutputCount >= pState->m_nCapacity ) {
-		return false;
-	}
-	if ( !pState->m_pRepository->isLocationValid( rLocation ) || pState->m_pRepository->getRegionPtr( rLocation ) == NULL
-	        || pState->m_pFrame->streamingState( rLocation ) != pState->m_eWanted ) {
-		return true;
-	}
-	const int nMapIndex = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-	if ( nMapIndex < 0 || pState->m_pSelectedMap[nMapIndex] != 0u ) {
-		return true;
-	}
-	pState->m_pLocations[( *pState->m_pOutputCount )++] = rLocation;
-	pState->m_pSelectedMap[nMapIndex] = 1u;
-	return *pState->m_pOutputCount < pState->m_nCapacity;
-}
-
 static void t3dGpuAppendMaterialMask( uint32_t nMask, uint8_t *const pIds, const int nCapacity, uint32_t &nEmittedMask, int &nCount ) {
 	while ( nMask != 0u && nCount < nCapacity ) {
 		int nId = 0;
@@ -1492,12 +1103,7 @@ static bool t3dGpuAppendTextureBatchUpdate( t3dRdTextureBatchUpdate_t *const pUp
 	if ( !rTexture.canUpdateLayer( rImage, nLayer ) || nUpdateCount >= 6u ) {
 		return false;
 	}
-	pUpdates[nUpdateCount].m_hTexture = rTexture.getRid();
-	pUpdates[nUpdateCount].m_data = rImage->get_data();
-	if ( pUpdates[nUpdateCount].m_data.is_empty() ) {
-		pUpdates[nUpdateCount].m_hTexture = RID();
-		return false;
-	}
+	if ( !rTexture.buildTrackedLayerBatchUpdate( rImage, nLayer, pUpdates[nUpdateCount] ) ) return false;
 	++nUpdateCount;
 	return true;
 }
@@ -1512,35 +1118,33 @@ int Terrain3DGpuRegionCache::collectDesiredGpuRegions( const t3dResidencyFrameSt
 		return 0;
 	}
 	const int capacity = MIN( nCapacity, s_nGpuCacheMaxLayers );
-	int output_count = 0;
 	uint8_t selected_map[s_nRegionSlots] = {};
-	t3dGpuCollectDesiredContext_t context;
-	context.m_pRepository = &m_regionRepository;
-	context.m_pFrame = &rFrame;
-	context.m_pLocations = pLocations;
-	context.m_pSelectedMap = selected_map;
-	context.m_nCapacity = capacity;
-	context.m_pOutputCount = &output_count;
 
 	// Full surface pages are mandatory only for ACTIVE. HOT geometry is served by
 	// the independent height cache below, so surface pressure can never move vertices.
-	context.m_eWanted = TERRAIN3D_REGION_STREAMING_ACTIVE;
-	t3dGpuRegionCacheForEachSquareRing( rCenter, s_nRegionMapSize, t3dGpuCollectDesiredLocation, &context );
+	int output_count = t3dCollectDesiredRegionsForState( m_regionRepository,
+	        rFrame,
+	        rCenter,
+	        s_nRegionMapSize,
+	        TERRAIN3D_REGION_STREAMING_ACTIVE,
+	        pLocations,
+	        capacity,
+	        0,
+	        selected_map );
 	rStats.m_nRequired = output_count;
-	context.m_eWanted = TERRAIN3D_REGION_STREAMING_HOT;
-	t3dGpuRegionCacheForEachSquareRing( rCenter, s_nRegionMapSize, t3dGpuCollectDesiredLocation, &context );
+	output_count = t3dCollectDesiredRegionsForState( m_regionRepository,
+	        rFrame,
+	        rCenter,
+	        s_nRegionMapSize,
+	        TERRAIN3D_REGION_STREAMING_HOT,
+	        pLocations,
+	        capacity,
+	        output_count,
+	        selected_map );
 	rStats.m_nGuard = output_count - rStats.m_nRequired;
 	const int prefetch_begin = output_count;
-	for ( int slot = 0; slot < m_regionRepository.getSlotCount() && output_count < capacity; ++slot ) {
-		const Vector2i location = t3dUnpackRegionCoord( m_regionRepository.getSlotsData()[slot] );
-		const int map_index = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
-		if ( map_index < 0 || selected_map[map_index] != 0u || m_regionRepository.getRegionPtr( location ) == NULL
-		        || !rFrame.isPrefetch( location ) ) {
-			continue;
-		}
-		pLocations[output_count++] = location;
-		selected_map[map_index] = 1u;
-	}
+	output_count = t3dAppendPrefetchRegionsFromRepositorySlots(
+	        m_regionRepository, rFrame, pLocations, capacity, output_count, selected_map );
 	rStats.m_nPrefetch = output_count - prefetch_begin;
 	rStats.m_nWritten = output_count;
 	return output_count;
@@ -1735,7 +1339,7 @@ void Terrain3DGpuRegionCache::resolveGpuRegionLayerMetadata( t3dGpuRegionLayerUp
 	}
 	rState.m_nMaterialMask = rState.m_bCookedPage
 	        ? rState.m_nCookedMaterialMask
-	        : ( rState.m_pControl.is_valid() ? t3dGpuRegionCacheMaterialMaskFromControlImage( rState.m_pControl ) : 1u );
+	        : ( rState.m_pControl.is_valid() ? t3dControlCookMaterialMaskFromControlImage( rState.m_pControl ) : 1u );
 	if ( m_pTerrain ) {
 		const Ref<Terrain3DMaterial> material = m_pTerrain->getMaterial();
 		if ( material.is_valid() && material->getAutoShaderEnabled() ) {
@@ -1931,11 +1535,6 @@ bool Terrain3DGpuRegionCache::uploadGpuRegionLayer(
 	return uploadGpuRegionLayerDirect( state );
 }
 
-bool Terrain3DGpuRegionCache::isRuntimePageWanted( void *const pContext, const Vector2i &rLocation ) {
-	const t3dResidencyFrameState_t *const pFrame = ( const t3dResidencyFrameState_t * )( pContext );
-	return pFrame && ( pFrame->streamingState( rLocation ) >= TERRAIN3D_REGION_STREAMING_HOT || pFrame->isPrefetch( rLocation ) );
-}
-
 bool Terrain3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_t &rFrame ) {
 	const int color_size = MAX( 1, s_nRegionSize / MAX( 1, rFrame.m_runtimePageConfig.m_nColorDivisor ) );
 	if ( !refreshMiddleCompositeSources( rFrame.m_runtimePageConfig.m_nMaterialSourceSignature, color_size, color_size ) ) {
@@ -1945,7 +1544,7 @@ bool Terrain3DGpuRegionCache::serviceRuntimePages( const t3dResidencyFrameState_
 	state.m_config = rFrame.m_runtimePageConfig;
 	state.m_predictedCenter = rFrame.m_predictedCenter;
 	state.m_nStreamingGeneration = rFrame.m_nStreamingGeneration;
-	state.m_isWanted = &Terrain3DGpuRegionCache::isRuntimePageWanted;
+	state.m_isWanted = &t3dResidencyFrameWantsRuntimePage;
 	state.m_pWantedContext = const_cast<t3dResidencyFrameState_t *>( &rFrame );
 	m_runtimePageStore.service( state );
 	return true;

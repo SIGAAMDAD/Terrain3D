@@ -1,6 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include "streaming/terrain_3d_region_residency_primitives.h"
 #include "streaming/terrain_3d_middle_height_region_cache.h"
+#include "streaming/terrain_3d_region_candidate_collector.h"
 
 #include "data/terrain_3d_region_codec.h"
 #include "data/terrain_3d_region_repository.h"
@@ -11,30 +13,6 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
-typedef bool ( *t3dMiddleHeightRegionRingFn )( void *pContext, const Vector2i &rLocation );
-
-static bool t3dMiddleHeightRegionCacheForEachSquareRing(
-        const Vector2i &rCenter, const int nMaxRadius, t3dMiddleHeightRegionRingFn pCallback, void *const pContext ) {
-	for ( int radius = 0; radius < nMaxRadius; ++radius ) {
-		if ( radius == 0 ) {
-			if ( !pCallback( pContext, rCenter ) ) {
-				return false;
-			}
-			continue;
-		}
-		for ( int x = -radius; x <= radius; ++x ) {
-			if ( !pCallback( pContext, rCenter + Vector2i( x, -radius ) ) || !pCallback( pContext, rCenter + Vector2i( x, radius ) ) ) {
-				return false;
-			}
-		}
-		for ( int y = -radius + 1; y <= radius - 1; ++y ) {
-			if ( !pCallback( pContext, rCenter + Vector2i( -radius, y ) ) || !pCallback( pContext, rCenter + Vector2i( radius, y ) ) ) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
 
 Terrain3DMiddleHeightRegionCache::Terrain3DMiddleHeightRegionCache(
         Terrain3DRegionRepository *pRepository, Terrain3DSamplingStorage *pSamplingStorage, Terrain3DRuntimePageStore *pRuntimePageStore ) :
@@ -123,19 +101,11 @@ bool Terrain3DMiddleHeightRegionCache::configure( const t3dMiddleHeightRegionCac
 }
 
 int Terrain3DMiddleHeightRegionCache::findSlot( const Vector2i &vLocation ) const {
-	if ( !m_pRepository ) {
+	if ( !m_pRepository || !m_pRepository->isLocationValid( vLocation ) ) {
 		return -1;
 	}
-	const int map_index = Terrain3DRegionRepository::getRegionMapIndex( vLocation );
-	if ( !m_pRepository->isLocationValid( vLocation ) || map_index < 0 ) {
-		return -1;
-	}
-	const int layer = ( int )( m_szRegionMap[map_index] ) - 1;
-	if ( layer < 0 || layer >= m_nPhysicalLayerCount || m_szSlotStates[layer] != TERRAIN3D_GPU_SLOT_MAPPED
-	        || !t3dRegionCoordEquals( m_szLocations[layer], vLocation ) ) {
-		return -1;
-	}
-	return layer;
+	return t3dRegionResidencyFindMappedSlot( vLocation, m_szRegionMap, m_szLocations, m_nPhysicalLayerCount,
+	        [&]( const int layer ) { return m_szSlotStates[layer] == TERRAIN3D_GPU_SLOT_MAPPED; } );
 }
 
 Ref<Image> Terrain3DMiddleHeightRegionCache::makeHeightImage( const Vector2i &vLocation, const bool bRuntimeResolution ) const {
@@ -212,34 +182,6 @@ bool Terrain3DMiddleHeightRegionCache::uploadLayer( const int nLayer, const Vect
 	return true;
 }
 
-typedef struct t3dMiddleCollectDesiredContext_s {
-	const Terrain3DRegionRepository *m_pRepository;
-	const t3dResidencyFrameState_t *m_pFrame;
-	Vector2i *m_pLocations;
-	uint8_t *m_pSelectedMap;
-	t3dRegionStreamingState_t m_eWanted;
-	int m_nCapacity;
-	int *m_pOutputCount;
-} t3dMiddleCollectDesiredContext_t;
-
-static bool t3dMiddleCollectDesiredLocation( void *const pContext, const Vector2i &rLocation ) {
-	t3dMiddleCollectDesiredContext_t *const pState = ( t3dMiddleCollectDesiredContext_t * )( pContext );
-	if ( *pState->m_pOutputCount >= pState->m_nCapacity ) {
-		return false;
-	}
-	if ( !pState->m_pRepository->isLocationValid( rLocation ) || !pState->m_pRepository->getRegionPtr( rLocation )
-	        || pState->m_pFrame->streamingState( rLocation ) != pState->m_eWanted ) {
-		return true;
-	}
-	const int nMapIndex = Terrain3DRegionRepository::getRegionMapIndex( rLocation );
-	if ( nMapIndex < 0 || pState->m_pSelectedMap[nMapIndex] != 0u ) {
-		return true;
-	}
-	pState->m_pLocations[( *pState->m_pOutputCount )++] = rLocation;
-	pState->m_pSelectedMap[nMapIndex] = 1u;
-	return *pState->m_pOutputCount < pState->m_nCapacity;
-}
-
 int Terrain3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameState_t &rFrame,
         const Vector2i &rCenter,
         Vector2i *pLocations,
@@ -256,29 +198,19 @@ int Terrain3DMiddleHeightRegionCache::collectDesired( const t3dResidencyFrameSta
 	for ( int state_value = ( int )( TERRAIN3D_REGION_STREAMING_ACTIVE );
 	        state_value >= ( int )( TERRAIN3D_REGION_STREAMING_HOT ) && output_count < capacity;
 	        --state_value ) {
-		const t3dRegionStreamingState_t wanted = ( t3dRegionStreamingState_t )( state_value );
-		t3dMiddleCollectDesiredContext_t context;
-		context.m_pRepository = m_pRepository;
-		context.m_pFrame = &rFrame;
-		context.m_pLocations = pLocations;
-		context.m_pSelectedMap = selected_map;
-		context.m_eWanted = wanted;
-		context.m_nCapacity = capacity;
-		context.m_pOutputCount = &output_count;
-		t3dMiddleHeightRegionCacheForEachSquareRing( rCenter, s_nRegionMapSize, t3dMiddleCollectDesiredLocation, &context );
+		output_count = t3dCollectDesiredRegionsForState( *m_pRepository,
+		        rFrame,
+		        rCenter,
+		        s_nRegionMapSize,
+		        ( t3dRegionStreamingState_t )( state_value ),
+		        pLocations,
+		        capacity,
+		        output_count,
+		        selected_map );
 	}
 	rRequiredCount = output_count;
-	for ( int slot = 0; slot < m_pRepository->getSlotCount() && output_count < capacity; ++slot ) {
-		const Vector2i location = t3dUnpackRegionCoord( m_pRepository->getSlotsData()[slot] );
-		const int map_index = location == s_v2iMax ? -1 : Terrain3DRegionRepository::getRegionMapIndex( location );
-		if ( map_index < 0 || selected_map[map_index] != 0u || !m_pRepository->getRegionPtr( location )
-		        || !rFrame.isPrefetch( location ) ) {
-			continue;
-		}
-		pLocations[output_count++] = location;
-		selected_map[map_index] = 1u;
-	}
-	return output_count;
+	return t3dAppendPrefetchRegionsFromRepositorySlots(
+	        *m_pRepository, rFrame, pLocations, capacity, output_count, selected_map );
 }
 
 bool Terrain3DMiddleHeightRegionCache::updatePageTableTexture( void ) {
@@ -448,13 +380,8 @@ void Terrain3DMiddleHeightRegionCache::update( const t3dResidencyFrameState_t &r
 			}
 			continue;
 		}
-		int free_layer = -1;
-		for ( int layer = 0; layer < m_nPhysicalLayerCount; ++layer ) {
-			if ( m_szSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE ) {
-				free_layer = layer;
-				break;
-			}
-		}
+		const int free_layer = t3dRegionResidencyFindFirstSlot( m_nPhysicalLayerCount,
+		        [&]( const int layer ) { return m_szSlotStates[layer] == TERRAIN3D_GPU_SLOT_FREE; } );
 		if ( free_layer < 0 ) {
 			if ( required ) {
 				++m_nMissingRequiredLastTick;

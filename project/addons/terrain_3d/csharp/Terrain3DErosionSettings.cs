@@ -10,36 +10,6 @@ namespace TokisanGames;
 [Tool]
 public partial class Terrain3DErosionSettings : Resource
 {
-    private new static readonly StringName NativeName = new StringName("Terrain3DErosionSettings");
-
-    [Obsolete("Wrapper types cannot be constructed with constructors; use Instantiate() instead.")]
-    protected Terrain3DErosionSettings() { }
-
-    private static CSharpScript _wrapperScriptAsset;
-
-    public new static Terrain3DErosionSettings Bind(GodotObject godotObject)
-    {
-        if (!IsInstanceValid(godotObject))
-            return null;
-        if (godotObject is Terrain3DErosionSettings wrapperScriptInstance)
-            return wrapperScriptInstance;
-#if DEBUG
-        var currentObjectClassName = godotObject.GetClass();
-        if (!ClassDB.IsParentClass(nameof(Terrain3DErosionSettings), currentObjectClassName))
-            throw new InvalidOperationException($"The supplied GodotObject ({currentObjectClassName}) is not Terrain3DErosionSettings.");
-#endif
-        if (_wrapperScriptAsset is null)
-        {
-            var scriptPathAttribute = typeof(Terrain3DErosionSettings).GetCustomAttributes<ScriptPathAttribute>().FirstOrDefault();
-            if (scriptPathAttribute is null) throw new UnreachableException();
-            _wrapperScriptAsset = ResourceLoader.Load<CSharpScript>(scriptPathAttribute.Path);
-        }
-        var instanceId = godotObject.GetInstanceId();
-        godotObject.SetScript(_wrapperScriptAsset);
-        return (Terrain3DErosionSettings)InstanceFromId(instanceId);
-    }
-
-    public new static Terrain3DErosionSettings Instantiate() => Bind(ClassDB.Instantiate(NativeName).As<GodotObject>());
 
     public enum BoundaryMode
     {
@@ -282,7 +252,6 @@ public partial class Terrain3DErosionSettings : Resource
         set => Set(GDExtensionPropertyName.HeightOutputStrength, value);
     }
 
-
     public new double GlobalIntensity
     {
         get => Get(GDExtensionPropertyName.GlobalIntensity).As<double>();
@@ -397,7 +366,6 @@ public partial class Terrain3DErosionSettings : Resource
         set => Set(GDExtensionPropertyName.MinimumSlope, value);
     }
 
-
     public new double StormFrequency
     {
         get => Get(GDExtensionPropertyName.StormFrequency).As<double>();
@@ -488,7 +456,6 @@ public partial class Terrain3DErosionSettings : Resource
         set => Set(GDExtensionPropertyName.OxidationWeakening, value);
     }
 
-
     public new double WeatheringSlopeBias
     {
         get => Get(GDExtensionPropertyName.WeatheringSlopeBias).As<double>();
@@ -554,7 +521,6 @@ public partial class Terrain3DErosionSettings : Resource
         get => Get(GDExtensionPropertyName.WindShelterStrength).As<double>();
         set => Set(GDExtensionPropertyName.WindShelterStrength, value);
     }
-
 
     public new double WindThreshold
     {
@@ -634,7 +600,6 @@ public partial class Terrain3DErosionSettings : Resource
         set => Set(GDExtensionPropertyName.WaveUndercutBias, value);
     }
 
-
     public new double BeachSmoothing
     {
         get => Get(GDExtensionPropertyName.BeachSmoothing).As<double>();
@@ -682,7 +647,6 @@ public partial class Terrain3DErosionSettings : Resource
         get => Get(GDExtensionPropertyName.TrafficRunoffMultiplier).As<double>();
         set => Set(GDExtensionPropertyName.TrafficRunoffMultiplier, value);
     }
-
 
     public new double TrafficThreshold
     {

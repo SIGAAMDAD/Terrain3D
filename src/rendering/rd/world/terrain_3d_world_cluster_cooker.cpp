@@ -167,6 +167,53 @@ static void t3dWorldComputeClusterDerived( const t3dWorldClusterCookSource_t &rS
 	rVt.m_nReserved = 0u;
 }
 
+
+static bool t3dWorldFlushClusterCold( const t3dWorldClusterCookSource_t &rSource,
+        t3dWorldClusterCookBuffers_t &rBuffers,
+        t3dWorldClusterCookStats_t &rStats,
+        const uint32_t *const pLocalVertices,
+        uint32_t &rLocalCount,
+        const uint32_t *const pTriangles,
+        uint32_t &rTriangleCount ) {
+	if ( rTriangleCount == 0u ) {
+		return true;
+	}
+	if ( rBuffers.m_nClusterCount >= rBuffers.m_nClusterCapacity
+	        || rBuffers.m_nClusterVertexIndexCount + rLocalCount > rBuffers.m_nClusterVertexIndexCapacity
+	        || rBuffers.m_nTriangleWordCount + T3D_WORLD_CLUSTER_MAX_TRIANGLES > rBuffers.m_nTriangleWordCapacity ) {
+		return false;
+	}
+	t3dWorldCluster_t &cluster = rBuffers.m_pClusters[rBuffers.m_nClusterCount];
+	t3dWorldClusterVtMetadata_t &vt = rBuffers.m_pVtMetadata[rBuffers.m_nClusterCount];
+	memset( &cluster, 0, sizeof( cluster ) );
+	cluster.m_nVertexIndexOffset = rBuffers.m_nClusterVertexIndexCount;
+	cluster.m_nTriangleOffset = rBuffers.m_nTriangleWordCount;
+	cluster.m_nPackedCounts = t3dWorldPackU16Pair( ( uint16_t )rLocalCount, ( uint16_t )rTriangleCount );
+	cluster.m_nPackedLodGeometryKind = t3dWorldPackU16Pair( ( uint16_t )rSource.m_nLod, ( uint16_t )rSource.m_nGeometryKind );
+	cluster.m_nMaterial = rSource.m_nMaterial;
+	cluster.m_nFlags = rSource.m_nClusterFlags;
+	cluster.m_nSourceId = rSource.m_nSourceId;
+	for ( uint32_t i = 0u; i < rLocalCount; ++i ) {
+		rBuffers.m_pClusterVertexIndices[rBuffers.m_nClusterVertexIndexCount + i] = rSource.m_nVertexBase + pLocalVertices[i];
+	}
+	for ( uint32_t i = 0u; i < rTriangleCount; ++i ) {
+		rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = pTriangles[i];
+	}
+	for ( uint32_t i = rTriangleCount; i < T3D_WORLD_CLUSTER_MAX_TRIANGLES; ++i ) {
+		rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = 0u;
+	}
+	t3dWorldComputeClusterDerived( rSource, pLocalVertices, rLocalCount, pTriangles, rTriangleCount, cluster, vt );
+	rBuffers.m_nClusterVertexIndexCount += rLocalCount;
+	rBuffers.m_nTriangleWordCount += T3D_WORLD_CLUSTER_MAX_TRIANGLES;
+	++rBuffers.m_nClusterCount;
+	++rStats.m_nClusterCount;
+	rStats.m_nRasterTriangleCount += rTriangleCount;
+	rStats.m_nPaddedTriangleSlots += T3D_WORLD_CLUSTER_MAX_TRIANGLES - rTriangleCount;
+	rLocalCount = 0u;
+	rTriangleCount = 0u;
+	return true;
+}
+
 bool t3dWorldCookMeshClustersCold( const t3dWorldClusterCookSource_t &rSource,
         t3dWorldClusterCookBuffers_t &rBuffers,
         t3dWorldMeshClusterSpan_t &rSpan,
@@ -211,39 +258,9 @@ bool t3dWorldCookMeshClustersCold( const t3dWorldClusterCookSource_t &rSource,
 				}
 			}
 			if ( triCount == T3D_WORLD_CLUSTER_MAX_TRIANGLES || localCount + newVertices > T3D_WORLD_CLUSTER_MAX_VERTICES ) {
-				if ( rBuffers.m_nClusterCount >= rBuffers.m_nClusterCapacity
-				        || rBuffers.m_nClusterVertexIndexCount + localCount > rBuffers.m_nClusterVertexIndexCapacity
-				        || rBuffers.m_nTriangleWordCount + T3D_WORLD_CLUSTER_MAX_TRIANGLES > rBuffers.m_nTriangleWordCapacity ) {
+				if ( !t3dWorldFlushClusterCold( rSource, rBuffers, rStats, localVertices, localCount, triangles, triCount ) ) {
 					return false;
 				}
-				t3dWorldCluster_t &cl = rBuffers.m_pClusters[rBuffers.m_nClusterCount];
-				t3dWorldClusterVtMetadata_t &vt = rBuffers.m_pVtMetadata[rBuffers.m_nClusterCount];
-				memset( &cl, 0, sizeof( cl ) );
-				cl.m_nVertexIndexOffset = rBuffers.m_nClusterVertexIndexCount;
-				cl.m_nTriangleOffset = rBuffers.m_nTriangleWordCount;
-				cl.m_nPackedCounts = t3dWorldPackU16Pair( ( uint16_t )localCount, ( uint16_t )triCount );
-				cl.m_nPackedLodGeometryKind = t3dWorldPackU16Pair( ( uint16_t )rSource.m_nLod, ( uint16_t )rSource.m_nGeometryKind );
-				cl.m_nMaterial = rSource.m_nMaterial;
-				cl.m_nFlags = rSource.m_nClusterFlags;
-				cl.m_nSourceId = rSource.m_nSourceId;
-				for ( uint32_t i = 0u; i < localCount; ++i ) {
-					rBuffers.m_pClusterVertexIndices[rBuffers.m_nClusterVertexIndexCount + i] = rSource.m_nVertexBase + localVertices[i];
-				}
-				for ( uint32_t i = 0u; i < triCount; ++i ) {
-					rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = triangles[i];
-				}
-				for ( uint32_t i = triCount; i < T3D_WORLD_CLUSTER_MAX_TRIANGLES; ++i ) {
-					rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = 0u;
-				}
-				t3dWorldComputeClusterDerived( rSource, localVertices, localCount, triangles, triCount, cl, vt );
-				rBuffers.m_nClusterVertexIndexCount += localCount;
-				rBuffers.m_nTriangleWordCount += T3D_WORLD_CLUSTER_MAX_TRIANGLES;
-				++rBuffers.m_nClusterCount;
-				++rStats.m_nClusterCount;
-				rStats.m_nRasterTriangleCount += triCount;
-				rStats.m_nPaddedTriangleSlots += T3D_WORLD_CLUSTER_MAX_TRIANGLES - triCount;
-				localCount = 0u;
-				triCount = 0u;
 			}
 			uint32_t local[3];
 			for ( uint32_t i = 0u; i < 3u; ++i ) {
@@ -257,38 +274,8 @@ bool t3dWorldCookMeshClustersCold( const t3dWorldClusterCookSource_t &rSource,
 			triangles[triCount++] = t3dWorldPackTriangle( local[0], local[1], local[2] );
 		}
 	}
-	if ( triCount ) {
-		if ( rBuffers.m_nClusterCount >= rBuffers.m_nClusterCapacity
-		        || rBuffers.m_nClusterVertexIndexCount + localCount > rBuffers.m_nClusterVertexIndexCapacity
-		        || rBuffers.m_nTriangleWordCount + T3D_WORLD_CLUSTER_MAX_TRIANGLES > rBuffers.m_nTriangleWordCapacity ) {
-			return false;
-		}
-		t3dWorldCluster_t &cl = rBuffers.m_pClusters[rBuffers.m_nClusterCount];
-		t3dWorldClusterVtMetadata_t &vt = rBuffers.m_pVtMetadata[rBuffers.m_nClusterCount];
-		memset( &cl, 0, sizeof( cl ) );
-		cl.m_nVertexIndexOffset = rBuffers.m_nClusterVertexIndexCount;
-		cl.m_nTriangleOffset = rBuffers.m_nTriangleWordCount;
-		cl.m_nPackedCounts = t3dWorldPackU16Pair( ( uint16_t )localCount, ( uint16_t )triCount );
-		cl.m_nPackedLodGeometryKind = t3dWorldPackU16Pair( ( uint16_t )rSource.m_nLod, ( uint16_t )rSource.m_nGeometryKind );
-		cl.m_nMaterial = rSource.m_nMaterial;
-		cl.m_nFlags = rSource.m_nClusterFlags;
-		cl.m_nSourceId = rSource.m_nSourceId;
-		for ( uint32_t i = 0u; i < localCount; ++i ) {
-			rBuffers.m_pClusterVertexIndices[rBuffers.m_nClusterVertexIndexCount + i] = rSource.m_nVertexBase + localVertices[i];
-		}
-		for ( uint32_t i = 0u; i < triCount; ++i ) {
-			rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = triangles[i];
-		}
-		for ( uint32_t i = triCount; i < T3D_WORLD_CLUSTER_MAX_TRIANGLES; ++i ) {
-			rBuffers.m_pTriangleWords[rBuffers.m_nTriangleWordCount + i] = 0u;
-		}
-		t3dWorldComputeClusterDerived( rSource, localVertices, localCount, triangles, triCount, cl, vt );
-		rBuffers.m_nClusterVertexIndexCount += localCount;
-		rBuffers.m_nTriangleWordCount += T3D_WORLD_CLUSTER_MAX_TRIANGLES;
-		++rBuffers.m_nClusterCount;
-		++rStats.m_nClusterCount;
-		rStats.m_nRasterTriangleCount += triCount;
-		rStats.m_nPaddedTriangleSlots += T3D_WORLD_CLUSTER_MAX_TRIANGLES - triCount;
+	if ( !t3dWorldFlushClusterCold( rSource, rBuffers, rStats, localVertices, localCount, triangles, triCount ) ) {
+		return false;
 	}
 	rSpan.m_nClusterCount = rBuffers.m_nClusterCount - rSpan.m_nClusterOffset;
 	return rSpan.m_nClusterCount != 0u;

@@ -62,7 +62,6 @@ private:
 	uint64_t m_nMirroredShapes = 0u;
 
 	bool rebuildCellCapacityCold( void );
-	bool cellWithinRange( const Vector2i &rRegion, const Vector2i &rCell, int nCellSize, real_t fRange, const Vector3 &rTarget ) const;
 	void configureBody( t3dInstancePhysicsCell_t &rRecord );
 	int findCellRecord( const Vector2i &rRegion, const Vector2i &rCell, int nMeshId ) const;
 	int findFreeCellRecord( void ) const;

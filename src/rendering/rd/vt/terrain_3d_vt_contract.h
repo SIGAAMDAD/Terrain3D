@@ -189,7 +189,7 @@ static inline uint32_t t3d_vt_physical_address_slot_v3( const uint32_t nAddress 
 	return nAddress & T3D_VT_V3_PHYSICAL_SLOT_MASK;
 }
 
-// The current RenderWorld owns four physical arrays already. P04 reinterprets
+// The current World owns four physical arrays already. P04 reinterprets
 // them by format family without increasing descriptor count: BC1=albedo array,
 // BC7=surface array, BC5=normal array, R8=height array.
 static inline uint32_t t3d_vt_physical_family_legacy_resource_channel( const t3dVTPhysicalFormatFamily_t Family ) {

@@ -47,13 +47,13 @@ public:
 	Terrain3DVTGpu();
 	~Terrain3DVTGpu();
 
-	bool prepare_cpu_cold( const T3DVtGpuResourcePlan &pPlan, const T3DRenderWorldLimits &pLimits );
+	bool prepare_cpu_cold( const T3DVtGpuResourcePlan &pPlan, const T3DWorldLimits &pLimits );
 	bool prepare_storage_cold( const Terrain3DVtResourceImage *pResources,
-	        const T3DRenderWorldLimits &pLimits );
+	        const T3DWorldLimits &pLimits );
 	bool bind_executable_cold();
 	bool service_bind_executable_cold( uint32_t nMaxWorkUnits );
 	bool initialize_cold( const Terrain3DVtResourceImage *pResources,
-	        const T3DRenderWorldLimits &pLimits );
+	        const T3DWorldLimits &pLimits );
 	void shutdown_cold();
 	void seal_hot_runtime();
 	bool upload_database_warm( const T3DVTDatabaseView &pDatabase, const T3DVTResidencyState &pResidency );
@@ -107,7 +107,7 @@ private:
 	godot::RenderingDevice *m_pRenderingDevice;
 	const Terrain3DVtResourceImage *m_pResources;
 	const T3DVTDatabaseView *m_pDatabaseView;
-	T3DRenderWorldLimits m_Limits;
+	T3DWorldLimits m_Limits;
 	T3DVtGpuResourcePlan m_Plan;
 	godot::PackedByteArray m_AllocationUpload;
 	godot::PackedByteArray m_PageEntryUpload;
@@ -115,9 +115,9 @@ private:
 	godot::PackedInt32Array m_RetiredSlotScratch;
 	godot::PackedInt32Array m_UploadBatchOrder;
 	godot::PackedByteArray m_UploadBatchReservations;
-	godot::PackedByteArray m_PhysicalUpload[T3D_RW_VT_CHANNEL_COUNT];
-	godot::PackedByteArray m_NeutralPhysicalUpload[T3D_RW_VT_CHANNEL_COUNT];
-	godot::PackedByteArray m_NeutralTailUpload[T3D_RW_VT_CHANNEL_COUNT];
+	godot::PackedByteArray m_PhysicalUpload[T3D_VT_CHANNEL_COUNT];
+	godot::PackedByteArray m_NeutralPhysicalUpload[T3D_VT_CHANNEL_COUNT];
+	godot::PackedByteArray m_NeutralTailUpload[T3D_VT_CHANNEL_COUNT];
 	T3DVTGpuStats m_Stats;
 	uint64_t m_nHotCreateEpoch;
 	uint64_t m_nHotFreeEpoch;

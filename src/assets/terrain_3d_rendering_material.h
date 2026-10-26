@@ -3,15 +3,15 @@
 #ifndef TERRAIN3D_RENDERING_MATERIAL_H
 #define TERRAIN3D_RENDERING_MATERIAL_H
 
-#include "assets/terrain_3d_render_world_material_resource.h"
+#include "assets/terrain_3d_world_material_resource.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/string.hpp>
 
-class Terrain3DRenderingMaterial : public Terrain3DRenderWorldMaterial {
-	GDCLASS( Terrain3DRenderingMaterial, Terrain3DRenderWorldMaterial );
+class Terrain3DRenderingMaterial : public Terrain3DWorldMaterial {
+	GDCLASS( Terrain3DRenderingMaterial, Terrain3DWorldMaterial );
 
 public:
 	typedef enum t3dSurfaceTextureLayout_e {

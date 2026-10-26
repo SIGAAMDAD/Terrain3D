@@ -66,7 +66,6 @@ private:
 
 	void advancePublicationGeneration( void );
 	bool rebuildCellCapacityCold( void );
-	bool cellWithinRange( const Vector2i &rRegion, const Vector2i &rCell, int nCellSize, real_t fRange, const Vector3 &rTarget ) const;
 	bool hasUsableExplicitProxy( const Ref<Terrain3DMeshAsset> &rAsset ) const;
 	bool buildCellRecord( Terrain3DRegion *pRegion,
 	        const t3dInstanceCell_t &rCell,

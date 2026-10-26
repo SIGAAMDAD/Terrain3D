@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 // Cross-renderer VT publication contract. The physical VT is shared by terrain,
-// unified-world, instances, previews, and companion RenderWorld consumers; no
+// unified-world, instances, previews, and companion World consumers; no
 // raster family owns this ABI.
 static const uint32_t T3D_SHARED_VT_CHANNEL_COUNT = T3D_VT_CHANNEL_COUNT;
 static const uint32_t T3D_SHARED_VT_MAX_TEXTURE_BANKS = 1u;
@@ -30,7 +30,7 @@ struct T3DSharedVTBindings {
 	uint64_t nBindingGeneration;
 };
 
-// Transitional source compatibility for the RenderWorld Stage-A bridge. New
+// Transitional source compatibility for the World Stage-A bridge. New
 // cross-renderer consumers should use T3DSharedVTBindings directly.
 typedef T3DSharedVTBindings T3DTerrainStageASharedVTBindings;
 

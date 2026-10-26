@@ -157,7 +157,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 			Legacy.nReserved0 = T3D_VT_RESIDENCY_TERRAIN;
 			if ( SourceChannel.m_nPageCount == 0u ) {
 				Candidate.pRuntimeAllocations[nRuntimeId].m_nTailIndex = T3D_VT_INVALID_TAIL;
-				for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) Candidate.pRuntimeTailSources[nRuntimeId].nPayloadId[c] = T3D_VT_INVALID_PAGE;
+				for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) Candidate.pRuntimeTailSources[nRuntimeId].nPayloadId[c] = T3D_VT_INVALID_PAGE;
 				continue;
 			}
 			if ( SourceChannel.m_nTailIndex >= Header.m_nTailCount ) {
@@ -207,7 +207,7 @@ static bool t3d_vt_pack_runtime_open_v3_cold( const void *const pPackage,
 			const uint32_t nFamily = ( uint32_t )t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t )iChannel );
 			RuntimeTail.m_nChannelMask = 1u << nFamily;
 			RuntimeTail.m_nContentId = SourceTail.m_nContentId;
-			for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNELS; ++c ) Candidate.pRuntimeTailSources[nRuntimeId].nPayloadId[c] = T3D_VT_INVALID_PAGE;
+			for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) Candidate.pRuntimeTailSources[nRuntimeId].nPayloadId[c] = T3D_VT_INVALID_PAGE;
 			Candidate.pRuntimeTailSources[nRuntimeId].nPayloadId[nFamily] = SourceTail.m_nPayloadId;
 			Candidate.pRuntimeTailSources[nRuntimeId].nAtlasInteriorWidth = SourceTail.m_nAtlasInteriorWidth;
 			Candidate.pRuntimeTailSources[nRuntimeId].nAtlasInteriorHeight = SourceTail.m_nAtlasInteriorHeight;

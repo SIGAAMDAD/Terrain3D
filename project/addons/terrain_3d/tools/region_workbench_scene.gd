@@ -3,27 +3,10 @@
 @tool
 extends Node3D
 
+const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
+
 @export_file("*.json") var manifest_path: String
 
-const REGION_NODES_NAME: StringName = &"RegionNodes"
-const REGION_NODES_LOADED_META: StringName = &"terrain3d_region_nodes_loaded"
-const REGION_CONTAINER_META: StringName = &"terrain3d_workbench_region_container"
-const REGION_LOCATION_META: StringName = &"terrain3d_workbench_region_location"
-const NODE_META_ID: StringName = &"terrain3d_stream_id"
-const NODE_META_FLAGS: StringName = &"terrain3d_stream_flags"
-const NODE_META_STATE: StringName = &"terrain3d_stream_state"
-const NODE_META_SOURCE_PATH: StringName = &"terrain3d_stream_source_path"
-const NODE_META_LOAD_ERROR: StringName = &"terrain3d_stream_load_error"
-const NODE_META_BOUNDARY_POLICY: StringName = &"terrain3d_boundary_policy"
-const NODE_META_COVERAGE_MIN: StringName = &"terrain3d_coverage_min"
-const NODE_META_COVERAGE_MAX: StringName = &"terrain3d_coverage_max"
-const NODE_META_LIGHTING_CLASS: StringName = &"terrain3d_lighting_class"
-const NODE_META_BAKED_LIGHTING_MODE: StringName = &"terrain3d_baked_lighting_mode"
-const NODE_META_CONTRIBUTE_BAKED_GI: StringName = &"terrain3d_contribute_baked_gi"
-const NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL: StringName = &"terrain3d_receive_dynamic_directional"
-const NODE_META_DYNAMIC_SHADOW_ELIGIBLE: StringName = &"terrain3d_dynamic_shadow_eligible"
-const NODE_META_SHADOW_PROXY_SCENE_PATH: StringName = &"terrain3d_shadow_proxy_scene_path"
-const BOUNDARY_POLICY_BOUNDS: int = 1
 
 var _initializing: bool = false
 
@@ -164,10 +147,10 @@ func _ensure_region_center(manifest: Terrain3DRegionWorkbenchManifest) -> void:
 
 
 func _ensure_region_nodes(terrain: Node3D, manifest: Terrain3DRegionWorkbenchManifest) -> void:
-	var region_nodes := get_node_or_null(NodePath(String(REGION_NODES_NAME))) as Node3D
+	var region_nodes := get_node_or_null(NodePath(String(WorkbenchMetadata.REGION_NODES_NAME))) as Node3D
 	if not is_instance_valid(region_nodes):
 		region_nodes = Node3D.new()
-		region_nodes.name = REGION_NODES_NAME
+		region_nodes.name = WorkbenchMetadata.REGION_NODES_NAME
 		region_nodes.editor_description = "Per-region streamed-object ownership. Each Region_X_Z child is positioned at that region's world origin; edit streamed roots inside the owning region container."
 		add_child(region_nodes)
 		if Engine.is_editor_hint():
@@ -189,7 +172,7 @@ func _ensure_region_nodes(terrain: Node3D, manifest: Terrain3DRegionWorkbenchMan
 		var location: Vector2i = entry.location
 		var container_name: String = "Region_%d_%d" % [location.x, location.y]
 		var region_container := region_nodes.get_node_or_null(NodePath(container_name)) as Node3D
-		if is_instance_valid(region_container) and bool(region_container.get_meta(REGION_NODES_LOADED_META, false)):
+		if is_instance_valid(region_container) and bool(region_container.get_meta(WorkbenchMetadata.REGION_NODES_LOADED_META, false)):
 			continue
 		if not is_instance_valid(region_container):
 			region_container = Node3D.new()
@@ -197,8 +180,8 @@ func _ensure_region_nodes(terrain: Node3D, manifest: Terrain3DRegionWorkbenchMan
 			region_container.position = Vector3(
 				float(location.x) * world_region_size, 0.0,
 				float(location.y) * world_region_size)
-			region_container.set_meta(REGION_CONTAINER_META, true)
-			region_container.set_meta(REGION_LOCATION_META, location)
+			region_container.set_meta(WorkbenchMetadata.REGION_CONTAINER_META, true)
+			region_container.set_meta(WorkbenchMetadata.REGION_LOCATION_META, location)
 			region_container.editor_description = "Streamed roots owned by terrain region %s. Direct children are serialized back into this region." % location
 			region_nodes.add_child(region_container, true)
 			if Engine.is_editor_hint():
@@ -228,9 +211,9 @@ func _ensure_region_nodes(terrain: Node3D, manifest: Terrain3DRegionWorkbenchMan
 			if node is Node3D:
 				(node as Node3D).transform = descriptor.transform
 			_apply_descriptor_metadata(node, descriptor)
-		region_container.set_meta(REGION_NODES_LOADED_META, true)
+		region_container.set_meta(WorkbenchMetadata.REGION_NODES_LOADED_META, true)
 
-	region_nodes.set_meta(REGION_NODES_LOADED_META, true)
+	region_nodes.set_meta(WorkbenchMetadata.REGION_NODES_LOADED_META, true)
 	if Engine.is_editor_hint():
 		EditorInterface.mark_scene_as_unsaved()
 
@@ -255,26 +238,26 @@ func _instantiate_streamed_node(descriptor: Terrain3DRegionNodeDescriptor) -> No
 func _make_missing_node_placeholder(descriptor: Terrain3DRegionNodeDescriptor) -> Node3D:
 	var placeholder := Node3D.new()
 	placeholder.name = "MissingRegionNode_%d" % descriptor.id
-	placeholder.set_meta(NODE_META_LOAD_ERROR, true)
+	placeholder.set_meta(WorkbenchMetadata.NODE_META_LOAD_ERROR, true)
 	return placeholder
 
 
 func _apply_descriptor_metadata(node: Node, descriptor: Terrain3DRegionNodeDescriptor) -> void:
-	node.set_meta(NODE_META_ID, descriptor.id)
-	node.set_meta(NODE_META_FLAGS, descriptor.flags)
-	node.set_meta(NODE_META_STATE, descriptor.state.duplicate(true))
+	node.set_meta(WorkbenchMetadata.NODE_META_ID, descriptor.id)
+	node.set_meta(WorkbenchMetadata.NODE_META_FLAGS, descriptor.flags)
+	node.set_meta(WorkbenchMetadata.NODE_META_STATE, descriptor.state.duplicate(true))
 	if not descriptor.scene_path.is_empty():
-		node.set_meta(NODE_META_SOURCE_PATH, descriptor.scene_path)
-	node.set_meta(NODE_META_BOUNDARY_POLICY, descriptor.boundary_policy)
-	node.set_meta(NODE_META_COVERAGE_MIN, descriptor.coverage_min)
-	node.set_meta(NODE_META_COVERAGE_MAX, descriptor.coverage_max)
-	node.set_meta(NODE_META_LIGHTING_CLASS, descriptor.lighting_class)
-	node.set_meta(NODE_META_BAKED_LIGHTING_MODE, descriptor.baked_lighting_mode)
-	node.set_meta(NODE_META_CONTRIBUTE_BAKED_GI, descriptor.contribute_baked_gi)
-	node.set_meta(NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, descriptor.receive_dynamic_directional)
-	node.set_meta(NODE_META_DYNAMIC_SHADOW_ELIGIBLE, descriptor.dynamic_shadow_eligible)
+		node.set_meta(WorkbenchMetadata.NODE_META_SOURCE_PATH, descriptor.scene_path)
+	node.set_meta(WorkbenchMetadata.NODE_META_BOUNDARY_POLICY, descriptor.boundary_policy)
+	node.set_meta(WorkbenchMetadata.NODE_META_COVERAGE_MIN, descriptor.coverage_min)
+	node.set_meta(WorkbenchMetadata.NODE_META_COVERAGE_MAX, descriptor.coverage_max)
+	node.set_meta(WorkbenchMetadata.NODE_META_LIGHTING_CLASS, descriptor.lighting_class)
+	node.set_meta(WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE, descriptor.baked_lighting_mode)
+	node.set_meta(WorkbenchMetadata.NODE_META_CONTRIBUTE_BAKED_GI, descriptor.contribute_baked_gi)
+	node.set_meta(WorkbenchMetadata.NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, descriptor.receive_dynamic_directional)
+	node.set_meta(WorkbenchMetadata.NODE_META_DYNAMIC_SHADOW_ELIGIBLE, descriptor.dynamic_shadow_eligible)
 	if not descriptor.shadow_proxy_scene_path.is_empty():
-		node.set_meta(NODE_META_SHADOW_PROXY_SCENE_PATH, descriptor.shadow_proxy_scene_path)
+		node.set_meta(WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, descriptor.shadow_proxy_scene_path)
 
 
 func _set_owner_recursive(node: Node, scene_owner: Node) -> void:

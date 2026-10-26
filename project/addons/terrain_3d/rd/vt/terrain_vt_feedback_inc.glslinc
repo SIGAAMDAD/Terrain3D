@@ -11,7 +11,7 @@
 // T3D_VT_DECLARE_FRAGMENT_BINDINGS only while this include is expanded. When
 // that declaration macro is absent, this include publishes helpers only and no
 // descriptor set. Consumer-owned adapter guards stay at their call sites so a
-// missing terrain/instance/RenderWorld adapter fails deterministically without
+// missing terrain/instance/World adapter fails deterministically without
 // changing this shared descriptor ABI. Compute predictors declare their request
 // buffers themselves and consume the same helper path.
 //

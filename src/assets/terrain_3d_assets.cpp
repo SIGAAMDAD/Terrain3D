@@ -7,15 +7,12 @@
 #include "core/terrain_3d_owner.h"
 #include "core/terrain_3d_util.h"
 #include "eastl_config.h"
+#include "integration/terrain_3d_resource_persistence.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
-#include <godot_cpp/classes/editor_file_system.hpp>
-#include <godot_cpp/classes/editor_interface.hpp>
-#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
-#include <godot_cpp/classes/resource_saver.hpp>
 
 // -----------------------------------------------------------------------------
 // Private functions
@@ -1459,39 +1456,7 @@ void Terrain3DAssets::loadPendingMeshes( void ) {
 }
 
 Error Terrain3DAssets::save( const String &rPath ) {
-	if ( rPath.is_empty() && get_path().is_empty() ) {
-		return ERR_FILE_NOT_FOUND;
-	}
-	if ( !rPath.is_empty() ) {
-		LOG( DEBUG, "Setting file path to ", rPath );
-		take_over_path( rPath );
-	}
-	// Avoid rewriting clean asset resources during scene pre-save. The nested
-	// asset signal callbacks above mark this resource dirty when authored content
-	// actually changes.
-	Error err = OK;
-	String path = get_path();
-	const bool explicit_path = !rPath.is_empty();
-	if ( path.get_extension() == "tres" || path.get_extension() == "res" ) {
-		if ( !explicit_path && !m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
-			return OK;
-		}
-		LOG( DEBUG, String( "Attempting to save external file: " ) + path );
-		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
-		if ( err == OK ) {
-			m_bPersistenceDirty = false;
-			LOG( INFO, "File saved successfully: ", path );
-			if ( IS_EDITOR && path.begins_with( "res://" ) ) {
-				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
-				if ( pFilesystem && !pFilesystem->is_scanning() ) {
-					pFilesystem->update_file( path );
-				}
-			}
-		} else {
-			LOG( ERROR, "Cannot save file: ", path, ". Error code: ", ERROR, ". Look up @GlobalScope Error enum in the Godot docs" );
-		}
-	}
-	return err;
+	return t3dSaveExternalResource( this, rPath, m_bPersistenceDirty, []() {} );
 }
 
 // -----------------------------------------------------------------------------

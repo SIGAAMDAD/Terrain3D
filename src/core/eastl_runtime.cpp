@@ -69,4 +69,4 @@ void AssertionFailure( void *pInstructionPointer, const char *pszExpression ) {
 // EASTL's prime rehash policy and shared empty bucket array are implemented in
 // its runtime source rather than headers. Import only that implementation here;
 // compiling it separately as well would create duplicate definitions.
-#include "../thirdparty/EASTL/source/hashtable.cpp"
+#include "../../thirdparty/EASTL/source/hashtable.cpp"

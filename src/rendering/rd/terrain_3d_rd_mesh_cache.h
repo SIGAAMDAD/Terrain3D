@@ -3,6 +3,8 @@
 #define TERRAIN3D_RD_MESH_CACHE_H
 
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_geometry_view.h"
 #include "instances/terrain_3d_instancer_bringup.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 #include "rendering/rd/world/terrain_3d_world_cluster_cooker.h"
@@ -42,8 +44,7 @@ typedef struct t3dRdMeshSourceSurface_s {
 
 
 typedef struct t3dRdArenaSurfaceView_s {
-	RID m_hVertexArray;
-	RID m_hIndexArray;
+	Terrain3DRdGeometryView m_view;
 } t3dRdArenaSurfaceView_t;
 
 typedef struct t3dRdMeshSourceLod_s {
@@ -136,15 +137,10 @@ private:
 	CLASS_NAME_STATIC( "Terrain3DRdMeshCache" );
 
 	Terrain3DRdContext &m_context;
-	RID m_hVertexArena;
-	RID m_hVertexArray;
-	RID m_hIndex32Arena;
-	RID m_hIndex32Array;
+	Terrain3DRdGpuBuffer m_vertexArena;
+	Terrain3DRdGpuBuffer m_index32Arena;
+	Terrain3DRdGeometryView m_arenaView;
 	int64_t m_nVertexFormat = RenderingDevice::INVALID_FORMAT_ID;
-	uint32_t m_nVertexCapacityBytes = 0u;
-	uint32_t m_nIndex32CapacityBytes = 0u;
-	uint32_t m_nVertexUsedBytes = 0u;
-	uint32_t m_nIndex32UsedBytes = 0u;
 	uint32_t m_nGeneration = 0u;
 	uint64_t m_nSourceGeneration = 0u;
 	uint64_t m_nArenaCapacityMissCount = 0u;
@@ -167,10 +163,9 @@ private:
 #endif
 
 	bool ensureVertexFormat( void );
-	bool ensureArena( RID &rBuffer,
-	        uint32_t &rCapacityBytes,
+	bool ensureArena( Terrain3DRdGpuBuffer &rBuffer,
 	        uint32_t nRequiredBytes,
-	        const String &rName,
+	        const char *pName,
 	        Terrain3DRdContext::ResourceType resourceType,
 	        Terrain3DRdContext::MemoryCategory memoryCategory );
 	bool rebuildArrays( void );
@@ -178,7 +173,7 @@ private:
 	bool rebuildSurfaceViews( const t3dRdMeshSourceSnapshot_t *pSnapshot );
 	void discardSurfaceViews( void );
 #endif
-	bool uploadChangedChunks( const RID &rBuffer,
+	bool uploadChangedChunks( const Terrain3DRdGpuBuffer &rBuffer,
 	        const PackedByteArray &rCurrent,
 	        const eastl::vector<uint64_t, Terrain3DEastlAllocator> &rCurrentHashes,
 	        const eastl::vector<uint64_t, Terrain3DEastlAllocator> &rPreviousHashes,
@@ -256,20 +251,20 @@ public:
 		return m_lods.size();
 	}
 	EA_FORCE_INLINE RID getVertexArray( void ) const {
-		return m_hVertexArray;
+		return m_arenaView.vertexRid();
 	}
 	EA_FORCE_INLINE int64_t getVertexFormat( void ) const {
 		return m_nVertexFormat;
 	}
 	EA_FORCE_INLINE RID getIndexArray( void ) const {
-		return m_hIndex32Array;
+		return m_arenaView.indexRid();
 	}
 #if T3D_INSTANCER_SHARED_MESH_ARENA
 	EA_FORCE_INLINE RID getSurfaceVertexArray( const uint32_t nSurfaceSlot ) const {
-		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_hVertexArray : RID();
+		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_view.vertexRid() : RID();
 	}
 	EA_FORCE_INLINE RID getSurfaceIndexArray( const uint32_t nSurfaceSlot ) const {
-		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_hIndexArray : RID();
+		return nSurfaceSlot < m_surfaceViews.size() ? m_surfaceViews[nSurfaceSlot].m_view.indexRid() : RID();
 	}
 	EA_FORCE_INLINE uint32_t getSurfaceViewCount( void ) const {
 		return ( uint32_t )( m_surfaceViews.size() );
@@ -282,13 +277,13 @@ public:
 		return m_nSourceGeneration;
 	}
 	EA_FORCE_INLINE uint64_t getGpuBytes( void ) const {
-		return ( uint64_t )( m_nVertexCapacityBytes ) + ( uint64_t )( m_nIndex32CapacityBytes );
+		return ( uint64_t )( m_vertexArena.capacityBytes() ) + ( uint64_t )( m_index32Arena.capacityBytes() );
 	}
 	EA_FORCE_INLINE bool isReady( void ) const {
 #if T3D_INSTANCER_SHARED_MESH_ARENA
-		return m_hVertexArray.is_valid() && !m_surfaceViews.empty() && m_nGeneration != 0u;
+		return m_arenaView.hasVertex() && !m_surfaceViews.empty() && m_nGeneration != 0u;
 #else
-		return m_hVertexArray.is_valid() && m_nGeneration != 0u;
+		return m_arenaView.hasVertex() && m_nGeneration != 0u;
 #endif
 	}
 	EA_FORCE_INLINE uint64_t getArenaCapacityMissCount( void ) const {
@@ -313,16 +308,16 @@ public:
 		return m_lastError;
 	}
 	EA_FORCE_INLINE uint32_t getVertexCapacityBytes( void ) const {
-		return m_nVertexCapacityBytes;
+		return m_vertexArena.capacityBytes();
 	}
 	EA_FORCE_INLINE uint32_t getIndex32CapacityBytes( void ) const {
-		return m_nIndex32CapacityBytes;
+		return m_index32Arena.capacityBytes();
 	}
 	EA_FORCE_INLINE uint32_t getVertexUsedBytes( void ) const {
-		return m_nVertexUsedBytes;
+		return m_vertexArena.usedBytes();
 	}
 	EA_FORCE_INLINE uint32_t getIndex32UsedBytes( void ) const {
-		return m_nIndex32UsedBytes;
+		return m_index32Arena.usedBytes();
 	}
 };
 

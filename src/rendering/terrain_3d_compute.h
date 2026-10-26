@@ -20,6 +20,10 @@
 using namespace godot;
 #endif
 #include "rendering/rd/infrastructure/terrain_3d_local_compute_buffer_service.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_sampler.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_texture.h"
 
 // Compute acceleration has two explicit device domains:
 // - a local RenderingDevice for CPU-authoritative brush/derived jobs that require readback;
@@ -84,7 +88,7 @@ typedef struct t3dDerivedMapComputeJob_s {
 } t3dDerivedMapComputeJob_t;
 
 typedef struct t3dPipeline_s {
-	RID m_hShader;
+	Terrain3DRdShader m_hShader;
 	RID m_hPipeline;
 	bool m_bAttempted = false;
 } t3dPipeline_t;
@@ -134,14 +138,14 @@ private:
 	Terrain3DLocalComputeBufferService::StorageSet m_brushStorage;
 	Terrain3DLocalComputeBufferService::StoragePairSet m_derivedStorage[s_nDerivedReadbackSlotCount];
 	RID m_hDisplacementUniformSet;
-	RID m_hDisplacementRegionBuffer;
-	RID m_hDisplacementMaterialBuffer;
-	RID m_hDisplacementOutputTexture;
+	Terrain3DRdGpuBuffer m_hDisplacementRegionBuffer;
+	Terrain3DRdGpuBuffer m_hDisplacementMaterialBuffer;
+	Terrain3DRdTexture m_hDisplacementOutputTexture;
 	RID m_hDisplacementBoundHeight;
 	RID m_hDisplacementBoundControl;
 	RID m_hDisplacementBoundDisplacement;
-	RID m_hNearestSampler;
-	RID m_hLinearRepeatSampler;
+	Terrain3DRdSampler m_hNearestSampler;
+	Terrain3DRdSampler m_hLinearRepeatSampler;
 	uint64_t m_nDisplacementRegionHash = 0u;
 	uint64_t m_nDisplacementMaterialHash = 0u;
 	bool m_bDisplacementRegionUploaded = false;

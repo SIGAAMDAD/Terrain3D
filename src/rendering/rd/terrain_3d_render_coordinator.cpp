@@ -18,6 +18,7 @@
 #include "memory/terrain_3d_memory.h"
 #include "rendering/terrain_3d_material.h"
 #include "rendering/rd/terrain_3d_rd_forward_plus_bridge.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_ocean_material_params.h"
 #include "terrain_3d.h"
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -54,14 +55,24 @@ static bool t3dRdShouldReportInstanceFailure( const uint64_t nFailureCount ) {
 	return nFailureCount <= 4u || ( nFailureCount & ( nFailureCount - 1u ) ) == 0u;
 }
 
-static uint64_t t3dRdPreviewVtRetryDelayUsec( const uint64_t nRetryCount ) {
-	const uint32_t nShift = ( uint32_t )( MIN( nRetryCount > 0u ? nRetryCount - 1u : 0u, 4u ) );
-	return 100000u << nShift;
-}
-
 static uint64_t t3dRdStartupTicksUsec( void ) {
 	Time *const pTime = Time::get_singleton();
 	return pTime ? pTime->get_ticks_usec() : 0u;
+}
+
+const char *Terrain3DRenderCoordinator::startupGpuStageName( const t3dStartupGpuStage_t eStage ) {
+	switch ( eStage ) {
+		case T3D_STARTUP_GPU_VT_STORAGE: return "VTStorage";
+		case T3D_STARTUP_GPU_VT_EXECUTABLE: return "VTExecutable";
+		case T3D_STARTUP_GPU_VT_PUBLICATION: return "VTPublication";
+		case T3D_STARTUP_GPU_TERRAIN_RENDERER: return "TerrainRenderer";
+		case T3D_STARTUP_GPU_WORLD_RUNTIME: return "WorldRuntime";
+		case T3D_STARTUP_GPU_INSTANCE_RENDERER: return "InstanceRenderer";
+		case T3D_STARTUP_GPU_OCEAN_RENDERER: return "OceanRenderer";
+		case T3D_STARTUP_GPU_COMPLETE: return "Complete";
+		case T3D_STARTUP_GPU_FAILED: return "Failed";
+		default: return "Unknown";
+	}
 }
 
 static Vector4 t3dRdGlobalVector4( const char *const pszName ) {
@@ -80,149 +91,15 @@ static Vector4 t3dRdGlobalVector4( const char *const pszName ) {
 	return Vector4();
 }
 
-static uint64_t t3dRdSharedVtMaterialSourceGeneration( const Ref<Terrain3DAssets> &rAssets ) {
-	if ( rAssets.is_null() ) {
-		return 0u;
-	}
-	uint64_t nGeneration = rAssets->getInstanceVtMaterialSourceGeneration();
-	const uint64_t nTerrainGeneration = rAssets->getTexturePublicationGeneration();
-	nGeneration ^= nTerrainGeneration + 0x9e3779b97f4a7c15ULL + ( nGeneration << 6u ) + ( nGeneration >> 2u );
-	return nGeneration == 0u ? 1u : nGeneration;
-}
-
-static float t3dRdMaterialFloatParam( const Terrain3DMaterial *const pMaterial, const char *const pszName, const float fDefault ) {
-	if ( !pMaterial ) {
-		return fDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::FLOAT || value.get_type() == Variant::INT ? ( float )( value ) : fDefault;
-}
-
-static uint32_t t3dRdMaterialUintParam( const Terrain3DMaterial *const pMaterial, const char *const pszName, const uint32_t nDefault ) {
-	if ( !pMaterial ) {
-		return nDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::INT ? ( uint32_t )( MAX( ( int64_t )( value ), int64_t( 0 ) ) ) : nDefault;
-}
-
-static bool t3dRdMaterialBoolParam( const Terrain3DMaterial *const pMaterial, const char *const pszName, const bool bDefault ) {
-	if ( !pMaterial ) {
-		return bDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::BOOL ? ( bool )( value ) : bDefault;
-}
-
-static Color t3dRdMaterialColorParam( const Terrain3DMaterial *const pMaterial, const char *const pszName, const Color &rDefault ) {
-	if ( !pMaterial ) {
-		return rDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	if ( value.get_type() == Variant::COLOR ) {
-		return ( Color )( value );
-	}
-	if ( value.get_type() == Variant::VECTOR3 ) {
-		const Vector3 vector = value;
-		return Color( vector.x, vector.y, vector.z, 1.0f );
-	}
-	return rDefault;
-}
-
-static Vector2 t3dRdMaterialVector2Param( const Terrain3DMaterial *const pMaterial, const char *const pszName, const Vector2 &rDefault ) {
-	if ( !pMaterial ) {
-		return rDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::VECTOR2 ? ( Vector2 )( value ) : rDefault;
-}
-
-static Vector3 t3dRdMaterialVector3Param( const Terrain3DMaterial *const pMaterial, const char *const pszName, const Vector3 &rDefault ) {
-	if ( !pMaterial ) {
-		return rDefault;
-	}
-	const Variant value = pMaterial->getShaderParam( StringName( pszName ) );
-	return value.get_type() == Variant::VECTOR3 ? ( Vector3 )( value ) : rDefault;
-}
-
-
-static Variant t3dRdOceanParam( const ShaderMaterial *const pMaterial, const char *const pszName ) {
-	return pMaterial ? pMaterial->get_shader_parameter( StringName( pszName ) ) : Variant();
-}
-static float t3dRdOceanFloatParam( const ShaderMaterial *const pMaterial, const char *const pszName, const float fDefault ) {
-	const Variant value = t3dRdOceanParam( pMaterial, pszName );
-	return value.get_type() == Variant::FLOAT || value.get_type() == Variant::INT ? ( float )( value ) : fDefault;
-}
-static Color t3dRdOceanColorParam( const ShaderMaterial *const pMaterial, const char *const pszName, const Color &rDefault ) {
-	const Variant value = t3dRdOceanParam( pMaterial, pszName );
-	if ( value.get_type() == Variant::COLOR ) {
-		return ( Color )( value );
-	}
-	if ( value.get_type() == Variant::VECTOR3 ) {
-		const Vector3 v = value;
-		return Color( v.x, v.y, v.z, 1.0f );
-	}
-	return rDefault;
-}
-
-static uint32_t t3dRdSamplingMode( const t3dMaterialSamplingQuality_t quality ) {
-	return quality == MATERIAL_SAMPLING_FAST ? ( uint32_t )( TERRAIN_SAMPLING_SINGLE_SAMPLE )
-	                                         : ( uint32_t )( TERRAIN_SAMPLING_ADAPTIVE_WEIGHTED );
-}
-
-static uint32_t t3dRdNormalMode( const t3dTerrainNormalQuality_t quality ) {
-	return quality == TERRAIN_NORMAL_QUALITY_GEOMETRY ? ( uint32_t )( TERRAIN_NORMAL_GEOMETRY_DERIVATIVE )
-	                                                  : ( uint32_t )( TERRAIN_NORMAL_DERIVED_TEXTURE );
-}
-
-static uint32_t t3dRdColorMode( const t3dTerrainColorQuality_t quality ) {
-	return quality == TERRAIN_COLOR_QUALITY_FAST ? ( uint32_t )( COLOR_SAMPLING_HARDWARE_FILTERED )
-	                                             : ( uint32_t )( COLOR_SAMPLING_EXACT_4_TAP );
-}
-
-static uint32_t t3dRdDetilingMode( const t3dTierDetilingQuality_t quality ) {
-	return quality == TIER_DETILING_DISABLED ? ( uint32_t )( DETILING_DISABLED ) : ( uint32_t )( DETILING_DISCRETE_8 );
-}
-
-static void t3dRdFillTierConfig( t3dRdTierMaterialConfig_t &rConfig,
-        const t3dMaterialSamplingQuality_t sampling,
-        const t3dTerrainNormalQuality_t normal,
-        const t3dTerrainColorQuality_t color,
-        const t3dSurfaceResponseQuality_t surface,
-        const t3dTextureSurfaceMode_t textureSurface,
-        const t3dTierLightingModel_t lighting,
-        const t3dTierDetilingQuality_t detiling,
-        const t3dTextureFiltering_t filtering,
-        const float fAuthoredColor,
-        const float fWetness,
-        const float fLodBias,
-        const float fQualityLodOffset ) {
-	rConfig.m_nSamplingMode = t3dRdSamplingMode( sampling );
-	rConfig.m_nNormalMode = t3dRdNormalMode( normal );
-	rConfig.m_nColorMode = t3dRdColorMode( color );
-	rConfig.m_nSurfaceResponse = ( uint32_t )( surface );
-	rConfig.m_nTextureSurfaceMode = ( uint32_t )( textureSurface );
-	rConfig.m_nLightingModel = ( uint32_t )( lighting );
-	rConfig.m_nDetilingMode = t3dRdDetilingMode( detiling );
-	rConfig.m_nFiltering = ( uint32_t )( filtering );
-	rConfig.m_fAuthoredColorContribution = CLAMP( fAuthoredColor, 0.0f, 1.0f );
-	rConfig.m_fWetnessContribution = CLAMP( fWetness, 0.0f, 1.0f );
-	rConfig.m_fMaterialLodBias = fLodBias;
-	rConfig.m_fQualityLodOffset = fQualityLodOffset;
-}
-
 
 bool Terrain3DRenderCoordinator::bindRuntimeAllocator( Terrain3DMemoryZone *const pZone, const t3dAllocatorOverflowPolicy_t ePolicy ) {
 	if ( !pZone || !m_virtualTexture.bindRuntimeAllocator( pZone ) || !m_terrainMegaVT.attachVirtualTextureCold( &m_virtualTexture )
 	        || !m_publicationBuilder.bindRuntimeAllocator( pZone, ePolicy ) || !m_instanceRenderer.bindRuntimeAllocator( pZone, ePolicy )
 	        || !m_instanceRenderer.attachVirtualTextureCold( &m_virtualTexture )
-	        || !m_previewRenderer.bindRuntimeAllocator( pZone, ePolicy ) || !m_previewRenderer.attachVirtualTextureCold( &m_virtualTexture )
+	        || !m_previewService.bindRuntimeAllocator( *this, pZone, ePolicy )
 	        || !m_sharedVtRuntime.bindRuntimeAllocator( pZone ) || !m_sharedVtRuntime.bindVirtualTexture( &m_virtualTexture ) ) {
 		return false;
 	}
-	const Terrain3DEastlAllocator allocator = Terrain3DEastlAllocator::zoneAllocator( pZone, ePolicy );
-	m_cachedPreviewMeshes.bindRuntimeAllocator( allocator );
-	m_pendingPreviewMeshes.bindRuntimeAllocator( allocator );
 	m_pRuntimeAllocatorZone = pZone;
 	m_eRuntimeAllocatorOverflowPolicy = ePolicy;
 	m_bRuntimeAllocatorBound = true;
@@ -238,32 +115,7 @@ bool Terrain3DRenderCoordinator::setVirtualTextureQualityProfile( const uint32_t
 }
 
 bool Terrain3DRenderCoordinator::bakePreviewVirtualTexturesCold( String *const pError ) {
-	if ( m_pTerrain == NULL || !m_pTerrain->isEditorAuthoringMode() || Engine::get_singleton() == NULL
-	        || !Engine::get_singleton()->is_editor_hint() ) {
-		if ( pError ) {
-			*pError = "Virtual-texture authoring bake is available only in Editor Authoring mode";
-		}
-		return false;
-	}
-	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
-	if ( assets.is_null() ) {
-		if ( pError ) {
-			*pError = "Virtual-texture authoring bake has no Terrain3DAssets source";
-		}
-		return false;
-	}
-
-	// Explicit user action is allowed to retry a quarantined generation. Keep the
-	// content-addressed P08 cache intact so unchanged allocations/channels remain hits.
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_nPreviewVtStagedMaterialSourceGeneration = 0u;
-		m_nPreviewVtFailedMaterialSourceGeneration = 0u;
-		m_nPreviewVtFailedFingerprint = 0u;
-		m_previewVtLastCookError = String();
-	}
-	m_nPreviewVtObservedMaterialSourceGeneration = t3dRdSharedVtMaterialSourceGeneration( assets );
-	return preparePreviewAuthoringPackageCold( assets, pError );
+	return m_previewService.bakePreviewVirtualTexturesCold( *this, pError );
 }
 
 bool Terrain3DRenderCoordinator::loadVirtualTexturePackageCold( const void *const pPackageBytes, const uint64_t nPackageBytes ) {
@@ -302,191 +154,7 @@ bool Terrain3DRenderCoordinator::loadRuntimeVirtualTexturePackageFileCold( Strin
 }
 
 bool Terrain3DRenderCoordinator::preparePreviewAuthoringPackageCold( const Ref<Terrain3DAssets> &rAssets, String *const pError ) {
-	if ( rAssets.is_null() ) {
-		if ( pError ) {
-			*pError = "RD preview VT has no Terrain3DAssets source";
-		}
-		return false;
-	}
-	const uint64_t nSourceGeneration = t3dRdSharedVtMaterialSourceGeneration( rAssets );
-	bool bRepublishPending = false;
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		if ( nSourceGeneration != 0u && nSourceGeneration == m_nPreviewVtFailedMaterialSourceGeneration ) {
-			if ( pError ) {
-				*pError = m_previewVtLastCookError.is_empty() ? String( "RD preview VT transient package cook failed" )
-				                                              : m_previewVtLastCookError;
-			}
-			return false;
-		}
-		if ( nSourceGeneration != 0u && nSourceGeneration == m_nPreviewVtStagedMaterialSourceGeneration ) {
-			bRepublishPending = m_bPreviewVtRepublishPending;
-			if ( !bRepublishPending ) {
-				return true;
-			}
-		}
-	}
-	if ( bRepublishPending ) {
-		( void )queuePreviewVtRepublishCold();
-		return true;
-	}
-
-	t3dVTGodotAssetMaterials_t materials;
-	String collectError;
-	if ( !t3d_vt_godot_collect_asset_materials( rAssets, materials, &collectError ) ) {
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_nPreviewVtFailedMaterialSourceGeneration = nSourceGeneration;
-		m_previewVtLastCookError = collectError.is_empty() ? String( "RD preview VT material collection failed" ) : collectError;
-		++m_nPreviewVtCookFailureCount;
-		if ( pError ) {
-			*pError = m_previewVtLastCookError;
-		}
-		return false;
-	}
-
-	const uint32_t nMaterialCount = ( uint32_t )materials.m_stableKeys.size();
-	PackedByteArray packageBytes;
-	uint64_t nFingerprint = 0u;
-	uint32_t nPackageGeneration = 0u;
-	t3dVTEditorCookTelemetryV3_t cookTelemetry{};
-	bool bStageNeutral = nMaterialCount == 0u;
-	if ( !bStageNeutral ) {
-		if ( m_previewVtEditorCache.m_CacheDirectory.is_empty() ) {
-			String cacheDirectory;
-			ProjectSettings *const pSettings = ProjectSettings::get_singleton();
-			if ( pSettings != NULL ) {
-				cacheDirectory = pSettings->globalize_path( "res://.godot/terrain3d/vt_cache" );
-			}
-			if ( cacheDirectory.is_empty() && m_pTerrain != NULL ) {
-				cacheDirectory = m_pTerrain->getDataDirectory().path_join( ".vt_cache" );
-			}
-			t3d_vt_godot_editor_cache_set_directory_v3( m_previewVtEditorCache, cacheDirectory );
-		}
-		String cookError;
-		if ( !t3d_vt_godot_cook_editor_package_incremental_v3( rAssets,
-		             materials.m_stableKeys.data(),
-		             materials.m_records.data(),
-		             nMaterialCount,
-		             m_previewVtEditorCache,
-		             packageBytes,
-		             nFingerprint,
-		             nPackageGeneration,
-		             cookTelemetry,
-		             &cookError )
-		        || nFingerprint == 0u || packageBytes.is_empty() ) {
-			t3dScopedLock_t lock( m_previewVtMutex );
-			m_previewVtEditorTelemetry = cookTelemetry;
-			m_nPreviewVtFailedMaterialSourceGeneration = nSourceGeneration;
-			m_nPreviewVtFailedFingerprint = nFingerprint;
-			m_previewVtLastCookError = cookError.is_empty() ? String( "RD preview VT transient package cook failed" ) : cookError;
-			++m_nPreviewVtCookFailureCount;
-			if ( pError ) {
-				*pError = m_previewVtLastCookError;
-			}
-			return false;
-		}
-	}
-
-	const t3dRenderLifecycleStatus_t renderStatus = snapshotRenderLifecycleStatusOnOwnerThread();
-	const bool bConsumersLive = ( renderStatus.m_nReadyMask & T3D_RENDER_READY_RESOURCE_CONSUMERS ) != 0u;
-	const t3dRenderWorldSharedResourceClass_t eLiveClass =
-	        ( t3dRenderWorldSharedResourceClass_t )renderStatus.m_nSharedResourceClass;
-	bool bNeedsPublication = false;
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		bNeedsPublication =
-		        bStageNeutral != m_bPreviewVtPublishedNeutral || ( !bStageNeutral && nFingerprint != m_nPreviewVtPublishedFingerprint );
-		m_previewVtPackageBytes = packageBytes;
-		m_nPreviewVtFingerprint = nFingerprint;
-		m_nPreviewVtPackageGeneration = nPackageGeneration;
-		m_nPreviewVtStagedMaterialSourceGeneration = nSourceGeneration;
-		m_nPreviewVtFailedMaterialSourceGeneration = 0u;
-		m_nPreviewVtFailedFingerprint = 0u;
-		m_previewVtLastCookError = String();
-		m_previewVtEditorTelemetry = cookTelemetry;
-		m_bPreviewVtPackageValid = !bStageNeutral;
-		m_bPreviewVtStageNeutral = bStageNeutral;
-		if ( !bStageNeutral && cookTelemetry.m_nDirtyAllocations != 0u ) {
-			++m_nPreviewVtRecookCount;
-		}
-		m_bPreviewVtRepublishPending = bConsumersLive && bNeedsPublication;
-		if ( m_bPreviewVtRepublishPending ) {
-			m_ePreviewVtRepublishResourceClass = eLiveClass;
-		}
-	}
-
-	if ( !bNeedsPublication ) {
-		return true;
-	}
-	if ( bConsumersLive ) {
-		( void )queuePreviewVtRepublishCold();
-		return true;
-	}
-
-	const bool bPublished = bStageNeutral ? m_virtualTexture.clearPackageCold()
-	                                      : loadVirtualTexturePackageCold( packageBytes.ptr(), ( uint64_t )packageBytes.size() );
-	if ( !bPublished ) {
-		const uint64_t nNowUsec = Time::get_singleton() != NULL ? Time::get_singleton()->get_ticks_usec() : 0u;
-		{
-			t3dScopedLock_t lock( m_previewVtMutex );
-			m_bPreviewVtRepublishPending = true;
-			m_ePreviewVtRepublishResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
-			++m_nPreviewVtRepublishRetryCount;
-			m_nPreviewVtRepublishRetryAfterUsec = nNowUsec + t3dRdPreviewVtRetryDelayUsec( m_nPreviewVtRepublishRetryCount );
-			m_previewVtLastRepublishError = bStageNeutral ? String( "RD preview VT neutral publication failed; retry scheduled" )
-			                                              : String( "RD preview VT transient package publication failed; retry scheduled" );
-			++m_nPreviewVtRepublishFailureCount;
-			if ( pError ) {
-				*pError = m_previewVtLastRepublishError;
-			}
-		}
-		return true;
-	}
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_previewVtPublishedPackageBytes = packageBytes;
-		m_nPreviewVtPublishedFingerprint = nFingerprint;
-		m_nPreviewVtPublishedPackageGeneration = nPackageGeneration;
-		m_bPreviewVtPublishedNeutral = bStageNeutral;
-		m_previewVtLastRepublishError = String();
-		m_nPreviewVtRepublishRetryCount = 0u;
-		m_nPreviewVtRepublishRetryAfterUsec = 0u;
-		++m_nPreviewVtPublishCount;
-	}
-	return true;
-}
-
-bool Terrain3DRenderCoordinator::queuePreviewVtRepublishCold( void ) {
-	const uint64_t nNowUsec = Time::get_singleton() != NULL ? Time::get_singleton()->get_ticks_usec() : 0u;
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		if ( !m_bPreviewVtRepublishPending || m_bPreviewVtRepublishQueued || m_bPreviewVtRepublishInProgress ) {
-			return true;
-		}
-		if ( m_nPreviewVtRepublishRetryAfterUsec != 0u && nNowUsec < m_nPreviewVtRepublishRetryAfterUsec ) {
-			return true;
-		}
-		m_bPreviewVtRepublishQueued = true;
-	}
-	if ( Terrain3DRdContext::isOnRenderThread() ) {
-		servicePreviewVtRepublishOnRenderThread();
-		return true;
-	}
-	if ( m_effect.is_valid()
-	        && Terrain3DRdContext::enqueueOnRenderThread(
-	                callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::servicePreviewVtRepublishOnRenderThread ) ) ) {
-		return true;
-	}
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_bPreviewVtRepublishQueued = false;
-		m_bPreviewVtRepublishPending = true;
-		++m_nPreviewVtRepublishRetryCount;
-		m_nPreviewVtRepublishRetryAfterUsec = nNowUsec + t3dRdPreviewVtRetryDelayUsec( m_nPreviewVtRepublishRetryCount );
-		m_previewVtLastRepublishError = "RD preview VT republish render-thread submission failed; retry scheduled";
-		++m_nPreviewVtRepublishFailureCount;
-	}
-	return false;
+	return m_previewService.preparePreviewAuthoringPackageCold( *this, rAssets, pError );
 }
 
 Terrain3DRenderCoordinator::~Terrain3DRenderCoordinator( void ) {
@@ -731,29 +399,7 @@ void Terrain3DRenderCoordinator::detachEffect( void ) {
 }
 
 bool Terrain3DRenderCoordinator::reloadPublishedPreviewVtPackageCold( void ) {
-	PackedByteArray packageBytes;
-	bool bNeutral = true;
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		if ( m_bPreviewVtPublishedNeutral || !m_previewVtPublishedPackageBytes.is_empty() ) {
-			bNeutral = m_bPreviewVtPublishedNeutral;
-			packageBytes = m_previewVtPublishedPackageBytes;
-		} else {
-			bNeutral = m_bPreviewVtStageNeutral;
-			packageBytes = m_previewVtPackageBytes;
-		}
-	}
-	if ( bNeutral ) {
-		return m_virtualTexture.clearPackageCold();
-	}
-	if ( packageBytes.is_empty() || !loadVirtualTexturePackageCold( packageBytes.ptr(), ( uint64_t )packageBytes.size() ) ) {
-		return false;
-	}
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		++m_nPreviewVtPublishCount;
-	}
-	return true;
+	return m_previewService.reloadPublishedPreviewVtPackageCold( *this );
 }
 
 bool Terrain3DRenderCoordinator::snapshotSharedVtBindingsHot( T3DSharedVTBindings &rBindings ) const {
@@ -764,38 +410,30 @@ const T3DSharedVTBindings &Terrain3DRenderCoordinator::getSharedVtBindingsHot( v
 	return m_sharedVtRuntime.get_shared_vt_bindings();
 }
 
-bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dRenderWorldSharedResourceClass_t eResourceClass ) {
+bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dVtSharedResourceClass_t eResourceClass ) {
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), false );
 #endif
 	if ( !m_shaderLibrary.isReady() ) {
 		return false;
 	}
-	const t3dRenderWorldSharedResourceClass_t eCurrentClass = m_sharedVtRuntime.get_shared_resource_class();
+	const t3dVtSharedResourceClass_t eCurrentClass = m_sharedVtRuntime.get_shared_resource_class();
 	if ( m_sharedVtRuntime.are_shared_resources_ready()
 	        && ( eCurrentClass == eResourceClass
-	                || ( eCurrentClass == T3D_RW_SHARED_RESOURCES_PRODUCTION && eResourceClass == T3D_RW_SHARED_RESOURCES_PREVIEW ) ) ) {
+	                || ( eCurrentClass == T3D_VT_SHARED_RESOURCES_PRODUCTION && eResourceClass == T3D_VT_SHARED_RESOURCES_PREVIEW ) ) ) {
 		publishRenderSharedResourceReadyOnRenderThread( eCurrentClass );
 		return true;
 	}
-	if ( eCurrentClass == T3D_RW_SHARED_RESOURCES_PREVIEW && eResourceClass == T3D_RW_SHARED_RESOURCES_PRODUCTION ) {
-		{
-			t3dScopedLock_t state_lock( m_previewStateMutex );
-			for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-				if ( m_szPreviewReadbackSlots[iSlot].bReadbackInFlight ) {
-					return false;
-				}
-			}
+	if ( eCurrentClass == T3D_VT_SHARED_RESOURCES_PREVIEW && eResourceClass == T3D_VT_SHARED_RESOURCES_PRODUCTION ) {
+		if ( m_previewService.hasReadbackInFlight() ) {
+			return false;
 		}
-		{
-			t3dScopedLock_t vt_lock( m_previewVtMutex );
-			++m_nSharedResourceClassTransitionCount;
-		}
+		m_previewService.noteSharedResourceClassTransition();
 		shutdownRendererOnRenderThread();
 		const t3dRdFrameSnapshotSlot_t *const pPublication = acquireSnapshotOnRenderThread();
 		const bool bEditorAuthoringMode = pPublication != NULL && pPublication->m_snapshot.m_bEditorAuthoringMode;
 		if ( bEditorAuthoringMode ) {
-			if ( !reloadPublishedPreviewVtPackageCold() ) {
+			if ( !m_previewService.reloadPublishedPreviewVtPackageCold( *this ) ) {
 				return false;
 			}
 		} else {
@@ -809,7 +447,7 @@ bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dRenderWorld
 
 	uint32_t nPreviewMaterialCapacity = 0u;
 	uint32_t nPreviewVirtualPageCapacity = 0u;
-	if ( eResourceClass == T3D_RW_SHARED_RESOURCES_PREVIEW ) {
+	if ( eResourceClass == T3D_VT_SHARED_RESOURCES_PREVIEW ) {
 		nPreviewMaterialCapacity = MAX( 1u, m_virtualTexture.getLoadedPackageAllocationCountCold() );
 		nPreviewVirtualPageCapacity = MAX( 1u, m_virtualTexture.getLoadedPackageVirtualPageCountCold() );
 	}
@@ -818,7 +456,7 @@ bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dRenderWorld
 	        eResourceClass,
 	        nPreviewMaterialCapacity,
 	        nPreviewVirtualPageCapacity,
-	        eResourceClass == T3D_RW_SHARED_RESOURCES_PRODUCTION ? &m_worldRuntime.getLimits() : NULL );
+	        eResourceClass == T3D_VT_SHARED_RESOURCES_PRODUCTION ? &m_worldRuntime.getLimits() : NULL );
 	if ( bReady ) {
 		publishRenderSharedResourceReadyOnRenderThread( eResourceClass );
 	}
@@ -826,98 +464,7 @@ bool Terrain3DRenderCoordinator::ensureSharedVtRuntimeCold( const t3dRenderWorld
 }
 
 void Terrain3DRenderCoordinator::servicePreviewVtRepublishOnRenderThread( void ) {
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-			if ( m_szPreviewReadbackSlots[iSlot].bReadbackInFlight ) {
-				t3dScopedLock_t vt_lock( m_previewVtMutex );
-				m_bPreviewVtRepublishQueued = false;
-				return;
-			}
-		}
-	}
-
-	PackedByteArray stagedBytes;
-	PackedByteArray previousBytes;
-	uint64_t nStagedFingerprint = 0u;
-	uint32_t nStagedGeneration = 0u;
-	bool bStagedNeutral = true;
-	bool bPreviousNeutral = true;
-	t3dRenderWorldSharedResourceClass_t eResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_bPreviewVtRepublishQueued = false;
-		if ( !m_bPreviewVtRepublishPending || m_bPreviewVtRepublishInProgress ) {
-			return;
-		}
-		const uint64_t nNowUsec = Time::get_singleton() != NULL ? Time::get_singleton()->get_ticks_usec() : 0u;
-		if ( m_nPreviewVtRepublishRetryAfterUsec != 0u && nNowUsec < m_nPreviewVtRepublishRetryAfterUsec ) {
-			return;
-		}
-		m_bPreviewVtRepublishInProgress = true;
-		stagedBytes = m_previewVtPackageBytes;
-		previousBytes = m_previewVtPublishedPackageBytes;
-		nStagedFingerprint = m_nPreviewVtFingerprint;
-		nStagedGeneration = m_nPreviewVtPackageGeneration;
-		bStagedNeutral = m_bPreviewVtStageNeutral;
-		bPreviousNeutral = m_bPreviewVtPublishedNeutral;
-		eResourceClass = m_ePreviewVtRepublishResourceClass;
-	}
-	const t3dRenderWorldSharedResourceClass_t eCurrentClass = m_sharedVtRuntime.get_shared_resource_class();
-	if ( eCurrentClass == T3D_RW_SHARED_RESOURCES_PRODUCTION || eResourceClass == T3D_RW_SHARED_RESOURCES_NONE ) {
-		eResourceClass = eCurrentClass;
-	}
-
-	shutdownRendererOnRenderThread();
-	bool bPublished = bStagedNeutral
-	        ? m_virtualTexture.clearPackageCold()
-	        : ( !stagedBytes.is_empty() && loadVirtualTexturePackageCold( stagedBytes.ptr(), ( uint64_t )stagedBytes.size() ) );
-	if ( bPublished && eResourceClass != T3D_RW_SHARED_RESOURCES_NONE ) {
-		bPublished = ensureSharedVtRuntimeCold( eResourceClass );
-	}
-
-	if ( bPublished ) {
-		t3dScopedLock_t lock( m_previewVtMutex );
-		m_previewVtPublishedPackageBytes = stagedBytes;
-		m_nPreviewVtPublishedFingerprint = nStagedFingerprint;
-		m_nPreviewVtPublishedPackageGeneration = nStagedGeneration;
-		m_bPreviewVtPublishedNeutral = bStagedNeutral;
-		m_bPreviewVtRepublishPending = false;
-		m_bPreviewVtRepublishInProgress = false;
-		m_nPreviewVtRepublishRetryCount = 0u;
-		m_nPreviewVtRepublishRetryAfterUsec = 0u;
-		m_previewVtLastRepublishError = String();
-		++m_nPreviewVtPublishCount;
-		++m_nPreviewVtRepublishSuccessCount;
-		return;
-	}
-
-	// The new package/resources were not fully published. Tear down any partial
-	// state, restore the last committed package (including neutral), and quarantine
-	// this failed material generation so it cannot cycle renderer restarts.
-	shutdownRendererOnRenderThread();
-	bool bRolledBack = bPreviousNeutral
-	        ? m_virtualTexture.clearPackageCold()
-	        : ( !previousBytes.is_empty() && loadVirtualTexturePackageCold( previousBytes.ptr(), ( uint64_t )previousBytes.size() ) );
-	if ( bRolledBack && eResourceClass != T3D_RW_SHARED_RESOURCES_NONE ) {
-		bRolledBack = ensureSharedVtRuntimeCold( eResourceClass );
-	}
-	{
-		t3dScopedLock_t lock( m_previewVtMutex );
-		// Do not enter a renderer shutdown/restart retry loop. A failed live VT
-		// publication is quarantined for this material generation; a new material
-		// generation can stage a fresh package later. The last good publication
-		// remains active after rollback.
-		m_bPreviewVtRepublishPending = false;
-		m_bPreviewVtRepublishInProgress = false;
-		m_nPreviewVtFailedMaterialSourceGeneration = m_nPreviewVtStagedMaterialSourceGeneration;
-		m_nPreviewVtRepublishRetryCount = 0u;
-		m_nPreviewVtRepublishRetryAfterUsec = 0u;
-		m_previewVtLastRepublishError = bRolledBack
-		        ? String( "RD preview VT live republish failed; previous publication restored; generation quarantined" )
-		        : String( "RD preview VT live republish failed; rollback failed; generation quarantined" );
-		++m_nPreviewVtRepublishFailureCount;
-	}
+	m_previewService.servicePreviewVtRepublishOnRenderThread( *this );
 }
 
 bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( const uint64_t nRenderFrame ) {
@@ -929,8 +476,8 @@ bool Terrain3DRenderCoordinator::initializeRendererOnRenderThread( const uint64_
 	if ( m_bStartupColdBegun && !m_bStartupActivationCommitted ) {
 		return false;
 	}
-	if ( m_sharedVtRuntime.get_shared_resource_class() == T3D_RW_SHARED_RESOURCES_PREVIEW
-	        && !ensureSharedVtRuntimeCold( T3D_RW_SHARED_RESOURCES_PRODUCTION ) ) {
+	if ( m_sharedVtRuntime.get_shared_resource_class() == T3D_VT_SHARED_RESOURCES_PREVIEW
+	        && !ensureSharedVtRuntimeCold( T3D_VT_SHARED_RESOURCES_PRODUCTION ) ) {
 		return false;
 	}
 	const bool shader_ready = m_shaderLibrary.isReady();
@@ -1109,7 +656,7 @@ void Terrain3DRenderCoordinator::clearRenderLifecycleReadyBitOnRenderThread( con
 }
 
 void Terrain3DRenderCoordinator::publishRenderSharedResourceReadyOnRenderThread(
-        const t3dRenderWorldSharedResourceClass_t eResourceClass ) {
+        const t3dVtSharedResourceClass_t eResourceClass ) {
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
@@ -1251,6 +798,8 @@ bool Terrain3DRenderCoordinator::beginStartupCold( Terrain3D *const pTerrain, co
 	if ( m_bStartupColdBegun && m_pTerrain == pTerrain && m_nStartupGeneration == nStartupGeneration ) {
 		return !m_bStartupColdFailed;
 	}
+	const uint64_t nBeginStartedUsec = t3dRdStartupTicksUsec();
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Begin] BEGIN generation=", nStartupGeneration );
 	shutdown();
 	m_pTerrain = pTerrain;
 	m_nStartupGeneration.store( nStartupGeneration, T3D_MEMORY_ORDER_RELEASE );
@@ -1304,17 +853,32 @@ bool Terrain3DRenderCoordinator::beginStartupCold( Terrain3D *const pTerrain, co
 		m_initializationError = String();
 	}
 	if ( m_effect.is_null() ) {
+		LOG( INFO, "[Terrain3D][Startup][Coordinator][CompositorEffect] BEGIN generation=", nStartupGeneration );
 		m_effect.instantiate();
 		m_effect->setCoordinator( this );
 		m_effect->set_enabled( false );
+		LOG( INFO, "[Terrain3D][Startup][Coordinator][CompositorEffect] END generation=", nStartupGeneration );
 	}
 	attachForwardBridge();
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][ShaderLibrary] BEGIN generation=", nStartupGeneration );
 	if ( !m_shaderLibrary.beginLoadCold( m_nStartupGeneration ) ) {
 		m_bStartupColdFailed = true;
 		t3dScopedLock_t lock( m_diagnosticsMutex );
 		m_initializationError = m_shaderLibrary.getLastError();
+		LOG( ERROR,
+		        "[Terrain3D][Startup][Coordinator][ShaderLibrary] FAIL generation=",
+		        nStartupGeneration,
+		        " error=",
+		        m_initializationError );
 		return false;
 	}
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][ShaderLibrary] END generation=", nStartupGeneration );
+	LOG( INFO,
+	        "[Terrain3D][Startup][Coordinator][Begin] END generation=",
+	        nStartupGeneration,
+	        " elapsed=",
+	        t3dRdStartupTicksUsec() - nBeginStartedUsec,
+	        " us" );
 	return true;
 }
 
@@ -1333,7 +897,7 @@ void Terrain3DRenderCoordinator::serviceStartupCold( const uint32_t nStartupGene
 		return;
 	}
 	if ( !m_virtualTexture.is_cpu_ready() ) {
-		if ( !m_sharedVtRuntime.prepare_shared_vt_cpu_cold( T3D_RW_SHARED_RESOURCES_PRODUCTION, 0u, 0u, &m_worldRuntime.getLimits() ) ) {
+		if ( !m_sharedVtRuntime.prepare_shared_vt_cpu_cold( T3D_VT_SHARED_RESOURCES_PRODUCTION, 0u, 0u, &m_worldRuntime.getLimits() ) ) {
 			m_virtualTexture.mark_startup_failed( m_nStartupGeneration );
 			m_bStartupColdFailed = true;
 			t3dScopedLock_t lock( m_diagnosticsMutex );
@@ -1626,14 +1190,19 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	if ( m_bStartupColdFailed ) {
 		return false;
 	}
+	const uint64_t nPrepareStartedUsec = t3dRdStartupTicksUsec();
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare] BEGIN generation=", nStartupGeneration );
 	uint64_t nPublicationPrepareUsec = 0u;
 	++m_nStartupPublicationPrepareCount;
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][WorldLimits] BEGIN generation=", nStartupGeneration );
 	if ( !m_worldRuntime.configureLimitsCold( m_pTerrain->getWorldResourceLimitsInternal() ) ) {
 		t3dScopedLock_t lock( m_diagnosticsMutex );
 		m_initializationError = "Unified world limits are invalid or already initialized";
 		m_bStartupColdFailed = true;
+		LOG( ERROR, "[Terrain3D][Startup][Coordinator][Prepare][WorldLimits] FAIL generation=", nStartupGeneration );
 		return false;
 	}
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][WorldLimits] END generation=", nStartupGeneration );
 	setUnifiedWorldFramePolicy( ( uint32_t )m_pTerrain->getWorldUploadBudgetKb(),
 	        ( uint32_t )m_pTerrain->getWorldClusterUploadBudget(),
 	        ( uint32_t )m_pTerrain->getVtRequestBudget(),
@@ -1641,15 +1210,19 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	        false );
 	// shutdown() deliberately destroys retained publication backing. Re-bind the
 	// explicit Terrain3D owner before any cold capacity is re-established.
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][Allocator] BEGIN generation=", nStartupGeneration );
 	if ( !m_bRuntimeAllocatorBound || !m_pRuntimeAllocatorZone
 	        || !bindRuntimeAllocator( m_pRuntimeAllocatorZone, m_eRuntimeAllocatorOverflowPolicy ) ) {
 		t3dScopedLock_t lock( m_diagnosticsMutex );
 		m_initializationError = "RD publication owner allocator is not bound";
 		m_bStartupColdFailed = true;
+		LOG( ERROR, "[Terrain3D][Startup][Coordinator][Prepare][Allocator] FAIL generation=", nStartupGeneration );
 		return false;
 	}
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][Allocator] END generation=", nStartupGeneration );
 	{
 		const uint64_t nPublicationSegmentStartedUsec = t3dRdStartupTicksUsec();
+		LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][FixedStorage] BEGIN generation=", nStartupGeneration );
 		Terrain3DColdPhaseScope cold_phase_scope;
 		m_terrainMegaVT.resetCold();
 		m_publicationBuilder.invalidateTerrainMegaVTPersistence();
@@ -1659,9 +1232,16 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 			t3dScopedLock_t lock( m_diagnosticsMutex );
 			m_initializationError = "RD publication owner could not establish fixed region-map storage";
 			m_bStartupColdFailed = true;
+			LOG( ERROR, "[Terrain3D][Startup][Coordinator][Prepare][FixedStorage] FAIL generation=", nStartupGeneration );
 			return false;
 		}
 		nPublicationPrepareUsec += t3dRdStartupTicksUsec() - nPublicationSegmentStartedUsec;
+		LOG( INFO,
+		        "[Terrain3D][Startup][Coordinator][Prepare][FixedStorage] END generation=",
+		        nStartupGeneration,
+		        " elapsed=",
+		        t3dRdStartupTicksUsec() - nPublicationSegmentStartedUsec,
+		        " us" );
 	}
 	OS *const os = OS::get_singleton();
 	const bool bCompareCulling = os && os->get_environment( "TERRAIN3D_RD_COMPARE_CULL" ) == "1";
@@ -1692,6 +1272,7 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	m_nFailureLatchTerrainTextureGeneration = 0u;
 	m_nFailureLatchMaterialTextureGeneration = 0u;
 	const uint64_t nPublicationSegmentStartedUsec = t3dRdStartupTicksUsec();
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][Publication] BEGIN generation=", nStartupGeneration );
 	if ( !m_pTerrain->getMesher()
 	        || !m_renderer.prepareStripParts( m_pTerrain->getMesher()->getClipmapStripParts( LOD0_MESH ),
 	                m_pTerrain->getMesher()->getClipmapStripPartCount( LOD0_MESH ),
@@ -1733,7 +1314,7 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	nPublicationPrepareUsec += t3dRdStartupTicksUsec() - nPublicationSegmentStartedUsec;
 	m_nStartupPublicationPrepareUsecLast = nPublicationPrepareUsec;
 	LOG( INFO,
-	        "[Terrain3D][Startup][Coordinator] PUBLICATION PREP generation=",
+	        "[Terrain3D][Startup][Coordinator][Prepare][Publication] END generation=",
 	        m_nStartupGeneration,
 	        " elapsed=",
 	        m_nStartupPublicationPrepareUsecLast,
@@ -1744,26 +1325,41 @@ bool Terrain3DRenderCoordinator::prepareStartupCold( const uint32_t nStartupGene
 	const bool bHasTerrainVtMaterials = assets.is_valid() && assets->usesPackedPbr() && assets->getTextureCount() > 0;
 	const bool bHasSharedVtMaterials = bHasInstanceVtMaterials || bHasTerrainVtMaterials;
 	String vtError;
+	LOG( INFO,
+	        "[Terrain3D][Startup][Coordinator][Prepare][VTPackage] BEGIN generation=",
+	        nStartupGeneration,
+	        " required=",
+	        bHasSharedVtMaterials );
 	if ( !m_pTerrain->isEditorAuthoringMode() ) {
 		if ( bHasSharedVtMaterials && !loadRuntimeVirtualTexturePackageFileCold( &vtError ) ) {
 			m_virtualTexture.mark_startup_failed( m_nStartupGeneration );
 			t3dScopedLock_t lock( m_diagnosticsMutex );
 			m_initializationError = vtError;
 			m_bStartupColdFailed = true;
-			LOG( ERROR, "[RD instances] Cooked runtime VT package unavailable: ", vtError );
+			LOG( ERROR,
+			        "[Terrain3D][Startup][Coordinator][Prepare][VTPackage] FAIL generation=",
+			        nStartupGeneration,
+			        " error=",
+			        vtError );
 			return false;
 		}
 	} else if ( Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
 		if ( assets.is_valid() && bHasSharedVtMaterials && !preparePreviewAuthoringPackageCold( assets, &vtError ) ) {
 			LOG( WARN, "[RD instances] Editor VT package unavailable; continuing with neutral material backing: ", vtError );
 		}
-		m_nPreviewVtObservedMaterialSourceGeneration = t3dRdSharedVtMaterialSourceGeneration( assets );
 	}
+	LOG( INFO, "[Terrain3D][Startup][Coordinator][Prepare][VTPackage] END generation=", nStartupGeneration );
 	m_bStartupColdPrepared = true;
 	updateRenderRoute();
 	if ( m_bCompositorDebugEnabled ) {
 		attachEffectToActiveCamera();
 	}
+	LOG( INFO,
+	        "[Terrain3D][Startup][Coordinator][Prepare] END generation=",
+	        nStartupGeneration,
+	        " elapsed=",
+	        t3dRdStartupTicksUsec() - nPrepareStartedUsec,
+	        " us" );
 	return true;
 }
 
@@ -1856,17 +1452,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 
 	// With successful render teardown (or after the engine rendering boundary has
 	// disappeared) queued render work can no longer observe these owner records.
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		++m_nPreviewAsyncLifecycleGeneration;
-		if ( m_nPreviewAsyncLifecycleGeneration == 0u ) {
-			++m_nPreviewAsyncLifecycleGeneration;
-		}
-		for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-			m_szPreviewReadbackSlots[iSlot] = t3dPreviewReadbackSlot_t{};
-		}
-		m_nPendingPreviewReadbackSlot = UINT32_MAX;
-	}
+	m_previewService.resetOwnerCold();
 	{
 		t3dScopedLock_t lock( m_staticScenePublicationMutex );
 		m_staticScenePublication = t3dStaticScenePublication_t{};
@@ -1880,48 +1466,7 @@ void Terrain3DRenderCoordinator::shutdown( void ) {
 	m_shaderLibrary.clear();
 	m_bShaderGpuStartupQueued.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_bShaderGpuStartupService.store( false, T3D_MEMORY_ORDER_RELEASE );
-	m_cachedPreviewMeshes = t3dRdMeshSourceSnapshot_t{};
-	m_bCachedPreviewMeshesValid = false;
-	m_nPreviewMeshFingerprint = 0u;
-	m_nCachedPreviewAssetId = UINT16_MAX;
-	m_nPreviewMeshGeneration = 0u;
-	m_previewVtPackageBytes.clear();
-	m_previewVtPublishedPackageBytes.clear();
-	m_nPreviewVtFingerprint = 0u;
-	m_nPreviewVtPublishedFingerprint = 0u;
-	m_nPreviewVtPackageGeneration = 0u;
-	m_nPreviewVtPublishedPackageGeneration = 0u;
-	m_nPreviewVtRecookCount = 0u;
-	m_nPreviewVtObservedMaterialSourceGeneration = 0u;
-	m_nPreviewVtStagedMaterialSourceGeneration = 0u;
-	m_nPreviewVtFailedMaterialSourceGeneration = 0u;
-	m_nPreviewVtPublishCount = 0u;
-	m_nPreviewVtRepublishSuccessCount = 0u;
-	m_nPreviewVtRepublishFailureCount = 0u;
-	m_nPreviewVtRepublishRetryCount = 0u;
-	m_nPreviewVtRepublishRetryAfterUsec = 0u;
-	m_nSharedResourceClassTransitionCount = 0u;
-	m_nPreviewVtCookFailureCount = 0u;
-	m_nPreviewVtFailedFingerprint = 0u;
-	t3d_vt_godot_editor_cache_reset_v3( m_previewVtEditorCache );
-	m_previewVtEditorCache.m_CacheDirectory = String();
-	memset( &m_previewVtEditorTelemetry, 0, sizeof( m_previewVtEditorTelemetry ) );
-	m_previewVtLastCookError = String();
-	m_previewVtLastRepublishError = String();
-	m_bPreviewVtPackageValid = false;
-	m_bPreviewVtStageNeutral = true;
-	m_bPreviewVtPublishedNeutral = true;
-	m_bPreviewVtRepublishPending = false;
-	m_bPreviewVtRepublishQueued = false;
-	m_bPreviewVtRepublishInProgress = false;
-	m_ePreviewVtRepublishResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
-	{
-		t3dScopedLock_t lock( m_previewStateMutex );
-		m_pendingPreviewMeshes = t3dRdMeshSourceSnapshot_t{};
-		m_bPendingPreviewMeshesValid = false;
-		m_pendingPreviewImage.unref();
-		m_pendingPreviewError = String();
-	}
+
 	m_publicationBuilder.clearCachedSources();
 	resetSnapshotPublication();
 	m_bCompositorDebugEnabled = false;
@@ -2144,6 +1689,15 @@ void Terrain3DRenderCoordinator::serviceShaderStartupOnRenderThread( const uint3
 	const uint64_t nStartedUsec = t3dRdStartupTicksUsec();
 	++m_nStartupGpuServiceCount;
 	++m_nStartupRendererInitializeAttemptCount;
+	const t3dStartupGpuStage_t eStageBefore =
+	        ( t3dStartupGpuStage_t )m_nStartupGpuStage.load( T3D_MEMORY_ORDER_ACQUIRE );
+	LOG( INFO,
+	        "[Terrain3D][Startup][GPU][",
+	        startupGpuStageName( eStageBefore ),
+	        "] BEGIN generation=",
+	        nStartupGeneration,
+	        " callback=",
+	        m_nStartupGpuServiceCount );
 	const bool bReady = serviceStartupGpuOnRenderThreadBudgeted( nStartupGeneration );
 	m_nStartupGpuServiceUsecLast = t3dRdStartupTicksUsec() - nStartedUsec;
 	m_nStartupRendererInitializeUsecLast = m_nStartupGpuServiceUsecLast;
@@ -2154,16 +1708,35 @@ void Terrain3DRenderCoordinator::serviceShaderStartupOnRenderThread( const uint3
 		m_bShaderGpuStartupQueued.store( false, T3D_MEMORY_ORDER_RELEASE );
 		return;
 	}
-	const uint32_t nGpuStage = m_nStartupGpuStage.load( T3D_MEMORY_ORDER_ACQUIRE );
+	const t3dStartupGpuStage_t eStageAfter =
+	        ( t3dStartupGpuStage_t )m_nStartupGpuStage.load( T3D_MEMORY_ORDER_ACQUIRE );
 	if ( !bReady ) {
-		LOG( ERROR, "[Terrain3D][Startup][GPU] FAILED generation=", nStartupGeneration,
-		        " stage=", nGpuStage, " callback=", m_nStartupGpuServiceCount );
+		LOG( ERROR,
+		        "[Terrain3D][Startup][GPU][",
+		        startupGpuStageName( eStageBefore ),
+		        "] FAIL generation=",
+		        nStartupGeneration,
+		        " callback=",
+		        m_nStartupGpuServiceCount,
+		        " elapsed=",
+		        m_nStartupGpuServiceUsecLast,
+		        " us next_stage=",
+		        startupGpuStageName( eStageAfter ) );
 		m_bShaderGpuStartupQueued.store( false, T3D_MEMORY_ORDER_RELEASE );
 		return;
 	}
-	LOG( INFO, "[Terrain3D][Startup][GPU] SERVICE generation=", nStartupGeneration,
-	        " stage=", nGpuStage, " callback=", m_nStartupGpuServiceCount,
-	        " elapsed=", m_nStartupGpuServiceUsecLast, " us" );
+	LOG( INFO,
+	        "[Terrain3D][Startup][GPU][",
+	        startupGpuStageName( eStageBefore ),
+	        m_bStartupGpuServiceComplete.load( T3D_MEMORY_ORDER_ACQUIRE ) || eStageAfter != eStageBefore ? "] END generation="
+	                                                                                                         : "] WAIT generation=",
+	        nStartupGeneration,
+	        " callback=",
+	        m_nStartupGpuServiceCount,
+	        " elapsed=",
+	        m_nStartupGpuServiceUsecLast,
+	        " us next_stage=",
+	        startupGpuStageName( eStageAfter ) );
 
 	if ( m_bStartupGpuServiceComplete.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
 		const uint64_t nRecoveryRevision = m_nRecoveryActiveRevision.load( T3D_MEMORY_ORDER_ACQUIRE );
@@ -2283,19 +1856,9 @@ void Terrain3DRenderCoordinator::update( void ) {
 		return;
 	}
 	serviceShaderStartupCold();
-	servicePreviewReadbackWatchdogCold();
+	m_previewService.servicePreviewReadbackWatchdogCold( *this );
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint() ) {
-		const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
-		const uint64_t nMaterialSourceGeneration = t3dRdSharedVtMaterialSourceGeneration( assets );
-		if ( assets.is_valid() && nMaterialSourceGeneration != 0u
-		        && nMaterialSourceGeneration != m_nPreviewVtObservedMaterialSourceGeneration ) {
-			m_nPreviewVtObservedMaterialSourceGeneration = nMaterialSourceGeneration;
-			String vtError;
-			if ( !preparePreviewAuthoringPackageCold( assets, &vtError ) && !vtError.is_empty() ) {
-				LOG( WARN, "[RD instances] Editor VT refresh failed after material source change: ", vtError );
-			}
-		}
-		( void )queuePreviewVtRepublishCold();
+		m_previewService.updateAuthoringCold( *this );
 	}
 	publishSnapshot();
 	if ( m_pTerrain->isEditorAuthoringMode() && Engine::get_singleton() != NULL && Engine::get_singleton()->is_editor_hint()
@@ -2469,10 +2032,7 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 #ifdef DEBUG_ENABLED
 	ASSERT( Terrain3DRdContext::isOnRenderThread(), VOID );
 #endif
-	if ( m_bPreviewRendererInitialized ) {
-		m_previewRenderer.shutdown();
-		m_bPreviewRendererInitialized = false;
-	}
+	m_previewService.shutdownRendererOnRenderThread( *this );
 	m_worldRuntime.shutdownCold();
 	m_sharedVtRuntime.shutdown_cold();
 	m_oceanRenderer.shutdown();
@@ -2484,7 +2044,7 @@ void Terrain3DRenderCoordinator::shutdownRendererOnRenderThread( void ) {
 	m_bOceanRendererInitialized.store( false, T3D_MEMORY_ORDER_RELEASE );
 	t3dRenderLifecycleStatus_t lifecycle = snapshotRenderLifecycleStatusOnOwnerThread();
 	lifecycle.m_nReadyMask &= T3D_RENDER_READY_SHADER_GPU;
-	lifecycle.m_nSharedResourceClass = ( uint32_t )T3D_RW_SHARED_RESOURCES_NONE;
+	lifecycle.m_nSharedResourceClass = ( uint32_t )T3D_VT_SHARED_RESOURCES_NONE;
 	lifecycle.m_nPreparedWorldPublicationGeneration = 0u;
 	publishRenderLifecycleStatusOnRenderThread( lifecycle );
 }
@@ -2501,172 +2061,16 @@ void Terrain3DRenderCoordinator::shutdownRendererLifecycleOnRenderThread( const 
 }
 
 void Terrain3DRenderCoordinator::renderPreviewOnRenderThread( void ) {
-	t3dScopedLock_t lock( m_previewStateMutex );
-	m_pendingPreviewImage.unref();
-	m_pendingPreviewError = String();
-	m_pendingPreviewFailure = T3D_RD_PREVIEW_NONE;
-	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
-	context.beginRecoverableFailureScope();
-	// One exit keeps shared acquisition, partial initialization and cleanup recoverable.
-	do {
-		if ( !m_bPendingPreviewMeshesValid ) {
-			m_pendingPreviewFailure = T3D_RD_PREVIEW_ASSET_SOURCE;
-			m_pendingPreviewError = "RD editor preview source is unavailable";
-			break;
-		}
-		m_pendingPreviewFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
-		if ( m_shaderLibrary.getInstances().is_null() ) {
-			m_pendingPreviewError = "RD editor preview base instance shader is unavailable";
-			break;
-		}
-		if ( !ensureSharedVtRuntimeCold( T3D_RW_SHARED_RESOURCES_PREVIEW ) ) {
-			m_pendingPreviewError = "RD editor preview shared VT resources are unavailable";
-			break;
-		}
-		if ( !m_bPreviewRendererInitialized ) {
-			m_bPreviewRendererInitialized = m_previewRenderer.initializePreview( m_shaderLibrary.getInstances() );
-			if ( m_bPreviewRendererInitialized ) {
-				setRenderLifecycleReadyBitOnRenderThread(
-				        m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ), T3D_RENDER_READY_PREVIEW );
-			}
-		}
-		Ref<Image> image;
-		const bool ok = m_bPreviewRendererInitialized
-		        && m_previewRenderer.renderPreview( &m_pendingPreviewMeshes, m_nPendingPreviewAssetId, m_pendingPreviewSize, image );
-		if ( !ok || image.is_null() ) {
-			m_pendingPreviewError = m_previewRenderer.getLastError();
-			if ( m_pendingPreviewError.is_empty() ) {
-				m_pendingPreviewError = "RD editor preview renderer failed without a stage diagnostic";
-			}
-			break;
-		}
-		m_pendingPreviewImage = image;
-		m_pendingPreviewFailure = T3D_RD_PREVIEW_NONE;
-	} while ( false );
-	if ( m_pendingPreviewFailure != T3D_RD_PREVIEW_NONE ) {
-		// Release preview scratch only; production renderers and the VT owner remain intact.
-		m_previewRenderer.shutdown();
-		m_bPreviewRendererInitialized = false;
-		clearRenderLifecycleReadyBitOnRenderThread( T3D_RENDER_READY_PREVIEW );
-	}
-	context.endRecoverableFailureScope();
+	m_previewService.renderPreviewOnRenderThread( *this );
 }
 
-Ref<Image> Terrain3DRenderCoordinator::failMeshPreview(
-        const t3dRdPreviewFailure_t eFailure, const String &rError, t3dRdPreviewFailure_t *const pFailure ) {
-	if ( pFailure ) {
-		*pFailure = eFailure;
-	}
-	t3dScopedLock_t lock( m_diagnosticsMutex );
-	m_previewLastError = rError;
-	m_lastPreviewFailure = eFailure;
-	++m_nPreviewFailureCount;
-	return Ref<Image>();
-}
 
-bool Terrain3DRenderCoordinator::prepareMeshPreviewSourceCold(
-        const uint16_t nAssetId, const Vector2i &rSize, t3dRdPreviewFailure_t *const pFailure ) {
-	if ( pFailure ) {
-		*pFailure = T3D_RD_PREVIEW_NONE;
-	}
-	if ( !m_pTerrain || !m_effect.is_valid() ) {
-		( void )failMeshPreview( T3D_RD_PREVIEW_SYSTEMIC_RD, "RD preview coordinator is unavailable", pFailure );
-		return false;
-	}
-	// Preview rendering/readback owns separate RD targets. Region-cache uploads do
-	// not alias those targets, so global authoring residency is not a correctness
-	// prerequisite. Transient deferral is reserved for preview-owned in-flight
-	// slots and publication/rebuild seams instead of unrelated terrain streaming.
-	// Mesh-list edits can still discover a larger immutable instance mesh source.
-	// Do not launch previews against the stale bank while that cold capacity
-	// transition is pending.
-	if ( m_publicationBuilder.isInstancePublicationCapacityPending() || m_publicationBuilder.isInstanceMeshBankCapacityPending() ) {
-		( void )failMeshPreview( T3D_RD_PREVIEW_TRANSIENT_DEFERRED, "RD preview is waiting for instance publication capacity", pFailure );
-		return false;
-	}
-	const Ref<Terrain3DAssets> assets = m_pTerrain->getAssets();
-	if ( rSize.x < 2 || rSize.y < 2 || assets.is_null() || nAssetId >= assets->getMeshCount() ) {
-		( void )failMeshPreview( T3D_RD_PREVIEW_ASSET_SOURCE, "RD preview asset or dimensions are invalid", pFailure );
-		return false;
-	}
-	const uint64_t fingerprint = Terrain3DRdMeshCache::computeSourceFingerprintForAsset( assets, nAssetId );
-	if ( !m_bCachedPreviewMeshesValid || nAssetId != m_nCachedPreviewAssetId || fingerprint != m_nPreviewMeshFingerprint ) {
-		String error;
-		m_nPreviewMeshGeneration = advanceGeneration( m_nPreviewMeshGeneration );
-		if ( !Terrain3DRdMeshCache::buildSourceSnapshotForAsset(
-		             assets, nAssetId, m_cachedPreviewMeshes, fingerprint, m_nPreviewMeshGeneration, &error ) ) {
-			( void )failMeshPreview( T3D_RD_PREVIEW_ASSET_SOURCE, error, pFailure );
-			return false;
-		}
-		m_bCachedPreviewMeshesValid = true;
-		m_nPreviewMeshFingerprint = fingerprint;
-		m_nCachedPreviewAssetId = nAssetId;
-	}
-	String vtError;
-	if ( !preparePreviewAuthoringPackageCold( assets, &vtError ) ) {
-		LOG( WARN, "[RD instances] Mesh preview VT package unavailable; using neutral material backing: ", vtError );
-	}
-	{
-		t3dScopedLock_t lock( m_previewStateMutex );
-		if ( !t3dContainerReserveCold( m_pendingPreviewMeshes.m_vertexChunkHashes, m_cachedPreviewMeshes.m_vertexChunkHashes.size() )
-		        || !t3dContainerReserveCold(
-		                m_pendingPreviewMeshes.m_index32ChunkHashes, m_cachedPreviewMeshes.m_index32ChunkHashes.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_surfaces, m_cachedPreviewMeshes.m_surfaces.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_lods, m_cachedPreviewMeshes.m_lods.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_materials, m_cachedPreviewMeshes.m_materials.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_vtMaterials, m_cachedPreviewMeshes.m_vtMaterials.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_materialKeys, m_cachedPreviewMeshes.m_materialKeys.size() )
-		        || !t3dContainerReserveCold( m_pendingPreviewMeshes.m_vtStableKeys, m_cachedPreviewMeshes.m_vtStableKeys.size() )
-		        || !m_pendingPreviewMeshes.copyFrom( m_cachedPreviewMeshes ) ) {
-			( void )failMeshPreview( T3D_RD_PREVIEW_SYSTEMIC_RD, "RD preview snapshot copy failed", pFailure );
-			return false;
-		}
-		m_bPendingPreviewMeshesValid = true;
-		m_nPendingPreviewAssetId = nAssetId;
-		m_pendingPreviewSize = rSize;
-		m_pendingPreviewImage.unref();
-		m_pendingPreviewError = String();
-		m_pendingPreviewFailure = T3D_RD_PREVIEW_NONE;
-	}
-	return true;
-}
+
+
 
 Ref<Image> Terrain3DRenderCoordinator::createMeshPreview(
         const uint16_t nAssetId, const Vector2i &rSize, t3dRdPreviewFailure_t *const pFailure ) {
-	t3dScopedLock_t call_lock( m_previewCallMutex );
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-			if ( m_szPreviewReadbackSlots[iSlot].bActive ) {
-				return failMeshPreview( T3D_RD_PREVIEW_TRANSIENT_DEFERRED, "RD async preview readback is in flight", pFailure );
-			}
-		}
-	}
-	if ( !prepareMeshPreviewSourceCold( nAssetId, rSize, pFailure ) ) {
-		return Ref<Image>();
-	}
-	if ( Terrain3DRdContext::isOnRenderThread() ) {
-		renderPreviewOnRenderThread();
-	} else {
-		if ( m_effect.is_null()
-		        || !Terrain3DRdContext::enqueueOnRenderThread(
-		                callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::renderPreviewOnRenderThread ) ) ) {
-			return failMeshPreview( T3D_RD_PREVIEW_SYSTEMIC_RD, "RD preview render-thread submission failed", pFailure );
-		}
-		Terrain3DRdContext::forceSync();
-	}
-	t3dScopedLock_t lock( m_previewStateMutex );
-	if ( m_pendingPreviewImage.is_null() ) {
-		return failMeshPreview( m_pendingPreviewFailure == T3D_RD_PREVIEW_NONE ? T3D_RD_PREVIEW_SYSTEMIC_RD : m_pendingPreviewFailure,
-		        m_pendingPreviewError,
-		        pFailure );
-	}
-	{
-		t3dScopedLock_t diagnostics_lock( m_diagnosticsMutex );
-		m_previewLastError = String();
-		m_lastPreviewFailure = T3D_RD_PREVIEW_NONE;
-	}
-	return m_pendingPreviewImage;
+	return m_previewService.createMeshPreview( *this, nAssetId, rSize, pFailure );
 }
 
 bool Terrain3DRenderCoordinator::requestMeshPreviewAsync( const uint16_t nAssetId,
@@ -2674,259 +2078,21 @@ bool Terrain3DRenderCoordinator::requestMeshPreviewAsync( const uint16_t nAssetI
         const uint64_t nCompletionOwnerId,
         const uint64_t nCompletionGeneration,
         t3dRdPreviewFailure_t *const pFailure ) {
-	t3dScopedLock_t call_lock( m_previewCallMutex );
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-			if ( m_szPreviewReadbackSlots[iSlot].bActive ) {
-				if ( pFailure ) {
-					*pFailure = T3D_RD_PREVIEW_TRANSIENT_DEFERRED;
-				}
-				return false;
-			}
-		}
-	}
-	if ( !prepareMeshPreviewSourceCold( nAssetId, rSize, pFailure ) ) {
-		return false;
-	}
-	const Ref<Terrain3DAssets> assets = m_pTerrain ? m_pTerrain->getAssets() : Ref<Terrain3DAssets>();
-	const Ref<Terrain3DMeshAsset> asset = assets.is_valid() ? assets->getMeshAsset( ( int )nAssetId ) : Ref<Terrain3DMeshAsset>();
-	if ( assets.is_null() || asset.is_null() ) {
-		if ( pFailure ) {
-			*pFailure = T3D_RD_PREVIEW_ASSET_SOURCE;
-		}
-		return false;
-	}
-	const uint64_t nMeshSourceGeneration = assets->getMeshSourceGeneration();
-	const uint64_t nAssetObjectId = ( uint64_t )asset->get_instance_id();
-	uint32_t nSlot = UINT32_MAX;
-	uint64_t nRequestGeneration = 0u;
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		for ( uint32_t i = 0u; i < s_nPreviewReadbackSlotCount; ++i ) {
-			const uint32_t iSlot = ( m_nPreviewReadbackCursor + i ) % s_nPreviewReadbackSlotCount;
-			if ( !m_szPreviewReadbackSlots[iSlot].bActive ) {
-				nSlot = iSlot;
-				break;
-			}
-		}
-		if ( nSlot == UINT32_MAX ) {
-			if ( pFailure ) {
-				*pFailure = T3D_RD_PREVIEW_TRANSIENT_DEFERRED;
-			}
-			return false;
-		}
-		nRequestGeneration = ++m_nPreviewAsyncRequestGeneration;
-		if ( nRequestGeneration == 0u ) {
-			nRequestGeneration = ++m_nPreviewAsyncRequestGeneration;
-		}
-		t3dPreviewReadbackSlot_t &slot = m_szPreviewReadbackSlots[nSlot];
-		slot.bActive = true;
-		slot.nAssetId = nAssetId;
-		slot.size = rSize;
-		slot.nRequestGeneration = nRequestGeneration;
-		slot.nLifecycleGeneration = m_nPreviewAsyncLifecycleGeneration;
-		slot.nMeshSourceGeneration = nMeshSourceGeneration;
-		slot.nAssetObjectId = nAssetObjectId;
-		slot.nCompletionOwnerId = nCompletionOwnerId;
-		slot.nCompletionGeneration = nCompletionGeneration;
-		m_nPendingPreviewReadbackSlot = nSlot;
-		m_nPreviewReadbackCursor = ( nSlot + 1u ) % s_nPreviewReadbackSlotCount;
-	}
-	if ( m_effect.is_null()
-	        || !Terrain3DRdContext::enqueueOnRenderThread(
-	                callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::renderPreviewAsyncOnRenderThread ) ) ) {
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		m_szPreviewReadbackSlots[nSlot] = t3dPreviewReadbackSlot_t{};
-		m_nPendingPreviewReadbackSlot = UINT32_MAX;
-		if ( pFailure ) {
-			*pFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
-		}
-		return false;
-	}
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		++m_nPreviewAsyncScheduledCount;
-	}
-	return true;
+	return m_previewService.requestMeshPreviewAsync(
+	        *this, nAssetId, rSize, nCompletionOwnerId, nCompletionGeneration, pFailure );
 }
 
-void Terrain3DRenderCoordinator::dispatchPreviewAsyncCompletionCold(
-        const t3dPreviewReadbackSlot_t &rSlot, const t3dRdPreviewFailure_t eFailure, const Ref<Image> &rImage ) {
-	Object *const pOwner = ObjectDB::get_instance( rSlot.nCompletionOwnerId );
-	if ( pOwner ) {
-		pOwner->call_deferred( StringName( "_complete_mesh_thumbnail_async" ),
-		        ( int64_t )rSlot.nAssetId,
-		        rImage,
-		        ( int64_t )eFailure,
-		        ( int64_t )rSlot.nCompletionGeneration,
-		        ( int64_t )rSlot.nMeshSourceGeneration,
-		        ( int64_t )rSlot.nAssetObjectId );
-	}
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		++m_nPreviewAsyncCompletedCount;
-	}
-}
 
-void Terrain3DRenderCoordinator::completePreviewAsyncOnRenderThread(
-        const uint32_t nSlot, const t3dRdPreviewFailure_t eFailure, const Ref<Image> &rImage ) {
-	t3dPreviewReadbackSlot_t slot;
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		if ( nSlot >= s_nPreviewReadbackSlotCount || !m_szPreviewReadbackSlots[nSlot].bActive ) {
-			return;
-		}
-		slot = m_szPreviewReadbackSlots[nSlot];
-		m_szPreviewReadbackSlots[nSlot] = t3dPreviewReadbackSlot_t{};
-		if ( m_nPendingPreviewReadbackSlot == nSlot ) {
-			m_nPendingPreviewReadbackSlot = UINT32_MAX;
-		}
-	}
-	dispatchPreviewAsyncCompletionCold( slot, eFailure, rImage );
-}
 
-void Terrain3DRenderCoordinator::servicePreviewReadbackWatchdogCold( void ) {
-	const uint64_t nNowUsec = Time::get_singleton() != NULL ? Time::get_singleton()->get_ticks_usec() : 0u;
-	if ( nNowUsec == 0u ) {
-		return;
-	}
-	t3dPreviewReadbackSlot_t expired[s_nPreviewReadbackSlotCount];
-	uint32_t nExpired = 0u;
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-			const t3dPreviewReadbackSlot_t &slot = m_szPreviewReadbackSlots[iSlot];
-			if ( !slot.bActive || !slot.bReadbackInFlight || slot.nReadbackSubmitUsec == 0u
-			        || nNowUsec - slot.nReadbackSubmitUsec < s_nPreviewReadbackTimeoutUsec ) {
-				continue;
-			}
-			expired[nExpired++] = slot;
-			m_szPreviewReadbackSlots[iSlot] = t3dPreviewReadbackSlot_t{};
-			if ( m_nPendingPreviewReadbackSlot == iSlot ) {
-				m_nPendingPreviewReadbackSlot = UINT32_MAX;
-			}
-		}
-		if ( nExpired > 0u ) {
-			++m_nPreviewAsyncLifecycleGeneration;
-			if ( m_nPreviewAsyncLifecycleGeneration == 0u ) {
-				++m_nPreviewAsyncLifecycleGeneration;
-			}
-			m_nPreviewAsyncTimeoutCount += nExpired;
-		}
-	}
-	for ( uint32_t iExpired = 0u; iExpired < nExpired; ++iExpired ) {
-		dispatchPreviewAsyncCompletionCold( expired[iExpired], T3D_RD_PREVIEW_TRANSIENT_DEFERRED, Ref<Image>() );
-	}
-	if ( nExpired > 0u ) {
-		( void )queuePreviewVtRepublishCold();
-	}
-}
 
-void Terrain3DRenderCoordinator::cancelPreviewAsyncRequestsOnRenderThread( void ) {
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		++m_nPreviewAsyncLifecycleGeneration;
-		if ( m_nPreviewAsyncLifecycleGeneration == 0u ) {
-			++m_nPreviewAsyncLifecycleGeneration;
-		}
-		m_nPendingPreviewReadbackSlot = UINT32_MAX;
-	}
-	for ( uint32_t iSlot = 0u; iSlot < s_nPreviewReadbackSlotCount; ++iSlot ) {
-		if ( m_szPreviewReadbackSlots[iSlot].bActive ) {
-			completePreviewAsyncOnRenderThread( iSlot, T3D_RD_PREVIEW_TRANSIENT_DEFERRED, Ref<Image>() );
-		}
-	}
-}
 
 void Terrain3DRenderCoordinator::renderPreviewAsyncOnRenderThread( void ) {
-	uint32_t nSlot = UINT32_MAX;
-	uint64_t nRequestGeneration = 0u;
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		nSlot = m_nPendingPreviewReadbackSlot;
-		if ( nSlot >= s_nPreviewReadbackSlotCount || !m_szPreviewReadbackSlots[nSlot].bActive ) {
-			return;
-		}
-		nRequestGeneration = m_szPreviewReadbackSlots[nSlot].nRequestGeneration;
-	}
-	Terrain3DRdContext &context = Terrain3DRdContext::getShared();
-	context.beginRecoverableFailureScope();
-	t3dRdPreviewFailure_t eFailure = T3D_RD_PREVIEW_SYSTEMIC_RD;
-	bool bScheduled = false;
-	do {
-		if ( !m_bPendingPreviewMeshesValid || m_shaderLibrary.getInstances().is_null() ) {
-			break;
-		}
-		if ( !ensureSharedVtRuntimeCold( T3D_RW_SHARED_RESOURCES_PREVIEW ) ) {
-			break;
-		}
-		if ( !m_bPreviewRendererInitialized ) {
-			m_bPreviewRendererInitialized = m_previewRenderer.initializePreview( m_shaderLibrary.getInstances() );
-			if ( m_bPreviewRendererInitialized ) {
-				setRenderLifecycleReadyBitOnRenderThread(
-				        m_nStartupGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ), T3D_RENDER_READY_PREVIEW );
-			}
-		}
-		if ( !m_bPreviewRendererInitialized
-		        || !m_previewRenderer.renderPreviewToTarget( &m_pendingPreviewMeshes, m_nPendingPreviewAssetId, m_pendingPreviewSize ) ) {
-			break;
-		}
-		const Callable callback = callable_mp( m_effect.ptr(), &Terrain3DRdCompositorEffect::consumePreviewReadbackOnRenderThread )
-		                                  .bind( ( int32_t )nSlot, ( int64_t )nRequestGeneration );
-		if ( !m_previewRenderer.schedulePreviewReadback( callback ) ) {
-			break;
-		}
-		{
-			t3dScopedLock_t state_lock( m_previewStateMutex );
-			if ( nSlot < s_nPreviewReadbackSlotCount && m_szPreviewReadbackSlots[nSlot].bActive
-			        && m_szPreviewReadbackSlots[nSlot].nRequestGeneration == nRequestGeneration ) {
-				m_szPreviewReadbackSlots[nSlot].bReadbackInFlight = true;
-				m_szPreviewReadbackSlots[nSlot].nReadbackSubmitUsec =
-				        Time::get_singleton() != NULL ? Time::get_singleton()->get_ticks_usec() : 0u;
-			}
-		}
-		eFailure = T3D_RD_PREVIEW_NONE;
-		bScheduled = true;
-	} while ( false );
-	if ( !bScheduled ) {
-		m_previewRenderer.shutdown();
-		m_bPreviewRendererInitialized = false;
-		clearRenderLifecycleReadyBitOnRenderThread( T3D_RENDER_READY_PREVIEW );
-		completePreviewAsyncOnRenderThread( nSlot, eFailure, Ref<Image>() );
-	}
-	context.endRecoverableFailureScope();
+	m_previewService.renderPreviewAsyncOnRenderThread( *this );
 }
 
 void Terrain3DRenderCoordinator::consumePreviewReadbackOnRenderThread(
         const uint32_t nSlot, const uint64_t nRequestGeneration, const PackedByteArray &rReadbackBytes ) {
-	Vector2i size;
-	{
-		t3dScopedLock_t state_lock( m_previewStateMutex );
-		if ( nSlot >= s_nPreviewReadbackSlotCount ) {
-			++m_nPreviewAsyncLateCallbackCount;
-			return;
-		}
-		const t3dPreviewReadbackSlot_t &slot = m_szPreviewReadbackSlots[nSlot];
-		if ( !slot.bActive || slot.nRequestGeneration != nRequestGeneration
-		        || slot.nLifecycleGeneration != m_nPreviewAsyncLifecycleGeneration ) {
-			++m_nPreviewAsyncLateCallbackCount;
-			return;
-		}
-		size = slot.size;
-	}
-	if ( rReadbackBytes.size() != ( int64_t )size.x * ( int64_t )size.y * 4 ) {
-		completePreviewAsyncOnRenderThread( nSlot, T3D_RD_PREVIEW_SYSTEMIC_RD, Ref<Image>() );
-		return;
-	}
-	Ref<Image> image = Image::create_from_data( size.x, size.y, false, Image::FORMAT_RGBA8, rReadbackBytes );
-	if ( image.is_null() ) {
-		completePreviewAsyncOnRenderThread( nSlot, T3D_RD_PREVIEW_SYSTEMIC_RD, Ref<Image>() );
-		return;
-	}
-	image->flip_y();
-	completePreviewAsyncOnRenderThread( nSlot, T3D_RD_PREVIEW_NONE, image );
-	servicePreviewVtRepublishOnRenderThread();
+	m_previewService.consumePreviewReadbackOnRenderThread( *this, nSlot, nRequestGeneration, rReadbackBytes );
 }
 
 void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
@@ -2959,7 +2125,7 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 		m_nConsecutiveRenderFailures.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	} else {
 		const uint32_t failures = m_nConsecutiveRenderFailures.fetch_add( 1u, T3D_MEMORY_ORDER_ACQ_REL ) + 1u;
-		// The render thread owns failure teardown. Keep the shared VT/RenderWorld
+		// The render thread owns failure teardown. Keep the shared VT/World
 		// publication authority alive so a later resource-generation recovery can
 		// rebuild only the failed terrain/world consumers on the render thread.
 		m_worldRuntime.shutdownCold();
@@ -2983,24 +2149,27 @@ void Terrain3DRenderCoordinator::render( RenderData *const pRenderData ) {
 	}
 }
 
-bool Terrain3DRenderCoordinator::publishStaticSceneDatabaseCold( const T3DGeometryDatabase &rGeometry,
-        const T3DSceneCell *const pCells, const uint32_t nCellCount,
-        const T3DInstanceRecord *const pInstances, const uint32_t nInstanceCount,
-        const t3dRenderingMaterialGpu_t *const pMaterials, const uint32_t nMaterialCount ) {
-	if ( ( nCellCount != 0u && pCells == NULL ) || ( nInstanceCount != 0u && pInstances == NULL )
-	        || ( nMaterialCount != 0u && pMaterials == NULL ) ) {
+bool Terrain3DRenderCoordinator::publishStaticWorldCold( const Terrain3DWorldPublication &rWorld ) {
+	const t3dWorldPublicationCapacity_t required = { rWorld.m_vertices.size(), rWorld.m_clusterVertexIndices.size(),
+		rWorld.m_triangleWords.size(), rWorld.m_clusters.size(), rWorld.m_clusterVtMetadata.size(),
+		rWorld.m_terrainStripClusters.size(), rWorld.m_terrainStripClusterBounds.size(), rWorld.m_transforms.size(),
+		rWorld.m_instances.size(), rWorld.m_cells.size(), rWorld.m_hlodRecords.size(), rWorld.m_materials.size(),
+		rWorld.m_visibilityCandidates.size() };
+	t3dScopedLock_t lock( m_staticScenePublicationMutex );
+	const uint32_t targetIndex = m_staticScenePublication.pWorld == &m_staticWorldPublicationStorage[0] ? 1u : 0u;
+	Terrain3DWorldPublication &target = m_staticWorldPublicationStorage[targetIndex];
+	if ( !target.hasCapacity( required ) && !target.reserveCold( required ) ) {
 		return false;
 	}
-	t3dScopedLock_t lock( m_staticScenePublicationMutex );
+	if ( !target.copyFrom( rWorld ) ) {
+		return false;
+	}
 	const uint64_t nextGeneration = advanceGeneration( m_staticScenePublication.nGeneration );
 	m_staticScenePublication = t3dStaticScenePublication_t{};
-	m_staticScenePublication.pGeometry = &rGeometry;
-	m_staticScenePublication.pCells = pCells;
-	m_staticScenePublication.pInstances = pInstances;
-	m_staticScenePublication.pMaterials = pMaterials;
-	m_staticScenePublication.nCellCount = nCellCount;
-	m_staticScenePublication.nInstanceCount = nInstanceCount;
-	m_staticScenePublication.nMaterialCount = nMaterialCount;
+	m_staticScenePublication.pWorld = &target;
+	m_staticScenePublication.nCellCount = ( uint32_t )target.m_cells.size();
+	m_staticScenePublication.nInstanceCount = ( uint32_t )target.m_instances.size();
+	m_staticScenePublication.nMaterialCount = ( uint32_t )target.m_materials.size();
 	m_staticScenePublication.nGeneration = nextGeneration;
 	m_staticScenePublication.bValid = true;
 	return true;

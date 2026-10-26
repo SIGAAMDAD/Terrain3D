@@ -80,14 +80,14 @@ int Terrain3DDataResidencyAdapter::effectiveInstanceLoadPages( void ) const {
 }
 
 void Terrain3DDataResidencyAdapter::updateRegionResidency(
-        Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, const bool bForce ) {
-	m_regionResidency.update( rData, rFrame, bForce );
+        const t3dResidencyFrameState_t &rFrame, const bool bForce, const t3dRegionResidencyUpdateContext_t &rContext ) {
+	m_regionResidency.update( rFrame, bForce, rContext );
 }
 
-void Terrain3DDataResidencyAdapter::resetRuntimeCaches( Terrain3DData &rData ) {
-	m_regionResidency.resetRuntimeCaches( rData );
+void Terrain3DDataResidencyAdapter::resetRuntimeCaches( const t3dRegionResidencyUpdateContext_t &rContext ) {
+	m_regionResidency.resetRuntimeCaches( rContext );
 }
 
-void Terrain3DDataResidencyAdapter::appendRuntimeProfileSample( const Terrain3DData &rData, t3dRuntimeProfileSample_t &rSample ) const {
-	m_regionResidency.appendRuntimeProfileSample( rData, rSample );
+void Terrain3DDataResidencyAdapter::appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const {
+	m_regionResidency.appendRuntimeProfileSample( rSample );
 }

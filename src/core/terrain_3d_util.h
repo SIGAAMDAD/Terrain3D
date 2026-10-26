@@ -159,7 +159,7 @@ EA_FORCE_INLINE T t3dIntCeilMult( const T numToRound, const T multiple ) {
 template <typename T>
 EA_FORCE_INLINE T t3dIntCeilPow2( T numToRound, T multiple ) {
 	static_assert( eastl::numeric_limits<T>::is_integer, "Only integer types are allowed" );
-	ASSERT( is_power_of_2( multiple ), t3dIntCeilMult( numToRound, multiple ) );
+	ASSERT( Math::is_power_of_2( multiple ), t3dIntCeilMult( numToRound, multiple ) );
 	return ( numToRound + multiple - 1 ) & -multiple;
 }
 

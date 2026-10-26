@@ -7,6 +7,11 @@
 #include "rendering/terrain_3d_mesher.h"
 #include "core/terrain_3d_sync.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_framebuffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_sampler.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_shader.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_texture.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_pipeline_cache.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
 #include "rendering/rd/terrain_3d_rd_culling.h"
@@ -14,6 +19,8 @@
 #include "rendering/rd/terrain_3d_rd_forward_shader_bundle.h"
 #include "rendering/terrain_3d_clipmap_strip_contract.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
+#include "rendering/rd/terrain_3d_rd_forward_pipeline_base.h"
+#include "rendering/rd/vt/terrain_3d_vt_shared_bindings.h"
 #include "rendering/terrain_3d_shader_specializer.h"
 
 #include "eastl_config.h"
@@ -65,7 +72,7 @@ typedef struct t3dRdWorldTerrainRasterBindings_s {
 class Terrain3DRdClipmapRenderer {
 private:
 	typedef struct t3dRdViewState_s {
-		RID m_hFramebuffer;
+		Terrain3DRdFramebuffer m_hFramebuffer;
 		RID m_hszPipelines[3];
 		RID m_hColor;
 		RID m_hDepth;
@@ -73,14 +80,7 @@ private:
 		bool m_bColorWrite = true;
 	} t3dRdViewState_t;
 
-	typedef struct t3dRdForwardPipelineKey_s {
-		int64_t m_nFramebufferFormat = RenderingDevice::INVALID_ID;
-		t3dRdForwardShaderVariant_t m_variant = T3D_RD_FORWARD_SHADER_COLOR;
-		t3dRdForwardPassKind_t m_passKind = T3D_RD_FORWARD_PASS_INVALID;
-		RenderingDevice::TextureSamples m_samples = RenderingDevice::TEXTURE_SAMPLES_1;
-		uint32_t m_nViewCount = 1u;
-		bool m_bReverseCull = false;
-		bool m_bDepthPrepassActive = false;
+	typedef struct t3dRdForwardPipelineKey_s : public t3dRdForwardPipelineBaseKey_t {
 		bool m_bOneSunLighting = false;
 		t3dTerrainShaderPath_t m_shaderPath = T3D_TERRAIN_SHADER_PATH_COMPATIBILITY_MIXED;
 		uint8_t m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
@@ -92,9 +92,8 @@ private:
 		uint8_t m_nMiddleSurfaceClass = T3D_TERRAIN_MIDDLE_SURFACE_RUNTIME;
 
 		bool operator==( const t3dRdForwardPipelineKey_s &rOther ) const {
-			return m_nFramebufferFormat == rOther.m_nFramebufferFormat && m_variant == rOther.m_variant && m_passKind == rOther.m_passKind
-			        && m_samples == rOther.m_samples && m_nViewCount == rOther.m_nViewCount && m_bReverseCull == rOther.m_bReverseCull
-			        && m_bDepthPrepassActive == rOther.m_bDepthPrepassActive && m_bOneSunLighting == rOther.m_bOneSunLighting
+			return static_cast<const t3dRdForwardPipelineBaseKey_t &>( *this ) == static_cast<const t3dRdForwardPipelineBaseKey_t &>( rOther )
+			        && m_bOneSunLighting == rOther.m_bOneSunLighting
 			        && m_shaderPath == rOther.m_shaderPath && m_nShippingFeatureClass == rOther.m_nShippingFeatureClass
 			        && m_nszLightingModelClass[0] == rOther.m_nszLightingModelClass[0]
 			        && m_nszLightingModelClass[1] == rOther.m_nszLightingModelClass[1]
@@ -134,30 +133,30 @@ private:
 	        "Clipmap strip commands must start at a whole-command offset" );
 	t3dClipmapStripPart_t m_szStripParts[MESH_TYPE_COUNT][T3D_CLIPMAP_STRIP_PART_CAPACITY]{};
 	uint16_t m_szStripPartCounts[MESH_TYPE_COUNT]{};
-	RID m_hStripPartBuffer;
-	RID m_hszShaders[3];
-	RID m_hszForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-	RID m_hszForwardOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
-	RID m_hCullShader;
+	Terrain3DRdGpuBuffer m_hStripPartBuffer;
+	Terrain3DRdShader m_hszShaders[3];
+	Terrain3DRdShader m_hszForwardShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_SHADER_VARIANT_MAX];
+	Terrain3DRdShader m_hszForwardOneSunShaders[T3D_TERRAIN_SHADER_PATH_COUNT][3][T3D_RD_FORWARD_COLOR_VARIANT_COUNT];
+	Terrain3DRdShader m_hCullShader;
 	RID m_hCullPipeline;
 	Terrain3DRdPipelineCache<RID, 1u> m_cullPipelines;
 	Terrain3DRdPipelineCache<uint32_t, s_nMaxViews * 3u> m_viewPipelines;
-	RID m_hTerrainSampler;
-	RID m_hszMaterialSamplers[4];
-	RID m_hszMapSamplers[4];
-	RID m_hszVtSamplers[4];
-	RID m_hFallbackDisplacementTexture;
-	RID m_hFallbackArrayTexture;
-	RID m_hFrameUniformBuffer;
-	RID m_hRegionMapBuffer;
-	RID m_hMaterialBuffer;
-	RID m_hMaterialConfigBuffer;
-	RID m_hEditorOverlayBuffer;
-	RID m_hPatchBuffer;
-	RID m_hVisibleBuffer;
-	RID m_hIndirectBuffer;
-	t3dGpuBufferSlice_t m_indexedIndirectSlice;
-	t3dGpuBufferSlice_t m_stripIndirectSlice;
+	Terrain3DRdSampler m_hTerrainSampler;
+	Terrain3DRdSampler m_hszMaterialSamplers[4];
+	Terrain3DRdSampler m_hszMapSamplers[4];
+	Terrain3DRdSampler m_hszVtSamplers[4];
+	Terrain3DRdTexture m_hFallbackDisplacementTexture;
+	Terrain3DRdTexture m_hFallbackArrayTexture;
+	Terrain3DRdGpuBuffer m_hFrameUniformBuffer;
+	Terrain3DRdGpuBuffer m_hRegionMapBuffer;
+	Terrain3DRdGpuBuffer m_hMaterialBuffer;
+	Terrain3DRdGpuBuffer m_hMaterialConfigBuffer;
+	Terrain3DRdGpuBuffer m_hEditorOverlayBuffer;
+	Terrain3DRdGpuBuffer m_hPatchBuffer;
+	Terrain3DRdGpuBuffer m_hVisibleBuffer;
+	Terrain3DRdGpuBuffer *m_pIndirectBuffer = NULL;
+	t3dRdGpuBufferSlice_t m_indexedIndirectSlice;
+	t3dRdGpuBufferSlice_t m_stripIndirectSlice;
 	RID m_hszRasterUniformSets[3];
 	RID m_hCullUniformSet;
 
@@ -221,7 +220,6 @@ private:
 
 	Terrain3DRdPipelineCache<t3dRdTierPipelineKey_t, s_nForwardPipelineCapacity * 3u> m_forwardPipelines;
 	mutable t3dRdForwardPipelineEntry_t m_currentForwardPipelineEntry{};
-	uint32_t m_nRegionMapCapacityBytes = 0u;
 	uint64_t m_nRegionMapGeneration = 0u;
 	uint64_t m_nMaterialGeneration = 0u;
 	uint64_t m_nPatchGeneration = 0u;
@@ -287,7 +285,6 @@ private:
 	        const Ref<RDShaderSPIRV> &rCull );
 	bool ensureForwardShaders( const t3dRdForwardShaderBundle_t &rShaders );
 	void freeForwardPipelines( void );
-	bool selectForwardVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const;
 	bool ensureForwardPipelines( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t variant, bool bOneSunLighting,
 	        t3dTerrainShaderPath_t shaderPath, uint8_t nShippingFeatureClass, const uint8_t *pLightingModelClasses,
 	        uint8_t nSceneIntegrationClass, const uint8_t *pDnrOutputClasses, uint8_t nMiddleSurfaceClass );
@@ -299,6 +296,7 @@ private:
 	bool ensureFallbackTextures( void );
 	bool ensureBuffers( void );
 	bool ensureRegionMapBuffer( uint32_t nRequiredBytes );
+	t3dRdTerrainBindings_t resolveTerrainBindings( const t3dRdTerrainBindings_t &rBindings ) const;
 	t3dRdClipmapDescriptorKey_t buildUniformSetDescriptorKey( const t3dRdTerrainBindings_t &rBindings,
 	        const t3dRdMaterialConfig_t &rMaterialConfig,
 	        const T3DTerrainStageASharedVTBindings *pSharedVTBindings ) const;
@@ -380,10 +378,10 @@ public:
 	}
 
 	EA_FORCE_INLINE bool isReady( void ) const {
-		return m_context.isReady() && m_hszShaders[0].is_valid() && m_hszShaders[1].is_valid() && m_hszShaders[2].is_valid()
-		        && m_hStripPartBuffer.is_valid() && m_hIndirectBuffer.is_valid()
-		        && m_indexedIndirectSlice.m_hBuffer == m_hIndirectBuffer
-		        && m_stripIndirectSlice.m_hBuffer == m_hIndirectBuffer;
+		return m_context.isReady() && m_hszShaders[0].isValid() && m_hszShaders[1].isValid() && m_hszShaders[2].isValid()
+		        && m_hStripPartBuffer.is_valid() && m_pIndirectBuffer
+		        && m_pIndirectBuffer->ownsSlice( m_indexedIndirectSlice )
+		        && m_pIndirectBuffer->ownsSlice( m_stripIndirectSlice );
 	}
 	EA_FORCE_INLINE uint64_t getFramesRendered( void ) const {
 		return m_nFramesRendered.load( T3D_MEMORY_ORDER_ACQUIRE );

@@ -11,6 +11,27 @@ static func is_supported(p_descriptor: Dictionary) -> bool:
 	return type == TYPE_BOOL or type == TYPE_INT or type == TYPE_FLOAT
 
 
+static func supported_groups(p_class_name: String, p_group_prefixes: Array = []) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	var descriptors: Array[Dictionary] = SettingMetadata.descriptors_for_class(p_class_name, p_group_prefixes)
+	for group: Dictionary in SettingMetadata.group_descriptors(descriptors):
+		var supported: Array[Dictionary] = []
+		for descriptor: Dictionary in group.get("settings", []):
+			if is_supported(descriptor):
+				supported.append(descriptor)
+		if not supported.is_empty():
+			result.append({"group_path": str(group.get("group_path", "General")), "settings": supported})
+	return result
+
+
+static func group_is_advanced(p_descriptors: Array[Dictionary]) -> bool:
+	var advanced_count: int = 0
+	for descriptor: Dictionary in p_descriptors:
+		if str(descriptor.get("visibility", "basic")) == "advanced":
+			advanced_count += 1
+	return advanced_count > 0 and advanced_count * 2 >= p_descriptors.size()
+
+
 static func create_control(p_descriptor: Dictionary, p_changed: Callable) -> Control:
 	var type: int = int(p_descriptor.get("variant_type", TYPE_NIL))
 	var hint: int = int(p_descriptor.get("hint", PROPERTY_HINT_NONE))

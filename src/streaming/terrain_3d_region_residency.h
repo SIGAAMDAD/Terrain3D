@@ -5,10 +5,12 @@
 
 #include "streaming/terrain_3d_residency_state.h"
 #include "streaming/terrain_3d_runtime_profile.h"
+#include "streaming/terrain_3d_instance_region_cache.h"
+#include "streaming/terrain_3d_middle_height_region_cache.h"
 
 class Terrain3DActiveHeightResidency;
 class Terrain3DCpuRegionCache;
-class Terrain3DData;
+class Terrain3DCompute;
 class Terrain3DFarSurfaceAtlasCache;
 class Terrain3DGpuRegionCache;
 class Terrain3DInstanceRegionCache;
@@ -16,6 +18,20 @@ class Terrain3DMiddleHeightRegionCache;
 class Terrain3DRegionRepository;
 class Terrain3DRuntimePageStore;
 class Terrain3DSamplingStorage;
+
+
+typedef struct t3dRegionResidencyUpdateContext_s {
+	typedef void ( *PrepareGpuFarSurfaceFn )( void *pContext );
+	typedef void ( *ApplyInstanceChangesFn )( void *pContext, const t3dInstanceRegionCacheChanges_t &rChanges );
+	typedef void ( *GpuPageTableChangedFn )( void *pContext );
+
+	Terrain3DCompute *m_pCompute = NULL;
+	t3dMiddleHeightRegionCacheConfig_t m_middleHeightConfig{};
+	void *m_pOwnerContext = NULL;
+	PrepareGpuFarSurfaceFn m_prepareGpuFarSurface = NULL;
+	ApplyInstanceChangesFn m_applyInstanceChanges = NULL;
+	GpuPageTableChangedFn m_gpuPageTableChanged = NULL;
+} t3dRegionResidencyUpdateContext_t;
 
 // Coordinates the ordered runtime residency pipeline. Individual cache classes
 // own their storage, replacement policy, statistics, and reset/configuration state.
@@ -32,9 +48,9 @@ public:
 	        Terrain3DFarSurfaceAtlasCache *pFarSurfaceAtlasCache );
 
 	void reset( void );
-	void update( Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, bool bForce );
-	void resetRuntimeCaches( Terrain3DData &rData );
-	void appendRuntimeProfileSample( const Terrain3DData &rData, t3dRuntimeProfileSample_t &rSample ) const;
+	void update( const t3dResidencyFrameState_t &rFrame, bool bForce, const t3dRegionResidencyUpdateContext_t &rContext );
+	void resetRuntimeCaches( const t3dRegionResidencyUpdateContext_t &rContext );
+	void appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const;
 
 	void setBudgetOverrides( int nGpuUploadLayers, int nCpuLoadLayers, int nInstanceLoadPages );
 	void clearBudgetOverrides( void );

@@ -89,7 +89,7 @@ public:
 	const T3DVTStreamingLimits &get_streaming_limits() const;
 	bool configure_residency_policy_cold( const T3DVTResidencyPolicy &pPolicy );
 	const T3DVTResidencyPolicy &get_residency_policy() const;
-	bool prepare_cpu_cold( const T3DRenderWorldLimits &pLimits, const T3DVtGpuResourcePlan &pPlan, uint32_t nStartupGeneration );
+	bool prepare_cpu_cold( const T3DWorldLimits &pLimits, const T3DVtGpuResourcePlan &pPlan, uint32_t nStartupGeneration );
 	bool prepare_gpu_storage_cold( Terrain3DVtResourceImage *pResources );
 	bool bind_gpu_executable_cold();
 	bool service_gpu_executable_cold( uint32_t nMaxWorkUnits );
@@ -171,6 +171,7 @@ private:
 	bool allocate_cpu_image_cold();
 	void release_cpu_image_cold();
 	bool prepare_neutral_legacy_cpu_cold();
+	bool initialize_runtime_state_cold( const T3DVTDatabaseView &rDatabase, uint32_t nDatabaseGeneration );
 	bool prepare_runtime_package_cpu_cold();
 	bool publish_neutral_legacy_warm();
 	bool publish_runtime_package_warm();
@@ -181,7 +182,7 @@ private:
 	Terrain3DVtResourceImage *m_pResources;
 	Terrain3DMemoryZone *m_pRuntimeAllocatorZone;
 	Terrain3DVTGpu m_Gpu;
-	T3DRenderWorldLimits m_Limits;
+	T3DWorldLimits m_Limits;
 	T3DVTResidencyState m_Residency;
 	T3DVTStreamingState m_Streaming;
 	T3DVTStreamingLimits m_StreamingLimits;
@@ -189,10 +190,10 @@ private:
 	T3DVTDatabaseView m_NeutralDatabase;
 	T3DVTPackRuntimeStorage m_RuntimePack;
 	T3DVTFileHeader m_NeutralHeader;
-	T3DVTAllocationRecordV1 m_NeutralAllocations[T3D_RW_VT_CHANNELS];
-	T3DVTPageFileRecord m_NeutralPages[T3D_RW_VT_CHANNELS];
-	T3DVTPayloadRecord m_NeutralPayloads[T3D_RW_VT_CHANNELS];
-	uint8_t m_NeutralPayloadBytes[T3D_RW_VT_CHANNELS];
+	T3DVTAllocationRecordV1 m_NeutralAllocations[T3D_VT_CHANNEL_COUNT];
+	T3DVTPageFileRecord m_NeutralPages[T3D_VT_CHANNEL_COUNT];
+	T3DVTPayloadRecord m_NeutralPayloads[T3D_VT_CHANNEL_COUNT];
+	uint8_t m_NeutralPayloadBytes[T3D_VT_CHANNEL_COUNT];
 	void *m_pCpuImage;
 	uint64_t m_nCpuImageBytes;
 	t3dVTAllocation_t *m_pAllocations;
@@ -216,7 +217,7 @@ private:
 	uint32_t m_nFrameRequestBudget = 1u;
 	uint8_t *m_pStreamScratch;
 	uint32_t *m_pScratchLaneOwner;
-	t3dAtomic_t<uint32_t> m_ScratchLaneCompletion[T3D_RW_MAX_STREAM_SCRATCH_LANES];
+	t3dAtomic_t<uint32_t> m_ScratchLaneCompletion[T3D_VT_MAX_STREAM_SCRATCH_LANES];
 	T3DVirtualTextureStats m_Stats;
 	T3DVTQualityRuntimeStats m_QualityStats;
 	uint32_t m_nRequestedQualityProfile;

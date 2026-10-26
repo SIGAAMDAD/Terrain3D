@@ -62,7 +62,7 @@ typedef struct t3dRuntimePageConfig_s {
 	bool m_bEditorAuthoring = false;
 } t3dRuntimePageConfig_t;
 
-typedef struct t3dRuntimePageCookPayload_s {
+typedef struct t3dRuntimePageContent_s {
 	Ref<Image> m_height;
 	Ref<Image> m_control;
 	Ref<Image> m_color;
@@ -79,6 +79,12 @@ typedef struct t3dRuntimePageCookPayload_s {
 	PackedByteArray m_instanceMetadata;
 	PackedByteArray m_lightingReceivers;
 	PackedByteArray m_multimeshFastStart;
+} t3dRuntimePageContent_t;
+
+// Authoring/cook payload and runtime materialized payload share one canonical
+// page-content schema. Runtime-only byte staging and prepared-instance state
+// remain on t3dRuntimePagePayload_t below.
+typedef struct t3dRuntimePageCookPayload_s : public t3dRuntimePageContent_t {
 	uint32_t m_nMaterialMask = 1u;
 } t3dRuntimePageCookPayload_t;
 
@@ -166,7 +172,7 @@ typedef struct t3dRuntimePageMeta_s {
 	bool m_bEditorAuthoring = false;
 } t3dRuntimePageMeta_t;
 
-typedef struct t3dRuntimePagePayload_s {
+typedef struct t3dRuntimePagePayload_s : public t3dRuntimePageContent_t {
 	uint32_t m_szLogicalBytes[s_nRuntimePageChannelCount + 1u] = {};
 	PackedByteArray m_heightBytes;
 	PackedByteArray m_controlBytes;
@@ -175,23 +181,7 @@ typedef struct t3dRuntimePagePayload_s {
 	PackedByteArray m_middleHeightBytes;
 	PackedByteArray m_middleCompositeBytes;
 	PackedByteArray m_terrainShadowMaskBytes;
-	Ref<Image> m_height;
-	Ref<Image> m_control;
-	Ref<Image> m_color;
-	Ref<Image> m_derived;
-	Ref<Image> m_middleHeight;
-	Ref<Image> m_middleComposite;
-	Ref<Image> m_terrainShadowMask;
 	PackedByteArray m_instancePage;
-	PackedByteArray m_holeMask;
-	PackedByteArray m_collisionHeight;
-	PackedByteArray m_collisionBounds;
-	PackedByteArray m_navigation;
-	PackedByteArray m_minMaxHeight;
-	PackedByteArray m_nodeDescriptors;
-	PackedByteArray m_instanceMetadata;
-	PackedByteArray m_lightingReceivers;
-	PackedByteArray m_multimeshFastStart;
 	Terrain3DInstanceStore m_preparedInstanceStore{ TERRAIN3D_INSTANCE_STORE_RUNTIME_PREPARED };
 } t3dRuntimePagePayload_t;
 
@@ -390,6 +380,11 @@ private:
 	        t3dRuntimePageWorkerScratch_t &rScratch,
 	        const t3dRuntimePageSource_t &rSource,
 	        bool bPreserveMaterialized = false ) const;
+	bool loadRuntimePayloadNow( const Vector2i &rLocation,
+	        const t3dRuntimePageConfig_t &rConfig,
+	        uint16_t nConsumers,
+	        bool bLoadMinMax,
+	        t3dRuntimePagePayload_t &rPayload ) const;
 	void prepareWorkIndex( int nWorkIndex, int nWorkerIndex );
 	void workerMain( int nWorkerIndex );
 	void startWorkers( int nWorkerCount );

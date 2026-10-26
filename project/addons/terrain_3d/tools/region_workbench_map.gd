@@ -8,6 +8,7 @@ signal center_requested(location)
 const BASE_CELL_SIZE: float = 24.0
 const MIN_ZOOM: float = 0.15
 const MAX_ZOOM: float = 3.0
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 
 var _available: Dictionary[Vector2i, bool] = {}
 var _selected: Dictionary[Vector2i, bool] = {}
@@ -126,7 +127,7 @@ func _set_selected(location: Vector2i, enabled: bool) -> void:
 	var values: Array[Vector2i] = []
 	for value: Vector2i in _selected.keys():
 		values.push_back(value)
-	values.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	values.sort_custom(EditorUtil.region_location_less)
 	selection_changed.emit(values)
 	queue_redraw()
 

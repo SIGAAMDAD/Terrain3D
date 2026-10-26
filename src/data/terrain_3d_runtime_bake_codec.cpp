@@ -56,6 +56,64 @@ EA_FORCE_INLINE static bool t3dRuntimeBakeCodecResizeBytes( PackedByteArray &rBy
 	return ( size_t )rBytes.size() == nBytes;
 }
 
+template <typename TControlReader>
+static PackedByteArray t3dRuntimeBakeCodecEncodeNavigationMask(
+        const uint16_t nWidth, const uint32_t nSamples, TControlReader pReadControl ) {
+	PackedByteArray bytes;
+	const uint32_t plane = ( nSamples + 7u ) / 8u;
+	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t )plane * 2u ) ) {
+		return PackedByteArray();
+	}
+	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
+	writer.writeU32( s_nNavMagic );
+	writer.writeU16( s_nBlobVersion );
+	writer.writeU16( nWidth );
+	writer.writeU32( nSamples );
+	writer.writeU32( plane );
+	uint8_t *const pValid = bytes.ptrw() + writer.offset();
+	uint8_t *const pNavigation = pValid + plane;
+	memset( pValid, 0, ( size_t )plane * 2u );
+	for ( uint32_t i = 0u; i < nSamples; ++i ) {
+		const uint32_t control = pReadControl( i );
+		if ( !t3dIsHole( control ) ) {
+			t3dRuntimeBakeCodecSetBit( pValid, i );
+		}
+		if ( !t3dIsHole( control ) && t3dIsNav( control ) ) {
+			t3dRuntimeBakeCodecSetBit( pNavigation, i );
+		}
+	}
+	return bytes;
+}
+
+typedef struct t3dRuntimeCollisionHeightView_s {
+	const uint8_t *m_pHeights = NULL;
+	uint32_t m_nCount = 0u;
+	int m_nWidth = 0;
+} t3dRuntimeCollisionHeightView_t;
+
+static bool t3dRuntimeBakeCodecGetCollisionHeightView(
+        const PackedByteArray &rBlob, t3dRuntimeCollisionHeightView_t &rView ) {
+	rView = t3dRuntimeCollisionHeightView_t();
+	if ( rBlob.size() < 12 ) {
+		return false;
+	}
+	const uint8_t *const p = rBlob.ptr();
+	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionHeightMagic
+	        || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) {
+		return false;
+	}
+	const int width = t3dRuntimeBakeCodecReadU16( p + 6 );
+	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
+	if ( width != s_nRegionSize + 1 || count != ( uint32_t )width * ( uint32_t )width
+	        || rBlob.size() < 12 + ( int64_t )count * 4 ) {
+		return false;
+	}
+	rView.m_pHeights = p + 12;
+	rView.m_nCount = count;
+	rView.m_nWidth = width;
+	return true;
+}
+
 static const uint16_t s_szRuntimeMinMaxLevelSides[] = { 128u, 64u, 32u, 16u, 8u, 4u, 2u, 1u };
 static const uint32_t s_nRuntimeMinMaxLevelCount = 8u;
 static const size_t s_nRuntimeMinMaxBlobBytes = 174836u;
@@ -103,71 +161,28 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeHoleMask( const Ref<Image> &rCo
 }
 
 PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const Ref<Image> &rControl ) {
-	PackedByteArray bytes;
 	if ( rControl.is_valid()
 	        && ( rControl->get_width() != s_nRegionSize || rControl->get_height() != s_nRegionSize
 	                || rControl->get_format() != Image::FORMAT_RF ) ) {
-		return bytes;
-	}
-	const uint32_t samples = ( uint32_t )( s_nRegionTexels );
-	const uint32_t plane = ( samples + 7u ) / 8u;
-	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t )plane * 2u ) ) {
 		return PackedByteArray();
 	}
-	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
-	writer.writeU32( s_nNavMagic );
-	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )s_nRegionSize );
-	writer.writeU32( samples );
-	writer.writeU32( plane );
-	uint8_t *const pValid = bytes.ptrw() + writer.offset();
-	uint8_t *const pNavigation = pValid + plane;
-	memset( pValid, 0, ( size_t )plane * 2u );
 	const PackedByteArray control_bytes = rControl.is_valid() ? rControl->get_data() : PackedByteArray();
 	const uint8_t *const pControl = control_bytes.is_empty() ? NULL : control_bytes.ptr();
-	for ( uint32_t i = 0u; i < samples; ++i ) {
-		const uint32_t control = t3dRuntimeBakeCodecReadControlPixel( pControl, ( size_t )control_bytes.size(), i );
-		if ( !t3dIsHole( control ) ) {
-			t3dRuntimeBakeCodecSetBit( pValid, i );
-		}
-		if ( !t3dIsHole( control ) && t3dIsNav( control ) ) {
-			t3dRuntimeBakeCodecSetBit( pNavigation, i );
-		}
-	}
-	return bytes;
+	const size_t controlBytes = ( size_t )control_bytes.size();
+	return t3dRuntimeBakeCodecEncodeNavigationMask( ( uint16_t )s_nRegionSize, ( uint32_t )s_nRegionTexels,
+	        [pControl, controlBytes]( const uint32_t nIndex ) {
+		        return t3dRuntimeBakeCodecReadControlPixel( pControl, controlBytes, nIndex );
+	        } );
 }
 
 PackedByteArray Terrain3DRuntimeBakeCodec::encodeNavigationMask( const PackedInt32Array &rControls ) {
-	PackedByteArray bytes;
 	const int width = s_nRegionSize + 1;
 	if ( rControls.size() != width * width ) {
-		return bytes;
-	}
-	const uint32_t samples = ( uint32_t )( width * width );
-	const uint32_t plane = ( samples + 7u ) / 8u;
-	if ( !t3dRuntimeBakeCodecResizeBytes( bytes, 16u + ( size_t )plane * 2u ) ) {
 		return PackedByteArray();
 	}
-	t3dByteWriter_t writer( bytes.ptrw(), ( size_t )bytes.size() );
-	writer.writeU32( s_nNavMagic );
-	writer.writeU16( s_nBlobVersion );
-	writer.writeU16( ( uint16_t )width );
-	writer.writeU32( samples );
-	writer.writeU32( plane );
-	uint8_t *const pValid = bytes.ptrw() + writer.offset();
-	uint8_t *const pNavigation = pValid + plane;
-	memset( pValid, 0, ( size_t )plane * 2u );
 	const int32_t *const pControls = rControls.ptr();
-	for ( uint32_t i = 0u; i < samples; ++i ) {
-		const uint32_t control = ( uint32_t )pControls[i];
-		if ( !t3dIsHole( control ) ) {
-			t3dRuntimeBakeCodecSetBit( pValid, i );
-		}
-		if ( !t3dIsHole( control ) && t3dIsNav( control ) ) {
-			t3dRuntimeBakeCodecSetBit( pNavigation, i );
-		}
-	}
-	return bytes;
+	return t3dRuntimeBakeCodecEncodeNavigationMask( ( uint16_t )width, ( uint32_t )( width * width ),
+	        [pControls]( const uint32_t nIndex ) { return ( uint32_t )pControls[nIndex]; } );
 }
 
 bool Terrain3DRuntimeBakeCodec::getNavigationMaskView( const PackedByteArray &rBlob, t3dNavigationMaskView_t &rView ) {
@@ -406,42 +421,26 @@ PackedByteArray Terrain3DRuntimeBakeCodec::encodeCollisionBounds( const float fM
 
 bool Terrain3DRuntimeBakeCodec::decodeCollisionHeight( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth ) {
 	nWidth = 0;
-	if ( rBlob.size() < 12 ) {
+	t3dRuntimeCollisionHeightView_t view;
+	if ( !t3dRuntimeBakeCodecGetCollisionHeightView( rBlob, view ) ) {
 		return false;
 	}
-	const uint8_t *p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionHeightMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) {
-		return false;
+	if ( rHeights.size() != ( int64_t )view.m_nCount ) {
+		rHeights.resize( view.m_nCount );
 	}
-	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( nWidth != s_nRegionSize + 1 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4 ) {
-		nWidth = 0;
-		return false;
-	}
-	if ( rHeights.size() != ( int64_t )count ) {
-		rHeights.resize( count );
-	}
-	memcpy( rHeights.ptrw(), p + 12, ( size_t )count * 4u );
+	memcpy( rHeights.ptrw(), view.m_pHeights, ( size_t )view.m_nCount * 4u );
+	nWidth = view.m_nWidth;
 	return true;
 }
+
 bool Terrain3DRuntimeBakeCodec::decodeCollisionHeightInto( const PackedByteArray &rBlob, PackedFloat32Array &rHeights, int &nWidth ) {
 	nWidth = 0;
-	if ( rBlob.size() < 12 ) {
+	t3dRuntimeCollisionHeightView_t view;
+	if ( !t3dRuntimeBakeCodecGetCollisionHeightView( rBlob, view ) || rHeights.size() != ( int64_t )view.m_nCount ) {
 		return false;
 	}
-	const uint8_t *p = rBlob.ptr();
-	if ( t3dRuntimeBakeCodecReadU32( p ) != s_nCollisionHeightMagic || t3dRuntimeBakeCodecReadU16( p + 4 ) != s_nBlobVersion ) {
-		return false;
-	}
-	nWidth = t3dRuntimeBakeCodecReadU16( p + 6 );
-	const uint32_t count = t3dRuntimeBakeCodecReadU32( p + 8 );
-	if ( nWidth != s_nRegionSize + 1 || count != ( uint32_t )nWidth * nWidth || rBlob.size() < 12 + ( int64_t )count * 4
-	        || rHeights.size() != ( int64_t )count ) {
-		nWidth = 0;
-		return false;
-	}
-	memcpy( rHeights.ptrw(), p + 12, ( size_t )count * 4u );
+	memcpy( rHeights.ptrw(), view.m_pHeights, ( size_t )view.m_nCount * 4u );
+	nWidth = view.m_nWidth;
 	return true;
 }
 

@@ -68,6 +68,15 @@ typedef enum t3dWorldGeometryKind_e : uint32_t {
 	T3D_WORLD_GEOMETRY_KIND_COUNT = 4u,
 } t3dWorldGeometryKind_t;
 
+// Static-world authoring tier. Kept in the canonical World contract so authoring,
+// material cooking, and World publication share one tier vocabulary.
+typedef enum t3dWorldTier_e : uint32_t {
+	T3D_WORLD_TIER_WORLD = 0u,
+	T3D_WORLD_TIER_CLUTTER = 1u,
+	T3D_WORLD_TIER_FOLIAGE = 2u,
+	T3D_WORLD_TIER_COUNT = 3u,
+} t3dWorldTier_t;
+
 // Terrain strip-state packing. Low 16 bits retain patch flags. Tier and stitch
 // positions preserve the ABI-v1 bit assignments; ABI v2 consumes the two
 // previously unused bits for strip traversal state and places part_code above

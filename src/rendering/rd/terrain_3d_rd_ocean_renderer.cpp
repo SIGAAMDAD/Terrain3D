@@ -2,10 +2,6 @@
 
 #include "rendering/rd/infrastructure/terrain_3d_rd_binding_builder.h"
 #include "rendering/rd/terrain_3d_rd_ocean_renderer.h"
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_service.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_batch.h"
-#include "rendering/rd/terrain_3d_rd_shader_compile_status.h"
 
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
@@ -14,6 +10,7 @@
 #include <godot_cpp/classes/rd_pipeline_rasterization_state.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
 #include <string.h>
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer_batch.h"
 
 Terrain3DRdOceanRenderer::Terrain3DRdOceanRenderer( void ) :
         m_context( Terrain3DRdContext::getShared() ),
@@ -31,23 +28,16 @@ void Terrain3DRdOceanRenderer::setError( const String &rError ) {
 }
 
 bool Terrain3DRdOceanRenderer::ensureShaders( const Ref<RDShaderSPIRV> &rColor, const Ref<RDShaderSPIRV> &rShadow ) {
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd || rColor.is_null() || rShadow.is_null() ) {
+	if ( !m_context.getDevice() || rColor.is_null() || rShadow.is_null() ) {
 		return false;
 	}
-	if ( !m_hColorShader.is_valid() ) {
-		m_hColorShader = t3dRdCreateShaderWithStatus( rd, rColor, "T3D.Ocean.Shader.Color" );
-		if ( !m_hColorShader.is_valid()
-		        || !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_OCEAN ).adopt( rd, m_hColorShader, "T3D.Ocean.Shader.Color", Terrain3DRdContext::RESOURCE_SHADER ) ) {
-			return false;
-		}
+	if ( !m_hColorShader.isValid()
+	        && !m_hColorShader.createTracked( m_context, Terrain3DRdContext::OWNER_OCEAN, "T3D.Ocean.Shader.Color", rColor ) ) {
+		return false;
 	}
-	if ( !m_hShadowShader.is_valid() ) {
-		m_hShadowShader = t3dRdCreateShaderWithStatus( rd, rShadow, "T3D.Ocean.Shader.Shadow" );
-		if ( !m_hShadowShader.is_valid()
-		        || !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_OCEAN ).adopt( rd, m_hShadowShader, "T3D.Ocean.Shader.Shadow", Terrain3DRdContext::RESOURCE_SHADER ) ) {
-			return false;
-		}
+	if ( !m_hShadowShader.isValid()
+	        && !m_hShadowShader.createTracked( m_context, Terrain3DRdContext::OWNER_OCEAN, "T3D.Ocean.Shader.Shadow", rShadow ) ) {
+		return false;
 	}
 	return true;
 }
@@ -64,30 +54,49 @@ bool Terrain3DRdOceanRenderer::ensureBuffers( void ) {
 	if ( strip_indirect_bytes > Terrain3DRdContext::fixedIndirectCapacity( Terrain3DRdContext::FIXED_INDIRECT_OCEAN ) ) {
 		return false;
 	}
-	if ( !m_hFrameBuffer.is_valid() ) {
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_OCEAN )
-	                        .createUniformBuffer( m_hFrameBuffer, "T3D.Ocean.Frame", frame_bytes ) ) {
+	if ( !m_hFrameBuffer.isValid() ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Ocean.Frame";
+		spec.m_owner = Terrain3DRdContext::OWNER_OCEAN;
+		spec.m_type = Terrain3DRdContext::RESOURCE_UNIFORM_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_UNIFORM;
+		if ( !m_hFrameBuffer.configure( spec ) || !m_hFrameBuffer.createTracked( m_context, frame_bytes ) ) {
 			return false;
 		}
 	}
-	if ( !m_hPatchBuffer.is_valid() ) {
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_OCEAN )
-	                        .createStorageBuffer( m_hPatchBuffer, "T3D.Ocean.Patches", patch_bytes, Terrain3DRdContext::MEMORY_PATCH ) ) {
+	if ( !m_hPatchBuffer.isValid() ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Ocean.Patches";
+		spec.m_owner = Terrain3DRdContext::OWNER_OCEAN;
+		spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_PATCH;
+		if ( !m_hPatchBuffer.configure( spec ) || !m_hPatchBuffer.createTracked( m_context, patch_bytes ) ) {
 			return false;
 		}
 	}
-	if ( !m_hStripPartBuffer.is_valid() ) {
-		if ( !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_OCEAN )
-	                        .createStorageBuffer( m_hStripPartBuffer,
-	                                "T3D.Ocean.StripParts",
-	                                strip_part_bytes,
-	                                Terrain3DRdContext::MEMORY_STORAGE ) ) {
+	if ( !m_hStripPartBuffer.isValid() ) {
+		t3dRdGpuBufferSpec_t spec;
+		spec.m_pName = "T3D.Ocean.StripParts";
+		spec.m_owner = Terrain3DRdContext::OWNER_OCEAN;
+		spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+		spec.m_memory = Terrain3DRdContext::MEMORY_STORAGE;
+		if ( !m_hStripPartBuffer.configure( spec ) || !m_hStripPartBuffer.createTracked( m_context, strip_part_bytes ) ) {
 			return false;
 		}
 	}
-	if ( !m_hStripIndirectBuffer.is_valid() ) {
+	if ( !m_pStripIndirectBuffer || !m_pStripIndirectBuffer->ownsSlice( m_stripIndirectSlice ) ) {
+		if ( m_pStripIndirectBuffer ) {
+			m_context.releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_OCEAN, m_pStripIndirectBuffer );
+		}
+		m_stripIndirectSlice = t3dRdGpuBufferSlice_t{};
+		uint32_t offset = 0u;
+		const uint32_t capacity = Terrain3DRdContext::fixedIndirectCapacity( Terrain3DRdContext::FIXED_INDIRECT_OCEAN );
 		if ( !m_context.acquireFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_OCEAN,
-	             strip_indirect_bytes, m_hStripIndirectBuffer, m_nStripIndirectOffsetBytes ) ) {
+	             strip_indirect_bytes, m_pStripIndirectBuffer, offset )
+		        || offset != Terrain3DRdContext::fixedIndirectOffset( Terrain3DRdContext::FIXED_INDIRECT_OCEAN )
+		        || !m_pStripIndirectBuffer->slice( offset, capacity, 4u, m_stripIndirectSlice ) ) {
+			m_context.releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_OCEAN, m_pStripIndirectBuffer );
+			m_stripIndirectSlice = t3dRdGpuBufferSlice_t{};
 			return false;
 		}
 	}
@@ -107,10 +116,10 @@ bool Terrain3DRdOceanRenderer::ensureUniformSets( void ) {
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 0, RenderingDevice::UNIFORM_TYPE_UNIFORM_BUFFER, m_hFrameBuffer ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 1, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hPatchBuffer ) );
 	uniforms.push_back( Terrain3DRdBindingBuilder::single( 2, RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, m_hStripPartBuffer ) );
-	const t3dRdOceanSetKey_t color { m_hColorShader, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
-	const t3dRdOceanSetKey_t shadow { m_hShadowShader, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
-	return m_descriptors.getOrCreate( color, "T3D.Ocean.Set.Color", uniforms, m_hColorShader, 0u ).is_valid()
-	        && m_descriptors.getOrCreate( shadow, "T3D.Ocean.Set.Shadow", uniforms, m_hShadowShader, 0u ).is_valid();
+	const t3dRdOceanSetKey_t color { m_hColorShader.rid(), m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
+	const t3dRdOceanSetKey_t shadow { m_hShadowShader.rid(), m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer };
+	return m_descriptors.getOrCreate( color, "T3D.Ocean.Set.Color", uniforms, m_hColorShader.rid(), 0u ).is_valid()
+	        && m_descriptors.getOrCreate( shadow, "T3D.Ocean.Set.Shadow", uniforms, m_hShadowShader.rid(), 0u ).is_valid();
 }
 
 bool Terrain3DRdOceanRenderer::ensureStripParts( const t3dRdOceanStripSnapshot_t *const pStrip ) {
@@ -143,8 +152,8 @@ bool Terrain3DRdOceanRenderer::ensureStripParts( const t3dRdOceanStripSnapshot_t
 		return false;
 	}
 	memcpy( m_stripPartBytes.ptrw(), m_szStripParts, bytes );
-	if ( !Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_OCEAN, T3D_GPU_PUBLICATION )
-	                        .writeWhole( m_hStripPartBuffer, bytes, m_stripPartBytes.ptr(), bytes, m_stripPartBytes ) ) {
+	if ( !m_hStripPartBuffer.writeTracked( m_context, 0u, m_stripPartBytes.ptr(), bytes,
+	        m_stripPartBytes, T3D_GPU_PUBLICATION ) ) {
 		setError( "Failed to upload RD ocean procedural strip descriptors" );
 		return false;
 	}
@@ -154,7 +163,7 @@ bool Terrain3DRdOceanRenderer::ensureStripParts( const t3dRdOceanStripSnapshot_t
 }
 
 bool Terrain3DRdOceanRenderer::updateStripIndirect( const uint32_t nPatchCount ) {
-	if ( !m_hStripIndirectBuffer.is_valid() || m_stripIndirectBytes.is_empty() ) {
+	if ( !m_pStripIndirectBuffer || !m_pStripIndirectBuffer->ownsSlice( m_stripIndirectSlice ) || m_stripIndirectBytes.is_empty() ) {
 		return false;
 	}
 	t3dRdDrawIndirectCommand_t *const commands = ( t3dRdDrawIndirectCommand_t * )( m_stripIndirectBytes.ptrw() );
@@ -171,9 +180,9 @@ bool Terrain3DRdOceanRenderer::updateStripIndirect( const uint32_t nPatchCount )
 		}
 	}
 	const uint32_t indirect_bytes = ( uint32_t )( m_stripIndirectBytes.size() );
-	if ( Terrain3DGpuUploadService( m_context, Terrain3DRdContext::OWNER_OCEAN, T3D_GPU_INDIRECT )
-	             .updatePacked( m_hStripIndirectBuffer, m_nStripIndirectOffsetBytes,
-	                     indirect_bytes, m_stripIndirectBytes ) != OK ) {
+	if ( !m_pStripIndirectBuffer->writePackedSliceTracked( m_context, m_stripIndirectSlice, 0u, m_stripIndirectBytes, indirect_bytes,
+	        T3D_GPU_INDIRECT, Terrain3DRdContext::OWNER_OCEAN )
+	        || !m_pStripIndirectBuffer->setSliceUsedBytes( m_stripIndirectSlice, indirect_bytes ) ) {
 		setError( "Failed to update RD ocean procedural strip indirect commands" );
 		return false;
 	}
@@ -250,14 +259,13 @@ bool Terrain3DRdOceanRenderer::updateFrame( const t3dRdForwardPassContext_t &rCo
 	memcpy( m_patchBytes.ptrw(),
 	        rState.m_szPatches,
 	        sizeof( t3dRdPatch_t ) * MIN( rState.m_nPatchCount, ( uint32_t )( s_nMaxClipmapLevels ) ) );
-	Terrain3DGpuUploadBatch uploads( m_context, Terrain3DRdContext::OWNER_OCEAN );
-	if ( !uploads.queueFullWrite( m_hFrameBuffer, sizeof( frame ), m_frameBytes.ptr(), sizeof( frame ), m_frameBytes,
-	                    false, T3D_GPU_HOT_FRAME )
+	Terrain3DRdGpuBufferBatch uploads( m_context );
+	if ( !uploads.queueFullWrite( m_hFrameBuffer, m_frameBytes.ptr(), sizeof( frame ), m_frameBytes,
+	                    T3D_GPU_HOT_FRAME )
 	        || !uploads.queueFullWrite( m_hPatchBuffer,
-	                ( uint32_t )( m_patchBytes.size() ),
 	                m_patchBytes.ptr(),
 	                ( uint32_t )( m_patchBytes.size() ),
-	                m_patchBytes, false, T3D_GPU_DIRTY_UPLOAD )
+	                m_patchBytes, T3D_GPU_DIRTY_UPLOAD )
 	        || !uploads.flush() ) {
 		setError( "Failed to update RD ocean frame/patch buffers" );
 		return false;
@@ -280,51 +288,34 @@ bool Terrain3DRdOceanRenderer::ensurePipeline( const t3dRdForwardPassContext_t &
 		return false;
 	}
 	t3dRdOceanPipelineKey_t key;
-	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
-	key.m_passKind = rContext.m_passKind;
-	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
-	key.m_nViewCount = rContext.m_nViewCount;
-	key.m_bReverseCull = rContext.m_bReverseCull;
+	const t3dRdForwardShaderVariant_t variant =
+	        rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? T3D_RD_FORWARD_SHADER_DEPTH : T3D_RD_FORWARD_SHADER_COLOR;
+	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, false, key, false ) ) {
+		return false;
+	}
 	if ( findPipeline( key ) ) {
 		return true;
 	}
-	Ref<RDPipelineRasterizationState> raster;
-	raster.instantiate();
-	raster->set_front_face( RenderingDevice::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE );
-	raster->set_cull_mode( rContext.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK );
-	Ref<RDPipelineMultisampleState> multisample;
-	multisample.instantiate();
-	multisample->set_sample_count( key.m_samples );
-	Ref<RDPipelineDepthStencilState> depth;
-	depth.instantiate();
-	depth->set_enable_depth_test( true );
-	depth->set_enable_depth_write( true );
-	depth->set_depth_compare_operator( RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
-	Ref<RDPipelineColorBlendState> blend;
-	blend.instantiate();
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT ) {
-		TypedArray<Ref<RDPipelineColorBlendStateAttachment>> attachments;
-		for ( uint32_t i = 0u; i < 3u; ++i ) {
-			Ref<RDPipelineColorBlendStateAttachment> attachment;
-			attachment.instantiate();
-			const bool blend_color = i == 0u;
-			attachment->set_enable_blend( blend_color );
-			if ( blend_color ) {
-				attachment->set_src_color_blend_factor( RenderingDevice::BLEND_FACTOR_SRC_ALPHA );
-				attachment->set_dst_color_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-				attachment->set_src_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE );
-				attachment->set_dst_alpha_blend_factor( RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA );
-			}
-			attachments.push_back( attachment );
-		}
-		blend->set_attachments( attachments );
+	t3dRdForwardPipelineStateOptions_t state_options;
+	state_options.m_frontFace = RenderingDevice::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE;
+	state_options.m_cullMode = key.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK;
+	state_options.m_nBlendAttachmentCount = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT ? 3u : 0u;
+	state_options.m_bBlendFirstAttachment = rContext.m_passKind == T3D_RD_FORWARD_PASS_TRANSPARENT;
+	t3dRdForwardPipelineStates_t pipeline_states;
+	if ( !t3dRdBuildForwardPipelineStates( key, state_options, pipeline_states ) ) {
+		setError( "Failed to allocate native Forward+ ocean pipeline state" );
+		return false;
 	}
-	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader : m_hColorShader;
+	Ref<RDPipelineRasterizationState> raster = pipeline_states.m_raster;
+	Ref<RDPipelineMultisampleState> multisample = pipeline_states.m_multisample;
+	Ref<RDPipelineDepthStencilState> depth = pipeline_states.m_depth;
+	Ref<RDPipelineColorBlendState> blend = pipeline_states.m_blend;
+	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader.rid() : m_hColorShader.rid();
 	const RID pipeline = m_pipelines.getOrCreateRaster( key,
 	        "T3D.Ocean.ForwardPipeline",
 	        shader,
 	        rContext.m_nFramebufferFormat,
-	        RenderingDevice::INVALID_FORMAT_ID,
+	        static_cast<int64_t>( RenderingDevice::INVALID_FORMAT_ID ),
 	        RenderingDevice::RENDER_PRIMITIVE_TRIANGLE_STRIPS,
 	        raster,
 	        multisample,
@@ -355,15 +346,13 @@ bool Terrain3DRdOceanRenderer::initialize( const Ref<RDShaderSPIRV> &rColor, con
 void Terrain3DRdOceanRenderer::shutdown( void ) {
 	freePipelines();
 	m_descriptors.clear();
-	m_context.freeResource( m_hFrameBuffer );
-	m_context.freeResource( m_hPatchBuffer );
-	m_context.freeResource( m_hStripPartBuffer );
-	m_context.releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_OCEAN, m_hStripIndirectBuffer );
-	m_nStripIndirectOffsetBytes = 0u;
-	m_context.freeResource( m_hColorShader );
-	m_context.freeResource( m_hShadowShader );
-	m_hFrameBuffer = m_hPatchBuffer = m_hStripPartBuffer = m_hStripIndirectBuffer = m_hColorShader
-	        = m_hShadowShader = RID();
+	m_hFrameBuffer.releaseTracked( m_context );
+	m_hPatchBuffer.releaseTracked( m_context );
+	m_hStripPartBuffer.releaseTracked( m_context );
+	m_context.releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_OCEAN, m_pStripIndirectBuffer );
+	m_stripIndirectSlice = t3dRdGpuBufferSlice_t{};
+	m_hColorShader.releaseTracked( m_context );
+	m_hShadowShader.releaseTracked( m_context );
 	m_nStripGeneration = m_nStateGeneration = 0u;
 	m_nPreparedScenePass = m_nPreparedViewportKey = 0u;
 	m_preparedPassKind = T3D_RD_FORWARD_PASS_INVALID;
@@ -421,16 +410,16 @@ bool Terrain3DRdOceanRenderer::renderForwardPass( const t3dRdForwardPassContext_
 	}
 	t3dRdOceanPipelineKey_t key;
 	RenderingDevice *const rd = m_context.getDevice();
-	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
-	key.m_passKind = rContext.m_passKind;
-	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
-	key.m_nViewCount = rContext.m_nViewCount;
-	key.m_bReverseCull = rContext.m_bReverseCull;
+	const t3dRdForwardShaderVariant_t variant =
+	        rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? T3D_RD_FORWARD_SHADER_DEPTH : T3D_RD_FORWARD_SHADER_COLOR;
+	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, false, key, false ) ) {
+		return false;
+	}
 	const t3dRdOceanPipelineEntry_t *const entry = findPipeline( key );
 	if ( !entry ) {
 		return false;
 	}
-	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader : m_hColorShader;
+	const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader.rid() : m_hColorShader.rid();
 	const RID set = m_descriptors.find( { shader, m_hFrameBuffer, m_hPatchBuffer, m_hStripPartBuffer } );
 	if ( !set.is_valid() ) {
 		return false;
@@ -442,8 +431,8 @@ bool Terrain3DRdOceanRenderer::renderForwardPass( const t3dRdForwardPassContext_
 	rd->draw_list_set_push_constant( rContext.m_nDrawList, m_pushBytes, sizeof( push ) );
 	rd->draw_list_draw_indirect( rContext.m_nDrawList,
 	        false,
-	        m_hStripIndirectBuffer,
-	        m_nStripIndirectOffsetBytes,
+	        m_pStripIndirectBuffer->rid(),
+	        m_stripIndirectSlice.m_nOffsetBytes,
 	        m_szStripPartCounts[LOD0_MESH],
 	        sizeof( t3dRdDrawIndirectCommand_t ) );
 	m_context.recordRenderIndirectCommandsSubmitted( Terrain3DRdContext::OWNER_OCEAN, m_szStripPartCounts[LOD0_MESH] );
@@ -455,8 +444,8 @@ bool Terrain3DRdOceanRenderer::renderForwardPass( const t3dRdForwardPassContext_
 		rd->draw_list_set_push_constant( rContext.m_nDrawList, m_pushBytes, sizeof( push ) );
 		rd->draw_list_draw_indirect( rContext.m_nDrawList,
 		        false,
-		        m_hStripIndirectBuffer,
-		        m_nStripIndirectOffsetBytes + T3D_CLIPMAP_STRIP_PART_CAPACITY * sizeof( t3dRdDrawIndirectCommand_t ),
+		        m_pStripIndirectBuffer->rid(),
+		        m_stripIndirectSlice.m_nOffsetBytes + T3D_CLIPMAP_STRIP_PART_CAPACITY * sizeof( t3dRdDrawIndirectCommand_t ),
 		        m_szStripPartCounts[OUTER_RING_MESH],
 		        sizeof( t3dRdDrawIndirectCommand_t ) );
 		m_context.recordRenderIndirectCommandsSubmitted( Terrain3DRdContext::OWNER_OCEAN, m_szStripPartCounts[OUTER_RING_MESH] );
@@ -467,7 +456,7 @@ bool Terrain3DRdOceanRenderer::renderForwardPass( const t3dRdForwardPassContext_
 
 Dictionary Terrain3DRdOceanRenderer::getDiagnostics( void ) const {
 	Dictionary result;
-	result["ocean_rd_ready"] = m_hColorShader.is_valid() && m_hShadowShader.is_valid();
+	result["ocean_rd_ready"] = m_hColorShader.isValid() && m_hShadowShader.isValid();
 	result["ocean_strip_generation"] = ( int64_t )( m_nStripGeneration );
 	result["ocean_strip_descriptor_uploads"] = ( int64_t )( m_nStripDescriptorUploads );
 	result["ocean_strip_descriptor_bytes"] = ( int64_t )( sizeof( m_szStripParts ) );
@@ -477,7 +466,7 @@ Dictionary Terrain3DRdOceanRenderer::getDiagnostics( void ) const {
 	        Terrain3DRdContext::OWNER_OCEAN, Terrain3DRdContext::RenderTelemetry::EVENT_PIPELINE_CREATE );
 	result["ocean_frames_prepared"] = ( int64_t )( m_nFramesPrepared );
 	result["ocean_draws"] = ( int64_t )( m_nDraws );
-	result["ocean_indirect_offset_bytes"] = ( int64_t )m_nStripIndirectOffsetBytes;
+	result["ocean_indirect_offset_bytes"] = ( int64_t )m_stripIndirectSlice.m_nOffsetBytes;
 	result["ocean_last_error"] = m_lastError;
 	return result;
 }

@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-static const uint32_t T3D_RW_MAX_STREAM_SCRATCH_LANES = 8u;
+static const uint32_t T3D_VT_MAX_STREAM_SCRATCH_LANES = 8u;
 static const uint32_t T3D_VT_PRIORITY_BUCKET_COUNT = 6u;
 
 enum T3DVTPriorityBucket : uint16_t {

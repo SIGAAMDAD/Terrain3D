@@ -5,7 +5,9 @@
 #include "assets/terrain_3d_assets.h"
 #include "assets/terrain_3d_mesh_asset.h"
 #include "data/terrain_3d_region.h"
+#include "instances/terrain_3d_instance_capacity.h"
 #include "instances/terrain_3d_instance_store.h"
+#include "instances/terrain_3d_instance_traversal.h"
 #include "instances/terrain_3d_instancer.h"
 #include "terrain_3d.h"
 
@@ -37,35 +39,19 @@ bool Terrain3DInstanceOcclusion::rebuildCellCapacityCold( void ) {
 
 	size_t required_cells = 0u;
 	Terrain3DRegion *const *const ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
-	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
-		Terrain3DRegion *const pRegion = ppRegions[iRegion];
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
+	t3dForEachResidentInstanceMesh( ppRegions, s_nRegionSlots, [&]( Terrain3DRegion &, const t3dInstanceMesh_t &rMesh ) {
+		const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( rMesh.m_nId );
+		if ( asset.is_null() || asset->getInstanceCategory() != INSTANCE_CATEGORY_OCCLUDER || !asset->usesInstanceOcclusion() ) {
+			return true;
 		}
-		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-		if ( !pStore ) {
-			continue;
+		if ( !t3dAccumulateInstanceCellCount( rMesh.m_cells.size(), required_cells ) ) {
+			return false;
 		}
-		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-			const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( mesh.m_nId );
-			if ( asset.is_null() || asset->getInstanceCategory() != INSTANCE_CATEGORY_OCCLUDER || !asset->usesInstanceOcclusion() ) {
-				continue;
-			}
-			if ( mesh.m_cells.size() > SIZE_MAX - required_cells ) {
-				required_cells = SIZE_MAX;
-				break;
-			}
-			required_cells += mesh.m_cells.size();
-		}
-		if ( required_cells == SIZE_MAX ) {
-			break;
-		}
-	}
+		return true;
+	} );
 
-	const size_t headroom = MAX( ( size_t )( 16u ), required_cells / 8u );
-	const size_t desired_capacity = required_cells > SIZE_MAX - headroom ? SIZE_MAX : required_cells + headroom;
-	const size_t target_capacity = MAX( MAX( desired_capacity, m_cells.size() ), ( size_t )( 16u ) );
+	const t3dInstanceCellCapacityPlan_t capacity_plan = t3dPlanInstanceCellCapacity( required_cells, m_cells.size() );
+	const size_t target_capacity = capacity_plan.m_nTarget;
 	if ( target_capacity <= m_cells.capacity() ) {
 		m_nCellCapacity = m_cells.capacity();
 		return true;
@@ -79,21 +65,7 @@ bool Terrain3DInstanceOcclusion::rebuildCellCapacityCold( void ) {
 	return true;
 }
 
-bool Terrain3DInstanceOcclusion::cellWithinRange(
-        const Vector2i &rRegion, const Vector2i &rCell, const int nCellSize, const real_t fRange, const Vector3 &rTarget ) const {
-	if ( fRange <= 0.0f ) {
-		return false;
-	}
-	const real_t region_x = ( real_t )( rRegion.x * s_nRegionWorldSizeMeters );
-	const real_t region_z = ( real_t )( rRegion.y * s_nRegionWorldSizeMeters );
-	const real_t min_x = region_x + ( real_t )( rCell.x * nCellSize );
-	const real_t min_z = region_z + ( real_t )( rCell.y * nCellSize );
-	const real_t max_x = min_x + ( real_t )( nCellSize );
-	const real_t max_z = min_z + ( real_t )( nCellSize );
-	const real_t dx = rTarget.x < min_x ? min_x - rTarget.x : ( rTarget.x > max_x ? rTarget.x - max_x : 0.0f );
-	const real_t dz = rTarget.z < min_z ? min_z - rTarget.z : ( rTarget.z > max_z ? rTarget.z - max_z : 0.0f );
-	return dx * dx + dz * dz <= fRange * fRange;
-}
+
 
 bool Terrain3DInstanceOcclusion::hasUsableExplicitProxy( const Ref<Terrain3DMeshAsset> &rAsset ) const {
 	if ( rAsset.is_null() || rAsset->getInstanceOcclusionPolicy() != INSTANCE_OCCLUSION_EXPLICIT_MESH
@@ -123,7 +95,7 @@ bool Terrain3DInstanceOcclusion::buildCellRecord( Terrain3DRegion *const pRegion
 		return false;
 	}
 	const int cell_size = m_pTerrain->getInstancer() ? m_pTerrain->getInstancer()->getCellSize() : s_nInstanceDefaultCellSize;
-	if ( !cellWithinRange(
+	if ( !t3dInstanceCellWithinRange(
 	             pRegion->getLocation(), rCell.m_location, cell_size, rAsset->getInstanceOcclusionRange(), m_lastTargetPosition ) ) {
 		return false;
 	}
@@ -332,32 +304,26 @@ bool Terrain3DInstanceOcclusion::rebuildResidency( const Vector3 &rTarget ) {
 	m_lastTargetPosition = rTarget;
 	m_bTargetValid = true;
 	Terrain3DRegion *const *const ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
-	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
-		Terrain3DRegion *const pRegion = ppRegions[iRegion];
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
-		}
-		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-		if ( !pStore ) {
-			continue;
-		}
-		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-			const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( mesh.m_nId );
-			if ( asset.is_null() || asset->getInstanceCategory() != INSTANCE_CATEGORY_OCCLUDER || !asset->usesInstanceOcclusion() ) {
-				continue;
-			}
-			for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
-				t3dInstanceOcclusionCell_t record;
-				if ( !buildCellRecord( pRegion, mesh.m_cells[iCell], asset, record ) ) {
-					continue;
-				}
-				if ( !appendCellRecord( record ) ) {
-					refreshDiagnostics();
-					return false;
-				}
-			}
-		}
+	const bool completed = t3dForEachResidentInstanceMesh(
+	        ppRegions, s_nRegionSlots, [&]( Terrain3DRegion &rRegion, const t3dInstanceMesh_t &rMesh ) {
+		        const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( rMesh.m_nId );
+		        if ( asset.is_null() || asset->getInstanceCategory() != INSTANCE_CATEGORY_OCCLUDER || !asset->usesInstanceOcclusion() ) {
+			        return true;
+		        }
+		        for ( size_t iCell = 0u; iCell < rMesh.m_cells.size(); ++iCell ) {
+			        t3dInstanceOcclusionCell_t record;
+			        if ( !buildCellRecord( &rRegion, rMesh.m_cells[iCell], asset, record ) ) {
+				        continue;
+			        }
+			        if ( !appendCellRecord( record ) ) {
+				        return false;
+			        }
+		        }
+		        return true;
+	        } );
+	if ( !completed ) {
+		refreshDiagnostics();
+		return false;
 	}
 	++m_nProxyRebuilds;
 	advancePublicationGeneration();
@@ -492,20 +458,16 @@ void Terrain3DInstanceOcclusion::onAssetPolicyChanged( const int nMeshId ) {
 		return;
 	}
 	Terrain3DRegion *const *const ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
-	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
-		Terrain3DRegion *const pRegion = ppRegions[iRegion];
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
-		}
-		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-		const t3dInstanceMesh_t *const pMesh = pStore ? pStore->findMesh( nMeshId ) : NULL;
+	t3dForEachResidentInstanceRegion( ppRegions, s_nRegionSlots, [&]( Terrain3DRegion &rRegion, const Terrain3DInstanceStore &rStore ) {
+		const t3dInstanceMesh_t *const pMesh = rStore.findMesh( nMeshId );
 		if ( !pMesh ) {
-			continue;
+			return true;
 		}
 		for ( size_t iCell = 0u; iCell < pMesh->m_cells.size(); ++iCell ) {
-			refreshCellRecord( pRegion->getLocation(), pMesh->m_cells[iCell].m_location, nMeshId, pMesh->m_cells[iCell].m_nRevision );
+			refreshCellRecord( rRegion.getLocation(), pMesh->m_cells[iCell].m_location, nMeshId, pMesh->m_cells[iCell].m_nRevision );
 		}
-	}
+		return true;
+	} );
 	refreshDiagnostics();
 }
 

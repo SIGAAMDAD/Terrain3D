@@ -162,7 +162,6 @@ private:
 	int m_iClockHand = 0;
 
 
-	static bool alignUp( size_t nValue, size_t nAlignment, size_t &nAligned );
 	static bool buildSlotLayout( uint32_t nChannels, t3dSlotLayout_t &rLayout, size_t &nTexelCount );
 	static bool addEstimatedOptionalBytes(
 	        uint32_t nChannels, uint32_t nChannel, size_t nTexelCount, size_t nBytesPerTexel, size_t &nTotal );

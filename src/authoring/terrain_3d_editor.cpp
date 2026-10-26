@@ -1220,7 +1220,7 @@ void Terrain3DEditor::operateMap( const Vector3 &rGlobalPosition, const real_t f
 	PackedVector3Array gradient_points = m_brushData["gradient_points"];
 
 	const real_t randf = UtilityFunctions::randf();
-	real_t fRot = randf * Math_PI * ( real_t )( m_brushData["brush_spin_speed"] );
+	real_t fRot = randf * Math::PI * ( real_t )( m_brushData["brush_spin_speed"] );
 	if ( m_brushData["align_to_view"] ) {
 		fRot += fCameraDirection;
 	}

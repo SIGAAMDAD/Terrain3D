@@ -21,18 +21,18 @@ bool Terrain3DSharedVtRuntime::refresh_shared_vt_bindings_hot() {
 		return false;
 	}
 	T3DTerrainStageASharedVTBindings next = {};
-	next.hAllocationTable = m_Resources.get_buffer_rid( T3D_RW_GPU_BUFFER_VT_ALLOCATION_TABLE );
-	next.hPageTable = m_Resources.get_buffer_rid( T3D_RW_GPU_BUFFER_VT_PAGE_TABLE );
-	next.hMipLayoutTable = m_Resources.get_buffer_rid( T3D_RW_GPU_BUFFER_VT_MIP_LAYOUT_TABLE );
-	next.hTailMetadata = m_Resources.get_buffer_rid( T3D_RW_GPU_BUFFER_VT_TAIL_METADATA );
+	next.hAllocationTable = m_Resources.get_buffer_rid( T3D_VT_GPU_BUFFER_ALLOCATION_TABLE );
+	next.hPageTable = m_Resources.get_buffer_rid( T3D_VT_GPU_BUFFER_PAGE_TABLE );
+	next.hMipLayoutTable = m_Resources.get_buffer_rid( T3D_VT_GPU_BUFFER_MIP_LAYOUT_TABLE );
+	next.hTailMetadata = m_Resources.get_buffer_rid( T3D_VT_GPU_BUFFER_TAIL_METADATA );
 	if ( !next.hAllocationTable.is_valid() || !next.hPageTable.is_valid() || !next.hMipLayoutTable.is_valid()
 	        || !next.hTailMetadata.is_valid() ) {
 		return false;
 	}
-	for ( uint32_t c = 0u; c < T3D_RW_VT_CHANNEL_COUNT; ++c ) {
+	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
 		next.hTail[c] = m_Resources.get_vt_tail_rid( ( T3DVtChannel )c );
 		next.nBankCount[c] = m_Resources.get_vt_bank_count( ( T3DVtChannel )c );
-		if ( !next.hTail[c].is_valid() || next.nBankCount[c] == 0u || next.nBankCount[c] > T3D_RW_MAX_VT_TEXTURE_BANKS ) {
+		if ( !next.hTail[c].is_valid() || next.nBankCount[c] == 0u || next.nBankCount[c] > T3D_VT_MAX_TEXTURE_BANKS ) {
 			return false;
 		}
 		for ( uint32_t b = 0u; b < next.nBankCount[c]; ++b ) {
@@ -64,33 +64,33 @@ bool Terrain3DSharedVtRuntime::refresh_shared_vt_bindings_hot() {
 }
 
 bool Terrain3DSharedVtRuntime::prepare_shared_vt_cpu_cold(
-        const t3dRenderWorldSharedResourceClass_t eResourceClass,
+        const t3dVtSharedResourceClass_t eResourceClass,
         const uint32_t nPreviewMaterialCapacity,
         const uint32_t nPreviewVirtualPageCapacity,
         const t3dWorldResourceLimits_t *const pProductionWorldLimits ) {
-	if ( eResourceClass != T3D_RW_SHARED_RESOURCES_PREVIEW && eResourceClass != T3D_RW_SHARED_RESOURCES_PRODUCTION ) {
+	if ( eResourceClass != T3D_VT_SHARED_RESOURCES_PREVIEW && eResourceClass != T3D_VT_SHARED_RESOURCES_PRODUCTION ) {
 		return false;
 	}
 	if ( m_bSharedResourcesInitialized || m_pRuntimeAllocatorZone == NULL || m_pVirtualTexture == NULL ) {
 		return false;
 	}
-	if ( m_ePreparingSharedResourceClass != T3D_RW_SHARED_RESOURCES_NONE && m_ePreparingSharedResourceClass != eResourceClass ) {
+	if ( m_ePreparingSharedResourceClass != T3D_VT_SHARED_RESOURCES_NONE && m_ePreparingSharedResourceClass != eResourceClass ) {
 		return false;
 	}
 	if ( m_pVirtualTexture->is_cpu_ready() ) {
 		return m_ePreparingSharedResourceClass == eResourceClass;
 	}
-	if ( eResourceClass == T3D_RW_SHARED_RESOURCES_PREVIEW ) {
-		m_Limits = t3d_render_world_make_preview_limits( nPreviewMaterialCapacity, nPreviewVirtualPageCapacity );
+	if ( eResourceClass == T3D_VT_SHARED_RESOURCES_PREVIEW ) {
+		m_Limits = t3d_world_make_preview_limits( nPreviewMaterialCapacity, nPreviewVirtualPageCapacity );
 		m_Profile = t3d_vt_make_preview_gpu_profile();
 	} else {
 		if ( pProductionWorldLimits == NULL ) {
 			return false;
 		}
-		m_Limits = t3d_render_world_make_runtime_limits( *pProductionWorldLimits );
+		m_Limits = t3d_world_make_runtime_limits( *pProductionWorldLimits );
 		m_Profile = t3d_vt_make_runtime_gpu_profile( *pProductionWorldLimits );
 	}
-	if ( !t3d_render_world_validate_limits( m_Limits ) || !t3d_vt_validate_gpu_profile( m_Profile ) ) {
+	if ( !t3d_world_validate_limits( m_Limits ) || !t3d_vt_validate_gpu_profile( m_Profile ) ) {
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
@@ -104,7 +104,7 @@ bool Terrain3DSharedVtRuntime::prepare_shared_vt_cpu_cold(
 	m_ePreparingSharedResourceClass = eResourceClass;
 	const uint32_t nGeneration = m_pVirtualTexture->get_startup_snapshot().m_nGeneration;
 	if ( !m_pVirtualTexture->prepare_cpu_cold( m_Limits, Plan, nGeneration ) ) {
-		m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+		m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
@@ -123,7 +123,7 @@ bool Terrain3DSharedVtRuntime::prepare_shared_vt_storage_cold( Terrain3DRdContex
 
 bool Terrain3DSharedVtRuntime::service_shared_vt_storage_cold( Terrain3DRdContext &rContext,
         const uint32_t nMaxWorkUnits ) {
-	if ( m_bSharedResourcesInitialized || m_ePreparingSharedResourceClass == T3D_RW_SHARED_RESOURCES_NONE
+	if ( m_bSharedResourcesInitialized || m_ePreparingSharedResourceClass == T3D_VT_SHARED_RESOURCES_NONE
 	        || m_pVirtualTexture == NULL || !m_pVirtualTexture->is_cpu_ready() || nMaxWorkUnits == 0u ) {
 		return false;
 	}
@@ -151,7 +151,7 @@ bool Terrain3DSharedVtRuntime::service_shared_vt_storage_cold( Terrain3DRdContex
 	}
 	if ( !m_pVirtualTexture->prepare_gpu_storage_cold( &m_Resources ) ) {
 		m_Resources.shutdown_cold();
-		m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+		m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
@@ -179,7 +179,7 @@ bool Terrain3DSharedVtRuntime::service_shared_vt_executable_cold(
 	}
 	if ( !m_pVirtualTexture->service_gpu_executable_cold( nMaxWorkUnits ) ) {
 		m_Resources.shutdown_cold();
-		m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+		m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
@@ -201,14 +201,14 @@ bool Terrain3DSharedVtRuntime::service_shared_vt_publication_cold(
 	if ( m_bSharedResourcesInitialized ) {
 		return true;
 	}
-	if ( m_ePreparingSharedResourceClass == T3D_RW_SHARED_RESOURCES_NONE || m_pVirtualTexture == NULL
+	if ( m_ePreparingSharedResourceClass == T3D_VT_SHARED_RESOURCES_NONE || m_pVirtualTexture == NULL
 	        || !m_pVirtualTexture->is_gpu_ready() || nMaxBytes == 0u || nMaxWorkUnits == 0u ) {
 		return false;
 	}
 	if ( !m_pVirtualTexture->is_initial_published()
 	        && !m_pVirtualTexture->service_initial_publication_cold( nMaxBytes, nMaxWorkUnits ) ) {
 		m_Resources.shutdown_cold();
-		m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+		m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
 		return false;
@@ -217,13 +217,13 @@ bool Terrain3DSharedVtRuntime::service_shared_vt_publication_cold(
 		return true;
 	}
 	m_eSharedResourceClass = m_ePreparingSharedResourceClass;
-	m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+	m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 	m_bSharedResourcesInitialized = true;
 	if ( !refresh_shared_vt_bindings_hot() ) {
 		m_pVirtualTexture->shutdown_cold();
 		m_Resources.shutdown_cold();
 		m_bSharedResourcesInitialized = false;
-		m_eSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+		m_eSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
 		memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
 		memset( &m_Limits, 0, sizeof( m_Limits ) );
 		memset( &m_Profile, 0, sizeof( m_Profile ) );
@@ -233,16 +233,16 @@ bool Terrain3DSharedVtRuntime::service_shared_vt_publication_cold(
 }
 
 bool Terrain3DSharedVtRuntime::ensure_shared_resources_cold( Terrain3DRdContext &rContext,
-        const t3dRenderWorldSharedResourceClass_t eResourceClass,
+        const t3dVtSharedResourceClass_t eResourceClass,
         const uint32_t nPreviewMaterialCapacity,
         const uint32_t nPreviewVirtualPageCapacity,
         const t3dWorldResourceLimits_t *const pProductionWorldLimits ) {
-	if ( eResourceClass != T3D_RW_SHARED_RESOURCES_PREVIEW && eResourceClass != T3D_RW_SHARED_RESOURCES_PRODUCTION ) {
+	if ( eResourceClass != T3D_VT_SHARED_RESOURCES_PREVIEW && eResourceClass != T3D_VT_SHARED_RESOURCES_PRODUCTION ) {
 		return false;
 	}
 	if ( m_bSharedResourcesInitialized ) {
 		const bool bClassCompatible = m_eSharedResourceClass == eResourceClass
-		        || ( m_eSharedResourceClass == T3D_RW_SHARED_RESOURCES_PRODUCTION && eResourceClass == T3D_RW_SHARED_RESOURCES_PREVIEW );
+		        || ( m_eSharedResourceClass == T3D_VT_SHARED_RESOURCES_PRODUCTION && eResourceClass == T3D_VT_SHARED_RESOURCES_PREVIEW );
 		if ( !bClassCompatible || !m_Resources.is_initialized() || m_pVirtualTexture == NULL || !m_pVirtualTexture->is_initialized() ) {
 			return false;
 		}
@@ -270,8 +270,8 @@ void Terrain3DSharedVtRuntime::shutdown_cold() {
     m_Resources.unseal_hot_runtime_cold();
     m_Resources.shutdown_cold();
     m_bSharedResourcesInitialized = false;
-    m_eSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
-    m_ePreparingSharedResourceClass = T3D_RW_SHARED_RESOURCES_NONE;
+    m_eSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
+    m_ePreparingSharedResourceClass = T3D_VT_SHARED_RESOURCES_NONE;
     memset( &m_SharedVTBindings, 0, sizeof( m_SharedVTBindings ) );
     memset( &m_Limits, 0, sizeof( m_Limits ) );
     memset( &m_Profile, 0, sizeof( m_Profile ) );
@@ -281,10 +281,10 @@ bool Terrain3DSharedVtRuntime::are_shared_resources_ready() const {
 	return m_bSharedResourcesInitialized && m_Resources.is_initialized() && m_pVirtualTexture != NULL
 	        && m_pVirtualTexture->is_initialized();
 }
-t3dRenderWorldSharedResourceClass_t Terrain3DSharedVtRuntime::get_shared_resource_class() const {
+t3dVtSharedResourceClass_t Terrain3DSharedVtRuntime::get_shared_resource_class() const {
 	return m_eSharedResourceClass;
 }
-const T3DRenderWorldLimits &Terrain3DSharedVtRuntime::get_limits() const {
+const T3DWorldLimits &Terrain3DSharedVtRuntime::get_limits() const {
 	return m_Limits;
 }
 const Terrain3DVtResourceImage &Terrain3DSharedVtRuntime::get_resources() const {
@@ -303,7 +303,7 @@ bool Terrain3DSharedVtRuntime::snapshot_shared_vt_bindings_hot( T3DTerrainStageA
 	        || snapshot.nResourceGeneration != m_Resources.get_stats().nResourceGeneration ) {
 		return false;
 	}
-	for ( uint32_t channel = 0u; channel < T3D_RW_VT_CHANNEL_COUNT; ++channel ) {
+	for ( uint32_t channel = 0u; channel < T3D_VT_CHANNEL_COUNT; ++channel ) {
 		if ( !snapshot.hTail[channel].is_valid() || snapshot.nBankCount[channel] != 1u || !snapshot.hPhysical[channel][0].is_valid()
 		        || snapshot.nBankLayers[channel][0] == 0u ) {
 			return false;

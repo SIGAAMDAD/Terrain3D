@@ -12,7 +12,6 @@
 #include "streaming/terrain_3d_middle_height_region_cache.h"
 #include "streaming/terrain_3d_region_residency.h"
 
-class Terrain3DData;
 class Terrain3DMapEditService;
 class Terrain3DRegionPersistence;
 class Terrain3DRegionRepository;
@@ -88,9 +87,9 @@ public:
 	int effectiveCpuLoadLayers( void ) const;
 	int effectiveInstanceLoadPages( void ) const;
 
-	void updateRegionResidency( Terrain3DData &rData, const t3dResidencyFrameState_t &rFrame, bool bForce );
-	void resetRuntimeCaches( Terrain3DData &rData );
-	void appendRuntimeProfileSample( const Terrain3DData &rData, t3dRuntimeProfileSample_t &rSample ) const;
+	void updateRegionResidency( const t3dResidencyFrameState_t &rFrame, bool bForce, const t3dRegionResidencyUpdateContext_t &rContext );
+	void resetRuntimeCaches( const t3dRegionResidencyUpdateContext_t &rContext );
+	void appendRuntimeProfileSample( t3dRuntimeProfileSample_t &rSample ) const;
 
 private:
 	Terrain3DCpuRegionCache m_cpuRegionCache;

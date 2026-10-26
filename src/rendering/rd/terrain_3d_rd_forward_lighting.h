@@ -6,6 +6,9 @@
 #include "Terrain3DConstants.h"
 #include "rendering/rd/terrain_3d_rd_context.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_descriptor_cache.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_gpu_buffer.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_sampler.h"
+#include "rendering/rd/infrastructure/terrain_3d_rd_texture.h"
 #include "rendering/rd/terrain_3d_rd_types.h"
 
 #include <stddef.h>
@@ -121,15 +124,15 @@ private:
 	typedef Terrain3DRdDescriptorCache<t3dRdForwardDescriptorKey_t, s_nMaxSets> t3dRdForwardDescriptorCache_t;
 
 	Terrain3DRdContext &m_context;
-	RID m_hFrameBuffer;
-	RID m_hFallbackShadowTexture;
-	RID m_hFallbackShadowSampler;
-	RID m_hFallbackStorageBuffer;
-	RID m_hFallbackColorTexture;
-	RID m_hFallbackColorArrayTexture;
-	RID m_hFallbackRadianceTexture;
-	RID m_hFallbackRadianceArrayTexture;
-	RID m_hLinearSampler;
+	Terrain3DRdGpuBuffer m_hFrameBuffer;
+	Terrain3DRdTexture m_hFallbackShadowTexture;
+	Terrain3DRdSampler m_hFallbackShadowSampler;
+	Terrain3DRdGpuBuffer m_hFallbackStorageBuffer;
+	Terrain3DRdTexture m_hFallbackColorTexture;
+	Terrain3DRdTexture m_hFallbackColorArrayTexture;
+	Terrain3DRdTexture m_hFallbackRadianceTexture;
+	Terrain3DRdTexture m_hFallbackRadianceArrayTexture;
+	Terrain3DRdSampler m_hLinearSampler;
 	t3dRdForwardLightKey_t m_key{};
 	bool m_bKeyValid = false;
 	uint64_t m_nDeviceGeneration = 0u;

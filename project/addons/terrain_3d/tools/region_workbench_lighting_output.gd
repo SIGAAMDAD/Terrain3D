@@ -2,6 +2,8 @@
 class_name Terrain3DRegionWorkbenchLightingOutput
 extends RefCounted
 
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
+
 var cluster_min: Vector2i = Vector2i.ZERO
 var cluster_max: Vector2i = Vector2i.ZERO
 var region_locations: Array[Vector2i] = []
@@ -22,12 +24,12 @@ static func from_value(value: Variant) -> Terrain3DRegionWorkbenchLightingOutput
 	if map == null:
 		return null
 	var output := Terrain3DRegionWorkbenchLightingOutput.new()
-	output.cluster_min = _vector2i_from_value(map.raw_value("cluster_min"))
-	output.cluster_max = _vector2i_from_value(map.raw_value("cluster_max"))
+	output.cluster_min = EditorUtil.vector2i_from_value(map.raw_value("cluster_min"))
+	output.cluster_max = EditorUtil.vector2i_from_value(map.raw_value("cluster_max"))
 	var raw_locations: Variant = map.raw_value("region_locations")
 	if raw_locations is Array:
 		for raw_location: Variant in raw_locations:
-			output.region_locations.push_back(_vector2i_from_value(raw_location))
+			output.region_locations.push_back(EditorUtil.vector2i_from_value(raw_location))
 	output.workbench_light_data_path = map.string_value("workbench_light_data_path")
 	output.workbench_package_path = map.string_value("workbench_package_path")
 	output.source_light_data_path = map.string_value("source_light_data_path")
@@ -42,10 +44,10 @@ static func from_value(value: Variant) -> Terrain3DRegionWorkbenchLightingOutput
 func to_dictionary() -> Dictionary[String, Variant]:
 	var locations: Array[Variant] = []
 	for location: Vector2i in region_locations:
-		locations.push_back([location.x, location.y])
+		locations.push_back(EditorUtil.vector2i_to_array(location))
 	return {
-		"cluster_min": [cluster_min.x, cluster_min.y],
-		"cluster_max": [cluster_max.x, cluster_max.y],
+		"cluster_min": EditorUtil.vector2i_to_array(cluster_min),
+		"cluster_max": EditorUtil.vector2i_to_array(cluster_max),
 		"region_locations": locations,
 		"workbench_light_data_path": workbench_light_data_path,
 		"workbench_package_path": workbench_package_path,
@@ -70,11 +72,3 @@ func is_staged() -> bool:
 		FileAccess.file_exists(workbench_light_data_path) and FileAccess.file_exists(workbench_package_path)
 
 
-static func _vector2i_from_value(value: Variant) -> Vector2i:
-	if value is Vector2i:
-		return value
-	if value is Array:
-		var values: Array = value
-		if values.size() == 2:
-			return Vector2i(int(values[0]), int(values[1]))
-	return Vector2i.ZERO

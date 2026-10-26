@@ -7,7 +7,6 @@
 #include "core/terrain_3d_sync.h"
 #include "core/terrain_3d_compiler.h"
 #include "core/terrain_3d_eastl_helpers.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_buffer_layout.h"
 #include "rendering/rd/infrastructure/terrain_3d_render_telemetry.h"
 
 #include <godot_cpp/classes/rendering_device.hpp>
@@ -16,6 +15,20 @@
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/string.hpp>
 using namespace godot;
+
+class Terrain3DRdGpuBuffer;
+
+enum Terrain3DGpuBufferPolicy : uint8_t
+{
+	T3D_GPU_PUBLICATION,
+	T3D_GPU_DIRTY_UPLOAD,
+	T3D_GPU_HOT_FRAME,
+	T3D_GPU_SCRATCH,
+	T3D_GPU_HISTORY,
+	T3D_GPU_INDIRECT,
+	T3D_GPU_NEUTRAL,
+	T3D_GPU_POLICY_COUNT,
+};
 
 // Terrain3D's sole owner/coordinator for RenderingDevice objects. Resource
 // creation stays in the subsystem which has the construction data, but every
@@ -129,7 +142,6 @@ public:
 	{
 		PASS_NONE = 0,
 		PASS_TERRAIN_CLIPMAP,
-		PASS_RENDER_WORLD,
 		PASS_COUNT,
 	};
 
@@ -225,7 +237,7 @@ private:
 	t3dAtomicU64_t m_nFrameBufferUpdates { 0u };
 	t3dAtomicU64_t m_nFrameBytesUploaded { 0u };
 	RenderTelemetry m_renderTelemetry;
-	RID m_hFixedIndirectArena;
+	Terrain3DRdGpuBuffer *m_pFixedIndirectArena = NULL;
 	uint32_t m_nFixedIndirectReferences[FIXED_INDIRECT_SLOT_COUNT]{};
 	t3dAtomicU64_t m_nTerrainPatchCount { 0u };
 	t3dAtomicU64_t m_nVisibleTerrainPatches { 0u };
@@ -259,8 +271,8 @@ public:
 	static void shutdownShared( void );
 	// Fixed command slices share one physical indirect-capable storage buffer.
 	// Each consumer retains a reference until its own shutdown.
-	bool acquireFixedIndirect( FixedIndirectSlot slot, uint32_t nRequiredBytes, RID &rBuffer, uint32_t &rOffsetBytes );
-	void releaseFixedIndirect( FixedIndirectSlot slot, RID &rBuffer );
+	bool acquireFixedIndirect( FixedIndirectSlot slot, uint32_t nRequiredBytes, Terrain3DRdGpuBuffer *&rBuffer, uint32_t &rOffsetBytes );
+	void releaseFixedIndirect( FixedIndirectSlot slot, Terrain3DRdGpuBuffer *&rBuffer );
 
 	// The sole engine rendering gateway permitted in the RD branch. Godot's
 	// GDExtension API exposes global/local RenderingDevice acquisition and
@@ -297,11 +309,9 @@ public:
 	void registerResource( const RID& rRid, const String& rName, uint64_t nBufferBytes = 0u );
 	bool registerResource(
 	    const RID& rRid, const String& rName, ResourceType type, MemoryCategory memoryCategory, uint64_t nBytes, ResourceOwner owner );
-	void registerTextureResource( const RID& rRid, const String& rName, uint64_t nTextureBytes );
 	bool registerVertexFormat( int64_t nFormat, const String& rName );
 	void releaseVertexFormat( int64_t& rFormat );
 	void freeResource( RID& rRid, uint64_t nBufferBytes = 0u );
-	void freeTextureResource( RID& rRid, uint64_t nTextureBytes );
 	bool ownsResource( const RID& rRid ) const;
 	ResourceEpoch getResourceEpoch( ResourceOwner owner ) const;
 

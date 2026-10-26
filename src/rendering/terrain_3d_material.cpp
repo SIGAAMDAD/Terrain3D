@@ -12,12 +12,10 @@
 #include "data/terrain_3d_region_codec.h"
 #include "rendering/terrain_3d_shader_specializer.h"
 #include "streaming/terrain_3d_performance_profile.h"
+#include "integration/terrain_3d_resource_persistence.h"
 
 #include <string.h>
 #include <godot_cpp/classes/dir_access.hpp>
-#include <godot_cpp/classes/editor_file_system.hpp>
-#include <godot_cpp/classes/editor_interface.hpp>
-#include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/fast_noise_lite.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/gradient.hpp>
@@ -25,7 +23,6 @@
 #include <godot_cpp/classes/noise_texture2d.hpp>
 #include <godot_cpp/classes/reg_ex.hpp>
 #include <godot_cpp/classes/reg_ex_match.hpp>
-#include <godot_cpp/classes/resource_saver.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <EASTL/algorithm.h>
@@ -34,6 +31,31 @@
 EA_FORCE_INLINE static void t3dMaterialMixShaderSignature( uint64_t &nSignature, const uint64_t nValue ) {
 	nSignature ^= nValue;
 	nSignature *= 1099511628211ULL;
+}
+
+static void t3dMaterialAppendTextureFilteringExcludes( Array &rExcludes, const t3dTextureFiltering_t filtering ) {
+	switch ( filtering ) {
+		case LINEAR_ANISOTROPIC:
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
+			break;
+		case LINEAR:
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
+			break;
+		case NEAREST_ANISOTROPIC:
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
+			break;
+		case NEAREST:
+			rExcludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
+			rExcludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
+			break;
+	}
 }
 
 static String t3dMaterialApplyRendererShaderCompatibility( const String &rShader ) {
@@ -88,20 +110,6 @@ static String t3dMaterialInjectShaderDefines( const String &rShader, const Packe
 		return rShader;
 	}
 	return rShader.insert( declaration_end + 1, String( "\n" ) + defines );
-}
-
-static PackedColorArray t3dMaterialMakeTextureColorUniforms( const PackedColorArray &rSource ) {
-	PackedColorArray colors;
-	colors.resize( s_nMaxTextureAssets );
-	Color *pWrite = colors.ptrw();
-	for ( int index = 0; index < s_nMaxTextureAssets; ++index ) {
-		pWrite[index] = s_colorWhite;
-	}
-	const int count = MIN( rSource.size(), s_nMaxTextureAssets );
-	for ( int index = 0; index < count; ++index ) {
-		pWrite[index] = rSource[index];
-	}
-	return colors;
 }
 
 EA_FORCE_INLINE static void t3dMaterialAppendDefine( PackedStringArray &rLines, const String &strName, const String &strValue ) {
@@ -1649,7 +1657,8 @@ void Terrain3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 			if ( !loadRuntimeShaderPack() ) {
 				m_shaderConfig.m_nLastPrewarmVariantCount = 0;
 				m_shaderConfig.m_nLastPrewarmSkippedCount = 0;
-				LOG( ERROR, "Runtime shader prewarm requires a valid terrain3d_shaders.t3dshaderpack for the current material state." );
+				LOG( ERROR,
+				        "[Terrain3D][Startup][Material][Shader][Prewarm] FAIL reason=invalid_runtime_shader_pack" );
 			}
 		}
 		// Strict cooked runtime never regenerates speculative branches from authoring
@@ -1752,18 +1761,18 @@ void Terrain3DMaterial::prewarmShaderVariantsInternal( const bool bForce ) {
 
 	if ( m_shaderConfig.m_nLastPrewarmSkippedCount > 0 ) {
 		LOG( WARN,
-		        "Shader prewarm retained ",
+		        "[Terrain3D][Startup][Material][Shader][Prewarm] RESULT retained=",
 		        m_shaderConfig.m_nLastPrewarmVariantCount,
-		        " variants and skipped ",
+		        " skipped=",
 		        m_shaderConfig.m_nLastPrewarmSkippedCount,
-		        " because one or more variants failed validation or could not fit the cache/source-memory limits." );
+		        " reason=validation_or_cache_limit" );
 	} else {
 		LOG( INFO,
-		        "Shader prewarm retained ",
+		        "[Terrain3D][Startup][Material][Shader][Prewarm] RESULT retained=",
 		        m_shaderConfig.m_nLastPrewarmVariantCount,
-		        " unique runtime/buffer variants using ",
+		        " source_bytes=",
 		        getShaderVariantSourceBytesRaw(),
-		        " source bytes." );
+		        " skipped=0" );
 	}
 }
 String Terrain3DMaterial::generateShaderCode( void ) const {
@@ -1880,28 +1889,7 @@ String Terrain3DMaterial::generateShaderCode(
 		excludes.push_back( "OUTPUT_METALLIC" );
 	}
 
-	switch ( tier_state.m_textureFiltering ) {
-		case LINEAR_ANISOTROPIC:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			break;
-		case LINEAR:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-		case NEAREST_ANISOTROPIC:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-		case NEAREST:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-	}
+	t3dMaterialAppendTextureFilteringExcludes( excludes, tier_state.m_textureFiltering );
 	if ( !tier_state.m_bAutoShaderEnabled ) {
 		excludes.push_back( "AUTO_SHADER_UNIFORMS" );
 		excludes.push_back( "AUTO_SHADER" );
@@ -2108,28 +2096,7 @@ String Terrain3DMaterial::generateBufferShaderCode( const t3dShaderVariantState_
 		excludes.push_back( "LEGACY_PBR_MATERIAL_FUNCTIONS" );
 	}
 
-	switch ( buffer_state.m_textureFiltering ) {
-		case LINEAR_ANISOTROPIC:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			break;
-		case LINEAR:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-		case NEAREST_ANISOTROPIC:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-		case NEAREST:
-			excludes.push_back( "TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR" );
-			excludes.push_back( "TEXTURE_SAMPLERS_LINEAR_ANISOTROPIC" );
-			break;
-	}
+	t3dMaterialAppendTextureFilteringExcludes( excludes, buffer_state.m_textureFiltering );
 	if ( !buffer_state.m_bAutoShaderEnabled ) {
 		excludes.push_back( "AUTO_SHADER_UNIFORMS" );
 		excludes.push_back( "AUTO_SHADER" );
@@ -2286,6 +2253,11 @@ void Terrain3DMaterial::updateShader( void ) {
 	IS_INIT( VOID );
 	Time *const pTime = Time::get_singleton();
 	const uint64_t update_started_usec = pTime ? pTime->get_ticks_usec() : 0u;
+	const bool bStartupTrace = m_pTerrain && !m_pTerrain->isInitialized();
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader] BEGIN" );
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][Variants] BEGIN" );
+	}
 	disconnectShaderOverrideSignals();
 	const bool bRuntimeShaderExecution = m_pTerrain && !m_pTerrain->isEditorAuthoringMode();
 	const bool bEditorShaderFeatures = IS_EDITOR && !bRuntimeShaderExecution;
@@ -2382,6 +2354,12 @@ void Terrain3DMaterial::updateShader( void ) {
 		m_shaderConfig.m_nShaderUpdateUsecTotal += update_elapsed_usec;
 		m_shaderConfig.m_nShaderUpdateUsecPeak = MAX( m_shaderConfig.m_nShaderUpdateUsecPeak, update_elapsed_usec );
 		++m_shaderConfig.m_nShaderUpdateCount;
+		if ( bStartupTrace ) {
+			LOG( ERROR,
+			        "[Terrain3D][Startup][Material][Shader] FAIL reason=near_shader_unavailable elapsed=",
+			        update_elapsed_usec,
+			        " us" );
+		}
 		return;
 	}
 
@@ -2466,15 +2444,43 @@ void Terrain3DMaterial::updateShader( void ) {
 		}
 		LOG( DEBUG, "Buffer shader rid: ", getBufferShaderRid() );
 	}
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][Variants] END" );
+	}
 
 	connectShaderOverrideSignals();
 	recordVariantTransition( variant_state );
+	const uint64_t prewarm_started_usec = pTime ? pTime->get_ticks_usec() : 0u;
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][Prewarm] BEGIN" );
+	}
 	prewarmShaderVariants();
+	if ( bStartupTrace ) {
+		LOG( INFO,
+		        "[Terrain3D][Startup][Material][Shader][Prewarm] END elapsed=",
+		        ( pTime ? pTime->get_ticks_usec() : prewarm_started_usec ) - prewarm_started_usec,
+		        " us variants=",
+		        m_shaderConfig.m_nLastPrewarmVariantCount,
+		        " skipped=",
+		        m_shaderConfig.m_nLastPrewarmSkippedCount );
+	}
 
 	// Rebuild the inspector-facing shader metadata once per shader change. Godot
 	// can ask for property values many times per second while the inspector is
 	// idle; those reads must not query renderer shader metadata again.
+	const uint64_t property_cache_started_usec = pTime ? pTime->get_ticks_usec() : 0u;
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][PropertyCache] BEGIN" );
+	}
 	refreshShaderPropertyCache();
+	if ( bStartupTrace ) {
+		LOG( INFO,
+		        "[Terrain3D][Startup][Material][Shader][PropertyCache] END elapsed=",
+		        ( pTime ? pTime->get_ticks_usec() : property_cache_started_usec ) - property_cache_started_usec,
+		        " us active_params=",
+		        m_runtimeState.m_activeParams.size() );
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][RuntimeParameters] BEGIN" );
+	}
 	LOG( EXTREME, "_active_params: ", m_runtimeState.m_activeParams );
 	Terrain3DUtil::printDict( "_shader_params", m_authoringState.m_shaderParams, EXTREME );
 
@@ -2509,7 +2515,7 @@ void Terrain3DMaterial::updateShader( void ) {
 	PackedVector2Array detile_rotations;
 	detile_rotations.resize( 16 );
 	for ( int i = 0; i < 16; i++ ) {
-		const real_t fAngle = ( real_t )( i )*Math_TAU / 16.0;
+		const real_t fAngle = ( real_t )( i )*Math::TAU / 16.0;
 		detile_rotations.set( i, Vector2( Math::cos( fAngle ), Math::sin( fAngle ) ) );
 	}
 	setRuntimeMaterialParam( "_detile_rotation_cs", detile_rotations );
@@ -2569,6 +2575,9 @@ void Terrain3DMaterial::updateShader( void ) {
 		pNoiseTex->set_color_ramp( pCurve );
 		_set( "noise_texture", pNoiseTex );
 	}
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader][RuntimeParameters] END" );
+	}
 
 	notify_property_list_changed();
 	const uint64_t update_finished_usec = pTime ? pTime->get_ticks_usec() : update_started_usec;
@@ -2577,6 +2586,9 @@ void Terrain3DMaterial::updateShader( void ) {
 	m_shaderConfig.m_nShaderUpdateUsecTotal += update_elapsed_usec;
 	m_shaderConfig.m_nShaderUpdateUsecPeak = MAX( m_shaderConfig.m_nShaderUpdateUsecPeak, update_elapsed_usec );
 	++m_shaderConfig.m_nShaderUpdateCount;
+	if ( bStartupTrace ) {
+		LOG( INFO, "[Terrain3D][Startup][Material][Shader] END elapsed=", update_elapsed_usec, " us" );
+	}
 }
 
 void Terrain3DMaterial::invalidateRegionPageTables( void ) {
@@ -2729,6 +2741,7 @@ void Terrain3DMaterial::setShaderParameters( const Dictionary &rDict ) {
 // Godot likes to create resource objects at startup, so this prevents it from creating
 // uninitialized materials.
 void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
+	const uint64_t initialize_started_usec = Time::get_singleton()->get_ticks_usec();
 	if ( pTerrain ) {
 		Terrain3D *previous_owner = t3dTransferOwner( m_pTerrain, pTerrain );
 		if ( previous_owner != pTerrain ) {
@@ -2738,10 +2751,12 @@ void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
 			LOG( INFO, "Transferring material runtime ownership from ", previous_owner, " to ", pTerrain );
 		}
 	} else {
-		LOG( ERROR, "Initialization failed, p_terrain is null" );
+		LOG( ERROR, "[Terrain3D][Startup][Material] FAIL reason=null_terrain" );
 		return;
 	}
-	LOG( INFO, "Initializing material" );
+	LOG( INFO, "[Terrain3D][Startup][Material] BEGIN" );
+	const uint64_t shader_source_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Material][ShaderSource] BEGIN" );
 	const bool strict_cooked_builtin = m_pTerrain->isGpuRegionCookedPagesEnabled() && !m_pTerrain->isEditorAuthoringMode()
 	        && !m_authoringState.m_bShaderOverrideEnabled;
 	if ( strict_cooked_builtin ) {
@@ -2751,6 +2766,11 @@ void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
 	} else {
 		preloadShaders();
 	}
+	LOG( INFO,
+	        "[Terrain3D][Startup][Material][ShaderSource] END elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - shader_source_started_usec,
+	        " us cooked_pack=",
+	        strict_cooked_builtin );
 
 	if ( m_shaderConfig.m_shader.is_null() ) {
 		m_shaderConfig.m_shader.instantiate();
@@ -2758,6 +2778,8 @@ void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
 	if ( m_shaderConfig.m_bufferShader.is_null() ) {
 		m_shaderConfig.m_bufferShader.instantiate();
 	}
+	const uint64_t dummy_textures_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Material][DummyTextures] BEGIN" );
 	{ // Create dummy texture arrays to avoid empty sampler2DArrays
 		const Ref<Image> pImg = Image::create( 1, 1, false, Image::FORMAT_RF );
 		const TypedArray<Image> ia = { pImg };
@@ -2785,9 +2807,24 @@ void Terrain3DMaterial::initialize( Terrain3D *pTerrain ) {
 		const TypedArray<Image> displacement_array = { pDisplacementImg };
 		m_runtimeState.m_generatedDisplacementDummy.create( displacement_array, T3D_RD_TEXTURE_LINEAR_DATA );
 	}
+	LOG( INFO,
+	        "[Terrain3D][Startup][Material][DummyTextures] END elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - dummy_textures_started_usec,
+	        " us" );
 
+	const uint64_t rebuild_started_usec = Time::get_singleton()->get_ticks_usec();
+	LOG( INFO, "[Terrain3D][Startup][Material][FullRebuild] BEGIN" );
 	update( FULL_REBUILD );
+	LOG( INFO,
+	        "[Terrain3D][Startup][Material][FullRebuild] END elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - rebuild_started_usec,
+	        " us" );
 	m_authoringState.m_bPersistenceDirty = false;
+	LOG( INFO,
+	        "[Terrain3D][Startup][Material] END elapsed=",
+	        Time::get_singleton()->get_ticks_usec() - initialize_started_usec,
+	        " us shader_ready=",
+	        isRenderShaderReady() );
 }
 
 void Terrain3DMaterial::uninitialize( Terrain3D *pTerrain ) {
@@ -2820,19 +2857,7 @@ void Terrain3DMaterial::destroy( void ) {
 		String &source = ( m_shaderConfig.m_szRuntimeShaderPackTierSource )[iTier];
 		source = String();
 	}
-	m_shaderConfig.m_runtimeShaderVariantEntries.clear();
-	m_shaderConfig.m_nRuntimeShaderVariantSourceBytes = 0;
-	m_shaderConfig.m_editorShaderVariantEntries.clear();
-	m_shaderConfig.m_nEditorShaderVariantSourceBytes = 0;
-	m_shaderConfig.m_bufferShaderVariantEntries.clear();
-	m_shaderConfig.m_nBufferShaderVariantSourceBytes = 0;
-	m_shaderConfig.m_bHasLastBoundVariantState = false;
-	m_shaderConfig.m_nObservedVariantDimensions = 0;
-	m_shaderConfig.m_nVariantTransitionClock = 0;
-	for ( size_t iDimension = 0u; iDimension < T3D_ARRAY_COUNT( m_shaderConfig.m_szVariantDimensionLastUsed ); iDimension++ ) {
-		uint64_t &last_used = ( m_shaderConfig.m_szVariantDimensionLastUsed )[iDimension];
-		last_used = 0;
-	}
+	clearShaderVariantCache();
 	m_runtimeState.m_activeParams.clear();
 	m_authoringState.m_shaderParams.clear();
 	t3dVectorRelease( m_authoringState.m_shaderPropertyCache );
@@ -2859,9 +2884,22 @@ void Terrain3DMaterial::update( const uint32_t nFlags ) {
 	if ( bRebuildShader ) {
 		updateShader();
 	}
+	const bool bStartupRebuild = bRebuildShader && m_pTerrain && !m_pTerrain->isInitialized();
 	if ( nFlags & REGION_ARRAYS ) {
+		const uint64_t page_tables_started_usec = Time::get_singleton()->get_ticks_usec();
+		if ( bStartupRebuild ) {
+			LOG( INFO, "[Terrain3D][Startup][Material][PageTables] BEGIN" );
+		}
 		const t3dPageTableBuildResult_t page_table_result = prepareRegionPageTables();
 		if ( page_table_result != PAGE_TABLE_READY ) {
+			if ( bStartupRebuild ) {
+				LOG( ERROR,
+				        "[Terrain3D][Startup][Material][PageTables] FAIL result=",
+				        ( int )( page_table_result ),
+				        " elapsed=",
+				        Time::get_singleton()->get_ticks_usec() - page_tables_started_usec,
+				        " us" );
+			}
 			if ( page_table_result == PAGE_TABLE_INVALID_TERRAIN_STATE && m_pTerrain && m_pTerrain->getData() ) {
 				LOG( ERROR,
 				        "Cannot build terrain page tables while data runtime storage is inactive: ",
@@ -2875,10 +2913,26 @@ void Terrain3DMaterial::update( const uint32_t nFlags ) {
 			}
 			return;
 		}
+		if ( bStartupRebuild ) {
+			LOG( INFO,
+			        "[Terrain3D][Startup][Material][PageTables] END elapsed=",
+			        Time::get_singleton()->get_ticks_usec() - page_tables_started_usec,
+			        " us" );
+		}
 	}
 	IS_INIT( VOID );
 	if ( m_pTerrain->getTessellationLevel() > 0 ) {
+		const uint64_t snap_started_usec = Time::get_singleton()->get_ticks_usec();
+		if ( bStartupRebuild ) {
+			LOG( INFO, "[Terrain3D][Startup][Material][Snap] BEGIN" );
+		}
 		m_pTerrain->snap();
+		if ( bStartupRebuild ) {
+			LOG( INFO,
+			        "[Terrain3D][Startup][Material][Snap] END elapsed=",
+			        Time::get_singleton()->get_ticks_usec() - snap_started_usec,
+			        " us" );
+		}
 	}
 }
 
@@ -3035,17 +3089,8 @@ void Terrain3DMaterial::refreshGpuRegionChannelPolicy( void ) {
 	if ( !m_pTerrain || m_pTerrain->isEditorAuthoringMode() ) {
 		return;
 	}
-	Terrain3DData *const pData = m_pTerrain->getData();
-	if ( !pData ) {
-		return;
-	}
 	const uint64_t effective_budget_bytes = m_pTerrain->getEffectiveGpuRegionCacheBudgetBytes();
-	pData->configureGpuRegionCache( effective_budget_bytes > 0u,
-	        effective_budget_bytes,
-	        m_pTerrain->getGpuRegionUploadBudgetLayers(),
-	        m_pTerrain->getGpuRegionUploadBudgetMb(),
-	        m_pTerrain->getGpuRegionSparePages(),
-	        m_pTerrain->getGpuRegionRetireFrames() );
+	m_pTerrain->reconfigureGpuRegionCache( effective_budget_bytes > 0u );
 }
 
 void Terrain3DMaterial::setNearTextureFiltering( const t3dTextureFiltering_t filtering ) {
@@ -4312,53 +4357,20 @@ void Terrain3DMaterial::setShowTextureAo( const bool bEnabled ) {
 }
 
 Error Terrain3DMaterial::save( const String &rPath ) {
-	if ( rPath.is_empty() && get_path().is_empty() ) {
-		return ERR_FILE_NOT_FOUND;
-	}
-	if ( !rPath.is_empty() ) {
-		LOG( DEBUG, "Setting file path to ", rPath );
-		take_over_path( rPath );
-	}
-
-	// Remove saved shader params that are not present in the property metadata
-	// captured at the last shader rebuild. Saving must not trigger another shader
-	// reflection pass.
-	const Array keys = m_authoringState.m_shaderParams.keys();
-	for ( size_t iKey = 0u; iKey < ( size_t )( ( keys ).size() ); iKey++ ) {
-		const StringName name = ( keys )[iKey];
-		if ( !m_runtimeState.m_activeParams.has( name ) ) {
-			LOG( DEBUG, "'", name, "' not found in shader parameters. Removing from dictionary." );
-			m_authoringState.m_shaderParams.erase( name );
-			m_authoringState.m_bPersistenceDirty = true;
-		}
-	}
-
-	// Save external resources only when authored state actually changed. Rewriting
-	// a clean .tres/.res on every scene save changes its mtime and makes the editor
-	// rediscover Terrain3D's own write on the next filesystem reconciliation.
-	Error err = OK;
-	String path = get_path();
-	const bool explicit_path = !rPath.is_empty();
-	if ( path.get_extension() == "tres" || path.get_extension() == "res" ) {
-		if ( !explicit_path && !m_authoringState.m_bPersistenceDirty && FileAccess::file_exists( path ) ) {
-			return OK;
-		}
-		LOG( DEBUG, String( "Attempting to save external file: " ) + path );
-		err = ResourceSaver::get_singleton()->save( this, path, ResourceSaver::FLAG_COMPRESS );
-		if ( err == OK ) {
-			m_authoringState.m_bPersistenceDirty = false;
-			LOG( INFO, "File saved successfully: ", path );
-			if ( IS_EDITOR && path.begins_with( "res://" ) ) {
-				EditorFileSystem *const pFilesystem = EditorInterface::get_singleton()->get_resource_filesystem();
-				if ( pFilesystem && !pFilesystem->is_scanning() ) {
-					pFilesystem->update_file( path );
-				}
+	return t3dSaveExternalResource( this, rPath, m_authoringState.m_bPersistenceDirty, [this]() {
+		// Remove saved shader params that are not present in the property metadata
+		// captured at the last shader rebuild. Saving must not trigger another shader
+		// reflection pass.
+		const Array keys = m_authoringState.m_shaderParams.keys();
+		for ( size_t iKey = 0u; iKey < ( size_t )( ( keys ).size() ); iKey++ ) {
+			const StringName name = ( keys )[iKey];
+			if ( !m_runtimeState.m_activeParams.has( name ) ) {
+				LOG( DEBUG, "'", name, "' not found in shader parameters. Removing from dictionary." );
+				m_authoringState.m_shaderParams.erase( name );
+				m_authoringState.m_bPersistenceDirty = true;
 			}
-		} else {
-			LOG( ERROR, "Cannot save file: ", path, ". Error code: ", ERROR, ". Look up @GlobalScope Error enum in the Godot docs" );
 		}
-	}
-	return err;
+	} );
 }
 
 // -----------------------------------------------------------------------------

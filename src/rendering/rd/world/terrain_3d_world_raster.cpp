@@ -1,9 +1,8 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/terrain_3d_world_raster.h"
+#include "rendering/rd/terrain_3d_rd_forward_variant.h"
 #include "rendering/rd/infrastructure/terrain_3d_rd_binding_builder.h"
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
 #include "rendering/rd/terrain_3d_shader_pipeline_abi.h"
-#include "rendering/rd/terrain_3d_rd_shader_compile_status.h"
 
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state_attachment.hpp>
@@ -56,8 +55,7 @@ bool Terrain3DWorldRaster::initializeCold( const Ref<RDShaderSPIRV> *pTerrainStr
 	if ( m_bInitialized ) {
 		return true;
 	}
-	RenderingDevice *const rd = m_context.getDevice();
-	if ( !rd || !pTerrainStripVariants || !pMeshVariants ) {
+	if ( !m_context.getDevice() || !pTerrainStripVariants || !pMeshVariants ) {
 		return false;
 	}
 	m_forwardLighting.setPersistentFrameBufferEnabled( bPersistentFrameBuffer );
@@ -73,10 +71,8 @@ bool Terrain3DWorldRaster::initializeCold( const Ref<RDShaderSPIRV> *pTerrainStr
 			m_source[primitive][i] = variant_sources[primitive][i];
 			const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
 			const String resource_name = String( "T3D.World.Raster." ) + class_name + String( ".Shader." ) + String::num_uint64( i );
-			m_hShader[primitive][i] = t3dRdCreateShaderWithStatus( rd, variant_sources[primitive][i], resource_name );
-			if ( !m_hShader[primitive][i].is_valid()
-			        || !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_WORLD )
-			                    .adopt( rd, m_hShader[primitive][i], resource_name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
+			if ( !m_hShader[primitive][i].createTracked(
+			             m_context, Terrain3DRdContext::OWNER_WORLD, resource_name, variant_sources[primitive][i] ) ) {
 				shutdownCold();
 				return false;
 			}
@@ -89,10 +85,8 @@ bool Terrain3DWorldRaster::initializeCold( const Ref<RDShaderSPIRV> *pTerrainStr
 		m_shadowSource[primitive] = shadow_sources[primitive];
 		const String class_name = primitive == T3D_PRIMITIVE_TERRAIN_STRIP ? String( "TerrainStrip" ) : String( "Mesh" );
 		const String shadow_name = String( "T3D.World.Raster." ) + class_name + String( ".ShadowShader" );
-		m_hShadowShader[primitive] = t3dRdCreateShaderWithStatus( rd, shadow_sources[primitive], shadow_name );
-		if ( !m_hShadowShader[primitive].is_valid()
-		        || !Terrain3DRdResourceService( m_context, Terrain3DRdContext::OWNER_WORLD )
-		                    .adopt( rd, m_hShadowShader[primitive], shadow_name, Terrain3DRdContext::RESOURCE_SHADER ) ) {
+		if ( !m_hShadowShader[primitive].createTracked(
+		             m_context, Terrain3DRdContext::OWNER_WORLD, shadow_name, shadow_sources[primitive] ) ) {
 			shutdownCold();
 			return false;
 		}
@@ -101,43 +95,7 @@ bool Terrain3DWorldRaster::initializeCold( const Ref<RDShaderSPIRV> *pTerrainStr
 	return true;
 }
 
-bool Terrain3DWorldRaster::selectVariant( const t3dRdForwardPassContext_t &rContext, t3dRdForwardShaderVariant_t &rVariant ) const {
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ) {
-		rVariant = T3D_RD_FORWARD_SHADER_DEPTH;
-		return m_hShadowShader[T3D_PRIMITIVE_TERRAIN_STRIP].is_valid() && m_hShadowShader[T3D_PRIMITIVE_MESH].is_valid();
-	}
-	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) {
-		switch ( rContext.m_nativePassMode ) {
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH;
-				return true;
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS;
-				return true;
-			case T3D_RD_FORWARD_NATIVE_PASS_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI:
-				rVariant = T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI;
-				return true;
-			default:
-				return false;
-		}
-	}
-	if ( ( rContext.m_passKind != T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_passKind != T3D_RD_FORWARD_PASS_MOTION )
-	        || rContext.m_nativePassMode != T3D_RD_FORWARD_NATIVE_PASS_COLOR ) {
-		return false;
-	}
-	const bool specular = ( rContext.m_nColorPassFlags & ( 1u << 1u ) ) != 0u;
-	const bool motion = rContext.m_passKind == T3D_RD_FORWARD_PASS_MOTION || ( rContext.m_nColorPassFlags & ( 1u << 3u ) ) != 0u;
-	const bool radiance = ( rContext.m_nEnvironmentFlags & T3D_RD_FORWARD_ENV_RADIANCE_OCTMAP_ARRAY ) != 0u;
-	if ( radiance ) {
-		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION_RADIANCE_ARRAY
-		                               : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_RADIANCE_ARRAY )
-		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION_RADIANCE_ARRAY : T3D_RD_FORWARD_SHADER_COLOR_RADIANCE_ARRAY );
-	} else {
-		rVariant = specular ? ( motion ? T3D_RD_FORWARD_SHADER_COLOR_SPECULAR_MOTION : T3D_RD_FORWARD_SHADER_COLOR_SPECULAR )
-		                    : ( motion ? T3D_RD_FORWARD_SHADER_COLOR_MOTION : T3D_RD_FORWARD_SHADER_COLOR );
-	}
-	return true;
-}
+
 
 void Terrain3DWorldRaster::freeSetsCold( void ) {
 	m_set0Cache.clear();
@@ -295,55 +253,33 @@ bool Terrain3DWorldRaster::ensurePipelineCold(
 		return false;
 	}
 	t3dPipelineKey_t key;
-	key.m_nFramebufferFormat = rContext.m_nFramebufferFormat;
-	key.m_variant = variant;
-	key.m_samples = rd->framebuffer_format_get_texture_samples( rContext.m_nFramebufferFormat, 0u );
-	key.m_nViewCount = rContext.m_nViewCount;
-	key.m_nPrimitiveClass = ( uint32_t )primitiveClass;
-	key.m_bReverseCull = rContext.m_bReverseCull;
-	key.m_bDepthPrepassActive = rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE && rContext.m_bDepthPrepassActive;
-	key.m_bShadow = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW;
-	if ( ( 1u << ( uint32_t )key.m_samples ) != rContext.m_nSampleCount ) {
+	if ( !t3dRdCompileForwardPipelineBaseKey( rd, rContext, variant, false, key ) ) {
 		return false;
 	}
+	key.m_nPrimitiveClass = ( uint32_t )primitiveClass;
 	if ( findPipeline( key ) ) {
 		m_currentKey[( uint32_t )primitiveClass] = key;
 		return true;
 	}
-	Ref<RDPipelineRasterizationState> raster;
-	raster.instantiate();
-	raster->set_front_face( primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP
-	                ? RenderingDevice::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE
-	                : RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE );
-	raster->set_cull_mode( key.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK );
-	Ref<RDPipelineMultisampleState> multisample;
-	multisample.instantiate();
-	multisample->set_sample_count( key.m_samples );
-	Ref<RDPipelineDepthStencilState> depth;
-	depth.instantiate();
-	depth->set_enable_depth_test( true );
-	depth->set_enable_depth_write( !key.m_bDepthPrepassActive );
-	depth->set_depth_compare_operator(
-	        key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL );
-	Ref<RDPipelineColorBlendState> blend;
-	blend.instantiate();
-	uint32_t blend_count = variant < T3D_RD_FORWARD_COLOR_VARIANT_COUNT
-	        ? 3u
-	        : ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS
-	                          ? 1u
-	                          : ( variant == T3D_RD_FORWARD_SHADER_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI ? 2u : 0u ) );
-	if ( blend_count ) {
-		TypedArray<Ref<RDPipelineColorBlendStateAttachment>> attachments;
-		for ( uint32_t i = 0u; i < blend_count; ++i ) {
-			Ref<RDPipelineColorBlendStateAttachment> a;
-			a.instantiate();
-			a->set_enable_blend( false );
-			attachments.push_back( a );
-		}
-		blend->set_attachments( attachments );
+	t3dRdForwardPipelineStateOptions_t state_options;
+	state_options.m_frontFace = primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP
+	        ? RenderingDevice::POLYGON_FRONT_FACE_COUNTER_CLOCKWISE
+	        : RenderingDevice::POLYGON_FRONT_FACE_CLOCKWISE;
+	state_options.m_cullMode = key.m_bReverseCull ? RenderingDevice::POLYGON_CULL_FRONT : RenderingDevice::POLYGON_CULL_BACK;
+	state_options.m_nBlendAttachmentCount = t3dRdForwardBlendAttachmentCount( variant, false );
+	state_options.m_bEnableDepthWrite = !key.m_bDepthPrepassActive;
+	state_options.m_depthCompare =
+	        key.m_bDepthPrepassActive ? RenderingDevice::COMPARE_OP_EQUAL : RenderingDevice::COMPARE_OP_GREATER_OR_EQUAL;
+	t3dRdForwardPipelineStates_t pipeline_states;
+	if ( !t3dRdBuildForwardPipelineStates( key, state_options, pipeline_states ) ) {
+		return false;
 	}
+	Ref<RDPipelineRasterizationState> raster = pipeline_states.m_raster;
+	Ref<RDPipelineMultisampleState> multisample = pipeline_states.m_multisample;
+	Ref<RDPipelineDepthStencilState> depth = pipeline_states.m_depth;
+	Ref<RDPipelineColorBlendState> blend = pipeline_states.m_blend;
 	const uint32_t primitive = ( uint32_t )primitiveClass;
-	const RID shader = key.m_bShadow ? m_hShadowShader[primitive] : m_hShader[primitive][( uint32_t )variant];
+	const RID shader = key.m_passKind == T3D_RD_FORWARD_PASS_SHADOW ? m_hShadowShader[primitive].rid() : m_hShader[primitive][( uint32_t )variant].rid();
 	if ( !shader.is_valid() ) {
 		return false;
 	}
@@ -379,7 +315,11 @@ bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContex
 	m_bCurrentValid = false;
 	++m_nPrepareCount;
 	t3dRdForwardShaderVariant_t variant;
-	if ( !selectVariant( rContext, variant ) ) {
+	if ( !t3dRdSelectForwardVariant( rContext, T3D_RD_FORWARD_VARIANT_SHADOW_ANY_NATIVE_MODE, variant ) ) {
+		return false;
+	}
+	if ( rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
+	        && ( !m_hShadowShader[T3D_PRIMITIVE_TERRAIN_STRIP].isValid() || !m_hShadowShader[T3D_PRIMITIVE_MESH].isValid() ) ) {
 		return false;
 	}
 	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
@@ -393,8 +333,8 @@ bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContex
 		const t3dPrimitiveClass_t primitive_class = active_classes[active];
 		const uint32_t primitive = ( uint32_t )primitive_class;
 		const RID shader = rContext.m_passKind == T3D_RD_FORWARD_PASS_SHADOW
-		        ? m_hShadowShader[primitive]
-		        : m_hShader[primitive][( uint32_t )variant];
+		        ? m_hShadowShader[primitive].rid()
+		        : m_hShader[primitive][( uint32_t )variant].rid();
 		if ( !ensureSetsCold( rResources, rTerrain, rVT, shader, primitive_class, descriptor_slot )
 		        || !ensurePipelineCold( rContext, variant, primitive_class ) ) {
 			return false;
@@ -406,7 +346,7 @@ bool Terrain3DWorldRaster::prepareCold( const t3dRdForwardPassContext_t &rContex
 		}
 		for ( uint32_t active = 0u; active < 2u; ++active ) {
 			const uint32_t primitive = ( uint32_t )active_classes[active];
-			const RID shader = m_hShader[primitive][( uint32_t )variant];
+			const RID shader = m_hShader[primitive][( uint32_t )variant].rid();
 			m_hLightingSet[primitive] = m_forwardLighting.ensureSet( shader );
 			if ( !m_hLightingSet[primitive].is_valid() ) {
 				return false;
@@ -470,9 +410,9 @@ void Terrain3DWorldRaster::shutdownCold( void ) {
 	m_forwardLighting.shutdown();
 	m_pipelines.clear();
 	for ( uint32_t primitive = 0u; primitive < T3D_PRIMITIVE_CLASS_COUNT; ++primitive ) {
-		m_context.freeResource( m_hShadowShader[primitive] );
+		m_hShadowShader[primitive].releaseTracked( m_context );
 		for ( uint32_t i = 0u; i < T3D_RD_FORWARD_SHADER_VARIANT_MAX; ++i ) {
-			m_context.freeResource( m_hShader[primitive][i] );
+			m_hShader[primitive][i].releaseTracked( m_context );
 			m_source[primitive][i].unref();
 		}
 		m_shadowSource[primitive].unref();

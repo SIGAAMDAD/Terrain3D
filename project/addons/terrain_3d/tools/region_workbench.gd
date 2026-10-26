@@ -3,6 +3,8 @@
 @tool
 extends Node
 
+const WorkbenchMetadata = preload("res://addons/terrain_3d/tools/region_workbench_metadata.gd")
+
 
 const WORKBENCH_ROOT: String = "res://Terrain3D_Workbench"
 const MANIFEST_FILE: String = "workbench.json"
@@ -11,28 +13,8 @@ const DATA_DIR_NAME: String = "data"
 const CONTEXT_DIR_NAME: String = "context"
 const ARCHIVE_DIR_NAME: String = "_terrain3d_archive"
 const WORKBENCH_SCENE_SCRIPT = preload("res://addons/terrain_3d/tools/region_workbench_scene.gd")
-const WORKBENCH_META: StringName = &"terrain3d_region_workbench"
-const MANIFEST_META: StringName = &"terrain3d_workbench_manifest"
-const REGION_NODES_NAME: StringName = &"RegionNodes"
-const REGION_CONTAINER_META: StringName = &"terrain3d_workbench_region_container"
-const REGION_LOCATION_META: StringName = &"terrain3d_workbench_region_location"
-const NODE_META_LIGHTING_CLASS: StringName = &"terrain3d_lighting_class"
-const NODE_META_BAKED_LIGHTING_MODE: StringName = &"terrain3d_baked_lighting_mode"
-const NODE_META_CONTRIBUTE_BAKED_GI: StringName = &"terrain3d_contribute_baked_gi"
-const NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL: StringName = &"terrain3d_receive_dynamic_directional"
-const NODE_META_DYNAMIC_SHADOW_ELIGIBLE: StringName = &"terrain3d_dynamic_shadow_eligible"
-const NODE_META_SHADOW_PROXY_SCENE_PATH: StringName = &"terrain3d_shadow_proxy_scene_path"
+const EditorUtil = preload("res://addons/terrain_3d/src/editor_util.gd")
 const REGION_NODE_DIR_NAME: String = "_terrain3d_region_nodes"
-const NODE_META_ID: StringName = &"terrain3d_stream_id"
-const NODE_META_FLAGS: StringName = &"terrain3d_stream_flags"
-const NODE_META_STATE: StringName = &"terrain3d_stream_state"
-const NODE_META_SOURCE_PATH: StringName = &"terrain3d_stream_source_path"
-const NODE_META_LOAD_ERROR: StringName = &"terrain3d_stream_load_error"
-const NODE_META_BOUNDARY_POLICY: StringName = &"terrain3d_boundary_policy"
-const NODE_META_COVERAGE_MIN: StringName = &"terrain3d_coverage_min"
-const NODE_META_COVERAGE_MAX: StringName = &"terrain3d_coverage_max"
-const BOUNDARY_POLICY_ANCHOR: int = 0
-const BOUNDARY_POLICY_BOUNDS: int = 1
 const WORKBENCH_CONTEXT_RADIUS: int = 2
 const PUBLISH_PAGE_DEPENDENCY_RADIUS: int = 1
 const WORKBENCH_REGION_LIST_DISPLAY_LIMIT: int = 512
@@ -386,7 +368,7 @@ func create_workbench_regions(source_terrain: Terrain3D,
 
 func archive_active_region() -> Terrain3DRegionWorkbenchResult:
 	var workbench_root: Node = EditorInterface.get_edited_scene_root() if Engine.is_editor_hint() else null
-	var active_manifest_path: String = String(workbench_root.get_meta(MANIFEST_META, "")) if is_instance_valid(workbench_root) else ""
+	var active_manifest_path: String = String(workbench_root.get_meta(WorkbenchMetadata.MANIFEST_META, "")) if is_instance_valid(workbench_root) else ""
 	var session_directory: String = active_manifest_path.get_base_dir() if not active_manifest_path.is_empty() else ""
 	var workbench_terrain: Terrain3D = _get_active_terrain()
 	if not is_instance_valid(workbench_terrain):
@@ -420,10 +402,10 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 		scene_root = workbench_terrain.get_tree().current_scene
 	else:
 		scene_root = workbench_terrain.get_parent()
-	if not is_instance_valid(scene_root) or not bool(scene_root.get_meta(WORKBENCH_META, false)):
+	if not is_instance_valid(scene_root) or not bool(scene_root.get_meta(WorkbenchMetadata.WORKBENCH_META, false)):
 		return _failure("The active scene is not a Terrain3D region workbench")
 
-	var manifest_path: String = String(scene_root.get_meta(MANIFEST_META, ""))
+	var manifest_path: String = String(scene_root.get_meta(WorkbenchMetadata.MANIFEST_META, ""))
 	if manifest_path.is_empty() or not FileAccess.file_exists(manifest_path):
 		return _failure("Workbench manifest is missing: %s" % manifest_path)
 	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path)
@@ -766,13 +748,13 @@ func archive_region(workbench_terrain: Terrain3D) -> Terrain3DRegionWorkbenchRes
 
 func is_active_workbench() -> bool:
 	var root: Node = EditorInterface.get_edited_scene_root() if Engine.is_editor_hint() else null
-	return is_instance_valid(root) and bool(root.get_meta(WORKBENCH_META, false))
+	return is_instance_valid(root) and bool(root.get_meta(WorkbenchMetadata.WORKBENCH_META, false))
 
 
 func _manifest_for_root(root: Node) -> Terrain3DRegionWorkbenchManifest:
 	if not is_instance_valid(root):
 		return null
-	var path: String = String(root.get_meta(MANIFEST_META, ""))
+	var path: String = String(root.get_meta(WorkbenchMetadata.MANIFEST_META, ""))
 	return _read_manifest(path) if not path.is_empty() else null
 
 
@@ -933,7 +915,7 @@ func _refresh_operations_panel() -> void:
 	if not active:
 		return
 	var root: Node = EditorInterface.get_edited_scene_root()
-	var manifest_path: String = String(root.get_meta(MANIFEST_META, "")) if is_instance_valid(root) else ""
+	var manifest_path: String = String(root.get_meta(WorkbenchMetadata.MANIFEST_META, "")) if is_instance_valid(root) else ""
 	var manifest_modified_time: int = int(FileAccess.get_modified_time(manifest_path)) if not manifest_path.is_empty() and FileAccess.file_exists(manifest_path) else 0
 	if manifest_path != _operations_manifest_path or manifest_modified_time != _operations_manifest_modified_time:
 		_operations_manifest_path = manifest_path
@@ -1260,7 +1242,7 @@ func _populate_region_list(source_terrain: Terrain3D) -> void:
 	_available_locations.clear()
 	if source_terrain.data != null:
 		_available_locations.assign(source_terrain.data.get_region_locations())
-	_available_locations.sort_custom(_region_location_less)
+	_available_locations.sort_custom(EditorUtil.region_location_less)
 	_dialog_selection.clear()
 	_region_list.clear()
 	for location: Vector2i in _available_locations:
@@ -1268,10 +1250,6 @@ func _populate_region_list(source_terrain: Terrain3D) -> void:
 		_region_list.set_item_tooltip(index, "Terrain region (%d, %d)" % [location.x, location.y])
 	if is_instance_valid(_region_map):
 		_region_map.set_regions(_available_locations)
-
-
-func _region_location_less(a: Vector2i, b: Vector2i) -> bool:
-	return a.y < b.y or (a.y == b.y and a.x < b.x)
 
 
 func _set_dialog_location(source_terrain: Terrain3D, location: Vector2i) -> void:
@@ -1322,7 +1300,7 @@ func _normalize_locations(locations: Array[Vector2i]) -> Array[Vector2i]:
 			continue
 		seen[location] = true
 		result.push_back(location)
-	result.sort_custom(_region_location_less)
+	result.sort_custom(EditorUtil.region_location_less)
 	return result
 
 
@@ -1347,7 +1325,7 @@ func _collect_context_locations(source_terrain: Terrain3D, editable_locations: A
 	var result: Array[Vector2i] = []
 	for location: Vector2i in context.keys():
 		result.push_back(location)
-	result.sort_custom(_region_location_less)
+	result.sort_custom(EditorUtil.region_location_less)
 	return result
 
 
@@ -1454,17 +1432,7 @@ func _get_active_terrain() -> Terrain3D:
 	if Engine.is_editor_hint():
 		var root: Node = EditorInterface.get_edited_scene_root()
 		if is_instance_valid(root):
-			return _find_terrain(root)
-	return null
-
-
-func _find_terrain(node: Node) -> Terrain3D:
-	if node is Terrain3D:
-		return node as Terrain3D
-	for child: Node in node.get_children():
-		var found: Terrain3D = _find_terrain(child)
-		if is_instance_valid(found):
-			return found
+			return EditorUtil.find_terrain(root)
 	return null
 
 
@@ -1472,8 +1440,8 @@ func _write_workbench_scene(_source_terrain: Terrain3D, _locations: Array[Vector
 		manifest_path: String, scene_path: String) -> Error:
 	var root := Node3D.new()
 	root.name = "Terrain3DRegionWorkbench"
-	root.set_meta(WORKBENCH_META, true)
-	root.set_meta(MANIFEST_META, manifest_path)
+	root.set_meta(WorkbenchMetadata.WORKBENCH_META, true)
+	root.set_meta(WorkbenchMetadata.MANIFEST_META, manifest_path)
 	root.set_script(WORKBENCH_SCENE_SCRIPT)
 	root.set("manifest_path", manifest_path)
 
@@ -1526,11 +1494,11 @@ func _get_region_node_container(region_nodes: Node3D, location: Vector2i) -> Nod
 	if not is_instance_valid(region_nodes):
 		return null
 	var by_name := region_nodes.get_node_or_null(NodePath(_region_container_name(location))) as Node3D
-	if is_instance_valid(by_name) and bool(by_name.get_meta(REGION_CONTAINER_META, false)):
+	if is_instance_valid(by_name) and bool(by_name.get_meta(WorkbenchMetadata.REGION_CONTAINER_META, false)):
 		return by_name
 	for child: Node in region_nodes.get_children():
-		if child is Node3D and bool(child.get_meta(REGION_CONTAINER_META, false)) and \
-			child.get_meta(REGION_LOCATION_META, Vector2i(9999, 9999)) == location:
+		if child is Node3D and bool(child.get_meta(WorkbenchMetadata.REGION_CONTAINER_META, false)) and \
+			child.get_meta(WorkbenchMetadata.REGION_LOCATION_META, Vector2i(9999, 9999)) == location:
 			return child as Node3D
 	return null
 
@@ -1539,14 +1507,14 @@ func _has_region_node_containers(region_nodes: Node3D) -> bool:
 	if not is_instance_valid(region_nodes):
 		return false
 	for child: Node in region_nodes.get_children():
-		if bool(child.get_meta(REGION_CONTAINER_META, false)):
+		if bool(child.get_meta(WorkbenchMetadata.REGION_CONTAINER_META, false)):
 			return true
 	return false
 
 
 func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 		location: Vector2i, world_region_size: float) -> Terrain3DRegionNodeBuildResult:
-	var region_nodes := scene_root.get_node_or_null(NodePath(String(REGION_NODES_NAME))) as Node3D
+	var region_nodes := scene_root.get_node_or_null(NodePath(String(WorkbenchMetadata.REGION_NODES_NAME))) as Node3D
 	if not is_instance_valid(region_nodes):
 		return Terrain3DRegionNodeBuildResult.failure("Workbench scene is missing the RegionNodes root")
 	var region_container: Node3D = _get_region_node_container(region_nodes, location)
@@ -1579,7 +1547,7 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 			_cleanup_generated_files(result.generated_paths)
 			return Terrain3DRegionNodeBuildResult.failure(
 				"Every direct child of RegionNodes must be a Node3D: %s" % child.name)
-		if bool(child.get_meta(NODE_META_LOAD_ERROR, false)):
+		if bool(child.get_meta(WorkbenchMetadata.NODE_META_LOAD_ERROR, false)):
 			_cleanup_generated_files(result.generated_paths)
 			return Terrain3DRegionNodeBuildResult.failure(
 				"Cannot archive missing region node %s. Restore its source scene first." % child.name)
@@ -1590,7 +1558,7 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 			_cleanup_generated_files(result.generated_paths)
 			return Terrain3DRegionNodeBuildResult.failure(anchor_error)
 
-		var requested_id: int = int(child.get_meta(NODE_META_ID, 0))
+		var requested_id: int = int(child.get_meta(WorkbenchMetadata.NODE_META_ID, 0))
 		var spawn_id: int = requested_id
 		if spawn_id <= 0 or used_ids.has(spawn_id):
 			while used_ids.has(next_id):
@@ -1598,30 +1566,30 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 			spawn_id = next_id
 			next_id += 1
 		used_ids[spawn_id] = true
-		child.set_meta(NODE_META_ID, spawn_id)
+		child.set_meta(WorkbenchMetadata.NODE_META_ID, spawn_id)
 
 		var boundary_policy: int = int(child.get_meta(
-			NODE_META_BOUNDARY_POLICY, BOUNDARY_POLICY_BOUNDS))
-		if boundary_policy != BOUNDARY_POLICY_ANCHOR:
-			boundary_policy = BOUNDARY_POLICY_BOUNDS
-		child.set_meta(NODE_META_BOUNDARY_POLICY, boundary_policy)
+			WorkbenchMetadata.NODE_META_BOUNDARY_POLICY, WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS))
+		if boundary_policy != WorkbenchMetadata.BOUNDARY_POLICY_ANCHOR:
+			boundary_policy = WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS
+		child.set_meta(WorkbenchMetadata.NODE_META_BOUNDARY_POLICY, boundary_policy)
 
 		var coverage: Terrain3DRegionWorkbenchCoverage = _calculate_region_node_coverage(
 			node_root, region_container, world_region_size)
 		var coverage_min := Vector2i.ZERO
 		var coverage_max := Vector2i.ZERO
-		if boundary_policy == BOUNDARY_POLICY_BOUNDS:
+		if boundary_policy == WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS:
 			coverage_min = coverage.minimum
 			coverage_max = coverage.maximum
 		elif coverage.minimum != Vector2i.ZERO or coverage.maximum != Vector2i.ZERO:
 			result.warnings.push_back(
 				"Region node %s crosses its owner boundary but uses Anchor Only; it can pop when viewed from the neighboring region." % child.name)
-		child.set_meta(NODE_META_COVERAGE_MIN, coverage_min)
-		child.set_meta(NODE_META_COVERAGE_MAX, coverage_max)
+		child.set_meta(WorkbenchMetadata.NODE_META_COVERAGE_MIN, coverage_min)
+		child.set_meta(WorkbenchMetadata.NODE_META_COVERAGE_MAX, coverage_max)
 
 		var covered_region_count: int = (coverage_max.x - coverage_min.x + 1) * \
 			(coverage_max.y - coverage_min.y + 1)
-		if boundary_policy == BOUNDARY_POLICY_BOUNDS and covered_region_count > 16:
+		if boundary_policy == WorkbenchMetadata.BOUNDARY_POLICY_BOUNDS and covered_region_count > 16:
 			result.warnings.push_back(
 				"Region node %s covers %d regions. It remains single-owned, but its owner region can be retained across that footprint." % [child.name, covered_region_count])
 
@@ -1642,16 +1610,16 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 		descriptor.scene_path = node_scene_path
 		descriptor.transform = node_root.transform
 		descriptor.state = _metadata_state(child)
-		descriptor.flags = int(child.get_meta(NODE_META_FLAGS, 0))
+		descriptor.flags = int(child.get_meta(WorkbenchMetadata.NODE_META_FLAGS, 0))
 		descriptor.boundary_policy = boundary_policy
 		descriptor.coverage_min = coverage_min
 		descriptor.coverage_max = coverage_max
-		descriptor.lighting_class = int(child.get_meta(NODE_META_LIGHTING_CLASS, 2))
-		descriptor.baked_lighting_mode = int(child.get_meta(NODE_META_BAKED_LIGHTING_MODE, 1))
-		descriptor.contribute_baked_gi = bool(child.get_meta(NODE_META_CONTRIBUTE_BAKED_GI, true))
-		descriptor.receive_dynamic_directional = bool(child.get_meta(NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, true))
-		descriptor.dynamic_shadow_eligible = bool(child.get_meta(NODE_META_DYNAMIC_SHADOW_ELIGIBLE, true))
-		descriptor.shadow_proxy_scene_path = String(child.get_meta(NODE_META_SHADOW_PROXY_SCENE_PATH, ""))
+		descriptor.lighting_class = int(child.get_meta(WorkbenchMetadata.NODE_META_LIGHTING_CLASS, 2))
+		descriptor.baked_lighting_mode = int(child.get_meta(WorkbenchMetadata.NODE_META_BAKED_LIGHTING_MODE, 1))
+		descriptor.contribute_baked_gi = bool(child.get_meta(WorkbenchMetadata.NODE_META_CONTRIBUTE_BAKED_GI, true))
+		descriptor.receive_dynamic_directional = bool(child.get_meta(WorkbenchMetadata.NODE_META_RECEIVE_DYNAMIC_DIRECTIONAL, true))
+		descriptor.dynamic_shadow_eligible = bool(child.get_meta(WorkbenchMetadata.NODE_META_DYNAMIC_SHADOW_ELIGIBLE, true))
+		descriptor.shadow_proxy_scene_path = String(child.get_meta(WorkbenchMetadata.NODE_META_SHADOW_PROXY_SCENE_PATH, ""))
 		result.descriptors.push_back(descriptor)
 
 	return result
@@ -1659,7 +1627,7 @@ func _build_region_node_descriptors(scene_root: Node, source_directory: String,
 
 func _metadata_state(node: Node) -> Dictionary[StringName, Variant]:
 	var state: Dictionary[StringName, Variant] = {}
-	var state_value: Variant = node.get_meta(NODE_META_STATE, {})
+	var state_value: Variant = node.get_meta(WorkbenchMetadata.NODE_META_STATE, {})
 	if state_value is Dictionary:
 		state.assign(state_value.duplicate(true))
 	return state
@@ -1752,9 +1720,9 @@ func _save_region_node_scene(source: Node3D, destination_path: String) -> Error:
 
 
 func _remove_region_node_metadata(node: Node) -> void:
-	for key: StringName in [NODE_META_ID, NODE_META_FLAGS, NODE_META_STATE,
-			NODE_META_SOURCE_PATH, NODE_META_LOAD_ERROR, NODE_META_BOUNDARY_POLICY,
-			NODE_META_COVERAGE_MIN, NODE_META_COVERAGE_MAX]:
+	for key: StringName in [WorkbenchMetadata.NODE_META_ID, WorkbenchMetadata.NODE_META_FLAGS, WorkbenchMetadata.NODE_META_STATE,
+			WorkbenchMetadata.NODE_META_SOURCE_PATH, WorkbenchMetadata.NODE_META_LOAD_ERROR, WorkbenchMetadata.NODE_META_BOUNDARY_POLICY,
+			WorkbenchMetadata.NODE_META_COVERAGE_MIN, WorkbenchMetadata.NODE_META_COVERAGE_MAX]:
 		if node.has_meta(key):
 			node.remove_meta(key)
 
@@ -1932,7 +1900,7 @@ func _initialize_lighting_outputs(manifest: Terrain3DRegionWorkbenchManifest,
 		for raw_location: Variant in clusters[cluster_min]:
 			if raw_location is Vector2i:
 				members.push_back(raw_location)
-		members.sort_custom(_region_location_less)
+		members.sort_custom(EditorUtil.region_location_less)
 		var output := Terrain3DRegionWorkbenchLightingOutput.new()
 		output.cluster_min = cluster_min
 		output.cluster_max = cluster_min + Vector2i(LIGHTMAP_CLUSTER_SIZE - 1, LIGHTMAP_CLUSTER_SIZE - 1)
@@ -2057,7 +2025,7 @@ func _confirm_abandon_workbench() -> void:
 	var root: Node = EditorInterface.get_edited_scene_root() if Engine.is_editor_hint() else null
 	if not is_instance_valid(root):
 		return
-	var manifest_path: String = String(root.get_meta(MANIFEST_META, ""))
+	var manifest_path: String = String(root.get_meta(WorkbenchMetadata.MANIFEST_META, ""))
 	var manifest: Terrain3DRegionWorkbenchManifest = _read_manifest(manifest_path)
 	if manifest == null:
 		return

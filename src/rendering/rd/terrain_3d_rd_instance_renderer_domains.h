@@ -21,32 +21,22 @@ public:
 	Ref<RDShaderSPIRV> m_hlodCullSourceShader;
 	Ref<RDShaderSPIRV> m_instanceCullSourceShader;
 	Ref<RDShaderSPIRV> m_instanceHiZReduceSourceShader;
-	RID m_hHlodCullShader;
+	Terrain3DRdShader m_hHlodCullShader;
 	RID m_hHlodCullPipeline;
-	RID m_hHlodCullDescriptorBuffer;
+	Terrain3DRdGpuBuffer m_hHlodCullDescriptorBuffer;
 	RID m_hHlodCullUniformSet;
-	RID m_hInstanceCullShader;
+	Terrain3DRdShader m_hInstanceCullShader;
 	RID m_hInstanceCullPipeline;
-	RID m_hInstanceCullDescriptorBuffer;
-	RID m_hInstanceHiZRegionDescriptorBuffer;
-	RID m_hInstanceHiZRegionVisibilityBuffer;
+	Terrain3DRdGpuBuffer m_hInstanceCullDescriptorBuffer;
+	Terrain3DRdGpuBuffer m_hInstanceHiZRegionDescriptorBuffer;
+	Terrain3DRdGpuBuffer m_hInstanceHiZRegionVisibilityBuffer;
 	RID m_hInstanceCullUniformSet;
-	RID m_hVisibleIndexBuffer;
-	RID m_hShadowVisibleIndexBuffer;
-	RID m_hVisibleDrawSlotBuffer;
-	RID m_hShadowVisibleDrawSlotBuffer;
-	RID m_hVisibleLayerBuffer;
-	RID m_hShadowVisibleLayerBuffer;
-	uint32_t m_nVisibleCapacityBytes = 0u;
-	uint32_t m_nShadowVisibleCapacityBytes = 0u;
-	uint32_t m_nVisibleDrawSlotCapacityBytes = 0u;
-	uint32_t m_nShadowVisibleDrawSlotCapacityBytes = 0u;
-	uint32_t m_nVisibleLayerCapacityBytes = 0u;
-	uint32_t m_nShadowVisibleLayerCapacityBytes = 0u;
-	uint32_t m_nHlodDescriptorCapacityBytes = 0u;
-	uint32_t m_nInstanceCullDescriptorCapacityBytes = 0u;
-	uint32_t m_nInstanceHiZRegionDescriptorCapacityBytes = 0u;
-	uint32_t m_nInstanceHiZRegionVisibilityCapacityBytes = 0u;
+	Terrain3DRdGpuBuffer m_hVisibleIndexBuffer;
+	Terrain3DRdGpuBuffer m_hShadowVisibleIndexBuffer;
+	Terrain3DRdGpuBuffer m_hVisibleDrawSlotBuffer;
+	Terrain3DRdGpuBuffer m_hShadowVisibleDrawSlotBuffer;
+	Terrain3DRdGpuBuffer m_hVisibleLayerBuffer;
+	Terrain3DRdGpuBuffer m_hShadowVisibleLayerBuffer;
 	uint32_t m_nVisibleIndexCapacity = 0u;
 	uint32_t m_nVisibleIndexCount = 0u;
 	uint32_t m_nShadowVisibleIndexCount = 0u;
@@ -110,15 +100,10 @@ public:
 
 class Terrain3DRdInstanceCommandTable {
 public:
-	RID m_hDrawMetadataBuffer;
-	RID m_hIndirectBuffer;
-	RID m_hShadowIndirectBuffer;
-	uint32_t m_nDrawMetadataCapacityBytes = 0u;
-	uint32_t m_nIndirectCapacityBytes = 0u;
-	uint32_t m_nShadowIndirectCapacityBytes = 0u;
-	uint32_t m_nIndirectArenaCapacityBytes = 0u;
-	uint32_t m_nMainIndirectOffsetBytes = 0u;
-	uint32_t m_nShadowIndirectOffsetBytes = 0u;
+	Terrain3DRdGpuBuffer m_hDrawMetadataBuffer;
+	Terrain3DRdGpuBuffer m_hIndirectBuffer;
+	t3dRdGpuBufferSlice_t m_mainIndirectSlice;
+	t3dRdGpuBufferSlice_t m_shadowIndirectSlice;
 	uint64_t m_nDrawMetadataMeshGeneration = 0u;
 	uint32_t m_nPacketCapacity = 0u;
 	uint32_t m_nMainCompatibleCommandCount = 0u;
@@ -166,16 +151,16 @@ public:
 class Terrain3DRdInstanceOccluderDepth {
 public:
 	Ref<RDShaderSPIRV> m_sourceShader;
-	RID m_hShader;
+	Terrain3DRdShader m_hShader;
 	RID m_hPipeline;
 	RID m_hDepthTexture;
+	// Borrowed aliases into Terrain3DRdRenderTargetPool-owned texture/framebuffer resources.
 	RID m_hFramebuffer;
 	RID m_hszDepthTextures[2];
 	RID m_hszFramebuffers[2];
-	RID m_hVisibleIndexBuffer;
+	Terrain3DRdGpuBuffer m_hVisibleIndexBuffer;
 	RID m_hUniformSet;
 	Vector2i m_targetSize;
-	uint32_t m_nVisibleCapacityBytes = 0u;
 	uint32_t m_nPacketCapacity = 0u;
 	uint32_t m_nVisibleIndexCapacity = 0u;
 	uint32_t m_nVisibleIndexCount = 0u;
@@ -210,7 +195,7 @@ public:
 	RID m_hszForwardShadowUniformSets[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
 	RID m_hMaterialVtUniformSet;
 	RID m_hszForwardMaterialVtUniformSets[T3D_RD_FORWARD_SHADER_VARIANT_MAX];
-	RID m_hVtSampler;
+	Terrain3DRdSampler m_hVtSampler;
 	uint64_t m_nMaterialVtResourceSignature = 0u;
 	bool m_bMaterialVtSetBuiltOnce = false;
 	uint64_t m_nVtDescriptorBindsInstancerPass = 0u;
@@ -219,15 +204,11 @@ public:
 
 class Terrain3DRdInstanceUploadState {
 public:
-	RID m_hFrameBuffer;
-	RID m_hInstanceBuffer;
-	RID m_hPreviousInstanceBuffer;
-	RID m_hMaterialBuffer;
-	uint32_t m_nInstanceCapacityBytes = 0u;
-	uint32_t m_nPreviousInstanceCapacityBytes = 0u;
-	uint32_t m_nMaterialCapacityBytes = 0u;
+	Terrain3DRdGpuBuffer m_hFrameBuffer;
+	Terrain3DRdGpuBuffer m_hInstanceBuffer;
+	Terrain3DRdGpuBuffer m_hPreviousInstanceBuffer;
+	Terrain3DRdGpuBuffer m_hMaterialBuffer;
 	uint64_t m_nUploadedSceneGeneration = 0u;
-	uint32_t m_nInstanceUsedBytes = 0u;
 	uint32_t m_nMotionHistoryRecordCount = 0u;
 	uint32_t m_nMotionHistoryCellCount = 0u;
 	uint32_t m_nMotionPreviousRecordCount = 0u;

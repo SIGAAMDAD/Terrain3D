@@ -6,7 +6,9 @@
 #include "assets/terrain_3d_mesh_asset.h"
 #include "data/terrain_3d_data.h"
 #include "data/terrain_3d_region.h"
+#include "instances/terrain_3d_instance_capacity.h"
 #include "instances/terrain_3d_instance_store.h"
+#include "instances/terrain_3d_instance_traversal.h"
 #include "instances/terrain_3d_instancer.h"
 #include "physics/terrain_3d_collision.h"
 #include "terrain_3d.h"
@@ -25,21 +27,7 @@ bool Terrain3DInstancePhysics::bindRuntimeAllocator( Terrain3DMemoryZone *const 
 	return true;
 }
 
-bool Terrain3DInstancePhysics::cellWithinRange(
-        const Vector2i &rRegion, const Vector2i &rCell, const int nCellSize, const real_t fRange, const Vector3 &rTarget ) const {
-	if ( fRange <= 0.0f ) {
-		return false;
-	}
-	const real_t region_x = ( real_t )( rRegion.x * s_nRegionWorldSizeMeters );
-	const real_t region_z = ( real_t )( rRegion.y * s_nRegionWorldSizeMeters );
-	const real_t min_x = region_x + ( real_t )( rCell.x * nCellSize );
-	const real_t min_z = region_z + ( real_t )( rCell.y * nCellSize );
-	const real_t max_x = min_x + ( real_t )( nCellSize );
-	const real_t max_z = min_z + ( real_t )( nCellSize );
-	const real_t dx = rTarget.x < min_x ? min_x - rTarget.x : ( rTarget.x > max_x ? rTarget.x - max_x : 0.0f );
-	const real_t dz = rTarget.z < min_z ? min_z - rTarget.z : ( rTarget.z > max_z ? rTarget.z - max_z : 0.0f );
-	return dx * dx + dz * dz <= fRange * fRange;
-}
+
 
 void Terrain3DInstancePhysics::configureBody( t3dInstancePhysicsCell_t &rRecord ) {
 	if ( !m_pTerrain || !rRecord.m_hBody.is_valid() || !m_pTerrain->isInsideWorld() || !m_pTerrain->get_world_3d().is_valid() ) {
@@ -61,35 +49,19 @@ bool Terrain3DInstancePhysics::rebuildCellCapacityCold( void ) {
 
 	size_t required_cells = 0u;
 	Terrain3DRegion *const *const ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
-	for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
-		Terrain3DRegion *const pRegion = ppRegions[iRegion];
-		if ( !pRegion || pRegion->isDeleted() ) {
-			continue;
+	t3dForEachResidentInstanceMesh( ppRegions, s_nRegionSlots, [&]( Terrain3DRegion &, const t3dInstanceMesh_t &rMesh ) {
+		const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( rMesh.m_nId );
+		if ( asset.is_null() || !asset->requiresInstancePhysics() ) {
+			return true;
 		}
-		const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-		if ( !pStore ) {
-			continue;
+		if ( !t3dAccumulateInstanceCellCount( rMesh.m_cells.size(), required_cells ) ) {
+			return false;
 		}
-		for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-			const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-			const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( mesh.m_nId );
-			if ( asset.is_null() || !asset->requiresInstancePhysics() ) {
-				continue;
-			}
-			if ( mesh.m_cells.size() > SIZE_MAX - required_cells ) {
-				required_cells = SIZE_MAX;
-				break;
-			}
-			required_cells += mesh.m_cells.size();
-		}
-		if ( required_cells == SIZE_MAX ) {
-			break;
-		}
-	}
+		return true;
+	} );
 
-	const size_t headroom = MAX( ( size_t )( 16u ), required_cells / 8u );
-	const size_t desired_capacity = required_cells > SIZE_MAX - headroom ? SIZE_MAX : required_cells + headroom;
-	const size_t target_capacity = MAX( MAX( desired_capacity, m_cells.size() ), ( size_t )( 16u ) );
+	const t3dInstanceCellCapacityPlan_t capacity_plan = t3dPlanInstanceCellCapacity( required_cells, m_cells.size() );
+	const size_t target_capacity = capacity_plan.m_nTarget;
 	if ( target_capacity > m_cells.capacity() && !t3dContainerReserveCold( m_cells, target_capacity ) ) {
 		++m_nCapacityMisses;
 		return false;
@@ -206,54 +178,44 @@ bool Terrain3DInstancePhysics::reconcileResidency( const Vector3 &rTarget ) {
 		const int cell_size = m_pTerrain->getInstancer() ? m_pTerrain->getInstancer()->getCellSize() : s_nInstanceDefaultCellSize;
 		const real_t range = ( real_t )( MAX( ( int )( m_pTerrain->getCollisionRadius() ), cell_size ) );
 		Terrain3DRegion *const *const ppRegions = m_pTerrain->getData()->getRegionPtrMapInternal();
-		for ( int iRegion = 0; iRegion < s_nRegionSlots; ++iRegion ) {
-			Terrain3DRegion *const pRegion = ppRegions[iRegion];
-			if ( !pRegion || pRegion->isDeleted() ) {
-				continue;
+		t3dForEachResidentInstanceMesh( ppRegions, s_nRegionSlots, [&]( Terrain3DRegion &rRegion, const t3dInstanceMesh_t &rMesh ) {
+			const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( rMesh.m_nId );
+			if ( asset.is_null() || !asset->requiresInstancePhysics() ) {
+				return true;
 			}
-			const Terrain3DInstanceStore *const pStore = pRegion->getResidentInstanceStoreInternal();
-			if ( !pStore ) {
-				continue;
+			if ( !asset->hasInstanceCollisionProxy() ) {
+				++m_nMissingCollisionSkips;
+				return true;
 			}
-			for ( size_t iMesh = 0u; iMesh < pStore->meshes().size(); ++iMesh ) {
-				const t3dInstanceMesh_t &mesh = pStore->meshes()[iMesh];
-				const Ref<Terrain3DMeshAsset> asset = m_pTerrain->getAssets()->getMeshAsset( mesh.m_nId );
-				if ( asset.is_null() || !asset->requiresInstancePhysics() ) {
+			for ( size_t iCell = 0u; iCell < rMesh.m_cells.size(); ++iCell ) {
+				const t3dInstanceCell_t &cell = rMesh.m_cells[iCell];
+				if ( !t3dInstanceCellWithinRange( rRegion.getLocation(), cell.m_location, cell_size, range, rTarget ) ) {
 					continue;
 				}
-				if ( !asset->hasInstanceCollisionProxy() ) {
-					++m_nMissingCollisionSkips;
+				int record_index = findCellRecord( rRegion.getLocation(), cell.m_location, rMesh.m_nId );
+				if ( record_index >= 0 ) {
+					t3dInstancePhysicsCell_t &record = m_cells[( size_t )( record_index )];
+					record.m_bDesired = true;
+					if ( record.m_nSourceRevision == cell.m_nRevision
+					        && record.m_nCollisionGeneration == asset->getInstanceCollisionGeneration() ) {
+						configureBody( record );
+						++m_nCellsReused;
+						continue;
+					}
+				} else {
+					record_index = findFreeCellRecord();
+				}
+				if ( record_index < 0 ) {
+					++m_nCapacityMisses;
+					m_bCapacityRebuildPending = true;
 					continue;
 				}
-				for ( size_t iCell = 0u; iCell < mesh.m_cells.size(); ++iCell ) {
-					const t3dInstanceCell_t &cell = mesh.m_cells[iCell];
-					if ( !cellWithinRange( pRegion->getLocation(), cell.m_location, cell_size, range, rTarget ) ) {
-						continue;
-					}
-					int record_index = findCellRecord( pRegion->getLocation(), cell.m_location, mesh.m_nId );
-					if ( record_index >= 0 ) {
-						t3dInstancePhysicsCell_t &record = m_cells[( size_t )( record_index )];
-						record.m_bDesired = true;
-						if ( record.m_nSourceRevision == cell.m_nRevision
-						        && record.m_nCollisionGeneration == asset->getInstanceCollisionGeneration() ) {
-							configureBody( record );
-							++m_nCellsReused;
-							continue;
-						}
-					} else {
-						record_index = findFreeCellRecord();
-					}
-					if ( record_index < 0 ) {
-						++m_nCapacityMisses;
-						m_bCapacityRebuildPending = true;
-						continue;
-					}
-					if ( !rebuildCellRecord( m_cells[( size_t )( record_index )], pRegion, cell, asset ) ) {
-						deactivateCellRecord( m_cells[( size_t )( record_index )] );
-					}
+				if ( !rebuildCellRecord( m_cells[( size_t )( record_index )], &rRegion, cell, asset ) ) {
+					deactivateCellRecord( m_cells[( size_t )( record_index )] );
 				}
 			}
-		}
+			return true;
+		} );
 	}
 
 	for ( size_t i = 0u; i < m_cells.size(); ++i ) {

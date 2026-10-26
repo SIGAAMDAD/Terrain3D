@@ -1,7 +1,5 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 #include "rendering/rd/world/terrain_3d_world_resources.h"
-#include "rendering/rd/infrastructure/terrain_3d_gpu_upload_service.h"
-#include "rendering/rd/infrastructure/terrain_3d_rd_resource_service.h"
 
 #include <string.h>
 
@@ -127,50 +125,60 @@ bool Terrain3DWorldResources::ensureBufferCold( const t3dWorldBufferId_t eBuffer
 	if ( eBuffer >= WORLD_BUFFER_COUNT || nRequiredBytes == 0u || !m_pContext || !m_pContext->getDevice() ) {
 		return false;
 	}
-	if ( m_hBuffers[eBuffer].is_valid() && m_nCapacityBytes[eBuffer] >= nRequiredBytes ) {
-		return ensureScratchCold( eBuffer, m_nCapacityBytes[eBuffer] );
-	}
 	if ( eBuffer == WORLD_BUFFER_INDIRECT ) {
 		const uint32_t capacity = Terrain3DRdContext::fixedIndirectCapacity( Terrain3DRdContext::FIXED_INDIRECT_WORLD );
+		if ( m_pFixedIndirectBuffer && m_pFixedIndirectBuffer->ownsSlice( m_fixedIndirectSlice )
+		        && m_fixedIndirectSlice.m_nCapacityBytes >= nRequiredBytes ) {
+			return ensureScratchCold( eBuffer, capacity );
+		}
 		if ( !ensureScratchCold( eBuffer, capacity ) ) {
 			return false;
 		}
+		if ( m_pFixedIndirectBuffer ) {
+			m_pContext->releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD, m_pFixedIndirectBuffer );
+		}
+		m_fixedIndirectSlice = t3dRdGpuBufferSlice_t{};
 		uint32_t offset = 0u;
 		if ( !m_pContext->acquireFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD,
-		             nRequiredBytes, m_hBuffers[eBuffer], offset ) ) {
+		             nRequiredBytes, m_pFixedIndirectBuffer, offset )
+		        || offset != Terrain3DRdContext::fixedIndirectOffset( Terrain3DRdContext::FIXED_INDIRECT_WORLD )
+		        || !m_pFixedIndirectBuffer->slice( offset, capacity, 4u, m_fixedIndirectSlice )
+		        || !m_pFixedIndirectBuffer->setSliceUsedBytes( m_fixedIndirectSlice, 0u ) ) {
+			m_pContext->releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD, m_pFixedIndirectBuffer );
+			m_fixedIndirectSlice = t3dRdGpuBufferSlice_t{};
 			return false;
 		}
-		if ( offset != 0u ) {
-			m_pContext->releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD, m_hBuffers[eBuffer] );
-			return false;
-		}
-		m_nCapacityBytes[eBuffer] = capacity;
-		m_nGpuBufferBytes += m_nCapacityBytes[eBuffer];
+		m_nGpuBufferBytes += capacity;
 		++m_nCapacityGrowthCount;
 		++m_nResourceGeneration;
 		return true;
 	}
-	const uint32_t nOldCapacity = m_nCapacityBytes[eBuffer];
+
+	Terrain3DRdGpuBuffer &buffer = m_buffers[eBuffer];
+	if ( buffer.isValid() && buffer.capacityBytes() >= nRequiredBytes ) {
+		return ensureScratchCold( eBuffer, buffer.capacityBytes() );
+	}
+	const uint32_t nOldCapacity = buffer.capacityBytes();
 	const uint64_t nGrowth = ( uint64_t )nRequiredBytes + ( uint64_t )nRequiredBytes / 2u + 256u;
 	const uint32_t nCapacity = nGrowth > UINT32_MAX ? nRequiredBytes : MAX( nRequiredBytes, ( uint32_t )nGrowth );
-	if ( nCapacity < nRequiredBytes ) {
+	if ( nCapacity < nRequiredBytes || !ensureScratchCold( eBuffer, nCapacity ) ) {
 		return false;
 	}
-	if ( !ensureScratchCold( eBuffer, nCapacity ) ) {
-		return false;
-	}
-	const bool rebuilding = m_hBuffers[eBuffer].is_valid();
-	const Terrain3DRdResourceService resources( *m_pContext, Terrain3DRdContext::OWNER_WORLD );
-	const bool created_ok = resources.replaceBuffer( m_hBuffers[eBuffer], m_nCapacityBytes[eBuffer],
-	        String::utf8( bufferName( eBuffer ) ), Terrain3DRdContext::RESOURCE_STORAGE_BUFFER,
-	        memoryCategory( eBuffer ), nCapacity );
-	if ( !created_ok ) {
+	t3dRdGpuBufferSpec_t spec;
+	spec.m_pName = bufferName( eBuffer );
+	spec.m_owner = Terrain3DRdContext::OWNER_WORLD;
+	spec.m_type = Terrain3DRdContext::RESOURCE_STORAGE_BUFFER;
+	spec.m_memory = memoryCategory( eBuffer );
+	spec.m_growth = T3D_GPU_EXACT;
+	const bool rebuilding = buffer.isValid();
+	if ( ( !buffer.isConfigured() && !buffer.configure( spec ) )
+	        || !buffer.replaceTracked( *m_pContext, nCapacity ) ) {
 		return false;
 	}
 	if ( rebuilding ) {
 		m_nGpuBufferBytes -= MIN( m_nGpuBufferBytes, ( uint64_t )nOldCapacity );
 	}
-	m_nGpuBufferBytes += nCapacity;
+	m_nGpuBufferBytes += buffer.capacityBytes();
 	++m_nCapacityGrowthCount;
 	++m_nResourceGeneration;
 	return true;
@@ -191,11 +199,22 @@ bool Terrain3DWorldResources::ensureCapacityCold( const Terrain3DWorldPublicatio
 }
 
 bool Terrain3DWorldResources::uploadBufferWarm( const t3dWorldBufferId_t eBuffer, const void *const pData, const uint32_t nBytes ) {
-	m_nUsedBytes[eBuffer] = nBytes;
+	if ( eBuffer >= WORLD_BUFFER_COUNT ) {
+		return false;
+	}
+	if ( eBuffer == WORLD_BUFFER_INDIRECT ) {
+		if ( !m_pFixedIndirectBuffer || !m_pFixedIndirectBuffer->setSliceUsedBytes( m_fixedIndirectSlice, nBytes ) ) {
+			return false;
+		}
+	} else if ( !m_buffers[eBuffer].setUsedBytes( nBytes ) ) {
+		return false;
+	}
 	if ( nBytes == 0u ) {
 		return true;
 	}
-	if ( !pData || !m_pContext || !m_pContext->getDevice() || !m_hBuffers[eBuffer].is_valid() || nBytes > m_nCapacityBytes[eBuffer]
+	const RID &buffer_rid = eBuffer == WORLD_BUFFER_INDIRECT && m_pFixedIndirectBuffer ? m_pFixedIndirectBuffer->rid() : m_buffers[eBuffer].rid();
+	const uint32_t capacity = eBuffer == WORLD_BUFFER_INDIRECT ? m_fixedIndirectSlice.m_nCapacityBytes : m_buffers[eBuffer].capacityBytes();
+	if ( !pData || !m_pContext || !m_pContext->getDevice() || !buffer_rid.is_valid() || nBytes > capacity
 	        || m_uploadScratch[eBuffer].size() < ( int64_t )nBytes ) {
 		return false;
 	}
@@ -203,12 +222,14 @@ bool Terrain3DWorldResources::uploadBufferWarm( const t3dWorldBufferId_t eBuffer
 	        : eBuffer == WORLD_BUFFER_INDIRECT ? T3D_GPU_INDIRECT
 	        : eBuffer == WORLD_BUFFER_VISIBLE_ITEMS || eBuffer == WORLD_BUFFER_VISIBILITY_COUNTERS ? T3D_GPU_SCRATCH
 	        : T3D_GPU_PUBLICATION;
-	if ( !Terrain3DGpuUploadService( *m_pContext, Terrain3DRdContext::OWNER_WORLD, policy )
-	                        .writeWhole( m_hBuffers[eBuffer],
-	                                m_nCapacityBytes[eBuffer],
-	                                pData,
-	                                nBytes,
-	                                m_uploadScratch[eBuffer] ) ) {
+	bool uploaded = false;
+	if ( eBuffer == WORLD_BUFFER_INDIRECT ) {
+		uploaded = m_pFixedIndirectBuffer->writeSliceTracked( *m_pContext, m_fixedIndirectSlice, 0u, pData, nBytes,
+		        m_uploadScratch[eBuffer], policy, Terrain3DRdContext::OWNER_WORLD );
+	} else {
+		uploaded = m_buffers[eBuffer].writeTracked( *m_pContext, 0u, pData, nBytes, m_uploadScratch[eBuffer], policy );
+	}
+	if ( !uploaded ) {
 		return false;
 	}
 	m_nUploadBytes += nBytes;
@@ -312,15 +333,12 @@ bool Terrain3DWorldResources::uploadFrameHot( const t3dWorldFrame_t &rFrame ) {
 void Terrain3DWorldResources::shutdownCold( void ) {
 	if ( m_pContext ) {
 		for ( uint32_t i = 0u; i < WORLD_BUFFER_COUNT; ++i ) {
-			if ( m_hBuffers[i].is_valid() ) {
-				if ( i == WORLD_BUFFER_INDIRECT ) {
-					m_pContext->releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD, m_hBuffers[i] );
-				} else {
-					m_pContext->freeResource( m_hBuffers[i], m_nCapacityBytes[i] );
-				}
+			if ( i == WORLD_BUFFER_INDIRECT ) {
+				m_pContext->releaseFixedIndirect( Terrain3DRdContext::FIXED_INDIRECT_WORLD, m_pFixedIndirectBuffer );
+				m_fixedIndirectSlice = t3dRdGpuBufferSlice_t{};
+			} else {
+				m_buffers[i].releaseTracked( *m_pContext );
 			}
-			m_nCapacityBytes[i] = 0u;
-			m_nUsedBytes[i] = 0u;
 			m_uploadScratch[i].clear();
 		}
 	}
@@ -336,7 +354,11 @@ void Terrain3DWorldResources::shutdownCold( void ) {
 
 bool Terrain3DWorldResources::isInitialized( void ) const {
 	for ( uint32_t i = 0u; i < WORLD_BUFFER_COUNT; ++i ) {
-		if ( !m_hBuffers[i].is_valid() ) {
+		if ( i == WORLD_BUFFER_INDIRECT ) {
+			if ( !m_pFixedIndirectBuffer || !m_pFixedIndirectBuffer->ownsSlice( m_fixedIndirectSlice ) ) {
+				return false;
+			}
+		} else if ( !m_buffers[i].isValid() ) {
 			return false;
 		}
 	}
@@ -345,14 +367,24 @@ bool Terrain3DWorldResources::isInitialized( void ) const {
 
 const RID &Terrain3DWorldResources::getBuffer( const t3dWorldBufferId_t eBuffer ) const {
 	static RID invalid;
-	return eBuffer < WORLD_BUFFER_COUNT ? m_hBuffers[eBuffer] : invalid;
+	if ( eBuffer >= WORLD_BUFFER_COUNT ) {
+		return invalid;
+	}
+	return eBuffer == WORLD_BUFFER_INDIRECT && m_pFixedIndirectBuffer ? m_pFixedIndirectBuffer->rid() : m_buffers[eBuffer].rid();
 }
 uint32_t Terrain3DWorldResources::getCapacityBytes( const t3dWorldBufferId_t eBuffer ) const {
-	return eBuffer < WORLD_BUFFER_COUNT ? m_nCapacityBytes[eBuffer] : 0u;
+	if ( eBuffer >= WORLD_BUFFER_COUNT ) {
+		return 0u;
+	}
+	return eBuffer == WORLD_BUFFER_INDIRECT ? m_fixedIndirectSlice.m_nCapacityBytes : m_buffers[eBuffer].capacityBytes();
 }
 uint32_t Terrain3DWorldResources::getUsedBytes( const t3dWorldBufferId_t eBuffer ) const {
-	return eBuffer < WORLD_BUFFER_COUNT ? m_nUsedBytes[eBuffer] : 0u;
+	if ( eBuffer >= WORLD_BUFFER_COUNT ) {
+		return 0u;
+	}
+	return eBuffer == WORLD_BUFFER_INDIRECT ? m_fixedIndirectSlice.m_nSizeBytes : m_buffers[eBuffer].usedBytes();
 }
+
 uint64_t Terrain3DWorldResources::getResourceGeneration( void ) const {
 	return m_nResourceGeneration;
 }
