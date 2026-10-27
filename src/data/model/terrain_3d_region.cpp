@@ -1466,7 +1466,7 @@ Error Terrain3DRegion::save(
 			 "Cannot save region file: ",
 			 get_path(),
 			 ". Error code: ",
-			 ERROR,
+			 err,
 			 ". Look up @GlobalScope Error enum in the Godot docs" );
 	}
 	return err;
