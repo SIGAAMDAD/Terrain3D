@@ -1905,6 +1905,17 @@ bool Terrain3DRenderCoordinator::commitStartupActivationCold(
 		 " final_sync_elapsed=",
 		 m_nStartupFinalSyncElapsedUsecLast,
 		 " us" );
+	const Terrain3DRdForwardPlusBridgeAdapter *const pBridge =
+		Terrain3DRdForwardPlusBridgeAdapter::getSingleton();
+	LOG( INFO, "[Terrain3D][Startup][RenderRoute] generation=", nStartupGeneration,
+		 " render_enabled=", m_bRenderEnabled.load( T3D_MEMORY_ORDER_ACQUIRE ),
+		 " bridge_attached=", m_bForwardBridgeAttached,
+		 " bridge_ready=", pBridge != NULL && pBridge->isBridgeReady(),
+		 " native_callback_registered=", pBridge != NULL && pBridge->isCallbackRegistered(),
+		 " st_candidate=", m_stStartupCandidate.valid(),
+		 " st_activation_state=", m_nStActivationState.load( T3D_MEMORY_ORDER_ACQUIRE ),
+		 " world_publication_generation=", m_nStartupWorldPublicationGeneration.load( T3D_MEMORY_ORDER_ACQUIRE ),
+		 " awaiting_first_forward_packet=true" );
 	return true;
 }
 
@@ -2089,7 +2100,13 @@ bool Terrain3DRenderCoordinator::prepareStartupCold(
 		}
 		if ( bHasTerrainVtMaterials ) {
 			const String stPath = m_pTerrain->getDataDirectory().path_join( "terrain3d_surface.t3dst" );
-			if ( FileAccess::file_exists( stPath ) ) {
+			const bool bSidecarExists = FileAccess::file_exists( stPath );
+			LOG( INFO, "[Terrain3D][Startup][SuperTerrain][Probe] generation=", nStartupGeneration,
+				 " path=", stPath, " exists=", bSidecarExists,
+				 " composed_package_generation=", m_sharedVtRuntime.virtualTexture().getPackageGeneration(),
+				 " region_topology=", m_pTerrain->dataObject() != NULL
+					 ? m_pTerrain->dataObject()->getRegionTopologyGenerationInternal() : 0u );
+			if ( bSidecarExists ) {
 				const PackedByteArray stBytes = FileAccess::get_file_as_bytes( stPath );
 				if ( !prepareSuperTerrainPackageOwnerCold( stBytes, m_stStartupCandidate,
 						T3D_ST_MASK_MAX_PINNED_BYTES / 4u, 128u ) ) {
@@ -2102,6 +2119,10 @@ bool Terrain3DRenderCoordinator::prepareStartupCold(
 				}
 				LOG( INFO, "[Terrain3D][Startup][SuperTerrain] Prepared committed regions=",
 					m_stStartupCandidate.regionCount(), " signature=", m_stStartupCandidate.signature() );
+			} else {
+				LOG( WARN, "[Terrain3D][Startup][SuperTerrain][Missing] generation=", nStartupGeneration,
+					 " path=", stPath, " material_vt_required=", bHasTerrainVtMaterials,
+					 " outcome=no_committed_vhm_or_cutout candidate=false recook_required=true" );
 			}
 		}
 	}
