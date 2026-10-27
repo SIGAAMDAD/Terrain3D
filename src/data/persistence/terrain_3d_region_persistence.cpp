@@ -472,13 +472,24 @@ t3dRegionSaveResult_t Terrain3DRegionPersistence::saveRegion(
 		result.m_error = ERR_SKIP;
 		return result;
 	}
+    const uint64_t nRegionStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Region] BEGIN location=", rLocation,
+        " path=", result.m_path, " 16bit=", b16Bit );
 	if ( pEnsureResident && !pEnsureResident( pResidentContext, rLocation ) ) {
+        LOG( ERROR, "[Terrain3D][Save][Region][FAIL] stage=ensure_resident location=", rLocation );
 		LOG( ERROR, "Unable to page CPU terrain maps before saving region: ", rLocation );
 		result.m_error = ERR_UNAVAILABLE;
 		return result;
 	}
 
+    const uint64_t nSerializerStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Region] STAGE_BEGIN stage=resource_saver location=", rLocation );
 	result.m_error = pRegion->save( result.m_path, b16Bit );
+    const uint64_t nSerializationUsec = Time::get_singleton()->get_ticks_usec() - nSerializerStarted;
+    LOG( result.m_error == OK || result.m_error == ERR_SKIP ? INFO : ERROR,
+        "[Terrain3D][Save][Region] STAGE_END stage=resource_saver location=", rLocation,
+        " elapsed_us=", nSerializationUsec, " error=", result.m_error,
+        " total_elapsed_us=", Time::get_singleton()->get_ticks_usec() - nRegionStarted );
 	if ( !( result.m_error == OK || result.m_error == ERR_SKIP ) ) {
 		LOG( ERROR,
 			 "Could not save file: ",
@@ -511,6 +522,9 @@ t3dDirectorySaveResult_t Terrain3DRegionPersistence::saveDirectory(
 		return result;
 	}
 	const Array locations = m_pRepository->getRegionKeys();
+    const uint64_t nDirectoryStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Regions] BEGIN total_regions=", locations.size(),
+        " path=", rDirectory, " 16bit=", b16Bit );
 	result.m_regions.reserve( ( size_t ) ( locations.size() ) );
 	for ( size_t iLocation = 0u; iLocation < ( size_t ) ( ( locations ).size() ); iLocation++ ) {
 		const Vector2i		  location = ( locations )[iLocation];
@@ -526,7 +540,17 @@ t3dDirectorySaveResult_t Terrain3DRegionPersistence::saveDirectory(
 			++result.m_nFailed;
 		}
 		result.m_regions.push_back( saveResult );
+        if ( ( ( iLocation + 1u ) & 15u ) == 0u || iLocation + 1u == ( size_t ) locations.size() ) {
+            LOG( INFO, "[Terrain3D][Save][Regions] PROGRESS processed=", iLocation + 1u,
+                "/", locations.size(), " saved=", result.m_nSaved,
+                " deleted=", result.m_nDeleted, " failed=", result.m_nFailed,
+                " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nDirectoryStarted );
+        }
 	}
+    LOG( result.m_nFailed == 0 ? INFO : ERROR,
+        "[Terrain3D][Save][Regions] END saved=", result.m_nSaved,
+        " failed=", result.m_nFailed, " elapsed_us=",
+        Time::get_singleton()->get_ticks_usec() - nDirectoryStarted );
 	return result;
 }
 
