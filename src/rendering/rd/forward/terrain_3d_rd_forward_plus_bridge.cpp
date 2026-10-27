@@ -311,6 +311,11 @@ bool Terrain3DRdForwardPlusBridgeAdapter::connectEngineBridge(
 	}
 	m_bBridgeReady.store( true, T3D_MEMORY_ORDER_RELEASE );
 	setError( String() );
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+	UtilityFunctions::print( "[Terrain3D][Bridge][Connect] READY abi=", getObservedAbiVersion(),
+		" capabilities=", ( int64_t ) getObservedCapabilities(),
+		" callback_registered=", isCallbackRegistered(), " awaiting_first_packet=true" );
+#endif
 	return true;
 }
 
@@ -360,6 +365,11 @@ bool Terrain3DRdForwardPlusBridgeAdapter::attachCoordinator(
 			// Publish the fully initialized pointer with one release operation. The
 			// render thread performs one acquire load of this mask per PREPARE.
 			m_nCoordinatorMask.fetch_or( uint64_t( 1u ) << i, T3D_MEMORY_ORDER_RELEASE );
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+			UtilityFunctions::print( "[Terrain3D][Bridge][Attach] READY slot=", i,
+				" coordinator_mask=", ( int64_t ) m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ),
+				" callback_registered=", isCallbackRegistered() );
+#endif
 			return true;
 		}
 	}
@@ -603,6 +613,11 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare(
 	const t3dRdForwardBridgePassPacket_t *const		pPass ) noexcept {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
 	++m_nPacketsReceived;
+	if ( m_nPacketsReceived == 1u ) {
+		UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST phase=prepare has_frame=", pFrame != NULL,
+			" has_resources=", pResources != NULL, " has_pass=", pPass != NULL,
+			" coordinator_mask=", ( int64_t ) m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+	}
 #endif
 	m_pPreparedContext = NULL;
 	m_nCachedPassSerial = 0u;
@@ -630,6 +645,14 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare(
 	if ( !accepted ) {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
 		++m_nPacketsRejected;
+		if ( m_nPacketsRejected == 1u ) {
+			UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_REJECT phase=prepare",
+				" bridge_ready=", isBridgeReady(), " has_pass=", pPass != NULL,
+				" has_frame=", pFrame != NULL, " has_resources=", pResources != NULL,
+				" cached_frame_generation=", m_nCachedFrameGeneration,
+				" cached_resource_generation=", m_nCachedResourceGeneration,
+				" coordinator_mask=", ( int64_t ) coordinator_mask );
+		}
 #endif
 		return 0u;
 	}
@@ -638,6 +661,13 @@ uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare(
 	m_pPreparedContext = &m_mainCallbackContext;
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
 	++m_nPacketsAccepted;
+	if ( m_nPacketsAccepted == 1u ) {
+		UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_ACCEPT phase=prepare pass_kind=",
+			( uint32_t ) m_mainCallbackContext.m_passKind,
+			" frame=", m_mainCallbackContext.m_nRenderFrame,
+			" scene_pass=", m_mainCallbackContext.m_nScenePass,
+			" serial=", m_nCachedPassSerial );
+	}
 	m_nLastScenePass = m_mainCallbackContext.m_nScenePass;
 	m_nLastPassKind = ( uint32_t ) ( m_mainCallbackContext.m_passKind );
 #endif
