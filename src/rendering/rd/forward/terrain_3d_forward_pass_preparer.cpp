@@ -419,7 +419,11 @@ void Terrain3DForwardPassPreparer::logWorldPrepareStateHot(
 								 " frame=",
 								 rContext.m_nRenderFrame,
 								 " scene_pass=",
-								 rContext.m_nScenePass );
+								 rContext.m_nScenePass,
+								 " cpu_patches=", pSnapshot ? pSnapshot->m_nPatchCount : 0u,
+								 " region_map_generation=", pSnapshot ? pSnapshot->m_nRegionMapGeneration : 0u,
+								 " prepared_world=", m_bForwardPreparedHasWorld,
+								 " shared_vt_status=", ( uint32_t ) m_eLastSharedVtAcquireStatus );
 	} else if ( nStage == 5u && pTerrainProvider ) {
 		UtilityFunctions::push_warning( "[Terrain3D][World][Prepare] FAIL pass=", pPass,
 										" stage=", pReason, " stage_id=", nStage,
@@ -934,6 +938,18 @@ bool Terrain3DForwardPassPreparer::submit(
 		if ( pDrawBaseline && nWorldDrawsAfter >= nWorldDrawsBefore ) {
 			pDrawBaseline->m_nWorldDraws += nWorldDrawsAfter - nWorldDrawsBefore;
 		}
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+		if ( pDrawBaseline && pDrawBaseline->m_nSubmitCallbacks == 1u &&
+			 ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ||
+			   rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) ) {
+			UtilityFunctions::print( "[Terrain3D][World][Submit] FIRST pass_kind=",
+				( uint32_t ) rContext.m_passKind, " frame=", rContext.m_nRenderFrame,
+				" scene_pass=", rContext.m_nScenePass, " success=", world_ok,
+				" indirect_submission_delta=", nWorldDrawsAfter - nWorldDrawsBefore,
+				" draw_list=", rContext.m_nDrawList,
+				" ready_lane_mask=", m_nForwardPrepareReadyLaneMask );
+		}
+#endif
 		if ( world_ok ) {
 			m_nForwardSubmitAttemptedLaneMask |= T3D_RD_FORWARD_LANE_WORLD;
 			m_nForwardSubmitSucceededLaneMask |= T3D_RD_FORWARD_LANE_WORLD;
@@ -1044,14 +1060,14 @@ bool Terrain3DForwardPassPreparer::prepareTerrainAndWorldLanes(
 	}
 	if ( world_ok ) {
 		m_nForwardPrepareReadyLaneMask |= T3D_RD_FORWARD_LANE_WORLD;
-		logWorldPrepareStateHot( rContext, 0u );
+		logWorldPrepareStateHot( rContext, 0u, NULL, &snapshot );
 	} else {
 		m_nWorldPrepareFailureStage = nFailureStage;
 		m_nWorldPrepareFailurePassKind = ( uint32_t ) rContext.m_passKind;
 		m_nForwardPrepareFailedLaneMask |= T3D_RD_FORWARD_LANE_WORLD;
 		logWorldPrepareStateHot( rContext, nFailureStage,
 								 nFailureStage == 5u ? &rServices.m_renderer : NULL,
-								 nFailureStage == 5u ? &snapshot : NULL );
+								 &snapshot );
 	}
 	return world_ok;
 }
