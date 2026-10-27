@@ -10,6 +10,7 @@
 #include "core/utility/terrain_3d_sync.h"
 
 #include <godot_cpp/classes/os.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
@@ -850,14 +851,33 @@ void Terrain3DRdContext::releaseFixedIndirect(
 
 bool Terrain3DRdContext::beginHotFrame(
 	uint64_t render_frame ) {
+	const auto failHot = [this, render_frame]( const uint32_t nStage, const char *const pReason ) -> bool {
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+        static t3dAtomicU64_t s_nFailureCounts[32];
+        const uint64_t nCount = s_nFailureCounts[nStage].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED ) + 1u;
+        if ( nCount <= 3u || ( nCount & ( nCount - 1u ) ) == 0u ) {
+            UtilityFunctions::push_warning( "[Terrain3D][HOT][FAIL] stage=", pReason,
+                " stage_id=", nStage, " occurrences=", nCount,
+                " render_frame=", render_frame, " device_frame=", m_hotDeviceFrame,
+                " hot_pending=", m_hotPending, " hot_failed=", m_hotFailed,
+                " hot_count=", m_hotCount, " persistent=", arena( HOT ).isPersistent(),
+                " range_abi2=", m_hotRangeAbi2, " bridge_present=", m_hotBridge != NULL,
+                " rd_state=", ( uint32_t ) getState(),
+                " rd_failure=", ( uint32_t ) getFailureCode() );
+        }
+#else
+        ( void ) nStage; ( void ) pReason; ( void ) render_frame;
+#endif
+        return false;
+    };
 	if ( m_hotRenderFrame == render_frame ) {
 		return m_hotPending && !m_hotFailed;
 	}
 	if ( !getDevice() && !initialize() ) {
-		return false;
+		return failHot( 1u, "device_unavailable_or_initialize_failed" );
 	}
 	if ( m_hotPending || !initializeSharedArenas() ) {
-		return false;
+		return failHot( 2u, "pending_hot_frame_or_arena_init_failed" );
 	}
 	m_hotRenderFrame = render_frame;
 	m_hotAttempted = true;
@@ -870,15 +890,15 @@ bool Terrain3DRdContext::beginHotFrame(
 	m_hotRangeBatch = {};
 	RenderingDevice *rd = getDevice();
 	if ( !m_hotBridge ) {
-		return false;
+		return failHot( 3u, "engine_hot_bridge_missing" );
 	}
 	const Variant frame_value = m_hotBridge->call( "get_native_device_frame" );
 	if ( frame_value.get_type() != Variant::INT || int64_t( frame_value ) < 0 ) {
-		return false;
+		return failHot( 4u, "native_device_frame_invalid" );
 	}
 	const uint64_t device_frame = uint64_t( int64_t( frame_value ) );
 	if ( m_hotDeviceFrame == device_frame && m_hotStandalone ) {
-		return false;
+		return failHot( 5u, "stale_standalone_frame" );
 	}
 	m_hotStandalone = false;
 	m_hotDeviceFrame = device_frame;
@@ -887,14 +907,14 @@ bool Terrain3DRdContext::beginHotFrame(
 		if ( m_hotRangeAbi2 ) {
 			// Map first, then obtain the physical slot identity of THIS mapping.
 			if ( !arena( HOT ).beginFrameWrite( rd, m_hotDeviceFrame, m_hotImage, false ) ) {
-				return false;
+				return failHot( 6u, "persistent_abi2_map_failed" );
 			}
 			const Variant slot_value = m_hotBridge->call( "get_persistent_hot_frame_slot", arena( HOT ).rid() );
 			if ( slot_value.get_type() != Variant::INT || int64_t( slot_value ) < 0 ||
 				 uint64_t( int64_t( slot_value ) ) >= rd->get_frame_delay() ||
 				 !m_hotDirty.begin( uint32_t( int64_t( slot_value ) ) ) ) {
 				arena( HOT ).endFrameWriteWithoutSubmit( *this );
-				return false;
+				return failHot( 7u, "persistent_abi2_slot_or_dirty_tracker_failed" );
 			}
 			if ( !bool( m_hotBridge->call( "defer_native_buffer_flush_ranges",
 										   arena( HOT ).rid(),
@@ -904,35 +924,35 @@ bool Terrain3DRdContext::beginHotFrame(
 										   int64_t( uintptr_t( this ) ) ) ) ) {
 				m_hotDirty.abandon();
 				arena( HOT ).endFrameWriteWithoutSubmit( *this );
-				return false;
+				return failHot( 8u, "defer_native_buffer_flush_ranges_failed" );
 			}
 			m_hotRangeActive = true;
 		} else {
 			// Map first. Registering the deferred callback before a failing map
 			// used to leave m_hotPending latched and block subsequent frames.
 			if ( !arena( HOT ).beginFrameWrite( rd, m_hotDeviceFrame, m_hotImage, false ) ) {
-				return false;
+				return failHot( 9u, "persistent_abi1_map_failed" );
 			}
 			if ( !bool( m_hotBridge->call( "defer_native_buffer_flush",
 										   arena( HOT ).rid(),
 										   int64_t( uintptr_t( &Terrain3DRdContext::sealHotFrame ) ),
 										   int64_t( uintptr_t( this ) ) ) ) ) {
 				arena( HOT ).endFrameWriteWithoutSubmit( *this );
-				return false;
+				return failHot( 10u, "defer_native_buffer_flush_failed" );
 			}
 		}
 	} else {
 		if ( !rd->has_method( "get_frame_slot" ) ) {
-			return false;
+			return failHot( 11u, "native_get_frame_slot_missing" );
 		}
 		const int64_t slot = rd->call( "get_frame_slot" );
 		if ( slot < 0 || uint64_t( slot ) >= arena( HOT ).capacityBytes() / HOT_FRAME_BYTES ) {
-			return false;
+			return failHot( 12u, "native_frame_slot_invalid" );
 		}
 		m_hotSlotBase = uint32_t( slot ) * HOT_RECORD_CAPACITY;
 		if ( m_hotRangeAbi2 ) {
 			if ( !m_hotDirty.begin( uint32_t( slot ) ) ) {
-				return false;
+				return failHot( 13u, "dirty_tracker_frame_start_failed" );
 			}
 			if ( !bool( m_hotBridge->call( "defer_native_buffer_update_ranges",
 										   arena( HOT ).rid(),
@@ -942,13 +962,13 @@ bool Terrain3DRdContext::beginHotFrame(
 										   int64_t( uintptr_t( &Terrain3DRdContext::completeHotRanges ) ),
 										   int64_t( uintptr_t( this ) ) ) ) ) {
 				m_hotDirty.abandon();
-				return false;
+				return failHot( 14u, "defer_native_buffer_update_ranges_failed" );
 			}
 			m_hotRangeActive = true;
 		} else {
 			if ( !m_hotBridge->has_method( "get_deferred_upload_abi_version" ) ||
 				 int64_t( m_hotBridge->call( "get_deferred_upload_abi_version" ) ) != 1 ) {
-				return false;
+				return failHot( 15u, "deferred_upload_abi_mismatch" );
 			}
 			if ( !bool( m_hotBridge->call( "defer_native_buffer_update",
 										   arena( HOT ).rid(),
@@ -956,7 +976,7 @@ bool Terrain3DRdContext::beginHotFrame(
 										   int64_t( HOT_FRAME_BYTES ),
 										   int64_t( uintptr_t( &Terrain3DRdContext::fillHotFrame ) ),
 										   int64_t( uintptr_t( this ) ) ) ) ) {
-				return false;
+				return failHot( 16u, "defer_native_buffer_update_failed" );
 			}
 		}
 	}
@@ -1156,8 +1176,25 @@ bool Terrain3DRdContext::publishStandaloneHotFrame() {
 }
 
 bool Terrain3DRdContext::beginHotPass() {
+    const auto failPass = [this]( const uint32_t nStage, const char *const pReason ) -> bool {
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+        static t3dAtomicU64_t s_nFailureCounts[8];
+        const uint64_t nCount = s_nFailureCounts[nStage].fetch_add( 1u, T3D_MEMORY_ORDER_RELAXED ) + 1u;
+        if ( nCount <= 3u || ( nCount & ( nCount - 1u ) ) == 0u ) {
+            UtilityFunctions::push_warning( "[Terrain3D][HOT][Pass][FAIL] stage=", pReason,
+                " occurrences=", nCount, " frame=", m_hotRenderFrame,
+                " pending=", m_hotPending, " failed=", m_hotFailed,
+                " record_count=", m_hotCount, " max_records=", HOT_RECORD_CAPACITY,
+                " range_active=", m_hotRangeActive );
+        }
+#else
+        ( void ) nStage; ( void ) pReason;
+#endif
+        return false;
+    };
+
 	if ( !m_hotPending || m_hotFailed || m_hotCount == HOT_RECORD_CAPACITY ) {
-		return false;
+		return failPass( 1u, "hot_not_pending_failed_or_full" );
 	}
 	// ABI 2 tracks an allocated record's complete logical contents, including
 	// implicit zero/default sections. ABI 1 retains its old per-record clear.
@@ -1165,17 +1202,17 @@ bool Terrain3DRdContext::beginHotPass() {
 	if ( m_hotRangeActive ) {
 		if ( !m_hotDirty.reserveRecord() ) {
 			m_hotFailed = true;
-			return false;
+			return failPass( 2u, "hot_record_dirty_reserve_failed" );
 		}
 	} else if ( arena( HOT ).isPersistent() ) {
 		if ( !arena( HOT ).clearFrameSpan( offset, sizeof( Terrain3DRdHotRecord ) ) ) {
 			m_hotFailed = true;
-			return false;
+			return failPass( 3u, "hot_record_persistent_clear_failed" );
 		}
 	} else {
 		if ( !m_pHotImageData ) {
 			m_hotFailed = true;
-			return false;
+			return failPass( 4u, "hot_record_cpu_image_missing" );
 		}
 		memset( m_pHotImageData + offset, 0, sizeof( Terrain3DRdHotRecord ) );
 	}
