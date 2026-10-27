@@ -113,13 +113,20 @@ private:
 	uint64_t m_nLastScenePass = 0u;
 	int64_t	 m_nLastDrawList = -1;
 	uint32_t m_nLastPassKind = T3D_RD_FORWARD_PASS_INVALID;
+	uint64_t m_szFailureReports[T3D_RD_FORWARD_PASS_MAX][16]{};
+	uint64_t m_szAcceptedByPass[T3D_RD_FORWARD_PASS_MAX]{};
+	uint64_t m_szSubmittedByPass[T3D_RD_FORWARD_PASS_MAX]{};
 #endif
+	uint32_t m_nLastDispatchFailureStage = 0u;
 	mutable Terrain3DMutex m_errorMutex;
 	String				   m_lastError;
 
 	void	 resetConnectionState( void );
 	bool	 connectEngineBridge( void );
 	void	 disconnectEngineBridge( void );
+	void	 logPacketFailureHot( const char *pPhase, const char *pReason, uint32_t nReasonCode,
+		uint32_t nPassKind, uint64_t nFrame, uint64_t nScenePass, uint64_t nSerial,
+		uint64_t nCoordinatorMask, bool bHasFrame, bool bHasResources ) noexcept;
 	void	 setError( const String &rError );
 	bool	 failConnection( const String &rError );
 	bool	 convertFrame( const t3dRdForwardBridgeFramePacket_t &rFrame );
