@@ -376,9 +376,17 @@ void Terrain3DForwardPassPreparer::logWorldPrepareStateHot(
 	if ( nPass >= T3D_RD_FORWARD_PASS_MAX ) {
 		return;
 	}
-	if ( m_szLoggedWorldPrepareStage[nPass] && m_szLastLoggedWorldPrepareStage[nPass] == nStage ) {
-		return;
-	}
+    // Repeated failures still matter: the previous one-shot log hid permanent
+    // rejection of every subsequent WORLD pass. Sample at powers of two.
+    static uint64_t s_szSameStageRepeats[T3D_RD_FORWARD_PASS_MAX]{};
+    if ( m_szLoggedWorldPrepareStage[nPass] && m_szLastLoggedWorldPrepareStage[nPass] == nStage ) {
+        const uint64_t nRepeat = ++s_szSameStageRepeats[nPass];
+        if ( nRepeat > 3u && ( nRepeat & ( nRepeat - 1u ) ) != 0u ) {
+            return;
+        }
+    } else {
+        s_szSameStageRepeats[nPass] = 0u;
+    }
 	m_szLoggedWorldPrepareStage[nPass] = true;
 	m_szLastLoggedWorldPrepareStage[nPass] = nStage;
 	const char *pPass = "unknown";
@@ -440,10 +448,15 @@ void Terrain3DForwardPassPreparer::logWorldPrepareStateHot(
 										pReason,
 										" stage_id=",
 										nStage,
-										" frame=",
-										rContext.m_nRenderFrame,
-										" scene_pass=",
-										rContext.m_nScenePass );
+                                        " frame=", rContext.m_nRenderFrame,
+                                        " scene_pass=", rContext.m_nScenePass,
+                                        " patch_count=", pSnapshot ? pSnapshot->m_nPatchCount : 0u,
+                                        " region_map_generation=", pSnapshot ? pSnapshot->m_nRegionMapGeneration : 0u,
+                                        " material_backend=", pSnapshot ? ( uint32_t ) pSnapshot->m_nTerrainMaterialBackend : 0u,
+                                        " shared_vt_status=", ( uint32_t ) m_eLastSharedVtAcquireStatus,
+                                        " requested_lane_mask=", m_nForwardPrepareRequestedLaneMask,
+                                        " ready_lane_mask=", m_nForwardPrepareReadyLaneMask,
+                                        " failed_lane_mask=", m_nForwardPrepareFailedLaneMask );
 	}
 }
 
@@ -919,6 +932,19 @@ bool Terrain3DForwardPassPreparer::submit(
 		 !rServices.m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) ||
 		 m_nForwardPreparedScenePass != rContext.m_nScenePass ||
 		 m_nForwardPreparedViewportKey != rContext.m_nViewportKey ) {
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+        static uint64_t s_nSubmitStateFailures = 0u;
+        const uint64_t nCount = ++s_nSubmitStateFailures;
+        if ( nCount <= 3u || ( nCount & ( nCount - 1u ) ) == 0u ) {
+            UtilityFunctions::push_warning( "[Terrain3D][World][Submit][FAIL] stage=invalid_prepared_context count=", nCount,
+                " pass_kind=", ( uint32_t ) rContext.m_passKind,
+                " frame=", rContext.m_nRenderFrame, " scene_pass=", rContext.m_nScenePass,
+                " prepared_scene_pass=", m_nForwardPreparedScenePass,
+                " viewport=", rContext.m_nViewportKey,
+                " prepared_viewport=", m_nForwardPreparedViewportKey,
+                " renderer_initialized=", rServices.m_bRendererInitialized.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+        }
+#endif
 		return false;
 	}
 	Terrain3DAllocationPhaseScope	  allocation_phase( TERRAIN3D_ALLOCATION_PHASE_HOT_RENDER );
@@ -939,6 +965,26 @@ bool Terrain3DForwardPassPreparer::submit(
 			pDrawBaseline->m_nWorldDraws += nWorldDrawsAfter - nWorldDrawsBefore;
 		}
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+        if ( !world_ok || nWorldDrawsAfter == nWorldDrawsBefore ) {
+            static uint64_t s_nNoWorldDrawReports[T3D_RD_FORWARD_PASS_MAX]{};
+            const uint32_t nPass = ( uint32_t ) rContext.m_passKind;
+            if ( nPass < T3D_RD_FORWARD_PASS_MAX ) {
+                const uint64_t nCount = ++s_nNoWorldDrawReports[nPass];
+                if ( nCount <= 3u || ( nCount & ( nCount - 1u ) ) == 0u ) {
+                    UtilityFunctions::push_warning( "[Terrain3D][World][Submit][FAIL] stage=",
+                        world_ok ? "zero_indirect_draws" : "raster_submit_rejected",
+                        " count=", nCount, " pass_kind=", nPass,
+                        " frame=", rContext.m_nRenderFrame,
+                        " scene_pass=", rContext.m_nScenePass,
+                        " draw_list=", rContext.m_nDrawList,
+                        " indirect_before=", nWorldDrawsBefore,
+                        " indirect_after=", nWorldDrawsAfter,
+                        " prepared_world=", m_bForwardPreparedHasWorld,
+                        " ready_lane_mask=", m_nForwardPrepareReadyLaneMask );
+                }
+            }
+        }
+
 		if ( pDrawBaseline && pDrawBaseline->m_nSubmitCallbacks == 1u &&
 			 ( rContext.m_passKind == T3D_RD_FORWARD_PASS_OPAQUE ||
 			   rContext.m_passKind == T3D_RD_FORWARD_PASS_DEPTH ) ) {
