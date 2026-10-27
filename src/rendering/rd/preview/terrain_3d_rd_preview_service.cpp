@@ -445,10 +445,18 @@ Ref< Image > Terrain3DRdPreviewService::failMeshPreview(
 	if ( pFailure ) {
 		*pFailure = eFailure;
 	}
-	Terrain3DScopedLock lock( rServices.m_diagnosticsMutex );
-	m_previewLastError = rError;
-	m_lastPreviewFailure = eFailure;
-	++m_nPreviewFailureCount;
+	uint64_t nFailureCount = 0u;
+	{
+		Terrain3DScopedLock lock( rServices.m_diagnosticsMutex );
+		m_previewLastError = rError;
+		m_lastPreviewFailure = eFailure;
+		nFailureCount = ++m_nPreviewFailureCount;
+	}
+	if ( eFailure != T3D_RD_PREVIEW_TRANSIENT_DEFERRED &&
+		 ( nFailureCount <= 2u || ( nFailureCount & ( nFailureCount - 1u ) ) == 0u ) ) {
+		LOG( WARN, "[Terrain3D][Preview][Failure] code=", ( uint32_t ) eFailure,
+			 " error=", rError, " occurrences=", nFailureCount );
+	}
 	return Ref< Image >();
 }
 
@@ -660,6 +668,9 @@ bool Terrain3DRdPreviewService::requestMeshPreviewAsync(
 	if ( rServices.m_effect.is_null() || !Terrain3DRdContext::enqueueOnRenderThread( callable_mp(
 											 rServices.m_effect.ptr(),
 											 &Terrain3DRdCompositorEffect::renderPreviewAsyncOnRenderThread ) ) ) {
+		LOG( WARN, "[Terrain3D][Preview][Async] FAIL stage=queue_render_thread asset=", nAssetId,
+			 " slot=", nSlot, " generation=", nRequestGeneration,
+			 " effect_valid=", rServices.m_effect.is_valid() );
 		Terrain3DScopedLock state_lock( m_previewStateMutex );
 		m_szPreviewReadbackSlots[nSlot] = t3dPreviewReadbackSlot_t{};
 		m_nPendingPreviewReadbackSlot = UINT32_MAX;
