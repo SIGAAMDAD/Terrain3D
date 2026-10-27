@@ -2447,6 +2447,8 @@ void Terrain3DData::publishSparseRasterEdit(
 
 bool Terrain3DData::rebuildSparseRasterSnapshotCold(
 	void ) {
+    const uint64_t nStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][RasterRebuild] BEGIN slots=", m_regionRepository.getSlotCount() );
 	Terrain3DRasterTileStore		snapshot;
 	Terrain3DRasterHierarchyBuilder hierarchy;
 	const t3dRegionCoord_t *const	pSlots = m_regionRepository.getSlotsData();
@@ -2459,16 +2461,20 @@ bool Terrain3DData::rebuildSparseRasterSnapshotCold(
 		if ( !pRegion || pRegion->isDeleted() ) {
 			continue;
 		}
+        LOG( INFO, "[Terrain3D][Save][RasterRebuild][Region] BEGIN slot=", i, " location=", location );
 		if ( !ensurePersistenceRegionResident( this, location ) ) {
+            LOG( ERROR, "[Terrain3D][Save][RasterRebuild][FAIL] stage=ensure_resident slot=", i, " location=", location );
 			return false;
 		}
 		for ( int channel = TYPE_HEIGHT; channel < REGION_TYPE_MAX; ++channel ) {
 			const t3dMapType_t type = ( t3dMapType_t ) channel;
 			const Ref< Image > source = pRegion->getMap( type );
 			if ( source.is_null() && ( type == TYPE_HEIGHT || pRegion->hasChannel( type ) ) ) {
-				return false; // do not publish a silently incomplete source bundle
+                LOG( ERROR, "[Terrain3D][Save][RasterRebuild][FAIL] stage=source_null location=", location, " channel=", channel );
+				return false;
 			}
 			if ( !snapshot.updateRegion( location, type, source, Rect2i() ) ) {
+                LOG( ERROR, "[Terrain3D][Save][RasterRebuild][FAIL] stage=tile_update location=", location, " channel=", channel );
 				return false;
 			}
 		}
@@ -2484,6 +2490,8 @@ bool Terrain3DData::rebuildSparseRasterSnapshotCold(
 			m_sparseRegionInitialized.set( ( size_t ) index );
 		}
 	}
+    LOG( INFO, "[Terrain3D][Save][RasterRebuild] END elapsed_us=",
+        Time::get_singleton()->get_ticks_usec() - nStarted );
 	return true;
 }
 
@@ -2520,13 +2528,23 @@ void Terrain3DData::saveDirectory(
 		LOG( ERROR, "Cannot save terrain data without an attached Terrain3D owner" );
 		return;
 	}
-	LOG( INFO, "Saving data files to ", rDir );
+    const uint64_t nSaveStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Data] BEGIN path=", rDir,
+        " dirty_regions=", m_sparseDirtySavedRegions.count(),
+        " hierarchy_stale=", m_bSparseHierarchyStale,
+        " gpu_cook_on_save=", m_pTerrain->isGpuRegionCookOnSave() );
 	const bool					   cook_on_save = m_pTerrain && m_pTerrain->isGpuRegionCookOnSave();
+    const uint64_t nRegionsStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Data] STAGE_BEGIN stage=serialize_regions" );
 	const t3dDirectorySaveResult_t saveResult =
 		m_regionPersistence.saveDirectory( rDir,
 										   m_pTerrain->getSave16Bit(),
 										   &Terrain3DData::ensurePersistenceRegionResident,
 										   this );
+    LOG( INFO, "[Terrain3D][Save][Data] STAGE_END stage=serialize_regions elapsed_us=",
+        Time::get_singleton()->get_ticks_usec() - nRegionsStarted,
+        " saved=", saveResult.m_nSaved, " deleted=", saveResult.m_nDeleted,
+        " skipped=", saveResult.m_nSkipped, " failed=", saveResult.m_nFailed );
 	bool sourceChanged = false;
 	for ( size_t iRegion = 0u; iRegion < ( size_t ) ( ( saveResult.m_regions ).size() ); iRegion++ ) {
 		const t3dRegionSaveResult_t &regionResult = ( saveResult.m_regions )[iRegion];
@@ -2538,10 +2556,32 @@ void Terrain3DData::saveDirectory(
 		( void ) m_runtimeArtifacts.pageStore().setSharedSourcePackage( String() );
 		invalidateBakedWorldManifest( rDir );
 	}
-	if ( sourceChanged && saveResult.m_nFailed == 0 && rebuildSparseRasterSnapshotCold() ) {
+    bool bSparseRebuilt = false;
+    if ( sourceChanged && saveResult.m_nFailed == 0 ) {
+        LOG( INFO, "[Terrain3D][Save][Data] STAGE_BEGIN stage=rebuild_raster_snapshot" );
+        const uint64_t nRebuildStarted = Time::get_singleton()->get_ticks_usec();
+        bSparseRebuilt = rebuildSparseRasterSnapshotCold();
+        LOG( bSparseRebuilt ? INFO : ERROR,
+            "[Terrain3D][Save][Data] STAGE_END stage=rebuild_raster_snapshot success=", bSparseRebuilt,
+            " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nRebuildStarted );
+    } else if ( sourceChanged ) {
+        LOG( ERROR, "[Terrain3D][Save][Data][FAIL] stage=rebuild_raster_snapshot_skipped failed_regions=",
+            saveResult.m_nFailed );
+    }
+	if ( sourceChanged && saveResult.m_nFailed == 0 && bSparseRebuilt ) {
+        const uint64_t nRasterStarted = Time::get_singleton()->get_ticks_usec();
+        LOG( INFO, "[Terrain3D][Save][Data] STAGE_BEGIN stage=encode_sparse_raster" );
 		const Error sparseError = Terrain3DRasterBundle::save( rDir, m_sparseRasterTiles );
+        LOG( sparseError == OK ? INFO : ERROR,
+            "[Terrain3D][Save][Data] STAGE_END stage=encode_sparse_raster error=", sparseError,
+            " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nRasterStarted );
 		if ( sparseError == OK ) {
+            const uint64_t nHierarchyStarted = Time::get_singleton()->get_ticks_usec();
+            LOG( INFO, "[Terrain3D][Save][Data] STAGE_BEGIN stage=encode_hierarchy" );
 			const Error hierarchyError = Terrain3DRasterHierarchyBundle::save( rDir, m_sparseRasterHierarchy );
+            LOG( hierarchyError == OK ? INFO : ERROR,
+                "[Terrain3D][Save][Data] STAGE_END stage=encode_hierarchy error=", hierarchyError,
+                " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nHierarchyStarted );
 			if ( hierarchyError == OK ) {
 				if ( m_sparseHierarchyIndex.open( rDir ) == OK ) {
 					// Parent rasters are immutable cooked data. Release the entire
@@ -2572,7 +2612,13 @@ void Terrain3DData::saveDirectory(
 	}
 	if ( cook_on_save ) {
 #if defined( T3D_EDITOR_NATIVE )
+        const uint64_t nCookStarted = Time::get_singleton()->get_ticks_usec();
+        LOG( INFO, "[Terrain3D][Save][Data] STAGE_BEGIN stage=cook_gpu_regions" );
 		const Dictionary baked = cookGpuRegionPages();
+        LOG( bool( baked.get( "complete", false ) ) ? INFO : ERROR,
+            "[Terrain3D][Save][Data] STAGE_END stage=cook_gpu_regions complete=",
+            bool( baked.get( "complete", false ) ),
+            " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nCookStarted );
 		if ( !( bool ) baked.get( "complete", false ) ) {
 			const PackedStringArray cookErrors = baked.get( "errors", PackedStringArray() );
 			LOG( ERROR, "Authored regions saved, but V1 runtime package generation failed; package_ready=",
@@ -2586,6 +2632,10 @@ void Terrain3DData::saveDirectory(
 		}
 #endif
 	}
+    LOG( INFO, "[Terrain3D][Save][Data] END elapsed_us=",
+        Time::get_singleton()->get_ticks_usec() - nSaveStarted,
+        " source_changed=", sourceChanged, " region_failures=", saveResult.m_nFailed,
+        " raster_rebuilt=", bSparseRebuilt, " cook_enabled=", cook_on_save );
 	// Persistence updates only the exact resource paths Terrain3D changed. Do not
 	// force a project-wide EditorFileSystem scan from a scene-save callback.
 }
