@@ -1229,30 +1229,45 @@ void Terrain3D::_notification(
 	}
 
 	case NOTIFICATION_EDITOR_PRE_SAVE: {
-		// Editor Node is about to save the current scene
-		LOG( INFO, "NOTIFICATION_EDITOR_PRE_SAVE" );
+        const uint64_t nSaveStarted = Time::get_singleton()->get_ticks_usec();
+        LOG( INFO, "[Terrain3D][Save][Scene] BEGIN path=", m_dataDirectory,
+            " has_data=", m_pData != NULL, " has_material=", m_material.is_valid(),
+            " has_assets=", m_assets.is_valid() );
 		if ( m_dataDirectory.is_empty() ) {
 			LOG( ERROR, "Data directory is empty. Set it to save regions to disk." );
 		} else if ( !m_pData ) {
 			LOG( DEBUG, "Save requested, but no valid data object. Skipping" );
 		} else {
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_BEGIN stage=data_directory" );
 			m_pData->saveDirectory( m_dataDirectory );
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_END stage=data_directory elapsed_us=",
+                Time::get_singleton()->get_ticks_usec() - nSaveStarted );
 		}
 		if ( !m_material.is_valid() ) {
 			LOG( DEBUG, "Save requested, but no valid material. Skipping" );
 		} else {
+            const uint64_t nMaterialStarted = Time::get_singleton()->get_ticks_usec();
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_BEGIN stage=material" );
 			m_material->save();
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_END stage=material elapsed_us=",
+                Time::get_singleton()->get_ticks_usec() - nMaterialStarted );
 		}
 		if ( !m_assets.is_valid() ) {
 			LOG( DEBUG, "Save requested, but no valid texture list. Skipping" );
 		} else {
+            const uint64_t nAssetsStarted = Time::get_singleton()->get_ticks_usec();
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_BEGIN stage=assets" );
 			m_assets->save();
+            LOG( INFO, "[Terrain3D][Save][Scene] STAGE_END stage=assets elapsed_us=",
+                Time::get_singleton()->get_ticks_usec() - nAssetsStarted );
 		}
+        LOG( INFO, "[Terrain3D][Save][Scene] PRE_SAVE_COMPLETE elapsed_us=",
+            Time::get_singleton()->get_ticks_usec() - nSaveStarted );
 		break;
 	}
 
 	case NOTIFICATION_EDITOR_POST_SAVE: {
-		// Editor Node finished saving current scene
+        LOG( INFO, "[Terrain3D][Save][Scene] POST_SAVE_NOTIFICATION" );
 		break;
 	}
 
