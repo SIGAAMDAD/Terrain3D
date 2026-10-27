@@ -173,6 +173,47 @@ void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState(
 	m_nLastScenePass = 0u;
 	m_nLastDrawList = -1;
 	m_nLastPassKind = T3D_RD_FORWARD_PASS_INVALID;
+	memset( m_szFailureReports, 0, sizeof( m_szFailureReports ) );
+	memset( m_szAcceptedByPass, 0, sizeof( m_szAcceptedByPass ) );
+	memset( m_szSubmittedByPass, 0, sizeof( m_szSubmittedByPass ) );
+#endif
+	m_nLastDispatchFailureStage = 0u;
+}
+
+void Terrain3DRdForwardPlusBridgeAdapter::logPacketFailureHot(
+    const char *const pPhase, const char *const pReason, const uint32_t nReasonCode,
+    const uint32_t nPassKind, const uint64_t nFrame, const uint64_t nScenePass,
+    const uint64_t nSerial, const uint64_t nCoordinatorMask,
+    const bool bHasFrame, const bool bHasResources ) noexcept {
+#if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
+    const uint32_t nPass = nPassKind < T3D_RD_FORWARD_PASS_MAX ? nPassKind : 0u;
+    const uint32_t nReason = nReasonCode < 16u ? nReasonCode : 0u;
+    const uint64_t nOccurrence = ++m_szFailureReports[nPass][nReason];
+    // Record every distinct cause and pass, then use powers of two to prevent
+    // a persistent frame rejection from drowning out other evidence.
+    if ( nOccurrence <= 3u || ( nOccurrence & ( nOccurrence - 1u ) ) == 0u ) {
+        const Terrain3DRdContext &rContext = Terrain3DRdContext::getShared();
+        UtilityFunctions::push_warning( "[Terrain3D][Bridge][FAIL] phase=", pPhase,
+            " stage=", pReason, " stage_id=", nReasonCode,
+            " count=", nOccurrence, " pass_kind=", nPassKind,
+            " frame=", nFrame, " scene_pass=", nScenePass,
+            " serial=", nSerial, " has_frame=", bHasFrame,
+            " has_resources=", bHasResources,
+            " bridge_ready=", isBridgeReady(),
+            " coordinator_mask=", ( int64_t ) nCoordinatorMask,
+            " cached_frame_generation=", m_nCachedFrameGeneration,
+            " cached_resource_generation=", m_nCachedResourceGeneration,
+            " dispatch_stage=", m_nLastDispatchFailureStage,
+            " hot_pending=", rContext.hotPending(),
+            " rd_state=", ( uint32_t ) rContext.getState(),
+            " rd_failure=", ( uint32_t ) rContext.getFailureCode(),
+            " last_bridge_error=", getLastError() );
+    }
+#else
+    ( void ) pPhase; ( void ) pReason; ( void ) nReasonCode;
+    ( void ) nPassKind; ( void ) nFrame; ( void ) nScenePass;
+    ( void ) nSerial; ( void ) nCoordinatorMask;
+    ( void ) bHasFrame; ( void ) bHasResources;
 #endif
 }
 
@@ -582,23 +623,31 @@ bool Terrain3DRdForwardPlusBridgeAdapter::convertShadow(
 }
 
 bool Terrain3DRdForwardPlusBridgeAdapter::dispatchToCoordinators(
-	const t3dRdForwardPassContext_t &rContext,
-	uint64_t						 nCoordinatorMask ) {
-	bool dispatched = false;
-	bool accepted = true;
-	while ( nCoordinatorMask != 0u ) {
-		const uint32_t index = t3dRdForwardCtz64( nCoordinatorMask );
-		nCoordinatorMask &= nCoordinatorMask - 1u;
-		Terrain3DRenderCoordinator *const coordinator = m_szCoordinators[index];
-		if ( coordinator ) {
-			if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE && !Terrain3DRdContext::getShared().beginHotPass() ) {
-				return false;
-			}
-			dispatched = true;
-			accepted = coordinator->renderForwardPass( rContext ) && accepted;
-		}
-	}
-	return dispatched && accepted;
+    const t3dRdForwardPassContext_t &rContext, uint64_t nCoordinatorMask ) {
+    bool dispatched = false;
+    bool accepted = true;
+    m_nLastDispatchFailureStage = 0u;
+    while ( nCoordinatorMask != 0u ) {
+        const uint32_t index = t3dRdForwardCtz64( nCoordinatorMask );
+        nCoordinatorMask &= nCoordinatorMask - 1u;
+        Terrain3DRenderCoordinator *const pCoordinator = m_szCoordinators[index];
+        if ( pCoordinator ) {
+            if ( rContext.m_phase == T3D_RD_FORWARD_PHASE_PREPARE &&
+                 !Terrain3DRdContext::getShared().beginHotPass() ) {
+                m_nLastDispatchFailureStage = 1u; // HOT record unavailable.
+                return false;
+            }
+            dispatched = true;
+            if ( !pCoordinator->renderForwardPass( rContext ) ) {
+                m_nLastDispatchFailureStage = 2u; // Coordinator rejected PREPARE/SUBMIT.
+                accepted = false;
+            }
+        }
+    }
+    if ( !dispatched ) {
+        m_nLastDispatchFailureStage = 3u; // Mask contains no live coordinator.
+    }
+    return dispatched && accepted;
 }
 
 static bool t3dRdForwardPassRequiresBorrowedResources(
@@ -608,124 +657,166 @@ static bool t3dRdForwardPassRequiresBorrowedResources(
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepare(
-	const t3dRdForwardBridgeFramePacket_t *const	pFrame,
-	const t3dRdForwardBridgeResourcePacket_t *const pResources,
-	const t3dRdForwardBridgePassPacket_t *const		pPass ) noexcept {
+    const t3dRdForwardBridgeFramePacket_t *const pFrame,
+    const t3dRdForwardBridgeResourcePacket_t *const pResources,
+    const t3dRdForwardBridgePassPacket_t *const pPass ) noexcept {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-	++m_nPacketsReceived;
-	if ( m_nPacketsReceived == 1u ) {
-		UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST phase=prepare has_frame=", pFrame != NULL,
-			" has_resources=", pResources != NULL, " has_pass=", pPass != NULL,
-			" coordinator_mask=", ( int64_t ) m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ) );
-	}
+    ++m_nPacketsReceived;
+    if ( m_nPacketsReceived == 1u ) {
+        UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST phase=prepare has_frame=", pFrame != NULL,
+            " has_resources=", pResources != NULL, " has_pass=", pPass != NULL,
+            " coordinator_mask=", ( int64_t ) m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE ) );
+    }
 #endif
-	m_pPreparedContext = NULL;
-	m_nCachedPassSerial = 0u;
-	m_nPreparedCoordinatorMask = 0u;
-	const uint64_t coordinator_mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
-	bool		   accepted = false;
-	{
-		T3D_STREAM_PROFILE_SCOPE( T3D_SP_FORWARD_BRIDGE_PACKET );
-		accepted = m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) && coordinator_mask != 0u && pPass &&
-				   ( pFrame ? convertFrame( *pFrame ) : m_nCachedFrameGeneration != 0u ) && convertPass( *pPass );
-		if ( accepted && pResources ) {
-			accepted = convertResources( *pResources );
-		}
-		if ( accepted && !pResources &&
-			 t3dRdForwardPassRequiresBorrowedResources( m_mainCallbackContext.m_passKind ) ) {
-			accepted = m_nCachedResourceGeneration != 0u;
-		}
-		if ( accepted ) {
-			accepted = Terrain3DRdContext::getShared().beginHotFrame( m_mainCallbackContext.m_nRenderFrame );
-		}
-	}
-	if ( accepted ) {
-		accepted = dispatchToCoordinators( m_mainCallbackContext, coordinator_mask );
-	}
-	if ( !accepted ) {
+    m_pPreparedContext = NULL;
+    m_nCachedPassSerial = 0u;
+    m_nPreparedCoordinatorMask = 0u;
+    m_nLastDispatchFailureStage = 0u;
+    const uint64_t nCoordinatorMask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+    const uint32_t nPassKind = pPass ? pPass->m_nPassKind : T3D_RD_FORWARD_PASS_INVALID;
+    const uint64_t nFrame = pFrame ? pFrame->m_nRenderFrame : m_mainCallbackContext.m_nRenderFrame;
+    const uint64_t nScenePass = pFrame ? pFrame->m_nScenePass : m_mainCallbackContext.m_nScenePass;
+    const uint64_t nSerial = pPass ? pPass->m_nSerial : 0u;
+    const char *pFailure = NULL;
+    uint32_t nFailureCode = 0u;
+    {
+        T3D_STREAM_PROFILE_SCOPE( T3D_SP_FORWARD_BRIDGE_PACKET );
+        if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
+            nFailureCode = 1u; pFailure = "bridge_not_ready";
+        } else if ( nCoordinatorMask == 0u ) {
+            nFailureCode = 2u; pFailure = "coordinator_mask_empty";
+        } else if ( !pPass ) {
+            nFailureCode = 3u; pFailure = "missing_pass_packet";
+        } else if ( pFrame ? !convertFrame( *pFrame ) : m_nCachedFrameGeneration == 0u ) {
+            nFailureCode = 4u; pFailure = "frame_packet_invalid_or_uncached";
+        } else if ( !convertPass( *pPass ) ) {
+            nFailureCode = 5u; pFailure = "pass_packet_invalid";
+        } else if ( pResources && !convertResources( *pResources ) ) {
+            nFailureCode = 6u; pFailure = "borrowed_resources_packet_invalid";
+        } else if ( !pResources && t3dRdForwardPassRequiresBorrowedResources( m_mainCallbackContext.m_passKind ) &&
+                    m_nCachedResourceGeneration == 0u ) {
+            nFailureCode = 7u; pFailure = "required_borrowed_resources_never_published";
+        } else if ( !Terrain3DRdContext::getShared().beginHotFrame( m_mainCallbackContext.m_nRenderFrame ) ) {
+            nFailureCode = 8u; pFailure = "begin_hot_frame_failed";
+        }
+    }
+    if ( nFailureCode == 0u && !dispatchToCoordinators( m_mainCallbackContext, nCoordinatorMask ) ) {
+        nFailureCode = 9u;
+        pFailure = m_nLastDispatchFailureStage == 1u ? "begin_hot_pass_failed" :
+                   m_nLastDispatchFailureStage == 2u ? "coordinator_prepare_rejected" :
+                   "no_live_coordinator_dispatched";
+    }
+    if ( nFailureCode != 0u ) {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-		++m_nPacketsRejected;
-		if ( m_nPacketsRejected == 1u ) {
-			UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_REJECT phase=prepare",
-				" bridge_ready=", isBridgeReady(), " has_pass=", pPass != NULL,
-				" has_frame=", pFrame != NULL, " has_resources=", pResources != NULL,
-				" cached_frame_generation=", m_nCachedFrameGeneration,
-				" cached_resource_generation=", m_nCachedResourceGeneration,
-				" coordinator_mask=", ( int64_t ) coordinator_mask );
-		}
+        ++m_nPacketsRejected;
 #endif
-		return 0u;
-	}
-	m_nCachedPassSerial = pPass->m_nSerial;
-	m_nPreparedCoordinatorMask = coordinator_mask;
-	m_pPreparedContext = &m_mainCallbackContext;
+        logPacketFailureHot( "prepare", pFailure, nFailureCode, nPassKind,
+            nFrame, nScenePass, nSerial, nCoordinatorMask, pFrame != NULL, pResources != NULL );
+        return 0u;
+    }
+    m_nCachedPassSerial = pPass->m_nSerial;
+    m_nPreparedCoordinatorMask = nCoordinatorMask;
+    m_pPreparedContext = &m_mainCallbackContext;
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-	++m_nPacketsAccepted;
-	if ( m_nPacketsAccepted == 1u ) {
-		UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_ACCEPT phase=prepare pass_kind=",
-			( uint32_t ) m_mainCallbackContext.m_passKind,
-			" frame=", m_mainCallbackContext.m_nRenderFrame,
-			" scene_pass=", m_mainCallbackContext.m_nScenePass,
-			" serial=", m_nCachedPassSerial );
-	}
-	m_nLastScenePass = m_mainCallbackContext.m_nScenePass;
-	m_nLastPassKind = ( uint32_t ) ( m_mainCallbackContext.m_passKind );
+    ++m_nPacketsAccepted;
+    if ( nPassKind < T3D_RD_FORWARD_PASS_MAX && ++m_szAcceptedByPass[nPassKind] == 1u ) {
+        UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_ACCEPT pass_kind=", nPassKind,
+            " frame=", nFrame, " scene_pass=", nScenePass, " serial=", nSerial,
+            " has_resources=", pResources != NULL,
+            " cached_resource_generation=", m_nCachedResourceGeneration );
+    }
+    m_nLastScenePass = m_mainCallbackContext.m_nScenePass;
+    m_nLastPassKind = nPassKind;
 #endif
-	return pPass->m_nSerial;
+    return pPass->m_nSerial;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareShadow(
-	const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
+    const t3dRdForwardBridgeShadowPacket_t *const pShadow ) noexcept {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-	++m_nPacketsReceived;
+    ++m_nPacketsReceived;
 #endif
-	m_pPreparedContext = NULL;
-	m_nCachedPassSerial = 0u;
-	m_nPreparedCoordinatorMask = 0u;
-	const uint64_t coordinator_mask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
-	bool		   accepted = false;
-	{
-		T3D_STREAM_PROFILE_SCOPE( T3D_SP_FORWARD_BRIDGE_PACKET );
-		accepted = m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) && coordinator_mask != 0u && pShadow &&
-				   convertShadow( *pShadow ) &&
-				   Terrain3DRdContext::getShared().beginHotFrame( m_shadowCallbackContext.m_nRenderFrame );
-	}
-	if ( accepted ) {
-		accepted = dispatchToCoordinators( m_shadowCallbackContext, coordinator_mask );
-	}
-	if ( !accepted ) {
+    m_pPreparedContext = NULL;
+    m_nCachedPassSerial = 0u;
+    m_nPreparedCoordinatorMask = 0u;
+    m_nLastDispatchFailureStage = 0u;
+    const uint64_t nCoordinatorMask = m_nCoordinatorMask.load( T3D_MEMORY_ORDER_ACQUIRE );
+    const char *pFailure = NULL;
+    uint32_t nFailureCode = 0u;
+    {
+        T3D_STREAM_PROFILE_SCOPE( T3D_SP_FORWARD_BRIDGE_PACKET );
+        if ( !m_bBridgeReady.load( T3D_MEMORY_ORDER_ACQUIRE ) ) {
+            nFailureCode = 1u; pFailure = "bridge_not_ready";
+        } else if ( !nCoordinatorMask ) {
+            nFailureCode = 2u; pFailure = "coordinator_mask_empty";
+        } else if ( !pShadow || !convertShadow( *pShadow ) ) {
+            nFailureCode = 10u; pFailure = "shadow_packet_missing_or_invalid";
+        } else if ( !Terrain3DRdContext::getShared().beginHotFrame( m_shadowCallbackContext.m_nRenderFrame ) ) {
+            nFailureCode = 8u; pFailure = "begin_hot_frame_failed";
+        }
+    }
+    if ( nFailureCode == 0u && !dispatchToCoordinators( m_shadowCallbackContext, nCoordinatorMask ) ) {
+        nFailureCode = 9u;
+        pFailure = m_nLastDispatchFailureStage == 1u ? "begin_hot_pass_failed" :
+                   m_nLastDispatchFailureStage == 2u ? "coordinator_shadow_prepare_rejected" :
+                   "no_live_coordinator_dispatched";
+    }
+    if ( nFailureCode != 0u ) {
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-		++m_nPacketsRejected;
+        ++m_nPacketsRejected;
 #endif
-		return 0u;
-	}
-	m_nCachedPassSerial = pShadow->m_nSerial;
-	m_nPreparedCoordinatorMask = coordinator_mask;
-	m_pPreparedContext = &m_shadowCallbackContext;
+        logPacketFailureHot( "shadow_prepare", pFailure, nFailureCode, T3D_RD_FORWARD_PASS_SHADOW,
+            pShadow ? pShadow->m_nRenderFrame : 0u, pShadow ? pShadow->m_nScenePass : 0u,
+            pShadow ? pShadow->m_nSerial : 0u, nCoordinatorMask, false, false );
+        return 0u;
+    }
+    m_nCachedPassSerial = pShadow->m_nSerial;
+    m_nPreparedCoordinatorMask = nCoordinatorMask;
+    m_pPreparedContext = &m_shadowCallbackContext;
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-	++m_nPacketsAccepted;
-	m_nLastScenePass = m_shadowCallbackContext.m_nScenePass;
-	m_nLastPassKind = T3D_RD_FORWARD_PASS_SHADOW;
+    ++m_nPacketsAccepted;
+    if ( ++m_szAcceptedByPass[T3D_RD_FORWARD_PASS_SHADOW] == 1u ) {
+        UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_ACCEPT pass_kind=shadow frame=",
+            pShadow->m_nRenderFrame, " scene_pass=", pShadow->m_nScenePass,
+            " serial=", pShadow->m_nSerial );
+    }
+    m_nLastScenePass = m_shadowCallbackContext.m_nScenePass;
+    m_nLastPassKind = T3D_RD_FORWARD_PASS_SHADOW;
 #endif
-	return pShadow->m_nSerial;
+    return pShadow->m_nSerial;
 }
 
 uint32_t Terrain3DRdForwardPlusBridgeAdapter::submit(
-	const uint64_t nPreparedSerial,
-	const int64_t  nDrawList ) noexcept {
-	if ( nPreparedSerial == 0u || nPreparedSerial != m_nCachedPassSerial || nDrawList < 0 || !m_pPreparedContext ) {
-		return 0u;
-	}
-	m_pPreparedContext->m_phase = T3D_RD_FORWARD_PHASE_SUBMIT;
-	m_pPreparedContext->m_nDrawList = nDrawList;
-	dispatchToCoordinators( *m_pPreparedContext, m_nPreparedCoordinatorMask );
+    const uint64_t nPreparedSerial, const int64_t nDrawList ) noexcept {
+    const uint32_t nPassKind = m_pPreparedContext ? ( uint32_t ) m_pPreparedContext->m_passKind : T3D_RD_FORWARD_PASS_INVALID;
+    const uint64_t nFrame = m_pPreparedContext ? m_pPreparedContext->m_nRenderFrame : 0u;
+    const uint64_t nScenePass = m_pPreparedContext ? m_pPreparedContext->m_nScenePass : 0u;
+    if ( nPreparedSerial == 0u || nPreparedSerial != m_nCachedPassSerial || nDrawList < 0 || !m_pPreparedContext ) {
+        logPacketFailureHot( "submit", "serial_draw_list_or_prepared_context_invalid", 11u,
+            nPassKind, nFrame, nScenePass, nPreparedSerial, m_nPreparedCoordinatorMask,
+            m_pPreparedContext != NULL, m_nCachedResourceGeneration != 0u );
+        return 0u;
+    }
+    m_pPreparedContext->m_phase = T3D_RD_FORWARD_PHASE_SUBMIT;
+    m_pPreparedContext->m_nDrawList = nDrawList;
+    if ( !dispatchToCoordinators( *m_pPreparedContext, m_nPreparedCoordinatorMask ) ) {
+        logPacketFailureHot( "submit", "coordinator_submit_rejected", 12u,
+            nPassKind, nFrame, nScenePass, nPreparedSerial, m_nPreparedCoordinatorMask,
+            true, m_nCachedResourceGeneration != 0u );
+    }
 #if defined( T3D_EDITOR_NATIVE ) || defined( T3D_DEBUG_RUNTIME )
-	m_nLastDrawList = nDrawList;
+    if ( nPassKind < T3D_RD_FORWARD_PASS_MAX && ++m_szSubmittedByPass[nPassKind] == 1u ) {
+        UtilityFunctions::print( "[Terrain3D][Bridge][Packet] FIRST_SUBMIT pass_kind=", nPassKind,
+            " frame=", nFrame, " scene_pass=", nScenePass, " serial=", nPreparedSerial,
+            " draw_list=", nDrawList, " dispatch_stage=", m_nLastDispatchFailureStage );
+    }
+    m_nLastDrawList = nDrawList;
 #endif
-	m_pPreparedContext = NULL;
-	m_nCachedPassSerial = 0u;
-	m_nPreparedCoordinatorMask = 0u;
-	return 1u;
+    m_pPreparedContext = NULL;
+    m_nCachedPassSerial = 0u;
+    m_nPreparedCoordinatorMask = 0u;
+    // Preserve the ABI return contract; diagnostic failures do not change rendering policy.
+    return 1u;
 }
 
 uint64_t Terrain3DRdForwardPlusBridgeAdapter::prepareThunk(
