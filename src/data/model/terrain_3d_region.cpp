@@ -12,6 +12,7 @@
 
 #include <string.h>
 #include <godot_cpp/classes/resource_saver.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <EASTL/algorithm.h>
 #include <EASTL/utility.h>
 
@@ -1446,7 +1447,13 @@ Error Terrain3DRegion::save(
 	LOG( MESG, "Writing compact R16 region ", m_location, " to ", get_path() );
 	setVersion( s_fDataCurrentVersion );
 	( void ) b16Bit;
+    const uint64_t nCompressionStarted = Time::get_singleton()->get_ticks_usec();
+    LOG( INFO, "[Terrain3D][Save][Region][CompressedResource] BEGIN location=", m_location,
+        " path=", get_path(), " flags=FLAG_COMPRESS" );
 	const Error err = ResourceSaver::get_singleton()->save( this, get_path(), ResourceSaver::FLAG_COMPRESS );
+    LOG( err == OK ? INFO : ERROR,
+        "[Terrain3D][Save][Region][CompressedResource] END location=", m_location,
+        " error=", err, " elapsed_us=", Time::get_singleton()->get_ticks_usec() - nCompressionStarted );
 	if ( err == OK ) {
 		m_bModified = false;
 		m_bInstancesDirty = false;
