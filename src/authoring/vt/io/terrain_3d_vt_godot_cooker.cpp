@@ -2241,7 +2241,7 @@ static bool t3d_cs_ucmp_decode_mip_cold(
             if ( !t3d_cs_range_within( blob.m_nFileOffset, blob.m_nByteCount, nSidecarBytes ) ||
                  !t3d_cs_validate_channel_payload( blob,
                      pSidecar + blob.m_nFileOffset, blob.m_nByteCount ) ||
-                 !t3d_cs12_decode_godot_image( NULL, nFormat,
+                 !t3d_composed_surface_pack_decode_godot_image( NULL, nFormat,
                      pSidecar + blob.m_nFileOffset, blob.m_nByteCount,
                      decoded.ptrw(), T3D_CS_RGBA_SCRATCH_BYTES ) ) return false;
             const uint8_t *const rgba = decoded.ptr();

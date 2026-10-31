@@ -7,7 +7,7 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <cstring>
 
-bool t3d_cs12_decode_godot_image( void *, uint32_t format,
+bool t3d_composed_surface_pack_decode_godot_image( void *, uint32_t format,
                                   const uint8_t *bytes, uint32_t size,
                                   uint8_t *out, uint32_t capacity )
 {

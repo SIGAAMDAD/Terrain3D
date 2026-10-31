@@ -8,21 +8,21 @@
 // Called before opening source bytes, after composition, and before commit.
 // The editor owner must serialize final publication with edits; this predicate
 // does not acquire a lock or acknowledge the edit journal on its behalf.
-typedef bool ( *t3dCs13CurrentFn )( void *pUser, uint64_t nTerrainRevision,
+typedef bool ( *t3dComposedSurfaceColdCookCurrentFn )( void *pUser, uint64_t nTerrainRevision,
                                      uint64_t nMaterialRevision, uint64_t nTopologyGeneration );
 
-enum t3dCs13Status_t
+enum t3dComposedSurfaceColdCookStatus_t
 {
-    T3D_CS13_SUCCESS = 0,
-    T3D_CS13_INVALID_INPUT,
-    T3D_CS13_STALE_REVISION,
-    T3D_CS13_INVALID_SOURCE_PACK,
-    T3D_CS13_MISSING_MATERIAL,
-    T3D_CS13_COMPOSE_FAILURE,
-    T3D_CS13_PUBLICATION_FAILURE
+    T3D_COMPOSED_SURFACE_COLD_COOK_SUCCESS = 0,
+    T3D_COMPOSED_SURFACE_COLD_COOK_INVALID_INPUT,
+    T3D_COMPOSED_SURFACE_COLD_COOK_STALE_REVISION,
+    T3D_COMPOSED_SURFACE_COLD_COOK_INVALID_SOURCE_PACK,
+    T3D_COMPOSED_SURFACE_COLD_COOK_MISSING_MATERIAL,
+    T3D_COMPOSED_SURFACE_COLD_COOK_COMPOSE_FAILURE,
+    T3D_COMPOSED_SURFACE_COLD_COOK_PUBLICATION_FAILURE
 };
 
-struct t3dCs13ColdCookRequest_t
+struct t3dComposedSurfaceColdCookRequest_t
 {
     // The complete, mapped .t3sp file must outlive this call. No V1 ABI edits.
     const void *m_pSourcePackage;
@@ -38,7 +38,7 @@ struct t3dCs13ColdCookRequest_t
     t3dComposedStaticV1Source_t m_source;
     t3dComposedSurfaceEncodeFn m_pEncode;
     void *m_pEncoderUser;
-    t3dCs12DecodeFn m_pDecode;
+    t3dComposedSurfacePackDecodeFn m_pDecode;
     void *m_pDecoderUser;
     uint8_t *m_pDecodedCache;
     uint32_t m_nCacheSlots;
@@ -53,7 +53,7 @@ struct t3dCs13ColdCookRequest_t
     uint64_t m_nTerrainRevision;
     uint64_t m_nMaterialRevision;
     uint64_t m_nTopologyGeneration;
-    t3dCs13CurrentFn m_pCurrent;
+    t3dComposedSurfaceColdCookCurrentFn m_pCurrent;
     void *m_pCurrentUser;
     // Diagnostic candidate only; no canonical material/DNR/alpha parity proof.
     bool m_bReferenceOnly = false;
@@ -67,9 +67,9 @@ struct t3dCs13ColdCookRequest_t
     const char *m_pDestination;
 };
 
-struct t3dCs13ColdCookResult_t
+struct t3dComposedSurfaceColdCookResult_t
 {
-    t3dCs13Status_t m_status;
+    t3dComposedSurfaceColdCookStatus_t m_status;
     uint64_t m_nSourceFingerprint;
     uint64_t m_nWrittenBytes;
     uint32_t m_nDecodedTiles;
@@ -78,11 +78,11 @@ struct t3dCs13ColdCookResult_t
 
 // Fingerprint the immutable source pack, material parameters and external
 // authoring generations. Returns zero for invalid requests. No heap allocation.
-uint64_t t3d_cs13_source_fingerprint_cold( const t3dCs13ColdCookRequest_t &rRequest );
+uint64_t t3d_composed_surface_source_fingerprint_cold( const t3dComposedSurfaceColdCookRequest_t &rRequest );
 
 // Does not enable parity itself. Fails before touching output when eligibility,
 // callbacks, source pack, material keys or the revision check are invalid.
-bool t3d_cs13_cook_source_pack_cold( const t3dCs13ColdCookRequest_t &rRequest,
-                                     t3dCs13ColdCookResult_t &rResult );
+bool t3d_composed_surface_cook_source_pack_cold( const t3dComposedSurfaceColdCookRequest_t &rRequest,
+                                     t3dComposedSurfaceColdCookResult_t &rResult );
 
 #endif

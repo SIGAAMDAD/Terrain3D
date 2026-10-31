@@ -45,7 +45,7 @@ int main()
     t3dComposedSurfaceCookPage_t page_spec{ 77u, 991u, 0u, 0u, 0u, 1u };
     uint64_t bytes = 0u;
     assert( t3d_cs_cook_total_bytes( 1u, bytes ) );
-    std::vector< uint8_t > cache( 6u * T3D_CS12_DECODED_TILE_BYTES );
+    std::vector< uint8_t > cache( 6u * T3D_COMPOSED_SURFACE_PACK_DECODED_TILE_BYTES );
     std::vector< uint8_t > scratch( T3D_CS_COOK_SCRATCH_BYTES );
     std::vector< uint8_t > output( bytes );
     const char *path = "/tmp/terrain3d_cs14_editor_cook_test.t3sc";
@@ -53,7 +53,7 @@ int main()
     Terrain3DComposedSurfaceEditJournal journal{};
     CommitFixture commit{};
     commit.journal = &journal;
-    t3dCs14EditorCookRequest_t req{};
+    t3dComposedSurfaceEditorCookRequest_t req{};
     auto &cook = req.m_cook;
     cook.m_pSourcePackage = &f.view;
     cook.m_nSourcePackageBytes = sizeof( f.view );
@@ -96,23 +96,23 @@ int main()
     req.m_pBeginCommit = begin_commit;
     req.m_pEndCommit = end_commit;
     req.m_pCommitUser = &commit;
-    t3dCs14EditorCookResult_t result{};
+    t3dComposedSurfaceEditorCookResult_t result{};
 
     // No dirty work is reported, not accidentally published.
-    assert( !t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_NOT_DIRTY );
+    assert( !t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_NOT_DIRTY );
     assert( journal.invalidateRegionCold( commit.region, 99u, 31u ) );
 
     // Absent parity rejects work without consuming an edit claim.
     cook.m_source.m_bCanonicalMaterialParityAccepted = false;
-    assert( !t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_INVALID_INPUT );
+    assert( !t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_INVALID_INPUT );
     cook.m_source.m_bCanonicalMaterialParityAccepted = true;
 
     // A terrain revision that changes during source sampling cannot enter commit.
     f.mutate_mid_cook = true;
-    assert( !t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_STALE );
+    assert( !t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_STALE );
     assert( commit.begin_count == 0u && commit.end_count == 0u );
     assert( journal.statsCold().m_nDirtyRegions == 1u );
     f.mutate_mid_cook = false;
@@ -120,8 +120,8 @@ int main()
 
     // Refusal to enter serialized publication leaves the region dirty.
     commit.allow = false;
-    assert( !t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_COMMIT_FAILED );
+    assert( !t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_COMMIT_FAILED );
     assert( journal.statsCold().m_nDirtyRegions == 1u );
     assert( commit.begin_count == 1u && commit.end_count == 0u );
     std::ifstream absent( path, std::ios::binary );
@@ -130,17 +130,17 @@ int main()
     // A new authoring edit at commit revokes the old ticket before file IO.
     commit.allow = true;
     commit.mutate = true;
-    assert( !t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_STALE );
+    assert( !t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_STALE );
     assert( journal.statsCold().m_nDirtyRegions == 1u );
     std::ifstream absent2( path, std::ios::binary );
     assert( !absent2.good() );
     commit.mutate = false;
 
     // Successful commit validates and writes all channels, then acknowledges.
-    assert( t3d_cs14_editor_cook_cold( journal, req, result ) );
-    assert( result.m_status == T3D_CS14_SUCCESS && flag == 1u );
-    assert( result.m_cook.m_status == T3D_CS13_SUCCESS );
+    assert( t3d_composed_surface_editor_cook_cold( journal, req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_EDITOR_COOK_SUCCESS && flag == 1u );
+    assert( result.m_cook.m_status == T3D_COMPOSED_SURFACE_COLD_COOK_SUCCESS );
     assert( journal.statsCold().m_nDirtyRegions == 0u );
     assert( journal.statsCold().m_nAcceptedCompletions == 1u );
     assert( commit.begin_count == 3u && commit.end_count == 2u );

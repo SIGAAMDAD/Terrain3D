@@ -50,8 +50,8 @@
 
 class Terrain3DRenderAuthoringCompanion;
 #if defined( T3D_EDITOR_NATIVE )
-struct t3dCs14EditorCookRequest_t;
-struct t3dCs14EditorCookResult_t;
+struct t3dComposedSurfaceEditorCookRequest_t;
+struct t3dComposedSurfaceEditorCookResult_t;
 #endif
 
 class Terrain3DRenderCoordinator : public Terrain3DRenderCoordinatorAccess,
@@ -190,8 +190,8 @@ public:
     }
 #if defined( T3D_EDITOR_NATIVE )
     // Explicit editor-owner cold call; no automatic per-frame cook.
-    bool cookComposedSurfaceSidecarEditorCold( const t3dCs14EditorCookRequest_t &request,
-                                               t3dCs14EditorCookResult_t &result );
+    bool cookComposedSurfaceSidecarEditorCold( const t3dComposedSurfaceEditorCookRequest_t &request,
+                                               t3dComposedSurfaceEditorCookResult_t &result );
 #endif
 #if defined( T3D_EDITOR_NATIVE )
     // BRP-04/06: backend readiness and explicit seal/readback. The GPU brush

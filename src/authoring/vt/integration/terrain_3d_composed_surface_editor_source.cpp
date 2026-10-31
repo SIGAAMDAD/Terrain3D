@@ -466,7 +466,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     PackedByteArray output, scratch, cache;
     output.resize( int64_t( bytes ) );
     scratch.resize( T3D_CS_COOK_FUSED_SCRATCH_BYTES );
-    cache.resize( 4u * T3D_CS12_DECODED_TILE_BYTES );
+    cache.resize( 4u * T3D_COMPOSED_SURFACE_PACK_DECODED_TILE_BYTES );
     if ( uint64_t( output.size() ) != bytes || scratch.is_empty() || cache.is_empty() ) {
         rResult.m_error = "authoring_memory_exhausted";
         return false;
@@ -483,7 +483,7 @@ bool t3d_cs_cook_editor_candidate_cold(
         return false;
     }
     const CharString pathUtf8 = stagedPath.utf8();
-    t3dCs13ColdCookRequest_t request{};
+    t3dComposedSurfaceColdCookRequest_t request{};
     request.m_pSourcePackage = rPack.ptr();
     request.m_nSourcePackageBytes = uint64_t( rPack.size() );
     request.m_pPages = pages.data();
@@ -525,7 +525,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     request.m_source.m_nAutoBaseTexture = autoShader ? uint32_t( autoBase ) : 0u;
     request.m_source.m_nAutoOverlayTexture = autoShader ? uint32_t( autoOverlay ) : 1u;
     request.m_pEncode = t3d_cs_reference_encode;
-    request.m_pDecode = t3d_cs12_decode_godot_image;
+    request.m_pDecode = t3d_composed_surface_pack_decode_godot_image;
     request.m_pDecodedCache = cache.ptrw();
     request.m_nCacheSlots = 4u;
     request.m_pCookScratch = scratch.ptrw();
@@ -543,7 +543,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     request.m_pDestination = pathUtf8.get_data();
     // Incremental reuse is valid only for a CRC-verified candidate with the
     // same immutable source/material/filter identity and per-page revision.
-    const uint64_t identity = t3d_cs13_source_fingerprint_cold( request );
+    const uint64_t identity = t3d_composed_surface_source_fingerprint_cold( request );
     PackedByteArray previous = FileAccess::get_file_as_bytes( path );
     t3dComposedSurfaceSidecarView_t priorView{};
     if ( !previous.is_empty() &&
@@ -560,9 +560,9 @@ bool t3d_cs_cook_editor_candidate_cold(
                 ++rResult.m_nReusedPages;
         }
     }
-    t3dCs13ColdCookResult_t cooked{};
+    t3dComposedSurfaceColdCookResult_t cooked{};
     rResult.m_nPages = request.m_nPageCount;
-    if ( !t3d_cs13_cook_source_pack_cold( request, cooked ) ) {
+    if ( !t3d_composed_surface_cook_source_pack_cold( request, cooked ) ) {
         ( void ) publication.rollback();
         rResult.m_error = String( "candidate_cook_failed_status=" ) + String::num_int64( cooked.m_status );
         rResult.m_nReusedPages = 0u;

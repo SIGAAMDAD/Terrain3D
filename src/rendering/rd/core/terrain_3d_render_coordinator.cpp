@@ -147,11 +147,11 @@ static bool t3dRdPrepareComposedShippingV1Cold(
 }
 
 bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
-    const t3dCs14EditorCookRequest_t &request, t3dCs14EditorCookResult_t &result )
+    const t3dComposedSurfaceEditorCookRequest_t &request, t3dComposedSurfaceEditorCookResult_t &result )
 {
     // The editor owner supplies the edit-serialization commit hooks. The
     // source pack and control-map snapshots must remain pinned during the cook.
-    if ( !t3d_cs14_editor_cook_cold( m_composedSurfaceEdits, request, result ) ) {
+    if ( !t3d_composed_surface_editor_cook_cold( m_composedSurfaceEdits, request, result ) ) {
         return false;
     }
     // Candidate/reference cooks cannot supply production V1 allocations.

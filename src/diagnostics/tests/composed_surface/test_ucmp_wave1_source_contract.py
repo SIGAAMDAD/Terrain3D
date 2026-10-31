@@ -19,7 +19,7 @@ assert '#define T3D_CS_COMPOSITION_ABI        1u' in contract
 assert 't3d_cs_import_region_mips_complete' in contract
 assert 'nCount == 21u ? 4u' in contract
 pipeline = source('src/authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.cpp')
-assert 't3d_cs13_hash_integer( h, T3D_CS_SOURCE_RECIPE_REVISION )' in pipeline
+assert 't3d_composed_surface_cold_hash_integer( h, T3D_CS_SOURCE_RECIPE_REVISION )' in pipeline
 editor = source('src/authoring/vt/integration/terrain_3d_composed_surface_editor_source.cpp')
 for key in ('tile.m_nMip = mip', 'rPage.m_nMip', 'request.m_source.m_fBlendSharpness',
             'rMaterial.getMiddleMaterialLodBias()', 'm_nMaterialRevision',
@@ -47,7 +47,7 @@ static = source('src/authoring/vt/build/terrain_3d_composed_surface_static_v1.cp
 bridge = source('src/authoring/vt/build/terrain_3d_composed_surface_v1_pack_sampler.cpp')
 writer = source('src/authoring/vt/io/terrain_3d_composed_surface_sidecar_writer.cpp')
 assert '#define T3D_CS_SOURCE_RECIPE_REVISION 3u' in contract
-assert 'm_pReadTerrainSurface' in bridge and 't3d_cs12_bridge_surface' in bridge
+assert 'm_pReadTerrainSurface' in bridge and 't3d_composed_surface_pack_bridge_surface' in bridge
 assert 't3d_cs_resolve_auto' in static and 't3d_cs_detile' in static
 assert 'std::isfinite( autoBase )' in editor and 'unsupported_auto_material_id' in editor
 assert 'identical' in writer and 'memcmp( scratch, pBytes + offset, block )' in writer

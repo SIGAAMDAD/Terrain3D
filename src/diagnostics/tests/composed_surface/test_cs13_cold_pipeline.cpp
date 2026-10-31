@@ -98,7 +98,7 @@ struct Fixture
 static bool decoder( void *, uint32_t, const uint8_t *data, uint32_t bytes,
                      uint8_t *out, uint32_t capacity )
 {
-    if ( !data || !bytes || capacity != T3D_CS12_DECODED_TILE_BYTES ) return false;
+    if ( !data || !bytes || capacity != T3D_COMPOSED_SURFACE_PACK_DECODED_TILE_BYTES ) return false;
     for ( uint32_t i = 0u; i < T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE; ++i ) {
         out[i * 4u] = data[0];
         out[i * 4u + 1u] = 128u;
@@ -154,10 +154,10 @@ int main()
     t3dComposedSurfaceCookPage_t page_spec{ 77u, 991u, 0u, 0u, 0u, 1u };
     uint64_t file_bytes = 0u;
     assert( t3d_cs_cook_total_bytes( 1u, file_bytes ) );
-    std::vector< uint8_t > cache( 6u * T3D_CS12_DECODED_TILE_BYTES );
+    std::vector< uint8_t > cache( 6u * T3D_COMPOSED_SURFACE_PACK_DECODED_TILE_BYTES );
     std::vector< uint8_t > scratch( T3D_CS_COOK_SCRATCH_BYTES );
     std::vector< uint8_t > output( file_bytes );
-    t3dCs13ColdCookRequest_t req{};
+    t3dComposedSurfaceColdCookRequest_t req{};
     req.m_pSourcePackage = &fixture.view;
     req.m_nSourcePackageBytes = sizeof( fixture.view );
     req.m_pPages = &page_spec;
@@ -187,19 +187,19 @@ int main()
     req.m_pCurrent = current;
     req.m_pCurrentUser = &fixture;
 
-    t3dCs13ColdCookResult_t result{};
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) ); // parity still closed
+    t3dComposedSurfaceColdCookResult_t result{};
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) ); // parity still closed
     req.m_source.m_bCanonicalMaterialParityAccepted = true; // test authority only
     // Reject caller aliasing before any byte in either source or output changes.
     const uint8_t original_header = reinterpret_cast<const uint8_t*>(&fixture.view)[0];
     req.m_pOutput = reinterpret_cast<uint8_t*>( &fixture.view );
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( reinterpret_cast<const uint8_t*>(&fixture.view)[0] == original_header );
     req.m_pOutput = output.data();
-    const uint64_t fingerprint = t3d_cs13_source_fingerprint_cold( req );
+    const uint64_t fingerprint = t3d_composed_surface_source_fingerprint_cold( req );
     assert( fingerprint != 0u );
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
-    assert( result.m_status == T3D_CS13_SUCCESS && result.m_nWrittenBytes == file_bytes );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_COLD_COOK_SUCCESS && result.m_nWrittenBytes == file_bytes );
     assert( result.m_nSourceFingerprint == fingerprint );
     assert( resolved.m_nAllocation == 0u );
     assert( fixture.controls != 0u && fixture.encodes == 3u && result.m_nDecodedTiles > 0u );
@@ -216,14 +216,14 @@ int main()
     req.m_pDirtyFlags = &dirty;
     const uint32_t controls_before = fixture.controls;
     const uint32_t encodes_before = fixture.encodes;
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( fixture.controls == controls_before && fixture.encodes == encodes_before );
     assert( output == prior );
 
     // Changing a scalar material parameter changes the fingerprint and recooks.
     layer.m_fPbr0[2] = 0.2f;
-    assert( t3d_cs13_source_fingerprint_cold( req ) != fingerprint );
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_source_fingerprint_cold( req ) != fingerprint );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( fixture.encodes == encodes_before + 3u );
     layer.m_fPbr0[2] = 0.0f;
 
@@ -233,31 +233,31 @@ int main()
     // This footprint samples mip 1, so corrupt its packed tail payload.
     const uint32_t saved_crc = fixture.payloads[3].m_nChecksum;
     fixture.payloads[3].m_nChecksum ^= 0x800u;
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
-    assert( result.m_status == T3D_CS13_COMPOSE_FAILURE );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_COLD_COOK_COMPOSE_FAILURE );
     fixture.payloads[3].m_nChecksum = saved_crc;
     req.m_pPreviousSidecar = prior.data();
     req.m_nPreviousSidecarBytes = prior.size();
 
     // Missing canonical material keys fail before composition.
     fixture.key.m_nStableKey = t3d_vt_terrain_material_stable_key( 3u );
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
-    assert( result.m_status == T3D_CS13_MISSING_MATERIAL );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_COLD_COOK_MISSING_MATERIAL );
     fixture.key.m_nStableKey = t3d_vt_terrain_material_stable_key( 0u );
 
     // An authoring revision that changes while evaluating cannot be published.
     req.m_pPreviousSidecar = nullptr;
     req.m_nPreviousSidecarBytes = 0u;
     fixture.mutate_mid_cook = true;
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
-    assert( result.m_status == T3D_CS13_STALE_REVISION && result.m_nWrittenBytes == 0u );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
+    assert( result.m_status == T3D_COMPOSED_SURFACE_COLD_COOK_STALE_REVISION && result.m_nWrittenBytes == 0u );
     fixture.mutate_mid_cook = false;
     fixture.current_terrain = 17u;
 
     // Valid output can be published atomically through the existing cold writer.
     const char *path = "/tmp/terrain3d_cs13_cold_pipeline_test.t3sc";
     req.m_pDestination = path;
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     std::ifstream file( path, std::ios::binary );
     const std::vector< uint8_t > disk( (std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>() );
     assert( disk == output );
@@ -265,7 +265,7 @@ int main()
     // Identical publication must NOT replace the file inode: no disk writes.
     struct stat previous_stat{}, current_stat{};
     assert( stat( path, &previous_stat ) == 0 );
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( stat( path, &current_stat ) == 0 );
     assert( current_stat.st_ino == previous_stat.st_ino );
 #endif
@@ -280,9 +280,9 @@ int main()
     req.m_pPreviousSidecar = nullptr;
     req.m_nPreviousSidecarBytes = 0u;
     req.m_pDirtyFlags = nullptr;
-    const uint64_t candidate_identity = t3d_cs13_source_fingerprint_cold( req );
+    const uint64_t candidate_identity = t3d_composed_surface_source_fingerprint_cold( req );
     assert( candidate_identity != 0u );
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     const std::vector< uint8_t > reference = output;
     req.m_pPreviousSidecar = reference.data();
     req.m_nPreviousSidecarBytes = reference.size();
@@ -290,26 +290,26 @@ int main()
     req.m_nTerrainRevision = 18u;
     fixture.current_terrain = 18u;
     req.m_nControlPayloadFingerprint = 0x777777u;
-    assert( t3d_cs13_source_fingerprint_cold( req ) == candidate_identity );
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_source_fingerprint_cold( req ) == candidate_identity );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( fixture.encodes == before_candidate );
     assert( output == reference );
     ++page_spec.m_nCompositionRevision;
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     assert( fixture.encodes == before_candidate + 3u );
     layer.m_fPbr0[2] = 0.33f;
-    assert( t3d_cs13_source_fingerprint_cold( req ) != candidate_identity );
+    assert( t3d_composed_surface_source_fingerprint_cold( req ) != candidate_identity );
     layer.m_fPbr0[2] = 0.0f;
     // The candidate identity mode is never available for accepted cooks.
     req.m_bReferenceOnly = false;
     req.m_source.m_bCanonicalMaterialParityAccepted = true;
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
     req.m_bReferenceOnly = true;
     req.m_source.m_bCanonicalMaterialParityAccepted = false;
     req.m_pDestination = "/tmp/candidate_cannot_be_live.t3sc";
-    assert( !t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( !t3d_composed_surface_cook_source_pack_cold( req, result ) );
     req.m_pDestination = "/tmp/candidate_reference.t3sc.candidate";
-    assert( t3d_cs13_cook_source_pack_cold( req, result ) );
+    assert( t3d_composed_surface_cook_source_pack_cold( req, result ) );
     std::remove( req.m_pDestination );
     printf( "CS13 source-pack composition: PASS (%u controls, %u encodes)\n", fixture.controls, fixture.encodes );
 }
