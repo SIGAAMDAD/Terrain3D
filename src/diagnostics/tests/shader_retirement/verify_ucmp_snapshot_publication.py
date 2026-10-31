@@ -13,10 +13,10 @@ start = material.index("bool Terrain3DMaterialStateBuilder::publishSnapshotState
 end = material.index("void Terrain3DMaterialStateBuilder::resetPublicationState(", start)
 method = material[start:end]
 cache_branch = method.index("} else {")
-backend_restore = method.rfind("snapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;")
+backend_restore = method.rfind("snapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;")
 assert backend_restore > cache_branch, "Cache-hit publication must restore UCMP backend"
-assert 'm_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;' in types
-assert 'snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1' in publication
+assert 'm_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;' in types
+assert 'snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED' in publication
 assert 'isWorldPublicationCapacityPending(' in header
 assert coordinator.count('m_publicationBuilder.isWorldPublicationCapacityPending()') >= 3
 print('PASS UCMP snapshot cache-hit, default backend, mandatory publication, world cold reserve')

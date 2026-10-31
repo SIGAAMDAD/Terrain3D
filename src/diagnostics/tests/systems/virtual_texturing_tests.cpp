@@ -141,20 +141,20 @@ void register_virtual_texturing_tests(
 		for ( uint32_t family = 0; family < T3D_VT_PHYSICAL_FORMAT_COUNT; ++family ) {
 			for ( const uint32_t slot : { 0u, 1u, 1023u, 65535u } ) {
 				const uint32_t address =
-					t3d_vt_pack_physical_address_v1( static_cast< t3dVTPhysicalFormatFamily_t >( family ), slot );
-				T3D_CHECK( test, static_cast< uint32_t >( t3d_vt_physical_address_family_v1( address ) ) == family );
-				T3D_CHECK( test, t3d_vt_physical_address_slot_v1( address ) == slot );
+					t3d_vt_pack_physical_address( static_cast< t3dVTPhysicalFormatFamily_t >( family ), slot );
+				T3D_CHECK( test, static_cast< uint32_t >( t3d_vt_physical_address_family( address ) ) == family );
+				T3D_CHECK( test, t3d_vt_physical_address_slot( address ) == slot );
 			}
 		}
 	} );
 	runner.run( "virtual_texturing", "invalid_physical_addresses_are_rejected", []( TestContext &test ) {
 		T3D_CHECK(
 			test,
-			t3d_vt_pack_physical_address_v1( static_cast< t3dVTPhysicalFormatFamily_t >( T3D_VT_PHYSICAL_FORMAT_COUNT ),
+			t3d_vt_pack_physical_address( static_cast< t3dVTPhysicalFormatFamily_t >( T3D_VT_PHYSICAL_FORMAT_COUNT ),
 											 0 ) == T3D_VT_INVALID_SLOT );
 		T3D_CHECK( test,
-				   t3d_vt_pack_physical_address_v1( T3D_VT_PHYSICAL_FORMAT_BC1_UNORM,
-													T3D_VT_V1_PHYSICAL_SLOT_MASK + 1 ) == T3D_VT_INVALID_SLOT );
+				   t3d_vt_pack_physical_address( T3D_VT_PHYSICAL_FORMAT_BC1_UNORM,
+													T3D_VT_PHYSICAL_SLOT_MASK + 1 ) == T3D_VT_INVALID_SLOT );
 	} );
 	runner.run( "virtual_texturing",
 				"single_bank_accepts_exact_capacity_and_rejects_overflow",

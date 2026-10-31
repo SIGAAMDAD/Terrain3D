@@ -11,7 +11,7 @@ Terrain3DRdClusterCompact::Terrain3DRdClusterCompact( Terrain3DRdContext &contex
 	m_context( context ),
 	m_computeSets( context, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING ),
 	m_rasterSets( context, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING ) {
-	m_pushBytes.resize( sizeof( t3dBr21Push_t ) );
+	m_pushBytes.resize( sizeof( t3dClusterCompactPush_t ) );
 }
 
 Terrain3DRdClusterCompact::~Terrain3DRdClusterCompact() { shutdown(); }
@@ -49,9 +49,9 @@ bool Terrain3DRdClusterCompact::ensureResources( uint32_t lists ) {
 			 !m_hPipeline.createTrackedCompute( m_context, T3D_RD_CONTEXT_OWNER_FORWARD_LIGHTING,
 			"T3D.BR21.CompactPipeline", m_hShader.rid() ) ) return false;
 	}
-	const uint32_t groups = ( lists + T3D_BR21_SCAN_GROUP_SIZE - 1u ) / T3D_BR21_SCAN_GROUP_SIZE;
+	const uint32_t groups = ( lists + T3D_CLUSTER_COMPACT_SCAN_GROUP_SIZE - 1u ) / T3D_CLUSTER_COMPACT_SCAN_GROUP_SIZE;
 	const uint32_t bytes[6] = { lists * 4u, lists * 4u, groups * 4u,
-		groups * 4u, lists * ( uint32_t ) sizeof( t3dBr21Header_t ), T3D_BR21_INDEX_CAPACITY * 4u };
+		groups * 4u, lists * ( uint32_t ) sizeof( t3dClusterCompactHeader_t ), T3D_CLUSTER_COMPACT_INDEX_CAPACITY * 4u };
 	bool replaced = false;
 	for ( uint32_t i = 0u; i < 6u; ++i ) {
 		if ( m_buffers[i].needsCapacity( bytes[i] ) ) {
@@ -80,7 +80,7 @@ bool Terrain3DRdClusterCompact::ensureFallbackResources() {
 		m_bFallbackConfigured = true;
 	}
 	PackedByteArray zeros;
-	zeros.resize( sizeof( t3dBr21Header_t ) );
+	zeros.resize( sizeof( t3dClusterCompactHeader_t ) );
 	memset( zeros.ptrw(), 0, zeros.size() );
 	if ( !m_hFallbackHeaders.isValid() && !m_hFallbackHeaders.createTracked( m_context, zeros.size(), zeros ) )
 		return false;
@@ -119,13 +119,13 @@ bool Terrain3DRdClusterCompact::prepare( const t3dRdForwardPassContext_t &pass )
 	}
 	m_nDeviceGeneration = generation;
 	const uint32_t words = pass.m_nClusterMaxElementsDiv32;
-	const uint32_t stride = words + T3D_BR21_DEPTH_SLICES;
+	const uint32_t stride = words + T3D_CLUSTER_COMPACT_DEPTH_SLICES;
 	if ( words == 0u || words > 64u || pass.m_nClusterTypeSize < stride ||
-		 pass.m_nClusterTypeSize % stride || pass.m_nClusterTypeSize > UINT32_MAX / T3D_BR21_KIND_COUNT ) return false;
+		 pass.m_nClusterTypeSize % stride || pass.m_nClusterTypeSize > UINT32_MAX / T3D_CLUSTER_COMPACT_KIND_COUNT ) return false;
 	const uint32_t clusters = pass.m_nClusterTypeSize / stride;
-	if ( clusters == 0u || clusters > T3D_BR21_MAX_CLUSTERS ||
+	if ( clusters == 0u || clusters > T3D_CLUSTER_COMPACT_MAX_CLUSTERS ||
 		 pass.m_nClusterWidth == 0u || clusters % pass.m_nClusterWidth ) return false;
-	const uint32_t lists = clusters * T3D_BR21_LISTS_PER_CLUSTER;
+	const uint32_t lists = clusters * T3D_CLUSTER_COMPACT_LISTS_PER_CLUSTER;
 	m_context.beginResourceRebuild();
 	const bool resources_ok = ensureResources( lists );
 	m_context.endResourceRebuild();
@@ -141,14 +141,14 @@ bool Terrain3DRdClusterCompact::prepare( const t3dRdForwardPassContext_t &pass )
 	const RID set = ensureComputeSet( pass.m_hClusterBuffer );
 	m_context.endResourceRebuild();
 	if ( !set.is_valid() ) return false;
-	t3dBr21Push_t push{};
+	t3dClusterCompactPush_t push{};
 	push.m_nListCount = lists;
 	push.m_nClusterCount = clusters;
-	push.m_nIndexCapacity = T3D_BR21_INDEX_CAPACITY;
+	push.m_nIndexCapacity = T3D_CLUSTER_COMPACT_INDEX_CAPACITY;
 	push.m_nMaxWords = words;
 	push.m_nTypeStride = pass.m_nClusterTypeSize;
 	push.m_nClusterWidth = pass.m_nClusterWidth;
-	push.m_nNativeWordCount = pass.m_nClusterTypeSize * T3D_BR21_KIND_COUNT;
+	push.m_nNativeWordCount = pass.m_nClusterTypeSize * T3D_CLUSTER_COMPACT_KIND_COUNT;
 	const int64_t compute = rd->compute_list_begin();
 	if ( compute == RenderingDevice::INVALID_ID ) return false;
 	rd->compute_list_bind_compute_pipeline( compute, m_hPipeline.rid() );
@@ -158,7 +158,7 @@ bool Terrain3DRdClusterCompact::prepare( const t3dRdForwardPassContext_t &pass )
 		memcpy( m_pushBytes.ptrw(), &push, sizeof( push ) );
 		rd->compute_list_set_push_constant( compute, m_pushBytes, sizeof( push ) );
 		rd->compute_list_dispatch( compute,
-			phase == 2u ? 1u : ( lists + T3D_BR21_SCAN_GROUP_SIZE - 1u ) / T3D_BR21_SCAN_GROUP_SIZE,
+			phase == 2u ? 1u : ( lists + T3D_CLUSTER_COMPACT_SCAN_GROUP_SIZE - 1u ) / T3D_CLUSTER_COMPACT_SCAN_GROUP_SIZE,
 			1u, 1u );
 		rd->compute_list_add_barrier( compute );
 	}

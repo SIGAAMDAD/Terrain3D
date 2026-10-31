@@ -51,7 +51,7 @@ static bool t3dRasterHierarchyDecode(
 
 String Terrain3DRasterHierarchyBundle::getPath(
 	const String &rDirectory ) {
-	return rDirectory.path_join( "terrain3d_hierarchy_v1.t3rh" );
+	return rDirectory.path_join( "terrain3d_hierarchy_original.t3rh" );
 }
 
 Error Terrain3DRasterHierarchyBundle::save(
@@ -261,13 +261,13 @@ static bool t3dHierarchyDecodeAddress( const uint16_t nId, uint8_t &rLevel, uint
 	}
 	return false;
 }
-static void t3dHierarchyEncodeV2Channels(
+static void t3dHierarchyEncodeChannels(
 	const Terrain3DRasterHierarchyBuilder &builder, uint16_t nId,
 	const t3dRasterHierarchyPayload_t &payload,
 	PackedByteArray &height, PackedByteArray &control, PackedByteArray &color ) {
-	height.resize( T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES );
-	control.resize( T3D_RASTER_HIERARCHY_V2_CONTROL_BYTES );
-	color.resize( T3D_RASTER_HIERARCHY_V2_COLOR_BYTES );
+	height.resize( T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES );
+	control.resize( T3D_RASTER_HIERARCHY_STREAM_CONTROL_BYTES );
+	color.resize( T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES );
 	uint8_t *pHeight = height.ptrw();
 	uint8_t *pControl = control.ptrw();
 	uint8_t level = 0u, tileX = 0u, tileY = 0u;
@@ -298,7 +298,7 @@ static void t3dHierarchyEncodeV2Channels(
 }
 
 String Terrain3DRasterHierarchyBundle::getPathV2( const String &directory ) {
-	return directory.path_join( "terrain3d_hierarchy_v2.t3rh" );
+	return directory.path_join( "terrain3d_hierarchy_stream.t3rh" );
 }
 
 Error Terrain3DRasterHierarchyBundle::saveV2(
@@ -306,10 +306,10 @@ Error Terrain3DRasterHierarchyBundle::saveV2(
 	if ( directory.is_empty() ) return ERR_INVALID_PARAMETER;
 	const auto &payloads = builder.getPayloads();
 	if ( payloads.size() > 1365u ) return ERR_INVALID_PARAMETER;
-	const uint64_t dataStart = T3D_RASTER_HIERARCHY_V2_HEADER_BYTES +
-		( uint64_t ) T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES * 1365u;
+	const uint64_t dataStart = T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES +
+		( uint64_t ) T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES * 1365u;
 	PackedByteArray directoryBytes;
-	directoryBytes.resize( T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES * 1365u );
+	directoryBytes.resize( T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES * 1365u );
 	uint8_t *const pDirectory = directoryBytes.ptrw();
 	memset( pDirectory, 0, ( size_t ) directoryBytes.size() );
 	uint64_t cursor = dataStart;
@@ -324,8 +324,8 @@ Error Terrain3DRasterHierarchyBundle::saveV2(
 			node->m_fMaxHeightErrorM < 0.0f || node->m_nLeafCount == 0u ) return ERR_INVALID_DATA;
 		uint8_t level = 0u, x = 0u, y = 0u;
 		if ( !t3dHierarchyDecodeAddress( id, level, x, y ) ) return ERR_INVALID_DATA;
-		t3dHierarchyEncodeV2Channels( builder, id, it->second, height, control, color );
-		uint8_t *const e = pDirectory + ( size_t ) id * T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES;
+		t3dHierarchyEncodeChannels( builder, id, it->second, height, control, color );
+		uint8_t *const e = pDirectory + ( size_t ) id * T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES;
 		t3dHierarchyWrite32( e, 1u );
 		e[4] = level; e[5] = node->m_nChildMask; e[6] = node->m_nCoverageMask; e[7] = 1u;
 		t3dHierarchyWrite32( e + 8, node->m_nRevision );
@@ -346,18 +346,18 @@ Error Terrain3DRasterHierarchyBundle::saveV2(
 		++present;
 	}
 	PackedByteArray header;
-	header.resize( T3D_RASTER_HIERARCHY_V2_HEADER_BYTES );
+	header.resize( T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES );
 	uint8_t *const h = header.ptrw();
 	memset( h, 0, ( size_t ) header.size() );
 	t3dHierarchyWrite32( h, T3D_RASTER_HIERARCHY_MAGIC );
-	t3dHierarchyWrite32( h + 4, T3D_RASTER_HIERARCHY_VERSION_V2 );
+	t3dHierarchyWrite32( h + 4, T3D_RASTER_HIERARCHY_STREAM_FORMAT_VERSION );
 	t3dHierarchyWrite32( h + 8, T3D_REGION_MAP_SIZE );
 	t3dHierarchyWrite32( h + 12, 32u );
 	t3dHierarchyWrite32( h + 16, 1365u );
-	t3dHierarchyWrite32( h + 20, T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES );
+	t3dHierarchyWrite32( h + 20, T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES );
 	t3dHierarchyWrite32( h + 24, present );
 	t3dHierarchyWrite32( h + 28, builder.getGeneration() );
-	t3dHierarchyWrite64( h + 32, T3D_RASTER_HIERARCHY_V2_HEADER_BYTES );
+	t3dHierarchyWrite64( h + 32, T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES );
 	t3dHierarchyWrite64( h + 40, dataStart );
 	t3dHierarchyWrite64( h + 48, cursor );
 	t3dHierarchyWrite64( h + 56,
@@ -372,7 +372,7 @@ Error Terrain3DRasterHierarchyBundle::saveV2(
 	for ( uint16_t id = 0u; id < 1365u; ++id ) {
 		const auto it = payloads.find( id );
 		if ( it == payloads.end() ) continue;
-		t3dHierarchyEncodeV2Channels( builder, id, it->second, height, control, color );
+		t3dHierarchyEncodeChannels( builder, id, it->second, height, control, color );
 		file->store_buffer( height );
 		file->store_buffer( control );
 		file->store_buffer( color );
@@ -384,49 +384,49 @@ Error Terrain3DRasterHierarchyBundle::saveV2(
 	return err;
 }
 
-void Terrain3DRasterHierarchyIndexV2::clear( void ) {
+void Terrain3DRasterHierarchyStreamIndex::clear( void ) {
 	m_path = String();
 	m_entries.clear();
 	m_nGeneration = 0u;
 }
 
-const t3dRasterHierarchyV2Node_t *Terrain3DRasterHierarchyIndexV2::getNode( const uint16_t id ) const {
+const t3dRasterHierarchyStreamNode_t *Terrain3DRasterHierarchyStreamIndex::getNode( const uint16_t id ) const {
 	const auto it = m_entries.find( id );
 	return it == m_entries.end() ? nullptr : &it->second;
 }
 
-Error Terrain3DRasterHierarchyIndexV2::open( const String &directory ) {
+Error Terrain3DRasterHierarchyStreamIndex::open( const String &directory ) {
 	clear();
 	const String path = Terrain3DRasterHierarchyBundle::getPathV2( directory );
 	const Ref< FileAccess > file = FileAccess::open( path, FileAccess::READ );
-	if ( file.is_null() || file->get_length() < T3D_RASTER_HIERARCHY_V2_HEADER_BYTES ) return ERR_FILE_NOT_FOUND;
-	const PackedByteArray head = file->get_buffer( T3D_RASTER_HIERARCHY_V2_HEADER_BYTES );
-	if ( head.size() != T3D_RASTER_HIERARCHY_V2_HEADER_BYTES ) return ERR_FILE_CORRUPT;
+	if ( file.is_null() || file->get_length() < T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES ) return ERR_FILE_NOT_FOUND;
+	const PackedByteArray head = file->get_buffer( T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES );
+	if ( head.size() != T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES ) return ERR_FILE_CORRUPT;
 	const uint8_t *const h = head.ptr();
-	const uint64_t dataStart = T3D_RASTER_HIERARCHY_V2_HEADER_BYTES +
-		( uint64_t ) T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES * 1365u;
+	const uint64_t dataStart = T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES +
+		( uint64_t ) T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES * 1365u;
 	if ( t3dHierarchyRead32( h ) != T3D_RASTER_HIERARCHY_MAGIC ||
-		t3dHierarchyRead32( h + 4 ) != T3D_RASTER_HIERARCHY_VERSION_V2 ||
+		t3dHierarchyRead32( h + 4 ) != T3D_RASTER_HIERARCHY_STREAM_FORMAT_VERSION ||
 		t3dHierarchyRead32( h + 8 ) != T3D_REGION_MAP_SIZE || t3dHierarchyRead32( h + 12 ) != 32u ||
 		t3dHierarchyRead32( h + 16 ) != 1365u ||
-		t3dHierarchyRead32( h + 20 ) != T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES ||
+		t3dHierarchyRead32( h + 20 ) != T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES ||
 		t3dHierarchyRead32( h + 24 ) > 1365u || t3dHierarchyRead32( h + 28 ) == 0u ||
-		t3dHierarchyRead64( h + 32 ) != T3D_RASTER_HIERARCHY_V2_HEADER_BYTES ||
+		t3dHierarchyRead64( h + 32 ) != T3D_RASTER_HIERARCHY_STREAM_HEADER_BYTES ||
 		t3dHierarchyRead64( h + 40 ) != dataStart || t3dHierarchyRead64( h + 48 ) != file->get_length() ) {
 		return ERR_FILE_CORRUPT;
 	}
-	const PackedByteArray directoryBytes = file->get_buffer( T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES * 1365u );
-	if ( directoryBytes.size() != T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES * 1365u ||
+	const PackedByteArray directoryBytes = file->get_buffer( T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES * 1365u );
+	if ( directoryBytes.size() != T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES * 1365u ||
 		t3dHierarchyMetadataHash( h, directoryBytes.ptr(), ( uint32_t ) directoryBytes.size() ) !=
 			t3dHierarchyRead64( h + 56 ) ) return ERR_FILE_CORRUPT;
 	const uint8_t *const p = directoryBytes.ptr();
-	eastl::hash_map< uint16_t, t3dRasterHierarchyV2Node_t > candidate;
+	eastl::hash_map< uint16_t, t3dRasterHierarchyStreamNode_t > candidate;
 	uint64_t nextPayload = dataStart;
 	uint32_t populated = 0u;
 	for ( uint16_t id = 0u; id < 1365u; ++id ) {
-		const uint8_t *const e = p + ( size_t ) id * T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES;
+		const uint8_t *const e = p + ( size_t ) id * T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES;
 		if ( t3dHierarchyRead32( e ) == 0u ) {
-			for ( uint32_t k = 4u; k < T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES; ++k ) {
+			for ( uint32_t k = 4u; k < T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES; ++k ) {
 				if ( e[k] != 0u ) return ERR_FILE_CORRUPT;
 			}
 			continue;
@@ -435,10 +435,10 @@ Error Terrain3DRasterHierarchyIndexV2::open( const String &directory ) {
 		if ( t3dHierarchyRead32( e ) != 1u || !t3dHierarchyDecodeAddress( id, level, x, y ) ||
 			e[4] != level || e[6] != 7u || e[7] != 1u || ( e[5] & ~15u ) != 0u ||
 			( level == 5u && e[5] != 0u ) ) return ERR_FILE_CORRUPT;
-		for ( uint32_t k = 92u; k < T3D_RASTER_HIERARCHY_V2_ENTRY_BYTES; ++k ) {
+		for ( uint32_t k = 92u; k < T3D_RASTER_HIERARCHY_STREAM_ENTRY_BYTES; ++k ) {
 			if ( e[k] != 0u ) return ERR_FILE_CORRUPT;
 		}
-		t3dRasterHierarchyV2Node_t node;
+		t3dRasterHierarchyStreamNode_t node;
 		node.m_nLevel = level;
 		node.m_nChildMask = e[5];
 		node.m_nCoverageMask = e[6];
@@ -456,8 +456,8 @@ Error Terrain3DRasterHierarchyIndexV2::open( const String &directory ) {
 		uint64_t *offsets[3] = { &node.m_nHeightOffset, &node.m_nControlOffset, &node.m_nColorOffset };
 		uint64_t *hashes[3] = { &node.m_nHeightHash, &node.m_nControlHash, &node.m_nColorHash };
 		const uint32_t fields[3] = { 32u, 52u, 72u };
-		const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES,
-			T3D_RASTER_HIERARCHY_V2_CONTROL_BYTES, T3D_RASTER_HIERARCHY_V2_COLOR_BYTES };
+		const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES,
+			T3D_RASTER_HIERARCHY_STREAM_CONTROL_BYTES, T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES };
 		for ( uint32_t c = 0u; c < 3u; ++c ) {
 			*offsets[c] = t3dHierarchyRead64( e + fields[c] );
 			*hashes[c] = t3dHierarchyRead64( e + fields[c] + 12u );
@@ -473,7 +473,7 @@ Error Terrain3DRasterHierarchyIndexV2::open( const String &directory ) {
 	// Validate sparse topology and conservative bounds using directory alone.
 	for ( const auto &it : candidate ) {
 		const uint16_t id = it.first;
-		const t3dRasterHierarchyV2Node_t &node = it.second;
+		const t3dRasterHierarchyStreamNode_t &node = it.second;
 		uint8_t level = 0u, x = 0u, y = 0u;
 		( void ) t3dHierarchyDecodeAddress( id, level, x, y );
 		uint8_t mask = 0u;
@@ -500,14 +500,14 @@ Error Terrain3DRasterHierarchyIndexV2::open( const String &directory ) {
 	return OK;
 }
 
-bool Terrain3DRasterHierarchyIndexV2::read( const uint16_t id, t3dRasterHierarchyPayload_t &out ) const {
-	const t3dRasterHierarchyV2Node_t *node = getNode( id );
+bool Terrain3DRasterHierarchyStreamIndex::read( const uint16_t id, t3dRasterHierarchyPayload_t &out ) const {
+	const t3dRasterHierarchyStreamNode_t *node = getNode( id );
 	if (!node) return false;
 	const Ref< FileAccess > file = FileAccess::open( m_path, FileAccess::READ );
 	if ( file.is_null() ) return false;
 	const uint64_t offsets[3] = { node->m_nHeightOffset, node->m_nControlOffset, node->m_nColorOffset };
-	const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES,
-		T3D_RASTER_HIERARCHY_V2_CONTROL_BYTES, T3D_RASTER_HIERARCHY_V2_COLOR_BYTES };
+	const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES,
+		T3D_RASTER_HIERARCHY_STREAM_CONTROL_BYTES, T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES };
 	const uint64_t hashes[3] = { node->m_nHeightHash, node->m_nControlHash, node->m_nColorHash };
 	PackedByteArray bytes[3];
 	for ( uint32_t c = 0u; c < 3u; ++c ) {
@@ -533,17 +533,17 @@ bool Terrain3DRasterHierarchyIndexV2::read( const uint16_t id, t3dRasterHierarch
 
 // F02: isolated worker read; no hierarchy dictionary or owner-thread state is
 // accessed. Exact v2 offsets and hashes were frozen by the index-only open.
-bool t3dRasterHierarchyReadV2Tile( const godot::String &path,
-                                   const t3dRasterHierarchyV2Node_t &node,
+bool t3dRasterHierarchyReadStreamTile( const godot::String &path,
+                                   const t3dRasterHierarchyStreamNode_t &node,
                                    uint8_t *target, const uint32_t capacity ) {
-    if ( path.is_empty() || !target || capacity < T3D_RASTER_HIERARCHY_V2_TILE_BYTES ||
+    if ( path.is_empty() || !target || capacity < T3D_RASTER_HIERARCHY_STREAM_TILE_BYTES ||
          node.m_nRevision == 0u || node.m_nGeneration == 0u || node.m_nCoverageMask != 7u ) return false;
     const godot::Ref< godot::FileAccess > file = godot::FileAccess::open( path, godot::FileAccess::READ );
     if ( file.is_null() ) return false;
     const uint64_t offsets[3] = { node.m_nHeightOffset, node.m_nControlOffset, node.m_nColorOffset };
     const uint64_t hashes[3] = { node.m_nHeightHash, node.m_nControlHash, node.m_nColorHash };
-    const uint32_t sizes[3] = { T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES,
-        T3D_RASTER_HIERARCHY_V2_CONTROL_BYTES, T3D_RASTER_HIERARCHY_V2_COLOR_BYTES };
+    const uint32_t sizes[3] = { T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES,
+        T3D_RASTER_HIERARCHY_STREAM_CONTROL_BYTES, T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES };
     uint32_t cursor = 0u;
     for ( uint32_t c = 0u; c < 3u; ++c ) {
         if ( offsets[c] > file->get_length() || sizes[c] > file->get_length() - offsets[c] ||

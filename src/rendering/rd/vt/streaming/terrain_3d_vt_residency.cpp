@@ -118,7 +118,7 @@ uint64_t t3d_vt_compute_pack_bytes(
 
 	uint64_t nOffset = sizeof( t3dVTFileHeader_t );
 	nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) pSource.nAllocationCount *
-														  sizeof( t3dVTAllocationRecordV1_t ),
+														  sizeof( t3dVTAllocationRecord_t ),
 											16u );
 	nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) pSource.nPageCount * sizeof( t3dVTPageFileRecord_t ),
 											16u );
@@ -155,9 +155,9 @@ bool t3d_vt_write_pack_cold(
 	uint64_t nOffset = sizeof( t3dVTFileHeader_t );
 	Header.nAllocationOffset = nOffset;
 	memcpy( pOut + nOffset, pSource.pAllocations,
-			( size_t ) pSource.nAllocationCount * sizeof( t3dVTAllocationRecordV1_t ) );
+			( size_t ) pSource.nAllocationCount * sizeof( t3dVTAllocationRecord_t ) );
 	nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) pSource.nAllocationCount *
-														  sizeof( t3dVTAllocationRecordV1_t ), 16u );
+														  sizeof( t3dVTAllocationRecord_t ), 16u );
 	Header.nPageOffset = nOffset;
 	memcpy( pOut + nOffset, pSource.pPages, ( size_t ) pSource.nPageCount * sizeof( t3dVTPageFileRecord_t ) );
 	nOffset = t3dAlignUpOrZero< uint64_t >( nOffset + ( uint64_t ) pSource.nPageCount *
@@ -195,7 +195,7 @@ bool t3d_vt_open_pack_cold(
 		return false;
 	}
 	if ( !t3dByteRangeFits< uint64_t >( Header.nAllocationOffset,
-			( uint64_t ) Header.nAllocationCount * sizeof( t3dVTAllocationRecordV1_t ), pByteCount ) ||
+			( uint64_t ) Header.nAllocationCount * sizeof( t3dVTAllocationRecord_t ), pByteCount ) ||
 		 !t3dByteRangeFits< uint64_t >( Header.nPageOffset,
 			( uint64_t ) Header.nPageCount * sizeof( t3dVTPageFileRecord_t ), pByteCount ) ||
 		 !t3dByteRangeFits< uint64_t >( Header.nPayloadDirectoryOffset,
@@ -210,7 +210,7 @@ bool t3d_vt_open_pack_cold(
 	rStorage.Pages.resize( Header.nPageCount );
 	rStorage.Payloads.resize( Header.nPayloadCount );
 	memcpy( rStorage.Allocations.data(), pData + Header.nAllocationOffset,
-			( size_t ) Header.nAllocationCount * sizeof( t3dVTAllocationRecordV1_t ) );
+			( size_t ) Header.nAllocationCount * sizeof( t3dVTAllocationRecord_t ) );
 	memcpy( rStorage.Pages.data(), pData + Header.nPageOffset,
 			( size_t ) Header.nPageCount * sizeof( t3dVTPageFileRecord_t ) );
 	memcpy( rStorage.Payloads.data(), pData + Header.nPayloadDirectoryOffset,
@@ -248,7 +248,7 @@ static bool t3d_vt_build_runtime_tables_cold(
 		return false;
 	}
 
-	if ( pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+	if ( pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK ) {
 		if ( pDatabase.pRuntimeAllocations == NULL || pDatabase.pRuntimeTailMetadata == NULL ||
 			 pDatabase.nRuntimeTailCount == 0u || pBuffers.nTailMetadataCapacity < pDatabase.nRuntimeTailCount ) {
 			return false;
@@ -283,7 +283,7 @@ static bool t3d_vt_build_runtime_tables_cold(
 		return false;
 	}
 	for ( uint32_t iAllocation = 0u; iAllocation < pDatabase.pHeader->nAllocationCount; ++iAllocation ) {
-		const t3dVTAllocationRecordV1_t &Legacy = pDatabase.pAllocations[iAllocation];
+		const t3dVTAllocationRecord_t &Legacy = pDatabase.pAllocations[iAllocation];
 		if ( Legacy.nPageCount == 0u || Legacy.nMipCount == 0u || Legacy.nMipCount > T3D_VT_MAX_MIPS ||
 			 Legacy.nMip0WidthPages == 0u || Legacy.nMip0HeightPages == 0u || Legacy.nMip0WidthPages > 0xffffu ||
 			 Legacy.nMip0HeightPages > 0xffffu || Legacy.nBaseVirtualPage >= pDatabase.pHeader->nPageCount ||
@@ -391,7 +391,7 @@ bool t3d_vt_initialize_residency_cold(
 		Entry.nPhysicalSlot = T3D_VT_INVALID_SLOT;
 		Entry.nParentPage = Page.nParentPage;
 		Entry.nGeneration =
-			pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? Page.nGeneration : Allocation.m_nGeneration;
+			pDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK ? Page.nGeneration : Allocation.m_nGeneration;
 		Entry.nResolvedMip = Page.nMip;
 		Entry.nFlags = T3D_VT_PAGE_VALID;
 		if ( Page.nParentPage == T3D_VT_INVALID_PAGE ) {
@@ -513,7 +513,7 @@ bool t3d_vt_finalize_neutral_publication_warm(
 bool t3d_vt_finalize_package_publication_warm(
 	t3dVTResidencyState_t &rState ) {
 	if ( !rState.bInitialized || rState.pDatabase == NULL ||
-		 rState.pDatabase->nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ||
+		 rState.pDatabase->nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ||
 		 rState.pDatabase->pRuntimePayloads == NULL || rState.nAllocationCount == 0u || rState.nTailCount == 0u ) {
 		return false;
 	}
@@ -898,7 +898,7 @@ bool t3d_vt_commit_upload_hot(
 		return false;
 	}
 	const t3dVTPageFileRecord_t &Page = rState.pDatabase->pPages[pReservation.nVirtualPage];
-	const uint32_t				 nExpectedMask = rState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1
+	const uint32_t				 nExpectedMask = rState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK
 													 ? ( 1u << Page.nChannel )
 													 : T3D_VT_PAGE_SET_CHANNEL_MASK;
 	if ( pUploadedChannelMask != nExpectedMask ) {
@@ -1068,7 +1068,7 @@ bool t3d_vt_validate_residency_reference_debug(
 	}
 	for ( uint32_t iAllocation = 0u; iAllocation < pState.nAllocationCount; ++iAllocation ) {
 		const t3dVTAllocation_t &Allocation = pState.Buffers.pAllocations[iAllocation];
-		if ( pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 && Allocation.m_nPageCount == 0u ) {
+		if ( pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK && Allocation.m_nPageCount == 0u ) {
 			continue;
 		}
 		if ( Allocation.m_nPageCount == 0u || Allocation.m_nMipCount == 0u ||
@@ -1080,7 +1080,7 @@ bool t3d_vt_validate_residency_reference_debug(
 			return false;
 		}
 		const t3dVTTailMetadata_t &Tail = pState.Buffers.pTailMetadata[Allocation.m_nTailIndex];
-		const uint32_t			   nTailAtlasWidth = pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1
+		const uint32_t			   nTailAtlasWidth = pState.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK
 														 ? T3D_VT_PACK_TAIL_ATLAS_WIDTH
 														 : T3D_VT_TAIL_ATLAS_WIDTH;
 		if ( Tail.m_nGeneration != Allocation.m_nGeneration || Tail.m_nWidthTexels == 0u ||

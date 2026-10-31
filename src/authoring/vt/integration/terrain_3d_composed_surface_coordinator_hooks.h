@@ -4,7 +4,7 @@
 #include "authoring/vt/integration/terrain_3d_composed_surface_edit_journal.h"
 #include "rendering/rd/vt/runtime/terrain_3d_terrain_megavt.h"
 
-inline bool t3d_cs_editor_region( const Terrain3DTerrainMegaVT &megaVT,
+inline bool t3d_comp_surf_editor_region( const Terrain3DTerrainMegaVT &megaVT,
                                   uint32_t nIndex, t3dComposedSurfaceEditRegion_t &out )
 {
     const t3dTerrainMegaVTRegion_t *region = megaVT.getRegion( nIndex );
@@ -16,7 +16,7 @@ inline bool t3d_cs_editor_region( const Terrain3DTerrainMegaVT &megaVT,
     return true;
 }
 
-inline void t3d_cs_editor_dirty_bounds( const Terrain3DTerrainMegaVT &megaVT,
+inline void t3d_comp_surf_editor_dirty_bounds( const Terrain3DTerrainMegaVT &megaVT,
                                         Terrain3DComposedSurfaceEditJournal &journal,
                                         const t3dComposedSurfaceEditBounds_t &bounds,
                                         uint64_t nFingerprint )
@@ -28,9 +28,9 @@ inline void t3d_cs_editor_dirty_bounds( const Terrain3DTerrainMegaVT &megaVT,
          !isfinite( bounds.m_fMinX ) || !isfinite( bounds.m_fMinZ ) ||
          !isfinite( bounds.m_fMaxX ) || !isfinite( bounds.m_fMaxZ ) ||
          bounds.m_fMaxX <= bounds.m_fMinX || bounds.m_fMaxZ <= bounds.m_fMinZ ) return;
-    const float halo = ( T3D_CS_EDITOR_CONTROL_HALO_TEXELS +
-                         T3D_CS_EDITOR_GUTTER_TEXELS ) / float( megaVT.getTexelsPerMeter() );
-    const float side = T3D_CS_EDITOR_REGION_SIZE;
+    const float halo = ( T3D_COMP_SURF_EDITOR_CONTROL_HALO_TEXELS +
+                         T3D_COMP_SURF_EDITOR_GUTTER_TEXELS ) / float( megaVT.getTexelsPerMeter() );
+    const float side = T3D_COMP_SURF_EDITOR_REGION_SIZE;
     const int32_t half = int32_t( T3D_REGION_MAP_HALF );
     const float worldMin = -float( half ) * side;
     const float worldMax = float( half ) * side;
@@ -46,21 +46,21 @@ inline void t3d_cs_editor_dirty_bounds( const Terrain3DTerrainMegaVT &megaVT,
             uint32_t index = 0u;
             if ( !Terrain3DTerrainMegaVT::locationToRegionIndex( x, z, index ) ) continue;
             t3dComposedSurfaceEditRegion_t region{};
-            if ( t3d_cs_editor_region( megaVT, index, region ) )
+            if ( t3d_comp_surf_editor_region( megaVT, index, region ) )
                 journal.dirtyRegionCold( region, bounds, megaVT.getTexelsPerMeter(),
                                          nFingerprint, topology );
         }
     }
 }
 
-inline void t3d_cs_editor_invalidate_sources( const Terrain3DTerrainMegaVT &megaVT,
+inline void t3d_comp_surf_editor_invalidate_sources( const Terrain3DTerrainMegaVT &megaVT,
                                                Terrain3DComposedSurfaceEditJournal &journal,
                                                uint64_t nFingerprint )
 {
     const uint64_t topology = megaVT.getTopologyGeneration() ? megaVT.getTopologyGeneration() : 1u;
-    for ( uint32_t i = 0u; i < T3D_CS_EDITOR_REGION_COUNT; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_COMP_SURF_EDITOR_REGION_COUNT; ++i ) {
         t3dComposedSurfaceEditRegion_t region{};
-        if ( t3d_cs_editor_region( megaVT, i, region ) )
+        if ( t3d_comp_surf_editor_region( megaVT, i, region ) )
             journal.invalidateRegionCold( region, nFingerprint, topology );
         else journal.forgetRegionCold( i, topology );
     }

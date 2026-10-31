@@ -17,7 +17,7 @@ struct t3dStAuthoringSnapshot_t
     t3dStAuthoredRegionSource_t m_input;
 };
 
-static bool t3dStFindComposedFromPack( const t3dVTPackViewV1_t &rPack,
+static bool t3dStFindComposedFromPack( const t3dVTPackBaselineView_t &rPack,
                                         const uint32_t nRegion, uint32_t &rBase,
                                         uint32_t &rGeneration )
 {
@@ -36,7 +36,7 @@ static bool t3dStFindComposedFromPack( const t3dVTPackViewV1_t &rPack,
     if ( id >= rPack.m_pHeader->m_nAllocationCount ||
          rPack.m_pAllocations[id].m_nConsumer != T3D_VT_CONSUMER_COMPOSED ||
          rPack.m_pAllocations[id].m_nGeneration == 0u ) return false;
-    rBase = t3d_vt_v1_runtime_allocation_base( id );
+    rBase = t3d_vt_runtime_allocation_base( id );
     rGeneration = rPack.m_pAllocations[id].m_nGeneration;
     return true;
 }
@@ -47,9 +47,9 @@ bool t3d_st_cook_region_package_cold( Terrain3DData &rData,
                                        godot::String &rError )
 {
     rError = godot::String();
-    t3dVTPackViewV1_t pack{};
+    t3dVTPackBaselineView_t pack{};
     if ( rFinalV1.is_empty() ||
-         !t3d_vt_pack_open_view_v1( rFinalV1.ptr(), ( uint64_t ) rFinalV1.size(), pack ) ||
+         !t3d_vt_pack_open_baseline_view( rFinalV1.ptr(), ( uint64_t ) rFinalV1.size(), pack ) ||
          pack.m_pHeader == nullptr || pack.m_pHeader->m_nPackageGeneration == 0u )
     {
         rError = "SuperTerrain cannot cook from an invalid COMPOSED V1 package";

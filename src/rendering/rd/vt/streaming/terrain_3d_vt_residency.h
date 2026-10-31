@@ -15,7 +15,7 @@
 
 // Legacy channel-owned allocation ABI retained only for V1 pack compatibility.
 
-static_assert( sizeof( t3dVTAllocationRecordV1_t ) == 32, "t3dVTAllocationRecordV1_t ABI mismatch" );
+static_assert( sizeof( t3dVTAllocationRecord_t ) == 32, "t3dVTAllocationRecord_t ABI mismatch" );
 static_assert( sizeof( t3dVTPageTableEntry_t ) == 16, "t3dVTPageTableEntry_t ABI mismatch" );
 static_assert( sizeof( t3dVTGpuCounters_t ) == 32, "t3dVTGpuCounters_t ABI mismatch" );
 static_assert( sizeof( t3dVTRuntimeRequest_t ) == 8, "t3dVTRuntimeRequest_t ABI mismatch" );
@@ -46,7 +46,7 @@ bool	 t3d_vt_write_pack_cold( const t3dVTPackSource_t &pSource, void *pDestinati
 struct t3dVTLegacyDecodeStorage_t
 {
 	t3dVTFileHeader_t Header{};
-	eastl::vector< t3dVTAllocationRecordV1_t > Allocations;
+	eastl::vector< t3dVTAllocationRecord_t > Allocations;
 	eastl::vector< t3dVTPageFileRecord_t > Pages;
 	eastl::vector< t3dVTPayloadRecord_t > Payloads;
 };

@@ -74,9 +74,9 @@ static uint64_t t3dMegaVTSourceFingerprint(
 	const t3dMegaVTColorCapture_t &rCapture ) {
 	uint64_t hash = 1469598103934665603ULL;
 	// Cooker recipe revisions are cache dependencies, not source pixels.
-	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_ABI_VERSION );
-	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_FILTER_ABI_VERSION );
-	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_V1_COMPRESSOR_ABI_VERSION );
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_ABI_VERSION );
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_FILTER_ABI_VERSION );
+	hash = t3dHashFnv1a64LittleU32( hash, T3D_VT_COMPRESSOR_ABI_VERSION );
 	hash = t3dHashFnv1a64LittleU32( hash, rCapture.m_nExtent );
 	for ( uint32_t i = 0u; i < 9u; ++i ) {
 		const t3dMegaVTColorSource_t &source = rCapture.m_neighbors[i];
@@ -215,7 +215,7 @@ static bool t3dMegaVTCookPixels(
 	const t3dMegaVTRegionPixels_t &rPixels,
 	PackedByteArray				  &rFragment,
 	const uint64_t				   nByteLimit ) {
-	t3dVTCookSparseSourceV1_t source{};
+	t3dVTCookSparseSource_t source{};
 	source.m_nStableKey = t3d_vt_terrain_region_stable_key( rCapture.m_nRegionIndex );
 	source.m_nGenerationSeed = rCapture.m_nGeneration;
 	source.m_nConsumer = T3D_VT_CONSUMER_CLIPMAP;
@@ -235,7 +235,7 @@ static bool t3dMegaVTCookPixels(
 		t3dHashPublicationBytes( rPixels.m_albedo.ptr(), rPixels.m_albedo.size() );
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_PBR] =
 		t3dHashPublicationBytes( rPixels.m_pbr.ptr(), rPixels.m_pbr.size() );
-	return t3d_vt_godot_cook_source_fragment_v1( source, rFragment, nByteLimit );
+	return t3d_vt_godot_cook_source_fragment( source, rFragment, nByteLimit );
 }
 
 Terrain3DIncrementalMegaVTCooker::~Terrain3DIncrementalMegaVTCooker(
@@ -528,11 +528,11 @@ static bool t3dMegaVTLoadExportFragmentCold(
 	const Ref< FileAccess > file = FileAccess::open( rPath, FileAccess::READ );
 	if ( file.is_null() ) return false;
 	const uint64_t bytes = file->get_length();
-	if ( bytes < T3D_VT_PACK_V1_HEADER_BYTES || bytes > nByteLimit ) return false;
+	if ( bytes < T3D_VT_PACK_HEADER_BYTES || bytes > nByteLimit ) return false;
 	PackedByteArray candidate = file->get_buffer( bytes );
-	t3dVTPackViewV1_t view{};
+	t3dVTPackBaselineView_t view{};
 	if ( ( uint64_t ) candidate.size() != bytes ||
-		 !t3d_vt_pack_open_view_v1( candidate.ptr(), bytes, view ) ) return false;
+		 !t3d_vt_pack_open_baseline_view( candidate.ptr(), bytes, view ) ) return false;
 	if ( view.m_pHeader->m_nAllocationCount != 1u ||
 		 view.m_pAllocationKeys[0].m_nStableKey != t3d_vt_terrain_region_stable_key( nRegionIndex ) ) return false;
 	if ( view.m_pAllocations[0].m_nGeneration != 1u ||
@@ -628,7 +628,7 @@ bool Terrain3DIncrementalMegaVTCooker::restoreCachedRegionCold(
 	}
 	const Ref< FileAccess > file = FileAccess::open( path, FileAccess::READ );
 	const uint64_t			nBytes = file.is_valid() ? file->get_length() : 0u;
-	if ( nBytes < T3D_VT_PACK_V1_HEADER_BYTES || nBytes > m_nWorkerByteLimit || rRetainedBytes > m_nCpuByteLimit ||
+	if ( nBytes < T3D_VT_PACK_HEADER_BYTES || nBytes > m_nWorkerByteLimit || rRetainedBytes > m_nCpuByteLimit ||
 		 nBytes + 64u > m_nCpuByteLimit - rRetainedBytes ) {
 		++m_nCacheRejected;
 		return false;
@@ -639,8 +639,8 @@ bool Terrain3DIncrementalMegaVTCooker::restoreCachedRegionCold(
 		return false;
 	}
 	const PackedByteArray bytes = file->get_buffer( nBytes );
-	t3dVTPackViewV1_t	  view{};
-	if ( ( uint64_t ) bytes.size() != nBytes || !t3d_vt_pack_open_view_v1( bytes.ptr(), nBytes, view ) ||
+	t3dVTPackBaselineView_t	  view{};
+	if ( ( uint64_t ) bytes.size() != nBytes || !t3d_vt_pack_open_baseline_view( bytes.ptr(), nBytes, view ) ||
 		 view.m_pHeader->m_nAllocationCount != 1u ||
 		 view.m_pAllocationKeys[0].m_nStableKey != t3d_vt_terrain_region_stable_key( nRegionIndex ) ||
 		 view.m_pAllocations[0].m_nGeneration != nSourceGeneration ||
@@ -1240,7 +1240,7 @@ bool Terrain3DIncrementalMegaVTCooker::composePackageCold(
 	}
 	t3dVTMergeStatistics_t statistics;
 	const uint64_t		   nStart = t3dSteadyClockUsec();
-	const bool			   bMerged = t3d_vt_godot_merge_packages_v1( packages.data(),
+	const bool			   bMerged = t3d_vt_godot_merge_packages( packages.data(),
 														 ( uint32_t ) packages.size(),
 														 nGeneration,
 														 merged,
@@ -1517,7 +1517,7 @@ bool Terrain3DIncrementalMegaVTCooker::appendRuntimeRegionsCold(
 	const uint32_t	nGeneration = t3dNextGeneration( ( uint32_t ) ( nSignature ^ ( nSignature >> 32u ) ) );
 	PackedByteArray merged;
 	if ( nRetainedBytes >= rInputs.m_nCpuByteLimit ||
-		 !t3d_vt_godot_merge_packages_v1( packages.data(),
+		 !t3d_vt_godot_merge_packages( packages.data(),
 										  ( uint32_t ) packages.size(),
 										  nGeneration,
 										  merged,

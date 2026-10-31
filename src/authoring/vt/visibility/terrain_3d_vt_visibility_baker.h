@@ -53,7 +53,7 @@ public:
     // false without publishing partial results on any GPU/resource failure.
     // Caller supplies immutable scene buffers with lifetimes covering the call.
     bool bake( const t3dVTVisibilityStaticSceneView_t &rScene,
-               const t3dVTDemandV1CookConfig_t &rConfig,
+               const t3dVTDemandVisibilityCookConfig_t &rConfig,
                std::vector< t3dVTVisibilityProbeResult_t > &rResults,
                t3dVTVisibilityBakeStats_t &rStats ) const;
 };

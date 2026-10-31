@@ -23,12 +23,12 @@ Run from the repository root:
 
 ```
 clang++ -std=c++17 -Isrc -Wall -Wextra -Werror -pthread \
-  src/diagnostics/tests/composed_surface/test_cs03_cs04.cpp \
+  src/diagnostics/tests/composed_surface/test.cpp \
   src/authoring/vt/build/terrain_3d_composed_surface_cooker.cpp \
   src/authoring/vt/io/terrain_3d_composed_surface_sidecar_writer.cpp \
   src/rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.cpp \
   src/rendering/rd/vt/runtime/terrain_3d_composed_surface_mapped_file.cpp \
-  -o /tmp/test_cs03_cs04 && /tmp/test_cs03_cs04
+  -o /tmp/test && /tmp/test
 ```
 
 Covers deterministic full/incremental output, immutable reuse, CRC/readback corruption, file replacement and reopening, wrong fingerprints, lookup, priority and dedup, insufficient transfer budget, partial uploads, retired-slot reuse, canceled/stale device generations, and failures that leave no published file. Compression callback in the portable test is a transport stub, so standalone test success is not evidence of BC encoder image quality or Vulkan correctness.

@@ -52,8 +52,8 @@ def verify():
         assert stage.count('#include "terrain_composed_surface_sampling.glslinc"') == 1
         assert stage.index('#include "terrain_composed_material_math.glslinc"') < stage.index('#include "terrain_clipmap_fragment_inc.glslinc"')
     assert fixture.count('#include "terrain_composed_material_math.glslinc"') == 1
-    assert raster.count('t3d_cs_height_blend(') == 2, 'both color and DNR must reuse shared blend'
-    assert pure.count('float t3d_cs_height_blend(') == 1
+    assert raster.count('t3d_comp_surf_height_blend(') == 2, 'both color and DNR must reuse shared blend'
+    assert pure.count('float t3d_comp_surf_height_blend(') == 1
     assert 'struct SampledMaterial {' not in raster
     assert 'struct SampledMaterial {' in pure
     assert 'ControlBlendSet4 make_control_blend_set4' in pure

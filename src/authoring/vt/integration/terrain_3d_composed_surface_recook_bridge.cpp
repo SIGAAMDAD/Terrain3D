@@ -1,7 +1,7 @@
 #include "authoring/vt/integration/terrain_3d_composed_surface_recook_bridge.h"
 #include <string.h>
 
-bool t3d_cs_make_recook_flags_cold(
+bool t3d_comp_surf_make_recook_flags_cold(
     const t3dComposedSurfaceEditTicket_t &ticket, const uint64_t nRegionKey,
     const uint32_t nMip0Width, const uint32_t nMip0Height,
     const t3dComposedSurfaceCookPage_t *pPages, const uint32_t nPages,
@@ -53,7 +53,7 @@ bool t3d_cs_make_recook_flags_cold(
     return expectedMask == 0u && presentMask == ( ( 1u << allPages ) - 1u );
 }
 
-bool t3d_cs_recook_journal_ticket_cold(
+bool t3d_comp_surf_recook_journal_ticket_cold(
     const Terrain3DComposedSurfaceEditJournal &journal,
     const t3dComposedSurfaceEditTicket_t &ticket,
     const uint64_t nRegionKey, const uint32_t nMip0Width, const uint32_t nMip0Height,
@@ -69,10 +69,10 @@ bool t3d_cs_recook_journal_ticket_cold(
          source.m_nSourceFingerprint != ticket.m_nSourceFingerprint ||
          !journal.completionCurrentCold( ticket, source.m_nSourceFingerprint,
                                           ticket.m_nTopologyGeneration ) ||
-         !t3d_cs_make_recook_flags_cold( ticket, nRegionKey, nMip0Width,
+         !t3d_comp_surf_make_recook_flags_cold( ticket, nRegionKey, nMip0Width,
                                          nMip0Height, pPages, nPages, pDirtyFlags,
                                          nDirtyCapacity ) ) return false;
-    if ( !t3d_cs_recook_incremental_cold( pPages, nPages, source,
+    if ( !t3d_comp_surf_recook_incremental_cold( pPages, nPages, source,
                                           pPreviousFile, nPreviousBytes,
                                           pDirtyFlags, pScratch, nScratchBytes,
                                           pOutput, nOutputCapacity, rWrittenBytes ) ) return false;

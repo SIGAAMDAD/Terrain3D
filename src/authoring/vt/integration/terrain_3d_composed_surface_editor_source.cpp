@@ -1,8 +1,8 @@
 #include "authoring/vt/integration/terrain_3d_composed_surface_editor_source.h"
 #if defined( T3D_EDITOR_NATIVE )
 
-#include "authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.h"
-#include "authoring/vt/build/terrain_3d_composed_surface_v1_godot_decode.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_cold_pipeline.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_godot_decode.h"
 #include "authoring/vt/build/terrain_3d_composed_surface_encoder_adapter.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_coordinator_hooks.h"
 #include "assets/catalog/terrain_3d_assets.h"
@@ -25,10 +25,10 @@
 using namespace godot;
 
 // One additional control sample is needed for the four-corner interpolation.
-#define T3D_CS_EDITOR_SNAPSHOT_SIDE ( T3D_CS_PHYSICAL_TILE + 4u )
-#define T3D_CS_EDITOR_SNAPSHOT_COUNT ( T3D_CS_EDITOR_SNAPSHOT_SIDE * T3D_CS_EDITOR_SNAPSHOT_SIDE )
+#define T3D_COMP_SURF_EDITOR_SNAPSHOT_SIDE ( T3D_COMP_SURF_PHYSICAL_TILE + 4u )
+#define T3D_COMP_SURF_EDITOR_SNAPSHOT_COUNT ( T3D_COMP_SURF_EDITOR_SNAPSHOT_SIDE * T3D_COMP_SURF_EDITOR_SNAPSHOT_SIDE )
 
-struct t3dCsEditorControlTile_t
+struct t3dCompSurfEditorControlTile_t
 {
     uint32_t m_nRegionIndex = 0u;
     uint32_t m_nPageX = 0u;
@@ -48,21 +48,21 @@ struct t3dCsEditorControlTile_t
     uint64_t m_nControlsRevision = 0u;
 };
 
-struct t3dCsEditorSourceContext_t
+struct t3dCompSurfEditorSourceContext_t
 {
     Terrain3DData *m_pData = nullptr;
     const Terrain3DTerrainMegaVT *m_pMegaVT = nullptr;
     const Terrain3DComposedSurfaceEditJournal *m_pEdits = nullptr;
     const Terrain3DAssets *m_pAssets = nullptr;
     const Terrain3DMaterial *m_pMaterial = nullptr;
-    std::vector< t3dCsEditorControlTile_t > m_tiles;
-    const t3dCsEditorControlTile_t *m_pActive = nullptr;
+    std::vector< t3dCompSurfEditorControlTile_t > m_tiles;
+    const t3dCompSurfEditorControlTile_t *m_pActive = nullptr;
     uint64_t m_nTerrainRevision = 0u;
     uint64_t m_nMaterialRevision = 0u;
     uint64_t m_nTopologyRevision = 0u;
 };
 
-static uint64_t t3d_cs_editor_material_revision( const Terrain3DAssets &rAssets,
+static uint64_t t3d_comp_surf_editor_material_revision( const Terrain3DAssets &rAssets,
                                                   const Terrain3DMaterial &rMaterial )
 {
     const uint64_t a = rAssets.getTerrainVtContentGeneration();
@@ -156,31 +156,31 @@ static uint64_t t3d_cs_editor_material_revision( const Terrain3DAssets &rAssets,
     return revision ? revision : 1u;
 }
 
-static uint64_t t3d_cs_editor_terrain_revision( const Terrain3DComposedSurfaceEditJournal &rJournal )
+static uint64_t t3d_comp_surf_editor_terrain_revision( const Terrain3DComposedSurfaceEditJournal &rJournal )
 {
     const auto &s = rJournal.statsCold();
     uint64_t result = 1u + s.m_nEditEvents + s.m_nSourceInvalidations + s.m_nRemovedRegions;
     return result ? result : 1u;
 }
 
-static bool t3d_cs_editor_current( void *pUser, const uint64_t nTerrain,
+static bool t3d_comp_surf_editor_current( void *pUser, const uint64_t nTerrain,
                                    const uint64_t nMaterial, const uint64_t nTopology )
 {
-    const auto &c = *static_cast< const t3dCsEditorSourceContext_t * >( pUser );
+    const auto &c = *static_cast< const t3dCompSurfEditorSourceContext_t * >( pUser );
     return c.m_pData && c.m_pMegaVT && c.m_pEdits && c.m_pAssets && c.m_pMaterial &&
            nTerrain == c.m_nTerrainRevision && nMaterial == c.m_nMaterialRevision &&
            nTopology == c.m_nTopologyRevision &&
-           t3d_cs_editor_terrain_revision( *c.m_pEdits ) == nTerrain &&
-           t3d_cs_editor_material_revision( *c.m_pAssets, *c.m_pMaterial ) == nMaterial &&
+           t3d_comp_surf_editor_terrain_revision( *c.m_pEdits ) == nTerrain &&
+           t3d_comp_surf_editor_material_revision( *c.m_pAssets, *c.m_pMaterial ) == nMaterial &&
            c.m_pMegaVT->getTopologyGeneration() == nTopology;
 }
 
-static bool t3d_cs_editor_page( void *pUser, const t3dComposedSurfaceCookPage_t &rPage,
-                                t3dComposedStaticV1Footprint_t &rFootprint )
+static bool t3d_comp_surf_editor_page( void *pUser, const t3dComposedSurfaceCookPage_t &rPage,
+                                t3dComposedStaticFootprint_t &rFootprint )
 {
-    auto &c = *static_cast< t3dCsEditorSourceContext_t * >( pUser );
+    auto &c = *static_cast< t3dCompSurfEditorSourceContext_t * >( pUser );
     c.m_pActive = nullptr;
-    if ( rPage.m_nRegionKey == 0u || rPage.m_nRegionKey > T3D_CS_EDITOR_REGION_COUNT ) return false;
+    if ( rPage.m_nRegionKey == 0u || rPage.m_nRegionKey > T3D_COMP_SURF_EDITOR_REGION_COUNT ) return false;
     const uint32_t nIndex = uint32_t( rPage.m_nRegionKey - 1u );
     for ( const auto &tile : c.m_tiles ) {
         if ( tile.m_nRegionIndex != nIndex || tile.m_nPageX != rPage.m_nPageX ||
@@ -200,10 +200,10 @@ static bool t3d_cs_editor_page( void *pUser, const t3dComposedSurfaceCookPage_t 
     return false;
 }
 
-static bool t3d_cs_editor_control( void *pUser, const int32_t nX, const int32_t nZ,
+static bool t3d_comp_surf_editor_control( void *pUser, const int32_t nX, const int32_t nZ,
                                    uint32_t &rControl )
 {
-    const auto &c = *static_cast< const t3dCsEditorSourceContext_t * >( pUser );
+    const auto &c = *static_cast< const t3dCompSurfEditorSourceContext_t * >( pUser );
     const auto *pTile = c.m_pActive;
     if ( !pTile ) return false;
     const int64_t x = int64_t( nX ) - pTile->m_nOriginX;
@@ -216,13 +216,13 @@ static bool t3d_cs_editor_control( void *pUser, const int32_t nX, const int32_t 
     return rControl != UINT32_MAX;
 }
 
-static bool t3d_cs_editor_surface( void *pUser, uint32_t x, uint32_t y,
+static bool t3d_comp_surf_editor_surface( void *pUser, uint32_t x, uint32_t y,
                                     float &height, float &normal_y )
 {
-    const auto &c = *static_cast< const t3dCsEditorSourceContext_t * >( pUser );
+    const auto &c = *static_cast< const t3dCompSurfEditorSourceContext_t * >( pUser );
     const auto *pTile = c.m_pActive;
-    if ( !pTile || x >= T3D_CS_PHYSICAL_TILE || y >= T3D_CS_PHYSICAL_TILE ) return false;
-    const uint32_t i = y * T3D_CS_PHYSICAL_TILE + x;
+    if ( !pTile || x >= T3D_COMP_SURF_PHYSICAL_TILE || y >= T3D_COMP_SURF_PHYSICAL_TILE ) return false;
+    const uint32_t i = y * T3D_COMP_SURF_PHYSICAL_TILE + x;
     if ( i >= uint32_t( pTile->m_heights.size() ) ||
          i >= uint32_t( pTile->m_normalY.size() ) ) return false;
     height = pTile->m_heights[i];
@@ -230,13 +230,13 @@ static bool t3d_cs_editor_surface( void *pUser, uint32_t x, uint32_t y,
     return std::isfinite( height ) && std::isfinite( normal_y );
 }
 
-bool t3d_cs_cook_editor_candidate_cold(
+bool t3d_comp_surf_cook_editor_candidate_cold(
     const PackedByteArray &rPack, Terrain3DData &rData,
     const Ref< Terrain3DAssets > &rAssets,
     const Ref< Terrain3DMaterial > &rMaterial,
     const Terrain3DTerrainMegaVT &rMegaVT,
     const Terrain3DComposedSurfaceEditJournal &rEdits,
-    const String &rDirectory, t3dCsEditorCandidateResult_t &rResult )
+    const String &rDirectory, t3dCompSurfEditorCandidateResult_t &rResult )
 {
     rResult = {};
     rResult.m_error = "invalid_source";
@@ -258,15 +258,15 @@ bool t3d_cs_cook_editor_candidate_cold(
         return false;
     }
     const uint32_t nLayers = uint32_t( rAssets->getTextureCount() );
-    if ( !nLayers || nLayers > T3D_CS_STATIC_V1_MAX_LAYERS ) {
+    if ( !nLayers || nLayers > T3D_COMP_SURF_STATIC_MAX_LAYERS ) {
         rResult.m_error = "unsupported_material_count";
         return false;
     }
     const bool autoShader = rMaterial->getMiddleAutoShaderEnabled();
     const bool detiling = detilingMode != DETILING_DISABLED;
     const PackedVector2Array detiles = rAssets->getTextureDetiles();
-    t3dComposedStaticV1Layer_t layers[T3D_CS_STATIC_V1_MAX_LAYERS]{};
-    t3dComposedStaticV1Layer_t resolved[T3D_CS_STATIC_V1_MAX_LAYERS]{};
+    t3dComposedStaticLayer_t layers[T3D_COMP_SURF_STATIC_MAX_LAYERS]{};
+    t3dComposedStaticLayer_t resolved[T3D_COMP_SURF_STATIC_MAX_LAYERS]{};
     for ( uint32_t i = 0u; i < nLayers; ++i ) {
         const Ref< Terrain3DTextureAsset > asset = rAssets->getTextureAsset( int( i ) );
         if ( asset.is_null() ) { rResult.m_error = "missing_material"; return false; }
@@ -284,14 +284,14 @@ bool t3d_cs_cook_editor_candidate_cold(
         layers[i].m_fPbr1[2] = float( detile.x );
         layers[i].m_fPbr1[3] = float( detile.y );
     }
-    t3dCsEditorSourceContext_t context{};
+    t3dCompSurfEditorSourceContext_t context{};
     context.m_pData = &rData;
     context.m_pMegaVT = &rMegaVT;
     context.m_pEdits = &rEdits;
     context.m_pAssets = rAssets.ptr();
     context.m_pMaterial = rMaterial.ptr();
-    context.m_nTerrainRevision = t3d_cs_editor_terrain_revision( rEdits );
-    context.m_nMaterialRevision = t3d_cs_editor_material_revision( *rAssets.ptr(), *rMaterial.ptr() );
+    context.m_nTerrainRevision = t3d_comp_surf_editor_terrain_revision( rEdits );
+    context.m_nMaterialRevision = t3d_comp_surf_editor_material_revision( *rAssets.ptr(), *rMaterial.ptr() );
     context.m_nTopologyRevision = rMegaVT.getTopologyGeneration();
     if ( !context.m_nTopologyRevision ) {
         rResult.m_error = "terrain_topology_unavailable";
@@ -302,9 +302,9 @@ bool t3d_cs_cook_editor_candidate_cold(
     pages.reserve( 128u );
     context.m_tiles.reserve( 128u );
     uint64_t controlsHash = 14695981039346656037ull;
-    for ( uint32_t region = 0u; region < T3D_CS_EDITOR_REGION_COUNT; ++region ) {
+    for ( uint32_t region = 0u; region < T3D_COMP_SURF_EDITOR_REGION_COUNT; ++region ) {
         t3dComposedSurfaceEditRegion_t info{};
-        if ( !t3d_cs_editor_region( rMegaVT, region, info ) ||
+        if ( !t3d_comp_surf_editor_region( rMegaVT, region, info ) ||
              !rData.getRegionPtr( Vector2i( info.m_nRegionX, info.m_nRegionZ ) ) ) continue;
         // The existing MegaVT supports 2 or 4 texels per meter. Compose the
         // matching 2x2 / 4x4 pages rather than silently rejecting every editor
@@ -329,23 +329,23 @@ bool t3d_cs_cook_editor_candidate_cold(
         const uint32_t texelsPerCell = 1u << mip;
         for ( uint32_t pageY = 0u; pageY < pagesWide; ++pageY ) {
         for ( uint32_t pageX = 0u; pageX < pagesWide; ++pageX ) {
-        t3dCsEditorControlTile_t tile{};
+        t3dCompSurfEditorControlTile_t tile{};
         tile.m_nRegionIndex = region;
         tile.m_nPageX = pageX;
         tile.m_nPageY = pageY;
         tile.m_nMip = mip;
         tile.m_fWorldStep = float( texelsPerCell ) / float( tpm );
         tile.m_fWorldOriginX = float( info.m_nRegionX * 128 ) +
-                               float( pageX * T3D_CS_PAGE_INTERIOR ) * tile.m_fWorldStep;
+                               float( pageX * T3D_COMP_SURF_PAGE_INTERIOR ) * tile.m_fWorldStep;
         tile.m_fWorldOriginZ = float( info.m_nRegionZ * 128 ) +
-                               float( pageY * T3D_CS_PAGE_INTERIOR ) * tile.m_fWorldStep;
-        const uint32_t gutterCells = ( T3D_CS_PAGE_GUTTER * texelsPerCell + tpm - 1u ) / tpm;
-        const uint32_t interiorCells = ( T3D_CS_PAGE_INTERIOR * texelsPerCell ) / tpm;
+                               float( pageY * T3D_COMP_SURF_PAGE_INTERIOR ) * tile.m_fWorldStep;
+        const uint32_t gutterCells = ( T3D_COMP_SURF_PAGE_GUTTER * texelsPerCell + tpm - 1u ) / tpm;
+        const uint32_t interiorCells = ( T3D_COMP_SURF_PAGE_INTERIOR * texelsPerCell ) / tpm;
         tile.m_nOriginX = int32_t( floorf( tile.m_fWorldOriginX ) ) - int32_t( gutterCells );
         tile.m_nOriginZ = int32_t( floorf( tile.m_fWorldOriginZ ) ) - int32_t( gutterCells );
         tile.m_nSnapshotSide = interiorCells + gutterCells * 2u + 3u;
         const uint32_t count = tile.m_nSnapshotSide * tile.m_nSnapshotSide;
-        if ( count > T3D_CS_EDITOR_SNAPSHOT_COUNT ) return false;
+        if ( count > T3D_COMP_SURF_EDITOR_SNAPSHOT_COUNT ) return false;
         PackedVector3Array positions;
         positions.resize( count );
         Vector3 *pPositions = positions.ptrw();
@@ -408,13 +408,13 @@ bool t3d_cs_cook_editor_candidate_cold(
         // Their material fingerprint must remain independent of height edits.
         if ( autoShader && pageUsesAuto ) {
             PackedVector3Array surfacePositions;
-            surfacePositions.resize( T3D_CS_PHYSICAL_TILE * T3D_CS_PHYSICAL_TILE );
+            surfacePositions.resize( T3D_COMP_SURF_PHYSICAL_TILE * T3D_COMP_SURF_PHYSICAL_TILE );
             Vector3 *pSurfacePositions = surfacePositions.ptrw();
-            for ( uint32_t py = 0u; py < T3D_CS_PHYSICAL_TILE; ++py ) {
-                for ( uint32_t px = 0u; px < T3D_CS_PHYSICAL_TILE; ++px ) {
-                    const float sx = float( int32_t( px ) - int32_t( T3D_CS_PAGE_GUTTER ) ) + 0.5f;
-                    const float sy = float( int32_t( py ) - int32_t( T3D_CS_PAGE_GUTTER ) ) + 0.5f;
-                    pSurfacePositions[py * T3D_CS_PHYSICAL_TILE + px] =
+            for ( uint32_t py = 0u; py < T3D_COMP_SURF_PHYSICAL_TILE; ++py ) {
+                for ( uint32_t px = 0u; px < T3D_COMP_SURF_PHYSICAL_TILE; ++px ) {
+                    const float sx = float( int32_t( px ) - int32_t( T3D_COMP_SURF_PAGE_GUTTER ) ) + 0.5f;
+                    const float sy = float( int32_t( py ) - int32_t( T3D_COMP_SURF_PAGE_GUTTER ) ) + 0.5f;
+                    pSurfacePositions[py * T3D_COMP_SURF_PHYSICAL_TILE + px] =
                         Vector3( tile.m_fWorldOriginX + sx * tile.m_fWorldStep, 0.0f,
                                  tile.m_fWorldOriginZ + sy * tile.m_fWorldStep );
                 }
@@ -453,19 +453,19 @@ bool t3d_cs_cook_editor_candidate_cold(
         }
     }
     if ( pages.empty() ) { rResult.m_error = "no_eligible_regions"; return false; }
-    if ( !t3d_cs_editor_current( &context, context.m_nTerrainRevision,
+    if ( !t3d_comp_surf_editor_current( &context, context.m_nTerrainRevision,
                                  context.m_nMaterialRevision, context.m_nTopologyRevision ) ) {
         rResult.m_error = "source_changed_while_snapshotting";
         return false;
     }
     uint64_t bytes = 0u;
-    if ( !t3d_cs_cook_total_bytes( uint32_t( pages.size() ), bytes ) || bytes > INT32_MAX ) {
+    if ( !t3d_comp_surf_cook_total_bytes( uint32_t( pages.size() ), bytes ) || bytes > INT32_MAX ) {
         rResult.m_error = "composed_budget_exceeded";
         return false;
     }
     PackedByteArray output, scratch, cache;
     output.resize( int64_t( bytes ) );
-    scratch.resize( T3D_CS_COOK_FUSED_SCRATCH_BYTES );
+    scratch.resize( T3D_COMP_SURF_COOK_FUSED_SCRATCH_BYTES );
     cache.resize( 4u * T3D_COMPOSED_SURFACE_PACK_DECODED_TILE_BYTES );
     if ( uint64_t( output.size() ) != bytes || scratch.is_empty() || cache.is_empty() ) {
         rResult.m_error = "authoring_memory_exhausted";
@@ -491,11 +491,11 @@ bool t3d_cs_cook_editor_candidate_cold(
     request.m_pAuthoredLayers = layers;
     request.m_nLayerCount = nLayers;
     request.m_pResolvedLayers = resolved;
-    request.m_nResolvedLayerCapacity = T3D_CS_STATIC_V1_MAX_LAYERS;
+    request.m_nResolvedLayerCapacity = T3D_COMP_SURF_STATIC_MAX_LAYERS;
     request.m_source.m_pUser = &context;
-    request.m_source.m_pResolvePage = t3d_cs_editor_page;
-    request.m_source.m_pReadControl = t3d_cs_editor_control;
-    request.m_source.m_pReadTerrainSurface = autoShader ? t3d_cs_editor_surface : nullptr;
+    request.m_source.m_pResolvePage = t3d_comp_surf_editor_page;
+    request.m_source.m_pReadControl = t3d_comp_surf_editor_control;
+    request.m_source.m_pReadTerrainSurface = autoShader ? t3d_comp_surf_editor_surface : nullptr;
     request.m_source.m_bAutoShader = autoShader;
     request.m_source.m_bDetiling = detiling;
     request.m_source.m_nDetilingMode = uint32_t( detilingMode );
@@ -524,7 +524,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     }
     request.m_source.m_nAutoBaseTexture = autoShader ? uint32_t( autoBase ) : 0u;
     request.m_source.m_nAutoOverlayTexture = autoShader ? uint32_t( autoOverlay ) : 1u;
-    request.m_pEncode = t3d_cs_reference_encode;
+    request.m_pEncode = t3d_comp_surf_reference_encode;
     request.m_pDecode = t3d_composed_surface_pack_decode_godot_image;
     request.m_pDecodedCache = cache.ptrw();
     request.m_nCacheSlots = 4u;
@@ -537,7 +537,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     request.m_nTopologyGeneration = context.m_nTopologyRevision;
     request.m_nControlPayloadFingerprint = controlsHash ? controlsHash : 1u;
     request.m_bPageLocalCompositionIdentity = true;
-    request.m_pCurrent = t3d_cs_editor_current;
+    request.m_pCurrent = t3d_comp_surf_editor_current;
     request.m_pCurrentUser = &context;
     request.m_bReferenceOnly = true;
     request.m_pDestination = pathUtf8.get_data();
@@ -547,14 +547,14 @@ bool t3d_cs_cook_editor_candidate_cold(
     PackedByteArray previous = FileAccess::get_file_as_bytes( path );
     t3dComposedSurfaceSidecarView_t priorView{};
     if ( !previous.is_empty() &&
-         t3d_cs_validate_sidecar_bytes( previous.ptr(), size_t( previous.size() ), true ) &&
-         t3d_cs_open_sidecar_cold( previous.ptr(), uint64_t( previous.size() ),
+         t3d_comp_surf_validate_sidecar_bytes( previous.ptr(), size_t( previous.size() ), true ) &&
+         t3d_comp_surf_open_sidecar_cold( previous.ptr(), uint64_t( previous.size() ),
                                     identity, priorView ) ) {
         request.m_pPreviousSidecar = previous.ptr();
         request.m_nPreviousSidecarBytes = uint64_t( previous.size() );
         for ( const auto &page : pages ) {
             uint32_t index = 0u;
-            if ( t3d_cs_find_page( priorView, page.m_nRegionKey, page.m_nMip,
+            if ( t3d_comp_surf_find_page( priorView, page.m_nRegionKey, page.m_nMip,
                                   page.m_nPageX, page.m_nPageY,
                                   page.m_nCompositionRevision, index ) )
                 ++rResult.m_nReusedPages;
@@ -574,8 +574,8 @@ bool t3d_cs_cook_editor_candidate_cold(
     PackedByteArray committed = FileAccess::get_file_as_bytes( stagedPath );
     t3dComposedSurfaceSidecarView_t verified{};
     if ( uint64_t( committed.size() ) != cooked.m_nWrittenBytes ||
-         !t3d_cs_validate_sidecar_bytes( committed.ptr(), size_t( committed.size() ), true ) ||
-         !t3d_cs_open_sidecar_cold( committed.ptr(), uint64_t( committed.size() ),
+         !t3d_comp_surf_validate_sidecar_bytes( committed.ptr(), size_t( committed.size() ), true ) ||
+         !t3d_comp_surf_open_sidecar_cold( committed.ptr(), uint64_t( committed.size() ),
                                     identity, verified ) ||
          verified.m_header.m_nPageCount != request.m_nPageCount ) {
         ( void ) publication.rollback();
@@ -588,7 +588,7 @@ bool t3d_cs_cook_editor_candidate_cold(
     // before presenting the candidate as a valid editor bake.
     for ( const auto &page : pages ) {
         uint32_t index = 0u;
-        if ( !t3d_cs_find_page( verified, page.m_nRegionKey, page.m_nMip,
+        if ( !t3d_comp_surf_find_page( verified, page.m_nRegionKey, page.m_nMip,
                                 page.m_nPageX, page.m_nPageY,
                                 page.m_nCompositionRevision, index ) ) {
             ( void ) publication.rollback();
@@ -597,7 +597,7 @@ bool t3d_cs_cook_editor_candidate_cold(
             return false;
         }
     }
-    if ( !t3d_cs_editor_current( &context, context.m_nTerrainRevision,
+    if ( !t3d_comp_surf_editor_current( &context, context.m_nTerrainRevision,
                                  context.m_nMaterialRevision, context.m_nTopologyRevision ) ) {
         ( void ) publication.rollback();
         rResult.m_error = "source_changed_before_candidate_acceptance";

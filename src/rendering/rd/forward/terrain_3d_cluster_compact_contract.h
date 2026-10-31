@@ -3,24 +3,24 @@
 #define TERRAIN3D_CLUSTER_COMPACT_CONTRACT_H
 #include <stdint.h>
 #include <stddef.h>
-#define T3D_BR21_KIND_COUNT 5u
-#define T3D_BR21_DEPTH_SLICES 32u
-#define T3D_BR21_LISTS_PER_CLUSTER ( T3D_BR21_KIND_COUNT * T3D_BR21_DEPTH_SLICES )
-#define T3D_BR21_SCAN_GROUP_SIZE 128u
-#define T3D_BR21_MAX_CLUSTERS 8192u
-#define T3D_BR21_INDEX_CAPACITY 1048576u
-#define T3D_BR21_HEADER_VALID 0x42523131u
+#define T3D_CLUSTER_COMPACT_KIND_COUNT 5u
+#define T3D_CLUSTER_COMPACT_DEPTH_SLICES 32u
+#define T3D_CLUSTER_COMPACT_LISTS_PER_CLUSTER ( T3D_CLUSTER_COMPACT_KIND_COUNT * T3D_CLUSTER_COMPACT_DEPTH_SLICES )
+#define T3D_CLUSTER_COMPACT_SCAN_GROUP_SIZE 128u
+#define T3D_CLUSTER_COMPACT_MAX_CLUSTERS 8192u
+#define T3D_CLUSTER_COMPACT_INDEX_CAPACITY 1048576u
+#define T3D_CLUSTER_COMPACT_HEADER_VALID 0x42523131u
 
-typedef struct t3dBr21Header_s
+typedef struct t3dClusterCompactHeader_s
 {
 	uint32_t m_nOffset;
 	uint32_t m_nCount;
 	uint32_t m_nValidity;
 	uint32_t m_nReserved;
-} t3dBr21Header_t;
-static_assert( sizeof( t3dBr21Header_t ) == 16u, "BR21 header std430" );
+} t3dClusterCompactHeader_t;
+static_assert( sizeof( t3dClusterCompactHeader_t ) == 16u, "BR21 header std430" );
 
-typedef struct t3dBr21Push_s
+typedef struct t3dClusterCompactPush_s
 {
 	uint32_t m_nPhase;
 	uint32_t m_nListCount;
@@ -30,17 +30,17 @@ typedef struct t3dBr21Push_s
 	uint32_t m_nTypeStride;
 	uint32_t m_nClusterWidth;
 	uint32_t m_nNativeWordCount;
-} t3dBr21Push_t;
-static_assert( sizeof( t3dBr21Push_t ) == 32u, "BR21 push ABI" );
+} t3dClusterCompactPush_t;
+static_assert( sizeof( t3dClusterCompactPush_t ) == 32u, "BR21 push ABI" );
 
 // BR10 reference decoder. Caller supplies a verified backing array and enough
 // destination capacity; failure leaves the destination count at zero.
-static inline bool t3dBr21DecodeReference( const uint32_t *pWords, size_t nWords,
+static inline bool t3dClusterCompactDecodeReference( const uint32_t *pWords, size_t nWords,
 	uint32_t nTypeBase, uint32_t nMaxWords, uint32_t nSlice,
 	uint32_t *pIndices, uint32_t nCapacity, uint32_t &rCount )
 {
 	rCount = 0u;
-	if ( !pWords || !pIndices || nSlice >= T3D_BR21_DEPTH_SLICES ||
+	if ( !pWords || !pIndices || nSlice >= T3D_CLUSTER_COMPACT_DEPTH_SLICES ||
 		 nTypeBase > nWords || nMaxWords > nWords - nTypeBase ||
 		 nSlice >= nWords - nTypeBase - nMaxWords ) return false;
 	const uint32_t bounds = pWords[nTypeBase + nMaxWords + nSlice];

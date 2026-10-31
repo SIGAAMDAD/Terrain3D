@@ -408,7 +408,7 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 	bool bChanged =
 		!m_bPublicationUploadCached[WORLD_BUFFER_MATERIALS] || getUsedBytes( WORLD_BUFFER_MATERIALS ) != nBytes;
 	uint8_t *const				 pBytes = scratch.ptrw();
-	const bool					 bV1 = rVirtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1;
+	const bool					 bV1 = rVirtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK;
 	const uint32_t				 nAllocationCount = rVirtualTexture.getActiveAllocationCount();
 	const uint32_t				 nPageCount = rVirtualTexture.getActiveVirtualPageCount();
 	const t3dVTResidencyState_t &residency = rVirtualTexture.get_residency();
@@ -433,9 +433,9 @@ bool Terrain3DWorldResources::uploadResolvedMaterialsWarm(
 			material.m_nVtAllocation = nAllocation;
 			material.m_nOverlayVtAllocation = T3D_VT_INVALID_ALLOCATION;
 			if ( nAllocation != T3D_VT_INVALID_ALLOCATION ) {
-				material.m_nFlags |= T3D_VT_MATERIAL_V1_LAYOUT;
+				material.m_nFlags |= T3D_VT_MATERIAL_LAYOUT;
 			} else {
-				material.m_nFlags &= ~T3D_VT_MATERIAL_V1_LAYOUT;
+				material.m_nFlags &= ~T3D_VT_MATERIAL_LAYOUT;
 			}
 		}
 		uint8_t *const pRecord = pBytes + i * sizeof( material );

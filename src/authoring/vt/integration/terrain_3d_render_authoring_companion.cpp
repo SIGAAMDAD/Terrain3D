@@ -51,7 +51,7 @@ Dictionary Terrain3DRenderCoordinator::forceRebakeVirtualTexturesCold(
 	}
     // Explicit all-region rebake must supersede any composed sidecar revision.
     if ( m_terrainMegaVT.isReady() )
-        t3d_cs_editor_invalidate_sources( m_terrainMegaVT, m_composedSurfaceEdits,
+        t3d_comp_surf_editor_invalidate_sources( m_terrainMegaVT, m_composedSurfaceEdits,
                                            m_nComposedSourceGeneration );
     m_pAuthoring->m_composedCandidateSourcePack.clear();
     m_pAuthoring->m_bComposedCandidatePending = false;
@@ -134,7 +134,7 @@ Dictionary Terrain3DRenderCoordinator::getForceRebakeVirtualTexturesStatusCold(
     result["composed_bake_parity_ready"] = false;
     // Replacements remain forbidden until all independent acceptance gates pass.
     result["composed_legacy_middle_atlas_retirable"] =
-        t3d_cs_may_retire_legacy_middle_atlas( t3dComposedSurfaceRetirementEvidence_t{} );
+        t3d_comp_surf_may_retire_legacy_middle_atlas( t3dComposedSurfaceRetirementEvidence_t{} );
 	result["mode"] = m_pAuthoring->m_bForceRebakeAll ? "rebuild_all" : "changed";
 	result["cooked_megavt_regions"] = m_pAuthoring->m_cooker.getForceCookedCountCold();
 	// Expose the actual work rather than only the manual request serial.
@@ -325,8 +325,8 @@ void Terrain3DRenderCoordinator::serviceComposedReferenceBakeCold( void ) {
     const Ref< Terrain3DAssets > assets = m_pTerrain->assetsResource();
     const Ref< Terrain3DMaterial > material = m_pTerrain->materialResource();
     Terrain3DData *const data = m_pTerrain->dataObject();
-    t3dCsEditorCandidateResult_t candidate{};
-    const bool ok = data && t3d_cs_cook_editor_candidate_cold(
+    t3dCompSurfEditorCandidateResult_t candidate{};
+    const bool ok = data && t3d_comp_surf_cook_editor_candidate_cold(
         m_pAuthoring->m_composedCandidateSourcePack, *data, assets, material,
         m_terrainMegaVT, m_composedSurfaceEdits, m_pTerrain->getDataDirectory(), candidate );
     const auto &stats = m_composedSurfaceEdits.statsCold();
@@ -395,7 +395,7 @@ void Terrain3DRenderCoordinator::serviceAuthoringUpdateCold(
              topologyGeneration != m_nComposedTopologyGeneration ) {
             m_nComposedSourceGeneration = sourceGeneration;
             m_nComposedTopologyGeneration = topologyGeneration;
-            t3d_cs_editor_invalidate_sources( m_terrainMegaVT, m_composedSurfaceEdits,
+            t3d_comp_surf_editor_invalidate_sources( m_terrainMegaVT, m_composedSurfaceEdits,
                                                sourceGeneration );
         }
     }

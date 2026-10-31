@@ -7,12 +7,12 @@
 #include <stdint.h>
 #include <string.h>
 
-#define T3D_BR22_CONTROL_REGION_SIDE 128u
-#define T3D_BR22_CONTROL_TILE_SIDE 16u
-#define T3D_BR22_CONTROL_TILES_SIDE 8u
-#define T3D_BR22_CONTROL_TILES ( T3D_BR22_CONTROL_TILES_SIDE * T3D_BR22_CONTROL_TILES_SIDE )
-#define T3D_BR22_CONTROL_SAMPLE_KEY_MASK ( ( 0x1fu << 27u ) | ( 0x1fu << 22u ) | ( 0xfu << 10u ) | ( 0x7u << 7u ) )
-#define T3D_BR22_CONTROL_AUTO_BIT ( 1u )
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_REGION_SIDE 128u
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_TILE_SIDE 16u
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE 8u
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_TILES ( T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE * T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE )
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_SAMPLE_KEY_MASK ( ( 0x1fu << 27u ) | ( 0x1fu << 22u ) | ( 0xfu << 10u ) | ( 0x7u << 7u ) )
+#define T3D_MATERIAL_TILE_CLASS_CONTROL_AUTO_BIT ( 1u )
 
 enum t3dMaterialTileClass_t : uint8_t
 {
@@ -24,7 +24,7 @@ enum t3dMaterialTileClass_t : uint8_t
 
 struct t3dMaterialTileRegionClasses_t
 {
-    uint8_t m_szClass[T3D_BR22_CONTROL_TILES]{};
+    uint8_t m_szClass[T3D_MATERIAL_TILE_CLASS_CONTROL_TILES]{};
     uint32_t m_nRevision = 0u;
     bool m_bReady = false;
 };
@@ -43,25 +43,25 @@ inline uint8_t t3d_material_tile_classify( const uint32_t *pControl,
                                           uint32_t nWidth, uint32_t nHeight,
                                           uint32_t nTileX, uint32_t nTileY )
 {
-    if ( !pControl || nWidth != T3D_BR22_CONTROL_REGION_SIDE ||
-         nHeight != T3D_BR22_CONTROL_REGION_SIDE ||
-         nTileX >= T3D_BR22_CONTROL_TILES_SIDE || nTileY >= T3D_BR22_CONTROL_TILES_SIDE ||
+    if ( !pControl || nWidth != T3D_MATERIAL_TILE_CLASS_CONTROL_REGION_SIDE ||
+         nHeight != T3D_MATERIAL_TILE_CLASS_CONTROL_REGION_SIDE ||
+         nTileX >= T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE || nTileY >= T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE ||
          nTileX == 0u || nTileY == 0u ||
-         nTileX + 1u == T3D_BR22_CONTROL_TILES_SIDE ||
-         nTileY + 1u == T3D_BR22_CONTROL_TILES_SIDE ) return T3D_MATERIAL_TILE_UNKNOWN;
+         nTileX + 1u == T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE ||
+         nTileY + 1u == T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE ) return T3D_MATERIAL_TILE_UNKNOWN;
     // Include BOTH sides of the bilinear four-corner footprint. Border tiles
     // are unknown because sampling can cross into an adjacent region.
-    const uint32_t nBeginX = nTileX * T3D_BR22_CONTROL_TILE_SIDE - 1u;
-    const uint32_t nBeginY = nTileY * T3D_BR22_CONTROL_TILE_SIDE - 1u;
-    const uint32_t nEndX = ( nTileX + 1u ) * T3D_BR22_CONTROL_TILE_SIDE + 1u;
-    const uint32_t nEndY = ( nTileY + 1u ) * T3D_BR22_CONTROL_TILE_SIDE + 1u;
+    const uint32_t nBeginX = nTileX * T3D_MATERIAL_TILE_CLASS_CONTROL_TILE_SIDE - 1u;
+    const uint32_t nBeginY = nTileY * T3D_MATERIAL_TILE_CLASS_CONTROL_TILE_SIDE - 1u;
+    const uint32_t nEndX = ( nTileX + 1u ) * T3D_MATERIAL_TILE_CLASS_CONTROL_TILE_SIDE + 1u;
+    const uint32_t nEndY = ( nTileY + 1u ) * T3D_MATERIAL_TILE_CLASS_CONTROL_TILE_SIDE + 1u;
     uint32_t keys[3]{};
     uint32_t nKeys = 0u;
     for ( uint32_t y = nBeginY; y <= nEndY; ++y ) {
         for ( uint32_t x = nBeginX; x <= nEndX; ++x ) {
             const uint32_t control = pControl[y * nWidth + x];
-            if ( ( control & T3D_BR22_CONTROL_AUTO_BIT ) != 0u ) return T3D_MATERIAL_TILE_UNKNOWN;
-            const uint32_t key = control & T3D_BR22_CONTROL_SAMPLE_KEY_MASK;
+            if ( ( control & T3D_MATERIAL_TILE_CLASS_CONTROL_AUTO_BIT ) != 0u ) return T3D_MATERIAL_TILE_UNKNOWN;
+            const uint32_t key = control & T3D_MATERIAL_TILE_CLASS_CONTROL_SAMPLE_KEY_MASK;
             bool known = false;
             for ( uint32_t i = 0u; i < nKeys; ++i ) known |= keys[i] == key;
             // Continue checking for auto controls even after the third key:
@@ -77,11 +77,11 @@ inline bool t3d_material_tiles_rebuild( t3dMaterialTileRegionClasses_t &rRegion,
                                        const uint32_t *pControl, uint32_t nWidth, uint32_t nHeight )
 {
     t3d_material_tiles_invalidate( rRegion );
-    if ( !pControl || nWidth != T3D_BR22_CONTROL_REGION_SIDE ||
-         nHeight != T3D_BR22_CONTROL_REGION_SIDE ) return false;
-    for ( uint32_t y = 0u; y < T3D_BR22_CONTROL_TILES_SIDE; ++y )
-        for ( uint32_t x = 0u; x < T3D_BR22_CONTROL_TILES_SIDE; ++x )
-            rRegion.m_szClass[y * T3D_BR22_CONTROL_TILES_SIDE + x] =
+    if ( !pControl || nWidth != T3D_MATERIAL_TILE_CLASS_CONTROL_REGION_SIDE ||
+         nHeight != T3D_MATERIAL_TILE_CLASS_CONTROL_REGION_SIDE ) return false;
+    for ( uint32_t y = 0u; y < T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE; ++y )
+        for ( uint32_t x = 0u; x < T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE; ++x )
+            rRegion.m_szClass[y * T3D_MATERIAL_TILE_CLASS_CONTROL_TILES_SIDE + x] =
                 t3d_material_tile_classify( pControl, nWidth, nHeight, x, y );
     rRegion.m_bReady = true;
     return true;
@@ -103,7 +103,7 @@ inline uint8_t t3d_material_tiles_certify_covered_batch(
         if ( !r.m_bReady || r.m_nRevision != pExpectedRevisions[i] || !pExpectedRevisions[i] )
             return T3D_MATERIAL_TILE_UNKNOWN;
         const uint64_t coverage = pWholeDrawTileCoverage[i];
-        for ( uint32_t tile = 0u; tile < T3D_BR22_CONTROL_TILES; ++tile ) {
+        for ( uint32_t tile = 0u; tile < T3D_MATERIAL_TILE_CLASS_CONTROL_TILES; ++tile ) {
             if ( ( coverage & ( uint64_t( 1 ) << tile ) ) == 0u ) continue;
             const uint8_t eClass = r.m_szClass[tile];
             if ( eClass < T3D_MATERIAL_TILE_HOMOGENEOUS || eClass > T3D_MATERIAL_TILE_GENERAL )
@@ -126,7 +126,7 @@ inline uint8_t t3d_material_tiles_certify_batch( const t3dMaterialTileRegionClas
         const t3dMaterialTileRegionClasses_t &r = pRegions[i];
         if ( !r.m_bReady || r.m_nRevision != pExpectedRevisions[i] || !pExpectedRevisions[i] )
             return T3D_MATERIAL_TILE_UNKNOWN;
-        for ( uint32_t t = 0u; t < T3D_BR22_CONTROL_TILES; ++t ) {
+        for ( uint32_t t = 0u; t < T3D_MATERIAL_TILE_CLASS_CONTROL_TILES; ++t ) {
             if ( r.m_szClass[t] == T3D_MATERIAL_TILE_UNKNOWN ) return T3D_MATERIAL_TILE_UNKNOWN;
             if ( r.m_szClass[t] > maxClass ) maxClass = r.m_szClass[t];
         }

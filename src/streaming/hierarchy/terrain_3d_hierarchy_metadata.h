@@ -5,7 +5,7 @@
 
 // F01 T3RH v2 persistent node ABI. This header is deliberately independent
 // of Godot classes so the owner-thread F03 policy can be tested in isolation.
-typedef struct t3dRasterHierarchyV2Node_s
+typedef struct t3dRasterHierarchyStreamNode_s
 {
     uint64_t m_nHeightOffset = 0u;
     uint64_t m_nControlOffset = 0u;
@@ -22,6 +22,6 @@ typedef struct t3dRasterHierarchyV2Node_s
     uint8_t m_nLevel = 0u;
     uint8_t m_nChildMask = 0u;
     uint8_t m_nCoverageMask = 0u;
-} t3dRasterHierarchyV2Node_t;
+} t3dRasterHierarchyStreamNode_t;
 
 #endif

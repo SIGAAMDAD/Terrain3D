@@ -182,7 +182,7 @@ static void t3dStageWorldMaterialFootprintsHot(
 		// Sphere-based demand cannot measure the fragment ellipse: conservatively cover its bounded anisotropic LOD.
 		const float fFilterScale = bAnisotropic ? ( float ) T3D_VT_MAX_ANISOTROPY : 1.0f;
 		const bool	bMipmapped = nFilter >= T3D_VT_FILTER_NEAREST_MIPMAP;
-		for ( uint32_t channel = 0u; channel < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION; ++channel ) {
+		for ( uint32_t channel = 0u; channel < T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION; ++channel ) {
 			if ( diagnostic_mode == 2u && channel != 0u ) {
 				continue;
 			}
@@ -279,7 +279,7 @@ static uint32_t t3dStageTerrainMaterialFootprintHot(
 									   uvMin[1],
 									   uvMax[1] );
 			const uint32_t nChannelCount =
-				( rLayer.m_nMicroVTFlags & 1u ) != 0u ? T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION : 1u;
+				( rLayer.m_nMicroVTFlags & 1u ) != 0u ? T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION : 1u;
 			for ( uint32_t iChannel = 0u; iChannel < nChannelCount && nRemaining > 0u; ++iChannel ) {
 				const uint32_t nRuntimeAllocation = rLayer.m_nMicroVTAllocation + iChannel;
 				if ( nRuntimeAllocation >= rVirtualTexture.getActiveAllocationCount() ||
@@ -304,7 +304,7 @@ static uint32_t t3dStageTerrainMaterialFootprintHot(
 		const float	   uvMin[2] = { 0.0f, 0.0f };
 		const float	   uvMax[2] = { 1.0f, 1.0f };
 		const uint32_t nChannelCount =
-			( rLayer.m_nMicroVTFlags & 1u ) != 0u ? T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION : 1u;
+			( rLayer.m_nMicroVTFlags & 1u ) != 0u ? T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION : 1u;
 		for ( uint32_t iChannel = 0u; iChannel < nChannelCount && nAttempted < T3D_FORWARD_PASS_MATERIAL_REQUEST_CAP;
 			  ++iChannel ) {
 			const uint32_t nRuntimeAllocation = rLayer.m_nMicroVTAllocation + iChannel;

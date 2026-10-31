@@ -21,7 +21,7 @@ def main():
     rd=root/'project/addons/terrain_3d/rd'
     sys.path.insert(0,str(root/'src/diagnostics/tests/shaders'))
     from compile_fragment_variants import split_sections,emit_fragment,variants
-    from verify_wave19_shader_gate import check
+    from verify_shader_gate import check
     shader=rd/'terrain_clipmap.glsl'
     versions=[x for x in variants(split_sections(shader.read_text())) if x.endswith('_compact')]
     assert versions and not any(x.startswith('compat_') for x in versions)

@@ -7,10 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace t3d_render_telemetry_contract
-{
-}
-
 // Lifetime and rendered-frame infrastructure upload counters. Domain algorithms
 // retain their own visibility and publication counters.
 template< size_t OwnerCount, size_t PolicyCount > class Terrain3DRenderTelemetry

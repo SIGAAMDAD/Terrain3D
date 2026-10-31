@@ -1,6 +1,6 @@
 #include "authoring/vt/integration/terrain_3d_composed_surface_resident_bridge.h"
 
-bool t3d_cs_begin_dirty_page_retirements_hot(
+bool t3d_comp_surf_begin_dirty_page_retirements_hot(
     Terrain3DComposedSurfaceCache &rCache,
     const t3dComposedSurfaceCookPage_t *pNewPages, const uint8_t *pDirtyFlags,
     const uint32_t nPages, t3dComposedSurfaceJob_t *pRetirements,
@@ -25,27 +25,27 @@ bool t3d_cs_begin_dirty_page_retirements_hot(
         }
         if ( pDirtyFlags[i] == 0u ) continue;
         const t3dComposedSurfaceCookPage_t &page = pNewPages[i];
-        uint32_t oldIndex = T3D_CS_INVALID_SLOT;
-        if ( !t3d_cs_find_page_location( view, page.m_nRegionKey, page.m_nMip,
+        uint32_t oldIndex = T3D_COMP_SURF_INVALID_SLOT;
+        if ( !t3d_comp_surf_find_page_location( view, page.m_nRegionKey, page.m_nMip,
                                          page.m_nPageX, page.m_nPageY, oldIndex ) ) continue;
         const uint32_t state = rCache.stateForPageHot( oldIndex );
-        if ( state == T3D_CS_SLOT_UPLOADING || state == T3D_CS_SLOT_RETIRING ) return false;
-        if ( state == T3D_CS_SLOT_RESIDENT && ++requiredRetirements > nRetirementCapacity ) return false;
+        if ( state == T3D_COMP_SURF_SLOT_UPLOADING || state == T3D_COMP_SURF_SLOT_RETIRING ) return false;
+        if ( state == T3D_COMP_SURF_SLOT_RESIDENT && ++requiredRetirements > nRetirementCapacity ) return false;
     }
 
     for ( uint32_t i = 0u; i < nPages; ++i ) {
         if ( !pDirtyFlags[i] ) continue;
         const t3dComposedSurfaceCookPage_t &page = pNewPages[i];
-        uint32_t oldIndex = T3D_CS_INVALID_SLOT;
-        if ( !t3d_cs_find_page_location( view, page.m_nRegionKey, page.m_nMip,
+        uint32_t oldIndex = T3D_COMP_SURF_INVALID_SLOT;
+        if ( !t3d_comp_surf_find_page_location( view, page.m_nRegionKey, page.m_nMip,
                                          page.m_nPageX, page.m_nPageY, oldIndex ) ) continue;
         // The queued request still refers to the retired sidecar revision.
         // Remove it before any new sidecar may become authoritative.
         rCache.forgetPendingDemandHot( oldIndex );
         const uint32_t state = rCache.stateForPageHot( oldIndex );
-        if ( state == T3D_CS_SLOT_READING || state == T3D_CS_SLOT_READY ) {
+        if ( state == T3D_COMP_SURF_SLOT_READING || state == T3D_COMP_SURF_SLOT_READY ) {
             if ( !rCache.cancelUnsubmittedPageHot( oldIndex ) ) return false;
-        } else if ( state == T3D_CS_SLOT_RESIDENT ) {
+        } else if ( state == T3D_COMP_SURF_SLOT_RESIDENT ) {
             if ( !rCache.beginInvalidationHot( oldIndex, pRetirements[rRetirementCount] ) ) return false;
             ++rRetirementCount;
         }

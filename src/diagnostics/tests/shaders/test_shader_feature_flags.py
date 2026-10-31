@@ -31,7 +31,7 @@ cpp_files = tuple(ROOT / path for path in (
 for path in cpp_files:
     contents = path.read_text()
     assert 'T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS' in contents, path
-    assert 'T3D_BR20_ENABLE_HINTS' not in contents, path
+    assert 'T3D_ENABLE_HINTS' not in contents, path
 constants = (ROOT / 'src/Terrain3DConstants.h').read_text()
 assert '#define T3D_ENABLE_VT_RESIDENT_ANCESTOR_HINTS ( 0 )' in constants
 

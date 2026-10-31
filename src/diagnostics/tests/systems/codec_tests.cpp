@@ -111,7 +111,7 @@ void register_codec_tests(
 		T3D_CHECK( test, roundtrip == handle );
 	} );
 	runner.run( "codec", "legacy_vt_pack_decodes_from_misaligned_bytes", []( TestContext &test ) {
-		t3dVTAllocationRecordV1_t allocation{};
+		t3dVTAllocationRecord_t allocation{};
 		t3dVTPageFileRecord_t page{};
 		t3dVTPayloadRecord_t payload{};
 		uint8_t payload_bytes[4] = { 1u, 2u, 3u, 4u };
@@ -445,8 +445,8 @@ void register_codec_tests(
 		CookingSource	source;
 		PackedByteArray bytes;
 		T3D_REQUIRE( test, source.fragment( bytes ) );
-		t3dVTPackViewV1_t view{};
-		T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( bytes.ptr(), bytes.size(), view ) );
+		t3dVTPackBaselineView_t view{};
+		T3D_REQUIRE( test, t3d_vt_pack_open_baseline_view( bytes.ptr(), bytes.size(), view ) );
 		T3D_CHECK( test, view.m_pHeader->m_nAllocationCount == 1 && view.m_pAllocationKeys[0].m_nStableKey == 101 );
 		T3D_CHECK( test, view.m_pHeader->m_nPayloadCount > 0 && view.m_pHeader->m_nTailCount > 0 );
 	} );
@@ -454,16 +454,16 @@ void register_codec_tests(
 		CookingSource	input;
 		PackedByteArray bytes;
 		T3D_REQUIRE( test, input.fragment( bytes ) );
-		t3dVTPackViewV1_t full{};
-		T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( bytes.ptr(), bytes.size(), full ) );
+		t3dVTPackBaselineView_t full{};
+		T3D_REQUIRE( test, t3d_vt_pack_open_baseline_view( bytes.ptr(), bytes.size(), full ) );
 		const uint64_t	  prefix = full.m_pHeader->m_nPayloadDataOffset;
-		t3dVTPackViewV1_t metadata{};
-		T3D_REQUIRE( test, t3d_vt_pack_open_metadata_view_v1( bytes.ptr(), prefix, bytes.size(), metadata ) );
+		t3dVTPackBaselineView_t metadata{};
+		T3D_REQUIRE( test, t3d_vt_pack_open_metadata_view( bytes.ptr(), prefix, bytes.size(), metadata ) );
 		T3D_CHECK( test,
 				   metadata.m_pPayloadData == nullptr &&
 					   metadata.m_pHeader->m_nContentSignature == full.m_pHeader->m_nContentSignature );
-		T3D_CHECK( test, !t3d_vt_pack_open_metadata_view_v1( bytes.ptr(), prefix - 1u, bytes.size(), metadata ) );
-		T3D_CHECK( test, !t3d_vt_pack_open_metadata_view_v1( bytes.ptr(), prefix, bytes.size() + 1u, metadata ) );
+		T3D_CHECK( test, !t3d_vt_pack_open_metadata_view( bytes.ptr(), prefix - 1u, bytes.size(), metadata ) );
+		T3D_CHECK( test, !t3d_vt_pack_open_metadata_view( bytes.ptr(), prefix, bytes.size() + 1u, metadata ) );
 
 		const String path = "user://terrain3d_vt_file_source_test.t3dvt";
 		{
@@ -476,9 +476,9 @@ void register_codec_tests(
 		T3D_REQUIRE( test, t3d_vt_file_source_open_cold( path, source, prefixBytes, true ) );
 		T3D_REQUIRE(
 			test,
-			t3d_vt_pack_open_metadata_view_v1( prefixBytes.ptr(), prefixBytes.size(), source.nFileBytes, metadata ) );
-		const t3dVTPackPayloadRecordV1_t payload = metadata.m_pPayloads[0u];
-		const t3dVTPackClusterRecordV1_t cluster = metadata.m_pClusters[payload.m_nClusterId];
+			t3d_vt_pack_open_metadata_view( prefixBytes.ptr(), prefixBytes.size(), source.nFileBytes, metadata ) );
+		const t3dVTPackPayloadRecord_t payload = metadata.m_pPayloads[0u];
+		const t3dVTPackClusterRecord_t cluster = metadata.m_pClusters[payload.m_nClusterId];
 		const uint64_t					 offset = cluster.m_nPayloadDataOffset + payload.m_nClusterOffset;
 		uint8_t							 scratch[T3D_VT_PHYSICAL_TILE * T3D_VT_PHYSICAL_TILE]{};
 		T3D_REQUIRE( test, payload.m_nDecodedBytes <= sizeof( scratch ) );
@@ -543,18 +543,18 @@ void register_codec_tests(
 					PackedByteArray unaligned;
 					T3D_REQUIRE( test, unaligned.resize( bytes.size() + 1 ) == OK );
 					memcpy( unaligned.ptrw() + 1, bytes.ptr(), bytes.size() );
-					t3dVTPackViewV1_t view{};
-					T3D_REQUIRE( test, t3d_vt_pack_open_view_v1( unaligned.ptr() + 1, bytes.size(), view ) );
+					t3dVTPackBaselineView_t view{};
+					T3D_REQUIRE( test, t3d_vt_pack_open_baseline_view( unaligned.ptr() + 1, bytes.size(), view ) );
 					T3D_CHECK( test,
 							   view.m_pHeader->m_nAllocationCount == 1u &&
 								   view.m_pAllocationKeys[0].m_nStableKey == 101u );
-					t3dVTPackHeaderV1_t header{};
+					t3dVTPackHeader_t header{};
 					memcpy( &header, bytes.ptr(), sizeof( header ) );
 					++header.m_nPageOffset;
 					header.m_nHeaderChecksum = 0u;
 					header.m_nHeaderChecksum = t3d_vt_pack_checksum32( &header, sizeof( header ) );
 					memcpy( unaligned.ptrw() + 1, &header, sizeof( header ) );
-					T3D_CHECK( test, !t3d_vt_pack_open_view_v1( unaligned.ptr() + 1, bytes.size(), view ) );
+					T3D_CHECK( test, !t3d_vt_pack_open_baseline_view( unaligned.ptr() + 1, bytes.size(), view ) );
 				} );
 	runner.run( "codec", "vt_runtime_package_transfer_clears_source_without_copying_storage", []( TestContext &test ) {
 		alignas( 64 ) uint8_t	  block[128]{};
@@ -597,12 +597,12 @@ void register_codec_tests(
 					CookingSource	source;
 					PackedByteArray bytes;
 					T3D_REQUIRE( test, source.fragment( bytes ) );
-					for ( uint32_t length = 0; length < T3D_VT_PACK_V1_HEADER_BYTES; ++length ) {
-						t3dVTPackViewV1_t view{};
-						T3D_CHECK( test, !t3d_vt_pack_open_view_v1( bytes.ptr(), length, view ) );
+					for ( uint32_t length = 0; length < T3D_VT_PACK_HEADER_BYTES; ++length ) {
+						t3dVTPackBaselineView_t view{};
+						T3D_CHECK( test, !t3d_vt_pack_open_baseline_view( bytes.ptr(), length, view ) );
 					}
-					t3dVTPackViewV1_t view{};
-					T3D_CHECK( test, !t3d_vt_pack_open_view_v1( bytes.ptr(), bytes.size() - 1, view ) );
+					t3dVTPackBaselineView_t view{};
+					T3D_CHECK( test, !t3d_vt_pack_open_baseline_view( bytes.ptr(), bytes.size() - 1, view ) );
 				} );
 	runner.run( "codec", "sparse_vt_pack_rejects_corrupt_magic_and_payload_checksum", []( TestContext &test ) {
 		CookingSource	source;
@@ -611,27 +611,27 @@ void register_codec_tests(
 		for ( const int64_t offset : { int64_t( 0 ), valid.size() - 1 } ) {
 			auto damaged = valid;
 			damaged.set( offset, damaged[offset] ^ 1 );
-			t3dVTPackViewV1_t view{};
-			T3D_CHECK( test, !t3d_vt_pack_open_view_v1( damaged.ptr(), damaged.size(), view ) );
+			t3dVTPackBaselineView_t view{};
+			T3D_CHECK( test, !t3d_vt_pack_open_baseline_view( damaged.ptr(), damaged.size(), view ) );
 		}
 	} );
 	runner.run( "codec", "sparse_vt_writer_requires_the_measured_output_capacity", []( TestContext &test ) {
 		CookingSource source;
 		CookedPackage cooked;
 		T3D_REQUIRE( test, cooked.cook( source ) );
-		t3dVTPackSourceV1_t pack_source{};
-		T3D_REQUIRE( test, t3d_vt_cooker_build_pack_source_v1( cooked.package, pack_source ) );
-		const uint64_t expected = t3d_vt_pack_compute_bytes_v1( pack_source );
-		T3D_REQUIRE( test, expected > T3D_VT_PACK_V1_HEADER_BYTES );
+		t3dVTSerializedPackSource_t pack_source{};
+		T3D_REQUIRE( test, t3d_vt_cooker_build_pack_source( cooked.package, pack_source ) );
+		const uint64_t expected = t3d_vt_pack_compute_bytes( pack_source );
+		T3D_REQUIRE( test, expected > T3D_VT_PACK_HEADER_BYTES );
 		PackedByteArray bytes;
 		bytes.resize( expected + 1 );
 		bytes.fill( 0xa5 );
 		uint64_t written = 99;
-		T3D_CHECK( test, !t3d_vt_pack_write_v1( pack_source, bytes.ptrw(), expected - 1, written ) );
+		T3D_CHECK( test, !t3d_vt_pack_write( pack_source, bytes.ptrw(), expected - 1, written ) );
 		T3D_CHECK( test, written == 0 && bytes[expected] == 0xa5 );
-		T3D_CHECK( test, t3d_vt_pack_write_v1( pack_source, bytes.ptrw(), expected, written ) && written == expected );
-		t3dVTPackViewV1_t view{};
-		T3D_CHECK( test, t3d_vt_pack_open_view_v1( bytes.ptr(), written, view ) && bytes[expected] == 0xa5 );
+		T3D_CHECK( test, t3d_vt_pack_write( pack_source, bytes.ptrw(), expected, written ) && written == expected );
+		t3dVTPackBaselineView_t view{};
+		T3D_CHECK( test, t3d_vt_pack_open_baseline_view( bytes.ptr(), written, view ) && bytes[expected] == 0xa5 );
 	} );
 }
 } // namespace terrain3d_tests

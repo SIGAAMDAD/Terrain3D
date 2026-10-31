@@ -251,8 +251,8 @@ private:
 	// package mutex, stable-key lookups, or allocations during frame demand.
 	uint32_t m_szFarRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
     uint32_t m_szComposedRegionAllocations[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY]{};
-	uint8_t m_szFarLastMip[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
-	uint32_t m_szFarLastMipFrame[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION]{};
+	uint8_t m_szFarLastMip[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION]{};
+	uint32_t m_szFarLastMipFrame[T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY * 3u * T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION]{};
 	uint32_t m_nFarRegionLastStageFrame = UINT32_MAX;
 	uint64_t m_nFarRegionRequests = 0u;
 	bool m_bComposedOnlyRegionalDemand = false;
@@ -304,7 +304,7 @@ private:
 	bool						m_bWarmRollbackReady = true;
 	bool						m_bInitialPublicationStarted = false;
 	t3dVTFileHeader_t			m_NeutralHeader;
-	t3dVTAllocationRecordV1_t	m_NeutralAllocations[T3D_VT_CHANNEL_COUNT];
+	t3dVTAllocationRecord_t	m_NeutralAllocations[T3D_VT_CHANNEL_COUNT];
 	t3dVTPageFileRecord_t		m_NeutralPages[T3D_VT_CHANNEL_COUNT];
 	t3dVTPayloadRecord_t		m_NeutralPayloads[T3D_VT_CHANNEL_COUNT];
 	uint8_t						m_NeutralPayloadBytes[T3D_VT_CHANNEL_COUNT];

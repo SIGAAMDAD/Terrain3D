@@ -97,7 +97,7 @@ const char *Terrain3DRenderCoordinator::startupGpuStageName(
 }
 
 #if defined( T3D_EDITOR_NATIVE )
-static bool t3dRdPrepareComposedShippingV1Cold(
+static bool t3dRdPrepareComposedShippingCold(
     Terrain3DOwner *const pTerrain,
     Terrain3DRenderAuthoringCompanion &rAuthoring,
     const PackedByteArray &rComposed,
@@ -127,7 +127,7 @@ static bool t3dRdPrepareComposedShippingV1Cold(
     }
     const PackedByteArray fragments[2] = { base, rComposed };
     const uint32_t nGeneration = t3dNextGeneration( nBaseGeneration ^ nRevision );
-    if ( !t3d_vt_godot_merge_packages_v1( fragments, 2u, nGeneration,
+    if ( !t3d_vt_godot_merge_packages( fragments, 2u, nGeneration,
             rShipping, t3dMemoryCookingLimit( pAccount ) ) ) {
         rError = "Composed V1 pages could not merge into the shipping package";
         return false;
@@ -164,7 +164,7 @@ bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
     PackedByteArray composed;
     String error;
     const uint32_t generation = t3dNextGeneration( ( uint32_t ) result.m_nClaimRevision );
-    if ( !t3d_vt_godot_import_composed_sidecar_v1(
+    if ( !t3d_vt_godot_import_composed_sidecar(
             request.m_cook.m_pOutput, result.m_cook.m_nWrittenBytes,
             result.m_cook.m_nSourceFingerprint, generation, composed, &error ) ) {
         m_pAuthoring->m_approvedComposedV1Fragment.clear();
@@ -180,7 +180,7 @@ bool Terrain3DRenderCoordinator::cookComposedSurfaceSidecarEditorCold(
     const uint64_t nTopologyGeneration = m_terrainMegaVT.getTopologyGeneration();
     String shippingPath, demandPath, v1Path, surfacePath;
     PackedByteArray shipping, demand, v1, surface;
-    if ( !t3dRdPrepareComposedShippingV1Cold( m_pTerrain, *m_pAuthoring,
+    if ( !t3dRdPrepareComposedShippingCold( m_pTerrain, *m_pAuthoring,
             composed, generation, shippingPath, shipping, demandPath,
             demand, v1Path, v1, surfacePath, surface, error ) ) {
         m_pAuthoring->m_approvedComposedV1Fragment.clear();
@@ -465,7 +465,7 @@ void Terrain3DRenderCoordinator::onTerrainMapsEdited(
 			bounds.m_fMinWorldX, bounds.m_fMinWorldZ,
 			bounds.m_fMaxWorldX, bounds.m_fMaxWorldZ
 		};
-		t3d_cs_editor_dirty_bounds( m_terrainMegaVT, m_composedSurfaceEdits,
+		t3d_comp_surf_editor_dirty_bounds( m_terrainMegaVT, m_composedSurfaceEdits,
 							composedBounds, m_nComposedSourceGeneration );
 #endif
 		persistTerrainMegaVTEditorStateHot();

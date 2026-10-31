@@ -151,7 +151,7 @@ void Terrain3DRdForwardPlusBridgeAdapter::resetConnectionState(
 	m_bCallbackRegistered.store( false, T3D_MEMORY_ORDER_RELEASE );
 	m_nObservedAbiVersion.store( 0u, T3D_MEMORY_ORDER_RELEASE );
 	m_nObservedCapabilities.store( 0u, T3D_MEMORY_ORDER_RELEASE );
-    m_br24FragmentSubgroup = t3dBr24SubgroupCapabilities_t{};
+    m_br24FragmentSubgroup = t3dFragmentSubgroupSubgroupCapabilities_t{};
     m_bBr24SubgroupRequested = false;
 
 	m_pEngineBridge = NULL;

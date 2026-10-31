@@ -11,7 +11,7 @@ struct t3dVTVisibilityAggregateStats_t
     uint32_t m_nDroppedRecords = 0u;
     uint32_t m_nRecords = 0u;
     uint64_t m_nVisibleSamples = 0u;
-    uint64_t m_szMipSamples[T3D_VT_DEMAND_V1_MIP_BINS]{};
+    uint64_t m_szMipSamples[T3D_VT_DEMAND_BAKED_VISIBILITY_MIP_BINS]{};
 };
 
 class Terrain3DVTVisibilityAggregator
@@ -24,8 +24,8 @@ public:
                         uint32_t nProbes, const uint64_t *pSortedStableKeys,
                         uint32_t nMaterials, uint32_t nPerCellLimit,
                         bool bForcedPartial,
-                        std::vector< t3dVTDemandV1Cell_t > &rCells,
-                        std::vector< t3dVTDemandV1Record_t > &rRecords,
+                        std::vector< t3dVTDemandVisibilityCell_t > &rCells,
+                        std::vector< t3dVTDemandBakedVisibilityRecord_t > &rRecords,
                         t3dVTVisibilityAggregateStats_t &rStats );
 };
 

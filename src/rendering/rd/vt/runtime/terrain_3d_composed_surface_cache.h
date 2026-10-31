@@ -4,12 +4,12 @@
 #include "rendering/rd/vt/core/terrain_3d_composed_surface_contract.h"
 #include <stddef.h>
 
-#define T3D_CS_SLOT_FREE 0u
-#define T3D_CS_SLOT_READING 1u
-#define T3D_CS_SLOT_READY 2u
-#define T3D_CS_SLOT_UPLOADING 3u
-#define T3D_CS_SLOT_RESIDENT 4u
-#define T3D_CS_SLOT_RETIRING 5u
+#define T3D_COMP_SURF_SLOT_FREE 0u
+#define T3D_COMP_SURF_SLOT_READING 1u
+#define T3D_COMP_SURF_SLOT_READY 2u
+#define T3D_COMP_SURF_SLOT_UPLOADING 3u
+#define T3D_COMP_SURF_SLOT_RESIDENT 4u
+#define T3D_COMP_SURF_SLOT_RETIRING 5u
 
 struct t3dComposedSurfaceSidecarView_t
 {
@@ -26,15 +26,15 @@ struct t3dComposedSurfaceSlot_t
 {
     uint64_t m_nToken = 0u;
     uint64_t m_nLastTouch = 0u;
-    uint32_t m_nPageIndex = T3D_CS_INVALID_SLOT;
+    uint32_t m_nPageIndex = T3D_COMP_SURF_INVALID_SLOT;
     uint32_t m_nDeviceGeneration = 0u;
-    uint32_t m_nState = T3D_CS_SLOT_FREE;
+    uint32_t m_nState = T3D_COMP_SURF_SLOT_FREE;
 };
 struct t3dComposedSurfaceJob_t
 {
     uint64_t m_nToken = 0u;
-    uint32_t m_nPageIndex = T3D_CS_INVALID_SLOT;
-    uint32_t m_nSlot = T3D_CS_INVALID_SLOT;
+    uint32_t m_nPageIndex = T3D_COMP_SURF_INVALID_SLOT;
+    uint32_t m_nSlot = T3D_COMP_SURF_INVALID_SLOT;
     uint32_t m_nDeviceGeneration = 0u;
 };
 struct t3dComposedSurfaceStats_t
@@ -49,16 +49,16 @@ struct t3dComposedSurfaceStats_t
 };
 
 // Checked once on cold open. Record directory is sorted by the editor writer.
-bool t3d_cs_open_sidecar_cold( const uint8_t *pBytes, size_t nBytes,
+bool t3d_comp_surf_open_sidecar_cold( const uint8_t *pBytes, size_t nBytes,
                                uint64_t nExpectedSourceFingerprint,
                                t3dComposedSurfaceSidecarView_t &out );
-bool t3d_cs_sidecar_record( const t3dComposedSurfaceSidecarView_t &view,
+bool t3d_comp_surf_sidecar_record( const t3dComposedSurfaceSidecarView_t &view,
                             uint32_t nPageIndex, t3dComposedSurfacePageRecord_t &out );
-bool t3d_cs_find_page( const t3dComposedSurfaceSidecarView_t &view,
+bool t3d_comp_surf_find_page( const t3dComposedSurfaceSidecarView_t &view,
                         uint64_t nRegionKey, uint32_t nMip, uint32_t nX, uint32_t nY,
                         uint64_t nRevision, uint32_t &rPageIndex );
 // Editor dirty page queries must also locate the *old* revision being retired.
-bool t3d_cs_find_page_location( const t3dComposedSurfaceSidecarView_t &view,
+bool t3d_comp_surf_find_page_location( const t3dComposedSurfaceSidecarView_t &view,
                                  uint64_t nRegionKey, uint32_t nMip, uint32_t nX, uint32_t nY,
                                  uint32_t &rPageIndex );
 

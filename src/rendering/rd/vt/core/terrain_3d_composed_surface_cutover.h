@@ -24,7 +24,7 @@ struct t3dComposedSurfaceCutoverProof_t
     bool m_bStaticDecalParity = false;
 };
 
-inline bool t3d_cs_cutover_proof_current(
+inline bool t3d_comp_surf_cutover_proof_current(
     const t3dComposedSurfaceCutoverProof_t &rAccepted,
     const t3dComposedSurfaceCutoverProof_t &rCurrent,
     const uint64_t nSidecarSourceFingerprint,

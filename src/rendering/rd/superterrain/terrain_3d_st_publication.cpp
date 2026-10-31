@@ -52,7 +52,7 @@ bool Terrain3DStPublicationImage::prepareCold( const t3dStPublicationRegionInput
     }
     for ( uint32_t i = 0u; i < T3D_ST_REGION_COUNT; ++i )
     {
-        t3dStRegionRecordV1_t &r = staged.m_regions[i];
+        t3dStRegionRecord_t &r = staged.m_regions[i];
         r.m_nComposedVTAllocation = T3D_ST_INVALID_ID;
         r.m_nMegaVTAllocation = T3D_ST_INVALID_ID;
         r.m_nVhmRootIndex = T3D_ST_INVALID_ID;
@@ -91,7 +91,7 @@ bool Terrain3DStPublicationImage::prepareCold( const t3dStPublicationRegionInput
         {
             return false;
         }
-        t3dStVhmPageEntryV1_t *pPages = staged.m_heightPages.data() +
+        t3dStRegionVhmPageEntry_t *pPages = staged.m_heightPages.data() +
             input.m_nRegionIndex * T3D_ST_VHM_PAGES_PER_REGION;
         for ( uint32_t j = 0u; j < T3D_ST_VHM_PAGES_PER_REGION; ++j )
         {
@@ -110,14 +110,14 @@ bool Terrain3DStPublicationImage::prepareCold( const t3dStPublicationRegionInput
         }
         for ( uint32_t j = 0u; j < T3D_ST_MASK_PAGES_PER_REGION; ++j )
         {
-            t3dStMaskPageEntryV1_t &rMask = staged.m_maskPages[
+            t3dStMaskPageEntry_t &rMask = staged.m_maskPages[
                 input.m_nRegionIndex * T3D_ST_MASK_PAGES_PER_REGION + j ];
             rMask.m_nPhysicalSlot = stagedMask[j].m_nPhysicalSlot;
             rMask.m_nPinnedWordOffset = stagedMask[j].m_nPinnedWordOffset;
             rMask.m_nGeneration = stagedMask[j].m_nGeneration;
             rMask.m_nPackedState = stagedMask[j].m_nPackedState;
         }
-        t3dStRegionRecordV1_t &r = staged.m_regions[input.m_nRegionIndex];
+        t3dStRegionRecord_t &r = staged.m_regions[input.m_nRegionIndex];
         r.m_nPackedPhysicalFlags = input.m_nPackedPhysicalFlags;
         r.m_nMegaVTAllocation = input.m_nMegaVTAllocation;
         r.m_nMegaVTGeneration = input.m_nMegaVTGeneration;
@@ -172,7 +172,7 @@ bool Terrain3DStPublicationImage::prepareCold( const t3dStPublicationRegionInput
                 const uint32_t slot = staged.m_nFinePageCount++;
                 staged.m_finePages.insert( staged.m_finePages.end(), pPage,
                                            pPage + T3D_ST_VHM_PAGE_BYTES );
-                t3dStVhmPageEntryV1_t &entry = staged.m_heightPages[
+                t3dStRegionVhmPageEntry_t &entry = staged.m_heightPages[
                     input.m_nRegionIndex * T3D_ST_VHM_PAGES_PER_REGION + localPage ];
                 if ( entry.m_nGeneration != input.m_nGeneration ||
                      ( entry.m_nPackedMipFlags & T3D_ST_VHM_PAGE_VALID_FLAG ) == 0u ||
@@ -188,11 +188,11 @@ bool Terrain3DStPublicationImage::prepareCold( const t3dStPublicationRegionInput
         }
     }
     staged.m_heightTails.resize( roots.getTailCount() );
-    static_assert( sizeof( t3dStVhmTailV1_t ) == sizeof( t3dStVhmTail_t ), "ST05 VHM tail ABI" );
+    static_assert( sizeof( t3dStRegionVhmTail_t ) == sizeof( t3dStVhmTail_t ), "ST05 VHM tail ABI" );
     for ( uint32_t i = 0u; i < roots.getTailCount(); ++i )
     {
         const t3dStVhmTail_t &source = roots.getTailEntries()[i];
-        t3dStVhmTailV1_t &dest = staged.m_heightTails[i];
+        t3dStRegionVhmTail_t &dest = staged.m_heightTails[i];
         dest.m_nAtlasX = source.m_nAtlasX;
         dest.m_nAtlasY = source.m_nAtlasY;
         dest.m_nFirstMip = source.m_nFirstMip;

@@ -21,7 +21,7 @@ struct t3dComposedSurfaceGpuPending_t
 
 struct t3dComposedSurfaceGpuBindings_t
 {
-    godot::RID m_hChannels[T3D_CS_CHANNEL_COUNT];
+    godot::RID m_hChannels[T3D_COMP_SURF_CHANNEL_COUNT];
     godot::RID m_hPageTable;
     uint32_t m_nPageCapacity = 0u;
     uint32_t m_nTableCapacity = 0u;
@@ -71,7 +71,7 @@ public:
     bool areMappingsCoherent() const { return m_bInitialized && m_bMappingsCoherent; }
 private:
     bool writeTableEntryHot( Terrain3DRdContext &rContext, uint32_t index );
-    Terrain3DRdTexture m_channels[T3D_CS_CHANNEL_COUNT];
+    Terrain3DRdTexture m_channels[T3D_COMP_SURF_CHANNEL_COUNT];
     Terrain3DRdGpuBuffer m_pageTable;
     Terrain3DComposedSurfaceGpuTable m_table;
     t3dComposedSurfaceGpuPending_t *m_pPending = nullptr;
@@ -81,7 +81,7 @@ private:
     // Fail-closed on an unconfirmed table write. A cold resource replacement
     // is required before any bindings can be acquired again.
     bool m_bMappingsCoherent = false;
-    godot::PackedByteArray m_staging[T3D_CS_CHANNEL_COUNT];
+    godot::PackedByteArray m_staging[T3D_COMP_SURF_CHANNEL_COUNT];
     godot::PackedByteArray m_bufferFallback;
 };
 

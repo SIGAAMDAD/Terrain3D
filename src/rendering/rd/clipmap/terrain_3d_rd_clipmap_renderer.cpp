@@ -617,7 +617,7 @@ bool Terrain3DRdClipmapRenderer::ensureForwardPipelines(
 		shader_key.m_nPassClass = ( uint8_t ) ( t3dRdTerrainShaderPassClass( variant, key.m_bOneSunLighting ) );
 		shader_key.m_nTier = ( uint8_t ) ( tier );
 		shader_key.m_nShaderPath = ( uint8_t ) ( key.m_shaderPath );
-		shader_key.m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
+		shader_key.m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;
 		shader_key.m_nShippingFeatureClass = key.m_nShippingFeatureClass;
 		shader_key.m_nEditorDiagnosticClass = key.m_nEditorDiagnosticClass;
 		shader_key.m_nNoiseSourceClass = key.m_nNoiseSourceClass;
@@ -2080,7 +2080,7 @@ bool Terrain3DRdClipmapRenderer::prepareForwardPass(
 		m_nForwardPrepareFailureStage = 7u;
 		return false;
 	}
-    if ( rSnapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) {
+    if ( rSnapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED ) {
         m_nForwardPrepareFailureStage = 8u;
         setError( "Retired terrain material backend rejected before UCMP pipeline publication" );
         return false;

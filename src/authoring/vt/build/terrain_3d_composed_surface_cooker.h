@@ -49,15 +49,15 @@ struct t3dComposedSurfaceCookSource_t
     t3dComposedSurfaceEvaluateAllFn m_pEvaluateAll = nullptr;
 };
 
-#define T3D_CS_RGBA_SCRATCH_BYTES ( T3D_CS_PHYSICAL_TILE * T3D_CS_PHYSICAL_TILE * 4u )
+#define T3D_COMP_SURF_RGBA_SCRATCH_BYTES ( T3D_COMP_SURF_PHYSICAL_TILE * T3D_COMP_SURF_PHYSICAL_TILE * 4u )
 // Scratch = exactly one uncompressed RGBA8 tile plus one compressed channel.
-#define T3D_CS_COOK_SCRATCH_BYTES ( T3D_CS_RGBA_SCRATCH_BYTES + ( T3D_CS_PHYSICAL_TILE * T3D_CS_PHYSICAL_TILE ) )
+#define T3D_COMP_SURF_COOK_SCRATCH_BYTES ( T3D_COMP_SURF_RGBA_SCRATCH_BYTES + ( T3D_COMP_SURF_PHYSICAL_TILE * T3D_COMP_SURF_PHYSICAL_TILE ) )
 // Optional: three independent RGBA channels and the existing encoder scratch.
 // No change to the serialized .t3sc page-set contract or legacy cook buffers.
-#define T3D_CS_COOK_FUSED_SCRATCH_BYTES ( T3D_CS_RGBA_SCRATCH_BYTES * T3D_CS_CHANNEL_COUNT + ( T3D_CS_PHYSICAL_TILE * T3D_CS_PHYSICAL_TILE ) )
+#define T3D_COMP_SURF_COOK_FUSED_SCRATCH_BYTES ( T3D_COMP_SURF_RGBA_SCRATCH_BYTES * T3D_COMP_SURF_CHANNEL_COUNT + ( T3D_COMP_SURF_PHYSICAL_TILE * T3D_COMP_SURF_PHYSICAL_TILE ) )
 
-bool t3d_cs_cook_total_bytes( uint32_t nPages, uint64_t &rBytes );
-bool t3d_cs_cook_pages_cold( const t3dComposedSurfaceCookPage_t *pPages, uint32_t nPages,
+bool t3d_comp_surf_cook_total_bytes( uint32_t nPages, uint64_t &rBytes );
+bool t3d_comp_surf_cook_pages_cold( const t3dComposedSurfaceCookPage_t *pPages, uint32_t nPages,
                              const t3dComposedSurfaceCookSource_t &source,
                              uint8_t *pScratch, uint32_t nScratchBytes,
                              uint8_t *pOutput, uint64_t nOutputCapacity, uint64_t &rWrittenBytes );
@@ -65,7 +65,7 @@ bool t3d_cs_cook_pages_cold( const t3dComposedSurfaceCookPage_t *pPages, uint32_
 // Incremental cold rewrite. Reuse validated prior page payloads when their
 // logical identity, source fingerprint, revision and generation are unchanged.
 // Mark dirty pages explicitly; a changed revision always triggers recomposition.
-bool t3d_cs_recook_incremental_cold( const t3dComposedSurfaceCookPage_t *pPages, uint32_t nPages,
+bool t3d_comp_surf_recook_incremental_cold( const t3dComposedSurfaceCookPage_t *pPages, uint32_t nPages,
                                      const t3dComposedSurfaceCookSource_t &source,
                                      const uint8_t *pPreviousFile, uint64_t nPreviousBytes,
                                      const uint8_t *pDirtyFlags,

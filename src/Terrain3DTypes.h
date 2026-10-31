@@ -265,7 +265,7 @@ typedef struct t3dVTCookStagedPayload_s
 	uint32_t m_nChecksum;
 } t3dVTCookStagedPayload_t;
 
-typedef struct t3dVTCookRawTileCacheEntryV1_s
+typedef struct t3dVTCookRawTileCacheEntry_s
 {
 	uint64_t m_nHashA;
 	uint64_t m_nHashB;
@@ -274,7 +274,7 @@ typedef struct t3dVTCookRawTileCacheEntryV1_s
 	uint32_t m_nChannel;
 	uint32_t m_nPayloadId;
 	uint32_t m_nFlags;
-} t3dVTCookRawTileCacheEntryV1_t;
+} t3dVTCookRawTileCacheEntry_t;
 
 typedef struct t3dVTCookerSettings_s
 {
@@ -325,7 +325,7 @@ typedef struct t3dVTCookClusterCodec_s
 	t3dVTCookClusterEncodeFn m_pEncode;
 } t3dVTCookClusterCodec_t;
 
-typedef struct t3dVTCookSparseStatsV1_s
+typedef struct t3dVTCookSparseStats_s
 {
 	uint32_t m_nAllocationCount;
 	uint32_t m_nPageCount;
@@ -336,9 +336,9 @@ typedef struct t3dVTCookSparseStatsV1_s
 	uint32_t m_nChannelPageCount[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint32_t m_nPhysicalFamilyPayloadCount[T3D_VT_PHYSICAL_FORMAT_COUNT];
 	uint64_t m_nContentSignature;
-} t3dVTCookSparseStatsV1_t;
+} t3dVTCookSparseStats_t;
 
-typedef struct t3dVTGodotSourceChannelV1_s
+typedef struct t3dVTGodotSourceChannel_s
 {
 	uint32_t m_nSourceWidth;
 	uint32_t m_nSourceHeight;
@@ -352,9 +352,9 @@ typedef struct t3dVTGodotSourceChannelV1_s
 	uint8_t	 m_bAlphaScissor;
 	uint8_t	 m_nAlphaThreshold;
 	uint8_t	 m_nReserved1[2];
-} t3dVTGodotSourceChannelV1_t;
+} t3dVTGodotSourceChannel_t;
 
-typedef struct t3dVTEditorCookTelemetryV1_s
+typedef struct t3dVTEditorCookTelemetry_s
 {
 	uint32_t m_nStage;
 	uint32_t m_nDirtyAllocations;
@@ -367,16 +367,16 @@ typedef struct t3dVTEditorCookTelemetryV1_s
 	uint64_t m_nPageUsec;
 	uint64_t m_nEncodeUsec;
 	uint64_t m_nPackUsec;
-} t3dVTEditorCookTelemetryV1_t;
+} t3dVTEditorCookTelemetry_t;
 
-typedef struct t3dVTPackAllocationKeyRecordV1_s
+typedef struct t3dVTPackAllocationKeyRecord_s
 {
 	uint64_t m_nStableKey;
 	uint32_t m_nAllocationId;
 	uint32_t m_nContentId;
-} t3dVTPackAllocationKeyRecordV1_t;
+} t3dVTPackAllocationKeyRecord_t;
 
-typedef struct t3dVTPackPayloadRecordV1_s
+typedef struct t3dVTPackPayloadRecord_s
 {
 	uint64_t m_nContentSignature;
 	uint32_t m_nFormat;
@@ -388,9 +388,9 @@ typedef struct t3dVTPackPayloadRecordV1_s
 	uint32_t m_nChecksum;
 	uint32_t m_nFlags;
 	uint32_t m_nReserved;
-} t3dVTPackPayloadRecordV1_t;
+} t3dVTPackPayloadRecord_t;
 
-typedef struct t3dVTPackClusterRecordV1_s
+typedef struct t3dVTPackClusterRecord_s
 {
 	uint64_t m_nPayloadDataOffset;
 	uint64_t m_nContentSignature;
@@ -400,9 +400,9 @@ typedef struct t3dVTPackClusterRecordV1_s
 	uint32_t m_nPayloadCount;
 	uint32_t m_nCodec;
 	uint32_t m_nChecksum;
-} t3dVTPackClusterRecordV1_t;
+} t3dVTPackClusterRecord_t;
 
-typedef struct t3dVTPackHeaderV1_s
+typedef struct t3dVTPackHeader_s
 {
 	uint32_t m_nMagic;
 	uint32_t m_nVersion;
@@ -439,7 +439,7 @@ typedef struct t3dVTPackHeaderV1_s
 	uint64_t m_nContentSignature;
 	uint64_t m_nPackageBytes;
 	uint64_t m_nReserved[3];
-} t3dVTPackHeaderV1_t;
+} t3dVTPackHeader_t;
 
 typedef struct t3dVTChannelAllocation_s
 {
@@ -452,7 +452,7 @@ typedef struct t3dVTChannelAllocation_s
 	uint16_t m_nFlags;
 } t3dVTChannelAllocation_t;
 
-typedef struct t3dVTPackAllocationRecordV1_s
+typedef struct t3dVTPackAllocationRecord_s
 {
 	uint32_t m_nGeneration;
 	uint32_t m_nContentId;
@@ -462,9 +462,9 @@ typedef struct t3dVTPackAllocationRecordV1_s
 	uint8_t	 m_nAvailableProfileMask;
 	uint8_t	 m_nConsumer;
 	uint8_t	 m_nReserved0;
-} t3dVTPackAllocationRecordV1_t;
+} t3dVTPackAllocationRecord_t;
 
-typedef struct t3dVTPackPageRecordV1_s
+typedef struct t3dVTPackPageRecord_s
 {
 	uint32_t m_nVirtualPage;
 	uint32_t m_nParentPage;
@@ -478,9 +478,9 @@ typedef struct t3dVTPackPageRecordV1_s
 	uint16_t m_nPageY;
 	uint16_t m_nChannel;
 	uint16_t m_nReserved;
-} t3dVTPackPageRecordV1_t;
+} t3dVTPackPageRecord_t;
 
-typedef struct t3dVTPackTailRecordV1_s
+typedef struct t3dVTPackTailRecord_s
 {
 	uint64_t m_nContentSignature;
 	uint32_t m_nCanonicalAllocationId;
@@ -495,49 +495,49 @@ typedef struct t3dVTPackTailRecordV1_s
 	uint16_t m_nChannel;
 	uint16_t m_nFlags;
 	uint32_t m_nLayout;
-} t3dVTPackTailRecordV1_t;
+} t3dVTPackTailRecord_t;
 
-typedef struct t3dVTPackQualityViewV1_s
+typedef struct t3dVTPackQualityView_s
 {
 	uint32_t m_nAllocationId;
 	uint8_t	 m_nProfile;
 	uint8_t	 m_nChannelMask;
 	uint8_t	 m_nBaseMip[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint8_t	 m_nMaxMip[T3D_VT_LOGICAL_CHANNEL_COUNT];
-} t3dVTPackQualityViewV1_t;
+} t3dVTPackQualityView_t;
 
-typedef struct t3dVTPackFormatFamilyRecordV1_s
+typedef struct t3dVTPackFormatFamilyRecord_s
 {
 	uint8_t	 m_nLogicalChannel;
 	uint8_t	 m_nPhysicalFamily;
 	uint8_t	 m_nSemantic;
 	uint8_t	 m_nFlags;
 	uint32_t m_nReserved;
-} t3dVTPackFormatFamilyRecordV1_t;
+} t3dVTPackFormatFamilyRecord_t;
 
-typedef struct t3dVTPackSourceV1_s
+typedef struct t3dVTSerializedPackSource_s
 {
-	const t3dVTPackAllocationRecordV1_s	   *m_pAllocations;
+	const t3dVTPackAllocationRecord_s	   *m_pAllocations;
 	uint32_t								m_nAllocationCount;
-	const t3dVTPackAllocationKeyRecordV1_t *m_pAllocationKeys;
+	const t3dVTPackAllocationKeyRecord_t *m_pAllocationKeys;
 	const t3dVTChannelAllocation_s		   *m_pChannelAllocations;
 	uint32_t								m_nChannelAllocationCount;
-	const t3dVTPackPageRecordV1_s		   *m_pPages;
+	const t3dVTPackPageRecord_s		   *m_pPages;
 	uint32_t								m_nPageCount;
-	const t3dVTPackPayloadRecordV1_t	   *m_pPayloads;
+	const t3dVTPackPayloadRecord_t	   *m_pPayloads;
 	uint32_t								m_nPayloadCount;
-	const t3dVTPackClusterRecordV1_t	   *m_pClusters;
+	const t3dVTPackClusterRecord_t	   *m_pClusters;
 	uint32_t								m_nClusterCount;
-	const t3dVTPackTailRecordV1_s		   *m_pTails;
+	const t3dVTPackTailRecord_s		   *m_pTails;
 	uint32_t								m_nTailCount;
-	const t3dVTPackQualityViewV1_s		   *m_pQualityViews;
+	const t3dVTPackQualityView_s		   *m_pQualityViews;
 	uint32_t								m_nQualityViewCount;
-	const t3dVTPackFormatFamilyRecordV1_s  *m_pFormatFamilies;
+	const t3dVTPackFormatFamilyRecord_s  *m_pFormatFamilies;
 	uint32_t								m_nFormatFamilyCount;
 	const uint8_t						   *m_pPayloadData;
 	uint64_t								m_nPayloadDataBytes;
 	uint32_t								m_nPackageGeneration;
-} t3dVTPackSourceV1_t;
+} t3dVTSerializedPackSource_t;
 
 // File-backed V1 directories are byte spans, never typed object arrays.
 // The reader validates each complete directory before exposing these handles.
@@ -562,12 +562,12 @@ template< typename T > struct t3dVTPackByteRecords_t
 
 struct t3dVTPackHeaderValue_t
 {
-	t3dVTPackHeaderV1_t		   m_Value{};
+	t3dVTPackHeader_t		   m_Value{};
 	bool					   m_bValid = false;
-	const t3dVTPackHeaderV1_t *operator->() const {
+	const t3dVTPackHeader_t *operator->() const {
 		return &m_Value;
 	}
-	const t3dVTPackHeaderV1_t &operator*() const {
+	const t3dVTPackHeader_t &operator*() const {
 		return m_Value;
 	}
 	bool operator==(
@@ -580,18 +580,18 @@ struct t3dVTPackHeaderValue_t
 	}
 };
 
-typedef struct t3dVTPackViewV1_s
+typedef struct t3dVTPackBaselineView_s
 {
 	t3dVTPackHeaderValue_t									   m_pHeader;
-	t3dVTPackByteRecords_t< t3dVTPackAllocationRecordV1_t >	   m_pAllocations;
-	t3dVTPackByteRecords_t< t3dVTPackAllocationKeyRecordV1_t > m_pAllocationKeys;
+	t3dVTPackByteRecords_t< t3dVTPackAllocationRecord_t >	   m_pAllocations;
+	t3dVTPackByteRecords_t< t3dVTPackAllocationKeyRecord_t > m_pAllocationKeys;
 	t3dVTPackByteRecords_t< t3dVTChannelAllocation_t >		   m_pChannelAllocations;
-	t3dVTPackByteRecords_t< t3dVTPackPageRecordV1_t >		   m_pPages;
-	t3dVTPackByteRecords_t< t3dVTPackPayloadRecordV1_t >	   m_pPayloads;
-	t3dVTPackByteRecords_t< t3dVTPackClusterRecordV1_t >	   m_pClusters;
-	t3dVTPackByteRecords_t< t3dVTPackTailRecordV1_t >		   m_pTails;
-	t3dVTPackByteRecords_t< t3dVTPackQualityViewV1_t >		   m_pQualityViews;
-	t3dVTPackByteRecords_t< t3dVTPackFormatFamilyRecordV1_t >  m_pFormatFamilies;
+	t3dVTPackByteRecords_t< t3dVTPackPageRecord_t >		   m_pPages;
+	t3dVTPackByteRecords_t< t3dVTPackPayloadRecord_t >	   m_pPayloads;
+	t3dVTPackByteRecords_t< t3dVTPackClusterRecord_t >	   m_pClusters;
+	t3dVTPackByteRecords_t< t3dVTPackTailRecord_t >		   m_pTails;
+	t3dVTPackByteRecords_t< t3dVTPackQualityView_t >		   m_pQualityViews;
+	t3dVTPackByteRecords_t< t3dVTPackFormatFamilyRecord_t >  m_pFormatFamilies;
 	const uint8_t											  *m_pPayloadData = nullptr;
 	uint32_t												   m_nAllocationCount = 0u;
 	uint32_t												   m_nChannelAllocationCount = 0u;
@@ -602,7 +602,7 @@ typedef struct t3dVTPackViewV1_s
 	uint32_t												   m_nQualityViewCount = 0u;
 	uint32_t												   m_nFormatFamilyCount = 0u;
 	uint64_t												   m_nPayloadDataBytes = 0u;
-} t3dVTPackViewV1_t;
+} t3dVTPackBaselineView_t;
 
 typedef struct t3dVTCookImageView_s
 {
@@ -2278,7 +2278,7 @@ typedef struct t3dVTRuntimeTailSourceRecord_s
 	uint16_t nAtlasInteriorHeight;
 } t3dVTRuntimeTailSourceRecord_t;
 
-typedef struct t3dVTAllocationRecordV1_s
+typedef struct t3dVTAllocationRecord_s
 {
 	uint32_t nBaseVirtualPage;
 	uint32_t nPageCount;
@@ -2290,11 +2290,11 @@ typedef struct t3dVTAllocationRecordV1_s
 	uint16_t nReserved0;
 	uint32_t nRootPage;
 	uint32_t nReserved1;
-} t3dVTAllocationRecordV1_t;
+} t3dVTAllocationRecord_t;
 
 typedef struct t3dVTPackSource_s
 {
-	const t3dVTAllocationRecordV1_s *pAllocations;
+	const t3dVTAllocationRecord_s *pAllocations;
 	uint32_t						 nAllocationCount;
 	const t3dVTPageFileRecord_t		*pPages;
 	uint32_t						 nPageCount;
@@ -2309,7 +2309,7 @@ typedef struct t3dVTDatabaseView_s
 {
 	const t3dVTFileSource_s									 *pFileSource;
 	const t3dVTFileHeader_t									 *pHeader;
-	const t3dVTAllocationRecordV1_s							 *pAllocations;
+	const t3dVTAllocationRecord_s							 *pAllocations;
 	const t3dVTPageFileRecord_t								 *pPages;
 	const t3dVTPayloadRecord_t								 *pPayloads;
 	const uint8_t											 *pPayloadData;
@@ -2320,12 +2320,12 @@ typedef struct t3dVTDatabaseView_s
 	const t3dVTRuntimePayloadRecord_t						 *pRuntimePayloads;
 	uint32_t												  nRuntimePayloadCount;
 	uint32_t												  nRuntimeTailCount;
-	t3dVTPackByteRecords_t< t3dVTPackAllocationRecordV1_t >	  pV1Allocations;
+	t3dVTPackByteRecords_t< t3dVTPackAllocationRecord_t >	  pV1Allocations;
 	t3dVTPackByteRecords_t< t3dVTChannelAllocation_t >		  pV1ChannelAllocations;
-	t3dVTPackByteRecords_t< t3dVTPackPageRecordV1_t >		  pV1Pages;
-	t3dVTPackByteRecords_t< t3dVTPackTailRecordV1_t >		  pV1Tails;
-	t3dVTPackByteRecords_t< t3dVTPackQualityViewV1_t >		  pV1QualityViews;
-	t3dVTPackByteRecords_t< t3dVTPackFormatFamilyRecordV1_t > pV1FormatFamilies;
+	t3dVTPackByteRecords_t< t3dVTPackPageRecord_t >		  pV1Pages;
+	t3dVTPackByteRecords_t< t3dVTPackTailRecord_t >		  pV1Tails;
+	t3dVTPackByteRecords_t< t3dVTPackQualityView_t >		  pV1QualityViews;
+	t3dVTPackByteRecords_t< t3dVTPackFormatFamilyRecord_t > pV1FormatFamilies;
 	uint32_t												  nV1ChannelAllocationCount;
 	uint32_t												  nV1PageCount;
 	uint32_t												  nV1TailCount;
@@ -3163,7 +3163,7 @@ typedef struct t3dTerrainShaderPipelineKey_s
 	uint8_t m_nPassClass = T3D_TERRAIN_SHADER_PASS_COLOR_GENERAL;
 	uint8_t m_nTier = 0u;
 	uint8_t m_nShaderPath = T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL;
-	uint8_t m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
+	uint8_t m_nMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;
 	uint8_t m_nShippingFeatureClass = T3D_TERRAIN_SHIPPING_FEATURE_RUNTIME;
 	uint8_t m_nLightingModelClass = T3D_TERRAIN_LIGHTING_MODEL_RUNTIME;
 	uint8_t m_nSceneIntegrationClass = T3D_TERRAIN_SCENE_INTEGRATION_RUNTIME;
@@ -3558,11 +3558,11 @@ typedef struct t3dBakeRowTask_s
 	size_t	m_nOutputCapacity = 0u;
 } t3dBakeRowTask_t;
 
-typedef struct t3dVTEditorTimedEncoderV1_s
+typedef struct t3dVTEditorTimedEncoder_s
 {
 	t3dVTEncoderInterface_t m_Base;
 	uint64_t				m_nEncodeUsec;
-} t3dVTEditorTimedEncoderV1_t;
+} t3dVTEditorTimedEncoder_t;
 
 typedef struct t3dVTMipChainLayout_s
 {
@@ -3863,19 +3863,19 @@ typedef struct t3dTerrainMegaVTIncrementalCookRequest_s
 	uint32_t					  m_nIncrementalFlags;
 } t3dTerrainMegaVTIncrementalCookRequest_t;
 
-typedef struct t3dVTCookedSparsePackageV1_s
+typedef struct t3dVTCookedSparsePackage_s
 {
 	t3dVTCookAllocator_t			  m_Allocator;
-	t3dVTPackAllocationRecordV1_t	 *m_pAllocations;
-	t3dVTPackAllocationKeyRecordV1_t *m_pAllocationKeys;
+	t3dVTPackAllocationRecord_t	 *m_pAllocations;
+	t3dVTPackAllocationKeyRecord_t *m_pAllocationKeys;
 	t3dVTChannelAllocation_t		 *m_pChannelAllocations;
-	t3dVTPackPageRecordV1_t			 *m_pPages;
-	t3dVTPackPayloadRecordV1_t		 *m_pPayloads;
-	t3dVTPackClusterRecordV1_t		 *m_pClusters;
-	t3dVTPackTailRecordV1_t			 *m_pTails;
-	t3dVTPackQualityViewV1_t		 *m_pQualityViews;
+	t3dVTPackPageRecord_t			 *m_pPages;
+	t3dVTPackPayloadRecord_t		 *m_pPayloads;
+	t3dVTPackClusterRecord_t		 *m_pClusters;
+	t3dVTPackTailRecord_t			 *m_pTails;
+	t3dVTPackQualityView_t		 *m_pQualityViews;
 	uint8_t							 *m_pPayloadData;
-	t3dVTPackFormatFamilyRecordV1_t	  m_FormatFamilies[T3D_VT_LOGICAL_CHANNEL_COUNT];
+	t3dVTPackFormatFamilyRecord_t	  m_FormatFamilies[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint32_t						  m_nAllocationCount;
 	uint32_t						  m_nChannelAllocationCount;
 	uint32_t						  m_nPageCount;
@@ -3886,8 +3886,8 @@ typedef struct t3dVTCookedSparsePackageV1_s
 	uint32_t						  m_nFullySupportedProfileMask;
 	uint32_t						  m_nPackageGeneration;
 	uint64_t						  m_nPayloadDataBytes;
-	t3dVTCookSparseStatsV1_t		  m_Stats;
-} t3dVTCookedSparsePackageV1_t;
+	t3dVTCookSparseStats_t		  m_Stats;
+} t3dVTCookedSparsePackage_t;
 
 typedef struct t3dVTPackRuntimeStorage_s
 {
@@ -3896,10 +3896,10 @@ typedef struct t3dVTPackRuntimeStorage_s
 	uint64_t						nOwnedBytes;
 	uint8_t						   *pPackageBytes;
 	uint64_t						nPackageBytes;
-	t3dVTPackViewV1_t				PackViewV1;
+	t3dVTPackBaselineView_t				PackViewV1;
 	t3dVTDatabaseView_t				Database;
 	t3dVTFileHeader_t			   *pRuntimeHeader;
-	t3dVTAllocationRecordV1_t	   *pLegacyAllocations;
+	t3dVTAllocationRecord_t	   *pLegacyAllocations;
 	t3dVTPageFileRecord_t		   *pLegacyPages;
 	t3dVTPayloadRecord_t		   *pLegacyPayloads;
 	t3dVTAllocation_t			   *pRuntimeAllocations;
@@ -3970,15 +3970,15 @@ typedef struct t3dRegionStreamingPrediction_s
 	t3dStreamingCoord_t m_predictedCenter;
 } t3dRegionStreamingPrediction_t;
 
-typedef struct t3dVTCookPreparedChannelV1_s
+typedef struct t3dVTCookPreparedChannel_s
 {
 	const uint8_t		 *m_pMipBytes;
 	t3dVTMipChainLayout_t m_Layout;
 	uint32_t			  m_nTargetExtent;
 	uint32_t			  m_nReserved0;
-} t3dVTCookPreparedChannelV1_t;
+} t3dVTCookPreparedChannel_t;
 
-typedef struct t3dVTEditorChannelCacheDiskHeaderV1_s
+typedef struct t3dVTEditorChannelCacheDiskHeader_s
 {
 	uint32_t			  m_nMagic;
 	uint32_t			  m_nVersion;
@@ -3989,7 +3989,7 @@ typedef struct t3dVTEditorChannelCacheDiskHeaderV1_s
 	uint64_t			  m_nPayloadBytes;
 	uint32_t			  m_nPayloadChecksum;
 	uint32_t			  m_nReserved0;
-} t3dVTEditorChannelCacheDiskHeaderV1_t;
+} t3dVTEditorChannelCacheDiskHeader_t;
 
 typedef struct t3dRdPacketBuildSlot_s
 {
@@ -4006,12 +4006,12 @@ typedef struct t3dRdOceanStripBank_s
 	t3dRdOceanStripSnapshot_t m_snapshot;
 } t3dRdOceanStripBank_t;
 
-typedef struct t3dVTCookSparseSourceV1_s
+typedef struct t3dVTCookSparseSource_s
 {
 	uint64_t					 m_nStableKey;
 	t3dVTCookImageView_t		 m_Channels[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint64_t					 m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_COUNT];
-	t3dVTCookPreparedChannelV1_t m_PreparedChannels[T3D_VT_LOGICAL_CHANNEL_COUNT];
+	t3dVTCookPreparedChannel_t m_PreparedChannels[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint32_t					 m_nAuthoredChannelMask;
 	uint32_t					 m_nOrmSourceLayout;
 	uint32_t					 m_nWrapMode;
@@ -4020,6 +4020,6 @@ typedef struct t3dVTCookSparseSourceV1_s
 	uint8_t						 m_bAlphaScissor;
 	uint8_t						 m_nAlphaThreshold;
 	uint32_t					 m_nGenerationSeed;
-} t3dVTCookSparseSourceV1_t;
+} t3dVTCookSparseSource_t;
 
 #endif // TERRAIN3D_TYPES_H

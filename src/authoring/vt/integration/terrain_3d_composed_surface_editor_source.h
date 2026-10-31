@@ -13,7 +13,7 @@ class Terrain3DMaterial;
 class Terrain3DTerrainMegaVT;
 class Terrain3DComposedSurfaceEditJournal;
 
-typedef struct t3dCsEditorCandidateResult_s
+typedef struct t3dCompSurfEditorCandidateResult_s
 {
     bool m_bSaved = false;
     uint32_t m_nPages = 0u;
@@ -25,16 +25,16 @@ typedef struct t3dCsEditorCandidateResult_s
     uint64_t m_nSourceFingerprint = 0u;
     godot::String m_error;
     godot::String m_path;
-} t3dCsEditorCandidateResult_t;
+} t3dCompSurfEditorCandidateResult_t;
 
 // Produces .t3sc.candidate, which is NEVER used for live GPU residency.
 // Explicit editor bake only; all buffers and Godot source samples are cold-owned.
-bool t3d_cs_cook_editor_candidate_cold(
+bool t3d_comp_surf_cook_editor_candidate_cold(
     const godot::PackedByteArray &rSourcePack, Terrain3DData &rData,
     const godot::Ref< Terrain3DAssets > &rAssets,
     const godot::Ref< Terrain3DMaterial > &rMaterial,
     const Terrain3DTerrainMegaVT &rMegaVT,
     const Terrain3DComposedSurfaceEditJournal &rEdits,
-    const godot::String &rDataDirectory, t3dCsEditorCandidateResult_t &rResult );
+    const godot::String &rDataDirectory, t3dCompSurfEditorCandidateResult_t &rResult );
 
 #endif

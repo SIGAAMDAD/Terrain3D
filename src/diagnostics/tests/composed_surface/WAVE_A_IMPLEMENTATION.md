@@ -9,8 +9,8 @@
 
 ## Verification actually performed
 
-- Standalone C++17 `test_cs01_contract.cpp` in runtime and editor native build modes, with `-Wall -Wextra -Werror -pthread`.
-- 10,000 deterministic reference scenarios for height/control weighting (`test_cs02_math_reference.py`).
+- Standalone C++17 `test_contract.cpp` in runtime and editor native build modes, with `-Wall -Wextra -Werror -pthread`.
+- 10,000 deterministic reference scenarios for height/control weighting (`test_math_reference.py`).
 - Include topology, extracted-symbol parity, camera-independent shared-math checks, explicit compute gradients, and 294 discovered shader variants (`wave_a_shader_checks.py`).
 
 ## Unmet acceptance gates / deliberately not activated

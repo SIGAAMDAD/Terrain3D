@@ -159,7 +159,7 @@ void register_stream_source_cache_tests(
 		t3dPackedTestCleanup( packPath );
 	} );
 	runner.run( "stream_io", "packed_index_order_and_cold_dedup", []( TestContext &test ) {
-		const String base = "user://terrain3d_t3sp_p13_p14_index_test.t3sp";
+		const String base = "user://terrain3d_t3sp_index_test.t3sp";
 		t3dPackedTestCleanup( base );
 		eastl::vector< t3dBakedRegionPage_t > pages;
 		PackedByteArray payloads[7];

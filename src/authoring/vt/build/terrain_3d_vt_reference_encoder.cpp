@@ -503,7 +503,7 @@ static bool t3d_vt_reference_encode_tile(
 	const uint32_t nSourceStride = rRequest.m_nWidth * rRequest.m_nComponents;
 	uint8_t		  *pOut = rRequest.m_pDestination;
 
-	const bool	   bV1 = rRequest.m_nContractVersion == T3D_VT_FILE_VERSION_V1;
+	const bool	   bV1 = rRequest.m_nContractVersion == T3D_VT_FILE_FORMAT_VERSION;
 	const uint32_t nHeightFormat =
 		bV1 ? ( uint32_t ) T3D_VT_PHYSICAL_FORMAT_R8_UNORM : ( uint32_t ) T3D_VT_FORMAT_HEIGHT_R8_UNORM;
 	if ( rRequest.m_nFormat == nHeightFormat ||

@@ -13,9 +13,9 @@ engine-side descriptor/fence wiring still need completion.
   can invalidate a resident page even without cache pressure. It does not
   allow early slot reuse.
 - `rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.cpp`:
-  `t3d_cs_find_page_location` locates the old sidecar's logical page even when
+  `t3d_comp_surf_find_page_location` locates the old sidecar's logical page even when
   the new authoring page has a different composition revision. Ordinary
-  `t3d_cs_find_page` still requires an exact revision match.
+  `t3d_comp_surf_find_page` still requires an exact revision match.
 - `authoring/vt/integration/terrain_3d_composed_surface_resident_bridge.*`:
   fixed-capacity bridge translating a set of dirty cooked pages to retirement
   tickets for resident old pages. Two passes reject insufficient capacity or

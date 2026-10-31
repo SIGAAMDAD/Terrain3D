@@ -5,7 +5,7 @@
 #if defined( _WIN32 )
 #include <windows.h>
 #include <io.h>
-static bool t3d_cs_write_utf8_to_wide( const char *pUtf8, std::wstring &out )
+static bool t3d_comp_surf_write_utf8_to_wide( const char *pUtf8, std::wstring &out )
 {
     if ( !pUtf8 || !pUtf8[0] ) return false;
     const int length = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, pUtf8, -1, nullptr, 0 );
@@ -19,16 +19,16 @@ static bool t3d_cs_write_utf8_to_wide( const char *pUtf8, std::wstring &out )
 #include <unistd.h>
 #endif
 
-bool t3d_cs_write_sidecar_cold( const char *pDestination, const uint8_t *pBytes, const uint64_t nBytes )
+bool t3d_comp_surf_write_sidecar_cold( const char *pDestination, const uint8_t *pBytes, const uint64_t nBytes )
 {
     if ( !pDestination || !pDestination[0] || !pBytes || nBytes > SIZE_MAX ||
-         !t3d_cs_validate_sidecar_bytes( pBytes, size_t( nBytes ), true ) ) return false;
+         !t3d_comp_surf_validate_sidecar_bytes( pBytes, size_t( nBytes ), true ) ) return false;
     // Identical validated cold sidecars perform zero writes, preserving file
     // timestamps and avoiding a needless synchronous disk flush on no-op bakes.
     // Compare in bounded chunks rather than loading a second full sidecar.
 #if defined( _WIN32 )
     std::wstring wide_dest;
-    if ( !t3d_cs_write_utf8_to_wide( pDestination, wide_dest ) ) return false;
+    if ( !t3d_comp_surf_write_utf8_to_wide( pDestination, wide_dest ) ) return false;
     FILE *pExisting = _wfopen( wide_dest.c_str(), L"rb" );
 #else
     FILE *pExisting = fopen( pDestination, "rb" );
@@ -54,7 +54,7 @@ bool t3d_cs_write_sidecar_cold( const char *pDestination, const uint8_t *pBytes,
     const std::string temporary = std::string( pDestination ) + ".t3sc.tmp";
 #if defined( _WIN32 )
     std::wstring wide_temp;
-    if ( !t3d_cs_write_utf8_to_wide( temporary.c_str(), wide_temp ) ) return false;
+    if ( !t3d_comp_surf_write_utf8_to_wide( temporary.c_str(), wide_temp ) ) return false;
     FILE *pFile = _wfopen( wide_temp.c_str(), L"wb" );
 #else
     FILE *pFile = fopen( temporary.c_str(), "wb" );

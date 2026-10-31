@@ -20,7 +20,7 @@ static uint8_t oracle( const uint32_t *p, uint32_t tx, uint32_t ty ) {
         for ( uint32_t x = tx * 16u - 1u; x <= ( tx + 1u ) * 16u + 1u; ++x ) {
             uint32_t raw = p[y * 128u + x];
             if ( raw & 1u ) return T3D_MATERIAL_TILE_UNKNOWN;
-            uint32_t key = raw & T3D_BR22_CONTROL_SAMPLE_KEY_MASK;
+            uint32_t key = raw & T3D_MATERIAL_TILE_CLASS_CONTROL_SAMPLE_KEY_MASK;
             bool found = false;
             for ( uint32_t i = 0; i < nObserved; ++i ) found |= observed[i] == key;
             if ( !found ) observed[nObserved++] = key;

@@ -35,11 +35,11 @@ typedef struct t3dStPublicationRegionInput_s
 // render owner. The frame table is never built by modifying an active record.
 class Terrain3DStPublicationImage
 {
-    std::vector<t3dStRegionRecordV1_t> m_regions;
-    std::vector<t3dStVhmPageEntryV1_t> m_heightPages;
-    std::vector<t3dStVhmTailV1_t> m_heightTails;
+    std::vector<t3dStRegionRecord_t> m_regions;
+    std::vector<t3dStRegionVhmPageEntry_t> m_heightPages;
+    std::vector<t3dStRegionVhmTail_t> m_heightTails;
     std::vector<uint8_t> m_heightAtlas;
-    std::vector<t3dStMaskPageEntryV1_t> m_maskPages;
+    std::vector<t3dStMaskPageEntry_t> m_maskPages;
     std::vector<uint32_t> m_maskWords;
     // Cold-selected residency snapshot. Each 68x68 R16 page occupies one
     // contiguous slot; immutable after the publication candidate is sealed.
@@ -56,11 +56,11 @@ public:
     bool valid( void ) const { return m_bValid; }
     uint64_t signature( void ) const { return m_nTransactionSignature; }
     uint32_t regionCount( void ) const { return m_nPresentRegions; }
-    const std::vector<t3dStRegionRecordV1_t> &regions( void ) const { return m_regions; }
-    const std::vector<t3dStVhmPageEntryV1_t> &heightPages( void ) const { return m_heightPages; }
-    const std::vector<t3dStVhmTailV1_t> &heightTails( void ) const { return m_heightTails; }
+    const std::vector<t3dStRegionRecord_t> &regions( void ) const { return m_regions; }
+    const std::vector<t3dStRegionVhmPageEntry_t> &heightPages( void ) const { return m_heightPages; }
+    const std::vector<t3dStRegionVhmTail_t> &heightTails( void ) const { return m_heightTails; }
     const std::vector<uint8_t> &heightAtlas( void ) const { return m_heightAtlas; }
-    const std::vector<t3dStMaskPageEntryV1_t> &maskPages( void ) const { return m_maskPages; }
+    const std::vector<t3dStMaskPageEntry_t> &maskPages( void ) const { return m_maskPages; }
     const std::vector<uint32_t> &maskWords( void ) const { return m_maskWords; }
     const std::vector<uint8_t> &finePages( void ) const { return m_finePages; }
     uint32_t finePageCount( void ) const { return m_nFinePageCount; }

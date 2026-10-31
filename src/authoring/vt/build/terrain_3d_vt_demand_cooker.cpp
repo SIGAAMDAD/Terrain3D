@@ -16,7 +16,7 @@
 using namespace godot;
 
 static bool t3dDemandHasKey(
-	const t3dVTPackViewV1_t &rPack,
+	const t3dVTPackBaselineView_t &rPack,
 	const uint64_t			 nKey ) {
 	uint32_t low = 0u, high = rPack.m_pHeader->m_nAllocationCount;
 	while ( low < high ) {
@@ -47,8 +47,8 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 		rError = "Cannot bake demand without final VT package";
 		return false;
 	}
-	t3dVTPackViewV1_t pack{};
-	if ( !t3d_vt_pack_open_view_v1( rFinalPackage.ptr(), ( uint64_t ) rFinalPackage.size(), pack ) ||
+	t3dVTPackBaselineView_t pack{};
+	if ( !t3d_vt_pack_open_baseline_view( rFinalPackage.ptr(), ( uint64_t ) rFinalPackage.size(), pack ) ||
 		 pack.m_pHeader == nullptr || pack.m_pHeader->m_nContentSignature == 0u ) {
 		rError = "Final VT package is invalid";
 		return false;
@@ -63,7 +63,7 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 		return a.x != b.x ? a.x < b.x : a.y < b.y;
 	} );
 	std::vector< t3dVTDemandCell_t >	 cells;
-	std::vector< t3dVTDemandRecordV2_t > records;
+	std::vector< t3dVTDemandStableMaterialRecord_t > records;
 	const uint32_t nTerrainMaterials = ( uint32_t ) MIN( rAssets->getTextureCount(), T3D_MAX_TEXTURE_ASSETS );
 	for ( const Vector2i &location : ordered ) {
 		uint32_t					 counts[T3D_MAX_TEXTURE_ASSETS]{};
@@ -110,12 +110,12 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 			}
 			nCoverageTotal = MAX( nCoverageTotal, 1u );
 		}
-		std::vector< t3dVTDemandRecordV2_t > local;
+		std::vector< t3dVTDemandStableMaterialRecord_t > local;
 		auto								 append = [&]( const uint64_t key, const uint32_t coverage ) {
 			if ( !t3dDemandHasKey( pack, key ) ) {
 				return;
 			}
-			t3dVTDemandRecordV2_t item{};
+			t3dVTDemandStableMaterialRecord_t item{};
 			item.nStableMaterialKey = key;
 			item.Footprint.nMip = 0u;
 			item.Footprint.nCoverage = ( uint16_t ) MAX(
@@ -138,7 +138,7 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 				append( t3d_vt_terrain_material_stable_key( m ), counts[m] );
 			}
 		}
-		std::sort( local.begin(), local.end(), []( const t3dVTDemandRecordV2_t &a, const t3dVTDemandRecordV2_t &b ) {
+		std::sort( local.begin(), local.end(), []( const t3dVTDemandStableMaterialRecord_t &a, const t3dVTDemandStableMaterialRecord_t &b ) {
 			if ( a.Footprint.nCoverage != b.Footprint.nCoverage ) {
 				return a.Footprint.nCoverage > b.Footprint.nCoverage;
 			}
@@ -169,7 +169,7 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
 	const CharString utf8 = rPath.utf8();
 	const uint64_t	 nAssetHash = t3d_vt_demand_hash( ( const uint8_t * ) utf8.get_data(), ( uint64_t ) utf8.length() );
 	std::vector< uint8_t > output;
-	if ( !t3d_vt_demand_write_v2( cells.data(),
+	if ( !t3d_vt_demand_write_stable_material( cells.data(),
 								  ( uint32_t ) cells.size(),
 								  records.data(),
 								  ( uint32_t ) records.size(),
@@ -195,7 +195,7 @@ bool t3d_vt_demand_cook_asset_sidecar_cold(
         PackedByteArray candidate;
         t3dVTVisibilityAggregateStats_t stats{};
         String gpuError;
-        if ( t3d_vt_visibility_cook_v1_cold( rData, keys.data(), ( uint32_t ) keys.size(),
+        if ( t3d_vt_visibility_cook_cold( rData, keys.data(), ( uint32_t ) keys.size(),
                 pack.m_pHeader->m_nContentSignature, nAssetHash, candidate, stats, gpuError ) &&
              !candidate.is_empty() ) {
             // Never replace the v2 sidecar during the T03/T04 transition.

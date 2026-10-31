@@ -45,28 +45,28 @@
     <ns0:None Include="docs\gdscript_modernization_audit.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f1_forward_plus_bridge.md">
+    <ns0:None Include="docs\rd_batch_forward_plus_bridge.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f2_native_depth_opaque.md">
+    <ns0:None Include="docs\rd_batch_native_depth_opaque.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f3_native_shadows.md">
+    <ns0:None Include="docs\rd_batch_native_shadows.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f4_native_lighting.md">
+    <ns0:None Include="docs\rd_batch_native_lighting.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f5_motion_vectors.md">
+    <ns0:None Include="docs\rd_batch_motion_vectors.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f6_scene_integrations.md">
+    <ns0:None Include="docs\rd_batch_scene_integrations.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f7_multiview_lifecycle.md">
+    <ns0:None Include="docs\rd_batch_multiview_lifecycle.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="docs\rd_batch_f8_consolidation.md">
+    <ns0:None Include="docs\rd_batch_consolidation.md">
       <ns0:Filter>docs</ns0:Filter>
     </ns0:None>
     <ns0:None Include="docs\rd_batch_g_editor_integration.md">
@@ -402,7 +402,7 @@
     <ns0:None Include="tools\verify_instance_indirect_buffer_usage.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_instance_local_active_storage_p2.py">
+    <ns0:None Include="tools\verify_instance_local_active_storage.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
     <ns0:None Include="tools\verify_instance_materialization_transaction.py">
@@ -558,7 +558,7 @@
     <ns0:None Include="tools\verify_megatexture_p25.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_memory_budget_zone_containment_p1.py">
+    <ns0:None Include="tools\verify_memory_budget_zone_containment.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
     <ns0:None Include="tools\verify_memory_zone_extent_safety.py">
@@ -579,40 +579,40 @@
     <ns0:None Include="tools\verify_owner_controlled_allocation_g.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p03_p04_p05_performance_contracts.py">
+    <ns0:None Include="tools\verify_performance_contracts.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p06_generation_gates.py">
+    <ns0:None Include="tools\verify_generation_gates.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p07_authoring_page_fallback.py">
+    <ns0:None Include="tools\verify_authoring_page_fallback.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p07_upload_accounting.py">
+    <ns0:None Include="tools\verify_upload_accounting.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p08_render_world_prepare_submit.py">
+    <ns0:None Include="tools\verify_render_world_prepare_submit.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p09_gpu_indirect_visibility.py">
+    <ns0:None Include="tools\verify_gpu_indirect_visibility.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p0_forward_viewport_lifecycle.py">
+    <ns0:None Include="tools\verify_forward_viewport_lifecycle.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p10_vt_streaming.py">
+    <ns0:None Include="tools\verify_vt_streaming.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p11_instance_gpu_culling.py">
+    <ns0:None Include="tools\verify_instance_gpu_culling.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p12_hlod_node_streaming.py">
+    <ns0:None Include="tools\verify_hlod_node_streaming.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p1_forward_lane_diagnostics.py">
+    <ns0:None Include="tools\verify_forward_lane_diagnostics.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
-    <ns0:None Include="tools\verify_p2_forward_pass_resource_prerequisites.py">
+    <ns0:None Include="tools\verify_forward_pass_resource_prerequisites.py">
       <ns0:Filter>tools</ns0:Filter>
     </ns0:None>
     <ns0:None Include="tools\verify_p33_shipping_reachability.py">

@@ -21,7 +21,7 @@ bool makePackage(
 	pbr.resize( 128 * 128 * 4 );
 	albedo.fill( color );
 	pbr.fill( 128 );
-	t3dVTCookSparseSourceV1_t source{};
+	t3dVTCookSparseSource_t source{};
 	source.m_nStableKey = t3d_vt_terrain_region_stable_key( 7 );
 	source.m_nGenerationSeed = generation;
 	source.m_nConsumer = T3D_VT_CONSUMER_CLIPMAP;
@@ -34,7 +34,7 @@ bool makePackage(
 	source.m_Channels[T3D_VT_LOGICAL_CHANNEL_PBR] = { pbr.ptr(), 128, 128, 4, 512 };
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_ALBEDO] = t3dHashPublicationBytes( albedo.ptr(), albedo.size() );
 	source.m_nSourceFingerprint[T3D_VT_LOGICAL_CHANNEL_PBR] = t3dHashPublicationBytes( pbr.ptr(), pbr.size() );
-	return t3d_vt_godot_cook_source_fragment_v1( source, package, 32ull * 1024 * 1024 );
+	return t3d_vt_godot_cook_source_fragment( source, package, 32ull * 1024 * 1024 );
 }
 }
 

@@ -5,10 +5,10 @@
 #include <math.h>
 #include <stdint.h>
 
-#define T3D_CS_EDITOR_REGION_COUNT 1024u
-#define T3D_CS_EDITOR_REGION_SIZE 128.0f
-#define T3D_CS_EDITOR_CONTROL_HALO_TEXELS 2.0f
-#define T3D_CS_EDITOR_GUTTER_TEXELS 4.0f
+#define T3D_COMP_SURF_EDITOR_REGION_COUNT 1024u
+#define T3D_COMP_SURF_EDITOR_REGION_SIZE 128.0f
+#define T3D_COMP_SURF_EDITOR_CONTROL_HALO_TEXELS 2.0f
+#define T3D_COMP_SURF_EDITOR_GUTTER_TEXELS 4.0f
 
 struct t3dComposedSurfaceEditBounds_t
 {
@@ -75,7 +75,7 @@ private:
     static uint32_t closure( uint32_t nWidth, uint32_t nHeight, uint32_t nMips, uint32_t nMask );
     bool invalidateCold( const t3dComposedSurfaceEditRegion_t &region, uint32_t nMip0Mask,
                          uint64_t nFingerprint, uint64_t nTopologyGeneration );
-    t3dComposedSurfaceEditRecord_t m_records[T3D_CS_EDITOR_REGION_COUNT]{};
+    t3dComposedSurfaceEditRecord_t m_records[T3D_COMP_SURF_EDITOR_REGION_COUNT]{};
     t3dComposedSurfaceEditStats_t m_stats{};
 };
 #endif

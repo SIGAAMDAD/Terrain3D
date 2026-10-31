@@ -105,7 +105,7 @@ struct t3dPreviewDiagnosticsView_t
 	const String					   &m_previewLastError;
 	const Terrain3DRdInstanceRenderer  &m_previewRenderer;
 	Terrain3DMutex					   &m_previewStateMutex;
-	const t3dVTEditorCookTelemetryV1_t &m_previewVtEditorTelemetry;
+	const t3dVTEditorCookTelemetry_t &m_previewVtEditorTelemetry;
 	const String					   &m_previewVtLastCookError;
 	const String					   &m_previewVtLastRepublishError;
 	Terrain3DMutex					   &m_previewVtMutex;
@@ -154,9 +154,9 @@ private:
 	uint64_t						 m_nPreviewVtCookFailureCount = 0u;
 	uint64_t						 m_nPreviewVtFailedFingerprint = 0u;
 #if defined( T3D_EDITOR_NATIVE )
-	t3dVTEditorCookCacheV1_t m_previewVtEditorCache;
+	t3dVTEditorCookCache_t m_previewVtEditorCache;
 #endif
-	t3dVTEditorCookTelemetryV1_t m_previewVtEditorTelemetry{};
+	t3dVTEditorCookTelemetry_t m_previewVtEditorTelemetry{};
 	String						 m_previewVtLastCookError;
 	String						 m_previewVtLastRepublishError;
 	bool						 m_bPreviewVtPackageValid = false;

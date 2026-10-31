@@ -60,7 +60,7 @@
 // Existing MegaVT fields and physical flags retain their original offsets.
 // Source revision (u64) and recipe fingerprint (u64) stay in the cold
 // transaction/sidecar manifest, not the GPU region record.
-typedef struct alignas( 16 ) t3dStRegionRecordV1_s
+typedef struct alignas( 16 ) t3dStRegionRecord_s
 {
     uint32_t m_nPackedPhysicalFlags;        // +0
     uint32_t m_nMegaVTAllocation;          // +4
@@ -75,20 +75,20 @@ typedef struct alignas( 16 ) t3dStRegionRecordV1_s
     uint32_t m_nMaskGeneration;            // +52
     uint32_t m_nPublicationGeneration;     // +56
     uint32_t m_nRegionStateFlags;          // +60
-} t3dStRegionRecordV1_t;
+} t3dStRegionRecord_t;
 
 // All VHM page IDs are stable: region * 11 + mip prefix + row-major page.
 // Low 16 bits of m_nPackedMipFlags = mip; bits 16..18 = valid/resident/pinned.
-typedef struct t3dStVhmPageEntryV1_s
+typedef struct t3dStRegionVhmPageEntry_s
 {
     uint32_t m_nPhysicalSlot;
     uint32_t m_nParentPage;
     uint32_t m_nGeneration;
     uint32_t m_nPackedMipFlags;
-} t3dStVhmPageEntryV1_t;
+} t3dStRegionVhmPageEntry_t;
 
 // A 52x20 tail slot holds mip 3..7 with 2-texel gutters per mip.
-typedef struct t3dStVhmTailV1_s
+typedef struct t3dStRegionVhmTail_s
 {
     uint32_t m_nAtlasX;
     uint32_t m_nAtlasY;
@@ -98,21 +98,21 @@ typedef struct t3dStVhmTailV1_s
     uint32_t m_nFlags;
     uint32_t m_nReserved0;
     uint32_t m_nReserved1;
-} t3dStVhmTailV1_t;
+} t3dStRegionVhmTail_t;
 
 // Bit 30 = entry valid; bit 31 = uniform (low three bits hold 1+2 mask bits).
 // Non-uniform entries address an immutable pinned exact bitplane fallback.
-typedef struct t3dStMaskPageEntryV1_s
+typedef struct t3dStMaskPageEntry_s
 {
     uint32_t m_nPhysicalSlot;
     uint32_t m_nPinnedWordOffset;
     uint32_t m_nGeneration;
     uint32_t m_nPackedState;
-} t3dStMaskPageEntryV1_t;
+} t3dStMaskPageEntry_t;
 
 // The VHM and MASK sidecar chunks use the same 48-byte little-endian header.
 // CRC32 is computed over the payload bytes, not the header. No native padding.
-typedef struct t3dStSidecarHeaderV1_s
+typedef struct t3dStSidecarHeader_s
 {
     uint32_t m_nMagic;
     uint32_t m_nVersion;
@@ -124,28 +124,28 @@ typedef struct t3dStSidecarHeaderV1_s
     uint32_t m_nPayloadBytes;
     uint32_t m_nPayloadCrc32;
     uint32_t m_nFlags;
-} t3dStSidecarHeaderV1_t;
+} t3dStSidecarHeader_t;
 
-static_assert( sizeof( t3dStRegionRecordV1_t ) == T3D_ST_REGION_SIZE_BYTES, "ST_REGION_V1 size" );
-static_assert( alignof( t3dStRegionRecordV1_t ) == 16u, "ST_REGION_V1 std430 alignment" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_vMegaVTWorldToUv ) == 16u, "ST_REGION_V1 vec4 offset" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_nComposedVTAllocation ) == 32u, "ST_REGION_V1 composed offset" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_nVhmRootIndex ) == 40u, "ST_REGION_V1 VHM offset" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_nMaskRootIndex ) == 48u, "ST_REGION_V1 mask offset" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_nPublicationGeneration ) == 56u, "ST_REGION_V1 generation offset" );
-static_assert( offsetof( t3dStRegionRecordV1_t, m_nRegionStateFlags ) == 60u, "ST_REGION_V1 state offset" );
-static_assert( sizeof( t3dStVhmPageEntryV1_t ) == 16u, "ST VHM page entry size" );
-static_assert( sizeof( t3dStVhmTailV1_t ) == 32u, "ST VHM tail size" );
-static_assert( sizeof( t3dStMaskPageEntryV1_t ) == 16u, "ST mask page entry size" );
-static_assert( sizeof( t3dStSidecarHeaderV1_t ) == 48u, "ST sidecar header size" );
-static_assert( offsetof( t3dStSidecarHeaderV1_t, m_nPayloadCrc32 ) == 40u, "ST sidecar CRC offset" );
+static_assert( sizeof( t3dStRegionRecord_t ) == T3D_ST_REGION_SIZE_BYTES, "ST_REGION_V1 size" );
+static_assert( alignof( t3dStRegionRecord_t ) == 16u, "ST_REGION_V1 std430 alignment" );
+static_assert( offsetof( t3dStRegionRecord_t, m_vMegaVTWorldToUv ) == 16u, "ST_REGION_V1 vec4 offset" );
+static_assert( offsetof( t3dStRegionRecord_t, m_nComposedVTAllocation ) == 32u, "ST_REGION_V1 composed offset" );
+static_assert( offsetof( t3dStRegionRecord_t, m_nVhmRootIndex ) == 40u, "ST_REGION_V1 VHM offset" );
+static_assert( offsetof( t3dStRegionRecord_t, m_nMaskRootIndex ) == 48u, "ST_REGION_V1 mask offset" );
+static_assert( offsetof( t3dStRegionRecord_t, m_nPublicationGeneration ) == 56u, "ST_REGION_V1 generation offset" );
+static_assert( offsetof( t3dStRegionRecord_t, m_nRegionStateFlags ) == 60u, "ST_REGION_V1 state offset" );
+static_assert( sizeof( t3dStRegionVhmPageEntry_t ) == 16u, "ST VHM page entry size" );
+static_assert( sizeof( t3dStRegionVhmTail_t ) == 32u, "ST VHM tail size" );
+static_assert( sizeof( t3dStMaskPageEntry_t ) == 16u, "ST mask page entry size" );
+static_assert( sizeof( t3dStSidecarHeader_t ) == 48u, "ST sidecar header size" );
+static_assert( offsetof( t3dStSidecarHeader_t, m_nPayloadCrc32 ) == 40u, "ST sidecar CRC offset" );
 static_assert( T3D_ST_VHM_TAIL_ATLAS_WIDTH * T3D_ST_VHM_TAIL_ATLAS_HEIGHT * 2u == T3D_ST_VHM_TAIL_BYTES,
                "ST VHM pinned root footprint" );
 static_assert( T3D_ST_MASK_PAGES_PER_REGION * T3D_ST_REGION_COUNT * T3D_ST_MASK_PAGE_BYTES ==
                T3D_ST_MASK_MAX_PINNED_BYTES, "ST mask worst-case exact fallback" );
 
 // Functions are test helpers only. Hot-path integration belongs to ST03/ST04.
-static inline bool t3dStRegionReady( const t3dStRegionRecordV1_t *pRegion )
+static inline bool t3dStRegionReady( const t3dStRegionRecord_t *pRegion )
 {
     if ( pRegion == nullptr ) {
         return false;

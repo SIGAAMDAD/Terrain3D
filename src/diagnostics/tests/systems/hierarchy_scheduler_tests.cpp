@@ -9,7 +9,7 @@ uint16_t schedulerNodeId( uint32_t l, uint32_t x, uint32_t z ) {
     for ( uint32_t i = 0u; i < l; ++i ) start += 1u << ( i * 2u );
     return ( uint16_t ) ( start + z * ( 1u << l ) + x );
 }
-void makeHierarchy( std::vector< t3dRasterHierarchyV2Node_t > &nodes,
+void makeHierarchy( std::vector< t3dRasterHierarchyStreamNode_t > &nodes,
                     std::vector< uint8_t > &present ) {
     nodes.resize( T3D_HIERARCHY_MAX_NODES );
     present.resize( T3D_HIERARCHY_MAX_NODES, 1u );
@@ -33,7 +33,7 @@ void makeHierarchy( std::vector< t3dRasterHierarchyV2Node_t > &nodes,
 
 void register_hierarchy_scheduler_tests( TestRunner &runner ) {
     runner.run( "hierarchy_scheduler", "f03_bounded_cover_parent_hold_and_exact_priority", []( TestContext &test ) {
-        std::vector< t3dRasterHierarchyV2Node_t > nodes;
+        std::vector< t3dRasterHierarchyStreamNode_t > nodes;
         std::vector< uint8_t > present;
         makeHierarchy( nodes, present );
         Terrain3DHierarchyScheduler scheduler;
@@ -75,7 +75,7 @@ void register_hierarchy_scheduler_tests( TestRunner &runner ) {
         T3D_CHECK( test, scheduler.cover()[0].m_nAvailableAncestor != desired || desired == 0u );
     } );
     runner.run( "hierarchy_scheduler", "f03_sparse_holes_teleport_and_invalid_source", []( TestContext &test ) {
-        std::vector< t3dRasterHierarchyV2Node_t > nodes;
+        std::vector< t3dRasterHierarchyStreamNode_t > nodes;
         std::vector< uint8_t > present;
         makeHierarchy( nodes, present );
         // Remove a full quadrant and its descendants; parent is still sparse.

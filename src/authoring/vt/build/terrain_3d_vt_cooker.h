@@ -42,24 +42,24 @@ typedef bool ( *t3dVTCookClusterEncodeFn )( void		  *pUser,
 
 void t3d_vt_cooker_default_settings( t3dVTCookerSettings_t &rSettings );
 bool t3d_vt_cooker_validate_settings( const t3dVTCookerSettings_t &rSettings );
-bool t3d_vt_cooker_encode_tile_v1( const t3dVTEncoderInterface_t  &rEncoder,
+bool t3d_vt_cooker_encode_tile( const t3dVTEncoderInterface_t  &rEncoder,
 								   const t3dVTEncodeTileRequest_t &rRequest,
 								   uint32_t						  &rWrittenBytes );
-bool t3d_vt_cooker_build_channel_pyramid_v1( const t3dVTCookAllocator_t		 &rAllocator,
-											 const t3dVTCookSparseSourceV1_t &rSource,
+bool t3d_vt_cooker_build_channel_pyramid( const t3dVTCookAllocator_t		 &rAllocator,
+											 const t3dVTCookSparseSource_t &rSource,
 											 t3dVTFixedProfile_t			  Profile,
 											 t3dVTLogicalChannel_t			  Channel,
 											 uint8_t						*&rpMipBytes,
 											 t3dVTMipChainLayout_t			 &rLayout,
 											 uint32_t						  nMipQuality = 1u );
-bool t3d_vt_cooker_cook_sparse_pages_v1( const t3dVTCookerSettings_t	 &rSettings,
-										 const t3dVTCookSparseSourceV1_t *pSources,
+bool t3d_vt_cooker_cook_sparse_pages( const t3dVTCookerSettings_t	 &rSettings,
+										 const t3dVTCookSparseSource_t *pSources,
 										 uint32_t						  nSourceCount,
 										 const t3dVTEncoderInterface_t	 &rEncoder,
 										 const t3dVTCookAllocator_t		 &rAllocator,
 										 const t3dVTCookClusterCodec_t	 *pClusterCodec,
-										 t3dVTCookedSparsePackageV1_t	 &rPackage );
-void t3d_vt_cooker_release_sparse_package_v1( t3dVTCookedSparsePackageV1_t &rPackage );
-bool t3d_vt_cooker_build_pack_source_v1( const t3dVTCookedSparsePackageV1_t &rPackage, t3dVTPackSourceV1_t &rSource );
+										 t3dVTCookedSparsePackage_t	 &rPackage );
+void t3d_vt_cooker_release_sparse_package( t3dVTCookedSparsePackage_t &rPackage );
+bool t3d_vt_cooker_build_pack_source( const t3dVTCookedSparsePackage_t &rPackage, t3dVTSerializedPackSource_t &rSource );
 
 #endif // TERRAIN3D_VT_COOKER_H

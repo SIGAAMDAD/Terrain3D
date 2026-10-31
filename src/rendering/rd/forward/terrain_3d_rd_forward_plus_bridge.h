@@ -93,7 +93,7 @@ private:
 	t3dAtomicU32_t				m_nObservedAbiVersion{ 0u };
 	t3dAtomicU64_t				m_nObservedCapabilities{ 0u };
     // BR18: cold optional engine-backend query, never inferred from vendor.
-    t3dBr24SubgroupCapabilities_t m_br24FragmentSubgroup{};
+    t3dFragmentSubgroupSubgroupCapabilities_t m_br24FragmentSubgroup{};
     bool m_bBr24SubgroupRequested = false;
 
 	uintptr_t					m_nPrepareAddress = 0u;
@@ -187,7 +187,7 @@ public:
 		return m_nObservedCapabilities.load( T3D_MEMORY_ORDER_ACQUIRE );
 	}
     bool isBr24FragmentSubgroupEligibleCold( void ) const {
-        return t3dBr24FragmentSubgroupEligible( m_bBr24SubgroupRequested, m_br24FragmentSubgroup );
+        return t3dFragmentSubgroupFragmentSubgroupEligible( m_bBr24SubgroupRequested, m_br24FragmentSubgroup );
     }
 	String	   getLastError( void ) const;
 	Dictionary getDiagnostics( void );

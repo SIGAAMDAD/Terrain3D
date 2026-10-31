@@ -591,9 +591,9 @@ out float normal_scale)
 	vec4 surface_texel = vec4(1.0);
 	if (has_surface)
 	{
-		T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
+		T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling(
 		material.vtAllocation, 2u, footprint, base_plan, albedo_address);
-		surface_texel = t3d_vt_consumer_sample_orm_v1(surface_address);
+		surface_texel = t3d_vt_consumer_sample_orm(surface_address);
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
 		t3d_vt_instance_fragment_feedback_channel(material, footprint, 2u);
 #endif
@@ -601,7 +601,7 @@ out float normal_scale)
 	vt_address = t3d_vt_consumer_invalid_address();
 	if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u)
 	{
-		vt_address = t3d_vt_consumer_resolve_material_sibling_v1(
+		vt_address = t3d_vt_consumer_resolve_material_sibling(
 		material.vtAllocation, 1u, footprint, base_plan, albedo_address);
 	}
 #ifdef T3D_VT_FRAGMENT_FEEDBACK
@@ -1053,7 +1053,7 @@ void main()
 			vt_address, metallic, roughness, ao, normal_scale);
 			if ((material.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u)
 			{
-				normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal_v1(vt_address), normal_scale), normal);
+				normal = tangent_to_world(decode_normal_sample(t3d_vt_consumer_sample_normal(vt_address), normal_scale), normal);
 			}
 		}
 		// P63: only shaded pixels sample surface and normal
@@ -1077,7 +1077,7 @@ void main()
 			if ((overlay.flags & T3D_VT_MATERIAL_NORMAL_MAPPING) != 0u)
 			{
 				vec3 overlay_normal = tangent_to_world(
-				decode_normal_sample(t3d_vt_consumer_sample_normal_v1(overlay_vt_address), overlay_normal_scale), normal);
+				decode_normal_sample(t3d_vt_consumer_sample_normal(overlay_vt_address), overlay_normal_scale), normal);
 				normal = normalize(mix(normal, overlay_normal, overlay_weight));
 			}
 		}

@@ -50,7 +50,7 @@ def percentile(data, fraction):
 
 
 def summarize(capture):
-    if capture.get('schema') != 't3d_streaming_baseline_v1':
+    if capture.get('schema') != 't3d_streaming_baseline':
         raise ValueError('unsupported baseline capture schema')
     if capture.get('scenario') not in SCENARIOS:
         raise ValueError('unrecognized scenario')

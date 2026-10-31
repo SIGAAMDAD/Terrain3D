@@ -14,7 +14,7 @@ struct t3dComposedSurfaceDirtyRegion_t
     uint64_t m_nSourceFingerprint;
 };
 
-inline bool t3d_cs_capture_dirty_region_cold( const Terrain3DTerrainMegaVT &megavt,
+inline bool t3d_comp_surf_capture_dirty_region_cold( const Terrain3DTerrainMegaVT &megavt,
                                                const uint32_t nRegionIndex,
                                                const uint64_t nSourceFingerprint,
                                                t3dComposedSurfaceDirtyRegion_t &out )
@@ -31,7 +31,7 @@ inline bool t3d_cs_capture_dirty_region_cold( const Terrain3DTerrainMegaVT &mega
     return true;
 }
 
-inline bool t3d_cs_dirty_region_still_current( const Terrain3DTerrainMegaVT &megavt,
+inline bool t3d_comp_surf_dirty_region_still_current( const Terrain3DTerrainMegaVT &megavt,
                                                const t3dComposedSurfaceDirtyRegion_t &ticket,
                                                const uint64_t nCurrentSourceFingerprint )
 {

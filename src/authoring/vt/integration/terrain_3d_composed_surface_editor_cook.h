@@ -2,7 +2,7 @@
 #ifndef TERRAIN3D_COMPOSED_SURFACE_EDITOR_COOK_H
 #define TERRAIN3D_COMPOSED_SURFACE_EDITOR_COOK_H
 
-#include "authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.h"
+#include "authoring/vt/build/terrain_3d_composed_surface_cold_pipeline.h"
 #include "authoring/vt/integration/terrain_3d_composed_surface_edit_journal.h"
 
 // The supplied lock must serialize terrain edits, material/source replacement,

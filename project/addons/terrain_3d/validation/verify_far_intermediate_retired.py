@@ -23,7 +23,7 @@ assert 'T3D_VT_CONSUMER_COMPOSED' in CONTRACT
 assert 'rAllocation.m_nConsumer > T3D_VT_CONSUMER_COMPOSED' in READER
 assert 'region_height_cutout=terrain3d_surface.t3dst' in COOK
 assert 'far_surface_vt=' not in COOK
-assert 't3d_vt_godot_import_far_region_directory_v1' not in GODOT + COOK
+assert 't3d_vt_godot_import_far_region_directory' not in GODOT + COOK
 assert '_archive_far_vt_regions' not in WORKBENCH
 assert '_restore_far_vt_regions' not in WORKBENCH
 print('PASS: FAR cooker, allocation, shader and intermediate retirement')

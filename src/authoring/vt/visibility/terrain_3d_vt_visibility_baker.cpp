@@ -66,7 +66,7 @@ public:
 };
 
 bool t3dVTProbeValid( const t3dVTVisibilityStaticSceneView_t &scene,
-                      const t3dVTDemandV1CookConfig_t &config ) {
+                      const t3dVTDemandVisibilityCookConfig_t &config ) {
     if ( !scene.m_pProbes || !scene.m_pTriangles || !scene.m_pVertices || !scene.m_pMaterialKeys ||
          scene.m_nSourceSignature == 0u || config.m_nSourceSignature != scene.m_nSourceSignature ||
          config.m_nPackageSignature == 0u || scene.m_nMaterialCount == 0u ||
@@ -264,7 +264,7 @@ bool Terrain3DVTVisibilityBaker::selectCellProbes(
 
 bool Terrain3DVTVisibilityBaker::bake(
     const t3dVTVisibilityStaticSceneView_t &scene,
-    const t3dVTDemandV1CookConfig_t &config,
+    const t3dVTDemandVisibilityCookConfig_t &config,
     std::vector< t3dVTVisibilityProbeResult_t > &results,
     t3dVTVisibilityBakeStats_t &stats ) const {
     results.clear();
@@ -303,7 +303,7 @@ bool Terrain3DVTVisibilityBaker::bake(
     attachments.push_back( attachment );
     blend->set_attachments( attachments );
 
-    const uint32_t nCounters = scene.m_nMaterialCount * 8u * T3D_VT_DEMAND_V1_MIP_BINS;
+    const uint32_t nCounters = scene.m_nMaterialCount * 8u * T3D_VT_DEMAND_BAKED_VISIBILITY_MIP_BINS;
     const uint32_t nCounterBytes = nCounters * sizeof( uint32_t );
     const RID histogram = dev.hold( dev.m_rd->storage_buffer_create( nCounterBytes ) );
     if ( !histogram.is_valid() ) return false;

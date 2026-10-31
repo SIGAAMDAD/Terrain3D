@@ -85,7 +85,7 @@ func finish(output_path: String) -> Error:
 	_active = false
 	var diagnostics: Dictionary = _terrain.call("get_runtime_diagnostics", false)
 	var capture: Dictionary = {
-		"schema": "t3d_streaming_baseline_v1",
+		"schema": "t3d_streaming_baseline",
 		"scenario": _scenario,
 		"scene_id": _scene_id,
 		"settings": _settings,

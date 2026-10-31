@@ -3100,7 +3100,7 @@ void Terrain3DMaterial::_bind_methods(
 bool t3dTerrainShaderPipelineKeyIsValid(
     const t3dTerrainShaderPipelineKey_t &rKey ) {
     if ( rKey.m_nPassClass >= T3D_TERRAIN_SHADER_PASS_COUNT || rKey.m_nTier != 0u ||
-         rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ||
+         rKey.m_nMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED ||
          ( rKey.m_nShaderPath != T3D_TERRAIN_SHADER_PATH_SHIPPING_CANONICAL &&
            rKey.m_nShaderPath != T3D_TERRAIN_SHADER_PATH_EDITOR_DEBUG_MIXED ) ) return false;
     const bool color = rKey.m_nPassClass == T3D_TERRAIN_SHADER_PASS_COLOR_GENERAL ||

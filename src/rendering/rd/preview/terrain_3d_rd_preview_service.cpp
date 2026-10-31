@@ -49,8 +49,8 @@ void Terrain3DRdPreviewService::noteGpuPackageOnRenderThread(
 	const uint64_t nSignature ) {
 	Terrain3DScopedLock lock( m_previewVtMutex );
 	uint64_t			nFingerprint = 0u;
-	if ( m_previewVtPublishedPackageBytes.size() >= ( int64_t ) sizeof( t3dVTPackHeaderV1_t ) ) {
-		t3dVTPackHeaderV1_t header{};
+	if ( m_previewVtPublishedPackageBytes.size() >= ( int64_t ) sizeof( t3dVTPackHeader_t ) ) {
+		t3dVTPackHeader_t header{};
 		memcpy( &header, m_previewVtPublishedPackageBytes.ptr(), sizeof( header ) );
 		if ( header.m_nPackageGeneration == nGeneration && header.m_nContentSignature == nSignature ) {
 			nFingerprint = m_nPreviewVtPublishedFingerprint;
@@ -132,7 +132,7 @@ void Terrain3DRdPreviewService::resetOwnerCold(
 		m_nPreviewVtCookFailureCount = 0u;
 		m_nPreviewVtFailedFingerprint = 0u;
 #if defined( T3D_EDITOR_NATIVE )
-		t3d_vt_godot_editor_cache_reset_v1( m_previewVtEditorCache );
+		t3d_vt_godot_editor_cache_reset( m_previewVtEditorCache );
 		m_previewVtEditorCache.m_CacheDirectory = String();
 #endif
 		memset( &m_previewVtEditorTelemetry, 0, sizeof( m_previewVtEditorTelemetry ) );

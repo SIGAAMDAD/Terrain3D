@@ -38,7 +38,7 @@ void Terrain3DHierarchyScheduler::reset( void ) {
     m_stats = t3dHierarchyScheduleStats_t{};
 }
 
-bool Terrain3DHierarchyScheduler::bindCold( const t3dRasterHierarchyV2Node_t *const nodes,
+bool Terrain3DHierarchyScheduler::bindCold( const t3dRasterHierarchyStreamNode_t *const nodes,
                                            const uint8_t *const present,
                                            const uint32_t count, const uint32_t generation ) {
     reset();
@@ -49,7 +49,7 @@ bool Terrain3DHierarchyScheduler::bindCold( const t3dRasterHierarchyV2Node_t *co
         for ( uint32_t index = 0u; index < width * width; ++index ) {
             const uint32_t i = offset + index;
             if ( !present[i] ) continue;
-            const t3dRasterHierarchyV2Node_t &n = nodes[i];
+            const t3dRasterHierarchyStreamNode_t &n = nodes[i];
             if ( n.m_nRevision == 0u || n.m_nGeneration != generation ||
                  n.m_nLevel != level || ( n.m_nCoverageMask & ~7u ) != 0u ||
                  ( level == 5u && n.m_nChildMask != 0u ) ||

@@ -16,7 +16,7 @@ struct t3dComposedSurfaceRetirementEvidence_t
 // The caller can release the old atlas only when independently established
 // evidence is true for every prerequisite. No producer sets these flags in
 // the current shipping/runtime build; the compatibility atlas remains live.
-inline bool t3d_cs_may_retire_legacy_middle_atlas(
+inline bool t3d_comp_surf_may_retire_legacy_middle_atlas(
     const t3dComposedSurfaceRetirementEvidence_t &e )
 {
     return e.m_bCanonicalSurfaceParity && e.m_bEditorDirtyRecookPasses &&

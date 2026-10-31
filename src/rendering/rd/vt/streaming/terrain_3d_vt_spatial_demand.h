@@ -9,7 +9,7 @@
 
 #define T3D_VT_DEMAND_MAGIC				   0x44563354u // T3VD, little endian
 #define T3D_VT_DEMAND_VERSION			   1u		   // historical read-only v1
-#define T3D_VT_DEMAND_VERSION_V2		   2u
+#define T3D_VT_DEMAND_STABLE_MATERIAL_FORMAT_VERSION		   2u
 #define T3D_VT_DEMAND_MAX_CELLS			   4096u
 #define T3D_VT_DEMAND_MAX_RECORDS_PER_CELL 64u
 #define T3D_VT_DEMAND_MAX_RECORDS		   65536u
@@ -52,7 +52,7 @@ typedef struct t3dVTDemandRecord_s
 
 // Cooked v2 records use stable material identity, never a transient allocation index.
 // Bit 0 of flags: partial/unknown static coverage; retain discovery fallback.
-typedef struct t3dVTDemandHeaderV2_s
+typedef struct t3dVTDemandStableMaterialHeader_s
 {
 	t3dVTDemandHeader_t Base;
 	uint64_t			nAssetIdentityHash;
@@ -60,20 +60,20 @@ typedef struct t3dVTDemandHeaderV2_s
 	int32_t				nOriginCellZ;
 	uint32_t			nRecordStride;
 	uint32_t			nFlags;
-} t3dVTDemandHeaderV2_t;
-typedef struct t3dVTDemandRecordV2_s
+} t3dVTDemandStableMaterialHeader_t;
+typedef struct t3dVTDemandStableMaterialRecord_s
 {
 	uint64_t			nStableMaterialKey;
 	t3dVTDemandRecord_t Footprint;
 	uint32_t			nFlags;
-} t3dVTDemandRecordV2_t;
-static_assert( sizeof( t3dVTDemandHeaderV2_t ) == 64u, "Demand V2 header ABI changed" );
-static_assert( sizeof( t3dVTDemandRecordV2_t ) == 32u, "Demand V2 record ABI changed" );
+} t3dVTDemandStableMaterialRecord_t;
+static_assert( sizeof( t3dVTDemandStableMaterialHeader_t ) == 64u, "Demand V2 header ABI changed" );
+static_assert( sizeof( t3dVTDemandStableMaterialRecord_t ) == 32u, "Demand V2 record ABI changed" );
 
 // Common deterministic serializer; authoring computes cells and stable keys from baked regions.
-bool t3d_vt_demand_write_v2( const t3dVTDemandCell_t	 *pCells,
+bool t3d_vt_demand_write_stable_material( const t3dVTDemandCell_t	 *pCells,
 							 uint32_t					  nCells,
-							 const t3dVTDemandRecordV2_t *pRecords,
+							 const t3dVTDemandStableMaterialRecord_t *pRecords,
 							 uint32_t					  nRecords,
 							 uint64_t					  nPackageSignature,
 							 uint64_t					  nAssetIdentityHash,
@@ -122,18 +122,18 @@ private:
 };
 // T04: immutable, directory-only T3VD v1 index. Bundle bodies are never
 // resident here; the worker reads/decompresses individual 4x4-cell groups.
-struct t3dVTDemandV1DirectoryCell_t
+struct t3dVTDemandDirectoryCell_t
 {
     int32_t nX = 0, nZ = 0;
     uint32_t nBundle = 0u, nByteOffset = 0u, nCount = 0u, nFlags = 0u;
 };
-struct t3dVTDemandV1DirectoryBundle_t
+struct t3dVTDemandDirectoryBundle_t
 {
     int32_t nX = 0, nZ = 0;
     uint64_t nOffset = 0u, nHash = 0u;
     uint32_t nEncodedBytes = 0u, nDecodedBytes = 0u, nCodec = 0u, nCount = 0u;
 };
-class Terrain3DVTDemandV1Directory
+class Terrain3DVTDemandDirectory
 {
 public:
     // Accept only the header and directories, not the bundle payloads.
@@ -143,30 +143,30 @@ public:
     void resetCold();
     bool findCellHot( int32_t nX, int32_t nZ, uint32_t &rCellIndex ) const;
     bool validFor( uint64_t nPackage ) const;
-    const t3dVTDemandV1CookConfig_t &config() const { return m_config; }
-    const std::vector< t3dVTDemandV1DirectoryCell_t > &cells() const { return m_cells; }
-    const std::vector< t3dVTDemandV1DirectoryBundle_t > &bundles() const { return m_bundles; }
+    const t3dVTDemandVisibilityCookConfig_t &config() const { return m_config; }
+    const std::vector< t3dVTDemandDirectoryCell_t > &cells() const { return m_cells; }
+    const std::vector< t3dVTDemandDirectoryBundle_t > &bundles() const { return m_bundles; }
     uint64_t fileBytes() const { return m_nFileBytes; }
 private:
-    t3dVTDemandV1CookConfig_t m_config{};
-    std::vector< t3dVTDemandV1DirectoryCell_t > m_cells;
-    std::vector< t3dVTDemandV1DirectoryBundle_t > m_bundles;
+    t3dVTDemandVisibilityCookConfig_t m_config{};
+    std::vector< t3dVTDemandDirectoryCell_t > m_cells;
+    std::vector< t3dVTDemandDirectoryBundle_t > m_bundles;
     uint64_t m_nFileBytes = 0u;
 };
 
 // Worker-only decode. Each output buffer is preallocated at cold bind; no
 // allocations or Godot resources are touched by the codec.
-bool t3d_vt_demand_decode_v1_bundle(
+bool t3d_vt_demand_decode_bundle(
     const uint8_t *pEncoded, uint32_t nEncodedBytes,
-    const t3dVTDemandV1DirectoryBundle_t &rBundle,
+    const t3dVTDemandDirectoryBundle_t &rBundle,
     uint8_t *pScratch, uint32_t nScratchBytes,
-    t3dVTDemandV1Record_t *pRecords, uint32_t nRecordCapacity );
+    t3dVTDemandBakedVisibilityRecord_t *pRecords, uint32_t nRecordCapacity );
 
 // Nominal bake-to-runtime projection scaling. The caller handles per-allocation
 // quality-base mip and physical page budget separately.
-uint16_t t3d_vt_demand_select_v1_mip(
-    const t3dVTDemandV1Record_t &rRecord,
-    const t3dVTDemandV1CookConfig_t &rConfig,
+uint16_t t3d_vt_demand_select_mip(
+    const t3dVTDemandBakedVisibilityRecord_t &rRecord,
+    const t3dVTDemandVisibilityCookConfig_t &rConfig,
     uint32_t nRuntimeTextureSize, uint32_t nRuntimeViewHeight,
     float fRuntimeFovDegrees, uint32_t nRuntimeMipCount );
 

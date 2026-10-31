@@ -553,7 +553,7 @@ def rd_batch_f1_forward_bridge_check() -> bool:
     rd_dir = REPO / "src" / "rendering" / "rd"
     patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     readme_path = REPO / "engine_patch" / "README.md"
-    doc_path = REPO / "docs" / "rd_batch_f1_forward_plus_bridge.md"
+    doc_path = REPO / "docs" / "rd_batch_forward_plus_bridge.md"
     required = [
         rd_dir / "terrain_3d_rd_forward_plus_bridge.h",
         rd_dir / "terrain_3d_rd_forward_plus_bridge.cpp",
@@ -909,7 +909,7 @@ def rd_batch_f6_scene_integration_check() -> bool:
     baker = (REPO / "project" / "addons" / "terrain_3d" / "tools" / "region_lightmap_baker.gd").read_text(encoding="utf-8", errors="ignore")
     patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
-    doc = (REPO / "docs" / "rd_batch_f6_scene_integrations.md").read_text(encoding="utf-8", errors="ignore")
+    doc = (REPO / "docs" / "rd_batch_scene_integrations.md").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
 
     borrowed_packet = (
@@ -987,7 +987,7 @@ def rd_batch_f7_multiview_lifecycle_check() -> bool:
     patch_path = REPO / "engine_patch" / "godot-4.7.2-terrain3d-forward-plus.patch"
     patch = patch_path.read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
-    doc = (REPO / "docs" / "rd_batch_f7_multiview_lifecycle.md").read_text(encoding="utf-8", errors="ignore")
+    doc = (REPO / "docs" / "rd_batch_multiview_lifecycle.md").read_text(encoding="utf-8", errors="ignore")
     shaders = [(REPO / "project" / "addons" / "terrain_3d" / "rd" / name).read_text(encoding="utf-8", errors="ignore") for name in (
         "terrain_clipmap_near.glsl", "terrain_clipmap_middle.glsl", "terrain_clipmap_far.glsl", "terrain_instances.glsl")]
     submit_slices = []
@@ -1050,7 +1050,7 @@ def rd_batch_f8_consolidation_check() -> bool:
     patch_readme = (REPO / "engine_patch" / "README.md").read_text(encoding="utf-8", errors="ignore")
     ledger = (REPO / "docs" / "rd_contract_ledger.tsv").read_text(encoding="utf-8", errors="ignore")
     batches = BATCH_FILE.read_text(encoding="utf-8", errors="ignore")
-    doc_path = REPO / "docs" / "rd_batch_f8_consolidation.md"
+    doc_path = REPO / "docs" / "rd_batch_consolidation.md"
     doc = doc_path.read_text(encoding="utf-8", errors="ignore") if doc_path.is_file() else ""
 
     def between(source: str, begin: str, end: str) -> str:

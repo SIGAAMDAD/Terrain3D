@@ -929,7 +929,7 @@ bool Terrain3DRenderPublicationBuilder::publishRegionState(
             if ( nLogicalPresent != 0u && source_index >= 0 &&
                  m_stCommitted.valid() && m_nStExpectedTopology == region_topology_generation )
             {
-                const t3dStRegionRecordV1_t &stRegion = m_stCommitted.regions()[ (uint32_t) i ];
+                const t3dStRegionRecord_t &stRegion = m_stCommitted.regions()[ (uint32_t) i ];
                 uint32_t currentComposed = T3D_VT_INVALID_ALLOCATION;
                 uint32_t currentGeneration = 0u;
                 if ( t3dStRegionReady( &stRegion ) &&
@@ -1825,7 +1825,7 @@ void Terrain3DRenderPublicationBuilder::publish(
 	if ( !rServices.m_materialStateBuilder.publishSnapshotState( rServices.m_materialSources, snapshot ) ) {
 		return;
 	}
-	if ( snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 ) {
+	if ( snapshot.m_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED ) {
 		rServices.m_host.reportPublicationError(
 			String( "Retired terrain material backend rejected before publication: backend=" ) +
 			String::num_uint64( snapshot.m_nTerrainMaterialBackend ) );

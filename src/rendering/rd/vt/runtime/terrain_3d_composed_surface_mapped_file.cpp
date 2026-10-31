@@ -3,7 +3,7 @@
 #if defined( _WIN32 )
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-static bool t3d_cs_utf8_to_wide( const char *pUtf8, std::wstring &out )
+static bool t3d_comp_surf_utf8_to_wide( const char *pUtf8, std::wstring &out )
 {
     if ( !pUtf8 || !pUtf8[0] ) return false;
     const int count = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, pUtf8, -1, nullptr, 0 );
@@ -27,7 +27,7 @@ bool Terrain3DComposedSurfaceMappedFile::openCold( const char *pUtf8Path,
     if ( !pUtf8Path || !pUtf8Path[0] || !nExpectedFingerprint ) return false;
 #if defined( _WIN32 )
     std::wstring wide;
-    if ( !t3d_cs_utf8_to_wide( pUtf8Path, wide ) ) return false;
+    if ( !t3d_comp_surf_utf8_to_wide( pUtf8Path, wide ) ) return false;
     HANDLE file = CreateFileW( wide.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE,
                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
     if ( file == INVALID_HANDLE_VALUE ) return false;
@@ -54,7 +54,7 @@ bool Terrain3DComposedSurfaceMappedFile::openCold( const char *pUtf8Path,
     m_pMapping = const_cast< void * >( bytes );
     m_nBytes = uint64_t( info.st_size );
 #endif
-    if ( !t3d_cs_open_sidecar_cold( static_cast< const uint8_t * >( m_pMapping ),
+    if ( !t3d_comp_surf_open_sidecar_cold( static_cast< const uint8_t * >( m_pMapping ),
                                     size_t( m_nBytes ), nExpectedFingerprint, m_view ) ) {
         closeCold();
         return false;

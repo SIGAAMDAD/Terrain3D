@@ -4,7 +4,7 @@
 
 bool t3dHierarchyBindFromTileStoreCold( Terrain3DHierarchyScheduler &scheduler,
                                         const Terrain3DHierarchicalTileStore &store ) {
-    std::vector< t3dRasterHierarchyV2Node_t > nodes( T3D_HIERARCHY_MAX_NODES );
+    std::vector< t3dRasterHierarchyStreamNode_t > nodes( T3D_HIERARCHY_MAX_NODES );
     std::vector< uint8_t > present( T3D_HIERARCHY_MAX_NODES );
     uint32_t generation = 0u;
     if ( !store.snapshotDirectoryCold( nodes.data(), present.data(),

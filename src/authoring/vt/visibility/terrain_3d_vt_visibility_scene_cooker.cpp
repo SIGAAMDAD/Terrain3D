@@ -38,7 +38,7 @@ static float sampleHeight( const uint8_t *const data, const Image::Format format
 }
 }
 
-bool t3d_vt_visibility_cook_v1_cold(
+bool t3d_vt_visibility_cook_cold(
     const Terrain3DData &data, const uint64_t *const keys, const uint32_t nKeys,
     const uint64_t packageSignature, const uint64_t assetHash,
     PackedByteArray &output, t3dVTVisibilityAggregateStats_t &outStats,
@@ -60,7 +60,7 @@ bool t3d_vt_visibility_cook_v1_cold(
     std::sort( regions.begin(), regions.end(), []( const Vector2i &a, const Vector2i &b ) {
         return a.x != b.x ? a.x < b.x : a.y < b.y;
     } );
-    if ( regions.empty() || regions.size() > T3D_VT_DEMAND_V1_MAX_CELLS ) {
+    if ( regions.empty() || regions.size() > T3D_VT_DEMAND_BAKED_VISIBILITY_MAX_CELLS ) {
         error = "No authored cells or visibility cook exceeds 4096-cell limit";
         return false;
     }
@@ -148,7 +148,7 @@ bool t3d_vt_visibility_cook_v1_cold(
         return false;
     }
     if ( sourceSignature == 0u ) sourceSignature = 1u;
-    t3dVTDemandV1CookConfig_t config;
+    t3dVTDemandVisibilityCookConfig_t config;
     config.m_nPackageSignature = packageSignature;
     config.m_nAssetIdentityHash = assetHash;
     config.m_nSourceSignature = sourceSignature;
@@ -182,15 +182,15 @@ bool t3d_vt_visibility_cook_v1_cold(
         raw.insert( raw.end(), std::make_move_iterator( batch.begin() ),
                     std::make_move_iterator( batch.end() ) );
     }
-    std::vector< t3dVTDemandV1Cell_t > cells;
-    std::vector< t3dVTDemandV1Record_t > records;
+    std::vector< t3dVTDemandVisibilityCell_t > cells;
+    std::vector< t3dVTDemandBakedVisibilityRecord_t > records;
     if ( !Terrain3DVTVisibilityAggregator::reduce( raw.data(), ( uint32_t ) raw.size(),
            keys, nKeys, 64u, true, cells, records, outStats ) ) {
         error = "Visibility histogram aggregation produced no safe cell coverage";
         return false;
     }
     std::vector< uint8_t > bytes;
-    if ( !t3d_vt_demand_write_v1( cells.data(), ( uint32_t ) cells.size(),
+    if ( !t3d_vt_demand_write_baked_visibility( cells.data(), ( uint32_t ) cells.size(),
            records.data(), ( uint32_t ) records.size(), config, bytes ) ) {
         error = "T3VD v1 byte-bounded bundle encoding failed";
         return false;

@@ -48,7 +48,7 @@ uint32_t t3d_vt_pack_expected_tile_bytes(
 // -----------------------------------------------------------------------------
 // Sparse V1 package primitives.
 
-uint32_t t3d_vt_pack_expected_physical_tile_bytes_v1(
+uint32_t t3d_vt_pack_expected_physical_tile_bytes(
 	const uint32_t nPhysicalFamily ) {
 	const uint32_t nBlocks = ( T3D_VT_PHYSICAL_TILE + 3u ) / 4u;
 	switch ( nPhysicalFamily ) {
@@ -66,8 +66,8 @@ uint32_t t3d_vt_pack_expected_physical_tile_bytes_v1(
 	}
 }
 
-bool t3d_vt_pack_init_format_family_records_v1(
-	t3dVTPackFormatFamilyRecordV1_t *pRecords,
+bool t3d_vt_pack_init_format_family_records(
+	t3dVTPackFormatFamilyRecord_t *pRecords,
 	const uint32_t					 nRecordCount ) {
 	if ( pRecords == NULL || nRecordCount != T3D_VT_LOGICAL_CHANNEL_COUNT ) {
 		return false;
@@ -83,7 +83,7 @@ bool t3d_vt_pack_init_format_family_records_v1(
 	return true;
 }
 
-static uint32_t t3d_vt_pack_v1_expected_profile_mask(
+static uint32_t t3d_vt_pack_expected_profile_mask(
 	const uint32_t nHighestProfile ) {
 	if ( nHighestProfile >= T3D_VT_QUALITY_PROFILE_COUNT ) {
 		return 0u;
@@ -92,13 +92,13 @@ static uint32_t t3d_vt_pack_v1_expected_profile_mask(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_v1_format_map_valid(
+static bool t3d_vt_pack_format_map_valid(
 	const TSource &rSource ) {
 	if ( rSource.m_pFormatFamilies == NULL || rSource.m_nFormatFamilyCount != T3D_VT_LOGICAL_CHANNEL_COUNT ) {
 		return false;
 	}
 	for ( uint32_t iChannel = 0u; iChannel < T3D_VT_LOGICAL_CHANNEL_COUNT; ++iChannel ) {
-		const t3dVTPackFormatFamilyRecordV1_t &rRecord = rSource.m_pFormatFamilies[iChannel];
+		const t3dVTPackFormatFamilyRecord_t &rRecord = rSource.m_pFormatFamilies[iChannel];
 		const t3dVTLogicalChannel_t			   Channel = ( t3dVTLogicalChannel_t ) iChannel;
 		if ( rRecord.m_nLogicalChannel != iChannel ||
 			 rRecord.m_nPhysicalFamily != ( uint8_t ) t3d_vt_logical_channel_physical_family( Channel ) ||
@@ -126,20 +126,20 @@ static uint32_t t3d_vt_pack_fully_supported_mask_impl(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_allocations_v1(
+static bool t3d_vt_pack_validate_allocations(
 	const TSource &rSource ) {
 	uint64_t nPreviousStableKey = 0u;
 	uint64_t nExpectedPageBase = 0u;
 	uint64_t nExpectedQualityViews = 0u;
 	for ( uint32_t iAllocation = 0u; iAllocation < rSource.m_nAllocationCount; ++iAllocation ) {
-		const t3dVTPackAllocationRecordV1_t	   &rAllocation = rSource.m_pAllocations[iAllocation];
-		const t3dVTPackAllocationKeyRecordV1_t &rKey = rSource.m_pAllocationKeys[iAllocation];
+		const t3dVTPackAllocationRecord_t	   &rAllocation = rSource.m_pAllocations[iAllocation];
+		const t3dVTPackAllocationKeyRecord_t &rKey = rSource.m_pAllocationKeys[iAllocation];
 		const uint32_t nAllowedMask = t3d_vt_consumer_allowed_mask(
             ( t3dVTConsumer_t ) rAllocation.m_nConsumer );
         const uint32_t nRequiredMask = t3d_vt_consumer_required_mask(
             ( t3dVTConsumer_t ) rAllocation.m_nConsumer );
         const uint32_t							nExpectedProfileMask =
-			t3d_vt_pack_v1_expected_profile_mask( rAllocation.m_nHighestAvailableProfile );
+			t3d_vt_pack_expected_profile_mask( rAllocation.m_nHighestAvailableProfile );
 		// V1 contains the coarse regional (FAR) consumer too. The cooker and
 		// residency reader must agree on the supported consumer range.
 		if ( rAllocation.m_nConsumer > T3D_VT_CONSUMER_COMPOSED ||
@@ -181,7 +181,7 @@ static bool t3d_vt_pack_validate_allocations_v1(
 				 ( rSource.m_pFormatFamilies[iChannel].m_nFlags & T3D_VT_FORMAT_MAP_ALBEDO_RGBA ) == 0u ) {
 				return false;
 			}
-			const t3dVTPackTailRecordV1_t &rTail = rSource.m_pTails[rChannelAllocation.m_nTailIndex];
+			const t3dVTPackTailRecord_t &rTail = rSource.m_pTails[rChannelAllocation.m_nTailIndex];
 			if ( rTail.m_nChannel != iChannel || rTail.m_nFirstMip >= rChannelAllocation.m_nMipCount ||
 				 rTail.m_nMipCount != rChannelAllocation.m_nMipCount - rTail.m_nFirstMip ) {
 				return false;
@@ -198,15 +198,15 @@ static bool t3d_vt_pack_validate_allocations_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_pages_v1(
+static bool t3d_vt_pack_validate_pages(
 	const TSource &rSource ) {
 	for ( uint32_t iPage = 0u; iPage < rSource.m_nPageCount; ++iPage ) {
-		const t3dVTPackPageRecordV1_t &rPage = rSource.m_pPages[iPage];
+		const t3dVTPackPageRecord_t &rPage = rSource.m_pPages[iPage];
 		if ( rPage.m_nVirtualPage != iPage || rPage.m_nAllocationId >= rSource.m_nAllocationCount ||
 			 rPage.m_nPayloadId >= rSource.m_nPayloadCount || rPage.m_nChannel >= T3D_VT_LOGICAL_CHANNEL_COUNT ) {
 			return false;
 		}
-		const t3dVTPackAllocationRecordV1_t &rAllocation = rSource.m_pAllocations[rPage.m_nAllocationId];
+		const t3dVTPackAllocationRecord_t &rAllocation = rSource.m_pAllocations[rPage.m_nAllocationId];
 		if ( ( rAllocation.m_nChannelMask & T3D_VT_LOGICAL_CHANNEL_BIT( rPage.m_nChannel ) ) == 0u ||
 			 rPage.m_nGeneration != rAllocation.m_nGeneration || rPage.m_nContentId != rAllocation.m_nContentId ) {
 			return false;
@@ -224,9 +224,9 @@ static bool t3d_vt_pack_validate_pages_v1(
 		const uint32_t nFamily =
 			( uint32_t ) t3d_vt_logical_channel_physical_family( ( t3dVTLogicalChannel_t ) rPage.m_nChannel,
 																 rChannelAllocation.m_nFlags );
-		const t3dVTPackPayloadRecordV1_t &rPayload = rSource.m_pPayloads[rPage.m_nPayloadId];
+		const t3dVTPackPayloadRecord_t &rPayload = rSource.m_pPayloads[rPage.m_nPayloadId];
 		if ( rPayload.m_nFormat != nFamily ||
-			 rPayload.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes_v1( nFamily ) ) {
+			 rPayload.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes( nFamily ) ) {
 			return false;
 		}
 	}
@@ -235,17 +235,17 @@ static bool t3d_vt_pack_validate_pages_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_payloads_v1(
+static bool t3d_vt_pack_validate_payloads(
 	const TSource &rSource ) {
 	for ( uint32_t iPayload = 0u; iPayload < rSource.m_nPayloadCount; ++iPayload ) {
-		const t3dVTPackPayloadRecordV1_t &rPayload = rSource.m_pPayloads[iPayload];
+		const t3dVTPackPayloadRecord_t &rPayload = rSource.m_pPayloads[iPayload];
 		if ( rPayload.m_nClusterId >= rSource.m_nClusterCount || rPayload.m_nStoredBytes == 0u ||
 			 rPayload.m_nDecodedBytes == 0u || rPayload.m_nFormat >= T3D_VT_PHYSICAL_FORMAT_COUNT ||
 			 rPayload.m_nCodec != T3D_VT_PACK_CODEC_NONE || rPayload.m_nStoredBytes != rPayload.m_nDecodedBytes ||
-			 rPayload.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes_v1( rPayload.m_nFormat ) ) {
+			 rPayload.m_nDecodedBytes != t3d_vt_pack_expected_physical_tile_bytes( rPayload.m_nFormat ) ) {
 			return false;
 		}
-		const t3dVTPackClusterRecordV1_t &rCluster = rSource.m_pClusters[rPayload.m_nClusterId];
+		const t3dVTPackClusterRecord_t &rCluster = rSource.m_pClusters[rPayload.m_nClusterId];
 		if ( rPayload.m_nClusterOffset > rCluster.m_nDecodedBytes ||
 			 rPayload.m_nDecodedBytes > rCluster.m_nDecodedBytes - rPayload.m_nClusterOffset ) {
 			return false;
@@ -256,11 +256,11 @@ static bool t3d_vt_pack_validate_payloads_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_clusters_v1(
+static bool t3d_vt_pack_validate_clusters(
 	const TSource &rSource ) {
 	uint32_t nExpectedFirstPayload = 0u;
 	for ( uint32_t iCluster = 0u; iCluster < rSource.m_nClusterCount; ++iCluster ) {
-		const t3dVTPackClusterRecordV1_t &rCluster = rSource.m_pClusters[iCluster];
+		const t3dVTPackClusterRecord_t &rCluster = rSource.m_pClusters[iCluster];
 		if ( rCluster.m_nPayloadDataOffset > rSource.m_nPayloadDataBytes ||
 			 rCluster.m_nStoredBytes > rSource.m_nPayloadDataBytes - rCluster.m_nPayloadDataOffset ||
 			 rCluster.m_nStoredBytes == 0u || rCluster.m_nDecodedBytes == 0u ||
@@ -285,23 +285,23 @@ static bool t3d_vt_pack_validate_clusters_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_tails_v1(
+static bool t3d_vt_pack_validate_tails(
 	const TSource &rSource ) {
 	for ( uint32_t iTail = 0u; iTail < rSource.m_nTailCount; ++iTail ) {
-		const t3dVTPackTailRecordV1_t &rTail = rSource.m_pTails[iTail];
+		const t3dVTPackTailRecord_t &rTail = rSource.m_pTails[iTail];
 		if ( rTail.m_nCanonicalAllocationId >= rSource.m_nAllocationCount ||
 			 rTail.m_nPayloadId >= rSource.m_nPayloadCount || rTail.m_nChannel >= T3D_VT_LOGICAL_CHANNEL_COUNT ||
 			 rTail.m_nMipCount == 0u || rTail.m_nFirstMipWidth == 0u || rTail.m_nFirstMipHeight == 0u ||
 			 rTail.m_nAtlasInteriorWidth == 0u || rTail.m_nAtlasInteriorWidth > T3D_VT_PAGE_INTERIOR ||
 			 rTail.m_nAtlasInteriorHeight == 0u || rTail.m_nAtlasInteriorHeight > T3D_VT_PAGE_INTERIOR ||
-			 rTail.m_nLayout != T3D_VT_PACK_TAIL_LAYOUT_HORIZONTAL_V1 ) {
+			 rTail.m_nLayout != T3D_VT_PACK_TAIL_LAYOUT_HORIZONTAL ) {
 			return false;
 		}
-		const t3dVTPackAllocationRecordV1_t &rAllocation = rSource.m_pAllocations[rTail.m_nCanonicalAllocationId];
+		const t3dVTPackAllocationRecord_t &rAllocation = rSource.m_pAllocations[rTail.m_nCanonicalAllocationId];
 		if ( ( rAllocation.m_nChannelMask & T3D_VT_LOGICAL_CHANNEL_BIT( rTail.m_nChannel ) ) == 0u ) {
 			return false;
 		}
-		const t3dVTPackPayloadRecordV1_t &rPayload = rSource.m_pPayloads[rTail.m_nPayloadId];
+		const t3dVTPackPayloadRecord_t &rPayload = rSource.m_pPayloads[rTail.m_nPayloadId];
 		const uint32_t					  nFamily = ( uint32_t ) t3d_vt_logical_channel_physical_family(
 			   ( t3dVTLogicalChannel_t ) rTail.m_nChannel,
 			   rSource
@@ -316,13 +316,13 @@ static bool t3d_vt_pack_validate_tails_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_quality_views_v1(
+static bool t3d_vt_pack_validate_quality_views(
 	const TSource &rSource ) {
 	uint32_t nPreviousAllocation = 0u;
 	uint32_t nPreviousProfile = 0u;
 	uint32_t nSeenProfileMask = 0u;
 	for ( uint32_t iView = 0u; iView < rSource.m_nQualityViewCount; ++iView ) {
-		const t3dVTPackQualityViewV1_t &rView = rSource.m_pQualityViews[iView];
+		const t3dVTPackQualityView_t &rView = rSource.m_pQualityViews[iView];
 		if ( rView.m_nAllocationId >= rSource.m_nAllocationCount || rView.m_nProfile >= T3D_VT_QUALITY_PROFILE_COUNT ||
 			 ( iView == 0u && rView.m_nAllocationId != 0u ) ) {
 			return false;
@@ -340,7 +340,7 @@ static bool t3d_vt_pack_validate_quality_views_v1(
 		} else if ( rView.m_nProfile <= nPreviousProfile ) {
 			return false;
 		}
-		const t3dVTPackAllocationRecordV1_t &rAllocation = rSource.m_pAllocations[rView.m_nAllocationId];
+		const t3dVTPackAllocationRecord_t &rAllocation = rSource.m_pAllocations[rView.m_nAllocationId];
 		const uint32_t						 nProfileBit = 1u << rView.m_nProfile;
 		const uint32_t nRequiredMask = t3d_vt_consumer_required_mask(
             ( t3dVTConsumer_t ) rAllocation.m_nConsumer );
@@ -377,7 +377,7 @@ static bool t3d_vt_pack_validate_quality_views_v1(
 }
 
 template< typename TSource >
-static bool t3d_vt_pack_validate_records_v1(
+static bool t3d_vt_pack_validate_records(
 	const TSource &rSource ) {
 	if ( rSource.m_pAllocations == NULL || rSource.m_nAllocationCount == 0u || rSource.m_pAllocationKeys == NULL ||
 		 rSource.m_pChannelAllocations == NULL ||
@@ -387,36 +387,36 @@ static bool t3d_vt_pack_validate_records_v1(
 		 rSource.m_nPayloadCount == 0u || rSource.m_pClusters == NULL || rSource.m_nClusterCount == 0u ||
 		 rSource.m_pTails == NULL || rSource.m_nTailCount == 0u || rSource.m_pQualityViews == NULL ||
 		 rSource.m_nQualityViewCount == 0u || rSource.m_pPayloadData == NULL || rSource.m_nPayloadDataBytes == 0u ||
-		 !t3d_vt_pack_v1_format_map_valid( rSource ) ) {
+		 !t3d_vt_pack_format_map_valid( rSource ) ) {
 		return false;
 	}
 
-	return t3d_vt_pack_validate_allocations_v1( rSource ) && t3d_vt_pack_validate_pages_v1( rSource ) &&
-		   t3d_vt_pack_validate_payloads_v1( rSource ) && t3d_vt_pack_validate_clusters_v1( rSource ) &&
-		   t3d_vt_pack_validate_tails_v1( rSource ) && t3d_vt_pack_validate_quality_views_v1( rSource );
+	return t3d_vt_pack_validate_allocations( rSource ) && t3d_vt_pack_validate_pages( rSource ) &&
+		   t3d_vt_pack_validate_payloads( rSource ) && t3d_vt_pack_validate_clusters( rSource ) &&
+		   t3d_vt_pack_validate_tails( rSource ) && t3d_vt_pack_validate_quality_views( rSource );
 }
 
-bool t3d_vt_pack_validate_source_v1(
-	const t3dVTPackSourceV1_t &rSource ) {
-	return t3d_vt_pack_validate_records_v1( rSource );
+bool t3d_vt_pack_validate_source(
+	const t3dVTSerializedPackSource_t &rSource ) {
+	return t3d_vt_pack_validate_records( rSource );
 }
 
-static bool t3d_vt_pack_open_view_impl_v1(
+static bool t3d_vt_pack_open_view_impl(
 	const void		  *pPackage,
 	const uint64_t	   nAvailableBytes,
 	const uint64_t	   nPackageBytes,
 	const bool		   bMetadataOnly,
-	t3dVTPackViewV1_t &rView ) {
-	rView = t3dVTPackViewV1_t{};
-	if ( pPackage == NULL || nAvailableBytes < T3D_VT_PACK_V1_HEADER_BYTES || nPackageBytes < nAvailableBytes ) {
+	t3dVTPackBaselineView_t &rView ) {
+	rView = t3dVTPackBaselineView_t{};
+	if ( pPackage == NULL || nAvailableBytes < T3D_VT_PACK_HEADER_BYTES || nPackageBytes < nAvailableBytes ) {
 		return false;
 	}
 	const uint8_t *const pBytes = ( const uint8_t * ) pPackage;
-	t3dVTPackHeaderV1_t	 Header{};
+	t3dVTPackHeader_t	 Header{};
 	memcpy( &Header, pBytes, sizeof( Header ) );
-	const t3dVTPackHeaderV1_t *const pHeader = &Header;
-	if ( pHeader->m_nMagic != T3D_VT_FILE_MAGIC || pHeader->m_nVersion != T3D_VT_FILE_VERSION_V1 ||
-		 pHeader->m_nHeaderBytes != T3D_VT_PACK_V1_HEADER_BYTES || pHeader->m_nPackageBytes != nPackageBytes ||
+	const t3dVTPackHeader_t *const pHeader = &Header;
+	if ( pHeader->m_nMagic != T3D_VT_FILE_MAGIC || pHeader->m_nVersion != T3D_VT_FILE_FORMAT_VERSION ||
+		 pHeader->m_nHeaderBytes != T3D_VT_PACK_HEADER_BYTES || pHeader->m_nPackageBytes != nPackageBytes ||
 		 pHeader->m_nAllocationCount > UINT32_MAX / T3D_VT_LOGICAL_CHANNEL_COUNT ||
 		 pHeader->m_nChannelCount != T3D_VT_LOGICAL_CHANNEL_COUNT ||
 		 pHeader->m_nInteriorTexels != T3D_VT_PAGE_INTERIOR || pHeader->m_nGutterTexels != T3D_VT_PAGE_GUTTER ||
@@ -429,29 +429,29 @@ static bool t3d_vt_pack_open_view_impl_v1(
 		return false;
 	}
 
-	t3dVTPackHeaderV1_t HeaderCopy = *pHeader;
+	t3dVTPackHeader_t HeaderCopy = *pHeader;
 	const uint32_t		nStoredHeaderChecksum = HeaderCopy.m_nHeaderChecksum;
 	HeaderCopy.m_nHeaderChecksum = 0u;
 	if ( t3d_vt_pack_checksum32( &HeaderCopy, sizeof( HeaderCopy ) ) != nStoredHeaderChecksum ||
 		 ( !bMetadataOnly &&
-		   t3d_vt_pack_hash64( pBytes + T3D_VT_PACK_V1_HEADER_BYTES, nPackageBytes - T3D_VT_PACK_V1_HEADER_BYTES ) !=
+		   t3d_vt_pack_hash64( pBytes + T3D_VT_PACK_HEADER_BYTES, nPackageBytes - T3D_VT_PACK_HEADER_BYTES ) !=
 			   pHeader->m_nContentSignature ) ) {
 		return false;
 	}
 
 	const uint64_t nAllocationBytes =
-		( uint64_t ) pHeader->m_nAllocationCount * sizeof( t3dVTPackAllocationRecordV1_t );
+		( uint64_t ) pHeader->m_nAllocationCount * sizeof( t3dVTPackAllocationRecord_t );
 	const uint64_t nAllocationKeyBytes =
-		( uint64_t ) pHeader->m_nAllocationCount * sizeof( t3dVTPackAllocationKeyRecordV1_t );
+		( uint64_t ) pHeader->m_nAllocationCount * sizeof( t3dVTPackAllocationKeyRecord_t );
 	const uint64_t nChannelAllocationBytes =
 		( uint64_t ) pHeader->m_nChannelAllocationCount * sizeof( t3dVTChannelAllocation_t );
-	const uint64_t nPageBytes = ( uint64_t ) pHeader->m_nPageCount * sizeof( t3dVTPackPageRecordV1_t );
-	const uint64_t nPayloadBytes = ( uint64_t ) pHeader->m_nPayloadCount * sizeof( t3dVTPackPayloadRecordV1_t );
-	const uint64_t nClusterBytes = ( uint64_t ) pHeader->m_nClusterCount * sizeof( t3dVTPackClusterRecordV1_t );
-	const uint64_t nTailBytes = ( uint64_t ) pHeader->m_nTailCount * sizeof( t3dVTPackTailRecordV1_t );
-	const uint64_t nQualityViewBytes = ( uint64_t ) pHeader->m_nQualityViewCount * sizeof( t3dVTPackQualityViewV1_t );
+	const uint64_t nPageBytes = ( uint64_t ) pHeader->m_nPageCount * sizeof( t3dVTPackPageRecord_t );
+	const uint64_t nPayloadBytes = ( uint64_t ) pHeader->m_nPayloadCount * sizeof( t3dVTPackPayloadRecord_t );
+	const uint64_t nClusterBytes = ( uint64_t ) pHeader->m_nClusterCount * sizeof( t3dVTPackClusterRecord_t );
+	const uint64_t nTailBytes = ( uint64_t ) pHeader->m_nTailCount * sizeof( t3dVTPackTailRecord_t );
+	const uint64_t nQualityViewBytes = ( uint64_t ) pHeader->m_nQualityViewCount * sizeof( t3dVTPackQualityView_t );
 	const uint64_t nFormatFamilyBytes =
-		( uint64_t ) pHeader->m_nFormatFamilyCount * sizeof( t3dVTPackFormatFamilyRecordV1_t );
+		( uint64_t ) pHeader->m_nFormatFamilyCount * sizeof( t3dVTPackFormatFamilyRecord_t );
 	if ( !t3dByteRangeFits< uint64_t >( pHeader->m_nAllocationOffset, nAllocationBytes, nPackageBytes ) ||
 		 !t3dByteRangeFits< uint64_t >( pHeader->m_nAllocationKeyOffset, nAllocationKeyBytes, nPackageBytes ) ||
 		 !t3dByteRangeFits< uint64_t >( pHeader->m_nChannelAllocationOffset, nChannelAllocationBytes, nPackageBytes ) ||
@@ -478,7 +478,7 @@ static bool t3d_vt_pack_open_view_impl_v1(
 		 ( pHeader->m_nQualityViewOffset % T3D_VT_PACK_ALIGNMENT ) != 0u ||
 		 ( pHeader->m_nFormatFamilyOffset % T3D_VT_PACK_ALIGNMENT ) != 0u ||
 		 ( pHeader->m_nPayloadDataOffset % T3D_VT_PACK_ALIGNMENT ) != 0u ||
-		 pHeader->m_nAllocationOffset != T3D_VT_PACK_V1_HEADER_BYTES ||
+		 pHeader->m_nAllocationOffset != T3D_VT_PACK_HEADER_BYTES ||
 		 pHeader->m_nAllocationKeyOffset < pHeader->m_nAllocationOffset + nAllocationBytes ||
 		 pHeader->m_nChannelAllocationOffset < pHeader->m_nAllocationKeyOffset + nAllocationKeyBytes ||
 		 pHeader->m_nPageOffset < pHeader->m_nChannelAllocationOffset + nChannelAllocationBytes ||
@@ -514,9 +514,9 @@ static bool t3d_vt_pack_open_view_impl_v1(
 	rView.m_nFormatFamilyCount = Header.m_nFormatFamilyCount;
 	rView.m_nPayloadDataBytes = Header.m_nPayloadDataBytes;
 
-	if ( !t3d_vt_pack_validate_records_v1( rView ) ||
+	if ( !t3d_vt_pack_validate_records( rView ) ||
 		 pHeader->m_nFullySupportedProfileMask != t3d_vt_pack_fully_supported_mask_impl( rView ) ) {
-		rView = t3dVTPackViewV1_t{};
+		rView = t3dVTPackBaselineView_t{};
 		return false;
 	}
 
@@ -533,17 +533,17 @@ static bool t3d_vt_pack_open_view_impl_v1(
 	for ( uint32_t iChannel = 0u; iChannel < T3D_VT_LOGICAL_CHANNEL_COUNT; ++iChannel ) {
 		if ( nChannelPageCount[iChannel] != pHeader->m_nChannelPageCount[iChannel] ||
 			 nChannelTailCount[iChannel] != pHeader->m_nChannelTailCount[iChannel] ) {
-			rView = t3dVTPackViewV1_t{};
+			rView = t3dVTPackBaselineView_t{};
 			return false;
 		}
 	}
 	for ( uint32_t iCluster = 0u; !bMetadataOnly && iCluster < pHeader->m_nClusterCount; ++iCluster ) {
-		const t3dVTPackClusterRecordV1_t &rCluster = rView.m_pClusters[iCluster];
+		const t3dVTPackClusterRecord_t &rCluster = rView.m_pClusters[iCluster];
 		if ( rCluster.m_nCodec == T3D_VT_PACK_CODEC_NONE ) {
 			const uint8_t *const pClusterBytes = rView.m_pPayloadData + rCluster.m_nPayloadDataOffset;
 			if ( t3d_vt_pack_checksum32( pClusterBytes, rCluster.m_nStoredBytes ) != rCluster.m_nChecksum ||
 				 t3d_vt_pack_hash64( pClusterBytes, rCluster.m_nStoredBytes ) != rCluster.m_nContentSignature ) {
-				rView = t3dVTPackViewV1_t{};
+				rView = t3dVTPackBaselineView_t{};
 				return false;
 			}
 		}
@@ -551,22 +551,22 @@ static bool t3d_vt_pack_open_view_impl_v1(
 	return true;
 }
 
-bool t3d_vt_pack_open_view_v1(
+bool t3d_vt_pack_open_baseline_view(
 	const void		  *pPackage,
 	const uint64_t	   nPackageBytes,
-	t3dVTPackViewV1_t &rView ) {
-	return t3d_vt_pack_open_view_impl_v1( pPackage, nPackageBytes, nPackageBytes, false, rView );
+	t3dVTPackBaselineView_t &rView ) {
+	return t3d_vt_pack_open_view_impl( pPackage, nPackageBytes, nPackageBytes, false, rView );
 }
 
-bool t3d_vt_pack_open_metadata_view_v1(
+bool t3d_vt_pack_open_metadata_view(
 	const void		  *pPrefix,
 	const uint64_t	   nPrefixBytes,
 	const uint64_t	   nFileBytes,
-	t3dVTPackViewV1_t &rView ) {
-	return t3d_vt_pack_open_view_impl_v1( pPrefix, nPrefixBytes, nFileBytes, true, rView );
+	t3dVTPackBaselineView_t &rView ) {
+	return t3d_vt_pack_open_view_impl( pPrefix, nPrefixBytes, nFileBytes, true, rView );
 }
 
-uint32_t t3d_vt_pack_fully_supported_profile_mask_v1(
-	const t3dVTPackSourceV1_t &rSource ) {
+uint32_t t3d_vt_pack_fully_supported_profile_mask(
+	const t3dVTSerializedPackSource_t &rSource ) {
 	return t3d_vt_pack_fully_supported_mask_impl( rSource );
 }

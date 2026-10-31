@@ -71,7 +71,7 @@ void register_stream_io_rollout_tests(
 		T3D_REQUIRE( test, index.readTile( second, after ) );
 		T3D_CHECK( test, after == tile.m_bytes );
 		index.clear();
-		directory->remove( "terrain3d_io07_raster/terrain3d_raster_v1.t3rb" );
+		directory->remove( "terrain3d_io07_raster/terrain3d_raster.t3rb" );
 		directory->remove( "terrain3d_io07_raster" );
 	} );
 	runner.run( "stream_io_rollout", "cooked_cache_clearing_prevents_stale_payload_reuse", []( TestContext &test ) {
@@ -115,7 +115,7 @@ void register_stream_io_rollout_tests(
 		}
 	} );
     runner.run( "stream_io_rollout", "f02_hierarchy_async_merge_cancel_epoch_and_integrity", []( TestContext &test ) {
-        const String directory = "user://terrain3d_f02_async_hierarchy";
+        const String directory = "user://terrain3d_async_hierarchy";
         T3D_REQUIRE( test, DirAccess::make_dir_recursive_absolute( directory ) == OK );
         Terrain3DRasterTileStore source;
         Terrain3DRasterHierarchyBuilder builder;
@@ -129,10 +129,10 @@ void register_stream_io_rollout_tests(
             builder.updateRegion( locations[i], source );
         }
         T3D_REQUIRE( test, Terrain3DRasterHierarchyBundle::saveV2( directory, builder ) == OK );
-        Terrain3DRasterHierarchyIndexV2 index;
+        Terrain3DRasterHierarchyStreamIndex index;
         T3D_REQUIRE( test, index.open( directory ) == OK );
         const uint16_t id = Terrain3DRasterHierarchyBuilder::nodeId( 5u, 15u, 15u );
-        const t3dRasterHierarchyV2Node_t *node = index.getNode( id );
+        const t3dRasterHierarchyStreamNode_t *node = index.getNode( id );
         T3D_REQUIRE( test, node != nullptr );
         // Fixed pool is cold allocated; both consumer requests must share one
         // physical verified I/O operation and one immutable source revision.
@@ -164,8 +164,8 @@ void register_stream_io_rollout_tests(
         T3D_REQUIRE( test, store.takePrepared( id, 5u, node->m_nRevision, prepared ) );
         T3D_CHECK( test, prepared.m_nContentGeneration == index.getGeneration() &&
             prepared.m_nStoreEpoch == epoch && prepared.m_nSourceRevision == node->m_nRevision );
-        T3D_CHECK( test, prepared.m_height.size() == T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES &&
-            prepared.m_color.size() == T3D_RASTER_HIERARCHY_V2_COLOR_BYTES &&
+        T3D_CHECK( test, prepared.m_height.size() == T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES &&
+            prepared.m_color.size() == T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES &&
             prepared.m_control.is_empty() );
         T3D_CHECK( test, !store.isReady( id, 5u, node->m_nRevision ) );
         // Cancelled work cannot publish and reset waits for worker quiescence.

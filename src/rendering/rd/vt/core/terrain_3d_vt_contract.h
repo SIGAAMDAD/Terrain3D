@@ -11,15 +11,15 @@
 // Terrain3D Sparse VT V1 is the frozen shipping package ABI.
 // Filter/compressor ABI revisions are explicit cache-invalidating contracts.
 #define T3D_VT_FILE_MAGIC				 0x56543154u
-#define T3D_VT_FILE_VERSION_V1			 1u
-#define T3D_VT_FILE_VERSION				 T3D_VT_FILE_VERSION_V1
-#define T3D_VT_V1_ABI_VERSION			 2u
-#define T3D_VT_V1_FILTER_ABI_VERSION	 1u
-#define T3D_VT_V1_COMPRESSOR_ABI_VERSION 1u
-static_assert( T3D_VT_FILE_VERSION_V1 == 1u, "Sparse VT V1 file ABI version is frozen" );
-static_assert( T3D_VT_V1_ABI_VERSION == 2u, "Sparse VT V1 ABI version is frozen" );
-static_assert( T3D_VT_V1_FILTER_ABI_VERSION == 1u, "Sparse VT V1 filter ABI version is frozen" );
-static_assert( T3D_VT_V1_COMPRESSOR_ABI_VERSION == 1u, "Sparse VT V1 RGBA compressor recipe revision" );
+#define T3D_VT_FILE_FORMAT_VERSION			 1u
+#define T3D_VT_FILE_VERSION				 T3D_VT_FILE_FORMAT_VERSION
+#define T3D_VT_ABI_VERSION			 2u
+#define T3D_VT_FILTER_ABI_VERSION	 1u
+#define T3D_VT_COMPRESSOR_ABI_VERSION 1u
+static_assert( T3D_VT_FILE_FORMAT_VERSION == 1u, "Sparse VT V1 file ABI version is frozen" );
+static_assert( T3D_VT_ABI_VERSION == 2u, "Sparse VT V1 ABI version is frozen" );
+static_assert( T3D_VT_FILTER_ABI_VERSION == 1u, "Sparse VT V1 filter ABI version is frozen" );
+static_assert( T3D_VT_COMPRESSOR_ABI_VERSION == 1u, "Sparse VT V1 RGBA compressor recipe revision" );
 // V1 regional coarse-surface source recipe. Changes invalidate cooked fingerprints.
 #define T3D_VT_REGIONAL_SOURCE_RECIPE_VERSION 3u
 #define T3D_VT_PAGE_INTERIOR			128u
@@ -157,28 +157,28 @@ inline bool t3d_vt_is_terrain_region_stable_key(
 
 // V1 internal page-table addresses reserve three high bits for five format families.
 // The remaining 29 bits address physical layers; all resident pages use one allocator.
-#define T3D_VT_V1_PHYSICAL_FAMILY_SHIFT 29u
-#define T3D_VT_V1_PHYSICAL_FAMILY_MASK	0xe0000000u
-#define T3D_VT_V1_PHYSICAL_SLOT_MASK	0x1fffffffu
+#define T3D_VT_PHYSICAL_FAMILY_SHIFT 29u
+#define T3D_VT_PHYSICAL_FAMILY_MASK	0xe0000000u
+#define T3D_VT_PHYSICAL_SLOT_MASK	0x1fffffffu
 
-static inline uint32_t t3d_vt_pack_physical_address_v1(
+static inline uint32_t t3d_vt_pack_physical_address(
 	const t3dVTPhysicalFormatFamily_t Family,
 	const uint32_t					  nSlot ) {
-	if ( ( uint32_t ) Family >= T3D_VT_PHYSICAL_FORMAT_COUNT || nSlot > T3D_VT_V1_PHYSICAL_SLOT_MASK ) {
+	if ( ( uint32_t ) Family >= T3D_VT_PHYSICAL_FORMAT_COUNT || nSlot > T3D_VT_PHYSICAL_SLOT_MASK ) {
 		return T3D_VT_INVALID_SLOT;
 	}
-	return ( ( uint32_t ) Family << T3D_VT_V1_PHYSICAL_FAMILY_SHIFT ) | nSlot;
+	return ( ( uint32_t ) Family << T3D_VT_PHYSICAL_FAMILY_SHIFT ) | nSlot;
 }
 
-static inline t3dVTPhysicalFormatFamily_t t3d_vt_physical_address_family_v1(
+static inline t3dVTPhysicalFormatFamily_t t3d_vt_physical_address_family(
 	const uint32_t nAddress ) {
-	return ( t3dVTPhysicalFormatFamily_t ) ( ( nAddress & T3D_VT_V1_PHYSICAL_FAMILY_MASK ) >>
-											 T3D_VT_V1_PHYSICAL_FAMILY_SHIFT );
+	return ( t3dVTPhysicalFormatFamily_t ) ( ( nAddress & T3D_VT_PHYSICAL_FAMILY_MASK ) >>
+											 T3D_VT_PHYSICAL_FAMILY_SHIFT );
 }
 
-static inline uint32_t t3d_vt_physical_address_slot_v1(
+static inline uint32_t t3d_vt_physical_address_slot(
 	const uint32_t nAddress ) {
-	return nAddress & T3D_VT_V1_PHYSICAL_SLOT_MASK;
+	return nAddress & T3D_VT_PHYSICAL_SLOT_MASK;
 }
 
 // The current World owns four physical arrays already. P04 reinterprets
@@ -244,9 +244,9 @@ static inline t3dVTChannelSemantic_t t3d_vt_logical_channel_semantic(
 // VT-P06 runtime adapter: one logical V1 material allocation is flattened to
 // three independent residency allocations. The meaning of slots 1/2 depends
 // on the consumer; slot 0 is ALBEDO for both.
-#define T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION 3u
+#define T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION 3u
 
-static inline bool t3d_vt_v1_runtime_slot_for_channel(
+static inline bool t3d_vt_runtime_slot_for_channel(
 	const t3dVTConsumer_t		Consumer,
 	const t3dVTLogicalChannel_t Channel,
 	uint32_t				   &rSlot ) {
@@ -280,12 +280,12 @@ static inline bool t3d_vt_v1_runtime_slot_for_channel(
 	return false;
 }
 
-static inline uint32_t t3d_vt_v1_runtime_allocation_base(
+static inline uint32_t t3d_vt_runtime_allocation_base(
 	const uint32_t nAllocationId ) {
-	return nAllocationId * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
+	return nAllocationId * T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION;
 }
 
-static inline bool t3d_vt_v1_logical_channel_for_runtime_slot(
+static inline bool t3d_vt_logical_channel_for_runtime_slot(
 	const t3dVTConsumer_t  Consumer,
 	const uint32_t		   nSlot,
 	t3dVTLogicalChannel_t &rChannel ) {
@@ -422,11 +422,11 @@ static inline bool t3d_vt_allocation_quality_enabled(
 
 static_assert( sizeof( t3dVTAllocation_t ) == 32u, "t3dVTAllocation_t ABI changed" );
 static_assert( sizeof( t3dVTChannelAllocation_t ) == 20u, "t3dVTChannelAllocation_t v1 ABI changed" );
-static_assert( sizeof( t3dVTPackAllocationRecordV1_t ) == 16u, "t3dVTPackAllocationRecordV1_t ABI changed" );
-static_assert( sizeof( t3dVTPackPageRecordV1_t ) == 36u, "t3dVTPackPageRecordV1_t ABI changed" );
-static_assert( sizeof( t3dVTPackTailRecordV1_t ) == 40u, "t3dVTPackTailRecordV1_t ABI changed" );
-static_assert( sizeof( t3dVTPackQualityViewV1_t ) == 20u, "t3dVTPackQualityViewV1_t ABI changed" );
-static_assert( sizeof( t3dVTPackFormatFamilyRecordV1_t ) == 8u, "t3dVTPackFormatFamilyRecordV1_t ABI changed" );
+static_assert( sizeof( t3dVTPackAllocationRecord_t ) == 16u, "t3dVTPackAllocationRecord_t ABI changed" );
+static_assert( sizeof( t3dVTPackPageRecord_t ) == 36u, "t3dVTPackPageRecord_t ABI changed" );
+static_assert( sizeof( t3dVTPackTailRecord_t ) == 40u, "t3dVTPackTailRecord_t ABI changed" );
+static_assert( sizeof( t3dVTPackQualityView_t ) == 20u, "t3dVTPackQualityView_t ABI changed" );
+static_assert( sizeof( t3dVTPackFormatFamilyRecord_t ) == 8u, "t3dVTPackFormatFamilyRecord_t ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nBaseVirtualPage ) == 0u, "VT allocation base-page ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nMip0WidthPages ) == 8u, "VT allocation extent ABI changed" );
 static_assert( offsetof( t3dVTAllocation_t, m_nMipCount ) == 12u, "VT allocation mip ABI changed" );

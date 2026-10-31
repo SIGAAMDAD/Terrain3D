@@ -98,7 +98,7 @@ static uint16_t t3dRasterSpatialPhysicalId(
 
 String Terrain3DRasterBundle::getPath(
 	const String &rDirectory ) {
-	return rDirectory.path_join( "terrain3d_raster_v1.t3rb" );
+	return rDirectory.path_join( "terrain3d_raster.t3rb" );
 }
 
 Error Terrain3DRasterBundle::save(

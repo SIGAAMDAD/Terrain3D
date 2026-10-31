@@ -8,8 +8,8 @@
 
 // T04: one immutable T3VD v1 directory + four bounded asynchronous 4x4-cell
 // payloads. The hot path only queues and reads already-decoded records.
-#define T3D_VT_V1_BUNDLE_CACHE_SLOTS 4u
-#define T3D_VT_V1_BUNDLE_MAX_RECORDS ( T3D_VT_DEMAND_V1_MAX_BUNDLE_BYTES / T3D_VT_DEMAND_V1_RECORD_BYTES )
+#define T3D_VT_BUNDLE_CACHE_SLOTS 4u
+#define T3D_VT_BUNDLE_MAX_RECORDS ( T3D_VT_DEMAND_BAKED_VISIBILITY_MAX_BUNDLE_BYTES / T3D_VT_DEMAND_BAKED_VISIBILITY_RECORD_BYTES )
 
 struct t3dVTDemandBundleStats_t
 {
@@ -31,10 +31,10 @@ public:
                    uint64_t nAssetIdentityHash );
     void resetCold(); // join worker; no slot recycled while worker owns bytes
     bool validFor( uint64_t nPackageSignature ) const;
-    const t3dVTDemandV1CookConfig_t &configCold() const { return m_directory.config(); }
+    const t3dVTDemandVisibilityCookConfig_t &configCold() const { return m_directory.config(); }
     void requestCellHot( int32_t nX, int32_t nZ, uint8_t nPriority );
     // Valid until the next requestCellHot()/resetCold() on the owner lane.
-    const t3dVTDemandV1Record_t *findCellHot( int32_t nX, int32_t nZ,
+    const t3dVTDemandBakedVisibilityRecord_t *findCellHot( int32_t nX, int32_t nZ,
                                               uint32_t &rCount, uint32_t &rFlags );
     t3dVTDemandBundleStats_t stats() const;
 
@@ -42,7 +42,7 @@ private:
     enum State : uint8_t { FREE, QUEUED, LOADING, READY, FAILED };
     struct Slot
     {
-        std::vector< t3dVTDemandV1Record_t > records;
+        std::vector< t3dVTDemandBakedVisibilityRecord_t > records;
         uint32_t nBundle = UINT32_MAX;
         uint32_t nPriority = 0u;
         uint64_t nAge = 0u;
@@ -52,9 +52,9 @@ private:
     void workerMain();
     int32_t selectQueuedLocked() const;
     int32_t findSlotLocked( uint32_t nBundle ) const;
-    Terrain3DVTDemandV1Directory m_directory;
+    Terrain3DVTDemandDirectory m_directory;
     godot::String m_path;
-    Slot m_slots[T3D_VT_V1_BUNDLE_CACHE_SLOTS];
+    Slot m_slots[T3D_VT_BUNDLE_CACHE_SLOTS];
     mutable Terrain3DMutex m_mutex;
     Terrain3DCondition m_wake;
     Terrain3DThread m_worker;

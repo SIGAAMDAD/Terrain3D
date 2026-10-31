@@ -420,7 +420,7 @@ bool Terrain3DVirtualTexture::open_package_candidate(
 		return false;
 	}
 	t3dVTQualityRuntimeStats_t Quality{};
-	if ( !t3d_vt_pack_runtime_apply_quality_profile_v1( rCandidate.Database,
+	if ( !t3d_vt_pack_runtime_apply_quality_profile( rCandidate.Database,
 														rCandidate.pRuntimeAllocations,
 														rCandidate.Database.pHeader->nAllocationCount,
 														m_nRequestedQualityProfile,
@@ -454,7 +454,7 @@ bool Terrain3DVirtualTexture::stagePackageWarm(
 	}
 	if ( bValid && !m_bWarmCandidateNeutral ) {
 		t3dVTQualityRuntimeStats_t quality{};
-		bValid = t3d_vt_pack_runtime_apply_quality_profile_v1( m_WarmCandidate.Database,
+		bValid = t3d_vt_pack_runtime_apply_quality_profile( m_WarmCandidate.Database,
 															   m_WarmCandidate.pRuntimeAllocations,
 															   m_WarmCandidate.Database.pHeader->nAllocationCount,
 															   m_nRequestedQualityProfile,
@@ -505,7 +505,7 @@ bool Terrain3DVirtualTexture::stagePackageFileWarm(
 	bool							  valid = t3d_vt_pack_runtime_open_file_cold( rPath, allocator, m_WarmCandidate );
 	if ( valid ) {
 		t3dVTQualityRuntimeStats_t quality{};
-		valid = t3d_vt_pack_runtime_apply_quality_profile_v1( m_WarmCandidate.Database,
+		valid = t3d_vt_pack_runtime_apply_quality_profile( m_WarmCandidate.Database,
 															  m_WarmCandidate.pRuntimeAllocations,
 															  m_WarmCandidate.Database.pHeader->nAllocationCount,
 															  m_nRequestedQualityProfile,
@@ -708,8 +708,8 @@ bool Terrain3DVirtualTexture::findMaterialAllocationCold(
 	if ( !t3d_vt_pack_runtime_find_allocation_by_stable_key( m_RuntimePack, nStableKey, rAllocationId ) ) {
 		return false;
 	}
-	if ( m_RuntimePack.Database.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
-		rAllocationId = t3d_vt_v1_runtime_allocation_base( rAllocationId );
+	if ( m_RuntimePack.Database.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK ) {
+		rAllocationId = t3d_vt_runtime_allocation_base( rAllocationId );
 	}
 	return true;
 }
@@ -736,8 +736,8 @@ bool Terrain3DVirtualTexture::snapshotMaterialReadStateCold(
 		if ( t3d_vt_pack_runtime_find_allocation_by_stable_key( m_RuntimePack,
 																t3d_vt_terrain_material_stable_key( i ),
 																nAllocation ) ) {
-			rSnapshot.nMaterialAllocation[i] = m_RuntimePack.Database.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1
-												   ? t3d_vt_v1_runtime_allocation_base( nAllocation )
+			rSnapshot.nMaterialAllocation[i] = m_RuntimePack.Database.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK
+												   ? t3d_vt_runtime_allocation_base( nAllocation )
 												   : nAllocation;
 		}
 	}
@@ -756,10 +756,10 @@ bool Terrain3DVirtualTexture::snapshotTerrainMegaVTReadStateCold(
 	Terrain3DScopedLock packageLock( m_packageMutex );
 	const uint32_t		nBase = m_Limits.nMaxMaterials * T3D_VT_CHANNEL_COUNT;
 	for ( uint32_t i = 0u; i < nCount; ++i ) {
-		pAllocationIds[i] = nBase + i * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
+		pAllocationIds[i] = nBase + i * T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION;
 		pCookedGenerations[i] = 0u;
 		pCookedValid[i] = 0u;
-		if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+		if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ) {
 			continue;
 		}
 		uint32_t nRawAllocation = T3D_VT_INVALID_ALLOCATION;
@@ -768,8 +768,8 @@ bool Terrain3DVirtualTexture::snapshotTerrainMegaVTReadStateCold(
 																 nRawAllocation ) ) {
 			continue;
 		}
-		pAllocationIds[i] = t3d_vt_v1_runtime_allocation_base( nRawAllocation );
-		const t3dVTPackAllocationRecordV1_t &allocation = m_RuntimePack.PackViewV1.m_pAllocations[nRawAllocation];
+		pAllocationIds[i] = t3d_vt_runtime_allocation_base( nRawAllocation );
+		const t3dVTPackAllocationRecord_t &allocation = m_RuntimePack.PackViewV1.m_pAllocations[nRawAllocation];
 		if ( ( allocation.m_nFlags & T3D_VT_ALLOCATION_MEGATEXTURE ) != 0u && allocation.m_nGeneration != 0u ) {
 			pCookedGenerations[i] = allocation.m_nGeneration;
 			pCookedValid[i] = 1u;
@@ -969,7 +969,7 @@ bool Terrain3DVirtualTexture::prepare_neutral_legacy_cpu_cold() {
 	m_NeutralHeader.nGutterTexels = T3D_VT_PAGE_GUTTER;
 	m_NeutralHeader.nPhysicalTexels = T3D_VT_PHYSICAL_TILE;
 	for ( uint32_t c = 0u; c < T3D_VT_CHANNEL_COUNT; ++c ) {
-		t3dVTAllocationRecordV1_t &allocation = m_NeutralAllocations[c];
+		t3dVTAllocationRecord_t &allocation = m_NeutralAllocations[c];
 		memset( &allocation, 0, sizeof( allocation ) );
 		allocation.nBaseVirtualPage = c;
 		allocation.nPageCount = 1u;
@@ -1062,7 +1062,7 @@ bool Terrain3DVirtualTexture::publish_neutral_legacy_warm() {
 bool Terrain3DVirtualTexture::validate_package_limits(
 	const t3dVTPackRuntimeStorage_t &rCandidate ) const {
 	const t3dVTDatabaseView_t &Database = rCandidate.Database;
-	if ( Database.pHeader == NULL || Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ||
+	if ( Database.pHeader == NULL || Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ||
 		 Database.pRuntimePayloads == NULL || Database.pRuntimeAllocations == NULL ||
 		 Database.pHeader->nAllocationCount == 0u ||
 		 Database.pHeader->nAllocationCount > t3d_vt_allocation_capacity( m_Limits.nMaxMaterials ) ||
@@ -1075,14 +1075,14 @@ bool Terrain3DVirtualTexture::validate_package_limits(
 	const uint32_t nV1Count = rCandidate.PackViewV1.m_pHeader->m_nAllocationCount;
     if ( rCandidate.PackViewV1.m_pAllocations == NULL ||
          rCandidate.pRuntimeTails == NULL ||
-         nV1Count > UINT32_MAX / T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) return false;
+         nV1Count > UINT32_MAX / T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION ) return false;
     for ( uint32_t i = 0u; i < nV1Count; ++i ) {
-        const t3dVTPackAllocationRecordV1_t &source = rCandidate.PackViewV1.m_pAllocations[i];
+        const t3dVTPackAllocationRecord_t &source = rCandidate.PackViewV1.m_pAllocations[i];
         if ( source.m_nConsumer != T3D_VT_CONSUMER_COMPOSED ) continue;
         const uint32_t required = T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK;
         if ( !source.m_nGeneration || ( source.m_nChannelMask & required ) != required ) return false;
-        const uint32_t base = t3d_vt_v1_runtime_allocation_base( i );
-        for ( uint32_t c = 0u; c < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION; ++c ) {
+        const uint32_t base = t3d_vt_runtime_allocation_base( i );
+        for ( uint32_t c = 0u; c < T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION; ++c ) {
             const t3dVTAllocation_t &allocation = rCandidate.pRuntimeAllocations[base + c];
             if ( !allocation.m_nMipCount || allocation.m_nGeneration != source.m_nGeneration ||
                  allocation.m_nTailIndex == T3D_VT_INVALID_TAIL ||
@@ -1113,7 +1113,7 @@ bool Terrain3DVirtualTexture::prepare_runtime_package_cpu_cold() {
 	}
 
 	if ( m_spatialDemand.isValidFor( Database.nPackageContentSignature ) &&
-		 m_spatialDemand.getVersion() == T3D_VT_DEMAND_VERSION_V2 ) {
+		 m_spatialDemand.getVersion() == T3D_VT_DEMAND_STABLE_MATERIAL_FORMAT_VERSION ) {
 		const auto			   &view = m_RuntimePack.PackViewV1;
 		const uint32_t			nKeys = view.m_pHeader->m_nAllocationCount;
 		std::vector< uint64_t > keys;
@@ -1122,7 +1122,7 @@ bool Terrain3DVirtualTexture::prepare_runtime_package_cpu_cold() {
 		ids.reserve( nKeys );
 		for ( uint32_t i = 0u; i < nKeys; ++i ) {
 			keys.push_back( view.m_pAllocationKeys[i].m_nStableKey );
-			ids.push_back( t3d_vt_v1_runtime_allocation_base( view.m_pAllocationKeys[i].m_nAllocationId ) );
+			ids.push_back( t3d_vt_runtime_allocation_base( view.m_pAllocationKeys[i].m_nAllocationId ) );
 		}
 		( void ) m_spatialDemand.bindStableKeysCold( keys.data(), ids.data(), nKeys );
 	}
@@ -1142,7 +1142,7 @@ bool Terrain3DVirtualTexture::prepare_runtime_package_cpu_cold() {
             for ( uint32_t i = 0u; i < nKeys; ++i ) {
                 m_v1MaterialKeys.push_back( view.m_pAllocationKeys[i].m_nStableKey );
                 m_v1MaterialAllocations.push_back(
-                    t3d_vt_v1_runtime_allocation_base( view.m_pAllocationKeys[i].m_nAllocationId ) );
+                    t3d_vt_runtime_allocation_base( view.m_pAllocationKeys[i].m_nAllocationId ) );
             }
         }
     }
@@ -1201,7 +1201,7 @@ bool Terrain3DVirtualTexture::stageDemandIndexCold(
 	if ( !m_spatialDemand.loadCold( pBytes, nBytes ) ) {
 		return false;
 	}
-	if ( m_spatialDemand.getVersion() == T3D_VT_DEMAND_VERSION_V2 ) {
+	if ( m_spatialDemand.getVersion() == T3D_VT_DEMAND_STABLE_MATERIAL_FORMAT_VERSION ) {
 		const godot::CharString bytes = rSourceIdentity.utf8();
 		const uint64_t			expected = t3d_vt_demand_hash( ( const uint8_t * ) bytes.get_data(), bytes.length() );
 		if ( m_spatialDemand.getAssetIdentityHash() != expected ) {
@@ -1248,7 +1248,7 @@ uint32_t Terrain3DVirtualTexture::stage_v1_demand_hot(
          !m_v1Demand.validFor( db->nPackageContentSignature ) ||
          m_v1MaterialKeys.empty() || !viewHeight || m_nV1LastStageFrame == frame ) return 0u;
     m_nV1LastStageFrame = frame;
-    const float cell = ( float ) T3D_VT_DEMAND_V1_CELL_METERS;
+    const float cell = ( float ) T3D_VT_DEMAND_BAKED_VISIBILITY_CELL_METERS;
     const int32_t x = ( int32_t ) floorf( cameraX / cell );
     const int32_t z = ( int32_t ) floorf( cameraZ / cell );
     const int32_t lx = ( int32_t ) floorf( ( cameraX + forwardX * cell ) / cell );
@@ -1267,7 +1267,7 @@ uint32_t Terrain3DVirtualTexture::stage_v1_demand_hot(
     for ( uint32_t sector = 0u; sector < 2u && staged < limit; ++sector ) {
         if ( sector && lx == x && lz == z ) break;
         uint32_t count = 0u, flags = 0u;
-        const t3dVTDemandV1Record_t *const entries = m_v1Demand.findCellHot(
+        const t3dVTDemandBakedVisibilityRecord_t *const entries = m_v1Demand.findCellHot(
             sector ? lx : x, sector ? lz : z, count, flags );
         if ( !entries ) continue;
         // Top eight scores only. A v1 bundle is sorted by stable key, not
@@ -1293,7 +1293,7 @@ uint32_t Terrain3DVirtualTexture::stage_v1_demand_hot(
             const t3dVTAllocation_t &a = m_Residency.Buffers.pAllocations[allocationId];
             if ( !a.m_nPageCount || !a.m_nMipCount ) continue;
             const uint32_t sourceWidth = MAX( 1u, ( uint32_t ) a.m_nMip0WidthPages ) * T3D_VT_PAGE_INTERIOR;
-            const uint16_t wanted = t3d_vt_demand_select_v1_mip(
+            const uint16_t wanted = t3d_vt_demand_select_mip(
                 r, m_v1Demand.configCold(), sourceWidth, viewHeight, fov, a.m_nMipCount );
             if ( wanted == UINT16_MAX ) continue;
             // Ignore single-bin outliers and use confidence as the principal
@@ -1349,7 +1349,7 @@ void Terrain3DVirtualTexture::rebuildFarRegionAllocationTableCold()
     if ( !m_bRuntimePackLoaded || m_RuntimePack.PackViewV1.m_pHeader == NULL ||
          m_RuntimePack.PackViewV1.m_pAllocationKeys == NULL ||
          m_RuntimePack.PackViewV1.m_pAllocations == NULL ) return;
-    const t3dVTPackViewV1_t &view = m_RuntimePack.PackViewV1;
+    const t3dVTPackBaselineView_t &view = m_RuntimePack.PackViewV1;
     for ( uint32_t i = 0u; i < view.m_pHeader->m_nAllocationCount; ++i ) {
         const uint64_t key = view.m_pAllocationKeys[i].m_nStableKey;
         const bool composed = t3d_vt_is_composed_region_stable_key( key );
@@ -1360,7 +1360,7 @@ void Terrain3DVirtualTexture::rebuildFarRegionAllocationTableCold()
         if ( source >= view.m_pHeader->m_nAllocationCount ) continue;
         if ( view.m_pAllocations[source].m_nConsumer !=
              ( composed ? T3D_VT_CONSUMER_COMPOSED : T3D_VT_CONSUMER_CLIPMAP ) ) continue;
-        const uint32_t allocation = t3d_vt_v1_runtime_allocation_base( source );
+        const uint32_t allocation = t3d_vt_runtime_allocation_base( source );
         if ( allocation + 2u >= m_Residency.nAllocationCount && m_bInitialized ) continue;
         // Tag with +1; zero is an absent package allocation. All physical
         // slots, page table, upload budgets and eviction remain V1-owned.
@@ -1429,7 +1429,7 @@ uint32_t Terrain3DVirtualTexture::stage_region_surface_demand_hot(
                     if ( !tagged ) continue;
                     const uint32_t base = tagged - 1u;
                     if ( base + 2u >= m_Residency.nAllocationCount ) continue;
-                    for ( uint32_t slot = 0u; slot < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION && attempted < limit; ++slot ) {
+                    for ( uint32_t slot = 0u; slot < T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION && attempted < limit; ++slot ) {
                         const uint32_t id = base + slot;
                         const t3dVTAllocation_t &alloc = m_Residency.Buffers.pAllocations[id];
                         if ( !alloc.m_nPageCount || !alloc.m_nMipCount ) continue;
@@ -1439,7 +1439,7 @@ uint32_t Terrain3DVirtualTexture::stage_region_surface_demand_hot(
                         for ( float ratio = texels / projected; ratio > 2.0f && wanted + 1u < alloc.m_nMipCount;
                               ratio *= 0.5f ) ++wanted;
                         const uint32_t historySlot = ( region * 3u + family ) *
-                            T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION + slot;
+                            T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION + slot;
                         const uint8_t old = m_szFarLastMip[historySlot];
                         if ( old != 0xffu && wanted > old &&
                              frame - m_szFarLastMipFrame[historySlot] < 16u ) wanted = old;
@@ -1478,7 +1478,7 @@ uint32_t Terrain3DVirtualTexture::stage_spatial_demand_hot(
          !m_spatialDemand.isValidFor( db->nPackageContentSignature ) || m_nSpatialDemandLastStageFrame == nFrameId ) {
         return v1Requests + farRequests;
     }
-	if ( m_spatialDemand.getVersion() == T3D_VT_DEMAND_VERSION_V2 && !m_spatialDemand.hasBoundPredictor() ) {
+	if ( m_spatialDemand.getVersion() == T3D_VT_DEMAND_STABLE_MATERIAL_FORMAT_VERSION && !m_spatialDemand.hasBoundPredictor() ) {
 		return v1Requests + farRequests;
 	}
 	const float	  cell = ( float ) m_spatialDemand.getCellMeters();
@@ -2052,7 +2052,7 @@ uint32_t Terrain3DVirtualTexture::getMaterialVTAllocationId(
 bool Terrain3DVirtualTexture::supportsSparseV1() const {
 	Terrain3DScopedLock packageLock( m_packageMutex );
 	return m_bInitialized && m_Residency.pDatabase != NULL &&
-		   m_Residency.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1;
+		   m_Residency.pDatabase->nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK;
 }
 
 uint32_t Terrain3DVirtualTexture::getTerrainMegaVTAllocationBase() const {
@@ -2067,19 +2067,19 @@ bool Terrain3DVirtualTexture::getComposedRegionAllocationCold(
     if ( nRegionMapIndex >= T3D_TERRAIN_MEGAVT_ALLOCATION_CAPACITY ) return false;
     Terrain3DScopedLock packageLock( m_packageMutex );
     if ( !m_bInitialized || !m_bRuntimePackLoaded || m_bWarmPackagePending ||
-         m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ) return false;
+         m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ) return false;
     uint32_t source = T3D_VT_INVALID_ALLOCATION;
     if ( !t3d_vt_pack_runtime_find_allocation_by_stable_key( m_RuntimePack,
              t3d_vt_composed_region_stable_key( nRegionMapIndex ), source ) ||
          m_RuntimePack.PackViewV1.m_pHeader == NULL ||
          source >= m_RuntimePack.PackViewV1.m_pHeader->m_nAllocationCount ) return false;
-    const t3dVTPackAllocationRecordV1_t &allocation = m_RuntimePack.PackViewV1.m_pAllocations[source];
+    const t3dVTPackAllocationRecord_t &allocation = m_RuntimePack.PackViewV1.m_pAllocations[source];
     if ( allocation.m_nConsumer != T3D_VT_CONSUMER_COMPOSED || allocation.m_nGeneration == 0u ||
          ( allocation.m_nChannelMask & T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK ) !=
              T3D_VT_COMPOSED_REQUIRED_CHANNEL_MASK ) return false;
-    const uint32_t runtimeAllocation = t3d_vt_v1_runtime_allocation_base( source );
+    const uint32_t runtimeAllocation = t3d_vt_runtime_allocation_base( source );
     if ( runtimeAllocation > m_Residency.nAllocationCount ||
-         m_Residency.nAllocationCount - runtimeAllocation < T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION ) return false;
+         m_Residency.nAllocationCount - runtimeAllocation < T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION ) return false;
     rAllocation = runtimeAllocation;
     rGeneration = allocation.m_nGeneration;
     return true;
@@ -2093,14 +2093,14 @@ uint32_t Terrain3DVirtualTexture::getTerrainMegaVTAllocationId(
 	uint32_t nAllocation = T3D_VT_INVALID_ALLOCATION;
 	return findMaterialAllocationCold( t3d_vt_terrain_region_stable_key( nRegionMapIndex ), nAllocation )
 			   ? nAllocation
-			   : getTerrainMegaVTAllocationBase() + nRegionMapIndex * T3D_VT_V1_RUNTIME_CHANNELS_PER_ALLOCATION;
+			   : getTerrainMegaVTAllocationBase() + nRegionMapIndex * T3D_VT_RUNTIME_CHANNELS_PER_ALLOCATION;
 }
 bool Terrain3DVirtualTexture::getTerrainMegaVTCookedGenerationCold(
 	const uint32_t nRegionMapIndex,
 	uint32_t	  &rGeneration ) const {
 	Terrain3DScopedLock packageLock( m_packageMutex );
 	uint32_t			nAllocation = 0u;
-	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ||
+	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ||
 		 !t3d_vt_pack_runtime_find_allocation_by_stable_key( m_RuntimePack,
 															 t3d_vt_terrain_region_stable_key( nRegionMapIndex ),
 															 nAllocation ) ) {
@@ -2122,12 +2122,12 @@ const Terrain3DVTResourceImage *Terrain3DVirtualTexture::get_resource_image() co
 bool Terrain3DVirtualTexture::apply_quality_profile_state_v1(
 	t3dVTAllocation_t *const pAllocations,
 	const uint32_t			 nAllocationCount ) {
-	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ) {
 		memset( &m_QualityStats, 0, sizeof( m_QualityStats ) );
 		m_QualityStats.nRequestedProfile = m_nRequestedQualityProfile;
 		return true;
 	}
-	return t3d_vt_pack_runtime_apply_quality_profile_v1( m_RuntimePack.Database,
+	return t3d_vt_pack_runtime_apply_quality_profile( m_RuntimePack.Database,
 														 pAllocations,
 														 nAllocationCount,
 														 m_nRequestedQualityProfile,
@@ -2147,7 +2147,7 @@ bool Terrain3DVirtualTexture::set_quality_profile(
 	const t3dVTQualityRuntimeStats_t OldStats = m_QualityStats;
 	m_nRequestedQualityProfile = nProfile;
 
-	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+	if ( !m_bRuntimePackLoaded || m_RuntimePack.Database.nRuntimeKind != T3D_VT_RUNTIME_DATABASE_PACK ) {
 		memset( &m_QualityStats, 0, sizeof( m_QualityStats ) );
 		m_QualityStats.nRequestedProfile = nProfile;
 		++m_nQualityGeneration;
@@ -2896,14 +2896,14 @@ static bool t3dVtCopyResidentPackagePayloadHot(
 		return false;
 	}
 	const t3dVTPayloadRecord_t &payload = rDatabase.pPayloads[rJob.nPayloadId];
-	if ( rDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+	if ( rDatabase.nRuntimeKind == T3D_VT_RUNTIME_DATABASE_PACK ) {
 		if ( rDatabase.pRuntimePayloads == NULL || rJob.nPayloadId >= rDatabase.nRuntimePayloadCount ||
 			 rDatabase.pHeader->nInteriorTexels != T3D_VT_PAGE_INTERIOR ||
 			 rDatabase.pHeader->nGutterTexels != T3D_VT_PAGE_GUTTER ) {
 			return false;
 		}
 		const t3dVTRuntimePayloadRecord_t &physical = rDatabase.pRuntimePayloads[rJob.nPayloadId];
-		const uint32_t tile_bytes = t3d_vt_pack_expected_physical_tile_bytes_v1( physical.nChannel );
+		const uint32_t tile_bytes = t3d_vt_pack_expected_physical_tile_bytes( physical.nChannel );
 		if ( tile_bytes == 0u || physical.nChannel != rJob.nChannel || physical.nBytes != tile_bytes ||
 			 physical.nOffset != rJob.nReadOffset || rJob.nExpectedDecodedBytes != tile_bytes ) {
 			return false;

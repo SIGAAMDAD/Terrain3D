@@ -25,7 +25,7 @@ bool Terrain3DComposedSurfaceGpu::initializeCold(
         shutdownCold( rContext );
         return false;
     }
-    const RenderingDevice::DataFormat formats[T3D_CS_CHANNEL_COUNT] = {
+    const RenderingDevice::DataFormat formats[T3D_COMP_SURF_CHANNEL_COUNT] = {
         RenderingDevice::DATA_FORMAT_BC1_RGBA_UNORM_BLOCK,
         RenderingDevice::DATA_FORMAT_BC5_UNORM_BLOCK,
         RenderingDevice::DATA_FORMAT_BC7_UNORM_BLOCK
@@ -33,21 +33,21 @@ bool Terrain3DComposedSurfaceGpu::initializeCold(
     const uint64_t usage = RenderingDevice::TEXTURE_USAGE_SAMPLING_BIT |
                            RenderingDevice::TEXTURE_USAGE_CAN_UPDATE_BIT |
                            RenderingDevice::TEXTURE_USAGE_CAN_COPY_TO_BIT;
-    for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_COMP_SURF_CHANNEL_COUNT; ++i ) {
         t3dRdTextureSpec_t spec;
         spec.m_name = String( "Terrain3D composed surface channel " ) + String::num_uint64( i );
         spec.m_owner = T3D_RD_CONTEXT_OWNER_VT;
         spec.m_memory = T3D_RD_CONTEXT_MEMORY_COMPOSED_SURFACE;
         spec.m_layout.m_type = RenderingDevice::TEXTURE_TYPE_2D_ARRAY;
         spec.m_layout.m_format = formats[i];
-        spec.m_layout.m_nWidth = T3D_CS_PHYSICAL_TILE;
-        spec.m_layout.m_nHeight = T3D_CS_PHYSICAL_TILE;
+        spec.m_layout.m_nWidth = T3D_COMP_SURF_PHYSICAL_TILE;
+        spec.m_layout.m_nHeight = T3D_COMP_SURF_PHYSICAL_TILE;
         spec.m_layout.m_nLayers = nPageSlots;
         spec.m_layout.m_nMipmaps = 1u;
         spec.m_layout.m_nUsageBits = usage;
-        spec.m_layout.m_nBytes = uint64_t( nPageSlots ) * t3d_cs_channel_bytes( i );
+        spec.m_layout.m_nBytes = uint64_t( nPageSlots ) * t3d_comp_surf_channel_bytes( i );
         if ( !m_channels[i].createTracked( rContext, spec ) ||
-             m_staging[i].resize( t3d_cs_channel_bytes( i ) ) != OK ) {
+             m_staging[i].resize( t3d_comp_surf_channel_bytes( i ) ) != OK ) {
             shutdownCold( rContext );
             return false;
         }
@@ -81,7 +81,7 @@ bool Terrain3DComposedSurfaceGpu::initializeCold(
 void Terrain3DComposedSurfaceGpu::shutdownCold( Terrain3DRdContext &rContext )
 {
     m_pageTable.releaseTracked( rContext );
-    for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_COMP_SURF_CHANNEL_COUNT; ++i ) {
         m_channels[i].releaseTracked( rContext );
         m_staging[i] = PackedByteArray();
     }
@@ -115,7 +115,7 @@ bool Terrain3DComposedSurfaceGpu::submitPageSetHot(
     const uint32_t nMip, const uint64_t nRevision, const uint64_t nRegionKey,
     const uint64_t nSubmissionEpoch )
 {
-    if ( !m_bInitialized || !m_bMappingsCoherent || !pPageBytes || nPageBytes != T3D_CS_PAGE_PAYLOAD_BYTES ||
+    if ( !m_bInitialized || !m_bMappingsCoherent || !pPageBytes || nPageBytes != T3D_COMP_SURF_PAGE_PAYLOAD_BYTES ||
          job.m_nSlot >= m_nSlots || job.m_nDeviceGeneration != m_nDeviceGeneration ||
          nMip != 0u || !nRevision || !nSubmissionEpoch || m_pPending[job.m_nSlot].m_bPending ) return false;
     t3dComposedSurfacePageRecord_t sourcePage{};
@@ -125,8 +125,8 @@ bool Terrain3DComposedSurfaceGpu::submitPageSetHot(
          sourcePage.m_nMip != nMip ) return false;
     uint32_t offset = 0u;
     uint32_t mask = 0u;
-    for ( uint32_t channel = 0u; channel < T3D_CS_CHANNEL_COUNT; ++channel ) {
-        const uint32_t size = t3d_cs_channel_bytes( channel );
+    for ( uint32_t channel = 0u; channel < T3D_COMP_SURF_CHANNEL_COUNT; ++channel ) {
+        const uint32_t size = t3d_comp_surf_channel_bytes( channel );
         memcpy( m_staging[channel].ptrw(), pPageBytes + offset, size );
         if ( !m_channels[channel].updateLayerTracked( rContext, job.m_nSlot, m_staging[channel], T3D_GPU_DIRTY_UPLOAD ) ) return false;
         mask |= ( 1u << channel );
@@ -154,8 +154,8 @@ bool Terrain3DComposedSurfaceGpu::confirmAndPublishHot(
     if ( !pending.m_bPending || pending.m_job.m_nToken != job.m_nToken ||
          pending.m_job.m_nPageIndex != job.m_nPageIndex ||
          pending.m_job.m_nDeviceGeneration != job.m_nDeviceGeneration ||
-         pending.m_nUploadedChannels != T3D_CS_CHANNEL_MASK_ALL ||
-         !pending.m_nUploadEpoch || !t3d_cs_gpu_epoch_completed( pending.m_nUploadEpoch, nCompletedEpoch ) ) return false;
+         pending.m_nUploadedChannels != T3D_COMP_SURF_CHANNEL_MASK_ALL ||
+         !pending.m_nUploadEpoch || !t3d_comp_surf_gpu_epoch_completed( pending.m_nUploadEpoch, nCompletedEpoch ) ) return false;
     t3dComposedSurfacePageRecord_t page{};
     if ( !rCache.uploadingRecordHot( job, page ) ||
          page.m_nCompositionRevision != pending.m_nRevision ) return false;
@@ -169,8 +169,8 @@ bool Terrain3DComposedSurfaceGpu::confirmAndPublishHot(
     mapping.m_nDeviceGeneration = m_nDeviceGeneration;
     mapping.m_nPhysicalSlot = job.m_nSlot;
     mapping.m_nResidentChannels = pending.m_nUploadedChannels;
-    mapping.m_nState = T3D_CS_PAGE_RESIDENT;
-    uint32_t dirty = T3D_CS_INVALID_SLOT;
+    mapping.m_nState = T3D_COMP_SURF_PAGE_RESIDENT;
+    uint32_t dirty = T3D_COMP_SURF_INVALID_SLOT;
     t3dComposedSurfaceGpuEntry_t previous{};
     if ( !m_table.stageResident( pending.m_nWorldPageX, pending.m_nWorldPageY,
                                  pending.m_nMip, mapping, dirty, &previous ) ) return false;
@@ -211,24 +211,24 @@ bool Terrain3DComposedSurfaceGpu::retireHot(
     const t3dComposedSurfaceJob_t &retirement,
     const uint64_t nLastRasterUseEpoch, const uint64_t nCompletedEpoch )
 {
-    if ( !m_bInitialized || !m_bMappingsCoherent || !t3d_cs_gpu_epoch_completed( nLastRasterUseEpoch, nCompletedEpoch ) ||
+    if ( !m_bInitialized || !m_bMappingsCoherent || !t3d_comp_surf_gpu_epoch_completed( nLastRasterUseEpoch, nCompletedEpoch ) ||
          retirement.m_nSlot >= m_nSlots ||
          retirement.m_nDeviceGeneration != m_nDeviceGeneration ||
          !rCache.retirementPendingHot( retirement ) ) return false;
     // Keep the last CPU mapping if the RD update is rejected; never acknowledge
     // CS04 retirement while the GPU still refers to the physical layer.
-    uint32_t previousIndex = T3D_CS_INVALID_SLOT;
+    uint32_t previousIndex = T3D_COMP_SURF_INVALID_SLOT;
     for ( uint32_t i = 0u; i < m_table.capacity(); ++i ) {
         const t3dComposedSurfaceGpuEntry_t &entry = m_table.entries()[i];
-        if ( entry.m_nState == T3D_CS_GPU_MAP_RESIDENT &&
+        if ( entry.m_nState == T3D_COMP_SURF_GPU_MAP_RESIDENT &&
              entry.m_nPhysicalSlot == retirement.m_nSlot ) {
             previousIndex = i;
             break;
         }
     }
-    if ( previousIndex == T3D_CS_INVALID_SLOT ) return false;
+    if ( previousIndex == T3D_COMP_SURF_INVALID_SLOT ) return false;
     const t3dComposedSurfaceGpuEntry_t previous = m_table.entries()[previousIndex];
-    uint32_t dirty = T3D_CS_INVALID_SLOT;
+    uint32_t dirty = T3D_COMP_SURF_INVALID_SLOT;
     if ( !m_table.retireSlot( retirement.m_nSlot, dirty ) ) return false;
     if ( !writeTableEntryHot( rContext, dirty ) ) {
         m_table.restoreRetirementAfterFailedWrite( dirty, previous );
@@ -255,7 +255,7 @@ bool Terrain3DComposedSurfaceGpu::acquireBindingsHot( t3dComposedSurfaceGpuBindi
 {
     rBindings = {};
     if ( !m_bInitialized || !m_bMappingsCoherent || !m_pageTable.isValid() ) return false;
-    for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i ) {
+    for ( uint32_t i = 0u; i < T3D_COMP_SURF_CHANNEL_COUNT; ++i ) {
         if ( !m_channels[i].isValid() ) return false;
         rBindings.m_hChannels[i] = m_channels[i].rid();
     }

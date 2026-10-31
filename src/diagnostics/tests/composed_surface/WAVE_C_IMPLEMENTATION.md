@@ -5,9 +5,9 @@
 - `rendering/rd/vt/core/terrain_3d_composed_surface_gpu_table.h`: independent std430 page lookup, 16-probe bounded hash, signed world-page coordinates, tombstone eviction, revision/device generation validation. The table never aliases Sparse VT V3 entries.
 - `rendering/rd/vt/gpu/terrain_3d_composed_surface_gpu.{h,cpp}`: cold-only BC1/BC5/BC7 arrays and a tracked GPU lookup buffer. Fixed staging buffers, all-channel upload, external GPU-completion receipt before render-owner publication, positive GPU-use retirement confirmation before slot reuse. The main VT transfer-budget owner must grant a token before calling `submitPageSetHot`. Failed/stale jobs must not write physical texture slots.
 - `rendering/rd/vt/runtime/terrain_3d_composed_surface_cache.{h,cpp}`: read-only state assertions for ready/uploading jobs, including the corresponding sidecar page revision and region key.
-- `memory/policy/terrain_3d_composed_surface_budget.h` plus RD memory domain/category: budget 4x48B lookup entries *per resident page* in GPU and CPU, plus bounded CPU pending and staging. Physical RD objects charge `COMPOSED_SURFACE` directly; do not also call `t3d_cs_reserve_budget()` for the same allocations.
+- `memory/policy/terrain_3d_composed_surface_budget.h` plus RD memory domain/category: budget 4x48B lookup entries *per resident page* in GPU and CPU, plus bounded CPU pending and staging. Physical RD objects charge `COMPOSED_SURFACE` directly; do not also call `t3d_comp_surf_reserve_budget()` for the same allocations.
 - `project/addons/terrain_3d/rd/terrain_composed_surface_sampling.glslinc`: mip0 cache lookup, checked physical layer, BC1 sRGB decoding, BC5 tangent normal and BC7 ORM reconstruction, explicit-gradient sampling.
-- Fragment shader integration: optional `T3D_CS_ACTIVE` gate in standalone/embedded interfaces and the color/DNR material paths. Misses use **detailed material sampling**, not the legacy flat-normal RGB-only middle composite. Control-map coverage remains authoritative for the depth path; lighting, macro, authored tint and weather stay live.
+- Fragment shader integration: optional `T3D_COMP_SURF_ACTIVE` gate in standalone/embedded interfaces and the color/DNR material paths. Misses use **detailed material sampling**, not the legacy flat-normal RGB-only middle composite. Control-map coverage remains authoritative for the depth path; lighting, macro, authored tint and weather stay live.
 
 ## ABI and descriptor ranges
 
@@ -28,8 +28,8 @@ To activate, a future integration must:
 
 ### Available validation
 
-- `g++ -std=c++17 -Isrc -Wall -Wextra -Werror src/diagnostics/tests/composed_surface/test_cs05_gpu_table.cpp -o /tmp/cs05_table && /tmp/cs05_table`
-- `python src/diagnostics/tests/composed_surface/test_cs06_shader_contract.py`
+- `g++ -std=c++17 -Isrc -Wall -Wextra -Werror src/diagnostics/tests/composed_surface/test_gpu_table.cpp -o /tmp/cs05_table && /tmp/cs05_table`
+- `python src/diagnostics/tests/composed_surface/test_shader_contract.py`
 - `python src/diagnostics/tests/composed_surface/wave_a_shader_checks.py`
 - CS01 / CS03-CS04 standalone tests.
 

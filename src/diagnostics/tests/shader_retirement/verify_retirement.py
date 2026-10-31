@@ -40,7 +40,7 @@ def check(root, trace=None, glslang=None):
     assert 'm_bUnifiedCookedMaterialActive' not in clip
     assert 'm_hszRasterUniformSets[1]' in native
     assert 'm_hUnifiedRasterShader.isValid()' in native
-    assert 'm_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1' in clip
+    assert 'm_nTerrainMaterialBackend != T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED' in clip
     assert 'm_hszCompactSets[tier]' not in clip and 'state.m_hszPipelines[tier]' not in clip
     assert 'submit(' not in compute and 'sync(' not in compute
     assert 'processBrush(' not in compute and 'generateDerivedMaps(' not in compute

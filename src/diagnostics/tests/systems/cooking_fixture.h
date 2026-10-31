@@ -13,7 +13,7 @@ namespace terrain3d_tests
 struct CookingSource
 {
 	PackedByteArray			  albedo, pbr;
-	t3dVTCookSparseSourceV1_t source{};
+	t3dVTCookSparseSource_t source{};
 	CookingSource(
 		uint64_t key = 101,
 		uint8_t	 color = 170 ) {
@@ -38,7 +38,7 @@ struct CookingSource
 	bool fragment(
 		PackedByteArray &bytes,
 		uint64_t		 byte_limit = 32ull * 1024 * 1024 ) const {
-		return t3d_vt_godot_cook_source_fragment_v1( source, bytes, byte_limit );
+		return t3d_vt_godot_cook_source_fragment( source, bytes, byte_limit );
 	}
 };
 
@@ -88,9 +88,9 @@ struct CookAllocator
 struct CookedPackage
 {
 	CookAllocator				 allocator;
-	t3dVTCookedSparsePackageV1_t package{};
+	t3dVTCookedSparsePackage_t package{};
 	~CookedPackage() {
-		t3d_vt_cooker_release_sparse_package_v1( package );
+		t3d_vt_cooker_release_sparse_package( package );
 	}
 	bool cook(
 		const CookingSource &source,
@@ -102,7 +102,7 @@ struct CookedPackage
 		if ( encoder_override ) {
 			encoder.m_pEncodeTile = encoder_override;
 		}
-		return t3d_vt_cooker_cook_sparse_pages_v1( settings,
+		return t3d_vt_cooker_cook_sparse_pages( settings,
 												   &source.source,
 												   1,
 												   encoder,

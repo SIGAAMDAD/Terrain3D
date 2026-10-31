@@ -477,11 +477,11 @@ bool Terrain3DWorldRaster::ensureSetsCold(
 	if ( pComposed && primitiveClass == T3D_PRIMITIVE_TERRAIN_STRIP ) {
 		if ( !pComposed->m_hPageTable.is_valid() || !pComposed->m_nTableCapacity ||
 			!pComposed->m_nDeviceGeneration ) return false;
-		for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i )
+		for ( uint32_t i = 0u; i < T3D_COMP_SURF_CHANNEL_COUNT; ++i )
 			if ( !pComposed->m_hChannels[i].is_valid() ) return false;
 		set1.push_back( Terrain3DRdBindingBuilder::single( T3D_RD_WORLD_VT_COMPOSED_PAGE_TABLE_BINDING,
 			RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, pComposed->m_hPageTable ) );
-		for ( uint32_t i = 0u; i < T3D_CS_CHANNEL_COUNT; ++i )
+		for ( uint32_t i = 0u; i < T3D_COMP_SURF_CHANNEL_COUNT; ++i )
 			set1.push_back( Terrain3DRdBindingBuilder::samplerTexture( T3D_RD_WORLD_VT_COMPOSED_TEXTURE_BINDING_BASE + ( int ) i,
 				rTerrain.m_hMaterialSampler, pComposed->m_hChannels[i] ) );
 	}

@@ -334,7 +334,7 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["virtual_texture_initialized"] = rInputs.m_virtualTexture.is_initialized();
 	result["virtual_texture_initialize_count"] = ( int64_t ) ( rInputs.m_virtualTexture.get_stats().nInitializeCount );
 	result["virtual_texture_database_kind"] =
-		rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? String( "shipping-v3" )
+		rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK ? String( "shipping-v3" )
 																					  : String( "neutral" );
 	result["virtual_texture_database_generation"] = ( int64_t ) ( rInputs.m_virtualTexture.getDatabaseGeneration() );
 	result["virtual_texture_package_generation"] = ( int64_t ) ( rInputs.m_virtualTexture.getPackageGeneration() );
@@ -347,8 +347,8 @@ Dictionary Terrain3DDiagnosticsPublisher::getDiagnostics(
 	result["virtual_texture_package_content_signature"] =
 		String::num_uint64( rInputs.m_virtualTexture.getPackageContentSignature(), 16 );
 	result["vt_pack_version"] =
-		( int64_t ) ( rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK_V1
-						  ? T3D_VT_FILE_VERSION_V1
+		( int64_t ) ( rInputs.m_virtualTexture.getDatabaseKind() == T3D_VT_RUNTIME_DATABASE_PACK
+						  ? T3D_VT_FILE_FORMAT_VERSION
 						  : 0u );
 	result["vt_requested_profile"] = ( int64_t ) rInputs.m_virtualTexture.get_requested_quality_profile();
 	result["vt_package_fully_supported_profile_mask"] =

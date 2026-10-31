@@ -628,9 +628,9 @@ void t3d_world_mesh_fragment_evaluate()
 		vec4 surface = vec4(1.0);
 		if (has_surface)
 		{
-			T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling_v1(
+			T3DVTConsumerAddress surface_address = t3d_vt_consumer_resolve_material_sibling(
 			material.vtAllocation, 2u, footprint, base_address_plan, albedo_address);
-			surface = t3d_vt_consumer_sample_orm_v1(surface_address);
+			surface = t3d_vt_consumer_sample_orm(surface_address);
 		}
 		if (!has_surface)
 		{
@@ -671,9 +671,9 @@ void t3d_world_mesh_fragment_evaluate()
 		{
 			vec3 tangent = normalize(world_mesh_tangent.xyz - final_normal * dot(final_normal, world_mesh_tangent.xyz));
 			vec3 bitangent = normalize(cross(final_normal, tangent)) * world_mesh_tangent.w;
-			T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling_v1(
+			T3DVTConsumerAddress normal_address = t3d_vt_consumer_resolve_material_sibling(
 			material.vtAllocation, 1u, footprint, base_address_plan, albedo_address);
-			vec2 encoded = t3d_vt_consumer_sample_normal_v1(normal_address).rg * 2.0 - 1.0;
+			vec2 encoded = t3d_vt_consumer_sample_normal(normal_address).rg * 2.0 - 1.0;
 			encoded *= max(normal_scale, 0.0);
 			final_normal = normalize(mat3(tangent, bitangent, final_normal) * vec3(encoded, sqrt(max(1.0 - dot(encoded, encoded), 0.0))));
 		}

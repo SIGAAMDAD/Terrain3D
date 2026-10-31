@@ -46,8 +46,8 @@ def main():
              'm_nComposedGeneration' in region and
              'region_height_cutout=terrain3d_surface.t3dst' in data,
              "Unified material generation drives the height/cutout package")
-    required('t3d_vt_godot_cook_source_fragment_v1' in megavt and
-             't3d_vt_godot_import_far_region_directory_v1' not in importer,
+    required('t3d_vt_godot_cook_source_fragment' in megavt and
+             't3d_vt_godot_import_far_region_directory' not in importer,
              "Shared V1 cold cook replaces indexed FAR intermediates")
     required(not (ROOT / 'src/rendering/rd/vt/io/terrain_3d_far_avt_region_file.h').exists(),
              "Retired regional FAR indexed-file reader deleted")
@@ -55,13 +55,13 @@ def main():
     required('t3dMegaVTLoadExportFragmentCold(' in megavt and
              't3dMegaVTSourceFingerprint( capture )' in megavt and
              't3dMegaVTPublishCachePairCold(' in megavt and
-             't3d_vt_pack_open_view_v1( candidate.ptr()' in megavt,
+             't3d_vt_pack_open_baseline_view( candidate.ptr()' in megavt,
              "Incremental cook reuses validated source-keyed V1 fragments")
     required('publishedArtifactsMatchCold' in data and
              't3d_vt_demand_publish_triplet_cold' in data and
              't3dMegaVTFileEqualsBytesCold' in megavt,
              "Identical package/demand artifacts bypass publication")
-    required('t3d_vt_godot_merge_packages_v1( packages.data()' in megavt and
+    required('t3d_vt_godot_merge_packages( packages.data()' in megavt and
              't3d_vt_demand_publish_triplet_cold' in data,
              "Shared V1 material package and demand publication are retained")
     print('WG-A static contract checks passed (ST06 FAR-free representation)')

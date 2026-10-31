@@ -85,7 +85,7 @@ void register_vt_spatial_demand_tests(
 		cells[1].nZ = 0;
 		cells[1].nFirstRecord = 2;
 		cells[1].nCount = 1;
-		t3dVTDemandRecordV2_t records[3]{};
+		t3dVTDemandStableMaterialRecord_t records[3]{};
 		records[0].nStableMaterialKey = 100u;
 		records[1].nStableMaterialKey = 200u;
 		records[2].nStableMaterialKey = 300u;
@@ -96,12 +96,12 @@ void register_vt_spatial_demand_tests(
 		}
 		records[1].nFlags = 1u;
 		std::vector< uint8_t > bytes, again;
-		T3D_REQUIRE( test, t3d_vt_demand_write_v2( cells, 2u, records, 3u, 777u, 888u, bytes ) );
-		T3D_REQUIRE( test, t3d_vt_demand_write_v2( cells, 2u, records, 3u, 777u, 888u, again ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_stable_material( cells, 2u, records, 3u, 777u, 888u, bytes ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_stable_material( cells, 2u, records, 3u, 777u, 888u, again ) );
 		T3D_CHECK( test, bytes == again );
 		Terrain3DVTSpatialDemand index;
 		T3D_REQUIRE( test, index.loadCold( bytes.data(), bytes.size() ) );
-		T3D_CHECK( test, index.getVersion() == T3D_VT_DEMAND_VERSION_V2 );
+		T3D_CHECK( test, index.getVersion() == T3D_VT_DEMAND_STABLE_MATERIAL_FORMAT_VERSION );
 		T3D_CHECK( test, index.getAssetIdentityHash() == 888u );
 		T3D_CHECK( test, index.isValidFor( 777u ) && !index.isValidFor( 778u ) );
 		T3D_CHECK( test, !index.hasBoundPredictor() );
@@ -129,14 +129,14 @@ void register_vt_spatial_demand_tests(
 		cells[1].nZ = 0;
 		cells[1].nCount = 1;
 		cells[1].nFirstRecord = 1;
-		t3dVTDemandRecordV2_t records[2]{};
+		t3dVTDemandStableMaterialRecord_t records[2]{};
 		for ( auto &r : records ) {
 			r.nStableMaterialKey = 50;
 			r.Footprint.nCoverage = 100;
 			r.Footprint.nViewMask = 255;
 		}
 		std::vector< uint8_t > bytes;
-		T3D_CHECK( test, !t3d_vt_demand_write_v2( cells, 2u, records, 2u, 111u, 222u, bytes ) );
+		T3D_CHECK( test, !t3d_vt_demand_write_stable_material( cells, 2u, records, 2u, 111u, 222u, bytes ) );
 		T3D_CHECK( test, bytes.empty() );
 	} );
 	runner.run( "vt_spatial_demand", "offline_index_load_and_mru_lookup", []( TestContext &test ) {
@@ -170,17 +170,17 @@ void register_vt_spatial_demand_tests(
 		T3D_CHECK( test, !index.loadCold( bytes.data(), bytes.size() ) );
 	} );
     runner.run( "vt_spatial_demand", "v3_async_bundles_and_reopen", []( TestContext &test ) {
-        t3dVTDemandV1CookConfig_t cfg{};
+        t3dVTDemandVisibilityCookConfig_t cfg{};
         cfg.m_nPackageSignature = 7721u;
         cfg.m_nAssetIdentityHash = 7722u;
         cfg.m_nSourceSignature = 7723u;
         cfg.m_nBakeConfigSignature = 7724u;
-        t3dVTDemandV1Cell_t cells[2]{};
+        t3dVTDemandVisibilityCell_t cells[2]{};
         cells[0].m_nX = -5; cells[0].m_nZ = -1;
         cells[0].m_nFirstRecord = 0u; cells[0].m_nRecordCount = 1u;
         cells[1].m_nX = 5; cells[1].m_nZ = 2;
         cells[1].m_nFirstRecord = 1u; cells[1].m_nRecordCount = 1u;
-        t3dVTDemandV1Record_t records[2]{};
+        t3dVTDemandBakedVisibilityRecord_t records[2]{};
         for ( uint32_t i = 0u; i < 2u; ++i ) {
             records[i].m_nStableMaterialKey = 100u + i;
             records[i].m_nSourceRevision = 1u;
@@ -191,7 +191,7 @@ void register_vt_spatial_demand_tests(
             records[i].m_szMipWeight[5] = 20u;
         }
         std::vector< uint8_t > bytes;
-        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 2u, records, 2u, cfg, bytes ) );
+        T3D_REQUIRE( test, t3d_vt_demand_write_baked_visibility( cells, 2u, records, 2u, cfg, bytes ) );
         const String path = "user://t3d_w04_async_vt_test.t3vd";
         {
             Ref<godot::FileAccess> file = godot::FileAccess::open( path, godot::FileAccess::WRITE );
@@ -223,12 +223,12 @@ void register_vt_spatial_demand_tests(
         ( void ) godot::DirAccess::remove_absolute( path );
     } );
 	runner.run( "vt_spatial_demand", "v3_histogram_index_roundtrip_and_v2_isolation", []( TestContext &test ) {
-		t3dVTDemandV1CookConfig_t config;
+		t3dVTDemandVisibilityCookConfig_t config;
 		config.m_nPackageSignature = 1001u;
 		config.m_nAssetIdentityHash = 1002u;
 		config.m_nSourceSignature = 1003u;
 		config.m_nBakeConfigSignature = 1004u;
-		t3dVTDemandV1Cell_t cells[3]{};
+		t3dVTDemandVisibilityCell_t cells[3]{};
 		cells[0].m_nX = -5; cells[0].m_nZ = -1;
 		cells[1].m_nX = -4; cells[1].m_nZ = -1;
 		cells[2].m_nX = 1; cells[2].m_nZ = 2;
@@ -237,7 +237,7 @@ void register_vt_spatial_demand_tests(
 			cells[i].m_nRecordCount = 1u;
 		}
 		cells[1].m_nFlags = 1u; // explicitly incomplete static coverage
-		t3dVTDemandV1Record_t records[3]{};
+		t3dVTDemandBakedVisibilityRecord_t records[3]{};
 		for ( uint32_t i = 0u; i < 3u; ++i ) {
 			records[i].m_nStableMaterialKey = i + 11u;
 			records[i].m_nSourceRevision = 1u;
@@ -254,13 +254,13 @@ void register_vt_spatial_demand_tests(
 		records[2].m_nStableMaterialKey = 13u;
 		records[2].m_nViewBin = 2u;
 		std::vector< uint8_t > bytes, again;
-		T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, bytes ) );
-		T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, again ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_baked_visibility( cells, 3u, records, 3u, config, bytes ) );
+		T3D_REQUIRE( test, t3d_vt_demand_write_baked_visibility( cells, 3u, records, 3u, config, again ) );
 		T3D_CHECK( test, bytes == again );
-		std::vector< t3dVTDemandV1Cell_t > decodedCells;
-		std::vector< t3dVTDemandV1Record_t > decodedRecords;
-		t3dVTDemandV1CookConfig_t decodedConfig;
-		T3D_REQUIRE( test, t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1001u, 1003u,
+		std::vector< t3dVTDemandVisibilityCell_t > decodedCells;
+		std::vector< t3dVTDemandBakedVisibilityRecord_t > decodedRecords;
+		t3dVTDemandVisibilityCookConfig_t decodedConfig;
+		T3D_REQUIRE( test, t3d_vt_demand_read( bytes.data(), bytes.size(), 1001u, 1003u,
 			decodedCells, decodedRecords, &decodedConfig ) );
 		T3D_REQUIRE( test, decodedCells.size() == 3u && decodedRecords.size() == 3u );
 		T3D_CHECK( test, decodedCells[0].m_nX == -5 && decodedCells[1].m_nX == -4 );
@@ -269,23 +269,23 @@ void register_vt_spatial_demand_tests(
 		T3D_CHECK( test, decodedRecords[1].m_nFlags == ( T3D_VT_VISIBILITY_NO_VISIBLE | T3D_VT_VISIBILITY_PARTIAL ) );
 		Terrain3DVTSpatialDemand production;
 		T3D_CHECK( test, !production.loadCold( bytes.data(), bytes.size() ) ); // v3 not enabled in T01
-		T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1002u, 1003u,
+		T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), bytes.size(), 1002u, 1003u,
 			decodedCells, decodedRecords ) );
-		T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 1001u, 1004u,
+		T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), bytes.size(), 1001u, 1004u,
 			decodedCells, decodedRecords ) );
 		T3D_CHECK( test, decodedCells.size() == 3u && decodedRecords.size() == 3u ); // failure is atomic
 		for ( uint64_t limit : { ( uint64_t ) 0u, ( uint64_t ) 16u, ( uint64_t ) 135u, ( uint64_t ) bytes.size() - 1u } ) {
-			T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), limit, 1001u, 1003u,
+			T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), limit, 1001u, 1003u,
 				decodedCells, decodedRecords ) );
 		}
 		for ( size_t offset : { ( size_t ) 8u, ( size_t ) 96u, ( size_t ) 144u, bytes.size() - 1u } ) {
 			std::vector< uint8_t > corrupt = bytes;
 			corrupt[offset] ^= 0x10u;
-			T3D_CHECK( test, !t3d_vt_demand_read_v1( corrupt.data(), corrupt.size(), 1001u, 1003u,
+			T3D_CHECK( test, !t3d_vt_demand_read( corrupt.data(), corrupt.size(), 1001u, 1003u,
 				decodedCells, decodedRecords ) );
 		}
 		cells[1].m_nX = -5; cells[1].m_nZ = -1;
-		T3D_CHECK( test, !t3d_vt_demand_write_v1( cells, 3u, records, 3u, config, again ) );
+		T3D_CHECK( test, !t3d_vt_demand_write_baked_visibility( cells, 3u, records, 3u, config, again ) );
 	} );
 
 }

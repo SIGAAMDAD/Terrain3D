@@ -11,7 +11,7 @@ class BaselineTests(unittest.TestCase):
         self.assertIsNone(percentile([], .5))
 
     def test_real_capture_schema_and_missing_metrics(self):
-        captured = {'schema': 't3d_streaming_baseline_v1', 'scene_id': 'res://fixture.tscn',
+        captured = {'schema': 't3d_streaming_baseline', 'scene_id': 'res://fixture.tscn',
                     'scenario': 'flythrough', 'settings': {'viewport': [1920, 1080], 'vt_upload_budget': 8},
                     'samples': [{'sequence': 1, 'gpu_missing_required': 3, 'clipmap_usec': 100},
                                 {'sequence': 2, 'gpu_missing_required': 1, 'clipmap_usec': 200}]}

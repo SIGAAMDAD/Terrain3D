@@ -26,8 +26,8 @@ void register_vt_visibility_aggregation_tests( TestRunner &runner ) {
             r.m_bHasVisibleSamples = true;
         }
         probes[1].m_counts[1u] = 90u;
-        std::vector< t3dVTDemandV1Cell_t > cells;
-        std::vector< t3dVTDemandV1Record_t > records;
+        std::vector< t3dVTDemandVisibilityCell_t > cells;
+        std::vector< t3dVTDemandBakedVisibilityRecord_t > records;
         t3dVTVisibilityAggregateStats_t stats;
         T3D_REQUIRE( test, Terrain3DVTVisibilityAggregator::reduce(
             probes, 3u, keys, 3u, 2u, false, cells, records, stats ) );
@@ -35,32 +35,32 @@ void register_vt_visibility_aggregation_tests( TestRunner &runner ) {
             stats.m_nDroppedRecords == 2u && stats.m_nPartialCells == 2u );
         T3D_CHECK( test, cells[0].m_nX == -1 && cells[0].m_nZ == -5 &&
             records[0].m_nSourceRevision == 3u && records[0].m_nProbeCount == 2u );
-        t3dVTDemandV1CookConfig_t config;
+        t3dVTDemandVisibilityCookConfig_t config;
         config.m_nPackageSignature = 911u;
         config.m_nAssetIdentityHash = 912u;
         config.m_nSourceSignature = 913u;
         config.m_nBakeConfigSignature = 914u;
         std::vector< uint8_t > bytes, repeated;
-        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells.data(), ( uint32_t ) cells.size(),
+        T3D_REQUIRE( test, t3d_vt_demand_write_baked_visibility( cells.data(), ( uint32_t ) cells.size(),
             records.data(), ( uint32_t ) records.size(), config, bytes ) );
-        T3D_REQUIRE( test, t3d_vt_demand_write_v1( cells.data(), ( uint32_t ) cells.size(),
+        T3D_REQUIRE( test, t3d_vt_demand_write_baked_visibility( cells.data(), ( uint32_t ) cells.size(),
             records.data(), ( uint32_t ) records.size(), config, repeated ) );
         T3D_CHECK( test, bytes == repeated );
-        std::vector< t3dVTDemandV1Cell_t > outputCells;
-        std::vector< t3dVTDemandV1Record_t > outputRecords;
-        T3D_CHECK( test, t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 913u,
+        std::vector< t3dVTDemandVisibilityCell_t > outputCells;
+        std::vector< t3dVTDemandBakedVisibilityRecord_t > outputRecords;
+        T3D_CHECK( test, t3d_vt_demand_read( bytes.data(), bytes.size(), 911u, 913u,
             outputCells, outputRecords ) && outputRecords.size() == 4u );
-        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 912u, 913u,
+        T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), bytes.size(), 912u, 913u,
             outputCells, outputRecords ) );
-        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 914u,
+        T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), bytes.size(), 911u, 914u,
             outputCells, outputRecords ) );
         const size_t originalCount = outputRecords.size();
         bytes.back() ^= 0x40u;
-        T3D_CHECK( test, !t3d_vt_demand_read_v1( bytes.data(), bytes.size(), 911u, 913u,
+        T3D_CHECK( test, !t3d_vt_demand_read( bytes.data(), bytes.size(), 911u, 913u,
             outputCells, outputRecords ) && outputRecords.size() == originalCount );
     } );
     runner.run( "vt_visibility_aggregate", "t03_package_v2_v1_transaction_rollback", []( TestContext &test ) {
-        const String dir = "user://terrain3d_t03_publish";
+        const String dir = "user://terrain3d_publish";
         T3D_REQUIRE( test, DirAccess::make_dir_recursive_absolute( dir ) == OK );
         const String pack = dir.path_join( "pack.t3dvt" );
         const String v2 = dir.path_join( "presence.t3vd" );

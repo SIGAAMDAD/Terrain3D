@@ -28,7 +28,7 @@ bool t3d_composed_surface_editor_cook_cold( Terrain3DComposedSurfaceEditJournal 
     const t3dComposedSurfaceColdCookRequest_t &input = request.m_cook;
     if ( !request.m_nRegionKey || !request.m_nJournalFingerprint ||
          !request.m_nJournalTopologyGeneration ||
-         request.m_nRegionIndex >= T3D_CS_EDITOR_REGION_COUNT ||
+         request.m_nRegionIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ||
          !request.m_pDirtyFlags || request.m_nDirtyCapacity < input.m_nPageCount ||
          !request.m_pBeginCommit || !request.m_pEndCommit || !input.m_pCurrent ||
          !input.m_pDestination || !input.m_pDestination[0] ||
@@ -44,7 +44,7 @@ bool t3d_composed_surface_editor_cook_cold( Terrain3DComposedSurfaceEditJournal 
          ticket.m_nTopologyGeneration != request.m_nJournalTopologyGeneration ||
          !journal.completionCurrentCold( ticket, request.m_nJournalFingerprint,
                                           request.m_nJournalTopologyGeneration ) ||
-         !t3d_cs_make_recook_flags_cold( ticket, request.m_nRegionKey,
+         !t3d_comp_surf_make_recook_flags_cold( ticket, request.m_nRegionKey,
               request.m_nMip0Width, request.m_nMip0Height,
               input.m_pPages, input.m_nPageCount,
               request.m_pDirtyFlags, request.m_nDirtyCapacity ) ) {
@@ -75,7 +75,7 @@ bool t3d_composed_surface_editor_cook_cold( Terrain3DComposedSurfaceEditJournal 
     }
     const bool current = t3d_composed_surface_editor_current( &context, input.m_nTerrainRevision,
                                              input.m_nMaterialRevision, input.m_nTopologyGeneration );
-    const bool written = current && t3d_cs_write_sidecar_cold( input.m_pDestination,
+    const bool written = current && t3d_comp_surf_write_sidecar_cold( input.m_pDestination,
                                     input.m_pOutput, result.m_cook.m_nWrittenBytes );
     const bool accepted = written && journal.acceptCold( ticket,
                           request.m_nJournalFingerprint, request.m_nJournalTopologyGeneration );

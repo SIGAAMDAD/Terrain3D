@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 READ = lambda path: (ROOT / path).read_text(encoding='utf-8')
 source = READ('src/authoring/vt/integration/terrain_3d_composed_surface_editor_source.cpp')
-pipeline = READ('src/authoring/vt/build/terrain_3d_composed_surface_v1_cold_pipeline.cpp')
+pipeline = READ('src/authoring/vt/build/terrain_3d_composed_surface_baseline_cold_pipeline.cpp')
 owner = READ('src/authoring/vt/integration/terrain_3d_render_authoring_companion.cpp')
 ui = READ('project/addons/terrain_3d/menu/terrain_menu.gd')
 
@@ -17,9 +17,9 @@ for token in ('rData.getControls( positions )', 'getTextureAsset( int( i ) )',
               'request.m_bPageLocalCompositionIdentity = true'):
     assert token in source, token
 assert 'terrain_composed.t3sc.candidate' in source
-assert 't3d_cs_validate_sidecar_bytes( previous.ptr()' in source
-assert 't3d_cs_validate_sidecar_bytes( committed.ptr()' in source
-assert 't3d_cs_find_page( priorView' in source
+assert 't3d_comp_surf_validate_sidecar_bytes( previous.ptr()' in source
+assert 't3d_comp_surf_validate_sidecar_bytes( committed.ptr()' in source
+assert 't3d_comp_surf_find_page( priorView' in source
 assert 'unsupported_region_page_layout' in source
 assert 'missing_interior_control' in source
 assert 'm_nBoundaryClampedPages' in source

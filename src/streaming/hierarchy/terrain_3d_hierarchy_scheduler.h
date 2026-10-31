@@ -74,7 +74,7 @@ public:
     void reset( void );
     // Called only on cold hierarchy publication. The directory is copied;
     // no borrowed pointer into the persisted index survives this call.
-    bool bindCold( const t3dRasterHierarchyV2Node_t *pNodes,
+    bool bindCold( const t3dRasterHierarchyStreamNode_t *pNodes,
                    const uint8_t *pPresent, uint32_t nCount, uint32_t nGeneration );
     void markGpuCommitted( uint16_t nNode, uint8_t nChannels,
                            uint32_t nRevision, uint32_t nGeneration );
@@ -106,7 +106,7 @@ private:
                  const t3dHierarchyView_t &rView, float &rDistance ) const;
     uint16_t closestCommitted( uint16_t nNode, uint8_t nRequired ) const;
 
-    t3dRasterHierarchyV2Node_t m_nodes[T3D_HIERARCHY_MAX_NODES]{};
+    t3dRasterHierarchyStreamNode_t m_nodes[T3D_HIERARCHY_MAX_NODES]{};
     uint8_t m_present[T3D_HIERARCHY_MAX_NODES]{};
     uint8_t m_gpuChannels[T3D_HIERARCHY_MAX_NODES]{};
     uint8_t m_previousRefined[T3D_HIERARCHY_MAX_NODES]{};

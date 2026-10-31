@@ -29,7 +29,7 @@ void t3d_vt_pack_runtime_release_cold( const t3dVTPackRuntimeAllocator_t &rAlloc
 bool t3d_vt_pack_runtime_find_allocation_by_stable_key( const t3dVTPackRuntimeStorage_t &rStorage,
 														uint64_t						 nStableKey,
 														uint32_t						&rAllocationId );
-bool t3d_vt_pack_runtime_apply_quality_profile_v1( const t3dVTDatabaseView_t  &rDatabase,
+bool t3d_vt_pack_runtime_apply_quality_profile( const t3dVTDatabaseView_t  &rDatabase,
 												   t3dVTAllocation_t		  *pRuntimeAllocations,
 												   uint32_t					   nRuntimeAllocationCount,
 												   uint32_t					   nRequestedProfile,

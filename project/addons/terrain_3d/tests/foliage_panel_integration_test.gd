@@ -23,7 +23,7 @@ func _run() -> void:
 		return
 	for terrain: Terrain3D in _terrains:
 		if not _fixture_valid(terrain) or FileAccess.file_exists(TRANSACTION.journal_path(terrain)):
-			push_error("FG00 fixture invalid; see tests/F08_README.md")
+			push_error("FG00 fixture invalid; see tests/tests_tests_README.md")
 			return
 	# Save complete pages and resource references before any test mutation.
 	for terrain: Terrain3D in _terrains:

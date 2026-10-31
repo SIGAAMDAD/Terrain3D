@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-inline bool t3d_cs_gpu_epoch_completed( const uint64_t nRequiredEpoch,
+inline bool t3d_comp_surf_gpu_epoch_completed( const uint64_t nRequiredEpoch,
                                         const uint64_t nCompletedEpoch )
 {
     return nRequiredEpoch != 0u && nCompletedEpoch >= nRequiredEpoch;
@@ -12,7 +12,7 @@ inline bool t3d_cs_gpu_epoch_completed( const uint64_t nRequiredEpoch,
 
 // Zero/expired epochs are not valid submission tokens. The producer must
 // record the owner's current epoch before encoding the transfer commands.
-inline bool t3d_cs_gpu_submission_epoch_valid( const uint64_t nSubmissionEpoch,
+inline bool t3d_comp_surf_gpu_submission_epoch_valid( const uint64_t nSubmissionEpoch,
                                                 const uint64_t nCompletedEpoch )
 {
     return nSubmissionEpoch != 0u && nSubmissionEpoch > nCompletedEpoch;

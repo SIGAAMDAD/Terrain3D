@@ -34,7 +34,7 @@ bool Terrain3DComposedSurfaceEditJournal::invalidateCold(
     const t3dComposedSurfaceEditRegion_t &region, uint32_t nMip0Mask,
     uint64_t nFingerprint, uint64_t nTopologyGeneration )
 {
-    if ( !region.m_bPresent || region.m_nIndex >= T3D_CS_EDITOR_REGION_COUNT ||
+    if ( !region.m_bPresent || region.m_nIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ||
          !nFingerprint || !nTopologyGeneration || !region.m_nWidth || !region.m_nHeight ||
          uint32_t( region.m_nWidth ) * region.m_nHeight > 16u || !region.m_nMips ) return false;
     const uint32_t mask = nMip0Mask & ( ( 1u << ( region.m_nWidth * region.m_nHeight ) ) - 1u );
@@ -61,17 +61,17 @@ bool Terrain3DComposedSurfaceEditJournal::dirtyRegionCold(
          !isfinite( bounds.m_fMinZ ) || !isfinite( bounds.m_fMaxX ) ||
          !isfinite( bounds.m_fMaxZ ) || bounds.m_fMaxX <= bounds.m_fMinX ||
          bounds.m_fMaxZ <= bounds.m_fMinZ || !region.m_nWidth || !region.m_nHeight ) return false;
-    const float halo = ( T3D_CS_EDITOR_CONTROL_HALO_TEXELS + T3D_CS_EDITOR_GUTTER_TEXELS ) /
+    const float halo = ( T3D_COMP_SURF_EDITOR_CONTROL_HALO_TEXELS + T3D_COMP_SURF_EDITOR_GUTTER_TEXELS ) /
                        float( nTexelsPerMeter );
-    const float regionX = float( region.m_nRegionX ) * T3D_CS_EDITOR_REGION_SIZE;
-    const float regionZ = float( region.m_nRegionZ ) * T3D_CS_EDITOR_REGION_SIZE;
+    const float regionX = float( region.m_nRegionX ) * T3D_COMP_SURF_EDITOR_REGION_SIZE;
+    const float regionZ = float( region.m_nRegionZ ) * T3D_COMP_SURF_EDITOR_REGION_SIZE;
     const float minX = fmaxf( bounds.m_fMinX - halo, regionX );
     const float minZ = fmaxf( bounds.m_fMinZ - halo, regionZ );
-    const float maxX = fminf( bounds.m_fMaxX + halo, regionX + T3D_CS_EDITOR_REGION_SIZE );
-    const float maxZ = fminf( bounds.m_fMaxZ + halo, regionZ + T3D_CS_EDITOR_REGION_SIZE );
+    const float maxX = fminf( bounds.m_fMaxX + halo, regionX + T3D_COMP_SURF_EDITOR_REGION_SIZE );
+    const float maxZ = fminf( bounds.m_fMaxZ + halo, regionZ + T3D_COMP_SURF_EDITOR_REGION_SIZE );
     if ( minX >= maxX || minZ >= maxZ ) return false;
-    const float scaleX = float( region.m_nWidth ) / T3D_CS_EDITOR_REGION_SIZE;
-    const float scaleZ = float( region.m_nHeight ) / T3D_CS_EDITOR_REGION_SIZE;
+    const float scaleX = float( region.m_nWidth ) / T3D_COMP_SURF_EDITOR_REGION_SIZE;
+    const float scaleZ = float( region.m_nHeight ) / T3D_COMP_SURF_EDITOR_REGION_SIZE;
     const uint32_t x0 = uint32_t( fmaxf( 0.0f, floorf( ( minX - regionX ) * scaleX ) ) );
     const uint32_t z0 = uint32_t( fmaxf( 0.0f, floorf( ( minZ - regionZ ) * scaleZ ) ) );
     const uint32_t x1 = uint32_t( fminf( float( region.m_nWidth - 1u ),
@@ -101,7 +101,7 @@ bool Terrain3DComposedSurfaceEditJournal::invalidateRegionCold(
 bool Terrain3DComposedSurfaceEditJournal::forgetRegionCold(
     uint32_t nIndex, uint64_t nTopologyGeneration )
 {
-    if ( nIndex >= T3D_CS_EDITOR_REGION_COUNT || !nTopologyGeneration ) return false;
+    if ( nIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT || !nTopologyGeneration ) return false;
     t3dComposedSurfaceEditRecord_t &record = m_records[nIndex];
     if ( record.m_nTopologyGeneration == nTopologyGeneration ) return false;
     if ( !record.m_nRevision && !record.m_nDirtyMip0Mask ) return false;
@@ -120,7 +120,7 @@ bool Terrain3DComposedSurfaceEditJournal::forgetRegionCold(
 bool Terrain3DComposedSurfaceEditJournal::claimCold(
     uint32_t nIndex, t3dComposedSurfaceEditTicket_t &rTicket )
 {
-    if ( nIndex >= T3D_CS_EDITOR_REGION_COUNT ) return false;
+    if ( nIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ) return false;
     t3dComposedSurfaceEditRecord_t &record = m_records[nIndex];
     if ( record.m_bInFlight || !record.m_nDirtyMip0Mask ) return false;
     record.m_bInFlight = true;
@@ -134,7 +134,7 @@ bool Terrain3DComposedSurfaceEditJournal::completionCurrentCold(
     const t3dComposedSurfaceEditTicket_t &ticket, uint64_t nFingerprint,
     uint64_t nTopologyGeneration ) const
 {
-    if ( ticket.m_nRegionIndex >= T3D_CS_EDITOR_REGION_COUNT ) return false;
+    if ( ticket.m_nRegionIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ) return false;
     const t3dComposedSurfaceEditRecord_t &record = m_records[ticket.m_nRegionIndex];
     return record.m_bInFlight && record.m_nClaimRevision == ticket.m_nRevision &&
            record.m_nRevision == ticket.m_nRevision &&
@@ -150,7 +150,7 @@ bool Terrain3DComposedSurfaceEditJournal::acceptCold(
     const t3dComposedSurfaceEditTicket_t &ticket, uint64_t nFingerprint,
     uint64_t nTopologyGeneration )
 {
-    if ( ticket.m_nRegionIndex >= T3D_CS_EDITOR_REGION_COUNT ) return false;
+    if ( ticket.m_nRegionIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ) return false;
     if ( !completionCurrentCold( ticket, nFingerprint, nTopologyGeneration ) ) {
         ++m_stats.m_nStaleCompletions;
         cancelCold( ticket );
@@ -168,7 +168,7 @@ bool Terrain3DComposedSurfaceEditJournal::acceptCold(
 
 void Terrain3DComposedSurfaceEditJournal::cancelCold( const t3dComposedSurfaceEditTicket_t &ticket )
 {
-    if ( ticket.m_nRegionIndex >= T3D_CS_EDITOR_REGION_COUNT ) return;
+    if ( ticket.m_nRegionIndex >= T3D_COMP_SURF_EDITOR_REGION_COUNT ) return;
     t3dComposedSurfaceEditRecord_t &record = m_records[ticket.m_nRegionIndex];
     // Late cancellation from an earlier revision must not touch a new claim.
     if ( record.m_bInFlight && record.m_nClaimRevision == ticket.m_nRevision ) {
@@ -179,5 +179,5 @@ void Terrain3DComposedSurfaceEditJournal::cancelCold( const t3dComposedSurfaceEd
 
 const t3dComposedSurfaceEditRecord_t *Terrain3DComposedSurfaceEditJournal::regionCold( uint32_t nIndex ) const
 {
-    return nIndex < T3D_CS_EDITOR_REGION_COUNT ? &m_records[nIndex] : nullptr;
+    return nIndex < T3D_COMP_SURF_EDITOR_REGION_COUNT ? &m_records[nIndex] : nullptr;
 }

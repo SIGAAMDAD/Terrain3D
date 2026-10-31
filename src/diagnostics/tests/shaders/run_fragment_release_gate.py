@@ -23,11 +23,11 @@ CS = TESTS.parent / 'composed_surface'
 PYTHON_TESTS = [
     TESTS / 'test_fragment_shader_contracts.py',
     TESTS / 'test_fragment_release_gate.py',
-    CS / 'test_cs11_static_v1_shader.py',
-    CS / 'test_cs14_parity.py',
-    CS / 'test_cs19_optin_policy.py',
-    CS / 'test_cs20_editor_regression_gate.py',
-    CS / 'test_cs21_cache_stages.py',
+    CS / 'test_static_v1_shader.py',
+    CS / 'test_parity.py',
+    CS / 'test_optin_policy.py',
+    CS / 'test_editor_regression_gate.py',
+    CS / 'test_cache_stages.py',
 ]
 SMOKE_CHECKS = (
     'godot_cpp_build', 'vulkan_validation', 'runtime_scene',
@@ -177,13 +177,13 @@ def main():
     for source in PYTHON_TESTS:
         report['steps'][source.stem] = run_command(source.stem,
             [sys.executable, str(source)], args.root, args.out, env)
-    shader_cases = CS / 'test_cs19_shader_variants.py'
+    shader_cases = CS / 'test_shader_variants.py'
     report['steps']['cs19_compiled_variants'] = run_command('cs19_compiled_variants',
         [sys.executable, str(shader_cases), '--require-compiler'], args.root, args.out, env)
     native = [
         ('vt_upload_preflight', [args.root / 'src/diagnostics/tests/test_vt_upload_preflight.cpp']),
-        ('cs11_static_v1', [args.root / 'src/diagnostics/tests/composed_surface/test_cs11_static_v1.cpp',
-                            args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_static_v1.cpp',
+        ('cs11_static_v1', [args.root / 'src/diagnostics/tests/composed_surface/test_static_v1.cpp',
+                            args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_static_baseline.cpp',
                             args.root / 'src/authoring/vt/build/terrain_3d_composed_surface_cooker.cpp']),
     ]
     for name, sources in native:

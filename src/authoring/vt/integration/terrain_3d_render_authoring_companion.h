@@ -30,7 +30,7 @@ public:
     uint64_t m_nApprovedComposedEditStamp = 0u;
     String m_approvedComposedStatus = "none";
     PackedByteArray m_composedCandidateSourcePack;
-    t3dCsEditorCandidateResult_t m_composedCandidate;
+    t3dCompSurfEditorCandidateResult_t m_composedCandidate;
     bool m_bComposedCandidatePending = false;
     String m_composedCandidateState = "idle";
     uint64_t m_nComposedCandidateRequestSerial = 0u;

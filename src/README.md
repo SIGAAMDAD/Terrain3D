@@ -162,7 +162,7 @@ The reconstructable checks included with this snapshot are:
 
 ```text
 python3 tools/dual_dll/p00_snapshot.py --check
-python3 tools/dual_dll/verify_p01.py
+python3 tools/dual_dll/verify.py
 ```
 
 The source-level checks above do not compile or link the three native DLLs.

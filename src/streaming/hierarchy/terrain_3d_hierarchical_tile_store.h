@@ -69,7 +69,7 @@ public:
     t3dHierarchyTileStoreStats_t getStats( void ) const;
     // Cold snapshot for the F03 scheduler. Keep the only authoritative v2
     // directory in this store, and copy it under the worker/owner lock.
-    bool snapshotDirectoryCold( t3dRasterHierarchyV2Node_t *pNodes,
+    bool snapshotDirectoryCold( t3dRasterHierarchyStreamNode_t *pNodes,
                                 uint8_t *pPresent, uint32_t nCapacity,
                                 uint32_t &rGeneration ) const;
     uint64_t getEpoch( void ) const { return m_nEpoch; } // owner thread only
@@ -78,7 +78,7 @@ private:
     enum SlotState : uint8_t { FREE = 0u, QUEUED, LOADING, READY, FAILED };
     struct Slot
     {
-        uint8_t m_bytes[T3D_RASTER_HIERARCHY_V2_TILE_BYTES]{};
+        uint8_t m_bytes[T3D_RASTER_HIERARCHY_STREAM_TILE_BYTES]{};
         uint16_t m_nId = UINT16_MAX;
         uint8_t m_nChannels = 0u;
         uint8_t m_nPriority = 0u;
@@ -97,7 +97,7 @@ private:
     // Maximum 32 x 10,504-byte tiles. Pool allocated once at cold open,
     // using the requested slot count; no hot-path allocations on requests.
     Slot *m_slots = nullptr;
-    t3dRasterHierarchyV2Node_t m_nodes[1365]{};
+    t3dRasterHierarchyStreamNode_t m_nodes[1365]{};
     uint8_t m_nodePresent[1365]{};
     godot::String m_path;
     uint64_t m_nEpoch = 1u;

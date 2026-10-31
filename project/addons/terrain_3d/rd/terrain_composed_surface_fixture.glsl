@@ -82,7 +82,7 @@ SampledMaterial fixture_resolve_pair(uint packed_control, vec2 texel_world)
 	if (base_id == overlay_id)
 		return base;
 	SampledMaterial overlay = fixture_sample_layer(overlay_id, uv, grad_x, grad_y);
-	float fraction = t3d_cs_height_blend(blend, base.height, overlay.height,
+	float fraction = t3d_comp_surf_height_blend(blend, base.height, overlay.height,
 	fma(60.0, pc.blend_sharpness, 4.0));
 	SampledMaterial result = material_zero();
 	accumulate_material(result, base, 1.0 - fraction);

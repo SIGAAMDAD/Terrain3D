@@ -7,7 +7,7 @@
 // pFlags is caller-owned fixed/cold scratch, nCapacity >= nPages.
 // Return false for stale/incompatible page lists or unsupported page counts.
 // Consumes no dirty ticket and never acknowledges publication.
-bool t3d_cs_make_recook_flags_cold( const t3dComposedSurfaceEditTicket_t &ticket,
+bool t3d_comp_surf_make_recook_flags_cold( const t3dComposedSurfaceEditTicket_t &ticket,
                                     uint64_t nRegionKey,
                                     uint32_t nMip0Width, uint32_t nMip0Height,
                                     const t3dComposedSurfaceCookPage_t *pPages,
@@ -16,7 +16,7 @@ bool t3d_cs_make_recook_flags_cold( const t3dComposedSurfaceEditTicket_t &ticket
 // Only calls the CS03–CS04 incremental writer if the canonical producer has
 // established CS02 parity. Callers must verify current journal generation
 // before and after work and acknowledge only AFTER sidecar atomic commit.
-bool t3d_cs_recook_journal_ticket_cold(
+bool t3d_comp_surf_recook_journal_ticket_cold(
     const Terrain3DComposedSurfaceEditJournal &journal,
     const t3dComposedSurfaceEditTicket_t &ticket,
     uint64_t nRegionKey, uint32_t nMip0Width, uint32_t nMip0Height,

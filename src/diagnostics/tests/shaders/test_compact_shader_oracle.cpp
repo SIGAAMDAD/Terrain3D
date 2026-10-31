@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define T3D_BR21_TEST_CASES 64000u
-#define T3D_BR21_TEST_BUFFER_WORDS 128u
-#define T3D_BR21_TEST_MAX_INDICES 2048u
+#define T3D_CLUSTER_COMPACT_TEST_CASES 64000u
+#define T3D_CLUSTER_COMPACT_TEST_BUFFER_WORDS 128u
+#define T3D_CLUSTER_COMPACT_TEST_MAX_INDICES 2048u
 
 static uint32_t s_nSeed = 0x5abc1721u;
 static uint32_t nextRandom() {
@@ -28,21 +28,21 @@ static uint32_t originalRangeMask( uint32_t word, uint32_t minimum, uint32_t max
 }
 
 int main() {
-	uint32_t words[T3D_BR21_TEST_BUFFER_WORDS];
-	uint32_t actual[T3D_BR21_TEST_MAX_INDICES];
-	uint32_t reference[T3D_BR21_TEST_MAX_INDICES];
-	for ( uint32_t trial = 0u; trial < T3D_BR21_TEST_CASES; ++trial ) {
+	uint32_t words[T3D_CLUSTER_COMPACT_TEST_BUFFER_WORDS];
+	uint32_t actual[T3D_CLUSTER_COMPACT_TEST_MAX_INDICES];
+	uint32_t reference[T3D_CLUSTER_COMPACT_TEST_MAX_INDICES];
+	for ( uint32_t trial = 0u; trial < T3D_CLUSTER_COMPACT_TEST_CASES; ++trial ) {
 		memset( words, 0, sizeof( words ) );
 		const uint32_t max_words = 1u + nextRandom() % 64u;
-		const uint32_t slice = nextRandom() % T3D_BR21_DEPTH_SLICES;
+		const uint32_t slice = nextRandom() % T3D_CLUSTER_COMPACT_DEPTH_SLICES;
 		const uint32_t base = nextRandom() % 16u;
 		for ( uint32_t i = 0u; i < max_words; ++i ) words[base + i] = nextRandom();
 		const uint32_t minimum = nextRandom() % ( max_words * 32u + 1u );
 		const uint32_t maximum = nextRandom() % ( max_words * 32u + 1u );
 		words[base + max_words + slice] = minimum | ( maximum << 16u );
 		uint32_t actual_count = 0u;
-		assert( t3dBr21DecodeReference( words, T3D_BR21_TEST_BUFFER_WORDS, base,
-			max_words, slice, actual, T3D_BR21_TEST_MAX_INDICES, actual_count ) );
+		assert( t3dClusterCompactDecodeReference( words, T3D_CLUSTER_COMPACT_TEST_BUFFER_WORDS, base,
+			max_words, slice, actual, T3D_CLUSTER_COMPACT_TEST_MAX_INDICES, actual_count ) );
 		const uint32_t first = minimum / 32u;
 		const uint32_t end = maximum == 0u ? 0u : ( ( maximum - 1u ) / 32u + 1u );
 		uint32_t reference_count = 0u;

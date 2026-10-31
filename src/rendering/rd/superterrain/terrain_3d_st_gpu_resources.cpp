@@ -93,11 +93,11 @@ bool Terrain3DStGpuImage::uploadCandidateCold( Terrain3DRdContext &rContext,
     PackedByteArray atlas;
     if ( !t3dStCopyBytesCold( rImage.heightAtlas().data(), rImage.heightAtlas().size(), atlas ) ||
          !t3dStCreateBufferCold( rContext, candidate.m_vhmPages, "T3D.SuperTerrain.VhmPages",
-                                 rImage.heightPages().data(), rImage.heightPages().size() * sizeof( t3dStVhmPageEntryV1_t ) ) ||
+                                 rImage.heightPages().data(), rImage.heightPages().size() * sizeof( t3dStRegionVhmPageEntry_t ) ) ||
          !t3dStCreateBufferCold( rContext, candidate.m_vhmTails, "T3D.SuperTerrain.VhmTails",
-                                 rImage.heightTails().data(), rImage.heightTails().size() * sizeof( t3dStVhmTailV1_t ) ) ||
+                                 rImage.heightTails().data(), rImage.heightTails().size() * sizeof( t3dStRegionVhmTail_t ) ) ||
          !t3dStCreateBufferCold( rContext, candidate.m_maskEntries, "T3D.SuperTerrain.MaskEntries",
-                                 rImage.maskPages().data(), rImage.maskPages().size() * sizeof( t3dStMaskPageEntryV1_t ) ) ||
+                                 rImage.maskPages().data(), rImage.maskPages().size() * sizeof( t3dStMaskPageEntry_t ) ) ||
          !t3dStCreateBufferCold( rContext, candidate.m_maskWords, "T3D.SuperTerrain.MaskWords",
                                  pMaskWords, nMaskBytes ) ||
          !t3dStCreateTextureCold( rContext, candidate.m_vhmRoot, "T3D.SuperTerrain.VhmPinnedRoots",

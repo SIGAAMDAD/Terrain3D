@@ -14,20 +14,20 @@
 
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
-typedef struct t3dVTGodotSourceV1_s
+typedef struct t3dVTGodotSource_s
 {
 	godot::PackedByteArray		m_ChannelBytes[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	t3dVTCookImageView_t		m_Channels[T3D_VT_LOGICAL_CHANNEL_COUNT];
-	t3dVTGodotSourceChannelV1_t m_ChannelDesc[T3D_VT_LOGICAL_CHANNEL_COUNT];
+	t3dVTGodotSourceChannel_t m_ChannelDesc[T3D_VT_LOGICAL_CHANNEL_COUNT];
 	uint64_t					m_nStableKey;
 	uint32_t					m_nAuthoredChannelMask;
 	uint32_t					m_nSourceFlags;
 	uint32_t					m_nOrmSourceLayout;
 	uint32_t					m_nConsumer;
 	t3dVTFixedProfile_t			m_eHighestAvailableProfile;
-} t3dVTGodotSourceV1_t;
+} t3dVTGodotSource_t;
 
-typedef struct t3dVTEditorChannelCacheEntryV1_s
+typedef struct t3dVTEditorChannelCacheEntry_s
 {
 	uint64_t						 m_nKey;
 	uint32_t						 m_nTargetExtent;
@@ -35,27 +35,27 @@ typedef struct t3dVTEditorChannelCacheEntryV1_s
 	t3dVTMipChainLayout_t			 m_Layout;
 	godot::PackedByteArray			 m_Bytes;
 	Terrain3DSharedMemoryReservation m_memory;
-} t3dVTEditorChannelCacheEntryV1_t;
+} t3dVTEditorChannelCacheEntry_t;
 
-typedef struct t3dVTEditorAllocationCacheEntryV1_s
+typedef struct t3dVTEditorAllocationCacheEntry_s
 {
 	uint64_t						 m_nStableKey;
 	uint64_t						 m_nKey;
 	godot::PackedByteArray			 m_PackageBytes;
 	Terrain3DSharedMemoryReservation m_memory;
 	bool							 m_bPendingDiskWrite = false;
-} t3dVTEditorAllocationCacheEntryV1_t;
+} t3dVTEditorAllocationCacheEntry_t;
 
-typedef struct t3dVTEditorCookCacheV1_s
+typedef struct t3dVTEditorCookCache_s
 {
-	eastl::vector< t3dVTEditorChannelCacheEntryV1_t, Terrain3DEastlAllocator >	  m_ChannelEntries;
-	eastl::vector< t3dVTEditorAllocationCacheEntryV1_t, Terrain3DEastlAllocator > m_AllocationEntries;
+	eastl::vector< t3dVTEditorChannelCacheEntry_t, Terrain3DEastlAllocator >	  m_ChannelEntries;
+	eastl::vector< t3dVTEditorAllocationCacheEntry_t, Terrain3DEastlAllocator > m_AllocationEntries;
 	godot::String																  m_CacheDirectory;
-	uint32_t m_nFilterAbi = T3D_VT_V1_FILTER_ABI_VERSION;
-	uint32_t m_nCompressorAbi = T3D_VT_V1_COMPRESSOR_ABI_VERSION;
+	uint32_t m_nFilterAbi = T3D_VT_FILTER_ABI_VERSION;
+	uint32_t m_nCompressorAbi = T3D_VT_COMPRESSOR_ABI_VERSION;
 	uint64_t m_nLifetimeHits = 0u;
 	uint64_t m_nLifetimeMisses = 0u;
-} t3dVTEditorCookCacheV1_t;
+} t3dVTEditorCookCache_t;
 
 // Cold material-only authority shared by editor and runtime package cooks.
 typedef struct t3dVTGodotAssetMaterials_s
@@ -68,12 +68,12 @@ typedef struct t3dVTGodotAssetMaterials_s
 // cooker. The expected source fingerprint must come from the authoring owner;
 // its value is never inferred from the sidecar itself. This is a cold operation.
 // The result is one normal V1 package fragment with COMPOSED stable keys.
-bool t3d_vt_godot_import_composed_sidecar_v1(
+bool t3d_vt_godot_import_composed_sidecar(
     const uint8_t *pSidecar, uint64_t nSidecarBytes,
     uint64_t nExpectedSourceFingerprint, uint32_t nPackageGeneration,
     godot::PackedByteArray &rFragment, godot::String *pError );
 
-bool t3d_vt_godot_cook_source_fragment_v1( const t3dVTCookSparseSourceV1_t &rSource,
+bool t3d_vt_godot_cook_source_fragment( const t3dVTCookSparseSource_t &rSource,
 										   godot::PackedByteArray		   &rBytes,
 										   uint64_t nWorkingByteLimit = 512ull * 1024ull * 1024ull );
 
@@ -85,7 +85,7 @@ struct t3dVTMergeStatistics_t
 	uint64_t m_nPayloadComparisons = 0u;
 	bool	 m_bWorkingLimitExceeded = false;
 };
-bool t3d_vt_godot_merge_packages_v1( const godot::PackedByteArray *pPackages,
+bool t3d_vt_godot_merge_packages( const godot::PackedByteArray *pPackages,
 									 uint32_t					   nCount,
 									 uint32_t					   nGeneration,
 									 godot::PackedByteArray		  &rPackageBytes,
@@ -97,31 +97,31 @@ bool t3d_vt_godot_collect_asset_materials( const godot::Ref< Terrain3DAssets > &
 										   t3dVTGodotAssetMaterials_t		   &rMaterials,
 										   godot::String					   *pError );
 
-bool t3d_vt_godot_extract_instance_source_v1( const godot::Ref< Terrain3DRenderingMaterial > &rMaterial,
+bool t3d_vt_godot_extract_instance_source( const godot::Ref< Terrain3DRenderingMaterial > &rMaterial,
 											  uint64_t										  nStableKey,
-											  t3dVTGodotSourceV1_t							 &rSource );
-bool t3d_vt_godot_extract_terrain_source_v1( const godot::Ref< Terrain3DAssets > &rAssets,
+											  t3dVTGodotSource_t							 &rSource );
+bool t3d_vt_godot_extract_terrain_source( const godot::Ref< Terrain3DAssets > &rAssets,
 											 uint32_t							  nLogicalMaterialId,
 											 uint64_t							  nStableKey,
-											 t3dVTGodotSourceV1_t				 &rSource );
-bool t3d_vt_godot_extract_source_by_stable_key_v1( const godot::Ref< Terrain3DAssets > &rAssets,
+											 t3dVTGodotSource_t				 &rSource );
+bool t3d_vt_godot_extract_source_by_stable_key( const godot::Ref< Terrain3DAssets > &rAssets,
 												   uint64_t								nStableKey,
-												   t3dVTGodotSourceV1_t				   &rSource,
+												   t3dVTGodotSource_t				   &rSource,
 												   bool								   &rAuthored );
-bool t3d_vt_godot_make_sparse_cook_source_v1( const t3dVTGodotSourceV1_t &rSource,
-											  t3dVTCookSparseSourceV1_t	 &rCookSource );
+bool t3d_vt_godot_make_sparse_cook_source( const t3dVTGodotSource_t &rSource,
+											  t3dVTCookSparseSource_t	 &rCookSource );
 void t3d_vt_godot_make_encoder( t3dVTEncoderInterface_t &rEncoder );
-void t3d_vt_godot_editor_cache_reset_v1( t3dVTEditorCookCacheV1_t &rCache );
-void t3d_vt_godot_editor_cache_set_directory_v1( t3dVTEditorCookCacheV1_t &rCache, const godot::String &rDirectory );
-bool t3d_vt_godot_cook_editor_package_incremental_v1( const godot::Ref< Terrain3DAssets > &rAssets,
+void t3d_vt_godot_editor_cache_reset( t3dVTEditorCookCache_t &rCache );
+void t3d_vt_godot_editor_cache_set_directory( t3dVTEditorCookCache_t &rCache, const godot::String &rDirectory );
+bool t3d_vt_godot_cook_editor_package_incremental( const godot::Ref< Terrain3DAssets > &rAssets,
 													  const uint64_t					  *pStableKeys,
 													  const t3dRenderingMaterialGpu_t	  *pMaterialRecords,
 													  uint32_t							   nMaterialCount,
-													  t3dVTEditorCookCacheV1_t			  &rCache,
+													  t3dVTEditorCookCache_t			  &rCache,
 													  godot::PackedByteArray			  &rPackageBytes,
 													  uint64_t							  &rFingerprint,
 													  uint32_t							  &rPackageGeneration,
-													  t3dVTEditorCookTelemetryV1_t		  &rTelemetry,
+													  t3dVTEditorCookTelemetry_t		  &rTelemetry,
 													  godot::String						  *pError,
 													  Terrain3DSharedMemoryReservation	  *pPackageMemory = NULL,
 													  bool								   bForceRebuild = false );

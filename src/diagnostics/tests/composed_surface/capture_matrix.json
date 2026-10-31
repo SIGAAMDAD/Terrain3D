@@ -82,6 +82,6 @@
   "fragment_capture_comparator": "src/diagnostics/tests/shaders/compare_fragment_captures.py",
   "gpu_capture_comparator": "src/diagnostics/tests/shaders/compare_fragment_gpu_times.py",
   "release_gate": "src/diagnostics/tests/shaders/run_fragment_release_gate.py",
-  "composed_surface_reference_capture": "src/diagnostics/tests/composed_surface/export_cs21_reference.py",
-  "composed_surface_triple_stage_comparison": "src/diagnostics/tests/composed_surface/compare_cs21_cache_stages.py"
+  "composed_surface_reference_capture": "src/diagnostics/tests/composed_surface/export_reference.py",
+  "composed_surface_triple_stage_comparison": "src/diagnostics/tests/composed_surface/compare_cache_stages.py"
 }

@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 // pDestination is a platform-native path supplied by the owner; serialized
-// payload must already pass t3d_cs_validate_sidecar_bytes(..., true).
+// payload must already pass t3d_comp_surf_validate_sidecar_bytes(..., true).
 // Caller serializes cooks per destination; the temporary path is exclusive.
-bool t3d_cs_write_sidecar_cold( const char *pDestination,
+bool t3d_comp_surf_write_sidecar_cold( const char *pDestination,
                                const uint8_t *pBytes, uint64_t nBytes );
 #endif

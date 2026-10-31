@@ -60,7 +60,7 @@ def main():
                     {'VtFragmentGridBuffer': 2, 'VtFragmentCounterBuffer': 3,
                      'VtFragmentFeedbackParams': 4}, label)
             if variant.endswith('_compact'):
-                ensure('t3d_br21_cursor_begin' in source and 't3d_cluster_buffer' in source,
+                ensure('t3d_cursor_begin' in source and 't3d_cluster_buffer' in source,
                        label + ' compact lighting path did not activate')
             layout_checks += 1
         # Shipping precomputes exp2 on CPU; editor keeps authored live value.

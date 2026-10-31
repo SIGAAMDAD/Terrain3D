@@ -413,7 +413,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialFlags(
 	if ( m_macroNoiseTexture.getRid().is_valid() ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MACRO_NOISE;
 	}
-	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ) {
+	if ( rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK ) {
 		config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MICRO_VT;
 		if ( rSources.m_terrainMegaVT.isReady() ) {
 			config.m_nFeatureFlags |= T3D_RD_MATERIAL_FEATURE_MEGAVT;
@@ -641,7 +641,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	const Ref< Terrain3DAssets >	  &rAssets ) {
 	if ( rAssets.is_null() ) {
 		rSnapshot.m_nMaterialLayerCount = 1u;
-		rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
+		rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;
 		return;
 	}
 	const PackedColorArray	 colors = rAssets->getTextureColors();
@@ -657,7 +657,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		( uint32_t ) ( CLAMP( rAssets->getTextureCount(), 1, ( int ) ( T3D_RD_MATERIAL_LAYER_COUNT ) ) );
 	rSnapshot.m_nMaterialLayerCount = count;
 	bool canonical_vt_v1 = ( rSnapshot.m_materialConfig.m_nFeatureFlags & T3D_RD_MATERIAL_FEATURE_MICRO_VT ) != 0u &&
-						   rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1;
+						   rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK;
 	for ( uint32_t i = 0u; i < T3D_RD_MATERIAL_LAYER_COUNT; ++i ) {
 		t3dRdMaterialLayer_t &layer = rSnapshot.m_szMaterials[i];
 		const Color			  color =
@@ -685,7 +685,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		layer.m_nMicroVTAllocation =
 			i < rVtSnapshot.nMaterialCount ? rVtSnapshot.nMaterialAllocation[i] : T3D_VT_INVALID_ALLOCATION;
 		layer.m_nMicroVTGeneration = ( uint32_t ) ( rAssets->getTexturePublicationGeneration() & 0xffffffffu );
-		layer.m_nMicroVTFlags = rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? 1u : 0u;
+		layer.m_nMicroVTFlags = rVtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK ? 1u : 0u;
 		layer.m_nMicroVTReserved = 0u;
 		layer.m_nFlags = 0u;
 		if ( rAssets->usesPackedPbr() ) {
@@ -700,7 +700,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 		const bool layer_canonical_v1 = i < count && layer.m_nMicroVTAllocation != T3D_VT_INVALID_ALLOCATION &&
 										( layer.m_nMicroVTFlags & 1u ) != 0u;
 		if ( layer_canonical_v1 ) {
-			layer.m_nFlags |= T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V1;
+			layer.m_nFlags |= T3D_RD_MATERIAL_LAYER_CANONICAL_VT;
 		}
 		if ( i < count ) {
 			canonical_vt_v1 = canonical_vt_v1 && layer_canonical_v1;
@@ -708,7 +708,7 @@ void Terrain3DMaterialStateBuilder::buildMaterialLayers(
 	}
 	// The unified shader uses cooked pages when source generations match and
     // retains the existing detailed evaluator for missing or unsupported pages.
-    rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
+    rSnapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;
 }
 
 void Terrain3DMaterialStateBuilder::buildMaterialState(
@@ -785,7 +785,7 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getSurfaceArraySize() ) : 0u,
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getDisplacementArraySize() ) : 0u,
 		rd_assets.is_valid() ? ( uint64_t ) ( rd_assets->getFarAlbedoArraySize() ) : 0u,
-		vtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK_V1 ? 1u : 0u,
+		vtSnapshot.nDatabaseKind == T3D_VT_RUNTIME_DATABASE_PACK ? 1u : 0u,
 		( uint64_t ) vtSnapshot.nDatabaseGeneration,
 		vtSnapshot.nPackageContentSignature,
 		vtSnapshot.nPackagePublicationGeneration };
@@ -807,7 +807,7 @@ bool Terrain3DMaterialStateBuilder::publishSnapshotState(
 	}
 	// Frame slots are reset before every publication. The cached-material path
 	// must restore the backend classification just like the rebuilt path.
-	snapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1;
+	snapshot.m_nTerrainMaterialBackend = T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED;
 	snapshot.m_nMaterialGeneration = m_nMaterialGeneration;
 	buildEditorOverlayState( rSources, snapshot, rd_material.ptr() );
 	return true;

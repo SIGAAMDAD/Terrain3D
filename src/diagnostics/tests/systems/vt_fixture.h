@@ -12,7 +12,7 @@ namespace terrain3d_tests
 struct ResidencyFixture
 {
 	t3dVTFileHeader_t		  header{};
-	t3dVTAllocationRecordV1_t source_allocation{};
+	t3dVTAllocationRecord_t source_allocation{};
 	t3dVTPageFileRecord_t	  pages[6]{};
 	t3dVTPayloadRecord_t	  payloads[6]{};
 	t3dVTDatabaseView_t		  database{};

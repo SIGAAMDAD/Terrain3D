@@ -17,10 +17,10 @@ void Terrain3DHierarchicalTileStore::clearSlotLocked( Slot &slot ) {
 bool Terrain3DHierarchicalTileStore::open( const godot::String &directory, const uint32_t maxSlots ) {
     reset();
     if ( maxSlots == 0u || maxSlots > T3D_HIERARCHY_TILE_MAX_SLOTS ) return false;
-    Terrain3DRasterHierarchyIndexV2 index;
+    Terrain3DRasterHierarchyStreamIndex index;
     if ( index.open( directory ) != godot::OK || index.getGeneration() == 0u ) return false;
     for ( uint16_t id = 0u; id < 1365u; ++id ) {
-        const t3dRasterHierarchyV2Node_t *node = index.getNode( id );
+        const t3dRasterHierarchyStreamNode_t *node = index.getNode( id );
         m_nodePresent[id] = node ? 1u : 0u;
         if ( node ) m_nodes[id] = *node;
     }
@@ -35,7 +35,7 @@ bool Terrain3DHierarchicalTileStore::open( const godot::String &directory, const
 }
 
 bool Terrain3DHierarchicalTileStore::snapshotDirectoryCold(
-    t3dRasterHierarchyV2Node_t *const nodes, uint8_t *const present,
+    t3dRasterHierarchyStreamNode_t *const nodes, uint8_t *const present,
     const uint32_t capacity, uint32_t &generation ) const {
     generation = 0u;
     if ( !nodes || !present || capacity < 1365u ) return false;
@@ -121,7 +121,7 @@ int32_t Terrain3DHierarchicalTileStore::selectQueuedLocked( void ) const {
 void Terrain3DHierarchicalTileStore::workerMain( void ) {
     for ( ;; ) {
         int32_t chosen = -1;
-        t3dRasterHierarchyV2Node_t node;
+        t3dRasterHierarchyStreamNode_t node;
         uint64_t epoch = 0u;
         godot::String path;
         {
@@ -136,13 +136,13 @@ void Terrain3DHierarchicalTileStore::workerMain( void ) {
         }
         // Only the worker touches LOADING bytes. The owner may cancel a slot
         // but cannot reuse its storage until the worker reacquires this lock.
-        const bool valid = t3dRasterHierarchyReadV2Tile(
-            path, node, m_slots[chosen].m_bytes, T3D_RASTER_HIERARCHY_V2_TILE_BYTES );
+        const bool valid = t3dRasterHierarchyReadStreamTile(
+            path, node, m_slots[chosen].m_bytes, T3D_RASTER_HIERARCHY_STREAM_TILE_BYTES );
         {
             Terrain3DScopedLock lock( m_mutex );
             Slot &slot = m_slots[chosen];
             ++m_stats.m_nFileReads;
-            if ( valid ) m_stats.m_nVerifiedBytes += T3D_RASTER_HIERARCHY_V2_TILE_BYTES;
+            if ( valid ) m_stats.m_nVerifiedBytes += T3D_RASTER_HIERARCHY_STREAM_TILE_BYTES;
             if ( slot.m_bCancelled || slot.m_nEpoch != epoch || m_bStop ) {
                 ++m_stats.m_nCancelled;
                 clearSlotLocked( slot );
@@ -188,8 +188,8 @@ bool Terrain3DHierarchicalTileStore::takePrepared(
         // successful take; no transient candidate arrays on the hot path.
         // Consumers must inspect m_nChannels, since unrequested arrays retain
         // their previous bytes to avoid deallocating reusable staging memory.
-        const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_V2_HEIGHT_BYTES,
-            T3D_RASTER_HIERARCHY_V2_CONTROL_BYTES, T3D_RASTER_HIERARCHY_V2_COLOR_BYTES };
+        const uint32_t lengths[3] = { T3D_RASTER_HIERARCHY_STREAM_HEIGHT_BYTES,
+            T3D_RASTER_HIERARCHY_STREAM_CONTROL_BYTES, T3D_RASTER_HIERARCHY_STREAM_COLOR_BYTES };
         const uint32_t offsets[3] = { 0u, lengths[0], lengths[0] + lengths[1] };
         godot::PackedByteArray *arrays[3] = { &result.m_height, &result.m_control, &result.m_color };
         for ( uint32_t c = 0u; c < 3u; ++c ) {

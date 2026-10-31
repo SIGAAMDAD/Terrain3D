@@ -299,14 +299,14 @@ typedef enum t3dVTOuterCompression_e : uint32_t
 	T3D_VT_OUTER_COMPRESSION_ZSTD = 1u,
 } t3dVTOuterCompression_t;
 
-typedef enum t3dVTGodotSourceFlagsV1_e : uint32_t
+typedef enum t3dVTGodotSourceFlags_e : uint32_t
 {
-	T3D_VT_GODOT_SOURCE_V1_DIRECT_ORM = 1u << 0u,
-	T3D_VT_GODOT_SOURCE_V1_HAS_ALPHA = 1u << 1u,
-	T3D_VT_GODOT_SOURCE_V1_ALBEDO_RGBA = 1u << 2u,
-} t3dVTGodotSourceFlagsV1_t;
+	T3D_VT_GODOT_SOURCE_DIRECT_ORM = 1u << 0u,
+	T3D_VT_GODOT_SOURCE_HAS_ALPHA = 1u << 1u,
+	T3D_VT_GODOT_SOURCE_ALBEDO_RGBA = 1u << 2u,
+} t3dVTGodotSourceFlags_t;
 
-typedef enum t3dVTEditorCookStageV1_e : uint32_t
+typedef enum t3dVTEditorCookStage_e : uint32_t
 {
 	T3D_VT_EDITOR_COOK_STAGE_IDLE = 0u,
 	T3D_VT_EDITOR_COOK_STAGE_EXTRACT = 1u,
@@ -315,7 +315,7 @@ typedef enum t3dVTEditorCookStageV1_e : uint32_t
 	T3D_VT_EDITOR_COOK_STAGE_ENCODE = 4u,
 	T3D_VT_EDITOR_COOK_STAGE_PACK = 5u,
 	T3D_VT_EDITOR_COOK_STAGE_COMPLETE = 6u,
-} t3dVTEditorCookStageV1_t;
+} t3dVTEditorCookStage_t;
 
 typedef enum t3dVTCookWrapMode_e : uint32_t
 {
@@ -1036,7 +1036,7 @@ typedef enum t3dRdMaterialLayerBits_e
 	T3D_RD_MATERIAL_LAYER_PACKED_SURFACE = 1u << 0u,
 	T3D_RD_MATERIAL_LAYER_RESIDENT = 1u << 1u,
 	T3D_RD_MATERIAL_LAYER_MICRO_VT = 1u << 2u,
-	T3D_RD_MATERIAL_LAYER_CANONICAL_VT_V1 = 1u << 3u,
+	T3D_RD_MATERIAL_LAYER_CANONICAL_VT = 1u << 3u,
 } t3dRdMaterialLayerBits_t;
 
 typedef enum t3dRdInstanceFlags_e : uint32_t
@@ -1322,7 +1322,7 @@ typedef enum t3dRenderingMaterialFlags_e : uint32_t
 	// Known shared ShaderMaterial profile uses the authored stylized sun loop.
 	T3D_VT_MATERIAL_STYLIZED_SUN = 1u << 14u,
 	// VT-P06: material allocation is the base of a sparse V1 runtime channel triplet.
-	T3D_VT_MATERIAL_V1_LAYOUT = 1u << 15u,
+	T3D_VT_MATERIAL_LAYOUT = 1u << 15u,
 	T3D_VT_MATERIAL_HAS_SURFACE_TEXTURE = 1u << 16u,
 	// Old cooked records lack provenance and must retain surface sampling.
 	T3D_VT_MATERIAL_SURFACE_TEXTURE_KNOWN = 1u << 17u,
@@ -1359,7 +1359,7 @@ typedef enum t3dVTResidencyTemperature_e : uint16_t
 typedef enum t3dVTRuntimeDatabaseKind_e : uint32_t
 {
 	T3D_VT_RUNTIME_DATABASE_LEGACY_NEUTRAL = 0u,
-	T3D_VT_RUNTIME_DATABASE_PACK_V1 = 2u,
+	T3D_VT_RUNTIME_DATABASE_PACK = 2u,
 } t3dVTRuntimeDatabaseKind_t;
 
 typedef enum t3dVTGpuBufferId_e : uint32_t
@@ -1798,9 +1798,9 @@ typedef enum t3dTerrainShaderPassClass_e
 
 typedef enum t3dTerrainMaterialBackend_e
 {
-	T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT_V1 = 0u,
+	T3D_TERRAIN_MATERIAL_BACKEND_CANONICAL_VT = 0u,
 	T3D_TERRAIN_MATERIAL_BACKEND_COMPATIBILITY_MIXED = 1u,
-	T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED_V1 = 2u,
+	T3D_TERRAIN_MATERIAL_BACKEND_UNIFIED_COOKED = 2u,
 	T3D_TERRAIN_MATERIAL_BACKEND_COUNT = 3u,
 } t3dTerrainMaterialBackend_t;
 
